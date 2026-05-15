@@ -3,7 +3,12 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
-import { withholdingTaxLedgerToCsv, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
+import {
+  normalizePndFormHint,
+  withholdingTaxLedgerToCsv,
+  withholdingTaxSubmissionCsv,
+  type WithholdingTaxLedgerRow,
+} from '@/lib/withholding-tax-csv'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -33,6 +38,8 @@ export async function GET(request: NextRequest) {
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
+  const exportFormat = String(searchParams.get('format') || 'raw').trim().toLowerCase()
+  const formHint = normalizePndFormHint(searchParams.get('formHint'))
   const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
   const allowedStores =
     (Array.isArray(authResult.auth.allowedStores) ? authResult.auth.allowedStores : [])
@@ -82,13 +89,17 @@ export async function GET(request: NextRequest) {
         ? rows || []
         : (rows || []).filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
 
-    const csv = withholdingTaxLedgerToCsv(filteredRows)
+    const csv =
+      exportFormat === 'submission'
+        ? withholdingTaxSubmissionCsv(filteredRows, formHint)
+        : withholdingTaxLedgerToCsv(filteredRows)
+    const fileLabel = exportFormat === 'submission' ? 'withholding-tax-submission' : 'withholding-tax-ledger'
     return new NextResponse(csv, {
       status: 200,
       headers: {
         ...Object.fromEntries(headers.entries()),
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="withholding-tax-ledger-${period.periodKey}.csv"`,
+        'Content-Disposition': `attachment; filename="${fileLabel}-${period.periodKey}.csv"`,
       },
     })
   } catch (e) {

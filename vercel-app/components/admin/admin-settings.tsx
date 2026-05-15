@@ -15,17 +15,16 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Settings, RefreshCw, Copy } from "lucide-react"
+import { ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -593,7 +592,7 @@ export function AdminSettings() {
                   <p className="py-6 text-center text-muted-foreground text-xs">{t("loading")}</p>
                 ) : limitsData ? (
                   <>
-                    <p className="text-xs text-amber-700 dark:text-amber-500/90 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                    <p className={ADMIN_PANEL_WARNING_CN}>
                       {t("settings_data_limits_formula")
                         .replace("{{pages}}", String(limitsData.selectAllPagesMaxPages))
                         .replace("{{cap}}", String(limitsData.selectPageCap))

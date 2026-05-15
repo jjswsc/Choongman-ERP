@@ -111,6 +111,12 @@ create index if not exists company_hybrid_documents_category_idx
   on public.company_hybrid_documents (store, category_id)
   where deleted_at is null;
 
+alter table public.company_hybrid_documents
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
+comment on column public.company_hybrid_documents.metadata is
+  '확장 메타(JSON). correspondence: 발신/수신·상대·문서번호·상태·회신기한 등.';
+
 alter table public.company_hybrid_document_categories enable row level security;
 
 -- 기본 하위 카테고리 시드(공지, 매뉴얼):

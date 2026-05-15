@@ -113,6 +113,7 @@ import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { translatePosMenuLineForReceipt, chickenPartDedupeKey, prettyChickenPartLibraryLabel } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
 import { normalizeOptionGroupsForMenu } from "@/lib/pos-option-selection-groups"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
 const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as const
@@ -1203,7 +1204,7 @@ export default function PosMenusPage() {
       return
     }
     if (selectedStoreCodes.length === 0) {
-      await appAlert("노출할 매장을 1개 이상 선택해 주세요.")
+      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
       return
     }
     if (!editingId && menus.some((m) => m.code === code)) {
@@ -3549,7 +3550,7 @@ export default function PosMenusPage() {
                           type="button"
                           variant="secondary"
                           size="sm"
-                          className="h-7 shrink-0 text-[11px]"
+                          className={`${ADMIN_BTN_XS_CN} shrink-0 text-[11px]`}
                           onClick={() => appendOptionsConfigBulkLabels([line])}
                         >
                           {t("posOptionBulkMenuPickerRowAdd")}
@@ -3780,7 +3781,7 @@ export default function PosMenusPage() {
                     <div className="rounded-md border border-dashed p-3">
                       <label className="text-xs font-semibold">{t("store") || "매장"}</label>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        노출할 매장을 선택하세요. 선택한 매장 POS에서만 메뉴가 보입니다.
+                        {t("posMenuVisibleStoresScopeHint")}
                       </p>
                       <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
                         {availableScopeStores.map((sc) => {
@@ -3805,7 +3806,7 @@ export default function PosMenusPage() {
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                        <Input type="number" placeholder="홀과 동일" className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
+                        <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -3968,7 +3969,7 @@ export default function PosMenusPage() {
                           <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
                           <Input type="number" placeholder="+0" className="h-8 w-20 text-right text-xs" value={newOptionModifier} onChange={(e) => setNewOptionModifier(e.target.value)} />
                           <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
-                          <Input type="number" placeholder="홀과 동일" className="h-8 w-20 text-right text-xs" value={newOptionModifierDelivery} onChange={(e) => setNewOptionModifierDelivery(e.target.value)} />
+                          <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="h-8 w-20 text-right text-xs" value={newOptionModifierDelivery} onChange={(e) => setNewOptionModifierDelivery(e.target.value)} />
                         </div>
                       </div>
                     </div>
@@ -4405,7 +4406,7 @@ export default function PosMenusPage() {
                   <div className="rounded-md border border-dashed p-3">
                     <label className="text-xs font-semibold">{t("store") || "매장"}</label>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      노출할 매장을 1개 이상 선택해야 저장됩니다.
+                      {t("posMenuVisibleStoresRequiredToSave")}
                     </p>
                     <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
                       {availableScopeStores.map((sc) => {
@@ -4430,7 +4431,7 @@ export default function PosMenusPage() {
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                      <Input type="number" placeholder="홀과 동일" className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
+                      <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -5041,7 +5042,7 @@ export default function PosMenusPage() {
                               type="button"
                               variant={optionsConfigLibraryFilter === key ? "default" : "outline"}
                               size="sm"
-                              className="h-7 text-[11px]"
+                              className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                               disabled={!optionsConfigSelectedMenuId}
                               onClick={() => setOptionsConfigLibraryFilter(key)}
                             >
@@ -5224,7 +5225,7 @@ export default function PosMenusPage() {
                                 type="button"
                                 variant={newOptionChannelScope === "all" ? "default" : "outline"}
                                 size="sm"
-                                className="h-7 text-[11px]"
+                                className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                 onClick={() => setNewOptionChannelScope("all")}
                               >
                                 {t("posOptionScopeAll") || "기본+배달"}
@@ -5233,7 +5234,7 @@ export default function PosMenusPage() {
                                 type="button"
                                 variant={newOptionChannelScope === "hall" ? "default" : "outline"}
                                 size="sm"
-                                className="h-7 text-[11px]"
+                                className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                 onClick={() => setNewOptionChannelScope("hall")}
                               >
                                 {t("posOptionScopeBaseOnly") || "기본채널만"}
@@ -5242,7 +5243,7 @@ export default function PosMenusPage() {
                                 type="button"
                                 variant={newOptionChannelScope === "delivery" ? "default" : "outline"}
                                 size="sm"
-                                className="h-7 text-[11px]"
+                                className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                 onClick={() => setNewOptionChannelScope("delivery")}
                               >
                                 {t("posOptionScopeDeliveryOnly") || "배달만"}
@@ -5346,7 +5347,7 @@ export default function PosMenusPage() {
                                       <Button
                                         type="button"
                                         size="sm"
-                                        className="h-7 text-[11px]"
+                                        className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                         onClick={() => void handleApplyOptionGroupsForConfig()}
                                         disabled={optionsConfigApplyingGroups || promoLocked}
                                       >
@@ -5469,7 +5470,7 @@ export default function PosMenusPage() {
                           type="button"
                           variant={optionsConfigShowAllOptions ? "default" : "outline"}
                           size="sm"
-                          className="h-7 text-[11px]"
+                          className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                           onClick={() => setOptionsConfigShowAllOptions((prev) => !prev)}
                         >
                           {optionsConfigShowAllOptions
@@ -6070,7 +6071,7 @@ export default function PosMenusPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 px-2 text-[11px]"
+                                  className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                   disabled={deliveryOpsImageUploadingMenuId === String(m.id)}
                                   onClick={() => deliveryOpsImageInputRefs.current[String(m.id)]?.click()}
                                 >
@@ -6082,7 +6083,7 @@ export default function PosMenusPage() {
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-7 px-2 text-[11px]"
+                                  className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                   disabled={!overrideImageUrl}
                                   onClick={() => upsertDeliveryMenuPolicy(String(m.id), { imageUrl: null })}
                                 >

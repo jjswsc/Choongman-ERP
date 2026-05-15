@@ -3,6 +3,10 @@ import { requireAuth } from '@/lib/verify-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { companyHybridDocVisibilityFromDocType } from '@/lib/company-hybrid-documents'
 import { canViewCompanyHybridDocument, resolveCompanyHybridListScope } from '@/lib/company-hybrid-documents-access'
+import {
+  COMPANY_HYBRID_CORRESPONDENCE_DIRECTIONS,
+  COMPANY_HYBRID_CORRESPONDENCE_STATUSES,
+} from '@/lib/company-hybrid-correspondence'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +49,35 @@ export async function GET(request: NextRequest) {
         filterParts.push(`title=ilike.${encodeURIComponent(pat)}`)
       }
     }
+
+    const corrPresence = String(searchParams.get('corrPresence') || '').trim().toLowerCase()
+    if (corrPresence === 'yes') {
+      filterParts.push('metadata->correspondence=not.is.null')
+    } else if (corrPresence === 'no') {
+      filterParts.push('metadata->correspondence=is.null')
+    }
+
+    const corrDirection = String(searchParams.get('corrDirection') || '').trim().toLowerCase()
+    if (
+      corrDirection &&
+      (COMPANY_HYBRID_CORRESPONDENCE_DIRECTIONS as readonly string[]).includes(corrDirection)
+    ) {
+      filterParts.push(`metadata->correspondence->>direction=eq.${encodeURIComponent(corrDirection)}`)
+    }
+
+    const corrStatus = String(searchParams.get('corrStatus') || '').trim().toLowerCase()
+    if (corrStatus && (COMPANY_HYBRID_CORRESPONDENCE_STATUSES as readonly string[]).includes(corrStatus)) {
+      filterParts.push(`metadata->correspondence->>status=eq.${encodeURIComponent(corrStatus)}`)
+    }
+
+    const corrCounterpartySearch = String(searchParams.get('corrCounterpartySearch') || '').trim().slice(0, 120)
+    if (corrCounterpartySearch) {
+      const pat = `*${corrCounterpartySearch.replace(/\*/g, ' ').replace(/%/g, '')}*`
+      if (pat.length > 2) {
+        filterParts.push(`metadata->correspondence->>counterparty=ilike.${encodeURIComponent(pat)}`)
+      }
+    }
+
     const sortTitleRaw = String(searchParams.get('sortTitle') || '').trim().toLowerCase()
     const order =
       sortTitleRaw === 'asc'

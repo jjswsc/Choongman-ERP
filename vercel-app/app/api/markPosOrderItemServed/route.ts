@@ -5,6 +5,7 @@ import {
   readPosSetChildrenState,
   type PosSetChildrenState,
 } from '@/lib/pos-set-children-state'
+import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 
 function nowBangkokIso(): string {
   const dtf = new Intl.DateTimeFormat('sv-SE', {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
     const id = Number(body?.id)
+    const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const itemId = String(body?.itemId ?? '').trim()
     const childKey = String(body?.childKey ?? '').trim()
     const mode = String(body?.mode ?? '').trim().toLowerCase() === 'packed' ? 'packed' : 'served'
@@ -52,6 +54,16 @@ export async function POST(req: NextRequest) {
 
     if (!id || Number.isNaN(id) || !itemId) {
       return NextResponse.json({ success: false, message: 'id, itemId required' }, { headers })
+    }
+    if (idempotencyKey) {
+      const duplicated = await reserveRequestIdempotencyKey({
+        scope: `mark_pos_order_item_served:${id}`,
+        key: idempotencyKey,
+        payload: { id, itemId, mode, childKey: childKey || null },
+      })
+      if (duplicated) {
+        return NextResponse.json({ success: true, noop: true, duplicate: true }, { headers })
+      }
     }
 
     const rows = (await supabaseSelectFilter(

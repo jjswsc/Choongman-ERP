@@ -63,6 +63,7 @@ import {
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 import { buildMarketingCampaignHubLinkSetsFromRows } from "@/lib/marketing-campaign-hub-link-data"
 import {
   applyMarketingCampaignListFilters,
@@ -1511,11 +1512,11 @@ export default function MarketingCampaignsPage() {
                     </span>
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    <Button type="button" size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`}
                       onClick={() => router.push(`/admin/marketing/ads?campaignId=${editingId}`)}>
                       <ExternalLink className="h-3 w-3" />{tr("광고", "Ads", "โฆษณา")}
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
+                    <Button type="button" size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`}
                       onClick={() => router.push(`/admin/marketing/promos?campaignId=${editingId}`)}>
                       <ExternalLink className="h-3 w-3" />{tr("프로모션세트", "Promotion Sets", "ชุดโปรโมชัน")}
                     </Button>
@@ -2504,7 +2505,7 @@ export default function MarketingCampaignsPage() {
                                             <Button
                                               type="button"
                                               size="sm"
-                                              className="h-7 text-[11px]"
+                                              className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                               disabled={savingGift}
                                               onClick={() => void handleSaveGiftEdit()}
                                             >
@@ -2518,7 +2519,7 @@ export default function MarketingCampaignsPage() {
                                               type="button"
                                               variant="outline"
                                               size="sm"
-                                              className="h-7 text-[11px]"
+                                              className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                               onClick={() => setEditingGiftId(null)}
                                             >
                                               {tr("취소", "Cancel", "ยกเลิก")}
@@ -2554,7 +2555,7 @@ export default function MarketingCampaignsPage() {
                                               type="button"
                                               variant="outline"
                                               size="sm"
-                                              className="h-7 px-2 text-[10px]"
+                                              className={`${ADMIN_BTN_XS_CN} text-[10px]`}
                                               onClick={() => startEditGift(g)}
                                             >
                                               {tr("편집", "Edit", "แก้ไข")}
@@ -2643,7 +2644,7 @@ export default function MarketingCampaignsPage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    className="h-7 gap-1 text-[11px]"
+                                    className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                                     disabled={savingGift || storesLoading}
                                     onClick={() => void handleAddMaterialGift(mat.id)}
                                   >
@@ -3049,7 +3050,7 @@ export default function MarketingCampaignsPage() {
                 <span className="text-muted-foreground">
                   {tr("필터를 적용하지 않고 불러온 목록 전체를 표시 중입니다.", "Showing all loaded campaigns; filters are not applied.", "กำลังแสดงทั้งหมดโดยไม่ใช้ตัวกรอง")}
                 </span>
-                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setListFilterBypass(false)}>
+                <Button type="button" variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => setListFilterBypass(false)}>
                   {tr("필터 다시 적용", "Apply filters again", "ใช้ตัวกรองอีกครั้ง")}
                 </Button>
               </div>
@@ -3164,22 +3165,22 @@ export default function MarketingCampaignsPage() {
                   </div>
                   <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
                     <span className="mr-1 text-[10px] font-medium text-muted-foreground">{tr("연결", "Links", "ลิงก์")}:</span>
-                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                       title={tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}
                       onClick={() => router.push(`/admin/marketing/promos?campaignId=${c.id}`)}>
                       <Tag className="h-3 w-3" /> {tr("세트", "Promos", "ชุดโปรโมชัน")}
                     </Button>
-                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                       title={tr("광고", "Ads", "โฆษณา")}
                       onClick={() => router.push(`/admin/marketing/ads?campaignId=${c.id}`)}>
                       <TrendingUp className="h-3 w-3" /> {tr("광고", "Ads", "โฆษณา")}
                     </Button>
-                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                       title={tr("인플루언서", "Influencers", "อินฟลูเอนเซอร์")}
                       onClick={() => router.push(`/admin/marketing/influencers?campaignId=${c.id}`)}>
                       <Users className="h-3 w-3" /> {tr("인플", "Influencers", "อินฟลูเอนเซอร์")}
                     </Button>
-                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
                       title={tr("매장 홍보물", "Store promo materials", "สื่อโปรโมชันที่สาขา")}
                       onClick={() => router.push(`/admin/marketing/materials?campaignId=${c.id}`)}>
                       <Package className="h-3 w-3" /> {tr("홍보물", "Materials", "สื่อโปรโมชัน")}
@@ -3188,7 +3189,7 @@ export default function MarketingCampaignsPage() {
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleCopyCampaign(c)} title={tr("복사", "Copy", "คัดลอก")}>
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleEdit(c)}>{tr("수정", "Edit", "แก้ไข")}</Button>
+                    <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => handleEdit(c)}>{tr("수정", "Edit", "แก้ไข")}</Button>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(c)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>

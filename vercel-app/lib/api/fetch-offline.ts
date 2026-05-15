@@ -48,7 +48,7 @@ function normalPath(url: string): string {
  * 큐 적재 가능 API 화이트리스트 (POST/PUT)
  * FormData 사용(파일 업로드) API는 제외 - body 직렬화 불가
  */
-const QUEUE_WHITELIST = new Set([
+const LEGACY_QUEUE_WHITELIST = new Set([
   '/api/addBalanceTransaction',
   '/api/saveCheckResult',
   '/api/savePurchaseOrder',
@@ -200,6 +200,51 @@ const QUEUE_WHITELIST = new Set([
   '/api/syncAllOrderReceivablesFromOutbound',
 ])
 
+function getQueueDomain(path: string): 'pos' | 'erp' | 'accounting' | 'hr' | null {
+  if (
+    path.startsWith('/api/savePos') ||
+    path.startsWith('/api/updatePos') ||
+    path.startsWith('/api/markPos') ||
+    path.startsWith('/api/processPos') ||
+    path.startsWith('/api/posDineIn') ||
+    path === '/api/addTillTransaction' ||
+    path === '/api/deleteTillTransaction'
+  ) {
+    return 'pos'
+  }
+  if (
+    path.startsWith('/api/addBank') ||
+    path.startsWith('/api/updateBank') ||
+    path.startsWith('/api/saveBank') ||
+    path.startsWith('/api/executeWithdrawal') ||
+    path.startsWith('/api/executeExpensePayment') ||
+    path.startsWith('/api/saveCard') ||
+    path.startsWith('/api/deleteCard') ||
+    path.startsWith('/api/saveAccountSubject') ||
+    path.startsWith('/api/deleteAccountSubject')
+  ) {
+    return 'accounting'
+  }
+  if (
+    path.startsWith('/api/submitAttendance') ||
+    path.startsWith('/api/requestLeave') ||
+    path.startsWith('/api/processLeaveApproval') ||
+    path.startsWith('/api/processAttendanceApproval') ||
+    path.startsWith('/api/saveWorkLog')
+  ) {
+    return 'hr'
+  }
+  if (
+    path.startsWith('/api/save') ||
+    path.startsWith('/api/update') ||
+    path.startsWith('/api/delete') ||
+    path.startsWith('/api/process')
+  ) {
+    return 'erp'
+  }
+  return null
+}
+
 /** 큐 적재 시 반환할 fallback - API별 특수 케이스 */
 const OFFLINE_FALLBACK: Record<string, unknown> = {
   '/api/saveCheckResult': { result: 'SAVED' },
@@ -212,7 +257,8 @@ function canQueue(url: string, init?: RequestInit): boolean {
   const path = normalPath(url)
   const method = (init?.method || 'GET').toUpperCase()
   if (method !== 'POST' && method !== 'PUT' && method !== 'PATCH') return false
-  if (!QUEUE_WHITELIST.has(path)) return false
+  const domain = getQueueDomain(path)
+  if (!domain && !LEGACY_QUEUE_WHITELIST.has(path)) return false
   // FormData는 직렬화 불가 → 큐 제외
   const body = init?.body
   if (body instanceof FormData) return false
@@ -263,7 +309,11 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
         init?.headers instanceof Headers
           ? Object.fromEntries((init.headers as Headers).entries())
           : (init?.headers as Record<string, string>) ?? {},
-      ...(localOrderNo ? { metadata: { localOrderNo } } : {}),
+      metadata: {
+        ...(localOrderNo ? { localOrderNo } : {}),
+        domainTag: getQueueDomain(path) ?? 'unknown',
+        queuePath: path,
+      },
     })
     const fallback =
       path === '/api/savePosOrder' && localOrderNo

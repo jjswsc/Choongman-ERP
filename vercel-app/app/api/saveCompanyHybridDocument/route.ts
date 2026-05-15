@@ -10,6 +10,7 @@ import {
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
 import { resolveCategoryIdForDocument } from '@/lib/company-hybrid-category-server'
+import { mergeMetadataWithCorrespondence } from '@/lib/company-hybrid-correspondence'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     const note = norm(body.note)
     const validFrom = body.validFrom != null && String(body.validFrom).trim() ? String(body.validFrom).slice(0, 10) : null
     const validTo = body.validTo != null && String(body.validTo).trim() ? String(body.validTo).slice(0, 10) : null
+    const hasCorrespondenceKey = Object.prototype.hasOwnProperty.call(body, 'correspondence')
 
     if (!store) {
       return NextResponse.json({ success: false, message: '매장(store)이 필요합니다.' }, { status: 400, headers })
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
             source?: string
             title?: string
             deleted_at?: string | null
+            metadata?: unknown
           }[]
         | null
       const row = existing?.[0]
@@ -87,6 +90,9 @@ export async function POST(request: NextRequest) {
       if (!title) {
         return NextResponse.json({ success: false, message: '제목이 필요합니다.' }, { status: 400, headers })
       }
+      const metaPatch = hasCorrespondenceKey
+        ? mergeMetadataWithCorrespondence(row.metadata, body.correspondence)
+        : null
       if (row.source === 'drive') {
         if (!isReasonableExternalUrl(externalUrl)) {
           return NextResponse.json(
@@ -104,6 +110,7 @@ export async function POST(request: NextRequest) {
           valid_from: validFrom,
           valid_to: validTo,
           note: note || null,
+          ...(metaPatch ? { metadata: metaPatch } : {}),
           updated_at: new Date().toISOString(),
         })
       } else {
@@ -116,6 +123,7 @@ export async function POST(request: NextRequest) {
           valid_from: validFrom,
           valid_to: validTo,
           note: note || null,
+          ...(metaPatch ? { metadata: metaPatch } : {}),
           updated_at: new Date().toISOString(),
         })
       }
@@ -146,6 +154,10 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString()
+    const metadataNew = mergeMetadataWithCorrespondence(
+      {},
+      hasCorrespondenceKey ? body.correspondence : undefined
+    )
     const inserted = await supabaseInsert('company_hybrid_documents', {
       store,
       related_type: 'none',
@@ -163,6 +175,7 @@ export async function POST(request: NextRequest) {
       valid_from: validFrom,
       valid_to: validTo,
       note: note || null,
+      metadata: metadataNew,
       created_by_name: auth.name || null,
       created_by_store: auth.store || null,
       created_at: now,

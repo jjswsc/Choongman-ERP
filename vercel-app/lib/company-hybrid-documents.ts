@@ -105,7 +105,7 @@ export function isAllowedCompanyDocContentType(mime: string): boolean {
 /** 비동영·문서/이미지 (presign) */
 export const MAX_COMPANY_DOC_FILE_BYTES = 40 * 1024 * 1024
 
-export function maxBytesForCompanyDocMime(mime: string): number {
+export function maxBytesForCompanyDocMime(_mime: string): number {
   return MAX_COMPANY_DOC_FILE_BYTES
 }
 
@@ -135,6 +135,8 @@ export type CompanyHybridDocumentRow = {
   valid_from: string | null
   valid_to: string | null
   note: string | null
+  /** 공문 등 확장 필드 — Supabase `company_hybrid_documents_metadata.sql` 적용 후 채워짐 */
+  metadata?: Record<string, unknown> | null
   created_by_name: string | null
   created_by_store: string | null
   created_at: string

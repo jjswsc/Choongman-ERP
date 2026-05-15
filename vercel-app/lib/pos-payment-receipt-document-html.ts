@@ -320,6 +320,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     isPaymentReceipt
   )
   const payLines = isPaymentReceipt ? collectReceiptPaymentLines(receiptData, tr) : []
+  /** 수단별 금액이 한 건도 저장되지 않은 결제 영수증: 하단에 안내(현금/카드 등 미표시 방지) */
+  const showPaymentChannelFallback =
+    isPaymentReceipt &&
+    payLines.length === 0 &&
+    Math.max(0, Number(receiptData.total) || 0) > 0.005
   const paymentRowsHtml =
     payLines.length > 0
       ? `
@@ -328,6 +333,14 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${payLines.map((p) => paymentRowHtml(esc(p.label), formatBahtNum(p.amount))).join('')}
       `
       : ''
+  const paymentChannelFallbackHtml = showPaymentChannelFallback
+    ? `
+        <div class="receipt-divider"></div>
+        <div class="text-xs text-center" style="font-weight:700;margin:4px 0 2px 0;color:#000;line-height:1.4">${esc(
+          tr('posReceiptPaymentChannelUnspecified', 'Payment channel: not recorded in system')
+        )}</div>
+      `
+    : ''
   const paymentSimpleRows =
     payLines.length > 0
       ? `${payLines.map((p) => `<tr><td class="simple-k">${esc(p.label)}</td><td class="simple-v">${formatBahtNum(p.amount)}</td></tr>`).join('')}`
@@ -444,7 +457,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${
           paymentSimpleRows
             ? `<div class="simple-divider"></div><div class="simple-line" style="font-weight:700">${esc(tr('posReceiptPaymentMethods', 'Payment'))}</div><table class="simple-table simple-summary">${paymentSimpleRows}</table>`
-            : ''
+            : showPaymentChannelFallback
+              ? `<div class="simple-divider"></div><div class="simple-line" style="font-weight:700;text-align:center">${esc(
+                  tr('posReceiptPaymentChannelUnspecified', 'Payment channel: not recorded in system')
+                )}</div>`
+              : ''
         }
       </div>
     `
@@ -643,7 +660,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           formatBahtNum(receiptData.total),
           useLegacyAligned ? 'receipt-total' : 'receipt-pay-line--total'
         )}
-        ${paymentRowsHtml}
+        ${paymentRowsHtml}${paymentChannelFallbackHtml}
         <div class="receipt-divider"></div>
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}

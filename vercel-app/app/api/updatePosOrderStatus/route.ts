@@ -16,6 +16,8 @@ import {
   resolveBangkokAccountingDate,
 } from '@/lib/pos-order-policy'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
+import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   extractGrabOrderIdFromMemo,
   mergeGrabStateIntoFullMemo,
@@ -60,6 +62,7 @@ export async function POST(req: NextRequest) {
     }
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
+    const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const retrySideEffects = body.retrySideEffects === true || String(body.retrySideEffects ?? '') === '1'
     const id = body.id != null ? Number(body.id) : NaN
     const status = String(body.status ?? '').trim()
@@ -68,6 +71,16 @@ export async function POST(req: NextRequest) {
 
     if (!id || isNaN(id)) {
       return NextResponse.json({ success: false, message: '주문 ID가 필요합니다.' }, { headers })
+    }
+    if (idempotencyKey) {
+      const duplicated = await reserveRequestIdempotencyKey({
+        scope: `update_pos_order_status:${id}`,
+        key: idempotencyKey,
+        payload: { id, status, source: fromOfflineQueueSync ? 'offline_queue' : 'api' },
+      })
+      if (duplicated) {
+        return NextResponse.json({ success: true, noop: true, duplicate: true }, { headers })
+      }
     }
     if (!ALLOWED_STATUSES.includes(status)) {
       return NextResponse.json({ success: false, message: '유효하지 않은 상태입니다.' }, { headers })
@@ -170,6 +183,21 @@ export async function POST(req: NextRequest) {
         } catch (vatErr) {
           pushFailedStep(failedSideEffects, 'vat_draft')
           console.error('updatePosOrderStatus vat draft(retry):', vatErr)
+        }
+        try {
+          await enqueueKitchenPrintJob({
+            storeCode,
+            orderId: id,
+            orderNo: String(prev?.order_no || `POS-${id}`),
+            source: 'updatePosOrderStatus_retry',
+            dedupeKey: `order:${id}:kitchen:auto`,
+            payload: {
+              action: 'retry_side_effects',
+              status: nextStatus,
+            },
+          })
+        } catch (queueErr) {
+          console.error('updatePosOrderStatus enqueueKitchenPrintJob(retry):', queueErr)
         }
       } else if (isPosReversalStatus(nextStatus) && hasPositivePaymentAmount(prev)) {
         const storeCode = String(prev?.store_code ?? '').trim()
@@ -330,6 +358,21 @@ export async function POST(req: NextRequest) {
       } catch (vatErr) {
         pushFailedStep(failedSideEffects, 'vat_draft')
         console.error('updatePosOrderStatus vat draft:', vatErr)
+      }
+      try {
+        await enqueueKitchenPrintJob({
+          storeCode,
+          orderId: id,
+          orderNo: String(prev?.order_no || `POS-${id}`),
+          source: fromOfflineQueueSync ? 'offline_queue' : 'updatePosOrderStatus',
+          dedupeKey: `order:${id}:kitchen:auto`,
+          payload: {
+            action: 'update_status',
+            status: nextStatus,
+          },
+        })
+      } catch (queueErr) {
+        console.error('updatePosOrderStatus enqueueKitchenPrintJob:', queueErr)
       }
     } else if (isPosReversalStatus(nextStatus) && isPosPaidLikeStatus(prevStatus)) {
       try {

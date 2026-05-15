@@ -160,6 +160,39 @@ function decodePayeeCode(raw: string | undefined): { payeeCode: string } {
   return { payeeCode: src.slice(0, idx).trim() }
 }
 
+function resolveWhtFormHint(params: {
+  incomeType?: string | null
+  payeeName?: string | null
+  manualHint?: string | null
+}): 'PND3' | 'PND53' {
+  const manual = String(params.manualHint || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+  if (manual.includes('3') && !manual.includes('53')) return 'PND3'
+  if (manual.includes('53')) return 'PND53'
+
+  const incomeType = String(params.incomeType || '')
+    .trim()
+    .toLowerCase()
+  const payeeName = String(params.payeeName || '')
+    .trim()
+    .toLowerCase()
+  const looksPersonal =
+    incomeType.includes('개인') ||
+    incomeType.includes('프리랜서') ||
+    incomeType.includes('freelance') ||
+    incomeType.includes('individual') ||
+    incomeType.includes('บุคคล') ||
+    payeeName.startsWith('mr ') ||
+    payeeName.startsWith('ms ') ||
+    payeeName.startsWith('mrs ') ||
+    payeeName.startsWith('นาย') ||
+    payeeName.startsWith('นาง')
+
+  return looksPersonal ? 'PND3' : 'PND53'
+}
+
 /** 세무 원장의 기본 매장키(행 저장용): location 우선, 없으면 vendor_target */
 function taxScopeStoreFromStockLog(log: Pick<StockLogRow, 'log_type' | 'location' | 'vendor_target'>): string {
   const logType = String(log.log_type || '').trim()
@@ -579,7 +612,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
       gross_amount: grossBase > 0 ? grossBase : rawAmount,
       wht_rate: whtRate,
       wht_amount: wht,
-      form_hint: 'PND53',
+      form_hint: resolveWhtFormHint({ incomeType: '서비스', payeeName }),
       certificate_no: `EAW-${expenseId}`.slice(0, 128),
       memo: `${memoTag} 지출 원천세 자동`.slice(0, 2000),
       filing_status: 'draft',
@@ -744,7 +777,7 @@ export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
       gross_amount: grossBase > 0 ? grossBase : total,
       wht_rate: whtRate,
       wht_amount: whtAmount,
-      form_hint: 'PND53',
+      form_hint: resolveWhtFormHint({ incomeType: '서비스', payeeName }),
       certificate_no: (poNo ? `PO-${poNo}` : `PO-${poId}`).slice(0, 128),
       memo: `${memoTag} 발주 원천세 자동`.slice(0, 2000),
       filing_status: 'draft',

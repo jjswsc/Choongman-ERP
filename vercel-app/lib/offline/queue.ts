@@ -17,7 +17,13 @@ export interface PendingRequest {
   retryCount: number
   lastTriedAt?: number
   lastError?: string
-  metadata?: { localOrderNo?: string }
+  metadata?: {
+    localOrderNo?: string
+    domainTag?: 'pos' | 'erp' | 'accounting' | 'hr' | 'unknown'
+    queuePath?: string
+    deadReason?: string
+    lastStatus?: number
+  }
 }
 
 function uuid(): string {

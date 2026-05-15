@@ -48,6 +48,14 @@ import { useT, tr as i18nTr } from '@/lib/i18n'
 import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
 import { isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
+import {
+  ADMIN_BADGE_BASE_CN,
+  ADMIN_BADGE_DANGER_CN,
+  ADMIN_BADGE_SUCCESS_CN,
+  ADMIN_BADGE_WARNING_CN,
+  ADMIN_BTN_XS_CN,
+  ADMIN_DIALOG_SCROLL_CN,
+} from '@/lib/admin-ui-standards'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import {
@@ -1426,11 +1434,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                         <td className="px-4 py-3">
                           <span
                             className={cn(
-                              'rounded px-2 py-0.5 text-xs',
-                              o.status === 'completed' && 'bg-emerald-50 text-emerald-700',
+                              ADMIN_BADGE_BASE_CN,
+                              o.status === 'completed' && ADMIN_BADGE_SUCCESS_CN,
                               o.status === 'cancelled' &&
-                                'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
-                              o.status === 'pending' && 'bg-amber-50 text-amber-700'
+                                `${ADMIN_BADGE_DANGER_CN} dark:bg-rose-950/50 dark:text-rose-200`,
+                              o.status === 'pending' && ADMIN_BADGE_WARNING_CN
                             )}
                           >
                             {statusLabels[o.status] ?? o.status}
@@ -1524,7 +1532,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-7 gap-1 px-2 text-xs"
+                                      className={ADMIN_BTN_XS_CN}
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         handlePrintCustomerReceipt(o)
@@ -1541,7 +1549,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                           <Button
                                             size="sm"
                                             variant={hasKitchenPrintFailure ? 'destructive' : 'outline'}
-                                            className="h-7 gap-1 px-2 text-xs"
+                                            className={ADMIN_BTN_XS_CN}
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               handlePrintKitchenSlip(o)
@@ -1582,7 +1590,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-7 gap-1 px-2 text-xs"
+                                      className={ADMIN_BTN_XS_CN}
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         openTaxInvoiceEditor(o)
@@ -1595,7 +1603,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       <Button
                                         size="sm"
                                         variant="secondary"
-                                        className="h-7 gap-1 px-2 text-xs"
+                                        className={ADMIN_BTN_XS_CN}
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           openPayCorrect(o)
@@ -1635,7 +1643,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <DialogContent className={cn('max-w-xl', ADMIN_DIALOG_SCROLL_CN)} onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>{t('posReceiptTaxInvoice') || '세금계산서'}</DialogTitle>
             <DialogDescription className="text-left">

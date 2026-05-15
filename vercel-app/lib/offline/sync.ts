@@ -30,7 +30,11 @@ const snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>()
 const RETRY_BASE_MS = 2_000
 const RETRY_MAX_MS = 5 * 60_000
 const SNAPSHOT_KEY = 'cm_offline_sync_snapshot_v1'
+const SYNC_LEADER_KEY = 'cm_offline_sync_leader_v1'
+const SYNC_LEADER_TTL_MS = 45_000
 let syncSnapshot: SyncSnapshot = { lastSynced: 0, lastFailed: 0 }
+let inMemorySyncRunning = false
+const syncLeaderToken = `sync-${Math.random().toString(36).slice(2)}-${Date.now()}`
 
 function logPosQueueSync(event: string, detail: Record<string, unknown>) {
   if (typeof window === 'undefined') return
@@ -121,6 +125,10 @@ function isNetworkError(e: unknown): boolean {
  * - ERP 정산·전표 반영 성격(은행/출납/현금): 가장 뒤(7)
  */
 function syncOrder(item: { api: string; createdAt: number }): number {
+  const domain = String(item.api || '')
+  if (domain.startsWith('/api/savePos') || domain.startsWith('/api/updatePos') || domain.startsWith('/api/markPos')) {
+    return 0
+  }
   if (item.api === '/api/savePosOrder') return 0
   if (item.api === '/api/updatePosOrder' || item.api === '/api/posDineInTableActions') return 1
   if (item.api === '/api/updatePosOrderStatus') return 2
@@ -148,6 +156,41 @@ function syncOrder(item: { api: string; createdAt: number }): number {
   return 1
 }
 
+function acquireSyncLeader(): boolean {
+  if (typeof window === 'undefined') return true
+  const now = Date.now()
+  try {
+    const raw = window.localStorage.getItem(SYNC_LEADER_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as { token?: string; expiresAt?: number }
+      const expiresAt = Number(parsed?.expiresAt ?? 0)
+      const owner = String(parsed?.token ?? '')
+      if (owner && owner !== syncLeaderToken && expiresAt > now) return false
+    }
+    window.localStorage.setItem(
+      SYNC_LEADER_KEY,
+      JSON.stringify({ token: syncLeaderToken, expiresAt: now + SYNC_LEADER_TTL_MS })
+    )
+    return true
+  } catch {
+    return true
+  }
+}
+
+function releaseSyncLeader() {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = window.localStorage.getItem(SYNC_LEADER_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { token?: string }
+    if (String(parsed?.token ?? '') === syncLeaderToken) {
+      window.localStorage.removeItem(SYNC_LEADER_KEY)
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function nextRetryDelayMs(retryCount: number): number {
   if (retryCount <= 0) return 0
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, retryCount - 1))
@@ -162,6 +205,10 @@ export type SyncPendingOptions = {
 }
 
 export async function syncPending(options?: SyncPendingOptions): Promise<SyncResult> {
+  if (inMemorySyncRunning) return { synced: 0, failed: 0 }
+  if (!acquireSyncLeader()) return { synced: 0, failed: 0 }
+  inMemorySyncRunning = true
+  try {
   if (!isOnline()) return { synced: 0, failed: 0 }
   let pending = await getAllPending()
   if (pending.length === 0) return { synced: 0, failed: 0 }
@@ -213,6 +260,11 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
           lastError: 'HTTP 401: session expired — open POS login and sign in again',
           retryCount: item.retryCount + 1,
           lastTriedAt: now,
+          metadata: {
+            ...(item.metadata || {}),
+            deadReason: 'http_401',
+            lastStatus: 401,
+          },
         })
         failed++
         continue
@@ -224,6 +276,11 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
           lastError: text?.slice(0, 200) || `HTTP ${res.status}`,
           retryCount: item.retryCount + 1,
           lastTriedAt: now,
+          metadata: {
+            ...(item.metadata || {}),
+            deadReason: res.status >= 500 ? 'server_error' : 'http_error',
+            lastStatus: res.status,
+          },
         })
         if (res.status >= 500) reportNetworkFailure()
         failed++
@@ -263,6 +320,10 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
           lastError: String(parsedBody.message ?? 'success:false').slice(0, 200),
           retryCount: item.retryCount + 1,
           lastTriedAt: now,
+          metadata: {
+            ...(item.metadata || {}),
+            deadReason: 'business_reject',
+          },
         })
         failed++
         if (item.api === '/api/savePosOrder') {
@@ -302,6 +363,10 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
         lastError: errText,
         retryCount: item.retryCount + 1,
         lastTriedAt: Date.now(),
+        metadata: {
+          ...(item.metadata || {}),
+          deadReason: isNetworkError(e) ? 'network_error' : 'exception',
+        },
       })
       if (isNetworkError(e)) {
         reportNetworkFailure()
@@ -327,4 +392,8 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
     notifySyncComplete({ synced, failed })
   }
   return { synced, failed }
+  } finally {
+    inMemorySyncRunning = false
+    releaseSyncLeader()
+  }
 }

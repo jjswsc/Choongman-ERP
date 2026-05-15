@@ -63,7 +63,16 @@ function workflowFilingType(filingType: ThaiFilingType): string {
 function computeDueYmd(filingType: ThaiFilingType, yearMonth: string): string {
   const y = Number(yearMonth.slice(0, 4))
   const m = Number(yearMonth.slice(5, 7))
-  if (filingType === 'vat_pp30' || filingType === 'wht_ppnd' || filingType === 'sso_contribution') {
+  if (filingType === 'wht_pnd54') {
+    const d = new Date(y, m, 7) // 다음달 7일 (해외지급 원천세 일반 기준)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-07`
+  }
+  if (
+    filingType === 'vat_pp30' ||
+    filingType === 'vat_pp36' ||
+    filingType === 'wht_ppnd' ||
+    filingType === 'sso_contribution'
+  ) {
     const d = new Date(y, m, 15) // 다음달 15일
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`
   }

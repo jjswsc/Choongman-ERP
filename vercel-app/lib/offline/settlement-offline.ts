@@ -5,7 +5,7 @@
 
 import { isOnline } from './network'
 import { getFromCache, setCache } from './cache'
-import { getPosSettlement, type PosSettlement } from '@/lib/api-client'
+import { getPosSettlement, type PosCloseRun, type PosSettlement } from '@/lib/api-client'
 
 function cacheKeySettlement(storeCode: string, settleDate: string): string {
   return `settlement:${storeCode}:${settleDate}`
@@ -31,6 +31,7 @@ export type PosSettlementResponse = {
     autoOtherBreakdown?: Record<string, number>
   } | null
   settlement: PosSettlement | PosSettlement[] | null
+  closeRun?: PosCloseRun | null
 }
 
 export async function getPosSettlementWithCache(params: {
@@ -56,6 +57,7 @@ export async function getPosSettlementWithCache(params: {
           tillNetForSettleDate: 0,
           linkpos: null,
           settlement: null,
+          closeRun: null,
         }
       )
     }
@@ -71,6 +73,7 @@ export async function getPosSettlementWithCache(params: {
       tillNetForSettleDate: 0,
       linkpos: null,
       settlement: null,
+      closeRun: null,
     }
   )
 }

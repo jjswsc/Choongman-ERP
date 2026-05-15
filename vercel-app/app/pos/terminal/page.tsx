@@ -64,7 +64,12 @@ import {
   registerLocallyPrintedQueuedOrderNo,
 } from '@/lib/offline/pos-queued-sync-print-suppress'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
-import { cartLinesToPosOrderItems, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import {
+  cartLinesToPosOrderItems,
+  mergeDineInAddonCartPosItemsWithExisting,
+  orderUiItemsToPosOrderItems,
+  resolveCartLineQuantityForSave,
+} from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
@@ -86,7 +91,7 @@ import {
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
-import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
+import { escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
@@ -111,7 +116,6 @@ import {
   resolveAfterReceiptToKitchenDelayMs,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
-import { normalizePosLineNote } from '@/lib/pos-line-note'
 import {
   normalizePosTableNameForMatch,
   translatePosMenuLineForReceipt,
@@ -398,6 +402,8 @@ export default function PosTerminalPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const typeParam = searchParams.get('type') ?? 'dine_in'
+  /** 테이블 오더 등 손님 단말: URL `audience=guest` — 메뉴 설명 표시(직원 POS는 미사용) */
+  const showGuestMenuDescriptions = searchParams.get('audience') === 'guest'
   const orderType = useMemo(() => {
     if (typeParam === 'takeout') return 'takeout' as const
     if (typeParam === 'delivery') return 'delivery' as const
@@ -4728,6 +4734,14 @@ export default function PosTerminalPage() {
                   return
                 }
                 const incomingItems = cartLinesToPosOrderItems(payloadItemsNormalized)
+                /** 카트에 기존 줄이 없을 때(첫 주문 후 카트 비움)에도 DB·영수증이 한 주문으로 유지되도록 병합 */
+                const posItemsForSave =
+                  isAddOrder && existingOrder
+                    ? mergeDineInAddonCartPosItemsWithExisting(
+                        orderUiItemsToPosOrderItems(existingOrder.items),
+                        incomingItems
+                      )
+                    : incomingItems
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
                 let queuedLocalOrderNo: string | null = null
@@ -4737,15 +4751,15 @@ export default function PosTerminalPage() {
                 }
                 if (isAddOrder && existingOrder) {
                   /**
-                   * 추가 주문: `incomingItems`는 이미 카트에 담긴 **전체** 라인(기존 주문 + 수정분)이다.
-                   * 여기에 `existingOrder.items`를 다시 이어붙이면 DB·영수증이 2배로 중복된다.
+                   * 추가 주문: 카트가 기존+신규 전체일 수도 있고, 신규 줄만 있을 수도 있다.
+                   * `posItemsForSave`는 `mergeDineInAddonCartPosItemsWithExisting`로 후자일 때 DB 줄을 유지한다.
                    */
                   if (isMainPosDevice) {
                     mainPosSelfDineInUpdateSuppressUntilRef.current.set(existingOrderId, Date.now() + 12_000)
                   }
                   const updateReq = {
                     id: existingOrderId,
-                    items: incomingItems,
+                    items: posItemsForSave,
                     tableName: payload.tableName,
                     memo: payload.memo,
                     discountAmt: payload.discountAmt ?? 0,
@@ -4851,7 +4865,7 @@ export default function PosTerminalPage() {
                   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
                 }
                 const mapPosItemToReceiptLine = (
-                  it: (typeof incomingItems)[number],
+                  it: (typeof posItemsForSave)[number],
                   addon: boolean
                 ): ReceiptPrintLine => ({
                   id: String(it.id ?? ''),
@@ -4870,7 +4884,7 @@ export default function PosTerminalPage() {
                     : {}),
                   ...(addon ? { isAddon: true as const } : {}),
                 })
-                const receiptPrintItems: ReceiptPrintLine[] = incomingItems.map((it) => {
+                const receiptPrintItems: ReceiptPrintLine[] = posItemsForSave.map((it) => {
                   if (!isAddOrder || !existingOrder) {
                     return mapPosItemToReceiptLine(it, false)
                   }
@@ -6028,6 +6042,7 @@ export default function PosTerminalPage() {
                     hideTableContextBar
                     onAddItem={handleAddItemToCart}
                     orderType="dine-in"
+                    showMenuDescriptions={showGuestMenuDescriptions}
                     touchMode={isNarrowViewport ? 'large' : 'default'}
                     containMenuHeight={isNarrowViewport}
                     className="h-full"

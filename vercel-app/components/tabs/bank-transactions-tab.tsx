@@ -16,11 +16,9 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  adminTabsBarCn,
   adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -65,6 +63,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import {
   extractExpenseAccrualPrefix,
   extractWithdrawalCategoryFromNote,
@@ -113,7 +112,7 @@ function BankQuickMemoChipBar({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 shrink-0 gap-1 px-2 text-xs"
+            className={`${ADMIN_BTN_XS_CN} shrink-0`}
             onClick={onManageClick}
             title={manageLabel}
           >
@@ -129,7 +128,7 @@ function BankQuickMemoChipBar({
             type="button"
             size="sm"
             variant="secondary"
-            className="h-7 text-xs font-normal px-2.5"
+            className={`${ADMIN_BTN_XS_CN} font-normal`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onPhrase(phrase)}
             title={phrase}
@@ -1724,7 +1723,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 text-xs px-2"
+                                    className={ADMIN_BTN_XS_CN}
                                     onClick={() => setRegisterActionRow(r)}
                                   >
                                     {t("bankRegisterLink") || "지출등록"}
@@ -1733,7 +1732,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 text-xs px-2 shrink-0"
+                                    className={`${ADMIN_BTN_XS_CN} shrink-0`}
                                     onClick={() => {
                                       const amt = Math.abs(r.amount ?? 0)
                                       const bankMemo = (r.memo || "").trim().slice(0, 500)
@@ -2497,7 +2496,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Tabs>
 
       <Dialog open={accountManageOpen} onOpenChange={(open) => { setAccountManageOpen(open); if (!open) { setEditingAccountId(null); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("bankAccountManage")}</DialogTitle>
           </DialogHeader>
@@ -2589,7 +2588,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 px-2"
+                            className={ADMIN_BTN_XS_CN}
                             onClick={() => {
                               setEditingAccountId(a.id)
                               setEditAccountForm({
@@ -2606,7 +2605,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 px-2 text-destructive hover:text-destructive"
+                            className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
                             onClick={() => handleDeleteAccount(a.id)}
                             disabled={accountDeletingId !== null}
                           >
@@ -2685,7 +2684,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Dialog>
 
       <Dialog open={!!memoPreviewText} onOpenChange={(open) => !open && setMemoPreviewText(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
           </DialogHeader>
@@ -2694,7 +2693,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Dialog>
 
       <Dialog open={!!invoicePhotoPreviewUrl} onOpenChange={(open) => !open && setInvoicePhotoPreviewUrl(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className={`max-w-2xl ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("poInvoice") || "인보이스"}</DialogTitle>
           </DialogHeader>
@@ -2709,7 +2708,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Dialog>
 
       <Dialog open={!!invoiceLinkRow} onOpenChange={(open) => !open && setInvoiceLinkRow(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("bankInvoiceCheckTitle") || "인보이스 수령 체크"}</DialogTitle>
           </DialogHeader>
@@ -2749,7 +2748,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Dialog>
 
       <Dialog open={!!registerActionRow} onOpenChange={(open) => !open && setRegisterActionRow(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("bankRegisterLabel") || "지출 등록"}</DialogTitle>
           </DialogHeader>
@@ -2809,7 +2808,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}</DialogTitle>
           </DialogHeader>
@@ -2943,7 +2942,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Dialog>
 
       <Dialog open={!!registerExpenseRow} onOpenChange={(open) => !open && (setRegisterExpenseRow(null), setRegisterEditMode(false))}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("bankRegisterExpense") || "지출 발생으로 등록"}</DialogTitle>
           </DialogHeader>
@@ -3032,7 +3031,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           !open && (setRegisterPurchaseRow(null), setRegisterEditMode(false), setRegisterPurchaseLinkedOrderId(""))
         }
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("bankRegisterPurchase") || "매입 발생으로 등록"}</DialogTitle>
           </DialogHeader>

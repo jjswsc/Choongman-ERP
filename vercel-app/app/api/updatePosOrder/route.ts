@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
+import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import {
+  supabaseSelectFilterStrippingUnknownColumns,
+  supabaseUpdateByFilterWithPgrst204Fallback,
+} from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
@@ -12,6 +15,8 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -47,6 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
     const id = Number(body?.id)
+    const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
     const items = await enrichOrderItemsWithOptionCode(itemsRaw)
     const memo = String(body?.memo ?? '').trim()
@@ -84,14 +90,26 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const existing = (await supabaseSelectFilter(
+    if (idempotencyKey) {
+      const duplicated = await reserveRequestIdempotencyKey({
+        scope: `update_pos_order:${id}`,
+        key: idempotencyKey,
+        payload: { id, source: fromOfflineQueueSync ? 'offline_queue' : 'api' },
+      })
+      if (duplicated) {
+        return NextResponse.json({ success: true, noop: true, duplicate: true }, { headers })
+      }
+    }
+
+    const existing = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_orders',
       `id=eq.${id}`,
       {
         limit: 1,
         select:
           'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total',
-      }
+      },
+      'updatePosOrder'
     )) as {
       id?: number
       order_no?: string
@@ -126,6 +144,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const current = existing[0]
+    /** select에서 service_amt를 뺐다면 DB에 컬럼이 없는 레거시 스키마 — PATCH도 할인 필드 정합에 맞춘다 */
+    const hasServiceColumns = Object.prototype.hasOwnProperty.call(current ?? {}, 'service_amt')
     const tableName = sanitizePosOrderTableNameForDb(current?.order_type, body?.tableName)
 
     const statusRaw = String(current?.status ?? '').trim()
@@ -222,9 +242,22 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'updatePosOrder')
+      if (hasServiceColumns) {
+        await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'updatePosOrder')
+      } else {
+        const legacyPatch = { ...patch }
+        delete legacyPatch.service_amt
+        delete legacyPatch.service_reason
+        legacyPatch.discount_amt = discountAmt
+        if (serviceAmt > 0) {
+          const baseReason = String(legacyPatch.discount_reason ?? '').trim()
+          const svcReason = serviceReason || `service:${serviceAmt}`
+          legacyPatch.discount_reason = [baseReason, svcReason].filter(Boolean).join(' · ')
+        }
+        await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, legacyPatch, 'updatePosOrder')
+      }
     } catch (e) {
-      if (!isMissingServiceColumnsError(e)) throw e
+      if (!hasServiceColumns || !isMissingServiceColumnsError(e)) throw e
       const legacyPatch = { ...patch }
       delete legacyPatch.service_amt
       delete legacyPatch.service_reason
@@ -349,6 +382,18 @@ export async function POST(req: NextRequest) {
       before: auditBefore,
       after: auditAfter,
       reason: fromOfflineQueueSync ? 'offline_sync_update' : 'manual_order_update',
+    })
+
+    await enqueueKitchenPrintJob({
+      storeCode: String(current?.store_code || '').trim(),
+      orderId: id,
+      orderNo: String(current?.order_no || `POS-${id}`),
+      source: fromOfflineQueueSync ? 'offline_queue_update' : 'updatePosOrder',
+      dedupeKey: `order:${id}:kitchen:auto`,
+      payload: {
+        action: 'update_order',
+        status,
+      },
     })
 
     return NextResponse.json({ success: true, pointEarned }, { headers })

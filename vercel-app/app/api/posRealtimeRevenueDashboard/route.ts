@@ -11,6 +11,8 @@ import {
 } from '@/lib/pos-sales-store-filter'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import { isOfficeRole } from '@/lib/permissions'
 
 const FETCH_LIMIT = 50000
 const COMPLETED_STATUSES = new Set(['completed', 'paid', 'ready'])
@@ -187,15 +189,23 @@ function finalizeStoreRow(acc: StoreAccumulator) {
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Access-Control-Allow-Origin', request.headers.get('origin') || '*')
   headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+  const startedAt = Date.now()
   try {
+    const auth = await getVerifiedAuth(request)
     const { searchParams } = new URL(request.url)
     const todayYmd = toBangkokYmd(new Date())
     const startStr = searchParams.get('startStr')?.trim() || todayYmd
     const endStr = searchParams.get('endStr')?.trim() || startStr
     const pos = searchParams.get('pos')?.trim()
-    const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
+    const requestedStores = resolveStoresFromParams(pos, searchParams.get('stores'))
+    const isOffice = isOfficeRole(auth?.role || '')
+    const stores = isOffice
+      ? requestedStores
+      : String(auth?.store || '').trim()
+        ? [String(auth?.store || '').trim()]
+        : requestedStores
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
     const delayThresholdMin = Math.max(
       1,
@@ -321,11 +331,16 @@ export async function GET(request: NextRequest) {
         },
         generatedAt: new Date().toISOString(),
         truncated: rowsRaw.length >= FETCH_LIMIT,
+        elapsedMs: Date.now() - startedAt,
       },
       { headers }
     )
   } catch (e) {
     console.error('posRealtimeRevenueDashboard:', e)
+    console.error('posRealtimeRevenueDashboard_metrics', {
+      elapsedMs: Date.now() - startedAt,
+      error: e instanceof Error ? e.message : String(e),
+    })
     return NextResponse.json(
       {
         success: false,

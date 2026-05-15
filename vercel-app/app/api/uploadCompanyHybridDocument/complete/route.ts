@@ -11,6 +11,7 @@ import {
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
 import { resolveCategoryIdForDocument } from '@/lib/company-hybrid-category-server'
+import { mergeMetadataWithCorrespondence } from '@/lib/company-hybrid-correspondence'
 
 const BUCKET = COMPANY_DOCUMENTS_BUCKET
 
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
     const note = norm(body.note)
     const validFrom = body.validFrom != null && String(body.validFrom).trim() ? String(body.validFrom).slice(0, 10) : null
     const validTo = body.validTo != null && String(body.validTo).trim() ? String(body.validTo).slice(0, 10) : null
+    const hasCorrespondenceKey = Object.prototype.hasOwnProperty.call(body, 'correspondence')
     const fileName = norm(body.fileName)
     const storagePath = norm(body.storagePath)
     const fileSize = Number(body.fileSize)
@@ -82,6 +84,10 @@ export async function POST(request: NextRequest) {
 
     const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
     const now = new Date().toISOString()
+    const metadataNew = mergeMetadataWithCorrespondence(
+      {},
+      hasCorrespondenceKey ? body.correspondence : undefined
+    )
     const inserted = await supabaseInsert('company_hybrid_documents', {
       store,
       related_type: 'none',
@@ -99,6 +105,7 @@ export async function POST(request: NextRequest) {
       valid_from: validFrom,
       valid_to: validTo,
       note: note || null,
+      metadata: metadataNew,
       created_by_name: auth.name || null,
       created_by_store: auth.store || null,
       created_at: now,

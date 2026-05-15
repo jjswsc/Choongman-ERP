@@ -13,6 +13,7 @@ type PosOrderAuditPayload = {
   orderNo?: string | null
   storeCode?: string | null
   actionType: string
+  idempotencyKey?: string | null
   actor?: PosOrderAuditActor | null
   source?: string | null
   reason?: string | null
@@ -23,6 +24,11 @@ type PosOrderAuditPayload = {
 function isMissingAuditTableError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
   return msg.includes('pos_order_audit_logs') || msg.includes('42p01')
+}
+
+function isMissingOrderEventsTableError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('pos_order_events') || msg.includes('42p01')
 }
 
 function normalizeComparableValue(v: unknown): string {
@@ -54,6 +60,42 @@ function buildChangedFields(
   return out
 }
 
+export async function appendPosOrderEvent(payload: PosOrderAuditPayload): Promise<void> {
+  const orderId = Math.floor(Number(payload.orderId))
+  if (!Number.isFinite(orderId) || orderId <= 0) return
+  const before = payload.before || null
+  const after = payload.after || null
+  const changedFields = buildChangedFields(before, after)
+  const actor = payload.actor || null
+
+  try {
+    await supabaseInsert('pos_order_events', {
+      order_id: orderId,
+      order_no: String(payload.orderNo || '').trim() || null,
+      store_code: String(payload.storeCode || '').trim() || null,
+      event_type: String(payload.actionType || 'unknown').trim().slice(0, 120) || 'unknown',
+      actor_name: String(actor?.name || '').trim() || null,
+      actor_role: String(actor?.role || '').trim() || null,
+      actor_store: String(actor?.store || '').trim() || null,
+      actor_employee_code: String(actor?.employeeCode || '').trim() || null,
+      actor_employee_id:
+        actor?.employeeId != null && Number.isFinite(Number(actor.employeeId))
+          ? Math.floor(Number(actor.employeeId))
+          : null,
+      source: String(payload.source || '').trim().slice(0, 80) || null,
+      reason: String(payload.reason || '').trim().slice(0, 500) || null,
+      before_json: before,
+      after_json: after,
+      changed_fields_json: changedFields,
+      idempotency_key: String(payload.idempotencyKey || '').trim().slice(0, 200) || null,
+      event_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    if (isMissingOrderEventsTableError(e)) return
+    throw e
+  }
+}
+
 export async function writePosOrderAuditTrail(payload: PosOrderAuditPayload): Promise<void> {
   const orderId = Math.floor(Number(payload.orderId))
   if (!Number.isFinite(orderId) || orderId <= 0) return
@@ -61,6 +103,12 @@ export async function writePosOrderAuditTrail(payload: PosOrderAuditPayload): Pr
   const after = payload.after || null
   const changedFields = buildChangedFields(before, after)
   const actor = payload.actor || null
+
+  try {
+    await appendPosOrderEvent(payload)
+  } catch (e) {
+    if (!isMissingOrderEventsTableError(e)) throw e
+  }
 
   try {
     await supabaseInsert('pos_order_audit_logs', {

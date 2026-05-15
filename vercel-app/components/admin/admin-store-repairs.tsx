@@ -16,11 +16,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
@@ -53,6 +51,7 @@ import { isStoreRepairVideoUrl } from "@/lib/store-repair-media"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { StoreRepairsProcessTab } from "@/components/admin/store-repairs-process-tab"
 import { useTranslatedTextMap, useDebouncedTranslatedText } from "@/lib/use-ui-translate"
+import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 const CATEGORIES: { v: string; k: string }[] = [
   { v: "시설", k: "repair_cat_facility" },
@@ -824,7 +823,7 @@ export function AdminStoreRepairs() {
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn("max-w-lg", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{t("repair_detail_title")}</DialogTitle>
           </DialogHeader>
@@ -982,7 +981,7 @@ export function AdminStoreRepairs() {
       </Dialog>
 
       <Dialog open={!!photoPreview} onOpenChange={() => setPhotoPreview(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className={cn("max-w-3xl", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{t("photo")}</DialogTitle>
           </DialogHeader>

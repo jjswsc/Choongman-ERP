@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
     const lines: string[] = []
     lines.push('section,key,value')
     lines.push(`summary,period_type,${data.periodType}`)
+    lines.push(`summary,filing_form,${data.filingForm}`)
     lines.push(`summary,period_key,${data.periodKey}`)
     lines.push(`summary,months,${escCell(data.months.join('|'))}`)
     lines.push(`summary,store_filter,${escCell(data.storeFilter)}`)
@@ -54,12 +55,17 @@ export async function GET(request: NextRequest) {
     lines.push(`summary,tax_add_back,${data.taxAddBack}`)
     lines.push(`summary,tax_deduction,${data.taxDeduction}`)
     lines.push(`summary,taxable_income,${data.taxableIncome}`)
+    lines.push(`summary,projected_annual_taxable_income,${data.projectedAnnualTaxableIncome}`)
     lines.push(`summary,tax_rate,${data.taxRate}`)
     lines.push(`summary,estimated_tax,${data.estimatedTax}`)
+    lines.push(`summary,filing_tax_due,${data.filingTaxDue}`)
     for (const item of data.adjustments) {
       lines.push(
         `adjustment,${escCell(item.type + ':' + item.itemName)},${item.amount}`
       )
+      if (item.memo) {
+        lines.push(`evidence,${escCell(item.itemName)},${escCell(item.memo)}`)
+      }
     }
     const csv = lines.join('\r\n')
     return new NextResponse(csv, {

@@ -379,6 +379,29 @@ export async function GET(request: NextRequest) {
       cashActualDenoms: mapCashActualDenomsFromDb(s.cash_actual_denoms),
     }))
 
+    const closeRuns = ((storeCode && storeCode !== 'All'
+      ? await supabaseSelectFilter(
+          'pos_close_runs',
+          `store_code=eq.${encodeURIComponent(storeCode)}&business_date=eq.${encodeURIComponent(settleYmd)}`,
+          {
+            limit: 1,
+            select: 'id,status,checks_json,totals_json,settlement_ref,posted_journal_entry_id,validated_at,finalized_at',
+          }
+        ).catch(() => [])
+      : []) ?? []) as
+      | {
+          id?: number
+          status?: string
+          checks_json?: Record<string, unknown> | null
+          totals_json?: Record<string, unknown> | null
+          settlement_ref?: number | null
+          posted_journal_entry_id?: number | null
+          validated_at?: string | null
+          finalized_at?: string | null
+        }[]
+      | null
+    const closeRun = closeRuns?.[0]
+
     return NextResponse.json(
       {
         systemTotal,
@@ -400,6 +423,24 @@ export async function GET(request: NextRequest) {
           autoOtherBreakdown,
         },
         settlement: storeCode && storeCode !== 'All' ? list[0] ?? null : list,
+        closeRun: closeRun
+          ? {
+              id: Number(closeRun.id || 0),
+              status: String(closeRun.status || 'draft'),
+              checks: closeRun.checks_json && typeof closeRun.checks_json === 'object' ? closeRun.checks_json : {},
+              totals: closeRun.totals_json && typeof closeRun.totals_json === 'object' ? closeRun.totals_json : {},
+              settlementRef:
+                closeRun.settlement_ref != null && Number.isFinite(Number(closeRun.settlement_ref))
+                  ? Number(closeRun.settlement_ref)
+                  : null,
+              postedJournalEntryId:
+                closeRun.posted_journal_entry_id != null && Number.isFinite(Number(closeRun.posted_journal_entry_id))
+                  ? Number(closeRun.posted_journal_entry_id)
+                  : null,
+              validatedAt: closeRun.validated_at || null,
+              finalizedAt: closeRun.finalized_at || null,
+            }
+          : null,
       },
       { headers }
     )

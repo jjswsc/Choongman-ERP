@@ -37,6 +37,7 @@ import { StoreRepairMediaThumb } from "@/components/store-repair-media-thumb"
 import { isStoreRepairVideoUrl } from "@/lib/store-repair-media"
 import { cn } from "@/lib/utils"
 import { useTranslatedTextMap, useDebouncedTranslatedText } from "@/lib/use-ui-translate"
+import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 const OPEN_STATUSES = new Set(["접수", "진행중", "보류"])
 
@@ -519,7 +520,7 @@ export function StoreRepairsProcessTab({
       </div>
 
       <Dialog open={!!photoPreview} onOpenChange={() => setPhotoPreview(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className={cn("max-w-3xl", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{t("photo")}</DialogTitle>
           </DialogHeader>

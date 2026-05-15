@@ -20,6 +20,7 @@ import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
+import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -456,6 +457,7 @@ export async function POST(req: NextRequest) {
         orderNo,
         storeCode,
         actionType: 'create_order',
+        idempotencyKey: idempotencyKey || null,
         source: 'api',
         actor: {
           name: String(auth?.name || createdBy || '').trim() || null,
@@ -480,6 +482,20 @@ export async function POST(req: NextRequest) {
           payment_delivery_app: paymentDeliveryApp,
         },
         reason: 'new_order_created',
+      })
+    }
+
+    if (Number(created?.id) > 0 && isPosCompletionStatus(orderStatus)) {
+      await enqueueKitchenPrintJob({
+        storeCode,
+        orderId: Number(created.id),
+        orderNo,
+        source: 'savePosOrder',
+        dedupeKey: `order:${Number(created.id)}:kitchen:auto`,
+        payload: {
+          action: 'create_order',
+          status: orderStatus,
+        },
       })
     }
 

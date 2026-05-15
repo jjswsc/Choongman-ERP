@@ -1,4 +1,5 @@
 import type { PosOrderItem } from '@/lib/api-client'
+import type { OrderItem } from '@/lib/pos-types'
 
 export type CartLineForPosOrder = {
   id: string
@@ -86,6 +87,78 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
             ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
           }
         : {}),
+    }
+  })
+}
+
+function normPosOrderItemId(id: unknown): string {
+  return String(id ?? '').trim()
+}
+
+/** 테이블·조회용 `OrderItem` → `updatePosOrder` / 병합용 `PosOrderItem` */
+export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
+  return items.map((i) => {
+    const q = resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
+    const menuIdPrimary = String(i.menuId ?? '').trim()
+    const optionIdPrimary = String(i.optionId ?? '').trim()
+    const optionCodePrimary = String(i.optionCode ?? '').trim()
+    return {
+      id: String(i.id ?? ''),
+      name: String(i.name ?? ''),
+      price: Number(i.price ?? 0) || 0,
+      qty: q,
+      quantity: q,
+      ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
+      ...(menuIdPrimary ? { menuId1: menuIdPrimary } : {}),
+      ...(optionIdPrimary ? { optionId1: optionIdPrimary } : {}),
+      ...(optionCodePrimary ? { optionCode1: optionCodePrimary } : {}),
+      ...(i.servedAt ? { servedAt: i.servedAt } : {}),
+      ...(i.servedBy ? { servedBy: i.servedBy } : {}),
+      ...(i.cancelledAt ? { cancelledAt: i.cancelledAt } : {}),
+      ...(i.cancelledBy ? { cancelledBy: i.cancelledBy } : {}),
+      ...(String(i.cancelReason ?? '').trim() ? { cancelReason: String(i.cancelReason) } : {}),
+      ...(i.promoId
+        ? {
+            promoId: i.promoId,
+            ...(i.promoCode ? { promoCode: i.promoCode } : {}),
+            ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+          }
+        : {}),
+      ...(i.deliveryAppCode ? { deliveryAppCode: i.deliveryAppCode } : {}),
+      ...(i.setChildrenState ? { setChildrenState: i.setChildrenState } : {}),
+    }
+  })
+}
+
+/**
+ * 홀(dine-in) 추가 주문: 카트에 **신규 줄만** 있을 때(기존 줄이 카트에 안 올라온 경우)
+ * `updatePosOrder`가 `items_json` 전체를 덮어쓰므로, DB에 있던 줄을 유지하고 카트 줄을 이어붙인다.
+ * 카트에 기존 id가 하나라도 있으면 카트를 전체 스냅샷으로 보고(수량·삭제 반영) 그대로 둔다.
+ */
+export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[], fromCart: PosOrderItem[]): PosOrderItem[] {
+  if (fromCart.length === 0) return existing
+  const baseIds = new Set(existing.map((b) => normPosOrderItemId(b.id)).filter(Boolean))
+  const allCartLinesAreNewIds = fromCart.every((c) => !baseIds.has(normPosOrderItemId(c.id)))
+  if (allCartLinesAreNewIds) {
+    return [...existing.map((e) => ({ ...e })), ...fromCart.map((c) => ({ ...c }))]
+  }
+  const baseById = new Map<string, PosOrderItem>()
+  for (const b of existing) {
+    const k = normPosOrderItemId(b.id)
+    if (k) baseById.set(k, b)
+  }
+  return fromCart.map((c) => {
+    const k = normPosOrderItemId(c.id)
+    const b = k ? baseById.get(k) : undefined
+    if (!b) return { ...c }
+    return {
+      ...b,
+      ...c,
+      servedAt: c.servedAt ?? b.servedAt ?? null,
+      servedBy: c.servedBy ?? b.servedBy ?? null,
+      cancelledAt: c.cancelledAt ?? b.cancelledAt ?? null,
+      cancelledBy: c.cancelledBy ?? b.cancelledBy ?? null,
+      cancelReason: c.cancelReason ?? b.cancelReason ?? null,
     }
   })
 }

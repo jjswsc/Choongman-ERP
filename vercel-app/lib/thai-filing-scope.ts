@@ -7,7 +7,9 @@ export type ThaiFilingResponsibility = 'in_house' | 'tax_agent' | 'tbd'
 
 export type ThaiFilingType =
   | 'vat_pp30'
+  | 'vat_pp36'
   | 'wht_ppnd'
+  | 'wht_pnd54'
   | 'cit_ppnd50'
   | 'dbd_annual_fs'
   | 'sso_contribution'
@@ -32,10 +34,26 @@ export const THAI_FILING_DEFINITIONS: ThaiFilingDefinition[] = [
     frequencyKo: '일반적으로 월별',
   },
   {
+    id: 'vat_pp36',
+    labelKo: '해외서비스 부가세 (ภ.พ.36)',
+    labelTh: 'ภ.พ.36 ภาษีมูลค่าเพิ่มจากบริการต่างประเทศ',
+    labelEn: 'Imported service VAT (PP.36)',
+    rdFormHint: 'ภ.พ.36',
+    frequencyKo: '일반적으로 월별',
+  },
+  {
     id: 'wht_ppnd',
     labelKo: '원천징수 (ภ.ง.ด.3/53 등)',
     labelTh: 'ภาษีหัก ณ ที่จ่าย (ภ.ง.ด.)',
     labelEn: 'Withholding tax (PND forms)',
+    frequencyKo: '지급·월별 등 유형별',
+  },
+  {
+    id: 'wht_pnd54',
+    labelKo: '해외지급 원천세 (ภ.ง.ด.54)',
+    labelTh: 'ภ.ง.ด.54 ภาษีหัก ณ ที่จ่ายจากต่างประเทศ',
+    labelEn: 'Overseas withholding tax (PND.54)',
+    rdFormHint: 'ภ.ง.ด.54',
     frequencyKo: '지급·월별 등 유형별',
   },
   {
@@ -71,7 +89,9 @@ export const THAI_FILING_DEFINITIONS: ThaiFilingDefinition[] = [
 
 export const DEFAULT_FILING_RESPONSIBILITIES: Record<ThaiFilingType, ThaiFilingResponsibility> = {
   vat_pp30: 'tbd',
+  vat_pp36: 'tbd',
   wht_ppnd: 'tbd',
+  wht_pnd54: 'tbd',
   cit_ppnd50: 'tbd',
   dbd_annual_fs: 'tbd',
   sso_contribution: 'tbd',

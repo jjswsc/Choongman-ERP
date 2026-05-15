@@ -22,6 +22,7 @@ type TaxAdjustmentRow = {
 
 export type CorporateTaxComputation = {
   periodType: 'monthly' | 'half_year' | 'annual'
+  filingForm: 'pnd50' | 'pnd51'
   periodKey: string
   months: string[]
   storeFilter: string
@@ -31,6 +32,8 @@ export type CorporateTaxComputation = {
   taxableIncome: number
   taxRate: number
   estimatedTax: number
+  projectedAnnualTaxableIncome: number
+  filingTaxDue: number
   adjustments: {
     type: 'add_back' | 'deduction'
     itemName: string
@@ -140,10 +143,14 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   }
 
   const taxableIncome = Math.max(0, accountingProfit + taxAddBack - taxDeduction)
-  const estimatedTax = taxableIncome * appliedTaxRate
+  const projectedAnnualTaxableIncome = period.periodType === 'half_year' ? taxableIncome * 2 : taxableIncome
+  const estimatedTax = projectedAnnualTaxableIncome * appliedTaxRate
+  const filingTaxDue = period.periodType === 'half_year' ? estimatedTax * 0.5 : estimatedTax
+  const filingForm: CorporateTaxComputation['filingForm'] = period.periodType === 'half_year' ? 'pnd51' : 'pnd50'
 
   return {
     periodType: period.periodType,
+    filingForm,
     periodKey: period.periodKey,
     months: period.months,
     storeFilter: scope.storeFilter,
@@ -153,6 +160,8 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
     taxableIncome: toFixed2(taxableIncome),
     taxRate: appliedTaxRate,
     estimatedTax: toFixed2(estimatedTax),
+    projectedAnnualTaxableIncome: toFixed2(projectedAnnualTaxableIncome),
+    filingTaxDue: toFixed2(filingTaxDue),
     adjustments,
   }
 }

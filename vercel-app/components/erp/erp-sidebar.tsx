@@ -110,6 +110,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionSales",
     items: [
       { titleKey: "adminLiveStoreSales", icon: Radio, href: "/admin/live-store-sales" },
+      { titleKey: "adminOpsCenter", icon: LayoutDashboard, href: "/admin/ops-center" },
       { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
     ],
   },

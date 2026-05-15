@@ -21,8 +21,11 @@ import {
   getPosDeliveryApps,
   getPosPaymentSettings,
   getPosPrinterSettings,
+  validatePosClose,
+  finalizePosClose,
   useStoreList,
   type PosDeliveryApp,
+  type PosCloseRun,
   type PosSettlement,
 } from '@/lib/api-client'
 import {
@@ -256,8 +259,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
   const [systemCashFromOrders, setSystemCashFromOrders] = React.useState(0)
   const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
+  const [closeRun, setCloseRun] = React.useState<PosCloseRun | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [closeRunning, setCloseRunning] = React.useState(false)
   const [systemSubtotal, setSystemSubtotal] = React.useState(0)
   const [systemVat, setSystemVat] = React.useState(0)
   const [linkposSummary, setLinkposSummary] = React.useState<{
@@ -437,6 +442,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           tillNetForSettleDate: tillNetRaw,
           linkpos,
           settlement: s,
+          closeRun: nextCloseRun,
         } = main
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
         setSystemCashFromOrders(autoCashTotal)
@@ -458,6 +464,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSystemVat(vat ?? 0)
         setLinkposSummary(linkpos ?? null)
         const single = Array.isArray(s) ? s[0] : s
+        setCloseRun(nextCloseRun ?? null)
         if (single) {
           const preferLiveAuto = !Boolean(single.closed)
           setSettlement(single)
@@ -1085,6 +1092,53 @@ ${footerStamp}
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleValidateClose = async () => {
+    if (!effectiveStore) return
+    setCloseRunning(true)
+    try {
+      const res = await validatePosClose({
+        storeCode: effectiveStore,
+        settleDate,
+      })
+      if (!res.success || !res.result) {
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
+        return
+      }
+      const diff = Number(res.result.diffTotal || 0)
+      await appAlert(
+        `${t('posSettlement') || '결산'} Validate: ${
+          res.result.status === 'validated' ? 'OK' : 'Draft'
+        }\nDiff: ${diff.toLocaleString()}`
+      )
+      loadData()
+    } finally {
+      setCloseRunning(false)
+    }
+  }
+
+  const handleFinalizeClose = async () => {
+    if (!effectiveStore) return
+    setCloseRunning(true)
+    try {
+      const res = await finalizePosClose({
+        storeCode: effectiveStore,
+        settleDate,
+      })
+      if (!res.success || !res.result) {
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
+        return
+      }
+      await appAlert(
+        `${t('posSettlementClosedDone') || '마감 완료'}${
+          res.result.postedJournalEntryId ? `\nJE#${res.result.postedJournalEntryId}` : ''
+        }`
+      )
+      loadData()
+    } finally {
+      setCloseRunning(false)
     }
   }
 
@@ -1853,6 +1907,29 @@ ${footerStamp}
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? '...' : t('itemsBtnSave') || '저장'}
               </Button>
+              {!openMode && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleValidateClose}
+                    disabled={saving || closeRunning || !effectiveStore}
+                  >
+                    {closeRunning ? '...' : 'Validate'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleFinalizeClose}
+                    disabled={saving || closeRunning || !effectiveStore}
+                  >
+                    Finalize
+                  </Button>
+                </div>
+              )}
+              {!openMode && closeRun && (
+                <p className="text-xs text-muted-foreground">
+                  Close run: <span className="font-medium">{closeRun.status}</span>
+                </p>
+              )}
             </TabsContent>
 
             <TabsContent value="history" className="space-y-4">

@@ -489,6 +489,37 @@ export async function postPosOrderJournal(params: {
   })
 }
 
+export async function postPosDayClearingJournal(params: {
+  storeCode: string
+  businessDate: string
+  systemTotal: number
+  settlementTotal: number
+  diffTotal: number
+}) {
+  const diff = Number(params.diffTotal || 0)
+  if (Math.abs(diff) <= 0.5) return null
+  const amount = Math.abs(diff)
+  const lines: JournalLineInput[] =
+    diff > 0
+      ? [
+          { ...accountLine('5590', { nameKo: 'POS 마감 차이손실' }), side: 'debit', amount },
+          { ...accountLine('1130', { nameKo: '결제대기자산' }), side: 'credit', amount },
+        ]
+      : [
+          { ...accountLine('1130', { nameKo: '결제대기자산' }), side: 'debit', amount },
+          { ...accountLine('4190', { nameKo: 'POS 마감 차이이익' }), side: 'credit', amount },
+        ]
+
+  return postJournalEntry({
+    accountingDate: String(params.businessDate || '').slice(0, 10),
+    sourceType: 'pos_day_close',
+    sourceId: null,
+    storeName: params.storeCode || null,
+    memo: `POS 일마감 조정분개 (system=${params.systemTotal}, settlement=${params.settlementTotal})`,
+    lines,
+  })
+}
+
 export async function postPosOrderReversalJournal(params: {
   posOrderId: number
   salesDate: string

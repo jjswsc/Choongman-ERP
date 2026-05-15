@@ -60,6 +60,15 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn, escapeHtml } from "@/lib/utils"
+import {
+  ADMIN_BADGE_BASE_CN,
+  ADMIN_BADGE_DANGER_CN,
+  ADMIN_BADGE_NEUTRAL_CN,
+  ADMIN_BADGE_SUCCESS_CN,
+  ADMIN_BADGE_WARNING_CN,
+  ADMIN_BTN_XS_CN,
+  ADMIN_DIALOG_SCROLL_CN,
+} from "@/lib/admin-ui-standards"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
@@ -2156,7 +2165,7 @@ export default function PosOrdersPage() {
                                           <Button
                                             size="sm"
                                             variant={hasKitchenPrintFailure ? "destructive" : "outline"}
-                                            className="h-7 gap-1 px-2 text-xs"
+                                            className={ADMIN_BTN_XS_CN}
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               handlePrintKitchenSlip(o)
@@ -2198,7 +2207,7 @@ export default function PosOrdersPage() {
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-7 gap-1 px-2 text-xs"
+                                        className={ADMIN_BTN_XS_CN}
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           handleOpenEdit(o)
@@ -2290,7 +2299,7 @@ export default function PosOrdersPage() {
                           <td className="px-4 py-3">{r.itemName}</td>
                           <td className="px-4 py-3 text-center tabular-nums">{r.qty}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                            <span className={cn(ADMIN_BADGE_BASE_CN, ADMIN_BADGE_WARNING_CN)}>
                               {r.elapsedMin}
                               {t("posTimeMinUnit")}
                             </span>
@@ -2306,11 +2315,11 @@ export default function PosOrdersPage() {
                           <td className="px-4 py-3 text-center">
                             <span
                               className={cn(
-                                "rounded px-2 py-0.5 text-xs",
-                                r.compareKey === "ok" && "bg-emerald-50 text-emerald-700",
-                                r.compareKey === "warn" && "bg-amber-50 text-amber-700",
-                                r.compareKey === "late" && "bg-rose-50 text-rose-700",
-                                r.compareKey === "unset" && "bg-muted text-muted-foreground"
+                                ADMIN_BADGE_BASE_CN,
+                                r.compareKey === "ok" && ADMIN_BADGE_SUCCESS_CN,
+                                r.compareKey === "warn" && ADMIN_BADGE_WARNING_CN,
+                                r.compareKey === "late" && ADMIN_BADGE_DANGER_CN,
+                                r.compareKey === "unset" && ADMIN_BADGE_NEUTRAL_CN
                               )}
                             >
                               {t(COOK_VERDICT_I18N[r.compareKey])}
@@ -2525,10 +2534,10 @@ export default function PosOrdersPage() {
                           <td className="px-4 py-3 text-center">
                             <span
                               className={cn(
-                                "rounded px-2 py-0.5 text-xs",
-                                a.status === "approved" && "bg-emerald-50 text-emerald-700",
-                                (a.status === "declined" || a.status === "failed") && "bg-rose-50 text-rose-700",
-                                a.status !== "approved" && a.status !== "declined" && a.status !== "failed" && "bg-muted text-muted-foreground"
+                                ADMIN_BADGE_BASE_CN,
+                                a.status === "approved" && ADMIN_BADGE_SUCCESS_CN,
+                                (a.status === "declined" || a.status === "failed") && ADMIN_BADGE_DANGER_CN,
+                                a.status !== "approved" && a.status !== "declined" && a.status !== "failed" && ADMIN_BADGE_NEUTRAL_CN
                               )}
                             >
                               {a.status || "-"}
@@ -2569,7 +2578,7 @@ export default function PosOrdersPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 px-2 text-xs"
+                                className={ADMIN_BTN_XS_CN}
                                 onClick={() => {
                                   void handleRetryAttempt(a)
                                 }}
@@ -2735,11 +2744,11 @@ export default function PosOrdersPage() {
                           <td className="px-4 py-3 text-center">
                             <span
                               className={cn(
-                                "rounded px-2 py-0.5 text-xs",
-                                row.integrationStatus === "ACTIVE" && "bg-emerald-50 text-emerald-700",
-                                row.integrationStatus === "SYNCING" && "bg-amber-50 text-amber-700",
-                                row.integrationStatus === "FAILED" && "bg-rose-50 text-rose-700",
-                                row.integrationStatus === "INACTIVE" && "bg-muted text-muted-foreground"
+                                ADMIN_BADGE_BASE_CN,
+                                row.integrationStatus === "ACTIVE" && ADMIN_BADGE_SUCCESS_CN,
+                                row.integrationStatus === "SYNCING" && ADMIN_BADGE_WARNING_CN,
+                                row.integrationStatus === "FAILED" && ADMIN_BADGE_DANGER_CN,
+                                row.integrationStatus === "INACTIVE" && ADMIN_BADGE_NEUTRAL_CN
                               )}
                             >
                               {row.integrationStatus}
@@ -2765,7 +2774,7 @@ export default function PosOrdersPage() {
 
       {/* LINKPOS 재시도 체인 모달 */}
       <Dialog open={!!chainDialogAttemptId} onOpenChange={(open) => !open && setChainDialogAttemptId(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className={cn("max-w-4xl", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{t("posLinkposRetryChainTitle")}</DialogTitle>
           </DialogHeader>
@@ -2793,7 +2802,7 @@ export default function PosOrdersPage() {
                       {chainRows.map((r) => (
                         <tr key={r.id} className="border-b last:border-b-0">
                           <td className="px-4 py-2.5 text-center">
-                            <span className={cn("rounded px-2 py-0.5 text-xs", r.depth === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                            <span className={cn(ADMIN_BADGE_BASE_CN, r.depth === 0 ? "bg-primary/10 text-primary" : ADMIN_BADGE_NEUTRAL_CN)}>
                               {r.depth === 0
                                 ? t("posLinkposRetryDepthRoot")
                                 : i18nTr(t, "posLinkposRetryDepthN", { n: r.depth })}
@@ -2805,10 +2814,10 @@ export default function PosOrdersPage() {
                           <td className="px-4 py-2.5 text-center">
                             <span
                               className={cn(
-                                "rounded px-2 py-0.5 text-xs",
-                                r.status === "approved" && "bg-emerald-50 text-emerald-700",
-                                (r.status === "declined" || r.status === "failed") && "bg-rose-50 text-rose-700",
-                                r.status !== "approved" && r.status !== "declined" && r.status !== "failed" && "bg-muted text-muted-foreground"
+                                ADMIN_BADGE_BASE_CN,
+                                r.status === "approved" && ADMIN_BADGE_SUCCESS_CN,
+                                (r.status === "declined" || r.status === "failed") && ADMIN_BADGE_DANGER_CN,
+                                r.status !== "approved" && r.status !== "declined" && r.status !== "failed" && ADMIN_BADGE_NEUTRAL_CN
                               )}
                             >
                               {r.status || "-"}
@@ -2840,7 +2849,7 @@ export default function PosOrdersPage() {
 
       {/* 주문 수정 모달 */}
       <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn("max-w-md", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>
               {t("posOrderEdit") || "주문 수정"} — {editOrder?.orderNo}

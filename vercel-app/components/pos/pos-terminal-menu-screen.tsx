@@ -115,6 +115,11 @@ export interface PosTerminalMenuScreenProps {
    * 터미널에서 테이블·뒤로가기를 장바구니로 옮길 때 사용.
    */
   hideTableContextBar?: boolean
+  /**
+   * 관리자에 등록한 메뉴/옵션 설명(채널별) 표시.
+   * 테이블 오더 등 손님 단말에서만 true — 직원 POS는 false.
+   */
+  showMenuDescriptions?: boolean
 }
 
 type PromoChoiceDialogState = {
@@ -138,6 +143,7 @@ export function PosTerminalMenuScreen({
   containMenuHeight = false,
   className,
   hideTableContextBar = false,
+  showMenuDescriptions = false,
   configReloadNonce = 0,
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
@@ -1165,7 +1171,9 @@ export function PosTerminalMenuScreen({
               </button>
             ))}
             {filteredMenus.map((m) => {
-              const menuDesc = resolvePosMenuDescriptionForChannel(m, descriptionChannel)
+              const menuDesc = showMenuDescriptions
+                ? resolvePosMenuDescriptionForChannel(m, descriptionChannel)
+                : ''
               return (
               <button
                 key={m.id}
@@ -1375,7 +1383,7 @@ export function PosTerminalMenuScreen({
                 ? ` (${(optionPickerStep || 0) + 1}/${optionPickerMenu.optionSelectionGroups.length})`
                 : ''}
             </DialogTitle>
-            {optionPickerMenu
+            {showMenuDescriptions && optionPickerMenu
               ? (() => {
                   const md = resolvePosMenuDescriptionForChannel(optionPickerMenu, descriptionChannel)
                   return md ? (
@@ -1414,7 +1422,9 @@ export function PosTerminalMenuScreen({
                   ) : (
                     <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                       {list.map((menu) => {
-                        const banDesc = resolvePosMenuDescriptionForChannel(menu, descriptionChannel)
+                        const banDesc = showMenuDescriptions
+                          ? resolvePosMenuDescriptionForChannel(menu, descriptionChannel)
+                          : ''
                         return (
                         <button
                           key={menu.id}
@@ -1599,7 +1609,9 @@ export function PosTerminalMenuScreen({
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
                 {optsToShow.map((opt) => {
-                  const optDesc = resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
+                  const optDesc = showMenuDescriptions
+                    ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
+                    : ''
                   return (
                   <button
                     key={opt.id}

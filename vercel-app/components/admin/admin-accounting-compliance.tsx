@@ -8,13 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsContentEmbeddedCn,
   adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsRootEmbeddedCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
@@ -57,12 +55,23 @@ import {
   getWithholdingTaxLedger,
   saveWithholdingTaxLedgerEntry,
   deleteWithholdingTaxLedgerEntry,
+  getPp36Ledger,
+  savePp36LedgerEntry,
+  deletePp36LedgerEntry,
+  getPnd54Ledger,
+  savePnd54LedgerEntry,
+  deletePnd54LedgerEntry,
   getExportVatLedgerCsvUrl,
   getExportWithholdingTaxLedgerCsvUrl,
+  getExportPp36LedgerCsvUrl,
+  getExportPnd54LedgerCsvUrl,
   getExportPnd1RdPrepTxtUrl,
   validatePnd1RdPrep,
+  validatePnd3Pnd53,
+  saveCorporateTaxAdjustments,
   getPayrollWhtTinGaps,
   type ValidatePnd1RdPrepResult,
+  type ValidatePnd3Pnd53Result,
   type PayrollWhtTinGapResult,
   getKt20kSettings,
   saveKt20kSettings,
@@ -137,6 +146,42 @@ type WhtDraft = {
   wht_amount: string
   form_hint: string
   certificate_no: string
+  filing_status: "draft" | "submitted"
+  submitted_at: string
+  submitted_by: string
+  memo: string
+  store_name: string
+}
+
+type Pp36Draft = {
+  id?: number
+  doc_date: string
+  tax_month: string
+  supplier_name: string
+  supplier_country: string
+  supplier_tax_id: string
+  service_desc: string
+  taxable_amount: string
+  vat_rate: string
+  vat_amount: string
+  filing_status: "draft" | "submitted"
+  submitted_at: string
+  submitted_by: string
+  memo: string
+  store_name: string
+}
+
+type Pnd54Draft = {
+  id?: number
+  payment_date: string
+  tax_month: string
+  payee_name: string
+  payee_country: string
+  payee_tax_id: string
+  income_type: string
+  gross_amount: string
+  wht_rate: string
+  wht_amount: string
   filing_status: "draft" | "submitted"
   submitted_at: string
   submitted_by: string
@@ -273,6 +318,44 @@ function emptyWht(taxMonth: string, defaultStoreName: string): WhtDraft {
     wht_amount: "",
     form_hint: "",
     certificate_no: "",
+    filing_status: "draft",
+    submitted_at: "",
+    submitted_by: "",
+    memo: "",
+    store_name: defaultStoreName,
+  }
+}
+
+function emptyPp36(taxMonth: string, defaultStoreName: string): Pp36Draft {
+  return {
+    doc_date: `${taxMonth}-01`,
+    tax_month: taxMonth,
+    supplier_name: "",
+    supplier_country: "",
+    supplier_tax_id: "",
+    service_desc: "",
+    taxable_amount: "",
+    vat_rate: "7",
+    vat_amount: "",
+    filing_status: "draft",
+    submitted_at: "",
+    submitted_by: "",
+    memo: "",
+    store_name: defaultStoreName,
+  }
+}
+
+function emptyPnd54(taxMonth: string, defaultStoreName: string): Pnd54Draft {
+  return {
+    payment_date: `${taxMonth}-01`,
+    tax_month: taxMonth,
+    payee_name: "",
+    payee_country: "",
+    payee_tax_id: "",
+    income_type: "",
+    gross_amount: "",
+    wht_rate: "",
+    wht_amount: "",
     filing_status: "draft",
     submitted_at: "",
     submitted_by: "",
@@ -697,6 +780,8 @@ export function AdminAccountingCompliance({
   const [workflowReminderSummary, setWorkflowReminderSummary] = React.useState<{ critical: number; warn: number; info: number } | null>(null)
   const [vatRows, setVatRows] = React.useState<VatDraft[]>([])
   const [whtRows, setWhtRows] = React.useState<WhtDraft[]>([])
+  const [pp36Rows, setPp36Rows] = React.useState<Pp36Draft[]>([])
+  const [pnd54Rows, setPnd54Rows] = React.useState<Pnd54Draft[]>([])
   const [periodType, setPeriodType] = React.useState<"monthly" | "half_year" | "annual">("monthly")
   const [ledgerStatusFilter, setLedgerStatusFilter] = React.useState<"all" | "draft" | "submitted">("all")
   /** 법인세 연간: API는 yearMonth의 연도만 사용 — UI는 연도만 고름 */
@@ -770,6 +855,9 @@ export function AdminAccountingCompliance({
   const [pnd1FormMode, setPnd1FormMode] = React.useState<"auto" | "pnd1" | "pnd1a" | "all">("auto")
   const [pnd1Validating, setPnd1Validating] = React.useState(false)
   const [pnd1ValidationResult, setPnd1ValidationResult] = React.useState<ValidatePnd1RdPrepResult | null>(null)
+  const [pnd353Validating, setPnd353Validating] = React.useState(false)
+  const [pnd353ValidationResult, setPnd353ValidationResult] = React.useState<ValidatePnd3Pnd53Result | null>(null)
+  const [whtSubmissionFormHint, setWhtSubmissionFormHint] = React.useState<"PND3" | "PND53" | "ALL">("ALL")
   const [pnd1IssueFilterCodes, setPnd1IssueFilterCodes] = React.useState<Pnd1IssueCode[]>([])
   const [payrollTinGapLoading, setPayrollTinGapLoading] = React.useState(false)
   const [payrollTinGapResult, setPayrollTinGapResult] = React.useState<PayrollWhtTinGapResult | null>(null)
@@ -790,6 +878,9 @@ export function AdminAccountingCompliance({
     fundRatePercent: "",
   })
   const [kt20kData, setKt20kData] = React.useState<Kt20kSummaryResponse | null>(null)
+  const [citAdjustmentsDraft, setCitAdjustmentsDraft] = React.useState<
+    { adjustmentType: "add_back" | "deduction"; itemName: string; amount: string; memo: string }[]
+  >([])
 
   const ssoSelectedStore = React.useMemo(() => {
     const pickStore = externalFiling ? storeTb : ssoStoreFilter
@@ -1022,6 +1113,50 @@ export function AdminAccountingCompliance({
     [taxMonth]
   )
 
+  const mapPp36 = React.useCallback(
+    (entries: Record<string, unknown>[]): Pp36Draft[] =>
+      entries.map((r) => ({
+        id: r.id != null ? Number(r.id) : undefined,
+        doc_date: String(r.doc_date || "").slice(0, 10),
+        tax_month: String(r.tax_month || taxMonth).slice(0, 7),
+        supplier_name: String(r.supplier_name || ""),
+        supplier_country: String(r.supplier_country || ""),
+        supplier_tax_id: String(r.supplier_tax_id || ""),
+        service_desc: String(r.service_desc || ""),
+        taxable_amount: String(r.taxable_amount ?? ""),
+        vat_rate: String(r.vat_rate ?? "7"),
+        vat_amount: String(r.vat_amount ?? ""),
+        filing_status: normalizeLedgerFilingStatus(r.filing_status),
+        submitted_at: String(r.submitted_at || ""),
+        submitted_by: String(r.submitted_by || ""),
+        memo: String(r.memo || ""),
+        store_name: String(r.store_name || ""),
+      })),
+    [taxMonth]
+  )
+
+  const mapPnd54 = React.useCallback(
+    (entries: Record<string, unknown>[]): Pnd54Draft[] =>
+      entries.map((r) => ({
+        id: r.id != null ? Number(r.id) : undefined,
+        payment_date: String(r.payment_date || "").slice(0, 10),
+        tax_month: String(r.tax_month || taxMonth).slice(0, 7),
+        payee_name: String(r.payee_name || ""),
+        payee_country: String(r.payee_country || ""),
+        payee_tax_id: String(r.payee_tax_id || ""),
+        income_type: String(r.income_type || ""),
+        gross_amount: String(r.gross_amount ?? ""),
+        wht_rate: String(r.wht_rate ?? ""),
+        wht_amount: String(r.wht_amount ?? ""),
+        filing_status: normalizeLedgerFilingStatus(r.filing_status),
+        submitted_at: String(r.submitted_at || ""),
+        submitted_by: String(r.submitted_by || ""),
+        memo: String(r.memo || ""),
+        store_name: String(r.store_name || ""),
+      })),
+    [taxMonth]
+  )
+
   const loadWht = React.useCallback(async () => {
     if (!canUse) return
     const seq = ++whtLoadSeqRef.current
@@ -1051,6 +1186,52 @@ export function AdminAccountingCompliance({
       if (seq === whtLoadSeqRef.current) setLoading(false)
     }
   }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapWht])
+
+  const loadPp36 = React.useCallback(async () => {
+    if (!canUse) return
+    setLoading(true)
+    try {
+      const data = await withClientTimeout(
+        getPp36Ledger({
+          userRole: role,
+          taxMonth,
+          yearMonth: taxMonth,
+          periodType,
+          filingStatus: ledgerStatusFilter,
+          storeFilter: storeFilterForLedger,
+        }),
+        PP30_FETCH_TIMEOUT_MS
+      )
+      setPp36Rows(mapPp36(data.entries || []))
+    } catch {
+      setPp36Rows([])
+    } finally {
+      setLoading(false)
+    }
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapPp36])
+
+  const loadPnd54 = React.useCallback(async () => {
+    if (!canUse) return
+    setLoading(true)
+    try {
+      const data = await withClientTimeout(
+        getPnd54Ledger({
+          userRole: role,
+          taxMonth,
+          yearMonth: taxMonth,
+          periodType,
+          filingStatus: ledgerStatusFilter,
+          storeFilter: storeFilterForLedger,
+        }),
+        PP30_FETCH_TIMEOUT_MS
+      )
+      setPnd54Rows(mapPnd54(data.entries || []))
+    } catch {
+      setPnd54Rows([])
+    } finally {
+      setLoading(false)
+    }
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapPnd54])
 
   const loadTaxSummary = React.useCallback(async () => {
     if (!canUse) return
@@ -1092,8 +1273,17 @@ export function AdminAccountingCompliance({
         userStore: auth?.store,
       })
       setCitData(data)
+      setCitAdjustmentsDraft(
+        (data.adjustments || []).map((x) => ({
+          adjustmentType: x.type,
+          itemName: String(x.itemName || ""),
+          amount: String(x.amount ?? ""),
+          memo: String(x.memo || ""),
+        }))
+      )
     } catch {
       setCitData(null)
+      setCitAdjustmentsDraft([])
     } finally {
       setLoading(false)
     }
@@ -1723,9 +1913,15 @@ export function AdminAccountingCompliance({
     if (!canUse || tab !== "summary" || !pp30Queried) return
     let cancelled = false
     void (async () => {
-      if (pp30SubView === "wht") setWhtRows([])
+      if (pp30SubView === "wht") {
+        setWhtRows([])
+        setPp36Rows([])
+        setPnd54Rows([])
+      }
       else setVatRows([])
-      if (pp30SubView === "wht") await loadWht()
+      if (pp30SubView === "wht") {
+        await Promise.all([loadWht(), loadPp36(), loadPnd54()])
+      }
       else await loadVat()
       if (cancelled) {
         return
@@ -1748,6 +1944,8 @@ export function AdminAccountingCompliance({
     loadTaxSummary,
     loadVat,
     loadWht,
+    loadPp36,
+    loadPnd54,
   ])
 
   React.useEffect(() => {
@@ -2119,6 +2317,112 @@ export function AdminAccountingCompliance({
         throw new Error(res.error || "DELETE_FAILED")
       }
       await loadWht()
+    } catch {
+      appAlert(t("msg_delete_fail"))
+    }
+  }
+
+  const savePp36Row = async (row: Pp36Draft) => {
+    if (!canUse) return
+    if (row.filing_status === "submitted" && !canApproveCompliance) {
+      appAlert(t("accCompNoSubmitApprovePermission"))
+      return
+    }
+    if (row.filing_status !== "submitted" && !canWriteCompliance) {
+      appAlert(t("accCompNoWritePermission"))
+      return
+    }
+    try {
+      const res = await savePp36LedgerEntry({
+        userRole: role,
+        id: row.id,
+        docDate: row.doc_date,
+        taxMonth: row.tax_month,
+        supplierName: row.supplier_name || null,
+        supplierCountry: row.supplier_country || null,
+        supplierTaxId: row.supplier_tax_id || null,
+        serviceDesc: row.service_desc || null,
+        taxableAmount: Number(row.taxable_amount) || 0,
+        vatRate: Number(row.vat_rate) || 7,
+        vatAmount: Number(row.vat_amount) || 0,
+        filingStatus: row.filing_status,
+        submittedAt: row.submitted_at || null,
+        submittedBy: row.submitted_by || null,
+        memo: row.memo || null,
+        storeName: row.store_name?.trim() ? row.store_name.trim() : null,
+        createdBy: auth?.user,
+      })
+      if (!res.success) throw new Error(res.error || "SAVE_FAILED")
+      await loadPp36()
+      appAlert(t("accCompSaved"))
+    } catch {
+      appAlert(t("msg_save_fail"))
+    }
+  }
+
+  const removePp36 = async (row: Pp36Draft) => {
+    if (!row.id) {
+      setPp36Rows((prev) => prev.filter((r) => r !== row))
+      return
+    }
+    if (!canUse || !canWriteCompliance) return
+    try {
+      const res = await deletePp36LedgerEntry({ userRole: role, id: row.id })
+      if (!res.success) throw new Error(res.error || "DELETE_FAILED")
+      await loadPp36()
+    } catch {
+      appAlert(t("msg_delete_fail"))
+    }
+  }
+
+  const savePnd54Row = async (row: Pnd54Draft) => {
+    if (!canUse) return
+    if (row.filing_status === "submitted" && !canApproveCompliance) {
+      appAlert(t("accCompNoSubmitApprovePermission"))
+      return
+    }
+    if (row.filing_status !== "submitted" && !canWriteCompliance) {
+      appAlert(t("accCompNoWritePermission"))
+      return
+    }
+    try {
+      const res = await savePnd54LedgerEntry({
+        userRole: role,
+        id: row.id,
+        paymentDate: row.payment_date,
+        taxMonth: row.tax_month,
+        payeeName: row.payee_name || null,
+        payeeCountry: row.payee_country || null,
+        payeeTaxId: row.payee_tax_id || null,
+        incomeType: row.income_type || null,
+        grossAmount: Number(row.gross_amount) || 0,
+        whtRate: row.wht_rate ? Number(row.wht_rate) : null,
+        whtAmount: Number(row.wht_amount) || 0,
+        filingStatus: row.filing_status,
+        submittedAt: row.submitted_at || null,
+        submittedBy: row.submitted_by || null,
+        memo: row.memo || null,
+        storeName: row.store_name?.trim() ? row.store_name.trim() : null,
+        createdBy: auth?.user,
+      })
+      if (!res.success) throw new Error(res.error || "SAVE_FAILED")
+      await loadPnd54()
+      appAlert(t("accCompSaved"))
+    } catch {
+      appAlert(t("msg_save_fail"))
+    }
+  }
+
+  const removePnd54 = async (row: Pnd54Draft) => {
+    if (!row.id) {
+      setPnd54Rows((prev) => prev.filter((r) => r !== row))
+      return
+    }
+    if (!canUse || !canWriteCompliance) return
+    try {
+      const res = await deletePnd54LedgerEntry({ userRole: role, id: row.id })
+      if (!res.success) throw new Error(res.error || "DELETE_FAILED")
+      await loadPnd54()
     } catch {
       appAlert(t("msg_delete_fail"))
     }
@@ -2551,6 +2855,44 @@ export function AdminAccountingCompliance({
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
+  const whtSubmissionExportUrl = React.useMemo(
+    () =>
+      getExportWithholdingTaxLedgerCsvUrl({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForLedger,
+        format: "submission",
+        formHint: whtSubmissionFormHint,
+      }),
+    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, whtSubmissionFormHint]
+  )
+  const pp36ExportUrl = React.useMemo(
+    () =>
+      getExportPp36LedgerCsvUrl({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForLedger,
+      }),
+    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
+  )
+  const pnd54ExportUrl = React.useMemo(
+    () =>
+      getExportPnd54LedgerCsvUrl({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForLedger,
+      }),
+    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
+  )
   const pnd1FilingForm = React.useMemo<"pnd1" | "pnd1a" | "all">(() => {
     if (pnd1FormMode === "pnd1" || pnd1FormMode === "pnd1a" || pnd1FormMode === "all") return pnd1FormMode
     return periodType === "annual" ? "pnd1a" : "pnd1"
@@ -2876,6 +3218,69 @@ export function AdminAccountingCompliance({
       setPnd1Validating(false)
     }
   }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, pnd1FilingForm, t])
+
+  const runPnd353Validation = React.useCallback(async () => {
+    if (!canUse) return
+    setPnd353Validating(true)
+    try {
+      const data = await validatePnd3Pnd53({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForLedger,
+        formHint: whtSubmissionFormHint,
+      })
+      setPnd353ValidationResult(data)
+      const wc = data.warningCounts
+      const warningTotal =
+        wc.missingPayeeName +
+        wc.missingPayeeTaxId +
+        wc.missingIncomeType +
+        wc.missingCertificateNo +
+        wc.invalidWhtRate +
+        wc.nonPositiveWithheldAmount
+      appAlert(
+        warningTotal > 0
+          ? `PND3/53 검증 경고 ${warningTotal.toLocaleString()}건`
+          : "PND3/53 검증 완료 (경고 없음)"
+      )
+    } catch {
+      setPnd353ValidationResult(null)
+      appAlert("PND3/53 검증에 실패했습니다.")
+    } finally {
+      setPnd353Validating(false)
+    }
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, whtSubmissionFormHint])
+
+  const saveCitAdjustmentsDraft = React.useCallback(async () => {
+    if (!canUse || !canWriteCompliance) {
+      appAlert(t("accCompNoWritePermission"))
+      return
+    }
+    try {
+      const adjustments = citAdjustmentsDraft
+        .map((x) => ({
+          adjustmentType: x.adjustmentType,
+          itemName: String(x.itemName || "").trim(),
+          amount: Number(x.amount) || 0,
+          memo: String(x.memo || "").trim() || null,
+        }))
+        .filter((x) => x.itemName)
+      const res = await saveCorporateTaxAdjustments({
+        userRole: role,
+        yearMonth: citYearMonthForApi,
+        periodType,
+        adjustments,
+      })
+      if (!res.success) throw new Error(res.error || "SAVE_FAILED")
+      await loadCit()
+      appAlert(t("accCompSaved"))
+    } catch {
+      appAlert(t("msg_save_fail"))
+    }
+  }, [canUse, canWriteCompliance, citAdjustmentsDraft, role, citYearMonthForApi, periodType, loadCit, t])
 
   const runPayrollTinGapCheck = React.useCallback(async () => {
     if (!canUse) return
@@ -5195,6 +5600,24 @@ export function AdminAccountingCompliance({
                         {pnd1RdPrepBtnLabel}
                       </a>
                     </Button>
+                    <Select
+                      value={whtSubmissionFormHint}
+                      onValueChange={(v) => setWhtSubmissionFormHint(v as "PND3" | "PND53" | "ALL")}
+                    >
+                      <SelectTrigger className="h-9 w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">PND3/53 전체</SelectItem>
+                        <SelectItem value="PND3">PND3</SelectItem>
+                        <SelectItem value="PND53">PND53</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <a href={whtSubmissionExportUrl} target="_blank" rel="noopener noreferrer">
+                        신고 제출형 CSV
+                      </a>
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -5208,11 +5631,86 @@ export function AdminAccountingCompliance({
                       type="button"
                       variant="outline"
                       size="sm"
+                      onClick={() => void runPnd353Validation()}
+                      disabled={pnd353Validating}
+                    >
+                      {pnd353Validating ? t("loading") : "PND3/53 검증"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={() => void runPayrollTinGapCheck()}
                       disabled={payrollTinGapLoading}
                     >
                       {payrollTinGapLoading ? t("loading") : lang === "th" ? "ตรวจสอบ TIN พนักงาน" : t("accCompPayrollTinCheckBtn")}
                     </Button>
+                  </div>
+                  {pnd353ValidationResult ? (
+                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-1">
+                      <div className="font-medium">PND3/53 검증 결과</div>
+                      <div>검증 행: {pnd353ValidationResult.totalRows.toLocaleString()}</div>
+                      <div>정상 행: {pnd353ValidationResult.validRows.toLocaleString()}</div>
+                      <div>경고 건수: {(pnd353ValidationResult.issues || []).length.toLocaleString()}</div>
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">PP.36 원장</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => setPp36Rows((prev) => [...prev, emptyPp36(taxMonth, storeTb !== "All" ? storeTb : "")])}>
+                            <Plus className="h-3 w-3 mr-1" /> 행 추가
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => void loadPp36()}>조회</Button>
+                          <Button type="button" size="sm" variant="outline" asChild>
+                            <a href={pp36ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
+                          </Button>
+                        </div>
+                        {(pp36Rows || []).slice(0, 20).map((row, idx) => (
+                          <div key={row.id ?? `pp36-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
+                            <Input type="date" value={row.doc_date} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, doc_date: e.target.value } : x))} />
+                            <Input placeholder="Supplier" value={row.supplier_name} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, supplier_name: e.target.value } : x))} />
+                            <Input placeholder="Taxable" value={row.taxable_amount} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, taxable_amount: e.target.value } : x))} />
+                            <Input placeholder="VAT" value={row.vat_amount} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, vat_amount: e.target.value } : x))} />
+                            <div className="col-span-2 flex gap-2 justify-end">
+                              <Button type="button" size="sm" onClick={() => void savePp36Row(row)}>{t("accCompSave")}</Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => void removePp36(row)}>{t("accCompDelete")}</Button>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">PND54 원장</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
+                            <Plus className="h-3 w-3 mr-1" /> 행 추가
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>조회</Button>
+                          <Button type="button" size="sm" variant="outline" asChild>
+                            <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
+                          </Button>
+                        </div>
+                        {(pnd54Rows || []).slice(0, 20).map((row, idx) => (
+                          <div key={row.id ?? `pnd54-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
+                            <Input type="date" value={row.payment_date} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payment_date: e.target.value } : x))} />
+                            <Input placeholder="Payee" value={row.payee_name} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payee_name: e.target.value } : x))} />
+                            <Input placeholder="Gross" value={row.gross_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, gross_amount: e.target.value } : x))} />
+                            <Input placeholder="WHT" value={row.wht_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, wht_amount: e.target.value } : x))} />
+                            <div className="col-span-2 flex gap-2 justify-end">
+                              <Button type="button" size="sm" onClick={() => void savePnd54Row(row)}>{t("accCompSave")}</Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => void removePnd54(row)}>{t("accCompDelete")}</Button>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
                   </div>
                   <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
                     <div className="font-medium text-foreground/90">{pnd1RdPrepGuideTitle}</div>
@@ -5682,6 +6180,90 @@ export function AdminAccountingCompliance({
               <div>
                 {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
               </div>
+              <div>
+                신고폼: {String(citData?.filingForm || "-").toUpperCase()}
+              </div>
+              <div>
+                연환산 과세소득: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
+              </div>
+              <div>
+                이번 신고 납부예정액: {(citData?.filingTaxDue || 0).toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">세무조정(가산/차감) 초안</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCitAdjustmentsDraft((prev) => [
+                      ...prev,
+                      { adjustmentType: "add_back", itemName: "", amount: "", memo: "" },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  행 추가
+                </Button>
+                <Button type="button" size="sm" onClick={() => void saveCitAdjustmentsDraft()}>
+                  {t("accCompSave")}
+                </Button>
+              </div>
+              {(citAdjustmentsDraft || []).map((row, idx) => (
+                <div key={`cit-adj-${idx}`} className="grid grid-cols-1 md:grid-cols-5 gap-2 rounded border p-2">
+                  <Select
+                    value={row.adjustmentType}
+                    onValueChange={(v) =>
+                      setCitAdjustmentsDraft((prev) =>
+                        prev.map((x, i) => (i === idx ? { ...x, adjustmentType: v as "add_back" | "deduction" } : x))
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="add_back">Add-back</SelectItem>
+                      <SelectItem value="deduction">Deduction</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="항목명"
+                    value={row.itemName}
+                    onChange={(e) =>
+                      setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, itemName: e.target.value } : x)))
+                    }
+                  />
+                  <Input
+                    placeholder="금액"
+                    value={row.amount}
+                    onChange={(e) =>
+                      setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))
+                    }
+                  />
+                  <Input
+                    placeholder="메모"
+                    value={row.memo}
+                    onChange={(e) =>
+                      setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setCitAdjustmentsDraft((prev) => prev.filter((_, i) => i !== idx))}
+                  >
+                    {t("accCompDelete")}
+                  </Button>
+                </div>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>

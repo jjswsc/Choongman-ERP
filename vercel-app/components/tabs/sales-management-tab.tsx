@@ -36,6 +36,7 @@ import {
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
+import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
 import { addDaysYmd } from "@/lib/pos-business-day"
@@ -1762,7 +1763,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2"
+                      className={ADMIN_BTN_XS_CN}
                       onClick={() => applyPreset(preset)}
                     >
                       {preset.name}
@@ -1771,7 +1772,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                      className={`${ADMIN_BTN_XS_CN} text-muted-foreground hover:text-destructive`}
                       onClick={() => removePreset(preset.id)}
                     >
                       ×
@@ -2348,7 +2349,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 <>
                   {periodTruncated ? (
                     <p
-                      className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+                      className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`}
                       role="status"
                     >
                       {tr(
@@ -2524,7 +2525,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 <>
                   {periodTruncated ? (
                     <p
-                      className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+                      className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`}
                       role="status"
                     >
                       {tr(

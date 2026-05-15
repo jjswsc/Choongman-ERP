@@ -21,10 +21,10 @@ export default function PosTableOrderEntryPage() {
   useEffect(() => {
     if (!storeCode) return
     if (enabled) {
-      navigatePosOfflineAware('/pos/terminal?type=dine_in', (p) => router.replace(p))
+      navigatePosOfflineAware('/pos/terminal?type=dine_in&audience=guest', (p) => router.replace(p))
       return
     }
-    navigatePosOfflineAware('/pos/order?type=dine_in', (p) => router.replace(p))
+    navigatePosOfflineAware('/pos/order?type=dine_in&audience=guest', (p) => router.replace(p))
   }, [enabled, router, storeCode])
 
   return (

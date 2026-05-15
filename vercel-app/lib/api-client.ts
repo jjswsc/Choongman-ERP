@@ -2712,6 +2712,45 @@ export async function deleteVatLedgerEntry(params: { userRole: string; id: numbe
   return res.json() as Promise<{ success: boolean; error?: string }>
 }
 
+export async function getPp36Ledger(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/pp36Ledger?${q}`)
+  const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
+  if (!res.ok) {
+    return { entries: [], error: data?.error || `HTTP_${res.status}` }
+  }
+  return { entries: data.entries || [], error: data.error }
+}
+
+export async function savePp36LedgerEntry(params: Record<string, unknown> & { userRole: string }) {
+  const res = await apiFetchWithOffline('/api/pp36Ledger', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
+}
+
+export async function deletePp36LedgerEntry(params: { userRole: string; id: number }) {
+  const res = await apiFetchWithOffline('/api/pp36Ledger', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; error?: string }>
+}
+
 export async function getWithholdingTaxLedger(params: {
   userRole: string
   taxMonth: string
@@ -2747,6 +2786,45 @@ export async function deleteWithholdingTaxLedgerEntry(params: { userRole: string
   return res.json() as Promise<{ success: boolean; error?: string }>
 }
 
+export async function getPnd54Ledger(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/pnd54Ledger?${q}`)
+  const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
+  if (!res.ok) {
+    return { entries: [], error: data?.error || `HTTP_${res.status}` }
+  }
+  return { entries: data.entries || [], error: data.error }
+}
+
+export async function savePnd54LedgerEntry(params: Record<string, unknown> & { userRole: string }) {
+  const res = await apiFetchWithOffline('/api/pnd54Ledger', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
+}
+
+export async function deletePnd54LedgerEntry(params: { userRole: string; id: number }) {
+  const res = await apiFetchWithOffline('/api/pnd54Ledger', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; error?: string }>
+}
+
 export function getExportVatLedgerCsvUrl(params: {
   userRole: string
   taxMonth: string
@@ -2775,6 +2853,29 @@ export function getExportWithholdingTaxLedgerCsvUrl(params: {
   periodType?: 'monthly' | 'half_year' | 'annual'
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
+  format?: 'raw' | 'submission'
+  formHint?: 'PND3' | 'PND53' | 'ALL'
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.format) q.set('format', params.format)
+  if (params.formHint) q.set('formHint', params.formHint)
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportWithholdingTaxLedgerCsv?${q}`
+  }
+  return `/api/exportWithholdingTaxLedgerCsv?${q}`
+}
+
+export function getExportPp36LedgerCsvUrl(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
@@ -2782,9 +2883,28 @@ export function getExportWithholdingTaxLedgerCsvUrl(params: {
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}/api/exportWithholdingTaxLedgerCsv?${q}`
+    return `${window.location.origin}/api/exportPp36LedgerCsv?${q}`
   }
-  return `/api/exportWithholdingTaxLedgerCsv?${q}`
+  return `/api/exportPp36LedgerCsv?${q}`
+}
+
+export function getExportPnd54LedgerCsvUrl(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportPnd54LedgerCsv?${q}`
+  }
+  return `/api/exportPnd54LedgerCsv?${q}`
 }
 
 export function getExportPnd1RdPrepTxtUrl(params: {
@@ -2854,6 +2974,42 @@ export type ValidatePnd1RdPrepResult = {
   }[]
 }
 
+export type ValidatePnd3Pnd53Result = {
+  period: {
+    periodType: 'monthly' | 'half_year' | 'annual'
+    periodKey: string
+    startMonth: string
+    endMonth: string
+    months: string[]
+  }
+  filingForm: 'PND3' | 'PND53' | 'ALL'
+  totalRows: number
+  validRows: number
+  warningCounts: {
+    missingPayeeName: number
+    missingPayeeTaxId: number
+    missingIncomeType: number
+    missingCertificateNo: number
+    invalidWhtRate: number
+    nonPositiveWithheldAmount: number
+  }
+  sampleWarnings: string[]
+  issues: {
+    lineNo: number
+    rowId: number | null
+    code:
+      | 'missing_payee_name'
+      | 'missing_payee_tax_id'
+      | 'missing_income_type'
+      | 'missing_certificate_no'
+      | 'invalid_wht_rate'
+      | 'non_positive_wht_amount'
+    message: string
+    payeeName: string
+    certificateNo: string
+  }[]
+}
+
 export type PayrollWhtTinGapResult = {
   period: {
     periodType: 'monthly' | 'half_year' | 'annual'
@@ -2896,6 +3052,25 @@ export async function validatePnd1RdPrep(params: {
   if (params.filingForm) q.set('filingForm', params.filingForm)
   const res = await apiFetchWithOffline(`/api/validatePnd1RdPrep?${q}`)
   return res.json() as Promise<ValidatePnd1RdPrepResult>
+}
+
+export async function validatePnd3Pnd53(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+  formHint?: 'PND3' | 'PND53' | 'ALL'
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.formHint) q.set('formHint', params.formHint)
+  const res = await apiFetchWithOffline(`/api/validatePnd3Pnd53?${q}`)
+  return res.json() as Promise<ValidatePnd3Pnd53Result>
 }
 
 export async function getPayrollWhtTinGaps(params: {
@@ -3091,6 +3266,7 @@ export async function getTaxReadinessChecklist(params: {
 
 export type CorporateTaxComputationData = {
   periodType: 'monthly' | 'half_year' | 'annual'
+  filingForm: 'pnd50' | 'pnd51'
   periodKey: string
   months: string[]
   storeFilter: string
@@ -3098,8 +3274,10 @@ export type CorporateTaxComputationData = {
   taxAddBack: number
   taxDeduction: number
   taxableIncome: number
+  projectedAnnualTaxableIncome: number
   taxRate: number
   estimatedTax: number
+  filingTaxDue: number
   adjustments: { type: 'add_back' | 'deduction'; itemName: string; amount: number; memo: string | null }[]
 }
 
@@ -3143,6 +3321,32 @@ export function getExportCorporateTaxPackageCsvUrl(params: {
     return `${window.location.origin}/api/exportCorporateTaxPackageCsv?${q}`
   }
   return `/api/exportCorporateTaxPackageCsv?${q}`
+}
+
+export async function saveCorporateTaxAdjustments(params: {
+  userRole: string
+  yearMonth: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  adjustments: {
+    adjustmentType: 'add_back' | 'deduction'
+    itemCode?: string | null
+    itemName: string
+    amount: number
+    memo?: string | null
+  }[]
+}) {
+  const res = await apiFetchWithOffline('/api/saveCorporateTaxAdjustments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    periodKey?: string
+    savedCount?: number
+    rows?: Record<string, unknown>[]
+    error?: string
+  }>
 }
 
 export type AccountingWorkflowStatusRow = {
@@ -8888,6 +9092,17 @@ export interface PosSettlement {
   closed: boolean
 }
 
+export interface PosCloseRun {
+  id: number
+  status: 'draft' | 'validated' | 'locked' | 'posted'
+  checks: Record<string, unknown>
+  totals: Record<string, unknown>
+  settlementRef: number | null
+  postedJournalEntryId: number | null
+  validatedAt: string | null
+  finalizedAt: string | null
+}
+
 export interface PosPaymentAttempt {
   id: number
   orderId: number | null
@@ -8954,6 +9169,7 @@ export async function getPosSettlement(params: {
       autoOtherBreakdown?: Record<string, number>
     }
     settlement: PosSettlement | PosSettlement[] | null
+    closeRun?: PosCloseRun | null
   }>
 }
 
@@ -9040,6 +9256,54 @@ export async function savePosSettlement(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function validatePosClose(params: {
+  storeCode: string
+  settleDate: string
+}) {
+  const res = await apiFetchWithOffline('/api/posClose/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      businessDate: params.settleDate,
+      settleDate: params.settleDate,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    result?: {
+      status: 'validated' | 'draft'
+      diffTotal: number
+      hasSettlement: boolean
+    }
+  }>
+}
+
+export async function finalizePosClose(params: {
+  storeCode: string
+  settleDate: string
+}) {
+  const res = await apiFetchWithOffline('/api/posClose/finalize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      businessDate: params.settleDate,
+      settleDate: params.settleDate,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    result?: {
+      status: 'validated' | 'draft'
+      postedJournalEntryId: number | null
+      finalized: boolean
+    }
+  }>
 }
 
 export async function updatePosOrder(params: {
@@ -12006,6 +12270,7 @@ export type CompanyHybridDocumentListItem = {
   valid_from: string | null
   valid_to: string | null
   note: string | null
+  metadata?: Record<string, unknown> | null
   created_by_name: string | null
   created_by_store: string | null
   created_at: string
@@ -12034,6 +12299,11 @@ export async function getCompanyHybridDocuments(params: {
   searchTitle?: string
   /** 제목 정렬 — 미지정 시 등록일 최신순 */
   sortTitle?: 'asc' | 'desc'
+  /** 공문(metadata.correspondence) 유무: all | yes | no */
+  corrPresence?: 'all' | 'yes' | 'no'
+  corrDirection?: 'outbound' | 'inbound'
+  corrStatus?: 'draft' | 'sent' | 'filed' | 'replied'
+  corrCounterpartySearch?: string
 }): Promise<
   { success: boolean; list: CompanyHybridDocumentListItem[]; message?: string } & CompanyHybridHttpMeta
 > {
@@ -12046,6 +12316,10 @@ export async function getCompanyHybridDocuments(params: {
   }
   if (params.searchTitle?.trim()) q.set('searchTitle', params.searchTitle.trim())
   if (params.sortTitle === 'asc' || params.sortTitle === 'desc') q.set('sortTitle', params.sortTitle)
+  if (params.corrPresence && params.corrPresence !== 'all') q.set('corrPresence', params.corrPresence)
+  if (params.corrDirection) q.set('corrDirection', params.corrDirection)
+  if (params.corrStatus) q.set('corrStatus', params.corrStatus)
+  if (params.corrCounterpartySearch?.trim()) q.set('corrCounterpartySearch', params.corrCounterpartySearch.trim())
   const res = await apiFetchWithOffline(`/api/getCompanyHybridDocuments?${q}`)
   const data = (await res.json()) as { success: boolean; list: CompanyHybridDocumentListItem[]; message?: string }
   return { ...data, httpStatus: res.status }

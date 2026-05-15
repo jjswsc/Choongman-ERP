@@ -26,6 +26,10 @@ create table if not exists public.company_hybrid_documents (
   deleted_at timestamptz null
 );
 
+-- 공문 등 확장 메타(기존 DB는 company_hybrid_documents_metadata.sql 로 추가)
+alter table public.company_hybrid_documents
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
 create index if not exists company_hybrid_documents_store_created_idx
   on public.company_hybrid_documents (store, created_at desc)
   where deleted_at is null;

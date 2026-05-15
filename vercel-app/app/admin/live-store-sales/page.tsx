@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Radio } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tOr } from "@/lib/i18n"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { usePosStore } from "@/hooks/use-pos-store"
 import { useStoreView } from "@/lib/store-view-context"
@@ -59,7 +59,9 @@ export default function AdminLiveStoreSalesPage() {
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
                 <Radio className="h-4 w-4 text-primary" />
               </div>
-              <h1 className="text-xl font-bold tracking-tight">{t("adminLiveStoreSalesTitle")}</h1>
+              <h1 className="text-xl font-bold tracking-tight">
+                {tOr(t, "adminLiveStoreSalesTitle", "실시간 매출 (매장)")}
+              </h1>
             </div>
             <p className="text-xs text-muted-foreground">
               {selectedStoreLabel}
@@ -67,7 +69,7 @@ export default function AdminLiveStoreSalesPage() {
             <HelpSumHowBlocks helpSumKey={LIVE_STORE_SALES_HELP_SUM} className="mt-2 max-w-xl" compact />
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0">
-            <Link href="/store-sales">{t("adminLiveStoreSalesOpenMobile")}</Link>
+            <Link href="/store-sales">{tOr(t, "adminLiveStoreSalesOpenMobile", "모바일 매출 화면")}</Link>
           </Button>
         </div>
 

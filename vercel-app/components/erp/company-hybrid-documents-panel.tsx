@@ -9,6 +9,7 @@ import {
   FileStack,
   FileUp,
   Link2,
+  Mail,
   Pencil,
   Trash2,
   ExternalLink,
@@ -71,8 +72,13 @@ import {
   type CompanyHybridDocVisibility,
   isCompanyHybridDocsListAllStoresParam,
 } from "@/lib/company-hybrid-documents"
+import { getCorrespondenceFromMetadata } from "@/lib/company-hybrid-correspondence"
 
 const FORM_CAT_NONE = "0"
+/** 목록 공문 필터 Select — 빈 값(전체)용 (Radix value="" 지양) */
+const LIST_CORR_SELECT_NONE = "__none__"
+
+type CorrespondencePresence = "all" | "yes" | "no"
 
 type CompanyHybridDocumentsStoreFieldProps = {
   labelStore: string
@@ -186,7 +192,7 @@ function authToJwtPayload(auth: {
   }
 }
 
-type MainTab = "list" | "register" | "categories"
+type MainTab = "list" | "register" | "categories" | "correspondence"
 
 export function CompanyHybridDocumentsPanel() {
   const { lang } = useLang()
@@ -202,6 +208,11 @@ export function CompanyHybridDocumentsPanel() {
   /** null = 등록일 최신순(서버 기본), asc/desc = 제목 정렬 */
   const [titleSort, setTitleSort] = React.useState<"asc" | "desc" | null>(null)
 
+  const [listCorrPresence, setListCorrPresence] = React.useState<CorrespondencePresence>("all")
+  const [listCorrDirection, setListCorrDirection] = React.useState<"" | "outbound" | "inbound">("")
+  const [listCorrStatus, setListCorrStatus] = React.useState<"" | "draft" | "sent" | "filed" | "replied">("")
+  const [listCorrCounterpartySearch, setListCorrCounterpartySearch] = React.useState("")
+
   const [list, setList] = React.useState<CompanyHybridDocumentListItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [categories, setCategories] = React.useState<CompanyHybridDocumentCategory[]>([])
@@ -213,6 +224,13 @@ export function CompanyHybridDocumentsPanel() {
   const [validFrom, setValidFrom] = React.useState("")
   const [validTo, setValidTo] = React.useState("")
   const [note, setNote] = React.useState("")
+
+  const [corrDirection, setCorrDirection] = React.useState<"" | "outbound" | "inbound">("")
+  const [corrCounterparty, setCorrCounterparty] = React.useState("")
+  const [corrOfficialRef, setCorrOfficialRef] = React.useState("")
+  const [corrStatus, setCorrStatus] = React.useState<"" | "draft" | "sent" | "filed" | "replied">("")
+  const [corrReplyDue, setCorrReplyDue] = React.useState("")
+  const [corrChannel, setCorrChannel] = React.useState<"" | "mail" | "email" | "visit" | "other">("")
 
   const [editing, setEditing] = React.useState<CompanyHybridDocumentListItem | null>(null)
   const [fileBusy, setFileBusy] = React.useState(false)
@@ -228,6 +246,24 @@ export function CompanyHybridDocumentsPanel() {
     store: string
     parent_category_id: number | null
   } | null>(null)
+
+  const buildCorrespondenceApiBody = React.useCallback((): Record<string, unknown> | null => {
+    const o: Record<string, unknown> = {}
+    if (corrDirection === "outbound" || corrDirection === "inbound") o.direction = corrDirection
+    const cp = corrCounterparty.trim()
+    if (cp) o.counterparty = cp
+    const ref = corrOfficialRef.trim()
+    if (ref) o.officialRef = ref
+    if (corrStatus === "draft" || corrStatus === "sent" || corrStatus === "filed" || corrStatus === "replied") {
+      o.status = corrStatus
+    }
+    const rd = corrReplyDue.trim().slice(0, 10)
+    if (rd && /^\d{4}-\d{2}-\d{2}$/.test(rd)) o.replyDue = rd
+    if (corrChannel === "mail" || corrChannel === "email" || corrChannel === "visit" || corrChannel === "other") {
+      o.channel = corrChannel
+    }
+    return Object.keys(o).length > 0 ? o : null
+  }, [corrDirection, corrCounterparty, corrOfficialRef, corrStatus, corrReplyDue, corrChannel])
 
   const categoryLabelById = React.useMemo(() => {
     const byId = new Map<number, CompanyHybridDocumentCategory>()
@@ -355,6 +391,10 @@ export function CompanyHybridDocumentsPanel() {
       q.categoryId = listCategoryFilter
       if (listTitleSearch.trim()) q.searchTitle = listTitleSearch.trim()
       if (titleSort) q.sortTitle = titleSort
+      if (listCorrPresence !== "all") q.corrPresence = listCorrPresence
+      if (listCorrDirection) q.corrDirection = listCorrDirection
+      if (listCorrStatus) q.corrStatus = listCorrStatus
+      if (listCorrCounterpartySearch.trim()) q.corrCounterpartySearch = listCorrCounterpartySearch.trim()
       const res = await getCompanyHybridDocuments(q)
       if (redirectToAdminLoginIfUnauthorized(res.httpStatus, setAuth)) {
         setList([])
@@ -377,6 +417,10 @@ export function CompanyHybridDocumentsPanel() {
     listCategoryFilter,
     listTitleSearch,
     titleSort,
+    listCorrPresence,
+    listCorrDirection,
+    listCorrStatus,
+    listCorrCounterpartySearch,
     t,
     initialized,
     auth,
@@ -397,6 +441,12 @@ export function CompanyHybridDocumentsPanel() {
     setValidFrom("")
     setValidTo("")
     setNote("")
+    setCorrDirection("")
+    setCorrCounterparty("")
+    setCorrOfficialRef("")
+    setCorrStatus("")
+    setCorrReplyDue("")
+    setCorrChannel("")
     setEditing(null)
   }
 
@@ -413,6 +463,21 @@ export function CompanyHybridDocumentsPanel() {
     setValidFrom(row.valid_from ? String(row.valid_from).slice(0, 10) : "")
     setValidTo(row.valid_to ? String(row.valid_to).slice(0, 10) : "")
     setNote(row.note || "")
+    const c = getCorrespondenceFromMetadata(row.metadata)
+    setCorrDirection(c?.direction === "inbound" || c?.direction === "outbound" ? c.direction : "")
+    setCorrCounterparty(c?.counterparty || "")
+    setCorrOfficialRef(c?.officialRef || "")
+    setCorrStatus(
+      c?.status === "draft" || c?.status === "sent" || c?.status === "filed" || c?.status === "replied"
+        ? c.status
+        : ""
+    )
+    setCorrReplyDue(c?.replyDue ? String(c.replyDue).slice(0, 10) : "")
+    setCorrChannel(
+      c?.channel === "mail" || c?.channel === "email" || c?.channel === "visit" || c?.channel === "other"
+        ? c.channel
+        : ""
+    )
     setEditing(row)
   }
 
@@ -448,6 +513,7 @@ export function CompanyHybridDocumentsPanel() {
       validTo: validTo || undefined,
       note: note.trim() || undefined,
       categoryId: buildCategoryIdPayload(),
+      correspondence: buildCorrespondenceApiBody(),
     }
     const res = await saveCompanyHybridDocument(body)
     if (!res.success) {
@@ -484,6 +550,7 @@ export function CompanyHybridDocumentsPanel() {
       validTo: validTo || undefined,
       note: note.trim() || undefined,
       categoryId: buildCategoryIdPayload(),
+      correspondence: buildCorrespondenceApiBody(),
     }
     if (editing?.id) {
       body.id = editing.id
@@ -565,6 +632,7 @@ export function CompanyHybridDocumentsPanel() {
         storagePath: p.storagePath,
         mime,
         categoryId: buildCategoryIdPayload(),
+        correspondence: buildCorrespondenceApiBody(),
       })
       if (!done.success) {
         if (redirectToAdminLoginIfUnauthorized(done.httpStatus, setAuth)) return
@@ -657,6 +725,25 @@ export function CompanyHybridDocumentsPanel() {
 
   const canPickStore = isOfficeRole(String(auth?.role || "")) || isFranchiseeRole(String(auth?.role || ""))
 
+  const labelCorrDirectionCell = React.useCallback(
+    (d: string | undefined) => {
+      if (d === "outbound") return t("companyHybridCorrDirectionOutbound")
+      if (d === "inbound") return t("companyHybridCorrDirectionInbound")
+      return "—"
+    },
+    [t]
+  )
+  const labelCorrStatusCell = React.useCallback(
+    (s: string | undefined) => {
+      if (s === "draft") return t("companyHybridCorrStatusDraft")
+      if (s === "sent") return t("companyHybridCorrStatusSent")
+      if (s === "filed") return t("companyHybridCorrStatusFiled")
+      if (s === "replied") return t("companyHybridCorrStatusReplied")
+      return "—"
+    },
+    [t]
+  )
+
   return (
     <div className="space-y-4">
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className={adminTabsRootCn}>
@@ -673,6 +760,10 @@ export function CompanyHybridDocumentsPanel() {
             <TabsTrigger value="categories" className={adminTabsTriggerCn}>
               <Tags className={adminTabsIconCn} aria-hidden />
               {t("companyHybridDocTabCategories")}
+            </TabsTrigger>
+            <TabsTrigger value="correspondence" className={adminTabsTriggerCn}>
+              <Mail className={adminTabsIconCn} aria-hidden />
+              {t("companyHybridCorrTab")}
             </TabsTrigger>
           </TabsList>
         </AdminTabsBarWithHelp>
@@ -692,6 +783,10 @@ export function CompanyHybridDocumentsPanel() {
                   onStoreChange={(v) => {
                     setSelectedStore(v)
                     setTitleSort(null)
+                    setListCorrPresence("all")
+                    setListCorrDirection("")
+                    setListCorrStatus("")
+                    setListCorrCounterpartySearch("")
                     resetForm()
                   }}
                 />
@@ -725,6 +820,73 @@ export function CompanyHybridDocumentsPanel() {
                 <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
                   {t("stockBtnSearch")}
                 </Button>
+              </div>
+              <div className="mt-3 flex w-full flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="w-full text-xs font-medium text-muted-foreground">{t("companyHybridCorrListFiltersLabel")}</div>
+                <div className="min-w-[10rem] space-y-1.5">
+                  <Label className="text-xs">{t("companyHybridCorrTab")}</Label>
+                  <Select
+                    value={listCorrPresence}
+                    onValueChange={(v) => setListCorrPresence(v as CorrespondencePresence)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("companyHybridCorrPresenceAll")}</SelectItem>
+                      <SelectItem value="yes">{t("companyHybridCorrPresenceYes")}</SelectItem>
+                      <SelectItem value="no">{t("companyHybridCorrPresenceNo")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-[9rem] space-y-1.5">
+                  <Label className="text-xs">{t("companyHybridCorrDirection")}</Label>
+                  <Select
+                    value={listCorrDirection || LIST_CORR_SELECT_NONE}
+                    onValueChange={(v) =>
+                      setListCorrDirection(v === LIST_CORR_SELECT_NONE ? "" : (v as "outbound" | "inbound"))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("companyHybridCorrDirectionPh")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={LIST_CORR_SELECT_NONE}>{t("companyHybridCorrDirectionPh")}</SelectItem>
+                      <SelectItem value="outbound">{t("companyHybridCorrDirectionOutbound")}</SelectItem>
+                      <SelectItem value="inbound">{t("companyHybridCorrDirectionInbound")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-[9rem] space-y-1.5">
+                  <Label className="text-xs">{t("companyHybridCorrStatus")}</Label>
+                  <Select
+                    value={listCorrStatus || LIST_CORR_SELECT_NONE}
+                    onValueChange={(v) =>
+                      setListCorrStatus(
+                        v === LIST_CORR_SELECT_NONE ? "" : (v as "draft" | "sent" | "filed" | "replied")
+                      )
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("companyHybridCorrStatusPh")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={LIST_CORR_SELECT_NONE}>{t("companyHybridCorrStatusPh")}</SelectItem>
+                      <SelectItem value="draft">{t("companyHybridCorrStatusDraft")}</SelectItem>
+                      <SelectItem value="sent">{t("companyHybridCorrStatusSent")}</SelectItem>
+                      <SelectItem value="filed">{t("companyHybridCorrStatusFiled")}</SelectItem>
+                      <SelectItem value="replied">{t("companyHybridCorrStatusReplied")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-[12rem] flex-1 space-y-1.5">
+                  <Label className="text-xs">{t("companyHybridCorrCounterpartySearch")}</Label>
+                  <Input
+                    value={listCorrCounterpartySearch}
+                    onChange={(e) => setListCorrCounterpartySearch(e.target.value)}
+                    placeholder="…"
+                  />
+                </div>
               </div>
             </CardHeader>
           </Card>
@@ -778,6 +940,11 @@ export function CompanyHybridDocumentsPanel() {
                         </TableHead>
                         <TableHead className="text-center">{t("companyHybridDocColCategory")}</TableHead>
                         <TableHead className="text-center">{t("companyHybridDocColPermission")}</TableHead>
+                        <TableHead className="hidden text-center md:table-cell">{t("companyHybridCorrColDirection")}</TableHead>
+                        <TableHead className="hidden text-center lg:table-cell">{t("companyHybridCorrColCounterparty")}</TableHead>
+                        <TableHead className="hidden text-center lg:table-cell">{t("companyHybridCorrColOfficialRef")}</TableHead>
+                        <TableHead className="hidden text-center md:table-cell">{t("companyHybridCorrColStatus")}</TableHead>
+                        <TableHead className="hidden text-center lg:table-cell">{t("companyHybridCorrColReplyDue")}</TableHead>
                         <TableHead className="text-center">{t("companyHybridDocSource")}</TableHead>
                         <TableHead className="whitespace-nowrap text-center">{t("companyHybridDocColIssued")}</TableHead>
                         <TableHead className="text-center">{t("companyHybridDocColCreated")}</TableHead>
@@ -787,6 +954,7 @@ export function CompanyHybridDocumentsPanel() {
                     <TableBody>
                       {list.map((row) => {
                         const canM = canMutateDocStore(row.store)
+                        const corr = getCorrespondenceFromMetadata(row.metadata)
                         return (
                         <TableRow key={row.id}>
                           <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -798,6 +966,21 @@ export function CompanyHybridDocumentsPanel() {
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {labelForVisibility(row)}
+                          </TableCell>
+                          <TableCell className="hidden text-center text-xs text-muted-foreground md:table-cell">
+                            {labelCorrDirectionCell(corr?.direction)}
+                          </TableCell>
+                          <TableCell className="hidden max-w-[10rem] truncate text-xs text-muted-foreground lg:table-cell">
+                            {corr?.counterparty || "—"}
+                          </TableCell>
+                          <TableCell className="hidden max-w-[8rem] truncate text-xs text-muted-foreground lg:table-cell">
+                            {corr?.officialRef || "—"}
+                          </TableCell>
+                          <TableCell className="hidden text-center text-xs text-muted-foreground md:table-cell">
+                            {labelCorrStatusCell(corr?.status)}
+                          </TableCell>
+                          <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground lg:table-cell">
+                            {formatHybridDocumentIssueDate(corr?.replyDue ?? null, lang)}
                           </TableCell>
                           <TableCell>
                             <span
@@ -888,6 +1071,10 @@ export function CompanyHybridDocumentsPanel() {
                   onStoreChange={(v) => {
                     setSelectedStore(v)
                     setTitleSort(null)
+                    setListCorrPresence("all")
+                    setListCorrDirection("")
+                    setListCorrStatus("")
+                    setListCorrCounterpartySearch("")
                     resetForm()
                   }}
                 />
@@ -977,6 +1164,88 @@ export function CompanyHybridDocumentsPanel() {
               <div className="space-y-1.5">
                 <Label>{t("companyHybridDocNote")}</Label>
                 <Input value={note} onChange={(e) => setNote(e.target.value)} />
+              </div>
+              <div className="space-y-3 rounded-md border border-dashed p-3">
+                <div>
+                  <p className="text-sm font-medium">{t("companyHybridCorrRegisterSectionTitle")}</p>
+                  <p className="text-xs text-muted-foreground">{t("companyHybridCorrRegisterSectionSub")}</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">{t("companyHybridCorrDirection")}</Label>
+                    <Select
+                      value={corrDirection || LIST_CORR_SELECT_NONE}
+                      onValueChange={(v) =>
+                        setCorrDirection(v === LIST_CORR_SELECT_NONE ? "" : (v as "outbound" | "inbound"))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("companyHybridCorrDirectionPh")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={LIST_CORR_SELECT_NONE}>{t("companyHybridCorrDirectionPh")}</SelectItem>
+                        <SelectItem value="outbound">{t("companyHybridCorrDirectionOutbound")}</SelectItem>
+                        <SelectItem value="inbound">{t("companyHybridCorrDirectionInbound")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">{t("companyHybridCorrStatus")}</Label>
+                    <Select
+                      value={corrStatus || LIST_CORR_SELECT_NONE}
+                      onValueChange={(v) =>
+                        setCorrStatus(
+                          v === LIST_CORR_SELECT_NONE ? "" : (v as "draft" | "sent" | "filed" | "replied")
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("companyHybridCorrStatusPh")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={LIST_CORR_SELECT_NONE}>{t("companyHybridCorrStatusPh")}</SelectItem>
+                        <SelectItem value="draft">{t("companyHybridCorrStatusDraft")}</SelectItem>
+                        <SelectItem value="sent">{t("companyHybridCorrStatusSent")}</SelectItem>
+                        <SelectItem value="filed">{t("companyHybridCorrStatusFiled")}</SelectItem>
+                        <SelectItem value="replied">{t("companyHybridCorrStatusReplied")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs">{t("companyHybridCorrColCounterparty")}</Label>
+                    <Input value={corrCounterparty} onChange={(e) => setCorrCounterparty(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">{t("companyHybridCorrOfficialRef")}</Label>
+                    <Input value={corrOfficialRef} onChange={(e) => setCorrOfficialRef(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">{t("companyHybridCorrReplyDue")}</Label>
+                    <Input type="date" value={corrReplyDue} onChange={(e) => setCorrReplyDue(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs">{t("companyHybridCorrChannel")}</Label>
+                    <Select
+                      value={corrChannel || LIST_CORR_SELECT_NONE}
+                      onValueChange={(v) =>
+                        setCorrChannel(
+                          v === LIST_CORR_SELECT_NONE ? "" : (v as "mail" | "email" | "visit" | "other")
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("companyHybridCorrChannelPh")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={LIST_CORR_SELECT_NONE}>{t("companyHybridCorrChannelPh")}</SelectItem>
+                        <SelectItem value="mail">{t("companyHybridCorrChannelMail")}</SelectItem>
+                        <SelectItem value="email">{t("companyHybridCorrChannelEmail")}</SelectItem>
+                        <SelectItem value="visit">{t("companyHybridCorrChannelVisit")}</SelectItem>
+                        <SelectItem value="other">{t("companyHybridCorrChannelOther")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
               {editing && editing.source !== "drive" && (
                 <div className="flex flex-wrap gap-2 border-t pt-3">
@@ -1078,6 +1347,10 @@ export function CompanyHybridDocumentsPanel() {
                   onStoreChange={(v) => {
                     setSelectedStore(v)
                     setTitleSort(null)
+                    setListCorrPresence("all")
+                    setListCorrDirection("")
+                    setListCorrStatus("")
+                    setListCorrCounterpartySearch("")
                     resetForm()
                   }}
                 />
@@ -1268,6 +1541,33 @@ export function CompanyHybridDocumentsPanel() {
                   </Table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="correspondence" className={cn(adminTabsContentCn, "space-y-4")}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Mail className="h-4 w-4" />
+                {t("companyHybridCorrGuideTitle")}
+              </CardTitle>
+              <CardDescription>{t("companyHybridCorrTabHint")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{t("companyHybridCorrGuideBody")}</p>
+              <Button
+                type="button"
+                onClick={() => {
+                  setListCorrPresence("yes")
+                  setListCorrDirection("")
+                  setListCorrStatus("")
+                  setListCorrCounterpartySearch("")
+                  setMainTab("list")
+                }}
+              >
+                {t("companyHybridCorrGoToFilteredList")}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

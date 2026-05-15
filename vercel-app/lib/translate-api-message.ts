@@ -63,6 +63,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "변경되었습니다.": "msg_updated",
   "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.": "posMenuPromoLinkedEdit",
 
+  // POS 메뉴 노출 매장
+  "신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.": "posMenuVisibleStoresRequiredNewMenu",
+  "노출 매장을 1개 이상 선택해 주세요.": "posMenuVisibleStoresPickAtLeastOne",
+
   // 비밀번호
   "비밀번호가 변경되었습니다. 다시 로그인해 주세요.": "pw_success",
   "현재 비밀번호가 일치하지 않습니다. 비밀번호 분실 시 슈퍼바이저팀에 문의해 주세요.": "msg_pw_current_wrong_contact_supervisor",
