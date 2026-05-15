@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { appConfirm } from '@/lib/app-message'
 import type { PosOrderPackagingChecklistGroup } from '@/lib/api-client'
+import { canonicalEnglishChickenMenuLine } from '@/lib/pos-print-translate'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -96,12 +97,19 @@ export function PackagingChecklistDialog(props: {
 
         <ScrollArea className="max-h-[55vh] rounded-md border">
           <div className="space-y-3 p-3">
-            {groups.map((group) => (
+            {groups.map((group) => {
+              const displayItemName = canonicalEnglishChickenMenuLine(group.itemName)
+              const displayOpt = group.optionName ? canonicalEnglishChickenMenuLine(group.optionName).trim() : ''
+              const showOptionSuffix =
+                Boolean(displayOpt) &&
+                displayOpt.length >= 2 &&
+                !displayItemName.toLowerCase().includes(displayOpt.toLowerCase())
+              return (
               <section key={group.orderItemId} className="rounded-lg border bg-muted/20 p-3">
                 <h4 className="text-sm font-semibold">
-                  {group.itemName}
-                  {group.optionName ? (
-                    <span className="ml-1 text-xs text-muted-foreground">({group.optionName})</span>
+                  {displayItemName}
+                  {showOptionSuffix ? (
+                    <span className="ml-1 text-xs text-muted-foreground">({displayOpt})</span>
                   ) : null}
                 </h4>
                 <div className="mt-2 space-y-2">
@@ -131,7 +139,8 @@ export function PackagingChecklistDialog(props: {
                   ))}
                 </div>
               </section>
-            ))}
+            )
+            })}
           </div>
         </ScrollArea>
 

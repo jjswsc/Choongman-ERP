@@ -2,6 +2,8 @@ import {
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdateByFilter,
+  supabaseDeleteByFilter,
+  supabaseUpsert,
 } from '@/lib/supabase-server'
 import {
   normalizeChickenOptionSelectionGroups,
@@ -37,6 +39,7 @@ export type PosMenuUpsertApiBody = {
   descriptionTable?: string | null
   id?: string
   storeCode?: string
+  storeCodes?: string[]
   /**
    * true 이면 image 컬럼만 업데이트한다. 프로모션과 연동된 메뉴라도
    * 사진 업로드는 운영자가 메뉴 화면에서 직접 변경할 수 있어야 하므로,
@@ -103,6 +106,19 @@ export async function upsertPosMenuFromBody(
     if (byCode?.[0]?.id != null) {
       editingId = String(byCode[0].id)
     }
+  }
+  const hasStoreCodesPayload = Array.isArray(body.storeCodes)
+  const normalizedStoreCodes = hasStoreCodesPayload
+    ? Array.from(
+        new Set(
+          body.storeCodes!
+            .map((x) => String(x ?? '').trim())
+            .filter(Boolean)
+        )
+      )
+    : []
+  if (hasStoreCodesPayload && normalizedStoreCodes.length === 0) {
+    return { success: false, message: '노출 매장을 1개 이상 선택해 주세요.' }
   }
 
   const optionSelectionGroupsExplicit =
@@ -551,6 +567,35 @@ export async function upsertPosMenuFromBody(
         await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(code)}`, { price: newPrice })
       } catch {
         /* items에 해당 code 없으면 무시 */
+      }
+    }
+    if (result.success && hasStoreCodesPayload && !isImageOnlyEdit) {
+      const savedMenuId = String(result.newId || editingId || '').trim()
+      if (!savedMenuId) {
+        return {
+          success: false,
+          message: '메뉴 저장은 완료되었지만 매장 노출 범위를 저장하지 못했습니다. 다시 저장해 주세요.',
+        }
+      }
+      try {
+        await supabaseDeleteByFilter('pos_menu_store_scopes', `menu_id=eq.${encodeURIComponent(savedMenuId)}`)
+        if (normalizedStoreCodes.length > 0) {
+          await supabaseUpsert(
+            'pos_menu_store_scopes',
+            normalizedStoreCodes.map((storeCode) => ({
+              menu_id: Number(savedMenuId),
+              store_code: storeCode,
+              enabled: true,
+            })),
+            'store_code,menu_id'
+          )
+        }
+      } catch (scopeErr: unknown) {
+        console.error('upsertPosMenuFromBody scope sync:', scopeErr)
+        return {
+          success: false,
+          message: '메뉴 저장은 완료되었지만 매장 노출 범위 저장에 실패했습니다. DB 스키마를 확인해 주세요.',
+        }
       }
     }
     return result

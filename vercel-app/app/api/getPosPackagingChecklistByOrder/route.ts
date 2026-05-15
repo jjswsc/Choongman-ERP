@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { canonicalEnglishChickenMenuLine } from '@/lib/pos-print-translate'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 type PosOrderRow = {
@@ -191,15 +192,18 @@ export async function GET(req: NextRequest) {
         sortOrder: Number(row.sort_order ?? 0) || 0,
         optionId: row.option_id != null ? String(row.option_id) : null,
       }))
-      const menuName = menuNameMap.get(menuId) || ''
-      const optionName = optionId != null ? (optionNameMap.get(optionId) || '') : ''
+      const menuName = canonicalEnglishChickenMenuLine(menuNameMap.get(menuId) || '')
+      const optionNameRaw = optionId != null ? (optionNameMap.get(optionId) || '') : ''
+      const optionName = optionNameRaw ? canonicalEnglishChickenMenuLine(optionNameRaw) : ''
+      const itemNameRaw = it.rawName || menuNameMap.get(menuId) || `#${it.orderItemId}`
+      const itemName = canonicalEnglishChickenMenuLine(String(itemNameRaw))
       return {
         orderItemId: it.orderItemId,
-        itemName: it.rawName || menuName || `#${it.orderItemId}`,
+        itemName,
         menuId: String(menuId),
         menuName,
         optionId: optionId != null ? String(optionId) : null,
-        optionName: optionName || null,
+        optionName: optionName.trim() ? optionName.trim() : null,
         checks,
       }
     }).filter((g) => g.checks.length > 0)

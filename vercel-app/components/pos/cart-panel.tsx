@@ -69,7 +69,7 @@ import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, tr as i18nTr } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth-context'
 import {
   getPosMenuOptions,
@@ -2539,7 +2539,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const applyCouponCode = async () => {
     const code = couponCode.trim()
     if (!code) {
-      setCouponMessage('쿠폰 코드를 입력해 주세요.')
+      setCouponMessage(t('posCouponPleaseEnterCode'))
       return
     }
     try {
@@ -2547,19 +2547,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (!res.valid) {
         setCouponAppliedCode('')
         setCouponAppliedAmt(0)
-        setCouponMessage(res.message || '유효하지 않은 쿠폰입니다.')
+        setCouponMessage(res.message || t('posCouponInvalid'))
         return
       }
       const amount = Math.max(0, Number(res.discountAmt || 0))
       setDiscountType('fixed')
       setDiscountValue(amount)
-      setDiscountReason(String(res.discountReason || `쿠폰: ${code.toUpperCase()}`))
+      setDiscountReason(
+        String(res.discountReason || i18nTr(t, 'posCouponDiscountReason', { code: code.toUpperCase() }))
+      )
       setCouponAppliedCode(code.toUpperCase())
       setCouponAppliedAmt(amount)
-      setCouponMessage(`${code.toUpperCase()} 쿠폰이 적용되었습니다.`)
+      setCouponMessage(i18nTr(t, 'posCouponAppliedSuccess', { code: code.toUpperCase() }))
     } catch (e) {
       console.error('validatePosCoupon:', e)
-      setCouponMessage('쿠폰 검증 중 오류가 발생했습니다.')
+      setCouponMessage(t('posCouponValidateError'))
     }
   }
 

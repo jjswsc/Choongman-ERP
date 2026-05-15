@@ -14,6 +14,7 @@ import {
   normalizeChickenOptionSelectionGroups,
   syncOptionSelectionConfigToGroupKeys,
 } from '@/lib/pos-option-selection-groups'
+import { normalizeMenuScopeStoreCodes, shouldMenuBeVisibleForStore } from '@/lib/pos-menu-store-scope'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
@@ -25,11 +26,14 @@ const POS_MENUS_SELECT_WITH_ALL =
 const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
-export async function GET() {
+export async function GET(request: Request) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const { searchParams } = new URL(request.url)
+    const requestedStoreCode = String(searchParams.get('storeCode') ?? '').trim()
+    const menuScopeCompatibilityMode = String(process.env.POS_MENU_SCOPE_COMPATIBILITY_MODE ?? '1') !== '0'
     try {
       await runDuePriceSchedules(new Date())
     } catch (scheduleErr) {
@@ -107,7 +111,41 @@ export async function GET() {
       description_table?: string | null
     }[]
 
-    const list = (typedRows || []).map((row) => {
+    const storeCodesByMenuId = new Map<number, string[]>()
+    let scopeSchemaReady = true
+    try {
+      const scopeRows = (await supabaseSelect('pos_menu_store_scopes', {
+        limit: 100000,
+        select: 'menu_id,store_code,enabled',
+      })) as { menu_id?: number | null; store_code?: string | null; enabled?: boolean | null }[]
+      for (const row of scopeRows || []) {
+        if (row.enabled === false) continue
+        const menuId = Number(row.menu_id || 0)
+        const storeCode = String(row.store_code || '').trim()
+        if (!menuId || !storeCode) continue
+        const list = storeCodesByMenuId.get(menuId) || []
+        if (!list.some((x) => x.toLowerCase() === storeCode.toLowerCase())) list.push(storeCode)
+        storeCodesByMenuId.set(menuId, list)
+      }
+    } catch {
+      scopeSchemaReady = false
+    }
+
+    const list = (typedRows || []).flatMap((row) => {
+      const rowMenuId = Number(row.id || 0)
+      const scopedStores = normalizeMenuScopeStoreCodes(
+        rowMenuId > 0 ? storeCodesByMenuId.get(rowMenuId) || [] : []
+      )
+      if (
+        !shouldMenuBeVisibleForStore({
+          requestedStoreCode,
+          scopedStores,
+          compatibilityMode: menuScopeCompatibilityMode,
+          scopeSchemaReady,
+        })
+      ) {
+        return []
+      }
       const v = row.option_selection_groups
       let optionSelectionGroups: string[] = []
       if (Array.isArray(v)) optionSelectionGroups = v
@@ -178,7 +216,7 @@ export async function GET() {
       const ctm = row.cooking_time_min
       const isBanban = (row as { is_banban?: boolean }).is_banban === true
       const pid = row.promo_id
-      return {
+      return [{
         id: String(row.id ?? ''),
         code: String(row.code ?? ''),
         name: String(row.name ?? ''),
@@ -202,7 +240,8 @@ export async function GET() {
           row.description_delivery == null ? null : String(row.description_delivery),
         descriptionTable:
           row.description_table == null ? null : String(row.description_table),
-      }
+        storeCodes: scopedStores,
+      }]
     })
 
     return NextResponse.json(list, { headers })

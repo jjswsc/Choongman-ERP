@@ -4,7 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
-import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2, Printer } from "lucide-react"
+import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2, Printer, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -34,9 +34,11 @@ import {
   getPosPrinterSettings,
   getPosDeliveryApps,
   getGrabStoreIntegrations,
+  getPosOrderAuditTrail,
   updatePosOrder,
   updatePosOrderStatus,
   useStoreList,
+  type PosOrderAuditTrailRow,
   type PosOrder,
   type PosPaymentAttempt,
   type PosLinkposTenderRule,
@@ -77,8 +79,17 @@ import {
   type PrintPosHtmlDocumentOptions,
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
+import {
+  buildKitchenPrintTrackingId,
+  clearKitchenPrintFailure,
+  extractOrderTokenFromKitchenPrintTrackingId,
+  getKitchenPrintFailure,
+  markKitchenPrintFailure,
+  subscribeKitchenPrintFailureChanges,
+  toKitchenPrintTrackingToken,
+} from "@/lib/pos-kitchen-print-tracking"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
 
@@ -123,6 +134,18 @@ function formatBangkokDateTime(value: string | null | undefined, locale = "en-GB
     second: "2-digit",
     hour12: false,
   }).format(dt)
+}
+
+function formatAuditValue(v: unknown): string {
+  if (v == null || v === "") return "-"
+  if (typeof v === "number") return Number.isFinite(v) ? v.toLocaleString() : "-"
+  if (typeof v === "boolean") return v ? "true" : "false"
+  if (typeof v === "string") return v
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
 }
 
 function extractOrderCancelReasonFromMemo(memo: string): string {
@@ -219,6 +242,8 @@ function getTargetCookingTimeMin(
 }
 
 export default function PosOrdersPage() {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -238,7 +263,7 @@ export default function PosOrdersPage() {
   const [cancelReasonFilter, setCancelReasonFilter] = React.useState("all")
   const [cancelScopeFilter, setCancelScopeFilter] = React.useState<"all" | "line" | "order">("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
-  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed" | "grabIntegration">("orders")
+  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed" | "grabIntegration" | "auditTrail">("orders")
   const [attempts, setAttempts] = React.useState<PosPaymentAttempt[]>([])
   const [attemptsLoading, setAttemptsLoading] = React.useState(false)
   const [attemptStatusFilter, setAttemptStatusFilter] = React.useState<"failed" | "all" | "approved" | "declined">("failed")
@@ -270,6 +295,23 @@ export default function PosOrdersPage() {
     Record<string, PosDeliveryApp[]>
   >({})
   const [grabIntegrations, setGrabIntegrations] = React.useState<GrabStoreIntegrationSnapshot[]>([])
+  const [auditRows, setAuditRows] = React.useState<PosOrderAuditTrailRow[]>([])
+  const [auditLoading, setAuditLoading] = React.useState(false)
+  const [auditStartStr, setAuditStartStr] = React.useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+  )
+  const [auditEndStr, setAuditEndStr] = React.useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+  )
+  const [auditEmployeeFilter, setAuditEmployeeFilter] = React.useState("")
+  const [auditOrderNoFilter, setAuditOrderNoFilter] = React.useState("")
+  const [expandedAuditRows, setExpandedAuditRows] = React.useState<Record<number, boolean>>({})
+  const [auditQuickSearchTick, setAuditQuickSearchTick] = React.useState(0)
+  const [, setKitchenPrintFailureVersion] = React.useState(0)
+  const [traceCopyToast, setTraceCopyToast] = React.useState<{
+    tone: "success" | "error"
+    message: string
+  } | null>(null)
   const [grabLoading, setGrabLoading] = React.useState(false)
   const [grabStatusFilter, setGrabStatusFilter] = React.useState("all")
   const [grabPartnerMerchantFilter, setGrabPartnerMerchantFilter] = React.useState("")
@@ -284,6 +326,11 @@ export default function PosOrdersPage() {
       .toLowerCase()
     const qCancelScope: "all" | "line" | "order" =
       qScopeRaw === "line" || qScopeRaw === "order" ? qScopeRaw : "all"
+    const qTab = String(searchParams.get("tab") || "").trim()
+    const qAuditStart = String(searchParams.get("auditStart") || "").trim()
+    const qAuditEnd = String(searchParams.get("auditEnd") || "").trim()
+    const qAuditEmployee = String(searchParams.get("auditEmployee") || "").trim()
+    const qAuditOrderNo = String(searchParams.get("auditOrderNo") || "").trim()
     if (/^\d{4}-\d{2}-\d{2}$/.test(qStart)) setStartStr(qStart)
     if (/^\d{4}-\d{2}-\d{2}$/.test(qEnd)) setEndStr(qEnd)
     if (qStatus && ["all", "pending", "cooking", "ready", "completed", "paid", "cancelled"].includes(qStatus)) {
@@ -291,7 +338,44 @@ export default function PosOrdersPage() {
     }
     setCancelScopeFilter(qCancelScope)
     setCancelReasonFilter(qCancelReason || "all")
+    if (["orders", "cookTime", "linkposFailed", "grabIntegration", "auditTrail"].includes(qTab)) {
+      setActiveTab(qTab as "orders" | "cookTime" | "linkposFailed" | "grabIntegration" | "auditTrail")
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(qAuditStart)) setAuditStartStr(qAuditStart)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(qAuditEnd)) setAuditEndStr(qAuditEnd)
+    setAuditEmployeeFilter(qAuditEmployee)
+    setAuditOrderNoFilter(qAuditOrderNo)
   }, [searchParams])
+
+  React.useEffect(() => {
+    const next = new URLSearchParams(searchParams.toString())
+    const prevQs = searchParams.toString()
+    if (activeTab === "orders") next.delete("tab")
+    else next.set("tab", activeTab)
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(auditStartStr)) next.set("auditStart", auditStartStr)
+    else next.delete("auditStart")
+    if (/^\d{4}-\d{2}-\d{2}$/.test(auditEndStr)) next.set("auditEnd", auditEndStr)
+    else next.delete("auditEnd")
+
+    if (auditEmployeeFilter.trim()) next.set("auditEmployee", auditEmployeeFilter.trim())
+    else next.delete("auditEmployee")
+    if (auditOrderNoFilter.trim()) next.set("auditOrderNo", auditOrderNoFilter.trim())
+    else next.delete("auditOrderNo")
+
+    const nextQs = next.toString()
+    if (nextQs === prevQs) return
+    router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false })
+  }, [
+    activeTab,
+    auditStartStr,
+    auditEndStr,
+    auditEmployeeFilter,
+    auditOrderNoFilter,
+    searchParams,
+    router,
+    pathname,
+  ])
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   /** 목록 API에 넘길 매장: 본사(오피스)는 선택값·「전체」는 미지정, 매니저/가맹점주 등은 로그인 매장 고정 */
@@ -644,7 +728,11 @@ export default function PosOrdersPage() {
       title: string,
       thermal?: Pick<
         PrintPosHtmlDocumentOptions,
-        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
+        | "printRole"
+        | "printReceiptKind"
+        | "kitchenStation"
+        | "escPosCutOverride"
+        | "onShellPrintResult"
       >
     ) =>
       new Promise<void>((resolve, reject) => {
@@ -660,12 +748,100 @@ export default function PosOrdersPage() {
     [t]
   )
 
+  React.useEffect(() => {
+    return subscribeKitchenPrintFailureChanges(() => {
+      setKitchenPrintFailureVersion((v) => v + 1)
+    })
+  }, [])
+
+  const resolveKitchenPrintOrderRef = React.useCallback((o: Pick<PosOrder, "id" | "orderNo">) => {
+    const orderNo = String(o.orderNo ?? "").trim()
+    if (orderNo) return orderNo
+    const orderId = Number(o.id ?? 0)
+    return orderId > 0 ? `id:${orderId}` : "UNKNOWN"
+  }, [])
+
+  const jumpToOrderByTraceId = React.useCallback(
+    (traceId: string) => {
+      const token = extractOrderTokenFromKitchenPrintTrackingId(traceId)
+      if (!token) return
+      const found = orders.find((o) => {
+        const orderRef = resolveKitchenPrintOrderRef(o)
+        return toKitchenPrintTrackingToken(orderRef) === token
+      })
+      if (!found) return
+      setSearchTerm(String(found.orderNo || ""))
+      setExpandedId(found.id)
+      if (typeof document !== "undefined") {
+        window.setTimeout(() => {
+          const el = document.getElementById(`admin-pos-order-row-${found.id}`)
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 120)
+      }
+    },
+    [orders, resolveKitchenPrintOrderRef]
+  )
+
+  const jumpToOrderByOrderNo = React.useCallback(
+    (orderNo: string, orderId?: number) => {
+      const targetNo = String(orderNo || "").trim()
+      const targetId = Number(orderId || 0)
+      const found = orders.find((o) => {
+        if (targetId > 0 && o.id === targetId) return true
+        return targetNo ? String(o.orderNo || "").trim() === targetNo : false
+      })
+      if (!found) return
+      setActiveTab("orders")
+      setSearchTerm(String(found.orderNo || ""))
+      setExpandedId(found.id)
+      if (typeof document !== "undefined") {
+        window.setTimeout(() => {
+          const el = document.getElementById(`admin-pos-order-row-${found.id}`)
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 120)
+      }
+    },
+    [orders]
+  )
+
+  const formatTraceIdTail = React.useCallback((traceId: string) => {
+    const raw = String(traceId || "").trim()
+    if (!raw) return "-"
+    return raw.length <= 8 ? raw : `...${raw.slice(-8)}`
+  }, [])
+
+  const copyTraceId = React.useCallback(
+    (traceId: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+      const raw = String(traceId || "").trim()
+      if (!raw) return
+      navigator.clipboard.writeText(raw).then(
+        () => {
+          setTraceCopyToast({
+            tone: "success",
+            message: t("adminPosOrdersTraceIdCopied") || "Trace ID를 복사했습니다.",
+          })
+          window.setTimeout(() => setTraceCopyToast(null), 1400)
+        },
+        () => {
+          setTraceCopyToast({
+            tone: "error",
+            message: t("adminPosOrdersTraceIdCopyFailed") || "Trace ID 복사에 실패했습니다.",
+          })
+          window.setTimeout(() => setTraceCopyToast(null), 1600)
+        },
+      )
+    },
+    [t]
+  )
+
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const storeCode = (o.storeCode ?? "").trim()
     if (!storeCode || !o.items?.length) {
       await appAlert(t("posPrintUnavailable"))
       return
     }
+    let lastTrackingId = ""
     try {
       const settings = await getPosPrinterSettings({ storeCode })
       const ki = kitchenSlipPrintI18n(settings, lang)
@@ -681,6 +857,7 @@ export default function PosOrdersPage() {
         ? `${ki.t("posCustomerMemo") || "메모"}: ${kitchenMemo.trim()}`
         : ""
       const dateStr = o.createdAt ? formatPosDateTimeMedium(new Date(o.createdAt), ki.lang) : "—"
+      let shellIssueDetected = false
       const formatKitchenOrderType = () => {
         const base = ki.orderTypeLabels[String(o.orderType || "").toLowerCase()] || String(o.orderType || "")
         const channelSuffix =
@@ -698,6 +875,12 @@ export default function PosOrdersPage() {
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
+          const printTrackingId = buildKitchenPrintTrackingId({
+            orderRef: resolveKitchenPrintOrderRef(o),
+            station: slip.station,
+            label: slip.label,
+          })
+          lastTrackingId = printTrackingId
         const tablePart =
           o.tableName && o.orderType !== "delivery"
             ? ` · ${ki.t("posTable") || "테이블"}: ${o.tableName}`
@@ -709,6 +892,7 @@ export default function PosOrdersPage() {
           orderTypeLabel: formatKitchenOrderType(),
           tablePart,
           dateStr,
+            printTrackingId,
           items: slip.items.map((it) => {
             const row = it as { name?: string; qty?: number; note?: string }
             return {
@@ -726,6 +910,9 @@ export default function PosOrdersPage() {
           printRole: "kitchen",
           kitchenStation: slip.station,
           escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: "kitchen" }),
+          onShellPrintResult: (r) => {
+            if (r?.ok === false || r?.cutOk === false) shellIssueDetected = true
+          },
         })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
@@ -733,8 +920,22 @@ export default function PosOrdersPage() {
         }
       }
       await printOne(0)
+      if (shellIssueDetected) {
+        markKitchenPrintFailure({
+          orderRef: resolveKitchenPrintOrderRef(o),
+          reason: "shell_print_or_cut_failed",
+          ...(lastTrackingId ? { trackingId: lastTrackingId } : {}),
+        })
+      } else {
+        clearKitchenPrintFailure(resolveKitchenPrintOrderRef(o))
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      markKitchenPrintFailure({
+        orderRef: resolveKitchenPrintOrderRef(o),
+        reason: msg || "print_failed",
+        ...(lastTrackingId ? { trackingId: lastTrackingId } : {}),
+      })
       if (msg === POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE) {
         await appAlert(t("posPrintBlockedBrowser"))
         return
@@ -792,6 +993,38 @@ export default function PosOrdersPage() {
       .catch(() => setGrabIntegrations([]))
       .finally(() => setGrabLoading(false))
   }, [grabStatusFilter, grabPartnerMerchantFilter])
+
+  const loadAuditTrail = React.useCallback(() => {
+    setAuditLoading(true)
+    getPosOrderAuditTrail({
+      startStr: auditStartStr,
+      endStr: auditEndStr,
+      employee: auditEmployeeFilter.trim() || undefined,
+      orderNo: auditOrderNoFilter.trim() || undefined,
+      store: orderListStoreCode || undefined,
+      limit: 1200,
+    })
+      .then((rows) => setAuditRows(Array.isArray(rows) ? rows : []))
+      .catch(() => setAuditRows([]))
+      .finally(() => setAuditLoading(false))
+  }, [auditStartStr, auditEndStr, auditEmployeeFilter, auditOrderNoFilter, orderListStoreCode])
+
+  const applyAuditQuickFilter = React.useCallback(
+    (params: { employee?: string; orderNo?: string }) => {
+      if (params.employee != null) setAuditEmployeeFilter(params.employee)
+      if (params.orderNo != null) setAuditOrderNoFilter(params.orderNo)
+      setActiveTab("auditTrail")
+      setAuditQuickSearchTick((v) => v + 1)
+    },
+    []
+  )
+
+  const toggleAuditExpanded = React.useCallback((rowId: number) => {
+    setExpandedAuditRows((prev) => ({
+      ...prev,
+      [rowId]: !prev[rowId],
+    }))
+  }, [])
 
   const handleSaveTenderRule = React.useCallback(async () => {
     const keyword = ruleKeyword.trim().toLowerCase().replace(/\s+/g, "")
@@ -1014,6 +1247,20 @@ export default function PosOrdersPage() {
     if (activeTab !== "grabIntegration") return
     loadGrabIntegrations()
   }, [activeTab, loadGrabIntegrations])
+
+  React.useEffect(() => {
+    if (activeTab !== "auditTrail") return
+    loadAuditTrail()
+  }, [activeTab, loadAuditTrail])
+
+  React.useEffect(() => {
+    if (activeTab !== "auditTrail") return
+    if (auditQuickSearchTick <= 0) return
+    const timer = window.setTimeout(() => {
+      loadAuditTrail()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [activeTab, auditQuickSearchTick, loadAuditTrail])
 
   React.useEffect(() => {
     getPosMenus().then(setMenus).catch(() => setMenus([]))
@@ -1255,7 +1502,7 @@ export default function PosOrdersPage() {
               <span className="min-w-0 truncate font-medium text-foreground">{auth?.store}</span>
             </span>
           ) : null}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9 w-32 text-sm">
                 <SelectValue placeholder={t("posStatus") || "상태"} />
@@ -1270,7 +1517,7 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
             <Select value={channelFilter} onValueChange={setChannelFilter}>
               <SelectTrigger className="h-9 w-36 text-sm">
                 <SelectValue placeholder={t("채널") || "채널"} />
@@ -1285,7 +1532,7 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
             <Select
               value={cancelScopeFilter}
               onValueChange={(v) => {
@@ -1303,7 +1550,7 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
             <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
               <SelectTrigger className="h-9 w-[min(16rem,60vw)] text-sm">
                 <SelectValue placeholder={t("posCancelReasonSummaryTitle") || "취소 사유"} />
@@ -1358,6 +1605,8 @@ export default function PosOrdersPage() {
                 ? loadAttempts
                 : activeTab === "grabIntegration"
                   ? loadGrabIntegrations
+                  : activeTab === "auditTrail"
+                    ? loadAuditTrail
                   : loadOrders
             }
           >
@@ -1378,6 +1627,33 @@ export default function PosOrdersPage() {
               onChange={(e) => setGrabPartnerMerchantFilter(e.target.value)}
               className="h-9 flex-1 min-w-[200px] text-sm"
             />
+          ) : activeTab === "auditTrail" ? (
+            <div className="flex flex-1 min-w-[360px] flex-wrap gap-2">
+              <Input
+                type="date"
+                value={auditStartStr}
+                onChange={(e) => setAuditStartStr(e.target.value)}
+                className="h-9 w-[150px] text-sm"
+              />
+              <Input
+                type="date"
+                value={auditEndStr}
+                onChange={(e) => setAuditEndStr(e.target.value)}
+                className="h-9 w-[150px] text-sm"
+              />
+              <Input
+                placeholder="직원명/사번"
+                value={auditEmployeeFilter}
+                onChange={(e) => setAuditEmployeeFilter(e.target.value)}
+                className="h-9 w-[160px] text-sm"
+              />
+              <Input
+                placeholder={t("posOrderNo") || "주문번호"}
+                value={auditOrderNoFilter}
+                onChange={(e) => setAuditOrderNoFilter(e.target.value)}
+                className="h-9 w-[160px] text-sm"
+              />
+            </div>
           ) : (
             <Input
               placeholder={t("posSearchPh") || "주문번호, 테이블, 메뉴 검색"}
@@ -1388,13 +1664,13 @@ export default function PosOrdersPage() {
           )}
         </div>
 
-        {(loading || attemptsLoading || grabLoading) && (
+        {(loading || attemptsLoading || grabLoading || auditLoading) && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
           </div>
         )}
 
-        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && todaySummary && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && todaySummary && (
           <div className="mb-4 flex gap-4 rounded-lg border bg-card p-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
@@ -1432,7 +1708,7 @@ export default function PosOrdersPage() {
             )}
           </div>
         )}
-        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && cancelledLineReasonSummary.length > 0 && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && cancelledLineReasonSummary.length > 0 && (
           <div className="mb-3 rounded-lg border border-rose-200/70 bg-rose-50/30 p-3">
             <div className="mb-2 text-xs font-semibold text-rose-700">
               {t("posCancelReasonLineSummaryTitle") || "품목 취소 사유 집계"}
@@ -1447,7 +1723,7 @@ export default function PosOrdersPage() {
             </div>
           </div>
         )}
-        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && cancelledOrderReasonSummary.length > 0 && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && cancelledOrderReasonSummary.length > 0 && (
           <div className="mb-4 rounded-lg border border-rose-200/70 bg-rose-50/30 p-3">
             <div className="mb-2 text-xs font-semibold text-rose-700">
               {t("posCancelReasonOrderSummaryTitle") || "주문 전체 취소 사유 집계"}
@@ -1465,7 +1741,7 @@ export default function PosOrdersPage() {
 
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed" | "grabIntegration")}
+          onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed" | "grabIntegration" | "auditTrail")}
           className={adminTabsRootCn}
         >
           <AdminTabsBarWithHelp>
@@ -1481,6 +1757,9 @@ export default function PosOrdersPage() {
                 </TabsTrigger>
                 <TabsTrigger value="grabIntegration" className={adminTabsTriggerCn}>
                   Grab 연동 상태
+                </TabsTrigger>
+                <TabsTrigger value="auditTrail" className={adminTabsTriggerCn}>
+                  감사로그
                 </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
@@ -1532,6 +1811,7 @@ export default function PosOrdersPage() {
                       filteredOrders.map((o) => (
                         <React.Fragment key={o.id}>
                           <tr
+                            id={`admin-pos-order-row-${o.id}`}
                             className={cn(
                               "border-b cursor-pointer hover:bg-muted/20",
                               expandedId === o.id && "bg-muted/20",
@@ -1836,18 +2116,52 @@ export default function PosOrdersPage() {
                                     <span className="text-muted-foreground">-</span>
                                   )}
                                   <div className="pt-2 flex flex-wrap gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 gap-1 px-2 text-xs"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handlePrintKitchenSlip(o)
-                                      }}
-                                    >
-                                      <Printer className="h-3 w-3" />
-                                      {t("posKitchenSlip") || "주방 주문서"}
-                                    </Button>
+                                    {(() => {
+                                      const failureRec = getKitchenPrintFailure(resolveKitchenPrintOrderRef(o))
+                                      const hasKitchenPrintFailure = Boolean(failureRec)
+                                      return (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant={hasKitchenPrintFailure ? "destructive" : "outline"}
+                                            className="h-7 gap-1 px-2 text-xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handlePrintKitchenSlip(o)
+                                            }}
+                                          >
+                                            <Printer className="h-3 w-3" />
+                                            {hasKitchenPrintFailure
+                                              ? t("posKitchenSlipRetryAfterMiss") || "미출력 감지 재출력"
+                                              : t("posKitchenSlip") || "주방 주문서"}
+                                          </Button>
+                                          {failureRec?.lastTrackingId ? (
+                                            <span className="inline-flex items-center gap-1">
+                                              <button
+                                                type="button"
+                                                className="h-7 rounded border border-amber-300 bg-amber-50 px-2 text-[10px] font-semibold text-amber-800 hover:bg-amber-100"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  jumpToOrderByTraceId(failureRec.lastTrackingId || "")
+                                                }}
+                                                title={`${failureRec.lastTrackingId}\n${t("posTraceIdJumpOrder") || "Trace ID로 주문 이동"}`}
+                                              >
+                                                Trace ID: {formatTraceIdTail(failureRec.lastTrackingId)}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="inline-flex h-7 w-7 items-center justify-center rounded border border-amber-200 bg-white text-amber-900 hover:bg-amber-50"
+                                                onClick={(e) => copyTraceId(failureRec.lastTrackingId || "", e)}
+                                                title={`${failureRec.lastTrackingId}\n${t("adminPosOrdersTraceIdCopy")}`}
+                                                aria-label={t("adminPosOrdersTraceIdCopy")}
+                                              >
+                                                <Copy className="h-3.5 w-3.5" />
+                                              </button>
+                                            </span>
+                                          ) : null}
+                                        </>
+                                      )
+                                    })()}
                                     {EDITABLE_STATUSES.includes(o.status) && (
                                       <Button
                                         size="sm"
@@ -2243,6 +2557,122 @@ export default function PosOrdersPage() {
               </div>
             </div>
           </TabsContent>
+          <TabsContent value="auditTrail" className={adminTabsContentFlushCn}>
+            <div className="mb-3 rounded-lg border border-amber-200/70 bg-amber-50/40 px-3 py-2 text-xs text-amber-900">
+              누가/언제/무엇을/이전값→변경값 기준으로 주문 변경 이력을 조회합니다.
+            </div>
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-40">변경시각</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-28">직원</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">액션</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posOrderNo") || "주문번호"}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[380px]">변경값 (이전 → 이후)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
+                          {t("itemsNoResults") || "조회된 내역이 없습니다."}
+                        </td>
+                      </tr>
+                    ) : (
+                      auditRows.map((row) => (
+                        <tr key={row.id} className="border-b align-top">
+                          <td className="px-4 py-3 text-center text-xs text-muted-foreground whitespace-nowrap">
+                            {formatBangkokDateTime(row.changedAt, bangkokDisplayLocale(lang))}
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs">
+                            {row.changedBy ? (
+                              <button
+                                type="button"
+                                className="font-medium text-primary hover:underline"
+                                onClick={() => applyAuditQuickFilter({ employee: row.changedBy })}
+                                title="직원 필터 적용"
+                              >
+                                {row.changedBy}
+                              </button>
+                            ) : (
+                              <div className="font-medium">-</div>
+                            )}
+                            {row.changedByEmployeeCode ? (
+                              <button
+                                type="button"
+                                className="text-muted-foreground hover:text-foreground hover:underline"
+                                onClick={() => applyAuditQuickFilter({ employee: row.changedByEmployeeCode })}
+                                title="사번 필터 적용"
+                              >
+                                {row.changedByEmployeeCode}
+                              </button>
+                            ) : (
+                              <div className="text-muted-foreground">-</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs">
+                            <span className="rounded bg-muted px-2 py-0.5">{row.actionType || "-"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="rounded bg-primary/10 px-2 py-0.5 font-semibold text-primary hover:bg-primary/20"
+                                onClick={() => applyAuditQuickFilter({ orderNo: row.orderNo || "" })}
+                                title="주문번호 필터 적용"
+                              >
+                                {row.orderNo || `#${row.orderId}`}
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+                                onClick={() => jumpToOrderByOrderNo(row.orderNo, row.orderId)}
+                                title="주문 행으로 점프"
+                              >
+                                점프
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            {row.changedFields.length === 0 ? (
+                              <span className="text-muted-foreground">-</span>
+                            ) : (
+                              <div className="space-y-1">
+                                {(expandedAuditRows[row.id] ? row.changedFields : row.changedFields.slice(0, 6)).map((c, idx) => (
+                                  <div key={`${row.id}-${c.field}-${idx}`} className="flex flex-wrap items-center gap-1">
+                                    <span className="rounded bg-muted px-1.5 py-0.5 font-semibold">{c.field}</span>
+                                    <span className="text-muted-foreground">{formatAuditValue(c.before)}</span>
+                                    <span className="text-muted-foreground">→</span>
+                                    <span>{formatAuditValue(c.after)}</span>
+                                  </div>
+                                ))}
+                                {row.changedFields.length > 6 ? (
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-primary hover:underline"
+                                    onClick={() => toggleAuditExpanded(row.id)}
+                                  >
+                                    {expandedAuditRows[row.id]
+                                      ? "접기"
+                                      : `전체 ${row.changedFields.length}건 보기 (+${row.changedFields.length - 6})`}
+                                  </button>
+                                ) : null}
+                              </div>
+                            )}
+                            {row.reason ? (
+                              <div className="mt-1 text-[11px] text-rose-700">사유: {row.reason}</div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
           <TabsContent value="grabIntegration" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card overflow-hidden">
               <div className="overflow-x-auto">
@@ -2503,6 +2933,16 @@ export default function PosOrdersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {traceCopyToast ? (
+        <div
+          className={cn(
+            "pointer-events-none fixed bottom-4 right-4 z-[10060] rounded-md px-3 py-2 text-xs font-semibold text-white shadow-lg",
+            traceCopyToast.tone === "error" ? "bg-rose-600/95" : "bg-amber-600/95"
+          )}
+        >
+          {traceCopyToast.message}
+        </div>
+      ) : null}
     </div>
   )
 }

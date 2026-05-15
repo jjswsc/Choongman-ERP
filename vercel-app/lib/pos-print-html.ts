@@ -73,6 +73,16 @@ export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   suppressPrintError?: boolean
   /** 인쇄 성공 후 ESC/POS 절단만 실패했을 때 알림 (기본 true) */
   alertOnCutFailure?: boolean
+  /** Windows 셸 printHtml 결과(이유·컷 실패 포함) 수집용 */
+  onShellPrintResult?: (result: {
+    ok?: boolean
+    reason?: string
+    cutOk?: boolean
+    cutReason?: string
+    printStage?: string
+    warnings?: string[]
+    usedDevice?: string
+  }) => void
 }
 
 /**
@@ -104,6 +114,9 @@ export function printPosHtmlDocument(
             reason?: string
             cutOk?: boolean
             cutReason?: string
+            printStage?: string
+            warnings?: string[]
+            usedDevice?: string
           }>
         }
       }
@@ -132,6 +145,7 @@ export function printPosHtmlDocument(
     void shell
       .printHtml!(fullDocumentHtml, shellOpts)
       .then((r) => {
+        opts?.onShellPrintResult?.(r || {})
         const ok = Boolean(r?.ok)
         if (ok) {
           if (r?.cutOk === false && opts?.alertOnCutFailure !== false) {
@@ -151,6 +165,7 @@ export function printPosHtmlDocument(
         printHtmlInHiddenIframe(fullDocumentHtml, opts)
       })
       .catch(() => {
+        opts?.onShellPrintResult?.({ ok: false, reason: 'shell_invoke_error' })
         if (opts?.suppressPrintError !== true) {
           void appAlert(getUiString(uiLang, 'posPrintRequestError'))
         }

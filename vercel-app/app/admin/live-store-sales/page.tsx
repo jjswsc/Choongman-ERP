@@ -11,6 +11,7 @@ import { usePosStore } from "@/hooks/use-pos-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
+import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
 import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { Button } from "@/components/ui/button"
@@ -80,6 +81,10 @@ export default function AdminLiveStoreSalesPage() {
           currentStore={currentStore}
           showInlineRefresh
           showHeaderBadge
+        />
+        <PosRevenueRealtimeDashboard
+          effectiveStoreCode={effectiveStoreCode}
+          isOfficeSelector={isOfficeSelector}
         />
       </div>
     </div>

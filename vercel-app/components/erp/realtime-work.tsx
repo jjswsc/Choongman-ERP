@@ -223,13 +223,13 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       .finally(() => setLoading(false))
   }, [storeFilterFinal, auth?.store, date])
 
-  // 당일 조회 중일 때 실시간 반영: 30초마다 출퇴근 데이터 재조회
+  // 당일 조회 중일 때 실시간 반영: 60초마다 출퇴근 데이터 재조회(관리자 트래픽 절감)
   const isViewingToday = date === todayStr()
   React.useEffect(() => {
     if (!hasSearched || !isViewingToday) return
     const interval = setInterval(() => {
       loadTodayData()
-    }, 30 * 1000)
+    }, 60 * 1000)
     return () => clearInterval(interval)
   }, [hasSearched, isViewingToday, loadTodayData])
 

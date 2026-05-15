@@ -147,7 +147,10 @@ export function PosTerminalMenuScreen({
     [t]
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
-  usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
+  usePosMenusCatalogLiveRefresh(
+    React.useCallback((list) => setMenus(list), []),
+    storeCode || null
+  )
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
   const [selectedMainCategory, setSelectedMainCategory] = React.useState('')
@@ -217,7 +220,7 @@ export function PosTerminalMenuScreen({
   const loadMenuData = React.useCallback(async () => {
     const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
     const [r0, r1, r2, r3] = await Promise.allSettled([
-      getPosMenus({ fresh: true }),
+      getPosMenus({ fresh: true, storeCode: storeCode || undefined }),
       getPosMenuCategories(),
       getPosMenuOptions({ fresh: true }),
       getPosPromosWithItems(),
@@ -250,7 +253,7 @@ export function PosTerminalMenuScreen({
             return hit
           }) || ''
     setSelectedCategory(firstSub)
-  }, [])
+  }, [storeCode])
 
   React.useEffect(() => {
     setLoading(true)
@@ -615,7 +618,7 @@ export function PosTerminalMenuScreen({
     for (const g of state.groups) {
       const selected = state.selectedRowKeysByGroup[g.key] || []
       if (selected.length !== g.pickCount) {
-        await appAlert(`"${g.key}" 그룹은 ${g.pickCount}개 선택해야 합니다.`)
+        await appAlert(i18nTr(t, 'posPromoGroupPickCount', { group: g.key, count: g.pickCount }))
         return
       }
     }
@@ -634,7 +637,7 @@ export function PosTerminalMenuScreen({
       items: [...state.fixedItems, ...selectedItems],
     })
     setPromoChoiceDialog(null)
-  }, [addResolvedPromo, promoChoiceDialog])
+  }, [addResolvedPromo, promoChoiceDialog, t])
 
   const openMenuPicker = (menu: PosMenu) => {
     if (isBanbanMenu(menu)) {
@@ -923,7 +926,7 @@ export function PosTerminalMenuScreen({
     const targetId = menuEditTargetId ? String(menuEditTargetId).trim() : ''
     const targetMenuId = Number(targetId)
     if (!targetId || !Number.isFinite(targetMenuId) || targetMenuId <= 0) {
-      await appAlert('옵션 단계 템플릿만 적용되었습니다. 메뉴 저장 후 다시 누르면 예시 옵션도 자동 생성됩니다.')
+      await appAlert(t('posMenuEditSetTemplateStepsOnly'))
       return
     }
     const hasExistingSubstitution = allOptions.some(
@@ -932,21 +935,19 @@ export function PosTerminalMenuScreen({
         (o.optionType == null || o.optionType === 'substitution')
     )
     if (hasExistingSubstitution) {
-      await appAlert('옵션 단계를 set_main, drink로 적용했습니다. 기존 옵션이 있어 예시 옵션 생성은 건너뛰었습니다.')
+      await appAlert(t('posMenuEditSetTemplateStepsSkipSamples'))
       return
     }
-    const confirmed = await appConfirm(
-      '이 메뉴에 세트 택1 예시 옵션 4개를 자동 생성할까요?\n(필요 없으면 취소를 누른 뒤 옵션 단계만 사용하세요.)'
-    )
+    const confirmed = await appConfirm(t('posMenuEditSetTemplateConfirm'))
     if (!confirmed) return
 
     setSetTemplateApplying(true)
     try {
       const samples: Array<{ name: string; step: Record<string, string> }> = [
-        { name: '메인A + 음료A', step: { set_main: '메인A', drink: '음료A' } },
-        { name: '메인A + 음료B', step: { set_main: '메인A', drink: '음료B' } },
-        { name: '메인B + 음료A', step: { set_main: '메인B', drink: '음료A' } },
-        { name: '메인B + 음료B', step: { set_main: '메인B', drink: '음료B' } },
+        { name: t('posSetTemplateEx1n'), step: { set_main: t('posSetTemplateEx1m'), drink: t('posSetTemplateEx1d') } },
+        { name: t('posSetTemplateEx2n'), step: { set_main: t('posSetTemplateEx2m'), drink: t('posSetTemplateEx2d') } },
+        { name: t('posSetTemplateEx3n'), step: { set_main: t('posSetTemplateEx3m'), drink: t('posSetTemplateEx3d') } },
+        { name: t('posSetTemplateEx4n'), step: { set_main: t('posSetTemplateEx4m'), drink: t('posSetTemplateEx4d') } },
       ]
       for (let i = 0; i < samples.length; i++) {
         const row = samples[i]
@@ -962,11 +963,11 @@ export function PosTerminalMenuScreen({
           { requireOnline: true }
         )
         if (!res?.success) {
-          throw new Error(res?.message || '옵션 생성 실패')
+          throw new Error(res?.message || t('posMenuEditSetTemplateOptionFail'))
         }
       }
       await loadMenuData()
-      await appAlert('세트 택1 템플릿을 적용했고, 예시 옵션 4개를 생성했습니다. 옵션명은 메뉴에 맞게 수정해서 사용하세요.')
+      await appAlert(t('posMenuEditSetTemplateDone'))
     } catch (e) {
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
@@ -1944,10 +1945,10 @@ export function PosTerminalMenuScreen({
                           disabled={setTemplateApplying}
                           onClick={() => void applySetChoiceTemplate()}
                         >
-                          {setTemplateApplying ? '세트 템플릿 적용중...' : '세트 택1 템플릿 적용'}
+                          {setTemplateApplying ? t('posMenuEditSetTemplateApplying') : t('posMenuEditSetTemplateButton')}
                         </Button>
                         <span className="text-[11px] text-muted-foreground">
-                          set_main, drink 단계와 기본 예시 옵션을 자동으로 만듭니다.
+                          {t('posMenuEditSetTemplateHint')}
                         </span>
                       </div>
                       {selectedOptionGroups.length > 0 && (

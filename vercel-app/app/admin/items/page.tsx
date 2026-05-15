@@ -25,7 +25,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr as i18nTr } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
 import { compareByCode } from "@/lib/sort-utils"
@@ -355,14 +355,19 @@ export default function ItemsPage() {
     try {
       const res = await importItemsFromExcel(file)
       if (res.success) {
-        await appAlert(res.message || (res.added ? `${res.added}건 등록` : '완료'))
+        await appAlert(
+          res.message ||
+            (typeof res.added === "number" && res.added > 0
+              ? i18nTr(t, "adminItemsImportAddedN", { n: res.added })
+              : t("adminItemsImportComplete"))
+        )
         const [list] = await Promise.all([getAdminItems()])
         setProducts(list || [])
       } else {
-        await appAlert(res.message || '가져오기 실패')
+        await appAlert(res.message || t("adminItemsImportFail"))
       }
     } catch (err) {
-      await appAlert(err instanceof Error ? err.message : '오류')
+      await appAlert(err instanceof Error ? err.message : t("adminItemsImportError"))
     } finally {
       setExcelImporting(false)
     }

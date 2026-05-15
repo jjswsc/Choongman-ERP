@@ -23,6 +23,7 @@ const FETCH_LIMIT = 50000
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
 
   try {
     const { searchParams } = new URL(request.url)

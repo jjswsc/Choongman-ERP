@@ -7,6 +7,7 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
+import { buildKitchenPrintTrackingId } from '@/lib/pos-kitchen-print-tracking'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
@@ -237,6 +238,7 @@ export function buildKitchenSlipHtml(params: {
   memoHtml: string
   escapeHtml: (s: string) => string
   design: KitchenSlipDesignResolved
+  printTrackingId?: string
   printColorAdjust?: 'exact' | 'economy'
 }): string {
   const {
@@ -250,11 +252,18 @@ export function buildKitchenSlipHtml(params: {
     memoHtml,
     escapeHtml,
     design,
+    printTrackingId,
     printColorAdjust = 'exact',
   } = params
   const paperCss = getKitchenSlipPaperCss(design, printColorAdjust)
   const classCss = kitchenSlipClassCss(design)
   const orderNoPrint = formatPosOrderNoForPrint(orderNo)
+  const traceId =
+    String(printTrackingId || '').trim() ||
+    buildKitchenPrintTrackingId({
+      orderRef: orderNoPrint || orderNo || storeCode,
+      label,
+    })
   const c = (tag: string) => '\u003c/' + tag + '>'
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
@@ -282,6 +291,10 @@ export function buildKitchenSlipHtml(params: {
     '<div class="k-row">' +
     dateStr +
     c('div') +
+    '<div class="k-row" style="font-size:11px;color:#555;">' +
+    'Trace ID: ' +
+    escapeHtml(traceId) +
+    c('div') +
     '<hr style="margin:10px 0;" />' +
     itemsHtml +
     memoHtml +
@@ -302,6 +315,7 @@ export function buildKitchenSlipDocumentHtml(params: {
   memoLine: string | null | undefined
   escapeHtml: (s: string) => string
   design: KitchenSlipDesignResolved
+  printTrackingId?: string
   printColorAdjust?: 'exact' | 'economy'
   prependItemsHtml?: string
 }): string {
@@ -316,6 +330,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     memoLine,
     escapeHtml,
     design,
+    printTrackingId,
     printColorAdjust,
     prependItemsHtml,
   } = params
@@ -332,6 +347,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     memoHtml,
     escapeHtml,
     design,
+    printTrackingId,
     printColorAdjust,
   })
 }

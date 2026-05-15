@@ -8,6 +8,8 @@ import { Invoice, type InvoiceData } from "@/components/invoice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { appAlert } from "@/lib/app-message"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import {
   getInvoicePrintOverrides,
   updateInvoicePrintOverrides,
@@ -29,6 +31,15 @@ function makeTaxInvoiceDocNo(issueDate: string, refText: string): string {
   return `IV.${yyyymm}XX-${suffix}`
 }
 
+function InvoicePrintLoadingLine() {
+  const t = useT(useLang().lang)
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8">
+      <p className="text-muted-foreground">{t("adminInvoicePrintLoading")}</p>
+    </div>
+  )
+}
+
 function isTaxInvoiceDoc(data: InvoiceData): boolean {
   return /tax\s*invoice/i.test(data.documentType || "")
 }
@@ -42,6 +53,8 @@ function buildOverrideCode(refType: string, refId: number, docKind: "invoice" | 
 }
 
 function InvoicePrintPageInner() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const searchParams = useSearchParams()
   const embed = searchParams.get("embed") === "1"
   const [editDatas, setEditDatas] = React.useState<InvoiceData[]>([])
@@ -135,18 +148,18 @@ function InvoicePrintPageInner() {
     })
 
     if (payload.length === 0) {
-      await appAlert("저장할 주문 기준 정보가 없어 현재 화면 값만 유지됩니다.")
+      await appAlert(t("adminInvoicePrintNoRefToSave"))
       setUpdating(false)
       return
     }
 
     const res = await updateInvoicePrintOverrides(payload)
     if (!res?.success) {
-      await appAlert(res?.message || "Update 저장에 실패했습니다.")
+      await appAlert(res?.message || t("adminInvoicePrintUpdateFail"))
       setUpdating(false)
       return
     }
-    await appAlert("Update 저장이 완료되었습니다. 다음에 열어도 수정값이 유지됩니다.")
+    await appAlert(t("adminInvoicePrintUpdateOk"))
     setUpdating(false)
   }
 
@@ -157,7 +170,7 @@ function InvoicePrintPageInner() {
   if (!loaded) {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">{t("adminInvoicePrintLoading")}</p>
       </div>
     )
   }
@@ -166,10 +179,10 @@ function InvoicePrintPageInner() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
         <p className="text-muted-foreground">
-          No invoice data. Use Print Invoice on Outbound History, or Tax Invoice on Receivables (paid orders).
+          {t("adminInvoicePrintEmpty")}
         </p>
         <Button variant="outline" onClick={() => window.close()}>
-          Close
+          {t("adminInvoicePrintClose")}
         </Button>
       </div>
     )
@@ -181,15 +194,15 @@ function InvoicePrintPageInner() {
       <div className="no-print fixed inset-x-0 bottom-0 z-[9999] border-t bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-6xl p-3 space-y-3">
           <div className="flex items-center gap-3">
-            <Button onClick={handlePrint}>Print</Button>
+            <Button onClick={handlePrint}>{t("adminInvoicePrintPrint")}</Button>
             <Button type="button" onClick={handleUpdate} disabled={updating}>
-              {updating ? "Updating..." : "Update"}
+              {updating ? t("adminInvoicePrintUpdating") : t("adminInvoicePrintUpdate")}
             </Button>
             <Button variant="outline" onClick={() => window.close()}>
-              Close
+              {t("adminInvoicePrintClose")}
             </Button>
             <span className="text-xs text-muted-foreground">
-              인쇄 전 수정 후 Update를 누르면 다음에도 반영됩니다.
+              {t("adminInvoicePrintHintSaveNote")}
             </span>
           </div>
           <div className="max-h-[35vh] overflow-auto space-y-2 pr-1">
@@ -262,11 +275,7 @@ function InvoicePrintPageInner() {
 export default function InvoicePrintPage() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center p-8">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      }
+      fallback={<InvoicePrintLoadingLine />}
     >
       <InvoicePrintPageInner />
     </Suspense>

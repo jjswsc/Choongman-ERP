@@ -9,6 +9,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json()) as Parameters<typeof upsertPosMenuFromBody>[0]
+    const isNewMenu = !String(body.id || '').trim()
+    const isImageOnly = body.imageOnly === true
+    const storeCodes =
+      Array.isArray(body.storeCodes)
+        ? body.storeCodes.map((x) => String(x || '').trim()).filter(Boolean)
+        : []
+    if (isNewMenu && !isImageOnly && storeCodes.length === 0) {
+      return NextResponse.json(
+        { success: false, message: '신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.' },
+        { headers }
+      )
+    }
     const result = await upsertPosMenuFromBody(body, { upsertByCode: false })
     if (result.success) {
       const changed = result.syncHint?.changedFields || []

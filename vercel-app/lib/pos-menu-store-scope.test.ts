@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'vitest'
+import {
+  menuScopeIncludesStore,
+  normalizeMenuScopeStoreCodes,
+  shouldMenuBeVisibleForStore,
+} from '@/lib/pos-menu-store-scope'
+import { posMenusCatalogCacheKey } from '@/lib/offline/pos-catalog-offline'
+
+describe('pos-menu-store-scope', () => {
+  it('normalizes and deduplicates store scope codes', () => {
+    expect(normalizeMenuScopeStoreCodes(['A', ' a ', '', null, 'B'])).toEqual(['A', 'B'])
+  })
+
+  it('matches store variants with CM prefix differences', () => {
+    expect(menuScopeIncludesStore(['CM Rama9'], 'Rama9')).toBe(true)
+    expect(menuScopeIncludesStore(['Rama9'], 'CM Rama9')).toBe(true)
+    expect(menuScopeIncludesStore(['Ekkamai'], 'Asoke')).toBe(false)
+  })
+
+  it('keeps unscoped menu visible only in compatibility mode', () => {
+    expect(
+      shouldMenuBeVisibleForStore({
+        requestedStoreCode: 'Rama9',
+        scopedStores: [],
+        compatibilityMode: true,
+        scopeSchemaReady: true,
+      })
+    ).toBe(true)
+    expect(
+      shouldMenuBeVisibleForStore({
+        requestedStoreCode: 'Rama9',
+        scopedStores: [],
+        compatibilityMode: false,
+        scopeSchemaReady: true,
+      })
+    ).toBe(false)
+  })
+})
+
+describe('pos menu cache key by store', () => {
+  it('creates global key when storeCode is empty', () => {
+    expect(posMenusCatalogCacheKey('')).toBe('erp:posCatalog:menus')
+  })
+
+  it('creates scoped key when storeCode exists', () => {
+    expect(posMenusCatalogCacheKey('CM Rama9')).toBe('erp:posCatalog:menus:CM Rama9')
+  })
+})

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { processPosStockDeduction, reversePosStockDeduction } from '@/lib/pos-stock-deduction'
 import {
   hasJournalForSource,
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(req)
     let body: Record<string, unknown>
     try {
       body = (await req.json()) as Record<string, unknown>
@@ -240,6 +243,33 @@ export async function POST(req: NextRequest) {
     }
 
     await supabaseUpdate('pos_orders', id, patch)
+
+    await writePosOrderAuditTrail({
+      orderId: id,
+      orderNo: String(prev?.order_no || `POS-${id}`),
+      storeCode: String(prev?.store_code || '').trim() || null,
+      actionType: 'update_status',
+      source: fromOfflineQueueSync ? 'offline_queue' : 'api',
+      actor: {
+        name: String(auth?.name || body?.updatedBy || body?.createdBy || '').trim() || null,
+        role: String(auth?.role || '').trim() || null,
+        store: String(auth?.store || '').trim() || null,
+        employeeCode: String(auth?.employeeCode || '').trim() || null,
+        employeeId:
+          auth?.employeeId != null && Number.isFinite(Number(auth.employeeId))
+            ? Math.floor(Number(auth.employeeId))
+            : null,
+      },
+      before: {
+        status: prevStatus,
+        memo: String(prev?.memo ?? ''),
+      },
+      after: {
+        status: nextStatus,
+        memo: String(patch.memo ?? prev?.memo ?? ''),
+      },
+      reason: memoAppend || null,
+    })
 
     const storeCode = String(prev?.store_code ?? '').trim()
     const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))

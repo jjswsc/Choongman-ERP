@@ -580,9 +580,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     const menuName =
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
                       `#${String(pi.menuId)}`
+                    const optName = String((pi as { optionName?: unknown }).optionName ?? '').trim()
+                    const optNameLabel = optName
+                      ? ` (${translatePosMenuLineForReceipt(optName, t)})`
+                      : ''
                     const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
                     const optCodeLabel = optCode ? ` [${optCode}]` : ''
-                    return `${menuName}${optCodeLabel} x${Math.max(1, Number(pi.quantity) || 1)}`
+                    return `${menuName}${optNameLabel}${optCodeLabel} x${Math.max(1, Number(pi.quantity) || 1)}`
                   })
                 : []
             const banbanFlavorLines = banban
@@ -634,7 +638,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${(receiptData.cardFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posCardFee') || '카드비'), `${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}`) : ''}
         ${(receiptData.otherFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posOtherFee') || '기타'), `${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}`) : ''}
         ${plainMemoForPrint ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(plainMemoForPrint)}</div>` : ''}
-        <div class="receipt-divider-strong"></div>
         ${paymentRowHtml(
           esc(tr('posTotal', '합계')),
           formatBahtNum(receiptData.total),
@@ -700,7 +703,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment--legacy-safe .receipt-item-head > span:last-child { display: table-cell !important; width: ${RECEIPT_AMOUNT_COL_MM}mm !important; min-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; vertical-align: top !important; white-space: nowrap !important; }
         .receipt-payment--legacy-safe .receipt-item-head { margin-top: 2px; }
         .receipt-payment--legacy-safe .receipt-row { margin: 5px 0; }
-        .receipt-payment--legacy-safe .receipt-total { margin-top: 10px; padding-top: 6px; border-top: 1px solid #000; font-weight: 800; }
+        .receipt-payment--legacy-safe .receipt-total { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; font-weight: 800; }
         .receipt-payment--legacy-safe .receipt-meta-row { display: table !important; width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; margin: 5px 0; }
         .receipt-payment--legacy-safe .receipt-meta-label { display: table-cell !important; width: 22mm !important; vertical-align: top !important; white-space: nowrap !important; padding-right: 3mm !important; font-size: 10px; font-weight: 600; line-height: 1.3; }
         .receipt-payment--legacy-safe .receipt-meta-value { display: table-cell !important; width: auto !important; vertical-align: top !important; font-size: 11px; font-weight: 700; line-height: 1.38; color: #000; word-break: break-word; }
@@ -723,7 +726,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment .receipt-pay-line--head { margin-top: 2px; margin-bottom: 2px; }
         .receipt-payment .receipt-pay-line--head .receipt-pay-line-name { font-size: 10px; font-weight: 700; }
         .receipt-payment .receipt-pay-line--head .receipt-pay-line-amt { font-size: 10px; font-weight: 700; margin-top: 1px; }
-        .receipt-payment .receipt-pay-line--total { margin-top: 10px; padding-top: 6px; border-top: 1px solid #000; }
+        .receipt-payment .receipt-pay-line--total { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; }
         .receipt-payment .receipt-pay-line--total .receipt-pay-line-name,
         .receipt-payment .receipt-pay-line--total .receipt-pay-line-amt { font-size: 12px; font-weight: 800; }
         `

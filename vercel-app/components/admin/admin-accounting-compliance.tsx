@@ -102,6 +102,7 @@ import {
   downloadThaiSsoFilingFromPayrollXlsx,
   THAI_SSO_TEMPLATE_COLUMN_HELP,
 } from "@/lib/thai-sso-filing-template"
+import { downloadThaiSsoEformV15FromPayrollXlsx } from "@/lib/thai-sso-eform-v15"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 
@@ -1533,6 +1534,18 @@ export function AdminAccountingCompliance({
       const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
       if (!rows || rows.length === 0) return
       downloadThaiSsoFilingFromPayrollXlsx({ yearMonth: taxMonth, payrollRows: rows })
+    } finally {
+      setSsoPayrollExporting(false)
+    }
+  }, [canUse, auth?.user, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
+
+  const exportSsoEformV15FromPayroll = React.useCallback(async () => {
+    if (!canUse || !auth?.user) return
+    setSsoPayrollExporting(true)
+    try {
+      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
+      if (!rows || rows.length === 0) return
+      downloadThaiSsoEformV15FromPayrollXlsx({ yearMonth: taxMonth, payrollRows: rows })
     } finally {
       setSsoPayrollExporting(false)
     }
@@ -5763,6 +5776,16 @@ export function AdminAccountingCompliance({
                 >
                   <Download className="h-4 w-4 mr-2" />
                   {ssoPayrollExporting ? t("loading") : t("accCompSsoFromPayroll")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void exportSsoEformV15FromPayroll()}
+                  disabled={ssoPayrollExporting || !ssoStep1Ready}
+                  title={t("accCompSsoEformV15Hint")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {ssoPayrollExporting ? t("loading") : t("accCompSsoEformV15FromPayroll")}
                 </Button>
                 <Button
                   type="button"

@@ -27,7 +27,7 @@ import {
   invalidateAppDataCache as invalidateAppDataCacheOffline,
   invalidateAdminItemsCache,
 } from './offline/erp-offline'
-import { ERP_POS_CATALOG_MENUS_CACHE_KEY, fetchPosCatalogCached, notifyPosCatalogUpdated } from './offline/pos-catalog-offline'
+import { fetchPosCatalogCached, notifyPosCatalogUpdated, posMenusCatalogCacheKey } from './offline/pos-catalog-offline'
 import { getFromErpCache, setErpCache } from './offline/cache'
 import type { PosMenuUpsertApiBody } from './pos-menu-upsert-server'
 import { readAutoTranslateEnabled } from './auto-translate'
@@ -5639,6 +5639,8 @@ export interface PosMenu {
   descriptionDefault?: string
   descriptionDelivery?: string | null
   descriptionTable?: string | null
+  /** 메뉴 노출 대상 매장 목록(비어 있으면 호환모드에서 전체 노출 가능) */
+  storeCodes?: string[]
 }
 
 export interface PosOptionSelectionGroupConfig {
@@ -5748,13 +5750,18 @@ export interface PosOrderPackagingChecklistGroup {
   }[]
 }
 
-export async function getPosMenus(params?: { fresh?: boolean }) {
+export async function getPosMenus(params?: { fresh?: boolean; storeCode?: string | null }) {
+  const storeCode = String(params?.storeCode || '').trim()
+  const q = new URLSearchParams()
+  if (storeCode) q.set('storeCode', storeCode)
+  const url = '/api/getPosMenus' + (q.toString() ? `?${q.toString()}` : '')
+  const cacheKey = posMenusCatalogCacheKey(storeCode || null)
   if (params?.fresh) {
-    const res = await apiFetchWithOffline('/api/getPosMenus')
+    const res = await apiFetchWithOffline(url)
     const data = await res.json().catch(() => [])
     return Array.isArray(data) ? (data as PosMenu[]) : []
   }
-  return fetchPosCatalogCached<PosMenu[]>(ERP_POS_CATALOG_MENUS_CACHE_KEY, '/api/getPosMenus', [])
+  return fetchPosCatalogCached<PosMenu[]>(cacheKey, url, [])
 }
 
 export async function getPosMenuPackagingChecklist(params: { menuId: string }) {
@@ -6509,6 +6516,7 @@ export async function savePosMenu(
     descriptionDefault?: string
     descriptionDelivery?: string | null
     descriptionTable?: string | null
+    storeCodes?: string[]
     /**
      * true 이면 image 컬럼만 갱신한다(프로모 연동 메뉴의 사진 단독 변경 등).
      * 서버는 다른 필드 비교를 건너뛴다.
@@ -6556,14 +6564,19 @@ export async function importPosMenus(menus: PosMenuUpsertApiBody[]): Promise<Imp
 }
 
 /** getPosMenus IDB 캐시를 서버 목록으로 덮어쓴 뒤 이벤트 알림 (일괄 저장 직후 목록 즉시 반영) */
-export async function refreshPosMenusCatalogCache(): Promise<void> {
+export async function refreshPosMenusCatalogCache(params?: { storeCode?: string | null }): Promise<void> {
   try {
-    const res = await apiFetch('/api/getPosMenus')
+    const storeCode = String(params?.storeCode || '').trim()
+    const q = new URLSearchParams()
+    if (storeCode) q.set('storeCode', storeCode)
+    const url = '/api/getPosMenus' + (q.toString() ? `?${q.toString()}` : '')
+    const cacheKey = posMenusCatalogCacheKey(storeCode || null)
+    const res = await apiFetch(url)
     if (!res.ok) return
     const list = (await res.json()) as unknown
     if (!Array.isArray(list)) return
-    await setErpCache(ERP_POS_CATALOG_MENUS_CACHE_KEY, list)
-    notifyPosCatalogUpdated(ERP_POS_CATALOG_MENUS_CACHE_KEY, list)
+    await setErpCache(cacheKey, list)
+    notifyPosCatalogUpdated(cacheKey, list, { storeCode: storeCode || null })
   } catch {
     /* ignore */
   }
@@ -9133,6 +9146,74 @@ export type PosOrderStatusUpdateResult = {
   retryAfterQueue?: boolean
   statusAlreadyApplied?: boolean
   failedSideEffects?: string[]
+}
+
+export type PosOrderAuditTrailRow = {
+  id: number
+  changedAt: string
+  orderId: number
+  orderNo: string
+  storeCode: string
+  actionType: string
+  changedBy: string
+  changedByRole: string
+  changedByStore: string
+  changedByEmployeeCode: string
+  changedByEmployeeId: number | null
+  changeSource: string
+  reason: string
+  beforeJson: Record<string, unknown> | null
+  afterJson: Record<string, unknown> | null
+  changedFields: Array<{ field: string; before: unknown; after: unknown }>
+}
+
+export async function getPosOrderAuditTrail(params: {
+  startStr: string
+  endStr: string
+  employee?: string
+  orderNo?: string
+  store?: string
+  limit?: number
+}) {
+  const q = new URLSearchParams()
+  q.set('startStr', params.startStr)
+  q.set('endStr', params.endStr)
+  if (params.employee) q.set('employee', params.employee)
+  if (params.orderNo) q.set('orderNo', params.orderNo)
+  if (params.store) q.set('store', params.store)
+  if (params.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline(`/api/getPosOrderAuditTrail?${q.toString()}`)
+  const json = (await res.json().catch(() => ({}))) as { rows?: Record<string, unknown>[] }
+  const rows = Array.isArray(json.rows) ? json.rows : []
+  return rows.map((r) => ({
+    id: Number(r.id || 0),
+    changedAt: String(r.changed_at || ''),
+    orderId: Number(r.order_id || 0),
+    orderNo: String(r.order_no || ''),
+    storeCode: String(r.store_code || ''),
+    actionType: String(r.action_type || ''),
+    changedBy: String(r.changed_by || ''),
+    changedByRole: String(r.changed_by_role || ''),
+    changedByStore: String(r.changed_by_store || ''),
+    changedByEmployeeCode: String(r.changed_by_employee_code || ''),
+    changedByEmployeeId:
+      r.changed_by_employee_id != null && Number.isFinite(Number(r.changed_by_employee_id))
+        ? Number(r.changed_by_employee_id)
+        : null,
+    changeSource: String(r.change_source || ''),
+    reason: String(r.reason || ''),
+    beforeJson:
+      r.before_json && typeof r.before_json === 'object' && !Array.isArray(r.before_json)
+        ? (r.before_json as Record<string, unknown>)
+        : null,
+    afterJson:
+      r.after_json && typeof r.after_json === 'object' && !Array.isArray(r.after_json)
+        ? (r.after_json as Record<string, unknown>)
+        : null,
+    changedFields: Array.isArray(r.changed_fields_json)
+      ? (r.changed_fields_json as Array<{ field: string; before: unknown; after: unknown }>)
+      : [],
+  })) as PosOrderAuditTrailRow[]
 }
 
 export async function updatePosOrderStatus(params: {

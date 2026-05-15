@@ -407,7 +407,8 @@ export function CompanyHybridDocumentsPanel() {
         ? String(row.category_id)
         : FORM_CAT_NONE
     )
-    setExternalUrl(row.external_url || "")
+    // Drive: external_url. 업로드(supabase): public_url만 채워지므로 수정 화면에서도 링크가 보이게 한다.
+    setExternalUrl(String(row.external_url || row.public_url || "").trim())
     setFormVisibility(companyHybridDocVisibilityFromDocType(row.doc_type))
     setValidFrom(row.valid_from ? String(row.valid_from).slice(0, 10) : "")
     setValidTo(row.valid_to ? String(row.valid_to).slice(0, 10) : "")
@@ -1002,7 +1003,17 @@ export function CompanyHybridDocumentsPanel() {
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>{t("companyHybridDocExternalUrl")}</Label>
-                  <Input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
+                  <Input
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                    readOnly={editing != null && editing.source !== "drive"}
+                    className={editing != null && editing.source !== "drive" ? "bg-muted/50" : undefined}
+                    title={
+                      editing != null && editing.source !== "drive"
+                        ? t("companyHybridDocUploadLinkReadonlyHint")
+                        : undefined
+                    }
+                  />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button

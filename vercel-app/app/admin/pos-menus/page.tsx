@@ -110,7 +110,7 @@ import {
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
-import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
+import { translatePosMenuLineForReceipt, chickenPartDedupeKey, prettyChickenPartLibraryLabel } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
 import { normalizeOptionGroupsForMenu } from "@/lib/pos-option-selection-groups"
 
@@ -520,6 +520,41 @@ export default function PosMenusPage() {
   const [priceManageTab, setPriceManageTab] = React.useState<"history" | "schedule">("history")
   const [pricingStoreCode, setPricingStoreCode] = React.useState("")
   const canSearchAllStores = isOfficeRole(auth?.role || "")
+  const availableScopeStores = React.useMemo(() => {
+    const out: string[] = []
+    const push = (raw: unknown) => {
+      const v = String(raw || "").trim()
+      if (!v) return
+      if (!out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v)
+    }
+    if (canSearchAllStores) {
+      for (const s of stores) push(s)
+    } else {
+      push(auth?.store)
+      for (const s of auth?.allowedStores || []) push(s)
+      if (out.length === 0) {
+        for (const s of stores) push(s)
+      }
+    }
+    return out.sort((a, b) => a.localeCompare(b))
+  }, [canSearchAllStores, stores, auth?.store, auth?.allowedStores])
+  const defaultScopeStoreCodes = React.useMemo(() => {
+    // 본사(전 매장 검색): 신규 시 스코프가 비면 저장 검증에 걸리므로, 노출 후보 전체를 기본 선택한다.
+    if (canSearchAllStores) return [...availableScopeStores]
+    if (auth?.store) return [String(auth.store).trim()].filter(Boolean)
+    if (availableScopeStores.length > 0) return [availableScopeStores[0]]
+    return []
+  }, [canSearchAllStores, auth?.store, availableScopeStores])
+  const [selectedStoreCodes, setSelectedStoreCodes] = React.useState<string[]>([])
+  const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
+    const normalized = String(storeCode || "").trim()
+    if (!normalized) return
+    setSelectedStoreCodes((prev) => {
+      const has = prev.some((x) => x.toLowerCase() === normalized.toLowerCase())
+      if (checked) return has ? prev : [...prev, normalized]
+      return prev.filter((x) => x.toLowerCase() !== normalized.toLowerCase())
+    })
+  }, [])
   const effectivePricingStore = canSearchAllStores && pricingStoreCode ? pricingStoreCode : auth?.store || ""
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
@@ -655,6 +690,12 @@ export default function PosMenusPage() {
       setDeliveryOpsStoreCode(auth.store)
     }
   }, [canSearchAllStores, stores, auth?.store, deliveryOpsStoreCode])
+
+  React.useEffect(() => {
+    if (selectedStoreCodes.length > 0) return
+    if (defaultScopeStoreCodes.length === 0) return
+    setSelectedStoreCodes(defaultScopeStoreCodes)
+  }, [defaultScopeStoreCodes, selectedStoreCodes.length])
 
   React.useEffect(() => {
     if (mainTab !== "set" && mainTab !== "setInquiry") return
@@ -993,6 +1034,7 @@ export default function PosMenusPage() {
 
   const handleNewRegister = () => {
     setEditingId(null)
+    setSelectedStoreCodes(defaultScopeStoreCodes)
     setPackagingChecklistRows([])
     const filter = mainCategoryFilter === "all" ? "" : mainCategoryFilter.trim()
     if (!filter) {
@@ -1011,6 +1053,10 @@ export default function PosMenusPage() {
     if (editingId) {
       const m = menus.find((x) => x.id === editingId)
       if (m) {
+        const scope = Array.isArray(m.storeCodes)
+          ? m.storeCodes.map((x) => String(x || "").trim()).filter(Boolean)
+          : []
+        setSelectedStoreCodes(scope)
         setFormData({
           ...emptyForm,
           code: m.code,
@@ -1031,6 +1077,7 @@ export default function PosMenusPage() {
       }
     } else {
       setFormData(emptyForm)
+      setSelectedStoreCodes(defaultScopeStoreCodes)
       setPackagingChecklistRows([])
     }
   }
@@ -1155,6 +1202,10 @@ export default function PosMenusPage() {
       await appAlert(t("posMenuAlertCodeName"))
       return
     }
+    if (selectedStoreCodes.length === 0) {
+      await appAlert("노출할 매장을 1개 이상 선택해 주세요.")
+      return
+    }
     if (!editingId && menus.some((m) => m.code === code)) {
       await appAlert(t("itemsAlertCodeExists"))
       return
@@ -1180,10 +1231,17 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
+      storeCodes: selectedStoreCodes,
     })
     if (!res.success) {
       await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
+    }
+    const scopeTargets = Array.from(new Set(selectedStoreCodes.map((x) => String(x || "").trim()).filter(Boolean)))
+    if (scopeTargets.length > 0) {
+      await Promise.all(scopeTargets.map((sc) => refreshPosMenusCatalogCache({ storeCode: sc })))
+    } else {
+      await refreshPosMenusCatalogCache()
     }
     const newMenu: PosMenu = {
       id: editingId || "",
@@ -1203,6 +1261,7 @@ export default function PosMenusPage() {
       optionSelectionGroups: editingMenu?.optionSelectionGroups,
       optionSelectionConfig: editingMenu?.optionSelectionConfig,
       isBanban: formData.isBanban,
+      storeCodes: selectedStoreCodes,
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
@@ -1221,6 +1280,7 @@ export default function PosMenusPage() {
     }
     if (!wasEditingExisting) {
       setFormData(emptyForm)
+      setSelectedStoreCodes(defaultScopeStoreCodes)
       setEditingId(null)
     }
   }
@@ -1245,6 +1305,11 @@ export default function PosMenusPage() {
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
     })
+    setSelectedStoreCodes(
+      Array.isArray(menu.storeCodes)
+        ? menu.storeCodes.map((x) => String(x || "").trim()).filter(Boolean)
+        : []
+    )
     setEditingId(menu.id)
     setNewOptionName("")
     setNewOptionModifier("0")
@@ -1462,7 +1527,7 @@ export default function PosMenusPage() {
       menus.filter((m) => isChickenMenu(m.code)).map((m) => String(m.id).trim()).filter(Boolean)
     )
     if (chickenMenuIds.size === 0 || optionsConfigAllMenuOptionsCatalog.length === 0) return null
-    const byLower = new Map<string, PosOptionGroup["items"][0]>()
+    const byDedupeKey = new Map<string, PosOptionGroup["items"][0]>()
     let sort = 0
     const menusWithPart = new Set<string>()
     for (const o of optionsConfigAllMenuOptionsCatalog) {
@@ -1480,13 +1545,14 @@ export default function PosMenusPage() {
       const part = fromStep || inferred
       const p = String(part ?? "").trim()
       if (!p) continue
+      const dedupeKey = chickenPartDedupeKey(p)
+      if (!dedupeKey) continue
       menusWithPart.add(mid)
-      const low = p.toLowerCase()
-      if (byLower.has(low)) continue
-      byLower.set(low, {
+      if (byDedupeKey.has(dedupeKey)) continue
+      byDedupeKey.set(dedupeKey, {
         id: "",
         groupId: "",
-        itemName: p,
+        itemName: prettyChickenPartLibraryLabel(dedupeKey, p),
         sortOrder: sort++,
         basePriceHall: 0,
         basePriceDelivery: null,
@@ -1494,14 +1560,25 @@ export default function PosMenusPage() {
         sellDelivery: true,
       })
     }
-    if (byLower.size === 0) return null
+    if (byDedupeKey.size === 0) return null
+    const partOrder = (k: string) => {
+      const i = ["boneless", "wing", "drumette"].indexOf(k)
+      return i === -1 ? 100 : i
+    }
+    const sortedItems = [...byDedupeKey.entries()]
+      .sort(([ka], [kb]) => {
+        const d = partOrder(ka) - partOrder(kb)
+        if (d !== 0) return d
+        return ka.localeCompare(kb, undefined, { numeric: true })
+      })
+      .map(([, row], i) => ({ ...row, sortOrder: i }))
     return {
       id: VIRTUAL_CHICKEN_PART_GROUP_ID,
       key: "part",
       name: t("posOptionVirtualLibraryChickenPartName") || "부위 후보 (치킨 메뉴 DB)",
       isActive: true,
       sortOrder: -100,
-      items: [...byLower.values()],
+      items: sortedItems,
       linkedMenuCount: menusWithPart.size,
     }
   }, [menus, optionsConfigLibraryGroups, optionsConfigAllMenuOptionsCatalog, t])
@@ -3700,6 +3777,27 @@ export default function PosMenusPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
+                    <div className="rounded-md border border-dashed p-3">
+                      <label className="text-xs font-semibold">{t("store") || "매장"}</label>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        노출할 매장을 선택하세요. 선택한 매장 POS에서만 메뉴가 보입니다.
+                      </p>
+                      <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
+                        {availableScopeStores.map((sc) => {
+                          const checked = selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
+                          return (
+                            <label key={`scope-edit-${sc}`} className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => toggleStoreScopeCode(sc, e.target.checked)}
+                              />
+                              <span>{sc}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
@@ -4303,6 +4401,27 @@ export default function PosMenusPage() {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                  </div>
+                  <div className="rounded-md border border-dashed p-3">
+                    <label className="text-xs font-semibold">{t("store") || "매장"}</label>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      노출할 매장을 1개 이상 선택해야 저장됩니다.
+                    </p>
+                    <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
+                      {availableScopeStores.map((sc) => {
+                        const checked = selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
+                        return (
+                          <label key={`scope-new-${sc}`} className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => toggleStoreScopeCode(sc, e.target.checked)}
+                            />
+                            <span>{sc}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>

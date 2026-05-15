@@ -1505,17 +1505,21 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
   }
   const cashAndBanks = openingCash + bankDelta
 
-  const itemRows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost' })) as { code?: string; cost?: number }[] | null
+  const [itemRows, subjectMeta, itemAccountSubjectMap] = await Promise.all([
+    supabaseSelect('items', { limit: 50000, select: 'code,cost' }) as Promise<{ code?: string; cost?: number }[] | null>,
+    loadAccountSubjectMeta(),
+    loadItemAccountSubjectMap(),
+  ])
   const itemCostMap: Record<string, number> = {}
   for (const r of itemRows || []) {
     const code = String(r.code || '').trim()
     if (code) itemCostMap[code] = Number(r.cost) || 0
   }
   const inventory = isHQ
-    ? await getInventoryValue('본사', endStr, false, itemCostMap)
+    ? await getInventoryValue('본사', endStr, false, itemCostMap, false, itemAccountSubjectMap, subjectMeta)
     : storeFilter !== 'All'
-      ? await getInventoryValue(storeFilter, endStr, false, itemCostMap)
-      : await getInventoryValue(null, endStr, false, itemCostMap, false)
+      ? await getInventoryValue(storeFilter, endStr, false, itemCostMap, false, itemAccountSubjectMap, subjectMeta)
+      : await getInventoryValue(null, endStr, false, itemCostMap, false, itemAccountSubjectMap, subjectMeta)
 
   let receivables = 0
   try {
@@ -1534,10 +1538,28 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
 
   let payables = 0
   try {
-    const payRows = (await supabaseSelectFilter('payable_transactions', 'id=gt.0', {
-      select: 'amount',
-      limit: 50000,
-    })) as { amount?: number }[] | null
+    const payableFilter =
+      storeFilter !== 'All' && !isHQ
+        ? buildStoreFieldOrIlikeFragment('store_name', storeFilter)
+        : 'id=gt.0'
+    let payRows: { amount?: number }[] | null = null
+    try {
+      payRows = (await supabaseSelectFilter('payable_transactions', payableFilter, {
+        select: 'amount',
+        limit: 50000,
+      })) as { amount?: number }[] | null
+    } catch (innerError) {
+      // 구 스키마 호환: store_name 대신 store 컬럼만 있는 환경 대응
+      if (storeFilter !== 'All' && !isHQ) {
+        const fallbackFilter = buildStoreFieldOrIlikeFragment('store', storeFilter)
+        payRows = (await supabaseSelectFilter('payable_transactions', fallbackFilter, {
+          select: 'amount',
+          limit: 50000,
+        })) as { amount?: number }[] | null
+      } else {
+        throw innerError
+      }
+    }
     payables = (payRows || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
   } catch {
     payables = 0

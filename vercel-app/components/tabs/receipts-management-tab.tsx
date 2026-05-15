@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Search, ChevronDown, Printer, PencilLine, Banknote, CreditCard, QrCode, Bike, Wallet } from 'lucide-react'
+import { Search, ChevronDown, Printer, PencilLine, Banknote, CreditCard, QrCode, Bike, Wallet, Copy } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -74,6 +74,15 @@ import {
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import {
+  buildKitchenPrintTrackingId,
+  clearKitchenPrintFailure,
+  extractOrderTokenFromKitchenPrintTrackingId,
+  getKitchenPrintFailure,
+  markKitchenPrintFailure,
+  subscribeKitchenPrintFailureChanges,
+  toKitchenPrintTrackingToken,
+} from '@/lib/pos-kitchen-print-tracking'
 import {
   parsePaymentOtherBreakdown,
   paymentOtherBreakdownSearchTokens,
@@ -240,6 +249,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [taxSearchKeyword, setTaxSearchKeyword] = React.useState('')
   const [taxSearchRows, setTaxSearchRows] = React.useState<PosTaxInvoiceRecipientRow[]>([])
   const [taxSearchMessage, setTaxSearchMessage] = React.useState('')
+  const [, setKitchenPrintFailureVersion] = React.useState(0)
+  const [traceCopyToast, setTraceCopyToast] = React.useState<{
+    tone: 'success' | 'error'
+    message: string
+  } | null>(null)
   const [tiCustomerType, setTiCustomerType] = React.useState<'person' | 'company'>('person')
   const [tiMemberNo, setTiMemberNo] = React.useState('')
   const [tiName, setTiName] = React.useState('')
@@ -593,7 +607,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       title: string,
       thermal?: Pick<
         PrintPosHtmlDocumentOptions,
-        'printRole' | 'printReceiptKind' | 'kitchenStation' | 'escPosCutOverride'
+        | 'printRole'
+        | 'printReceiptKind'
+        | 'kitchenStation'
+        | 'escPosCutOverride'
+        | 'onShellPrintResult'
       >
     ) =>
       new Promise<void>((resolve, reject) => {
@@ -609,12 +627,76 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     [t]
   )
 
+  React.useEffect(() => {
+    return subscribeKitchenPrintFailureChanges(() => {
+      setKitchenPrintFailureVersion((v) => v + 1)
+    })
+  }, [])
+
+  const resolveKitchenPrintOrderRef = React.useCallback((o: Pick<PosOrder, 'id' | 'orderNo'>) => {
+    const orderNo = String(o.orderNo ?? '').trim()
+    if (orderNo) return orderNo
+    const orderId = Number(o.id ?? 0)
+    return orderId > 0 ? `id:${orderId}` : 'UNKNOWN'
+  }, [])
+
+  const jumpToOrderByTraceId = React.useCallback(
+    (traceId: string) => {
+      const token = extractOrderTokenFromKitchenPrintTrackingId(traceId)
+      if (!token) return
+      const found = orders.find((o) => {
+        const orderRef = resolveKitchenPrintOrderRef(o)
+        return toKitchenPrintTrackingToken(orderRef) === token
+      })
+      if (!found) return
+      setSearchTerm(String(found.orderNo || ''))
+      setAppliedSearchTerm(String(found.orderNo || ''))
+      setExpandedId(found.id)
+      if (typeof document !== 'undefined') {
+        window.setTimeout(() => {
+          const el = document.getElementById(`admin-receipt-order-row-${found.id}`)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 120)
+      }
+    },
+    [orders, resolveKitchenPrintOrderRef]
+  )
+
+  const formatTraceIdTail = React.useCallback((traceId: string) => {
+    const raw = String(traceId || '').trim()
+    if (!raw) return '-'
+    return raw.length <= 8 ? raw : `...${raw.slice(-8)}`
+  }, [])
+
+  const copyTraceId = React.useCallback((traceId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const raw = String(traceId || '').trim()
+    if (!raw) return
+    navigator.clipboard.writeText(raw).then(
+      () => {
+        setTraceCopyToast({
+          tone: 'success',
+          message: t('adminPosOrdersTraceIdCopied') || 'Trace ID를 복사했습니다.',
+        })
+        window.setTimeout(() => setTraceCopyToast(null), 1400)
+      },
+      () => {
+        setTraceCopyToast({
+          tone: 'error',
+          message: t('adminPosOrdersTraceIdCopyFailed') || 'Trace ID 복사에 실패했습니다.',
+        })
+        window.setTimeout(() => setTraceCopyToast(null), 1600)
+      },
+    )
+  }, [t])
+
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const store = (o.storeCode ?? '').trim()
     if (!store || !o.items?.length) {
       await appAlert(t('posPrintUnavailable'))
       return
     }
+    let lastTrackingId = ''
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
       const ki = kitchenSlipPrintI18n(settings, lang)
@@ -635,9 +717,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const dateStr = o.createdAt
         ? formatPosDateTimeMedium(new Date(o.createdAt), ki.lang)
         : '-'
+      let shellIssueDetected = false
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
+        const printTrackingId = buildKitchenPrintTrackingId({
+          orderRef: resolveKitchenPrintOrderRef(o),
+          station: slip.station,
+          label: slip.label,
+        })
+        lastTrackingId = printTrackingId
         const segLabel =
           normalizePosOrderTypeKey(o.orderType) === 'dine_in'
             ? ki.t('posTable') || '테이블'
@@ -650,6 +739,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           orderTypeLabel: ki.orderTypeLabels[normalizePosOrderTypeKey(o.orderType)] || o.orderType,
           tablePart,
           dateStr,
+          printTrackingId,
           items: slip.items.map((it) => {
             const row = it as { name?: string; qty?: number; note?: string }
             return {
@@ -667,6 +757,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           printRole: 'kitchen',
           kitchenStation: slip.station,
           escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+          onShellPrintResult: (r) => {
+            if (r?.ok === false || r?.cutOk === false) shellIssueDetected = true
+          },
         })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
@@ -674,8 +767,22 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         }
       }
       await printOne(0)
+      if (shellIssueDetected) {
+        markKitchenPrintFailure({
+          orderRef: resolveKitchenPrintOrderRef(o),
+          reason: 'shell_print_or_cut_failed',
+          ...(lastTrackingId ? { trackingId: lastTrackingId } : {}),
+        })
+      } else {
+        clearKitchenPrintFailure(resolveKitchenPrintOrderRef(o))
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      markKitchenPrintFailure({
+        orderRef: resolveKitchenPrintOrderRef(o),
+        reason: msg || 'print_failed',
+        ...(lastTrackingId ? { trackingId: lastTrackingId } : {}),
+      })
       if (msg === POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE) {
         await appAlert(t('posPrintBlockedBrowser'))
         return
@@ -1298,6 +1405,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   filteredOrders.map((o) => (
                     <React.Fragment key={o.id}>
                       <tr
+                        id={`admin-receipt-order-row-${o.id}`}
                         className={cn(
                           'border-b cursor-pointer hover:bg-muted/20 transition',
                           expandedId === o.id && 'bg-muted/20',
@@ -1425,18 +1533,52 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       <Printer className="h-3 w-3" />
                                       {t('posCustomerReceiptPrint') || '손님 영수증'}
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 gap-1 px-2 text-xs"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handlePrintKitchenSlip(o)
-                                      }}
-                                    >
-                                      <Printer className="h-3 w-3" />
-                                      {t('posKitchenSlip') || '주방 주문서'}
-                                    </Button>
+                                    {(() => {
+                                      const failureRec = getKitchenPrintFailure(resolveKitchenPrintOrderRef(o))
+                                      const hasKitchenPrintFailure = Boolean(failureRec)
+                                      return (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant={hasKitchenPrintFailure ? 'destructive' : 'outline'}
+                                            className="h-7 gap-1 px-2 text-xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handlePrintKitchenSlip(o)
+                                            }}
+                                          >
+                                            <Printer className="h-3 w-3" />
+                                            {hasKitchenPrintFailure
+                                              ? t('posKitchenSlipRetryAfterMiss') || '미출력 감지 재출력'
+                                              : t('posKitchenSlip') || '주방 주문서'}
+                                          </Button>
+                                          {failureRec?.lastTrackingId ? (
+                                            <span className="inline-flex items-center gap-1">
+                                              <button
+                                                type="button"
+                                                className="h-7 rounded border border-amber-300 bg-amber-50 px-2 text-[10px] font-semibold text-amber-800 hover:bg-amber-100"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  jumpToOrderByTraceId(failureRec.lastTrackingId || '')
+                                                }}
+                                                title={`${failureRec.lastTrackingId}\n${t('posTraceIdJumpOrder') || 'Trace ID로 주문 이동'}`}
+                                              >
+                                                Trace ID: {formatTraceIdTail(failureRec.lastTrackingId)}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="inline-flex h-7 w-7 items-center justify-center rounded border border-amber-200 bg-white text-amber-900 hover:bg-amber-50"
+                                                onClick={(e) => copyTraceId(failureRec.lastTrackingId || '', e)}
+                                                title={`${failureRec.lastTrackingId}\nTrace ID 복사`}
+                                                aria-label="Trace ID 복사"
+                                              >
+                                                <Copy className="h-3.5 w-3.5" />
+                                              </button>
+                                            </span>
+                                          ) : null}
+                                        </>
+                                      )
+                                    })()}
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -1914,6 +2056,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {traceCopyToast ? (
+        <div
+          className={cn(
+            'pointer-events-none fixed bottom-4 right-4 z-[10060] rounded-md px-3 py-2 text-xs font-semibold text-white shadow-lg',
+            traceCopyToast.tone === 'error' ? 'bg-rose-600/95' : 'bg-amber-600/95'
+          )}
+        >
+          {traceCopyToast.message}
+        </div>
+      ) : null}
     </div>
   )
 }

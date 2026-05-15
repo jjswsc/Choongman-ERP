@@ -73,6 +73,7 @@ cp .env.example .env
 | `JWT_SECRET` | JWT 서명용 (32자 이상). 미설정 시 ANON_KEY 사용. **운영(Vercel)에서는 둘 중 하나 필수** | 권장 |
 | `RESEND_API_KEY` | 급여 명세서 이메일 발송 (resend.com) | 선택 |
 | `RESEND_FROM` | 발신 이메일 주소 | 선택 |
+| `POS_MENU_SCOPE_COMPATIBILITY_MODE` | POS 메뉴 매장 스코프 호환 모드. `1`=scope 없는 기존 메뉴 임시 노출 허용(권장 초기값), `0`=scope 없는 메뉴 비노출 | 권장 |
 
 Supabase 값은 **Supabase 대시보드 → Project Settings → API**에서 확인합니다.
 
@@ -92,6 +93,8 @@ npm run dev
 2. **스키마 적용**:
    - `supabase_schema.sql` → Supabase SQL Editor에서 실행
    - `supabase_migration_consolidated.sql` → 동일하게 실행 (중복 제거, 유니크 제약, 추가 테이블)
+   - 매장 전용 메뉴 도입 시 `sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql`의 `pos_menu_store_scopes` DDL 포함 블록 실행
+   - 기존 메뉴 백필 필요 시 `sql/pos_menu_store_scope_backfill.sql` 실행
 
 상세 스키마는 [docs/DATABASE.md](./docs/DATABASE.md) 참고.
 

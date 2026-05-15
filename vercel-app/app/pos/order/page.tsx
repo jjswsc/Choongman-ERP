@@ -89,6 +89,13 @@ import {
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import {
+  buildKitchenPrintTrackingId,
+  clearKitchenPrintFailure,
+  getKitchenPrintFailure,
+  markKitchenPrintFailure,
+  subscribeKitchenPrintFailureChanges,
+} from "@/lib/pos-kitchen-print-tracking"
+import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
   type PosOrderReceiptLineOptions,
 } from "@/lib/pos-payment-receipt-from-order"
@@ -168,7 +175,6 @@ export default function PosOrderPage() {
     [canSearchAll, auth?.store, stores]
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
-  usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [_categories, setCategories] = React.useState<string[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
@@ -185,6 +191,10 @@ export default function PosOrderPage() {
   const [promoChoiceDialog, setPromoChoiceDialog] = React.useState<PromoChoiceDialogState | null>(null)
   const [orderType] = React.useState<OrderType>(() => getInitialOrderType(searchParams))
   const [storeCode, setStoreCode] = React.useState("")
+  usePosMenusCatalogLiveRefresh(
+    React.useCallback((list) => setMenus(list), []),
+    storeCode || null
+  )
   const [tableName, setTableName] = React.useState("")
   const [tableOptions, setTableOptions] = React.useState<{ id: string; name: string }[]>([])
   const [discountType, setDiscountType] = React.useState<"pct" | "amt">("amt")
@@ -269,6 +279,7 @@ export default function PosOrderPage() {
     paymentDeliveryApp?: number
     deliveryPaymentChannel?: string | null
   } | null>(null)
+  const [, setKitchenPrintFailureVersion] = React.useState(0)
   const receiptRef = React.useRef<HTMLDivElement>(null)
   const autoPrintedKeyRef = React.useRef<string>("")
   const [isMainPosDevice] = usePosMainDevice(storeCode || null)
@@ -429,7 +440,7 @@ export default function PosOrderPage() {
     setLoading(true)
     const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
     Promise.allSettled([
-      getPosMenus({ fresh: true }),
+      getPosMenus({ fresh: true, storeCode: storeCode || undefined }),
       getPosMenuCategories(),
       getPosMenuOptions({ fresh: true }),
       getPosPromosWithItems(),
@@ -463,7 +474,7 @@ export default function PosOrderPage() {
         })
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [storeCode])
 
   React.useEffect(() => {
     loadMenusAndPromos()
@@ -948,7 +959,7 @@ export default function PosOrderPage() {
     for (const g of state.groups) {
       const selected = state.selectedRowKeysByGroup[g.key] || []
       if (selected.length !== g.pickCount) {
-        await appAlert(`"${g.key}" 그룹은 ${g.pickCount}개 선택해야 합니다.`)
+        await appAlert(i18nTr(t, "posPromoGroupPickCount", { group: g.key, count: g.pickCount }))
         return
       }
     }
@@ -968,7 +979,7 @@ export default function PosOrderPage() {
       items: [...state.fixedItems, ...selectedItems],
     })
     setPromoChoiceDialog(null)
-  }, [addResolvedPromoToCart, promoChoiceDialog])
+  }, [addResolvedPromoToCart, promoChoiceDialog, t])
 
   const updateQty = (id: string, delta: number) => {
     setCart((prev) => {
@@ -1135,7 +1146,7 @@ export default function PosOrderPage() {
         setAppliedCoupon({
           name: res.couponName ?? code,
           discountAmt: res.discountAmt,
-          discountReason: res.discountReason ?? `쿠폰: ${code}`,
+          discountReason: res.discountReason ?? i18nTr(t, "posCouponDiscountReason", { code }),
         })
         setDiscountValue("")
         setDiscountReason("")
@@ -1286,7 +1297,11 @@ export default function PosOrderPage() {
       title: string,
       thermal?: Pick<
         PrintPosHtmlDocumentOptions,
-        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
+        | "printRole"
+        | "printReceiptKind"
+        | "kitchenStation"
+        | "escPosCutOverride"
+        | "onShellPrintResult"
       >
     ) =>
       new Promise<void>((resolve, reject) => {
@@ -1301,6 +1316,18 @@ export default function PosOrderPage() {
       }),
     [t]
   )
+
+  React.useEffect(() => {
+    return subscribeKitchenPrintFailureChanges(() => {
+      setKitchenPrintFailureVersion((v) => v + 1)
+    })
+  }, [])
+
+  const resolveKitchenPrintOrderRef = React.useCallback(() => {
+    const orderNo = String(receiptData?.orderNo ?? "").trim()
+    if (orderNo) return orderNo
+    return "UNKNOWN"
+  }, [receiptData?.orderNo])
 
   const handlePrintReceipt = async () => {
     if (!receiptData) return
@@ -1377,6 +1404,7 @@ export default function PosOrderPage() {
 
   const handlePrintKitchenSlip = async () => {
     if (!receiptData || !receiptData.storeCode) return
+    let lastTrackingId = ""
     try {
       const settings = await getPrinterSettingsForStore(receiptData.storeCode)
       const ki = kitchenSlipPrintI18n(settings, lang)
@@ -1398,9 +1426,16 @@ export default function PosOrderPage() {
         tableName: receiptData.tableName,
         memo: receiptData.memo,
       })
+      let shellIssueDetected = false
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
+        const printTrackingId = buildKitchenPrintTrackingId({
+          orderRef: resolveKitchenPrintOrderRef(),
+          station: slip.station,
+          label: slip.label,
+        })
+        lastTrackingId = printTrackingId
         const kitchenMemo = parsePosOrderMemo(receiptData.memo).plainMemo
         const tablePart = receiptData.tableName
           ? ` · ${ki.t("posTable") || "테이블"}: ${translateReceiptTableDisplayName(receiptData.tableName, ki.t)}`
@@ -1415,6 +1450,7 @@ export default function PosOrderPage() {
             ki.orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType,
           tablePart,
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
+          printTrackingId,
           items: slip.items.map((it) => ({
             name: translatePosMenuLineForReceipt(it.name, ki.t),
             qty: it.qty,
@@ -1429,6 +1465,9 @@ export default function PosOrderPage() {
           printRole: "kitchen",
           kitchenStation: slip.station,
           escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: "kitchen" }),
+          onShellPrintResult: (r) => {
+            if (r?.ok === false || r?.cutOk === false) shellIssueDetected = true
+          },
         })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
@@ -1436,7 +1475,21 @@ export default function PosOrderPage() {
         }
       }
       await printOne(0)
+      if (shellIssueDetected) {
+        markKitchenPrintFailure({
+          orderRef: resolveKitchenPrintOrderRef(),
+          reason: "shell_print_or_cut_failed",
+          ...(lastTrackingId ? { trackingId: lastTrackingId } : {}),
+        })
+      } else {
+        clearKitchenPrintFailure(resolveKitchenPrintOrderRef())
+      }
     } catch (e) {
+      markKitchenPrintFailure({
+        orderRef: resolveKitchenPrintOrderRef(),
+        reason: String(e || "print_failed"),
+        ...(lastTrackingId ? { trackingId: lastTrackingId } : {}),
+      })
       await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     }
   }
@@ -2565,13 +2618,15 @@ export default function PosOrderPage() {
                   {t("posPrint") || "인쇄"}
                 </Button>
                 <Button
-                  variant="outline"
+                  variant={getKitchenPrintFailure(resolveKitchenPrintOrderRef()) ? "destructive" : "outline"}
                   size="sm"
                   className="gap-1.5"
                   onClick={handlePrintKitchenSlip}
                 >
                   <Printer className="h-4 w-4" />
-                  {t("posKitchenSlip") || "주방 주문서"}
+                  {getKitchenPrintFailure(resolveKitchenPrintOrderRef())
+                    ? t("posKitchenSlipRetryAfterMiss") || "미출력 감지 재출력"
+                    : t("posKitchenSlip") || "주방 주문서"}
                 </Button>
                 <Button size="sm" onClick={() => setReceiptData(null)}>
                   {t("close") || "닫기"}

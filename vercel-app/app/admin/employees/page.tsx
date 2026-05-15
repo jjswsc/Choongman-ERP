@@ -432,7 +432,7 @@ export default function EmployeesPage() {
   }
 
   const handleDelete = async (rowId: number) => {
-    if (!await appConfirm("퇴사/비활성 처리하시겠습니까?")) return
+    if (!await appConfirm(t("adminEmployeeConfirmDeactivate"))) return
     setLoading(true)
     try {
       const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })

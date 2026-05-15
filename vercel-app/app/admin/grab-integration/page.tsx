@@ -39,7 +39,7 @@ export default function GrabIntegrationPage() {
   const [rows, setRows] = React.useState<GrabStoreIntegrationSnapshot[]>([])
   const [status, setStatus] = React.useState("all")
   const [partnerMerchantID, setPartnerMerchantID] = React.useState("")
-  const [autoRefresh, setAutoRefresh] = React.useState(true)
+  const [autoRefresh, setAutoRefresh] = React.useState(false)
   const [lastRefreshedAt, setLastRefreshedAt] = React.useState<string | null>(null)
 
   const load = React.useCallback(() => {
@@ -47,7 +47,7 @@ export default function GrabIntegrationPage() {
     getGrabStoreIntegrations({
       status: status !== "all" ? status : undefined,
       partnerMerchantID: partnerMerchantID.trim() || undefined,
-      limit: 500,
+      limit: 200,
     })
       .then((list) => {
         setRows(Array.isArray(list) ? list : [])
@@ -66,7 +66,7 @@ export default function GrabIntegrationPage() {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return
       load()
-    }, 15000)
+    }, 60000)
     return () => window.clearInterval(timer)
   }, [autoRefresh, load])
 

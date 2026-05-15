@@ -801,7 +801,7 @@ export default function PosTerminalPage() {
     },
     [posReceiptLineOpts, enrichPromoItemsWithOptionName]
   )
-  usePosMenusCatalogLiveRefresh(applyPosMenusList)
+  usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
   const posPrinterSettingsRef = useRef<PosPrinterSettings | null>(null)
   const posPrinterSettingsStoreCodeRef = useRef("")
@@ -1063,7 +1063,7 @@ export default function PosTerminalPage() {
         setCustomerDisplayIdleMediaType('none')
         setCustomerDisplayIdleMediaUrl('')
       })
-    getPosMenus({ fresh: true })
+    getPosMenus({ fresh: true, storeCode: requestStoreCode || undefined })
       .then(applyPosMenusList)
       .catch(() => {
         if (seq !== storeSettingsLoadSeqRef.current) return
@@ -4736,45 +4736,16 @@ export default function PosTerminalPage() {
                   return
                 }
                 if (isAddOrder && existingOrder) {
-                  const mergedItems = [
-                    ...existingOrder.items.map((it) => {
-                      const q = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
-                      return {
-                        id: it.id,
-                        name: it.name,
-                        price: it.price,
-                        qty: q,
-                        quantity: q,
-                        ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-                        ...(it.promoId
-                          ? {
-                              promoId: it.promoId,
-                              ...(it.promoCode ? { promoCode: it.promoCode } : {}),
-                              ...(Array.isArray((it as { promoItems?: unknown }).promoItems) &&
-                              ((it as { promoItems: unknown[] }).promoItems?.length ?? 0) > 0
-                                ? {
-                                    promoItems: (it as {
-                                      promoItems: { menuId: string; optionId: string | null; quantity: number }[]
-                                    }).promoItems,
-                                  }
-                                : {}),
-                            }
-                          : {}),
-                        ...(it.servedAt ? { servedAt: it.servedAt } : {}),
-                        ...(it.servedBy ? { servedBy: it.servedBy } : {}),
-                        ...(it.cancelledAt ? { cancelledAt: it.cancelledAt } : {}),
-                        ...(it.cancelledBy ? { cancelledBy: it.cancelledBy } : {}),
-                        ...(it.cancelReason ? { cancelReason: it.cancelReason } : {}),
-                      }
-                    }),
-                    ...incomingItems,
-                  ]
+                  /**
+                   * 추가 주문: `incomingItems`는 이미 카트에 담긴 **전체** 라인(기존 주문 + 수정분)이다.
+                   * 여기에 `existingOrder.items`를 다시 이어붙이면 DB·영수증이 2배로 중복된다.
+                   */
                   if (isMainPosDevice) {
                     mainPosSelfDineInUpdateSuppressUntilRef.current.set(existingOrderId, Date.now() + 12_000)
                   }
                   const updateReq = {
                     id: existingOrderId,
-                    items: mergedItems,
+                    items: incomingItems,
                     tableName: payload.tableName,
                     memo: payload.memo,
                     discountAmt: payload.discountAmt ?? 0,
@@ -4899,28 +4870,19 @@ export default function PosTerminalPage() {
                     : {}),
                   ...(addon ? { isAddon: true as const } : {}),
                 })
-                const receiptPrintItems: ReceiptPrintLine[] =
-                  isAddOrder && existingOrder
-                    ? [
-                        ...existingOrder.items.map((it) => ({
-                          id: String(it.id),
-                          name: it.name,
-                          price: it.price,
-                          qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
-                          ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-                          ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
-                            ? {
-                                promoItems: enrichPromoItemsWithOptionName(
-                                  (it as {
-                                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
-                                  }).promoItems
-                                ),
-                              }
-                            : {}),
-                        })),
-                        ...incomingItems.map((it) => mapPosItemToReceiptLine(it, true)),
-                      ]
-                    : incomingItems.map((it) => mapPosItemToReceiptLine(it, false))
+                const receiptPrintItems: ReceiptPrintLine[] = incomingItems.map((it) => {
+                  if (!isAddOrder || !existingOrder) {
+                    return mapPosItemToReceiptLine(it, false)
+                  }
+                  const id = String(it.id ?? '').trim()
+                  const prev = existingOrder.items.find((e) => String(e.id ?? '').trim() === id)
+                  const qNow = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
+                  const qPrev = prev
+                    ? resolveCartLineQuantityForSave(prev as { quantity?: unknown; qty?: unknown })
+                    : 0
+                  const addon = !prev || qNow > qPrev
+                  return mapPosItemToReceiptLine(it, addon)
+                })
 
                 const mergeSubtotal = receiptPrintItems.reduce((s, i) => s + i.price * i.qty, 0)
                 const discountAmt = payload.discountAmt ?? 0

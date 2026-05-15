@@ -17,6 +17,32 @@ export function canonicalEnglishChickenMenuLine(text: string): string {
   return out
 }
 
+/**
+ * 옵션 `part` 단계 값·이름에서 한·영 혼용·사이즈 접두(M - 순살 등)를 묶어
+ * 가상「부위 후보」목록·중복 제거용 키로 쓴다.
+ */
+export function chickenPartDedupeKey(raw: string): string {
+  const canon = canonicalEnglishChickenMenuLine(String(raw ?? '').trim())
+  const noSize = canon.replace(/^\s*[SML]\s*[-–—\s]+\s*/i, '').trim() || canon
+  const t = noSize.toLowerCase().replace(/\s+/g, ' ').trim()
+  if (!t) return ''
+  if (t === 'boneless' || t.includes('boneless')) return 'boneless'
+  if (/\bdrumette\b/.test(t) || t.includes('wing stick')) return 'drumette'
+  if (t === 'wing' || t === 'wings' || /\bwing\b/.test(t)) return 'wing'
+  return t
+}
+
+/** `chickenPartDedupeKey` 결과에 맞는 라이브러리 한 줄 표기(알 수 없으면 영문 정규화·사이즈 접두 제거). */
+export function prettyChickenPartLibraryLabel(dedupeKey: string, originalRaw: string): string {
+  const k = String(dedupeKey ?? '').trim().toLowerCase()
+  if (k === 'boneless') return 'Boneless'
+  if (k === 'wing' || k === 'wings') return 'Wing'
+  if (k === 'drumette') return 'Drumette'
+  const canon = canonicalEnglishChickenMenuLine(String(originalRaw ?? '').trim())
+  const noSize = canon.replace(/^\s*[SML]\s*[-–—\s]+\s*/i, '').trim() || canon
+  return noSize || String(originalRaw ?? '').trim()
+}
+
 /** 테이블명 끝 한글 접미사 `번` 제거 (1F-2번 → 1F-2). 언어와 무관하게 표시만 정리. */
 export function translateReceiptTableDisplayName(tableName: string, _t?: (key: string) => string): string {
   const s = String(tableName || '').trim()

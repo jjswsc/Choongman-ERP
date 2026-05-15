@@ -10,6 +10,7 @@ import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800')
 
   try {
     const { searchParams } = new URL(request.url)

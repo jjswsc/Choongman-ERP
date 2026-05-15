@@ -18,6 +18,8 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -154,6 +156,7 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(req)
     let body: Record<string, unknown>
     try {
       body = (await req.json()) as Record<string, unknown>
@@ -444,6 +447,39 @@ export async function POST(req: NextRequest) {
         paymentOther,
         paymentDeliveryApp,
         createdBy,
+      })
+    }
+
+    if (Number(created?.id) > 0) {
+      await writePosOrderAuditTrail({
+        orderId: Number(created?.id),
+        orderNo,
+        storeCode,
+        actionType: 'create_order',
+        source: 'api',
+        actor: {
+          name: String(auth?.name || createdBy || '').trim() || null,
+          role: String(auth?.role || '').trim() || null,
+          store: String(auth?.store || '').trim() || null,
+          employeeCode: String(auth?.employeeCode || '').trim() || null,
+          employeeId:
+            auth?.employeeId != null && Number.isFinite(Number(auth.employeeId))
+              ? Math.floor(Number(auth.employeeId))
+              : null,
+        },
+        before: null,
+        after: {
+          status: orderStatus,
+          total,
+          table_name: tableName || null,
+          memo: memo || null,
+          payment_cash: paymentCash,
+          payment_card: paymentCard,
+          payment_qr: paymentQr,
+          payment_other: paymentOther,
+          payment_delivery_app: paymentDeliveryApp,
+        },
+        reason: 'new_order_created',
       })
     }
 

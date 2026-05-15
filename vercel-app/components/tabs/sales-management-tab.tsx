@@ -45,6 +45,7 @@ import {
   getPosSalesFilterOptionsWithCache,
   getPosSalesByPeriodWithCache,
   getPosSalesByDeliveryAppWithCache,
+  getPosSalesByChannelWithCache,
   getPosSalesByMenuWithCache,
   getPosSalesByPaymentWithCache,
   getPosSalesByStoreWithCache,
@@ -83,6 +84,13 @@ function formatSalesAmount(n: number) {
   const v = Number(n ?? 0)
   if (!Number.isFinite(v)) return "0"
   return Math.round(v).toLocaleString()
+}
+
+function formatPeakHourRange(hour: number) {
+  const h = Number(hour)
+  if (!Number.isFinite(h) || h < 0 || h > 23) return "—"
+  const next = (h + 1) % 24
+  return `${String(h).padStart(2, "0")}:00-${String(next).padStart(2, "0")}:00`
 }
 
 /** API·캐시 행에 집계 필드가 일부 누락될 수 있음 — 본문에서 ?? 로 보정 */
@@ -160,6 +168,7 @@ function normalizeStoreCodes(values: string[]): string[] {
 
 type AnalyticsView =
   | "period"
+  | "realtime-revenue"
   | "delivery"
   | "channel"
   | "menu"
@@ -196,6 +205,12 @@ const SALES_IA: SalesSubMenuConfig[] = [
     fallbackLabel: "실적 분석",
     topics: [
       { id: "analysis-period", labelKey: "salesTopicExplorePeriod", hintKey: "salesTopicExplorePeriodHint", view: "period" },
+      {
+        id: "analysis-realtime-revenue",
+        labelKey: "salesTopicRealtimeRevenueOps",
+        hintKey: "salesTopicRealtimeRevenueOpsHint",
+        view: "realtime-revenue",
+      },
       { id: "analysis-channel", labelKey: "salesTopicExploreChannel", hintKey: "salesTopicExploreChannelHint", view: "channel" },
       { id: "analysis-payment", labelKey: "salesTopicExplorePayment", hintKey: "salesTopicExplorePaymentHint", view: "payment" },
       { id: "analysis-menu", labelKey: "salesTopicExploreMenu", hintKey: "salesTopicExploreMenuHint", view: "menu" },
@@ -244,6 +259,60 @@ type SalesFilterPreset = {
 }
 
 const SALES_FILTER_PRESET_STORAGE_KEY = "cm-sales-filter-presets-v1"
+
+type RealtimeRevenueStoreRow = {
+  storeCode: string
+  completedRevenue: number
+  waitingRevenue: number
+  delayedRevenue: number
+  delayedOrders: number
+  avgCookingMinutes: number
+  revenueWeightedCookingMinutes: number
+  cancelRate: number
+  stockoutRate: number
+  peakHour: number
+  peakHourRevenue: number
+}
+
+type RealtimeRevenueDashboardData = {
+  store: RealtimeRevenueStoreRow
+  office: {
+    stores: RealtimeRevenueStoreRow[]
+  }
+  delayThresholdMin: number
+  truncated: boolean
+}
+
+async function fetchPosRealtimeRevenueDashboard(params: {
+  startStr: string
+  endStr: string
+  stores?: string[]
+  orderTypes?: PosOrderTypeValue[]
+}): Promise<RealtimeRevenueDashboardData> {
+  const q = new URLSearchParams()
+  q.set("startStr", params.startStr)
+  q.set("endStr", params.endStr)
+  if (params.stores?.length) q.set("stores", params.stores.join(","))
+  const orderTypesKey = (params.orderTypes ?? []).join(",")
+  if (orderTypesKey) q.set("orderTypes", orderTypesKey)
+  const res = await fetch(`/api/posRealtimeRevenueDashboard?${q.toString()}`, { cache: "no-store" })
+  const json = (await res.json()) as {
+    success?: boolean
+    store?: RealtimeRevenueStoreRow
+    office?: { stores?: RealtimeRevenueStoreRow[] }
+    delayThresholdMin?: number
+    truncated?: boolean
+  }
+  if (!res.ok || json?.success === false || !json?.store) {
+    throw new Error("failed to load realtime revenue dashboard")
+  }
+  return {
+    store: json.store,
+    office: { stores: Array.isArray(json.office?.stores) ? json.office.stores : [] },
+    delayThresholdMin: Number(json.delayThresholdMin ?? 15) || 15,
+    truncated: json.truncated === true,
+  }
+}
 
 export interface SalesManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
@@ -397,6 +466,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }[]
   >([])
   const [savedPresets, setSavedPresets] = React.useState<SalesFilterPreset[]>([])
+  const [realtimeRevenueData, setRealtimeRevenueData] = React.useState<RealtimeRevenueDashboardData | null>(null)
   const [summaryCards, setSummaryCards] = React.useState<{
     current: number
     prevRange: number
@@ -871,7 +941,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     showSalesResults &&
     !isHoursPanel &&
     selectedView != null &&
-    (selectedView === "store" || selectedView === "store-category" || selectedView === "payment")
+    (selectedView === "store" ||
+      selectedView === "store-category" ||
+      selectedView === "payment" ||
+      selectedView === "realtime-revenue")
 
   const totalsSummary = React.useMemo(() => {
     const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
@@ -904,6 +977,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setMenuData([])
     setPaymentData([])
     setStoreData([])
+    setRealtimeRevenueData(null)
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
   }, [analyticsParamKey])
@@ -1181,7 +1255,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [startStr, endStr, offlineAware, canSearchAll, auth?.store])
 
   React.useEffect(() => {
-    loadPosOptions()
+    const tid = window.setTimeout(() => {
+      loadPosOptions()
+    }, 250)
+    return () => clearTimeout(tid)
   }, [loadPosOptions])
 
   React.useEffect(() => {
@@ -1222,6 +1299,23 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "store-period"
     const periodRun = offlineAware ? getPosSalesByPeriodWithCache : getPosSalesByPeriod
     const menuFetcher = offlineAware ? getPosSalesByMenuWithCache : getPosSalesByMenu
+    const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
+    const needDelivery = selectedView === "delivery"
+    const needChannel = selectedView === "channel"
+    const needMenu = selectedView === "menu"
+    const needPayment = selectedView === "payment"
+    const needStore = selectedView === "store" || selectedView === "store-category"
+    const needRealtimeRevenue = selectedView === "realtime-revenue"
+    const needFullSummary = selectedView === "period" || selectedView === "store-period"
+    const needCurrentSummaryOnly =
+      !needFullSummary &&
+      (selectedView === "store" || selectedView === "store-category" || selectedView === "payment")
+    const needCancelReason =
+      selectedView === "period" ||
+      selectedView === "store-period" ||
+      selectedView === "store" ||
+      selectedView === "store-category" ||
+      selectedView === "payment"
     const guarded =
       <T,>(setter: React.Dispatch<React.SetStateAction<T>>) =>
       (v: T) => {
@@ -1232,10 +1326,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gPayment = guarded(setPaymentData)
     const gStore = guarded(setStoreData)
     const gMenu = guarded(setMenuData)
+    const gRealtimeRevenue = guarded(setRealtimeRevenueData)
     const gSummary = guarded(setSummaryCards)
     const gCancelReasonSummary = guarded(setCancelReasonSummary)
     setLoading(true)
-    Promise.all([
+    const tasks: Array<Promise<unknown>> = []
+    tasks.push(
       periodRun({
         startStr,
         endStr,
@@ -1255,115 +1351,174 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             setPeriodData(res.rows)
             setPeriodTruncated(res.truncated)
           }
+          if (needCurrentSummaryOnly) {
+            gSummary({
+              current: sumPeriodTotal(res as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+              prevRange: 0,
+              prevWeek: 0,
+            })
+          }
         })
         .catch(() => {
           if (loadIdRef.current !== id) return
           setPeriodSplitSeries(null)
           setPeriodData([])
           setPeriodTruncated(false)
-        }),
-      (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
-        startStr,
-        endStr,
-        stores: selectedStoresParam,
-        orderTypes: orderTypesParam,
-      })
-        .then(gDelivery)
-        .catch(() => gDelivery({ items: [], total: 0 })),
-      getPosSalesByChannel({
-        startStr,
-        endStr,
-        stores: selectedStoresParam,
-        orderTypes: orderTypesParam,
-      })
-        .then(gChannel)
-        .catch(() => gChannel([])),
-      (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
-        startStr,
-        endStr,
-        stores: selectedStoresParam,
-        orderTypes: orderTypesParam,
-      })
-        .then(gPayment)
-        .catch(() => gPayment([])),
-      (offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore)({
-        startStr,
-        endStr,
-        stores: selectedStoresParam,
-        orderTypes: orderTypesParam,
-      })
-        .then(gStore)
-        .catch(() => gStore([])),
-      menuFetcher({
-        startStr,
-        endStr,
-        stores: selectedStoresParam,
-        search: menuSearch || undefined,
-        searchMode: menuSearchAnd ? "and" : "or",
-        orderTypes: orderTypesParam,
-      })
-        .then(gMenu)
-        .catch(() => gMenu([])),
-      Promise.all([
-        periodRun({
+          if (needCurrentSummaryOnly) gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+        })
+    )
+    if (needDelivery) {
+      tasks.push(
+        (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
           startStr,
           endStr,
-          groupBy: "day",
           stores: selectedStoresParam,
           orderTypes: orderTypesParam,
-        }),
-        periodRun({
-          startStr: prevStart,
-          endStr: prevEnd,
-          groupBy: "day",
-          stores: selectedStoresParam,
-          orderTypes: orderTypesParam,
-        }),
-        periodRun({
-          startStr: weekStart,
-          endStr: weekEnd,
-          groupBy: "day",
-          stores: selectedStoresParam,
-          orderTypes: orderTypesParam,
-        }),
-      ])
-        .then(([currentRes, prevRes, weekRes]) => {
-          gSummary({
-            current: sumPeriodTotal(currentRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
-            prevRange: sumPeriodTotal(prevRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
-            prevWeek: sumPeriodTotal(weekRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
-          })
         })
-        .catch(() => gSummary({ current: 0, prevRange: 0, prevWeek: 0 })),
-      getPosCancelReasonSummary({
-        startStr,
-        endStr,
-        stores: selectedStoresParam,
-        orderTypes: orderTypesParam,
-      })
-        .then((res) =>
-          gCancelReasonSummary({
-            lineRows: res.lineRows,
-            orderRows: res.orderRows,
-            lineTotalCount: res.lineTotalCount,
-            lineTotalAmount: res.lineTotalAmount,
-            orderTotalCount: res.orderTotalCount,
-            orderTotalAmount: res.orderTotalAmount,
-            truncated: res.truncated === true,
+          .then(gDelivery)
+          .catch(() => gDelivery({ items: [], total: 0 }))
+      )
+    }
+    if (needChannel) {
+      tasks.push(
+        channelFetcher({
+          startStr,
+          endStr,
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then(gChannel)
+          .catch(() => gChannel([]))
+      )
+    }
+    if (needPayment) {
+      tasks.push(
+        (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
+          startStr,
+          endStr,
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then(gPayment)
+          .catch(() => gPayment([]))
+      )
+    }
+    if (needStore) {
+      tasks.push(
+        (offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore)({
+          startStr,
+          endStr,
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then(gStore)
+          .catch(() => gStore([]))
+      )
+    }
+    if (needMenu) {
+      tasks.push(
+        menuFetcher({
+          startStr,
+          endStr,
+          stores: selectedStoresParam,
+          search: menuSearch || undefined,
+          searchMode: menuSearchAnd ? "and" : "or",
+          orderTypes: orderTypesParam,
+        })
+          .then(gMenu)
+          .catch(() => gMenu([]))
+      )
+    }
+    if (needRealtimeRevenue) {
+      tasks.push(
+        fetchPosRealtimeRevenueDashboard({
+          startStr,
+          endStr,
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then((res) => {
+            gRealtimeRevenue(res)
+            gSummary({
+              current: Number(res.store.completedRevenue ?? 0) || 0,
+              prevRange: 0,
+              prevWeek: 0,
+            })
           })
-        )
-        .catch(() =>
-          gCancelReasonSummary({
-            lineRows: [],
-            orderRows: [],
-            lineTotalCount: 0,
-            lineTotalAmount: 0,
-            orderTotalCount: 0,
-            orderTotalAmount: 0,
-            truncated: false,
+          .catch(() => {
+            gRealtimeRevenue(null)
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
-        ),
-    ]).finally(() => {
+      )
+    }
+    if (needFullSummary) {
+      tasks.push(
+        Promise.all([
+          periodRun({
+            startStr,
+            endStr,
+            groupBy: "day",
+            stores: selectedStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          periodRun({
+            startStr: prevStart,
+            endStr: prevEnd,
+            groupBy: "day",
+            stores: selectedStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          periodRun({
+            startStr: weekStart,
+            endStr: weekEnd,
+            groupBy: "day",
+            stores: selectedStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([currentRes, prevRes, weekRes]) => {
+            gSummary({
+              current: sumPeriodTotal(currentRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+              prevRange: sumPeriodTotal(prevRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+              prevWeek: sumPeriodTotal(weekRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+            })
+          })
+          .catch(() => gSummary({ current: 0, prevRange: 0, prevWeek: 0 }))
+      )
+    }
+    if (needCancelReason) {
+      tasks.push(
+        getPosCancelReasonSummary({
+          startStr,
+          endStr,
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then((res) =>
+            gCancelReasonSummary({
+              lineRows: res.lineRows,
+              orderRows: res.orderRows,
+              lineTotalCount: res.lineTotalCount,
+              lineTotalAmount: res.lineTotalAmount,
+              orderTotalCount: res.orderTotalCount,
+              orderTotalAmount: res.orderTotalAmount,
+              truncated: res.truncated === true,
+            })
+          )
+          .catch(() =>
+            gCancelReasonSummary({
+              lineRows: [],
+              orderRows: [],
+              lineTotalCount: 0,
+              lineTotalAmount: 0,
+              orderTotalCount: 0,
+              orderTotalAmount: 0,
+              truncated: false,
+            })
+          )
+      )
+    }
+    Promise.all(tasks).finally(() => {
       if (loadIdRef.current === id) {
         setLoading(false)
         setFetchedAnalyticsKey(keySnapshot)
@@ -3111,6 +3266,122 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     </tbody>
                   </table>
                 </div>
+                </>
+              )
+            )}
+
+            {selectedView === "realtime-revenue" && (
+              !hasData ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
+                </p>
+              ) : !showSalesResults ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {tr(
+                    "salesPressQueryToLoad",
+                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
+                  )}
+                </p>
+              ) : !realtimeRevenueData ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {tr("salesDataNone", "데이터 없음")}
+                </p>
+              ) : (
+                <>
+                  <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-border/70 bg-card p-4">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("adminLiveStoreSalesWaitingRevenue", "현재 대기 주문 매출액")}
+                      </p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                        {formatSalesAmount(realtimeRevenueData.store.waitingRevenue)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-card p-4">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("adminLiveStoreSalesAvgCookingMins", "평균 조리시간(분)")}
+                      </p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                        {Number(realtimeRevenueData.store.revenueWeightedCookingMinutes || 0).toFixed(1)}m
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {tr("adminLiveStoreSalesAvgCookingRaw", "단순 평균")}{" "}
+                        {Number(realtimeRevenueData.store.avgCookingMinutes || 0).toFixed(1)}m
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-card p-4">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("adminLiveStoreSalesDelayedOrders", "지연 주문 카운트")}
+                      </p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                        {Math.max(0, Number(realtimeRevenueData.store.delayedOrders || 0)).toLocaleString()}
+                        {tr("posCount", "건")}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {realtimeRevenueData.delayThresholdMin}
+                        {tr("salesMinuteUnit", "분")}{" "}
+                        {tr("adminLiveStoreSalesDelayedRule", "초과 기준")}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-card p-4">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("adminLiveStoreSalesDelayedRevenue", "지연 주문 매출액")}
+                      </p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                        {formatSalesAmount(realtimeRevenueData.store.delayedRevenue)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {tr("salesManagementTabSalesStatus", "실매출")}{" "}
+                        {formatSalesAmount(realtimeRevenueData.store.completedRevenue)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {canSearchAll ? (
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full min-w-[920px] text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/40 text-muted-foreground">
+                            <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
+                            <th className="px-3 py-2 text-right">{tr("salesManagementTabSalesStatus", "실매출")}</th>
+                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesWaitingRevenue", "대기매출")}</th>
+                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesDelayedRevenue", "지연매출")}</th>
+                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesPeakHour", "피크타임")}</th>
+                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesStockoutRate", "품절률(금액)")}</th>
+                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesCancelRate", "취소율(금액)")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {realtimeRevenueData.office.stores.map((row) => (
+                            <tr key={row.storeCode} className="border-b">
+                              <td className="px-3 py-2">{posStoreDisplayName(row.storeCode)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{formatSalesAmount(row.completedRevenue)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{formatSalesAmount(row.waitingRevenue)}</td>
+                              <td className="px-3 py-2 text-right font-mono">{formatSalesAmount(row.delayedRevenue)}</td>
+                              <td className="px-3 py-2 text-right font-mono">
+                                {formatPeakHourRange(row.peakHour)} ({formatSalesAmount(row.peakHourRevenue)})
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono">
+                                {(Math.max(0, Number(row.stockoutRate || 0)) * 100).toFixed(1)}%
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono">
+                                {(Math.max(0, Number(row.cancelRate || 0)) * 100).toFixed(1)}%
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  {realtimeRevenueData.truncated ? (
+                    <p className="mt-2 text-xs text-amber-700">
+                      {tr(
+                        "salesDataTruncatedWarning",
+                        "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요."
+                      )}
+                    </p>
+                  ) : null}
                 </>
               )
             )}

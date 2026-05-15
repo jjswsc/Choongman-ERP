@@ -14,6 +14,10 @@ import {
 
 /** getPosMenus / fetchPosCatalogCached 와 동일 키 — 백그라운드 갱신 시 UI 동기화에 사용 */
 export const ERP_POS_CATALOG_MENUS_CACHE_KEY = 'erp:posCatalog:menus' as const
+export function posMenusCatalogCacheKey(storeCode?: string | null): string {
+  const normalized = String(storeCode || '').trim()
+  return normalized ? `${ERP_POS_CATALOG_MENUS_CACHE_KEY}:${normalized}` : ERP_POS_CATALOG_MENUS_CACHE_KEY
+}
 
 /** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦아지므로 상한 둠 */
 const POS_CATALOG_FETCH_MS = 4_000
@@ -48,10 +52,18 @@ async function readCacheOrNull<T>(cacheKey: string): Promise<T | null> {
 }
 
 /** IDB에 최신 카탈로그가 저장된 뒤 POS 화면이 구버전 메뉴(이미지 URL 없음 등)를 붙잡지 않도록 알림 */
-export function notifyPosCatalogUpdated(cacheKey: string, data: unknown): void {
+export function notifyPosCatalogUpdated(
+  cacheKey: string,
+  data: unknown,
+  extra?: { storeCode?: string | null }
+): void {
   if (typeof window === 'undefined') return
   try {
-    window.dispatchEvent(new CustomEvent('cm-erp-pos-catalog-updated', { detail: { cacheKey, data } }))
+    window.dispatchEvent(
+      new CustomEvent('cm-erp-pos-catalog-updated', {
+        detail: { cacheKey, data, storeCode: extra?.storeCode ?? null },
+      })
+    )
   } catch {
     /* ignore */
   }

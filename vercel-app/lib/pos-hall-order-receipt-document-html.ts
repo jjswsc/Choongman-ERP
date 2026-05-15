@@ -19,7 +19,13 @@ type HallOrderItem = {
   price: number
   qty: number
   note?: string
-  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
+  promoItems?: {
+    menuId: string
+    optionId: string | null
+    optionCode?: string | null
+    optionName?: string | null
+    quantity: number
+  }[]
 }
 
 type HallOrderPayload = {
@@ -139,7 +145,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
               const menuName =
                 (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : '') ||
                 `#${String(p.menuId)}`
-              return `${menuName} x${Math.max(1, Number(p.quantity) || 1)}`
+              const optName = String((p as { optionName?: unknown }).optionName ?? '').trim()
+              const optNameLabel = optName ? ` (${translatePosMenuLineForReceipt(optName, (k) => t(k))})` : ''
+              return `${menuName}${optNameLabel} x${Math.max(1, Number(p.quantity) || 1)}`
             })
           : []
       const promoComposeHtml =

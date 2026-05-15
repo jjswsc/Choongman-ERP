@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Settings2, MessageCircle, Facebook, Music2, ExternalLink, Loader2 } from "lucide-react"
-import { useT } from "@/lib/i18n"
+import { useT, tr as i18nTr } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { Button } from "@/components/ui/button"
 import { getLineOaGroupV2List, getLineOaGroups, getLineOaSegments } from "@/lib/api-client"
@@ -25,15 +25,15 @@ export default function MarketingIntegrationsPage() {
     try {
       const r = await getLineOaSegments({ page: 1, size: 50, sort: "id:asc" })
       if (!r.success) {
-        await appAlert(r.message || "Segment API 실패")
+        await appAlert(r.message || t("adminMarketingLineOaSegmentApiFail"))
         setSegmentPreview(JSON.stringify(r, null, 2))
         return
       }
       setSegmentPreview(JSON.stringify(r, null, 2))
       await appAlert(
         typeof r.total === "number"
-          ? `연결 OK — 세그먼트 응답 수신 (total: ${r.total})`
-          : "연결 OK — 세그먼트 목록 응답 수신"
+          ? i18nTr(t, "adminMarketingLineOaSegmentOkTotal", { total: r.total })
+          : t("adminMarketingLineOaSegmentOkList")
       )
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))
@@ -48,15 +48,15 @@ export default function MarketingIntegrationsPage() {
     try {
       const r = await getLineOaGroups({ page: 1, size: 20, sort: "id:asc" })
       if (!r.success) {
-        await appAlert(r.message || "Group API 실패")
+        await appAlert(r.message || t("adminMarketingLineOaGroupApiFail"))
         setGroupPreview(JSON.stringify(r, null, 2))
         return
       }
       setGroupPreview(JSON.stringify(r, null, 2))
       await appAlert(
         typeof r.total === "number"
-          ? `Group API OK — total: ${r.total}`
-          : "Group API OK — 목록 응답 수신"
+          ? i18nTr(t, "adminMarketingLineOaGroupOkTotal", { total: r.total })
+          : t("adminMarketingLineOaGroupOkList")
       )
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))
@@ -71,15 +71,15 @@ export default function MarketingIntegrationsPage() {
     try {
       const r = await getLineOaGroupV2List({ page: 1, size: 20, sort: "id:asc" })
       if (!r.success) {
-        await appAlert(r.message || "Group V2 API 실패")
+        await appAlert(r.message || t("adminMarketingLineOaGroupV2ApiFail"))
         setGroupV2Preview(JSON.stringify(r, null, 2))
         return
       }
       setGroupV2Preview(JSON.stringify(r, null, 2))
       await appAlert(
         typeof r.total === "number"
-          ? `Group V2 OK — total: ${r.total}`
-          : "Group V2 OK — 목록 응답 수신"
+          ? i18nTr(t, "adminMarketingLineOaGroupV2OkTotal", { total: r.total })
+          : t("adminMarketingLineOaGroupV2OkList")
       )
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))

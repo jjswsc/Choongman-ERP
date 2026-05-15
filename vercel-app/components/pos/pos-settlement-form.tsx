@@ -1101,11 +1101,11 @@ ${footerStamp}
           syncingMsg={t('posSyncing') || '동기화 중...'}
           retryLabel={t('posRetrySync') || '재시도'}
         />
-        <div className={cn('flex gap-3', compact ? 'mb-4' : 'mb-6')}>
+        <div className={cn('flex flex-wrap items-start gap-3', compact ? 'mb-4' : 'mb-6')}>
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             <Wallet className="h-5 w-5 text-primary" />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
             <h1 className={cn('font-bold tracking-tight text-foreground', compact ? 'text-lg' : 'text-xl')}>
               {openMode ? (t('posBusinessOpen') || '영업 시작') : (t('posSettlement') || 'POS 결산')}
             </h1>
@@ -1115,15 +1115,15 @@ ${footerStamp}
                 : (t('posSettlementSub') || '일별 매출·결제수단 입력, 돈통 시제')}
             </p>
           </div>
-          <div className="shrink-0">
+          <div className="ml-auto shrink-0 basis-[9.5rem] sm:basis-auto">
             <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
-              <SelectTrigger className="h-10 w-36">
-                <SelectValue placeholder={`🌐 ${t('posLanguage') || '언어'}`} />
+              <SelectTrigger className="h-10 w-full sm:w-36" aria-label={t('posLanguage') || 'Language'}>
+                <SelectValue placeholder={t('posLanguage') || '언어'} />
               </SelectTrigger>
               <SelectContent>
                 {ADMIN_UI_LANG_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    🌐 {o.label}
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
