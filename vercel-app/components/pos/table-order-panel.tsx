@@ -7,9 +7,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import type { Order, Table } from '@/lib/pos-types'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import {
@@ -105,6 +107,10 @@ export function TableOrderPanel({
   const { lang } = useLang()
   const tDefault = useT(lang)
   const t = tProp ?? tDefault
+  const tr = (key: string, fallback: string) => {
+    const v = t(key)
+    return !v || v === key ? fallback : v
+  }
   const serveActionLabel = t('posServeAction') || '서빙'
   const isPaidPrepaid = order?.status === 'paid'
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
@@ -114,6 +120,10 @@ export function TableOrderPanel({
   const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
+  const [guestEditOpen, setGuestEditOpen] = useState(false)
+  const [guestDirectOpen, setGuestDirectOpen] = useState(false)
+  const [guestDirectValue, setGuestDirectValue] = useState('10')
+  const [guestSaving, setGuestSaving] = useState(false)
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -554,6 +564,58 @@ export function TableOrderPanel({
 
   const tableDisplayName = translateReceiptTableDisplayName(tableName, t)
 
+  const openGuestCountEditor = () => {
+    if (!order || order.type !== 'dine-in') return
+    if (String(order.status ?? '').toLowerCase() === 'cancelled') return
+    const raw = Math.max(0, Math.min(99, Math.trunc(Number(order.guestCount ?? 0) || 0)))
+    setGuestDirectValue(String(raw > 9 ? raw : 10))
+    setGuestEditOpen(true)
+  }
+
+  const persistGuestCount = async (nextGuest: number) => {
+    if (!order || order.type !== 'dine-in') return
+    const g = Math.max(0, Math.min(99, Math.trunc(nextGuest)))
+    const st = String(order.status ?? '').toLowerCase()
+    if (st === 'cancelled') {
+      await appAlert(tr('posGuestEditCancelledOrder', '취소된 주문은 인원을 바꿀 수 없습니다.'))
+      return
+    }
+    if (isDemo && onDemoOrderReplace) {
+      onDemoOrderReplace({ ...order, guestCount: g })
+      setGuestEditOpen(false)
+      setGuestDirectOpen(false)
+      return
+    }
+    if (!posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : tDefault('posServedNeedsOrderId'))
+      return
+    }
+    setGuestSaving(true)
+    try {
+      const items = orderItemsToPosOrderItems(order.items)
+      const merged: Order = { ...order, guestCount: g }
+      const res = await updatePosOrder(buildUpdatePosOrderParamsFromOrder(merged, items))
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+        return
+      }
+      setGuestEditOpen(false)
+      setGuestDirectOpen(false)
+      onServed?.()
+    } catch (e) {
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setGuestSaving(false)
+    }
+  }
+
+  const confirmGuestDirectInput = () => {
+    const v = parseInt(guestDirectValue, 10)
+    if (!Number.isNaN(v)) void persistGuestCount(Math.max(0, Math.min(99, v)))
+    setGuestDirectOpen(false)
+  }
+
   return (
     <div className="h-full flex flex-col border-l border-border bg-card" data-tour="pos-tour-serving-panel">
       <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
@@ -609,18 +671,25 @@ export function TableOrderPanel({
         <div className="p-3 text-base text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
       ) : (
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
-          {order.type === 'dine-in' &&
-            ((order.guestCount ?? 0) > 0 || allTables.length > 0 || mergePeerOptions.length > 0) && (
+          {order.type === 'dine-in' && (
               <div className="flex flex-wrap items-center gap-2">
-                {(order.guestCount ?? 0) > 0 && (
-                  <div
-                    className="flex shrink-0 items-center gap-2 text-muted-foreground text-base"
-                    title={t('posOrderGuestCount') || ''}
-                  >
-                    <Users className="w-5 h-5 shrink-0" aria-hidden />
-                    <span className="font-semibold tabular-nums text-foreground">{order.guestCount}</span>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  className={cn(
+                    'flex shrink-0 items-center gap-2 rounded-xl border border-sky-500/45 bg-sky-500/[0.08] px-3 py-2 text-base shadow-sm',
+                    'transition-colors hover:bg-sky-500/15 active:scale-[0.98]',
+                    'dark:border-sky-500/35 dark:bg-sky-950/25 dark:hover:bg-sky-950/40',
+                    guestSaving || String(order.status ?? '').toLowerCase() === 'cancelled'
+                      ? 'pointer-events-none opacity-50'
+                      : 'touch-manipulation'
+                  )}
+                  title={t('posOrderGuestCount') || ''}
+                  aria-label={t('posOrderGuestCount') || undefined}
+                  onClick={openGuestCountEditor}
+                >
+                  <Users className="h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
+                  <span className="font-semibold tabular-nums text-foreground">{order.guestCount ?? 0}</span>
+                </button>
                 {allTables.length > 0 && (
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     <Button
@@ -1179,6 +1248,87 @@ export function TableOrderPanel({
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={guestEditOpen}
+        onOpenChange={(open) => {
+          if (guestSaving) return
+          setGuestEditOpen(open)
+          if (!open) setGuestDirectOpen(false)
+        }}
+      >
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>{t('posOrderGuestCount') || '손님 수'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <p className="text-xs text-muted-foreground">{tr('posTableGuestTapHint', '숫자를 선택하거나 직접 입력하세요.')}</p>
+            <Select
+              value={(() => {
+                const n = Math.max(0, Math.min(99, Math.trunc(Number(order?.guestCount ?? 0) || 0)))
+                if (n === 0) return '__zero__'
+                if (n >= 1 && n <= 9) return String(n)
+                return '__direct__'
+              })()}
+              onValueChange={(v) => {
+                if (v === '__zero__') void persistGuestCount(0)
+                else if (v === '__direct__') {
+                  const cur = Math.max(0, Math.min(99, Math.trunc(Number(order?.guestCount ?? 0) || 0)))
+                  setGuestDirectValue(String(cur > 9 ? cur : 10))
+                  setGuestDirectOpen(true)
+                } else void persistGuestCount(Number(v))
+              }}
+              disabled={guestSaving}
+            >
+              <SelectTrigger className="h-11 border-sky-600/35 bg-background/90 dark:border-sky-500/40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__zero__">0</SelectItem>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__direct__">{t('posGuestDirectInput') || '직접 입력'}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" size="sm" disabled={guestSaving} onClick={() => setGuestEditOpen(false)}>
+              {t('posCancel') ?? '취소'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={guestDirectOpen} onOpenChange={(o) => !guestSaving && setGuestDirectOpen(o)}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>{t('posGuestDirectInput') || '직접 입력'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
+            <Input
+              type="number"
+              min={0}
+              max={99}
+              className="tabular-nums"
+              value={guestDirectValue}
+              onChange={(e) => setGuestDirectValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmGuestDirectInput())}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" size="sm" onClick={() => setGuestDirectOpen(false)}>
+              {t('posCancel') ?? '취소'}
+            </Button>
+            <Button type="button" size="sm" disabled={guestSaving} onClick={() => void confirmGuestDirectInput()}>
+              {t('posConfirm') || '확인'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -147,10 +147,11 @@ function POSMainPageInner() {
   )
   const handlePosHomeHeaderRefresh = useCallback(() => {
     if (storeCode) {
-      getPosTodaySales({ storeCode }).then(setTodaySales).catch(() => setTodaySales(null))
-    } else {
-      window.location.reload()
+      return getPosTodaySales({ storeCode, forceNetwork: true })
+        .then(setTodaySales)
+        .catch(() => setTodaySales(null))
     }
+    window.location.reload()
   }, [storeCode])
 
   useEffect(() => {

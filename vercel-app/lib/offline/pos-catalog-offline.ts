@@ -149,22 +149,24 @@ async function fetchCatalogAndPersist<T>(relativeUrl: string, cacheKey: string, 
 export async function fetchPosCatalogCached<T>(
   cacheKey: string,
   relativeUrl: string,
-  fallback: T
+  fallback: T,
+  options?: { forceNetwork?: boolean }
 ): Promise<T> {
+  const forceNetwork = Boolean(options?.forceNetwork)
   const fromIdb = await readCacheOrNull<T>(cacheKey)
 
   if (shouldPreferOfflineCache()) {
-    if (fromIdb !== null) return fromIdb
+    if (!forceNetwork && fromIdb !== null) return fromIdb
     try {
       return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback)
     } catch {
       reportNetworkFailure()
-      return fallback
+      return fromIdb !== null ? fromIdb : fallback
     }
   }
 
   /** 온라인 표시여도 IDB에 캐시가 있으면 즉시 표시하고 백그라운드 갱신 (서버 지연 시 메뉴 로딩 체감 개선) */
-  if (fromIdb !== null) {
+  if (!forceNetwork && fromIdb !== null) {
     void fetchCatalogAndPersist(relativeUrl, cacheKey, fallback).catch(() => {})
     return fromIdb
   }

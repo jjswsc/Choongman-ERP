@@ -78,10 +78,11 @@ export function StoreSalesRealtimeView({
     return [...new Set(stores.map((s) => String(s.id || "").trim()).filter(Boolean))].sort().join(",")
   }, [isAllStoresSelected, stores])
 
-  const loadTodaySales = useCallback(() => {
+  const loadTodaySales = useCallback((opts?: { forceNetwork?: boolean }) => {
+    const forceNetwork = Boolean(opts?.forceNetwork)
     if (!effectiveStoreCode) return
     if (!isAllStoresSelected) {
-      getPosTodaySales({ storeCode: effectiveStoreCode })
+      getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
         .then((data) => {
           setTodaySales(data)
           setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
@@ -99,7 +100,7 @@ export function StoreSalesRealtimeView({
     }
     Promise.all(
       storeCodes.map((code) =>
-        getPosTodaySales({ storeCode: code }).then(
+        getPosTodaySales({ storeCode: code, forceNetwork }).then(
           (data) => [code, data] as const,
           () =>
             [
@@ -129,7 +130,7 @@ export function StoreSalesRealtimeView({
   }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
 
   const refreshRealtimeSection = useCallback(() => {
-    loadTodaySales()
+    loadTodaySales({ forceNetwork: true })
     if (effectiveStoreCode && !isAllStoresSelected) {
       void refetchStores({ storeCode: effectiveStoreCode, immediate: true })
       return

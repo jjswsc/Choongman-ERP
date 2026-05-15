@@ -8891,6 +8891,8 @@ export async function getPosTodaySales(params?: {
   storeCode?: string
   startStr?: string
   endStr?: string
+  /** true면 IDB 즉시 반환 없이 네트워크 조회를 기다림(헤더 새로고침 등) */
+  forceNetwork?: boolean
 }) {
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
@@ -8910,7 +8912,7 @@ export async function getPosTodaySales(params?: {
     completedTotal: number
     completedCash: number
     pendingCount: number
-  }>(cacheKey, url, fallback)
+  }>(cacheKey, url, fallback, { forceNetwork: Boolean(params?.forceNetwork) })
 }
 
 export async function getPosReversalJournals(params: {
