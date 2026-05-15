@@ -54,14 +54,12 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import {
-  adminTabsBarCn,
   adminTabsContentFlushCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
-import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
+import { cn, escapeHtml } from "@/lib/utils"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
@@ -307,6 +305,7 @@ export default function PosOrdersPage() {
   const [auditOrderNoFilter, setAuditOrderNoFilter] = React.useState("")
   const [expandedAuditRows, setExpandedAuditRows] = React.useState<Record<number, boolean>>({})
   const [auditQuickSearchTick, setAuditQuickSearchTick] = React.useState(0)
+  const auditEscArmedAtRef = React.useRef(0)
   const [, setKitchenPrintFailureVersion] = React.useState(0)
   const [traceCopyToast, setTraceCopyToast] = React.useState<{
     tone: "success" | "error"
@@ -1011,6 +1010,7 @@ export default function PosOrdersPage() {
 
   const handleAuditFilterKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>, clearField: () => void) => {
+      const now = Date.now()
       if (e.key === "Enter") {
         e.preventDefault()
         loadAuditTrail()
@@ -1018,8 +1018,20 @@ export default function PosOrdersPage() {
       }
       if (e.key === "Escape") {
         e.preventDefault()
+        const currentValue = String(e.currentTarget?.value ?? "").trim()
+        if (!currentValue && now - auditEscArmedAtRef.current <= 700) {
+          const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+          setAuditStartStr(today)
+          setAuditEndStr(today)
+          setAuditEmployeeFilter("")
+          setAuditOrderNoFilter("")
+          setAuditQuickSearchTick((v) => v + 1)
+          auditEscArmedAtRef.current = 0
+          return
+        }
         clearField()
         setAuditQuickSearchTick((v) => v + 1)
+        auditEscArmedAtRef.current = now
       }
     },
     [loadAuditTrail]
@@ -2580,6 +2592,9 @@ export default function PosOrdersPage() {
           <TabsContent value="auditTrail" className={adminTabsContentFlushCn}>
             <div className="mb-3 rounded-lg border border-amber-200/70 bg-amber-50/40 px-3 py-2 text-xs text-amber-900">
               누가/언제/무엇을/이전값→변경값 기준으로 주문 변경 이력을 조회합니다.
+              <div className="mt-1 text-[11px] text-amber-800/90">
+                Enter: 즉시 조회 · Esc: 현재 입력 초기화 · Esc 2회(700ms 이내): 감사로그 필터 전체 초기화
+              </div>
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
               <div className="overflow-x-auto">

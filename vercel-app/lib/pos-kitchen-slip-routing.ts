@@ -6,8 +6,9 @@ import type { OrderItem } from "@/lib/pos-types"
  * 주방 주문서 분할
  * - kitchenMode: 주방 프린터 대수(1~3). **1대(모드 1)**이면 항상 통합 한 장(메뉴에 2·3이 남아 있어도 분할하지 않음).
  * - kitchenMode 2·3일 때만 메뉴별 pos_menus.kitchen_printer(0~3)로 버킷을 나눈다.
- * - 대분류/카테고리 선택은 관리자 화면에서 메뉴별 값을 일괄 갱신하는 도구이며,
- *   인쇄 시점 라우팅 우선순위에는 참여하지 않음.
+ * - 프린터 설정의 `kitchenRouteByMenu` / `kitchenRouteByCategory` / `kitchenRouteByCategoryMain`은
+ *   저장 시 pos_menus에 실체화되지만, 인쇄 시점에는 **DB(kpMap)보다 우선** 적용되어(미동기·직접 DB 수정 대비)
+ *   `getPosPrinterSettings` 값과 주방 출력이 어긋나는 것을 줄인다. 우선순위: 메뉴 id → 소분류 → 대분류 → pos_menus.
  * - 프로모션 줄에 promoItems 가 있으면(저장된 스냅샷) 구성 메뉴별로 펼쳐 각 메뉴의 주방으로 라우팅(splitPromoKitchenLines 기본 true)
  */
 
@@ -312,9 +313,49 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     if (lower.startsWith(`[${codeLower}]`) || lower.endsWith(`(${codeLower})`)) return it
     return { ...it, name: `[${code}] ${currentName}` } as T
   }
+  /**
+   * 프린터 설정 라우트 맵 → pos_menus.kitchen_printer 순.
+   * (영수증 표시명은 `resolvePosOrderItemMenuDisplayName` 등으로 카탈로그와 맞출 수 있어,
+   *  DB `menuId`와 화면에서 본 메뉴 행이 다를 때 설정 맵으로 보정 가능)
+   */
+  const resolveRouteFromPrinterOverlay = (mid: string): KitchenRouteValue | null => {
+    if (!mid) return null
+    const menuMap = opts.kitchenRouteByMenu || {}
+    if (menuMap[mid] !== undefined) {
+      const v = menuMap[mid]
+      if (v === 0 || v === 1 || v === 2 || v === 3) {
+        return v === 0 ? 0 : clampPrinterIndex(v, mode)
+      }
+    }
+    const subRaw = String(opts.categoryByMenuId?.[mid] ?? "").trim()
+    const sub = subRaw ? normalizePromotionCategoryMain(subRaw) : ""
+    const catRoute = opts.kitchenRouteByCategory || {}
+    for (const key of sub ? [sub, subRaw].filter(Boolean) : []) {
+      if (catRoute[key] === undefined) continue
+      const v = catRoute[key]
+      if (v === 0 || v === 1 || v === 2 || v === 3) {
+        return v === 0 ? 0 : clampPrinterIndex(v, mode)
+      }
+    }
+    const mainRaw = String(opts.categoryMainByMenuId?.[mid] ?? "").trim()
+    const main = mainRaw ? normalizePromotionCategoryMain(mainRaw) : ""
+    const mainRoute = opts.kitchenRouteByCategoryMain || {}
+    for (const key of main ? [main, mainRaw].filter(Boolean) : []) {
+      if (mainRoute[key] === undefined) continue
+      const v = mainRoute[key]
+      if (v === 0 || v === 1 || v === 2 || v === 3) {
+        return v === 0 ? 0 : clampPrinterIndex(v, mode)
+      }
+    }
+    return null
+  }
+
   /** 0 = 스킵, 1~3 = 주방 번호 */
   const resolveRoute = (it: T): KitchenRouteValue => {
     const mid = menuIdOf(it)
+    const overlay = mid ? resolveRouteFromPrinterOverlay(mid) : null
+    if (overlay !== null) return overlay
+
     if (mid in kpMap) {
       const v = kpMap[mid]
       if (v === 0 || v === 1 || v === 2 || v === 3) {
