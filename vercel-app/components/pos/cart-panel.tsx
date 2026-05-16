@@ -230,6 +230,8 @@ export type CartPanelSplitReceiptPayload = {
   subtotal: number
   discountAmt: number
   total: number
+  /** 해당 인원 결제 시점에 입력한 수단(분할 영수증 인쇄용) */
+  payment?: CartPanelPaymentPayload
 }
 type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 type TaxInvoiceProfile = {
@@ -848,6 +850,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [discountReason, setDiscountReason] = useState('')
   const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
+  const paymentMethodSectionRef = useRef<HTMLDivElement | null>(null)
   const manualDiscountFlashTimerRef = useRef<number | null>(null)
   const [manualDiscountFlash, setManualDiscountFlash] = useState(false)
   const [collabOptions, setCollabOptions] = useState<
@@ -900,6 +903,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [menuSplitAssigned, setMenuSplitAssigned] = useState<Record<string, number[]>>({})
   const [menuSplitPaidByPerson, setMenuSplitPaidByPerson] = useState<number[]>([])
   const menuSplitAutoAppliedKeyRef = useRef<string>('')
+  const splitPaymentsByPersonRef = useRef<(CartPanelPaymentPayload | undefined)[]>([])
   const splitDraftAssignedRef = useRef<{ target: MoveTarget; amount: number; personIdx: number | null } | null>(null)
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
   const [editingNoteItemId, setEditingNoteItemId] = useState<string | null>(null)
@@ -1186,6 +1190,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     vatFeeAmt: pricing.vatFeeAmt,
     receiptVatDisplayAmt: pricing.receiptVatDisplayAmt,
   })
+  const scrollToPaymentMethods = useCallback(() => {
+    if (!showPaymentModal) return
+    const run = () => {
+      const el = paymentMethodSectionRef.current
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    requestAnimationFrame(() => requestAnimationFrame(run))
+  }, [showPaymentModal])
+
+  const selectMenuSplitTargetPerson = useCallback(
+    (idx: number) => {
+      setMenuSplitTargetPerson(idx)
+      scrollToPaymentMethods()
+    },
+    [scrollToPaymentMethods]
+  )
+
   const focusManualDiscountCard = useCallback(() => {
     const target = manualDiscountCardRef.current
     if (!target) return
@@ -1305,8 +1327,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     payOther,
   ])
 
-  const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
-    if (!showPaymentModal) return null
+  const buildPaymentSnapshot = useCallback((): CartPanelPaymentPayload => {
     const payDel = parseFloat(payDeliveryApp) || 0
     const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
       payDel > 0
@@ -1323,7 +1344,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...deliveryPayPart,
     }
   }, [
-    showPaymentModal,
     payCash,
     payCard,
     payPromptPay,
@@ -1334,6 +1354,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     legacyWalletPaymentSum,
     buildPaymentOtherBreakdownSnapshot,
   ])
+
+  const paymentSnapshotHasAmount = (snap: CartPanelPaymentPayload) => {
+    const eps = 0.005
+    return (
+      snap.paymentCash > eps ||
+      snap.paymentCard > eps ||
+      snap.paymentQr > eps ||
+      snap.paymentOther > eps ||
+      (snap.paymentDeliveryApp ?? 0) > eps
+    )
+  }
+
+  const captureSplitPaymentForPerson = useCallback(
+    (personIdx: number) => {
+      const snap = buildPaymentSnapshot()
+      if (!paymentSnapshotHasAmount(snap)) return
+      const arr = [...splitPaymentsByPersonRef.current]
+      while (arr.length <= personIdx) arr.push(undefined)
+      arr[personIdx] = snap
+      splitPaymentsByPersonRef.current = arr
+    },
+    [buildPaymentSnapshot]
+  )
+
+  const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
+    if (!showPaymentModal) return null
+    return buildPaymentSnapshot()
+  }, [showPaymentModal, buildPaymentSnapshot])
 
   useEffect(() => {
     onCustomerDisplayPaymentDraftChange?.(customerDisplayPaymentDraft)
@@ -1556,6 +1604,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           subtotal: subtotalRounded,
           discountAmt: discountByPerson,
           total: totalByPerson,
+          payment: splitPaymentsByPersonRef.current[personIdx],
         })
       }
       return entries.length > 0 ? entries : undefined
@@ -1572,11 +1621,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         accum = round2Local(accum + rounded)
       }
     }
+    const fullMenuLines = cartItems.map((item) => mapCartItemToOrderPayload(item))
     const entries: CartPanelSplitReceiptPayload[] = dueByPerson
       .map((due, idx) => ({
         key: `amount-${idx + 1}`,
         label: `${tr('posCurrentPerson', '현재 인원')} ${idx + 1}/${count}`,
         items: [
+          ...fullMenuLines,
           {
             id: `dutch-amount-${idx + 1}`,
             name: `${tr('posDutchPayHeader', '더치페이')} ${idx + 1}/${count}`,
@@ -1587,6 +1638,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         subtotal: due,
         discountAmt: 0,
         total: due,
+        payment: splitPaymentsByPersonRef.current[idx],
       }))
       .filter((entry) => entry.total > 0)
     return entries.length > 0 ? entries : undefined
@@ -2035,6 +2087,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       currentRow[personIdx] = round2(next)
       return { ...prev, [itemId]: currentRow }
     })
+    if (delta > 0) scrollToPaymentMethods()
   }
 
   useEffect(() => {
@@ -2052,22 +2105,39 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (splitMode === 'menu') {
         if (menuSplitUnassignedQty > 0) return
         if (Math.max(0, Number(menuSplitRemainingByPerson[menuSplitTargetPersonIndex] || 0)) > 0.009) return
+        captureSplitPaymentForPerson(menuSplitTargetPersonIndex)
+        resetPaymentInputs()
         const nextPending = menuSplitRemainingByPerson.findIndex((amt) => Math.max(0, Number(amt || 0)) > 0.009)
-        if (nextPending >= 0) setMenuSplitTargetPerson(nextPending)
+        if (nextPending >= 0) selectMenuSplitTargetPerson(nextPending)
+        else scrollToPaymentMethods()
         splitDraftAssignedRef.current = null
         return
       }
+      captureSplitPaymentForPerson(splitPaidSteps)
+      resetPaymentInputs()
       splitDraftAssignedRef.current = null
       setSplitPaidSteps((prev) => Math.min(count, prev + 1))
+      scrollToPaymentMethods()
     } else {
       splitDraftAssignedRef.current = null
       setSplitPaidSteps((prev) => prev + 1)
     }
   }
 
+  const finalizeSplitPaymentsForReceipt = () => {
+    if (!showSplit) return
+    const count = Math.max(1, Number(splitCount) || 1)
+    const personIdx =
+      splitMode === 'menu'
+        ? Math.min(menuSplitTargetPersonIndex, count - 1)
+        : Math.min(splitPaidSteps, count - 1)
+    captureSplitPaymentForPerson(personIdx)
+  }
+
   useEffect(() => {
     if (!showPaymentModal) return
     setSplitPaidSteps(0)
+    splitPaymentsByPersonRef.current = []
   }, [showPaymentModal, splitCount, total])
 
   useEffect(() => {
@@ -2088,6 +2158,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setSplitMode('amount')
       setMenuSplitAssigned({})
       setMenuSplitPaidByPerson([])
+      splitPaymentsByPersonRef.current = []
       splitDraftAssignedRef.current = null
     }
   }, [showPaymentModal])
@@ -2101,6 +2172,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     resetPaymentInputs()
     setSplitPaidSteps(0)
     setMenuSplitPaidByPerson([])
+    splitPaymentsByPersonRef.current = []
     splitDraftAssignedRef.current = null
   }, [showPaymentModal, showSplit, splitCount])
 
@@ -2336,6 +2408,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       .filter(Boolean)
       .join(' ')
     const selectedMemberNo = memberMap[selectedMemberId]?.memberNo || ''
+    if (withPayment) finalizeSplitPaymentsForReceipt()
     const splitReceipts = withPayment ? buildSplitReceiptPayloads() : undefined
     onNonDineOrderComplete({
       orderType,
@@ -2390,6 +2463,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         (parseFloat(payShopeePay) || 0) +
         (parseFloat(payOther) || 0)
     const payOtherBreakdown = buildPaymentOtherBreakdownSnapshot()
+    finalizeSplitPaymentsForReceipt()
     const splitReceipts = buildSplitReceiptPayloads()
     if (needTaxInvoice && !taxInvoiceInvalid) {
       const profile: TaxInvoiceProfile = {
@@ -4070,7 +4144,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div ref={paymentMethodSectionRef} className="scroll-mt-3 space-y-2" data-pos-payment-method-section>
               <p className="text-sm font-semibold">{tr('posPaymentMethodSection', '결제 수단')}</p>
             {/* 결제 수단 탭 */}
             <div className="grid grid-cols-5 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner" data-tour="pos-tour-payment-tabs">
@@ -4625,7 +4699,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </Collapsible>
 
             {/* Dutch Pay - 가로 compact, 터치 44px */}
-            <Collapsible open={showSplit} onOpenChange={setShowSplit}>
+            <Collapsible
+              open={showSplit}
+              onOpenChange={(open) => {
+                setShowSplit(open)
+                if (open) scrollToPaymentMethods()
+              }}
+            >
               <div className="w-full rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-50/90 to-card p-3 shadow-sm dark:from-violet-950/30 dark:to-card">
                 <CollapsibleTrigger asChild>
                   <Button
@@ -4651,7 +4731,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       variant={splitMode === 'amount' ? 'default' : 'outline'}
                       className="h-9"
                       data-tour="pos-tour-dutch-mode-amount"
-                      onClick={() => setSplitMode('amount')}
+                      onClick={() => {
+                        setSplitMode('amount')
+                        if (showSplit) scrollToPaymentMethods()
+                      }}
                     >
                       {tr('posDutchSplitModeAmount', '금액 기준')}
                     </Button>
@@ -4661,7 +4744,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       variant={splitMode === 'menu' ? 'default' : 'outline'}
                       className="h-9"
                       data-tour="pos-tour-dutch-mode-menu"
-                      onClick={() => setSplitMode('menu')}
+                      onClick={() => {
+                        setSplitMode('menu')
+                        if (showSplit) scrollToPaymentMethods()
+                      }}
                     >
                       {tr('posDutchSplitModeMenu', '메뉴 기준')}
                     </Button>
@@ -4754,7 +4840,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               size="sm"
                               variant={idx === menuSplitTargetPersonIndex ? 'default' : 'outline'}
                               className="mt-1 h-7 w-full text-[11px]"
-                              onClick={() => setMenuSplitTargetPerson(idx)}
+                              onClick={() => selectMenuSplitTargetPerson(idx)}
                             >
                               {tr('posSelectAssignTarget', '여기에 배정')}
                             </Button>

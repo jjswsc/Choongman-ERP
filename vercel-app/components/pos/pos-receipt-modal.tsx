@@ -80,7 +80,7 @@ export type ReceiptModalData = {
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number
   otherFeeMode?: 'included' | 'separate'
-  /** 결제 완료·재인쇄 영수증에 수단별 금액 표시 (주문 접수용 slip에는 생략) */
+  /** 결제 완료·재인쇄 영수증에 수단 종류 표시 (주문 접수용 slip에는 생략) */
   paymentCash?: number
   paymentCard?: number
   paymentQr?: number

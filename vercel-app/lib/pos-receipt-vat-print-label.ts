@@ -1,6 +1,6 @@
 import type { PosFeeMode } from '@/lib/pos-pricing'
 
-/** 결제·홀 주문 영수증 인쇄용: VAT 라벨(포함 과금 시 안내 접미) — HTML 이스케이프된 문자열 */
+/** 결제(손님) 영수증 인쇄용: VAT 라벨(포함 과금 시 안내 접미) — HTML 이스케이프된 문자열 */
 export function buildPosReceiptVatPrintLabelEscaped(params: {
   vatFeeMode?: PosFeeMode
   t: (key: string) => string

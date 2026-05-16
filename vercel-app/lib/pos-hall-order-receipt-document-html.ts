@@ -8,8 +8,6 @@ import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
-import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
-import { buildPosReceiptVatPrintLabelEscaped } from '@/lib/pos-receipt-vat-print-label'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
@@ -196,23 +194,6 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   const taxInvoiceRow = parsedMemo.taxInvoice
     ? buildPosTaxInvoiceThermalHtml({ taxInvoice: parsedMemo.taxInvoice, esc, tr })
     : ''
-  const subtotalPrint = resolveReceiptSubtotalPrintAmount({
-    subtotal: payload.subtotal,
-    vatFeeMode: payload.vatFeeMode,
-    receiptExclusiveSubtotalDisplay: payload.receiptExclusiveSubtotalDisplay,
-    receiptTaxableGrossForDisplay: payload.receiptTaxableGrossForDisplay,
-  })
-  const vatPrint = resolveReceiptVatPrintAmount({
-    vatFeeAmt: payload.vatFeeAmt,
-    receiptVatDisplayAmt: payload.receiptVatDisplayAmt,
-  })
-  const showVatRow = vatPrint > 0.0001
-  const vatPrintLabelEscaped = buildPosReceiptVatPrintLabelEscaped({
-    vatFeeMode: payload.vatFeeMode,
-    t,
-    tr,
-    esc,
-  })
   const discountRow =
     payload.discountAmt > 0
       ? '<div class="receipt-row discount"><span>' +
@@ -230,21 +211,6 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   const packagingFeeRow =
     (payload.packagingFee ?? 0) > 0
       ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${formatBahtNum(payload.packagingFee ?? 0)}</span></div>`
-      : ''
-  const vatRow = showVatRow
-    ? `<div class="receipt-row"><span>${vatPrintLabelEscaped}</span><span>${formatBahtNum(vatPrint)}</span></div>`
-    : ''
-  const serviceFeeRow =
-    (payload.serviceFeeAmt ?? 0) > 0
-      ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${payload.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.serviceFeeAmt ?? 0)}</span></div>`
-      : ''
-  const cardFeeRow =
-    (payload.cardFeeAmt ?? 0) > 0
-      ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${payload.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.cardFeeAmt ?? 0)}</span></div>`
-      : ''
-  const otherFeeRow =
-    (payload.otherFeeAmt ?? 0) > 0
-      ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${payload.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.otherFeeAmt ?? 0)}</span></div>`
       : ''
   const orderNoForPrint = formatPosReceiptOrderNoDisplay({
     posOrderNo: payload.orderNo,
@@ -284,20 +250,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     memoRow +
     '<div class="receipt-divider">' +
     c('div') +
-    '<div class="receipt-row"><span class="receipt-muted">' +
-    esc(t('posSubtotal') || '소계') +
-    c('span') +
-    '<span>' +
-    formatBahtNum(subtotalPrint) +
-    c('span') +
-    c('div') +
     discountRow +
     deliveryFeeRow +
     packagingFeeRow +
-    vatRow +
-    serviceFeeRow +
-    cardFeeRow +
-    otherFeeRow +
     '<div class="receipt-divider">' +
     c('div') +
     '<div class="receipt-row receipt-total"><span>' +

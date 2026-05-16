@@ -76,32 +76,31 @@ export function buildCode128BarcodeUrl(raw: string): string {
   return `https://quickchart.io/barcode?type=code128&text=${encodeURIComponent(text)}&scale=2&height=38&includetext=true`
 }
 
-/** 결제 완료 영수증: 수단별 금액 행 (0 초과만) */
-function collectReceiptPaymentLines(
+/** 결제 완료 영수증: 사용된 수단 라벨 (0 초과만, 금액은 합계에 이미 표시) */
+function collectReceiptPaymentMethodLabels(
   receiptData: ReceiptModalData,
   tr: (key: string, fallback: string) => string
-): { label: string; amount: number }[] {
-  const lines: { label: string; amount: number }[] = []
+): string[] {
+  const labels: string[] = []
   const cash = Math.max(0, Number(receiptData.paymentCash ?? 0) || 0)
   const card = Math.max(0, Number(receiptData.paymentCard ?? 0) || 0)
   const qr = Math.max(0, Number(receiptData.paymentQr ?? 0) || 0)
   const other = Math.max(0, Number(receiptData.paymentOther ?? 0) || 0)
   const del = Math.max(0, Number(receiptData.paymentDeliveryApp ?? 0) || 0)
   const eps = 0.005
-  if (cash > eps) lines.push({ label: tr('posPaymentCash', 'Cash'), amount: cash })
-  if (card > eps) lines.push({ label: tr('posPaymentCard', 'Card'), amount: card })
-  if (qr > eps) lines.push({ label: tr('posPaymentQrCode', 'QR'), amount: qr })
-  if (other > eps) lines.push({ label: tr('posPaymentOther', 'Other'), amount: other })
+  if (cash > eps) labels.push(tr('posPaymentCash', 'Cash'))
+  if (card > eps) labels.push(tr('posPaymentCard', 'Card'))
+  if (qr > eps) labels.push(tr('posPaymentQrCode', 'QR'))
+  if (other > eps) labels.push(tr('posPaymentOther', 'Other'))
   if (del > eps) {
     const ch = String(receiptData.deliveryPaymentChannel ?? '').trim()
-    lines.push({
-      label: ch
+    labels.push(
+      ch
         ? `${tr('posPaymentDeliveryApp', 'Delivery app')} (${ch})`
-        : tr('posPaymentDeliveryApp', 'Delivery app'),
-      amount: del,
-    })
+        : tr('posPaymentDeliveryApp', 'Delivery app')
+    )
   }
-  return lines
+  return labels
 }
 
 function resolveDiscountReceiptLabel(
@@ -320,18 +319,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     receiptData.discountAmt,
     isPaymentReceipt
   )
-  const payLines = isPaymentReceipt ? collectReceiptPaymentLines(receiptData, tr) : []
-  /** 수단별 금액이 한 건도 저장되지 않은 결제 영수증: 하단에 안내(현금/카드 등 미표시 방지) */
+  const payMethodLabels = isPaymentReceipt ? collectReceiptPaymentMethodLabels(receiptData, tr) : []
+  const payMethodsInline =
+    payMethodLabels.length > 0 ? payMethodLabels.map((label) => esc(label)).join(', ') : ''
+  /** 수단이 한 건도 저장되지 않은 결제 영수증: 하단에 안내(현금/카드 등 미표시 방지) */
   const showPaymentChannelFallback =
     isPaymentReceipt &&
-    payLines.length === 0 &&
+    payMethodLabels.length === 0 &&
     Math.max(0, Number(receiptData.total) || 0) > 0.005
   const paymentRowsHtml =
-    payLines.length > 0
+    payMethodsInline
       ? `
         <div class="receipt-divider"></div>
-        <div class="text-xs" style="font-weight:700;margin:4px 0 2px 0;color:#000">${esc(tr('posReceiptPaymentMethods', 'Payment'))}</div>
-        ${payLines.map((p) => paymentRowHtml(esc(p.label), formatBahtNum(p.amount))).join('')}
+        ${receiptMetaRowHtml(esc(tr('posReceiptPaymentMethods', 'Payment')), payMethodsInline)}
       `
       : ''
   const paymentChannelFallbackHtml = showPaymentChannelFallback
@@ -342,10 +342,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         )}</div>
       `
     : ''
-  const paymentSimpleRows =
-    payLines.length > 0
-      ? `${payLines.map((p) => `<tr><td class="simple-k">${esc(p.label)}</td><td class="simple-v">${formatBahtNum(p.amount)}</td></tr>`).join('')}`
-      : ''
+  const paymentSimpleLine = payMethodsInline
+    ? `<div class="simple-line"><b>${esc(tr('posReceiptPaymentMethods', 'Payment'))}</b>: ${payMethodsInline}</div>`
+    : ''
   const showLogo = isPaymentReceipt && (d.receiptShowLogo || forceReceiptLogo)
   const footerPrimaryText =
     String(d.receiptFooterPrimaryText || '').trim() ||
@@ -462,8 +461,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
         ${
-          paymentSimpleRows
-            ? `<div class="simple-divider"></div><div class="simple-line" style="font-weight:700">${esc(tr('posReceiptPaymentMethods', 'Payment'))}</div><table class="simple-table simple-summary">${paymentSimpleRows}</table>`
+          paymentSimpleLine
+            ? `<div class="simple-divider"></div>${paymentSimpleLine}`
             : showPaymentChannelFallback
               ? `<div class="simple-divider"></div><div class="simple-line" style="font-weight:700;text-align:center">${esc(
                   tr('posReceiptPaymentChannelUnspecified', 'Payment channel: not recorded in system')

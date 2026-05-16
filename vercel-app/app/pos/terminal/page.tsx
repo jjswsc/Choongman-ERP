@@ -803,6 +803,19 @@ export default function PosTerminalPage() {
           discountAmt: Math.max(0, Number(split.discountAmt ?? 0) || 0),
           total: total > 0 ? total : subtotal,
           vatFeeMode: base.vatFeeMode,
+          ...(split.payment
+            ? {
+                paymentCash: split.payment.paymentCash,
+                paymentCard: split.payment.paymentCard,
+                paymentQr: split.payment.paymentQr,
+                paymentOther: split.payment.paymentOther,
+                ...(split.payment.paymentOtherBreakdown
+                  ? { paymentOtherBreakdown: split.payment.paymentOtherBreakdown }
+                  : {}),
+                paymentDeliveryApp: split.payment.paymentDeliveryApp ?? 0,
+                deliveryPaymentChannel: split.payment.deliveryPaymentChannel ?? null,
+              }
+            : {}),
           receiptAutoPrintContext: 'payment',
           suppressReceiptModalAutoPrint,
           printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
