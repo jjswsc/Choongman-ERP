@@ -556,6 +556,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     () => (selectedStoresKey ? selectedStoresKey.split(",") : undefined),
     [selectedStoresKey]
   )
+  /** 본사: 매장 미선택 시 전 매장 API 호출 방지 → 첫 매장만 조회. 매장 비교 차트는 사용자 선택(selectedStoresParam) 유지 */
+  const salesFetchStoresParam = React.useMemo((): string[] | undefined => {
+    if (selectedStoresKey) return selectedStoresParam
+    if (canSearchAll && posBizDayStoreChoices.length > 0) {
+      return normalizeStoreCodes([posBizDayStoreChoices[0]])
+    }
+    return undefined
+  }, [selectedStoresKey, selectedStoresParam, canSearchAll, posBizDayStoreChoices])
   const filteredStoreOptions = React.useMemo(() => {
     const q = storeSearch.trim().toLowerCase()
     if (!q) return posOptions
@@ -1135,7 +1143,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
 
     if (qStoresKey !== selectedStoresKey && userSelectedRef.current.storesKey !== selectedStoresKey) {
-      setSelectedStores(qStores)
+      if (!(canSearchAll && qStoresKey === "")) {
+        setSelectedStores(qStores)
+      }
     }
     if (qOrderTypes !== orderTypesKey && userSelectedRef.current.orderTypesKey !== orderTypesKey) {
       setOrderTypesKey(qOrderTypes)
@@ -1165,6 +1175,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     compareStores,
     validTopicByMenu,
     selectedTopicBySubMenu,
+    canSearchAll,
   ])
 
   React.useEffect(() => {
@@ -1269,6 +1280,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
   }, [canSearchAll, auth?.store, selectedStoresKey])
 
+  React.useEffect(() => {
+    if (!canSearchAll) return
+    if (selectedStores.length > 0) return
+    const first = posBizDayStoreChoices[0]
+    if (!first) return
+    setSelectedStores(normalizeStoreCodes([first]))
+  }, [canSearchAll, selectedStores.length, posBizDayStoreChoices])
+
   const sumPeriodTotal = React.useCallback(
     (res: Awaited<ReturnType<typeof getPosSalesByPeriod>>) => {
       if (res.kind === "split") {
@@ -1337,7 +1356,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         startStr,
         endStr,
         groupBy: periodGroup,
-        stores: selectedStoresParam,
+        stores: salesFetchStoresParam,
         orderTypes: orderTypesParam,
         splitByStore: needSplit,
       })
@@ -1345,7 +1364,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           if (loadIdRef.current !== id) return
           if (res.kind === "split") {
             setPeriodSplitSeries(res.series)
-            setPeriodData(mergePeriodSeriesToAggregated(res.series, selectedStoresParam))
+            setPeriodData(mergePeriodSeriesToAggregated(res.series, salesFetchStoresParam ?? []))
             setPeriodTruncated(res.truncated)
           } else {
             setPeriodSplitSeries(null)
@@ -1373,7 +1392,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
           .then(gDelivery)
@@ -1385,7 +1404,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         channelFetcher({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
           .then(gChannel)
@@ -1397,7 +1416,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
           .then(gPayment)
@@ -1409,7 +1428,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         (offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore)({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
           .then(gStore)
@@ -1421,7 +1440,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         menuFetcher({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           search: menuSearch || undefined,
           searchMode: menuSearchAnd ? "and" : "or",
           orderTypes: orderTypesParam,
@@ -1435,7 +1454,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         fetchPosRealtimeRevenueDashboard({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
           .then((res) => {
@@ -1459,21 +1478,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             startStr,
             endStr,
             groupBy: "day",
-            stores: selectedStoresParam,
+            stores: salesFetchStoresParam,
             orderTypes: orderTypesParam,
           }),
           periodRun({
             startStr: prevStart,
             endStr: prevEnd,
             groupBy: "day",
-            stores: selectedStoresParam,
+            stores: salesFetchStoresParam,
             orderTypes: orderTypesParam,
           }),
           periodRun({
             startStr: weekStart,
             endStr: weekEnd,
             groupBy: "day",
-            stores: selectedStoresParam,
+            stores: salesFetchStoresParam,
             orderTypes: orderTypesParam,
           }),
         ])
@@ -1492,7 +1511,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         getPosCancelReasonSummary({
           startStr,
           endStr,
-          stores: selectedStoresParam,
+          stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
           .then((res) =>
@@ -1530,7 +1549,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     startStr,
     endStr,
     periodGroup,
-    selectedStoresParam,
+    salesFetchStoresParam,
     orderTypesParam,
     compareStores,
     selectedView,
@@ -1637,7 +1656,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   >
                     <span className="truncate text-left">
                       {selectedStores.length === 0
-                        ? tr("salesSelectStoreAll", "매장(전체)")
+                        ? posBizDayStoreChoices.length === 0
+                          ? tr("salesStorePickerLoading", "매장 목록 불러오는 중…")
+                          : tr("salesSelectStoreDefault", "매장(기본)")
                         : selectedStores.length === 1
                           ? posStoreDisplayName(selectedStores[0])
                           : `${selectedStores.length}${tr("selected", "개 선택")}`}
@@ -1659,17 +1680,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         className="mb-2 h-8"
                       />
                       <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={selectedStoresKey === "" ? "default" : "outline"}
-                          onClick={() => {
-                            userSelectedRef.current.storesKey = ""
-                            setSelectedStores([])
-                          }}
-                        >
-                          {tr("all", "전체")}
-                        </Button>
                         <Button
                           type="button"
                           size="sm"

@@ -46,10 +46,17 @@ import {
   getAccountingFilingPreferences,
   saveAccountingFilingPreferences,
   getAccountingPeriods,
+  getAccountingPeriodCloseStatus,
   setAccountingPeriodClosed,
   getTrialBalance,
   getAccountingReconciliation,
   getVatLedger,
+  getStoreTaxFilingProfile,
+  saveStoreTaxFilingProfile,
+  getVatLedgerStoreNameGaps,
+  getIntercompanyVatReconcile,
+  type IntercompanyVatReconcileReportDto,
+  type VatLedgerStoreNameGapsReportDto,
   saveVatLedgerEntry,
   deleteVatLedgerEntry,
   getWithholdingTaxLedger,
@@ -112,6 +119,12 @@ import {
   THAI_SSO_TEMPLATE_COLUMN_HELP,
 } from "@/lib/thai-sso-filing-template"
 import { downloadThaiSsoEformV15FromPayrollXlsx } from "@/lib/thai-sso-eform-v15"
+import {
+  downloadThaiSsoSps110FromPayrollXlsx,
+  type Sps110EmployerInfo,
+} from "@/lib/thai-sso-sps1-10-export"
+import { downloadThaiSsoEserviceBulkFromPayrollXlsx } from "@/lib/thai-sso-eservice-bulk-export"
+import { type SsoFilingWageMode } from "@/lib/payroll-utils"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 
@@ -127,6 +140,8 @@ type VatDraft = {
   vat_amount: string
   total_amount: string
   vat_status: string
+  invoice_evidence_status: "required_pending" | "received" | "not_required" | "unobtainable"
+  invoice_evidence_reason_code: string
   filing_status: "draft" | "submitted"
   submitted_at: string
   submitted_by: string
@@ -298,6 +313,8 @@ function emptyVat(taxMonth: string, defaultStoreName = ""): VatDraft {
     vat_amount: "",
     total_amount: "",
     vat_status: "",
+    invoice_evidence_status: "required_pending",
+    invoice_evidence_reason_code: "",
     filing_status: "draft",
     submitted_at: "",
     submitted_by: "",
@@ -804,6 +821,7 @@ export function AdminAccountingCompliance({
   /** 부가세(PP30) 요약 탭: 조건 변경 시 초기화, 검색 후에만 API 조회 */
   const [pp30Queried, setPp30Queried] = React.useState(false)
   const [pp30SearchSeq, setPp30SearchSeq] = React.useState(0)
+  const [pp30XlsxExporting, setPp30XlsxExporting] = React.useState(false)
   const pp30FilterBootRef = React.useRef(true)
   const vatLoadSeqRef = React.useRef(0)
   const whtLoadSeqRef = React.useRef(0)
@@ -847,6 +865,7 @@ export function AdminAccountingCompliance({
   const [ssoAttachmentInput, setSsoAttachmentInput] = React.useState("")
   const [ssoEvidenceUploading, setSsoEvidenceUploading] = React.useState(false)
   const [ssoSubmissionSaving, setSsoSubmissionSaving] = React.useState(false)
+  const [ssoFilingWageMode, setSsoFilingWageMode] = React.useState<SsoFilingWageMode>("contributable")
   const [ssoWorkflowRow, setSsoWorkflowRow] = React.useState<AccountingWorkflowStatusRow | null>(null)
   const [pnd1PayerTaxId, setPnd1PayerTaxId] = React.useState("")
   const [pnd1PayerBranchNo, setPnd1PayerBranchNo] = React.useState("00000")
@@ -878,6 +897,30 @@ export function AdminAccountingCompliance({
     fundRatePercent: "",
   })
   const [kt20kData, setKt20kData] = React.useState<Kt20kSummaryResponse | null>(null)
+  const [storeTaxTaxpayerName, setStoreTaxTaxpayerName] = React.useState("")
+  const [storeTaxTaxId, setStoreTaxTaxId] = React.useState("")
+  const [storeTaxBranchNo, setStoreTaxBranchNo] = React.useState("00000")
+  const [storeTaxPlace, setStoreTaxPlace] = React.useState("")
+  const [storeTaxSsoAccountNo, setStoreTaxSsoAccountNo] = React.useState("")
+  const [storeTaxSsoBranchCode, setStoreTaxSsoBranchCode] = React.useState("")
+  const [storeTaxSsoAddress, setStoreTaxSsoAddress] = React.useState("")
+  const [storeTaxSsoPostcode, setStoreTaxSsoPostcode] = React.useState("")
+  const [storeTaxSsoPhone, setStoreTaxSsoPhone] = React.useState("")
+  const [storeTaxSsoFax, setStoreTaxSsoFax] = React.useState("")
+  const [storeTaxSsoEmail, setStoreTaxSsoEmail] = React.useState("")
+  const [storeTaxProfileLoading, setStoreTaxProfileLoading] = React.useState(false)
+  const [storeTaxProfileSaving, setStoreTaxProfileSaving] = React.useState(false)
+  const [storeTaxProfileTableMissing, setStoreTaxProfileTableMissing] = React.useState(false)
+  const [pp30PeriodClose, setPp30PeriodClose] = React.useState<{
+    isClosed: boolean
+    closedViaAll: boolean
+    storeScope: string
+  } | null>(null)
+  const [pp30PeriodCloseLoading, setPp30PeriodCloseLoading] = React.useState(false)
+  const [vatStoreNameGaps, setVatStoreNameGaps] = React.useState<VatLedgerStoreNameGapsReportDto | null>(null)
+  const [vatStoreNameGapsLoading, setVatStoreNameGapsLoading] = React.useState(false)
+  const [intercompanyVatRecon, setIntercompanyVatRecon] = React.useState<IntercompanyVatReconcileReportDto | null>(null)
+  const [intercompanyVatReconLoading, setIntercompanyVatReconLoading] = React.useState(false)
   const [citAdjustmentsDraft, setCitAdjustmentsDraft] = React.useState<
     { adjustmentType: "add_back" | "deduction"; itemName: string; amount: string; memo: string }[]
   >([])
@@ -998,12 +1041,43 @@ export function AdminAccountingCompliance({
   const loadPeriods = React.useCallback(async () => {
     if (!canUse) return
     try {
-      const data = await getAccountingPeriods({ userRole: role })
+      const data = await getAccountingPeriods({
+        userRole: role,
+        storeFilter: storeTb && storeTb !== "All" ? storeTb : undefined,
+      })
       setPeriods(data.periods || [])
     } catch {
       setPeriods([])
     }
-  }, [canUse, role])
+  }, [canUse, role, storeTb])
+
+  const loadPp30PeriodClose = React.useCallback(async () => {
+    if (!canUse || storeFilterForLedger === "All") {
+      setPp30PeriodClose(null)
+      return
+    }
+    setPp30PeriodCloseLoading(true)
+    try {
+      const data = await getAccountingPeriodCloseStatus({
+        userRole: role,
+        yearMonth: taxMonth,
+        storeFilter: storeFilterForLedger,
+      })
+      if (data.snapshot) {
+        setPp30PeriodClose({
+          isClosed: data.snapshot.isClosed,
+          closedViaAll: data.snapshot.closedViaAll,
+          storeScope: data.snapshot.storeScope,
+        })
+      } else {
+        setPp30PeriodClose(null)
+      }
+    } catch {
+      setPp30PeriodClose(null)
+    } finally {
+      setPp30PeriodCloseLoading(false)
+    }
+  }, [canUse, role, taxMonth, storeFilterForLedger])
 
   const loadTrial = React.useCallback(async () => {
     if (!canUse) return
@@ -1039,6 +1113,13 @@ export function AdminAccountingCompliance({
         vat_amount: String(r.vat_amount ?? ""),
         total_amount: String(r.total_amount ?? ""),
         vat_status: String(r.vat_status || ""),
+        invoice_evidence_status:
+          r.invoice_evidence_status === "received" ||
+          r.invoice_evidence_status === "not_required" ||
+          r.invoice_evidence_status === "unobtainable"
+            ? (r.invoice_evidence_status as "received" | "not_required" | "unobtainable")
+            : "required_pending",
+        invoice_evidence_reason_code: String(r.invoice_evidence_reason_code || ""),
         filing_status: normalizeLedgerFilingStatus(r.filing_status),
         submitted_at: String(r.submitted_at || ""),
         submitted_by: String(r.submitted_by || ""),
@@ -1047,6 +1128,162 @@ export function AdminAccountingCompliance({
       })),
     [taxMonth]
   )
+
+  const loadStoreTaxFilingProfileForm = React.useCallback(async () => {
+    if (!canUse || storeFilterForLedger === "All") {
+      setStoreTaxTaxpayerName("")
+      setStoreTaxTaxId("")
+      setStoreTaxBranchNo("00000")
+      setStoreTaxPlace("")
+      setStoreTaxSsoAccountNo("")
+      setStoreTaxSsoBranchCode("")
+      setStoreTaxSsoAddress("")
+      setStoreTaxSsoPostcode("")
+      setStoreTaxSsoPhone("")
+      setStoreTaxSsoFax("")
+      setStoreTaxSsoEmail("")
+      return
+    }
+    setStoreTaxProfileLoading(true)
+    try {
+      const { profile } = await getStoreTaxFilingProfile(storeFilterForLedger)
+      setStoreTaxTaxpayerName(String(profile?.taxpayerName || ""))
+      setStoreTaxTaxId(String(profile?.taxId || ""))
+      setStoreTaxBranchNo(String(profile?.branchNo || "00000") || "00000")
+      setStoreTaxPlace(String(profile?.placeOfBusiness || ""))
+      setStoreTaxSsoAccountNo(String(profile?.ssoAccountNo || ""))
+      setStoreTaxSsoBranchCode(String(profile?.ssoBranchCode || ""))
+      setStoreTaxSsoAddress(String(profile?.ssoOfficeAddress || ""))
+      setStoreTaxSsoPostcode(String(profile?.ssoPostcode || ""))
+      setStoreTaxSsoPhone(String(profile?.ssoPhone || ""))
+      setStoreTaxSsoFax(String(profile?.ssoFax || ""))
+      setStoreTaxSsoEmail(String(profile?.ssoEmail || ""))
+      setStoreTaxProfileTableMissing(false)
+    } catch {
+      setStoreTaxProfileTableMissing(true)
+    } finally {
+      setStoreTaxProfileLoading(false)
+    }
+  }, [canUse, storeFilterForLedger])
+
+  const loadVatStoreNameGaps = React.useCallback(async () => {
+    if (!canUse) return
+    setVatStoreNameGapsLoading(true)
+    try {
+      const { report, error } = await getVatLedgerStoreNameGaps({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        storeFilter: storeFilterForLedger,
+      })
+      if (error) {
+        setVatStoreNameGaps(null)
+        return
+      }
+      setVatStoreNameGaps(report)
+    } catch {
+      setVatStoreNameGaps(null)
+    } finally {
+      setVatStoreNameGapsLoading(false)
+    }
+  }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
+
+  const loadIntercompanyVatRecon = React.useCallback(async () => {
+    if (!canUse || storeFilterForLedger === "All") {
+      setIntercompanyVatRecon(null)
+      return
+    }
+    setIntercompanyVatReconLoading(true)
+    try {
+      const { report, error } = await getIntercompanyVatReconcile({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        storeFilter: storeFilterForLedger,
+      })
+      if (error) {
+        setIntercompanyVatRecon(null)
+        return
+      }
+      setIntercompanyVatRecon(report)
+    } catch {
+      setIntercompanyVatRecon(null)
+    } finally {
+      setIntercompanyVatReconLoading(false)
+    }
+  }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
+
+  const saveStoreTaxFilingProfileForm = React.useCallback(async () => {
+    if (!canUse || storeFilterForLedger === "All") return
+    if (!canWriteCompliance) {
+      appAlert(t("accCompStoreTaxProfileNoWrite"))
+      return
+    }
+    setStoreTaxProfileSaving(true)
+    try {
+      const res = await saveStoreTaxFilingProfile({
+        storeCode: storeFilterForLedger,
+        taxpayerName: storeTaxTaxpayerName.trim(),
+        taxId: storeTaxTaxId.replace(/\D/g, ""),
+        branchNo: storeTaxBranchNo.replace(/\D/g, "") || "00000",
+        placeOfBusiness: storeTaxPlace.trim(),
+        ssoAccountNo: storeTaxSsoAccountNo.trim(),
+        ssoBranchCode: storeTaxSsoBranchCode.trim(),
+        ssoOfficeAddress: storeTaxSsoAddress.trim(),
+        ssoPostcode: storeTaxSsoPostcode.replace(/\D/g, ""),
+        ssoPhone: storeTaxSsoPhone.trim(),
+        ssoFax: storeTaxSsoFax.trim(),
+        ssoEmail: storeTaxSsoEmail.trim(),
+      })
+      if (res.error === "TABLE_NOT_DEPLOYED") {
+        setStoreTaxProfileTableMissing(true)
+        appAlert(t("accCompStoreTaxProfileTableMissing"))
+        return
+      }
+      if (!res.success) {
+        if (res.error === "INVALID_TAX_ID") appAlert(t("accCompStoreTaxProfileInvalidTaxId"))
+        else if (res.error === "TAXPAYER_NAME_REQUIRED") appAlert(t("accCompStoreTaxProfileNameRequired"))
+        else appAlert(t("msg_save_fail"))
+        return
+      }
+      if (res.profile) {
+        setStoreTaxTaxpayerName(res.profile.taxpayerName)
+        setStoreTaxTaxId(res.profile.taxId)
+        setStoreTaxBranchNo(res.profile.branchNo)
+        setStoreTaxPlace(res.profile.placeOfBusiness)
+        setStoreTaxSsoAccountNo(String(res.profile.ssoAccountNo || ""))
+        setStoreTaxSsoBranchCode(String(res.profile.ssoBranchCode || ""))
+        setStoreTaxSsoAddress(String(res.profile.ssoOfficeAddress || ""))
+        setStoreTaxSsoPostcode(String(res.profile.ssoPostcode || ""))
+        setStoreTaxSsoPhone(String(res.profile.ssoPhone || ""))
+        setStoreTaxSsoFax(String(res.profile.ssoFax || ""))
+        setStoreTaxSsoEmail(String(res.profile.ssoEmail || ""))
+      }
+      appAlert(t("msg_save_ok"))
+    } catch {
+      appAlert(t("msg_save_fail"))
+    } finally {
+      setStoreTaxProfileSaving(false)
+    }
+  }, [
+    canUse,
+    canWriteCompliance,
+    storeFilterForLedger,
+    storeTaxTaxpayerName,
+    storeTaxTaxId,
+    storeTaxBranchNo,
+    storeTaxPlace,
+    storeTaxSsoAccountNo,
+    storeTaxSsoBranchCode,
+    storeTaxSsoAddress,
+    storeTaxSsoPostcode,
+    storeTaxSsoPhone,
+    storeTaxSsoFax,
+    storeTaxSsoEmail,
+    t,
+  ])
 
   const loadVat = React.useCallback(async () => {
     if (!canUse) return
@@ -1074,6 +1311,10 @@ export function AdminAccountingCompliance({
       }
       if (data.error) appAlert(t("accCompLoadFail"))
       setVatRows(mapVat(data.entries || []))
+      if (seq === vatLoadSeqRef.current) {
+        void loadVatStoreNameGaps()
+        void loadIntercompanyVatRecon()
+      }
     } catch {
       if (seq !== vatLoadSeqRef.current) {
         return
@@ -1084,11 +1325,32 @@ export function AdminAccountingCompliance({
       if (seq === vatLoadSeqRef.current) setLoading(false)
       if (vatInFlightKeyRef.current === requestKey) vatInFlightKeyRef.current = null
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapVat])
+  }, [
+    canUse,
+    role,
+    taxMonth,
+    periodType,
+    ledgerStatusFilter,
+    storeFilterForLedger,
+    mapVat,
+    loadVatStoreNameGaps,
+    loadIntercompanyVatRecon,
+    t,
+  ])
 
   React.useEffect(() => {
     if (!pp30Queried || tab !== "summary") return
   }, [pp30Queried, tab, taxMonth, storeFilterForLedger, pp30SubView, vatRows.length, whtRows.length, loading])
+
+  React.useEffect(() => {
+    if (tab !== "summary") return
+    void loadStoreTaxFilingProfileForm()
+  }, [tab, storeFilterForLedger, loadStoreTaxFilingProfileForm])
+
+  React.useEffect(() => {
+    if (tab !== "summary") return
+    void loadPp30PeriodClose()
+  }, [tab, taxMonth, storeFilterForLedger, loadPp30PeriodClose])
 
   const mapWht = React.useCallback(
     (entries: Record<string, unknown>[]): WhtDraft[] =>
@@ -1723,11 +1985,15 @@ export function AdminAccountingCompliance({
     try {
       const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
       if (!rows || rows.length === 0) return
-      downloadThaiSsoFilingFromPayrollXlsx({ yearMonth: taxMonth, payrollRows: rows })
+      downloadThaiSsoFilingFromPayrollXlsx({
+        yearMonth: taxMonth,
+        payrollRows: rows,
+        filingWageMode: ssoFilingWageMode,
+      })
     } finally {
       setSsoPayrollExporting(false)
     }
-  }, [canUse, auth?.user, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
+  }, [canUse, auth?.user, ssoFilingWageMode, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
 
   const exportSsoEformV15FromPayroll = React.useCallback(async () => {
     if (!canUse || !auth?.user) return
@@ -1735,11 +2001,121 @@ export function AdminAccountingCompliance({
     try {
       const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
       if (!rows || rows.length === 0) return
-      downloadThaiSsoEformV15FromPayrollXlsx({ yearMonth: taxMonth, payrollRows: rows })
+      downloadThaiSsoEformV15FromPayrollXlsx({
+        yearMonth: taxMonth,
+        payrollRows: rows,
+        filingWageMode: ssoFilingWageMode,
+      })
     } finally {
       setSsoPayrollExporting(false)
     }
-  }, [canUse, auth?.user, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
+  }, [canUse, auth?.user, ssoFilingWageMode, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
+
+  const resolveSsoEmployerHeader = React.useCallback(async (): Promise<Sps110EmployerInfo> => {
+    let employer: Sps110EmployerInfo = { contributionRatePercent: "5.00" }
+    const year = Number(taxMonth.slice(0, 4))
+    if (Number.isFinite(year) && year >= 2000) {
+      try {
+        const res = await apiFetch(`/api/getKt20kSettings?year=${year}`)
+        const data = (await res.json()) as {
+          settings?: { companyName?: string; ssoOfficePhone?: string }
+        }
+        if (data.settings?.companyName) {
+          employer = {
+            ...employer,
+            companyName: data.settings.companyName,
+            phone: data.settings.ssoOfficePhone || undefined,
+          }
+        }
+      } catch {
+        /* optional KT20K header */
+      }
+    }
+    const pickStore = externalFiling ? storeTb : ssoStoreFilter
+    const effectiveStore =
+      isManager && managerStore ? managerStore : pickStore && pickStore !== "All" ? pickStore : ""
+    const branchLabel =
+      isManager && managerStore
+        ? managerStore
+        : pickStore && pickStore !== "All"
+          ? pickStore
+          : ""
+    if (branchLabel) employer = { ...employer, branchName: branchLabel }
+    if (effectiveStore) {
+      try {
+        const { profile } = await getStoreTaxFilingProfile(effectiveStore)
+        if (profile) {
+          employer = {
+            ...employer,
+            companyName: profile.taxpayerName || employer.companyName,
+            branchName: branchLabel || employer.branchName,
+            ssoAccountNo: String(profile.ssoAccountNo || "").trim(),
+            branchCode: String(profile.ssoBranchCode || "").trim(),
+            officeAddress: String(profile.ssoOfficeAddress || profile.placeOfBusiness || "").trim(),
+            postcode: String(profile.ssoPostcode || "").trim(),
+            phone: String(profile.ssoPhone || employer.phone || "").trim() || undefined,
+            fax: String(profile.ssoFax || "").trim(),
+            email: String(profile.ssoEmail || "").trim(),
+          }
+        }
+      } catch {
+        /* keep fallback header */
+      }
+    }
+    return employer
+  }, [externalFiling, isManager, managerStore, ssoStoreFilter, storeTb, taxMonth])
+
+  const exportEserviceBulkFromPayroll = React.useCallback(async () => {
+    if (!canUse || !auth?.user) return
+    setSsoPayrollExporting(true)
+    try {
+      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
+      if (!rows || rows.length === 0) return
+      const employer = await resolveSsoEmployerHeader()
+      downloadThaiSsoEserviceBulkFromPayrollXlsx({
+        yearMonth: taxMonth,
+        payrollRows: rows,
+        employer,
+        filingWageMode: ssoFilingWageMode,
+      })
+    } finally {
+      setSsoPayrollExporting(false)
+    }
+  }, [
+    canUse,
+    auth?.user,
+    fetchSsoPayrollRows,
+    resolveSsoEmployerHeader,
+    ssoFilingWageMode,
+    ssoPayrollRows,
+    taxMonth,
+  ])
+
+  const exportSps110FromPayroll = React.useCallback(async () => {
+    if (!canUse || !auth?.user) return
+    setSsoPayrollExporting(true)
+    try {
+      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
+      if (!rows || rows.length === 0) return
+      const employer = await resolveSsoEmployerHeader()
+      downloadThaiSsoSps110FromPayrollXlsx({
+        yearMonth: taxMonth,
+        payrollRows: rows,
+        employer,
+        filingWageMode: ssoFilingWageMode,
+      })
+    } finally {
+      setSsoPayrollExporting(false)
+    }
+  }, [
+    canUse,
+    auth?.user,
+    fetchSsoPayrollRows,
+    resolveSsoEmployerHeader,
+    ssoFilingWageMode,
+    ssoPayrollRows,
+    taxMonth,
+  ])
 
   const loadSsoWorkflowStatus = React.useCallback(async () => {
     if (!canUse) return
@@ -1865,7 +2241,7 @@ export function AdminAccountingCompliance({
 
   React.useEffect(() => {
     if (canUse && tab === "period") void loadPeriods()
-  }, [canUse, tab, loadPeriods])
+  }, [canUse, tab, loadPeriods, storeTb])
 
   React.useEffect(() => {
     if (canUse && tab === "period") void loadIncomeExpenseClosingPreview()
@@ -2146,10 +2522,17 @@ export function AdminAccountingCompliance({
           return
         }
       }
+      const periodStoreScope =
+        tab === "summary" && storeFilterForLedger !== "All"
+          ? storeFilterForLedger
+          : storeTb && storeTb !== "All"
+            ? storeTb
+            : "All"
       const res = await setAccountingPeriodClosed({
         userRole: role,
         yearMonth,
         closed,
+        storeScope: periodStoreScope,
         closedBy: auth.user,
         unlockReason: closed ? undefined : periodUnlockReason.trim(),
         unlockApprovedBy: closed ? undefined : periodUnlockApprovedBy.trim(),
@@ -2162,6 +2545,7 @@ export function AdminAccountingCompliance({
         throw new Error(res.error || "PERIOD_UPDATE_FAILED")
       }
       await loadPeriods()
+      if (tab === "summary") await loadPp30PeriodClose()
       appAlert(t("accCompSaved"))
     } catch {
       appAlert(t("msg_save_fail"))
@@ -2192,6 +2576,8 @@ export function AdminAccountingCompliance({
         vatAmount: Number(row.vat_amount) || 0,
         totalAmount: Number(row.total_amount) || 0,
         vatStatus: row.vat_status || null,
+        invoiceEvidenceStatus: row.invoice_evidence_status,
+        invoiceEvidenceReasonCode: row.invoice_evidence_reason_code || null,
         filingStatus: row.filing_status,
         submittedAt: row.submitted_at || null,
         submittedBy: row.submitted_by || null,
@@ -2212,6 +2598,32 @@ export function AdminAccountingCompliance({
         }
         if (res.error === "FORBIDDEN_WRITE") {
           appAlert(t("accCompNoWritePermission"))
+          return
+        }
+        if (res.error === "PERIOD_CLOSED") {
+          appAlert(t("accCompPeriodClosedBlocksVat"))
+          return
+        }
+        if (res.error === "EVIDENCE_REQUIRED_FOR_SUBMIT") {
+          appAlert(t("accCompEvidenceRequiredForSubmit"))
+          return
+        }
+        if (res.error === "EVIDENCE_PENDING_IN_MONTH") {
+          const rows = Array.isArray(res.pendingEvidenceRows) ? res.pendingEvidenceRows : []
+          const preview = rows
+            .slice(0, 8)
+            .map(
+              (x, i) =>
+                `${i + 1}. ${x.docDate || "-"} | ${x.storeName || "-"} | ${x.counterpartyName || "-"} | ${x.invoiceNumber || "-"}`
+            )
+            .join("\n")
+          const more =
+            Number(res.pendingEvidenceCount || rows.length) > rows.length
+              ? `\n... +${Number(res.pendingEvidenceCount || 0) - rows.length}건`
+              : ""
+          await appAlert(
+            `${t("accCompEvidencePendingInMonth")}\n\n${preview || t("accCompEvidenceRequiredForSubmit")}${more}`
+          )
           return
         }
         throw new Error(res.error)
@@ -2238,6 +2650,10 @@ export function AdminAccountingCompliance({
       if (!res.success) {
         if (res.error === "FORBIDDEN_WRITE") {
           appAlert(t("accCompNoWritePermission"))
+          return
+        }
+        if (res.error === "PERIOD_CLOSED") {
+          appAlert(t("accCompPeriodClosedBlocksVat"))
           return
         }
         throw new Error(res.error || "DELETE_FAILED")
@@ -2567,6 +2983,21 @@ export function AdminAccountingCompliance({
     () => vatInputRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [vatInputRows, ledgerStatusFilter]
   )
+  const vatInputClaimable = React.useMemo(() => {
+    const claimableRows = vatInputRowsFiltered.filter(
+      (r) => r.invoice_evidence_status === "received" || r.invoice_evidence_status === "not_required"
+    )
+    const pendingRows = vatInputRowsFiltered.filter((r) => r.invoice_evidence_status === "required_pending")
+    const unobtainableRows = vatInputRowsFiltered.filter((r) => r.invoice_evidence_status === "unobtainable")
+    return {
+      claimableVat: claimableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0),
+      pendingVat: pendingRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0),
+      unobtainableVat: unobtainableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0),
+      claimableCount: claimableRows.length,
+      pendingCount: pendingRows.length,
+      unobtainableCount: unobtainableRows.length,
+    }
+  }, [vatInputRowsFiltered])
   const nonPosOutputCount = React.useMemo(
     () => vatOutputRowsFiltered.filter((r) => !isPosAutoVatOutputRow(r)).length,
     [vatOutputRowsFiltered]
@@ -2751,6 +3182,158 @@ export function AdminAccountingCompliance({
     if (taxSummary.period.startMonth === taxSummary.period.endMonth) return taxSummary.period.startMonth
     return `${taxSummary.period.startMonth} ~ ${taxSummary.period.endMonth}`
   }, [taxSummary?.period, taxMonth])
+
+  const handleDownloadPp30VatReconcileXlsx = React.useCallback(async () => {
+    if (!pp30Queried) {
+      appAlert(t("accCompPp30ExportNeedSearch"))
+      return
+    }
+    setPp30XlsxExporting(true)
+    try {
+      const y = Number(taxMonth.slice(0, 4))
+      const profileTaxDigits = storeTaxTaxId.replace(/\D/g, "").trim()
+      const useStoreProfile =
+        storeFilterForLedger !== "All" && storeTaxTaxpayerName.trim() && profileTaxDigits.length === 13
+      let companyName = useStoreProfile
+        ? storeTaxTaxpayerName.trim()
+        : String(kt20kEmployer.companyName || "").trim()
+      let taxDigits = useStoreProfile
+        ? profileTaxDigits
+        : String(etaxTaxId || kt20kEmployer.companyTaxId || "")
+            .replace(/\D/g, "")
+            .trim()
+      const placeOfBusiness = useStoreProfile ? storeTaxPlace.trim() : ""
+      const branchNo = useStoreProfile
+        ? storeTaxBranchNo.replace(/\D/g, "").trim() || "00000"
+        : String(etaxBranchCode || "").trim() || "00000"
+      if (!useStoreProfile && (!companyName || taxDigits.length !== 13) && canUse && Number.isFinite(y) && y >= 2000) {
+        try {
+          const data = await getKt20kSettings({ userRole: role, year: y })
+          companyName = companyName || String(data.settings.companyName || "").trim()
+          const t2 = String(data.settings.companyTaxId || "")
+            .replace(/\D/g, "")
+            .trim()
+          if (t2.length === 13) taxDigits = t2
+        } catch {
+          // ignore
+        }
+      }
+      const branchOfficeLabel = (() => {
+        const st = String(storeTb || "").trim()
+        if (st && st !== "All") return `${st} ${branchNo}`.trim()
+        return branchNo ? `สำนักงานใหญ่ ${branchNo}` : ""
+      })()
+      const companyBlock = {
+        companyName,
+        companyTaxIdDigits: taxDigits,
+        placeOfBusiness,
+        branchOfficeLabel,
+      }
+      const mod = await import("@/lib/pp30-vat-reconcile-xlsx")
+      const gaps = mod.listPp30VatReconcileFieldGaps(companyBlock)
+      if (gaps.required.length > 0) {
+        const fields = gaps.required.map((k) => t(`accCompPp30ExportField_${k}`)).join(", ")
+        appAlert(tr(t, "accCompPp30ExportRequiredMissing", { fields }))
+        return
+      }
+      if (gaps.optional.length > 0) {
+        appAlert(
+          `${tr(t, "accCompPp30ExportOptionalGaps", {
+            fields: gaps.optional.map((k) => t(`accCompPp30ExportField_${k}`)).join(", "),
+          })}\n${t("accCompPp30ExportRowGapsNote")}`
+        )
+      }
+      const periodDescriptionLine =
+        taxSummary?.period && taxSummary.period.startMonth !== taxSummary.period.endMonth
+          ? `สำหรับงวดภาษี ${summaryPeriodLabel}`
+          : mod.formatThaiVatPeriodLine(taxMonth)
+      let filingRound = mod.filingRoundLabelFromTaxMonth(taxMonth)
+      if (taxSummary?.period?.startMonth && taxSummary?.period?.endMonth) {
+        const a = taxSummary.period.startMonth
+        const b = taxSummary.period.endMonth
+        if (a !== b) filingRound = `${a.slice(5, 7)}-${a.slice(0, 4)} ~ ${b.slice(5, 7)}-${b.slice(0, 4)} (ยื่นปกติ)`
+      }
+      const toLedger = (r: VatDraft): VatLedgerRow => ({
+        id: r.id,
+        doc_date: r.doc_date,
+        tax_month: r.tax_month,
+        direction: r.direction,
+        counterparty_name: r.counterparty_name,
+        counterparty_tax_id: r.counterparty_tax_id,
+        invoice_number: r.invoice_number,
+        net_amount: r.net_amount,
+        vat_amount: r.vat_amount,
+        total_amount: r.total_amount,
+        vat_status: r.vat_status,
+        filing_status: r.filing_status,
+        submitted_at: r.submitted_at,
+        submitted_by: r.submitted_by,
+        memo: r.memo,
+        store_name: r.store_name,
+      })
+      const buf = mod.buildPp30VatReconcileXlsxBuffer({
+        taxMonth,
+        periodDescriptionLine,
+        company: companyBlock,
+        storeLabel: storeTb !== "All" ? storeTb : undefined,
+        outputRows: vatOutputRowsFiltered.map(toLedger),
+        inputRows: vatInputRowsFiltered.map(toLedger),
+        totals: {
+          outputNet: vatSettlement.outputNet,
+          outputVat: vatSettlement.outputVat,
+          inputNet: vatSettlement.inputNet,
+          inputVat: vatSettlement.inputVat,
+        },
+        filingStatusLabel: (fs) =>
+          String(fs || "").toLowerCase() === "submitted" ? "ยื่นแล้ว" : "รอยื่นแบบภาษี",
+        filingRoundLabel: filingRound,
+      })
+      const blob = new Blob([buf], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const safeStore = String(storeTb || "All")
+        .replace(/[^\w\u0E00-\u0E7F\-]+/g, "_")
+        .slice(0, 80)
+      a.download = `VAT-Reconcile_${taxMonth}_${safeStore}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      appAlert(t("msg_save_fail"))
+    } finally {
+      setPp30XlsxExporting(false)
+    }
+  }, [
+    pp30Queried,
+    taxMonth,
+    taxSummary?.period,
+    summaryPeriodLabel,
+    kt20kEmployer.companyName,
+    kt20kEmployer.companyTaxId,
+    etaxTaxId,
+    etaxBranchCode,
+    storeTb,
+    storeFilterForLedger,
+    storeTaxTaxpayerName,
+    storeTaxTaxId,
+    storeTaxBranchNo,
+    storeTaxPlace,
+    role,
+    canUse,
+    vatOutputRowsFiltered,
+    vatInputRowsFiltered,
+    vatSettlement.outputNet,
+    vatSettlement.outputVat,
+    vatSettlement.inputNet,
+    vatSettlement.inputVat,
+    t,
+    tr,
+  ])
+
   const closingDraftPayload = React.useMemo<IncomeExpenseClosingPreview | null>(() => {
     const raw = closingDraft?.payload
     if (!raw || typeof raw !== "object") return null
@@ -3744,6 +4327,13 @@ export function AdminAccountingCompliance({
         <TabsContent value="period" className={tabsContentClass}>
           <div className="text-[11px] text-muted-foreground mb-2">
             {t("accCompPeriodLockRoleHint")}
+            {storeTb && storeTb !== "All" ? (
+              <span className="block mt-1">
+                {t("store")}: <span className="font-mono">{storeTb}</span>
+              </span>
+            ) : (
+              <span className="block mt-1">{t("accCompVatPeriodPickStoreForLock")}</span>
+            )}
           </div>
           <Card>
             <CardContent className="pt-6 overflow-x-auto">
@@ -4702,7 +5292,308 @@ export function AdminAccountingCompliance({
                     {t("search")}
                   </Button>
                 </div>
+                <div className="shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                      "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                      "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                      "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                    )}
+                    disabled={loading || summaryLoading || pp30XlsxExporting}
+                    onClick={() => void handleDownloadPp30VatReconcileXlsx()}
+                  >
+                    <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
+                    {pp30XlsxExporting ? t("loading") : t("accCompPp30VatReconcileXlsx")}
+                  </Button>
+                </div>
               </div>
+
+              {storeFilterForLedger !== "All" ? (
+                <Card className="border-border/80 bg-muted/10">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{t("accCompStoreTaxProfileTitle")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompStoreTaxProfileHint")}</p>
+                    {storeTaxProfileTableMissing ? (
+                      <p className="text-xs text-amber-800 dark:text-amber-200/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-md px-3 py-2">
+                        {t("accCompStoreTaxProfileTableMissing")}
+                      </p>
+                    ) : null}
+                    <div className="space-y-2 rounded-md border border-border/60 bg-muted/10 px-3 py-3">
+                      <div className="text-xs font-medium text-foreground/90">
+                        PP30 / e-Filing Header (부가세 신고 헤더 자동채움)
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">ชื่อผู้เสียภาษี / 납세자명</div>
+                          <Input
+                            placeholder={t("accCompStoreTaxProfileNamePh")}
+                            value={storeTaxTaxpayerName}
+                            onChange={(e) => setStoreTaxTaxpayerName(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">เลขผู้เสียภาษี 13 หลัก / TIN</div>
+                          <Input
+                            placeholder={t("accCompStoreTaxProfileTaxIdPh")}
+                            value={storeTaxTaxId}
+                            onChange={(e) => setStoreTaxTaxId(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">สาขา / 지점번호</div>
+                          <Input
+                            placeholder={t("accCompStoreTaxProfileBranchPh")}
+                            value={storeTaxBranchNo}
+                            onChange={(e) => setStoreTaxBranchNo(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">สถานประกอบการ / 사업장 주소</div>
+                          <Input
+                            placeholder={t("accCompStoreTaxProfilePlacePh")}
+                            value={storeTaxPlace}
+                            onChange={(e) => setStoreTaxPlace(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2 rounded-md border border-border/60 bg-muted/10 px-3 py-3">
+                      <div className="text-xs font-medium text-foreground/90">
+                        SSO Header (สปส.1-10 표지 자동채움)
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">เลขที่บัญชี / SSO 계정번호</div>
+                          <Input
+                            placeholder="예: 2673642707"
+                            value={storeTaxSsoAccountNo}
+                            onChange={(e) => setStoreTaxSsoAccountNo(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">ลำดับที่สาขา / 지점코드</div>
+                          <Input
+                            placeholder="예: 0002"
+                            value={storeTaxSsoBranchCode}
+                            onChange={(e) => setStoreTaxSsoBranchCode(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">รหัสไปรษณีย์ / 우편번호</div>
+                          <Input
+                            placeholder="예: 12130"
+                            value={storeTaxSsoPostcode}
+                            onChange={(e) => setStoreTaxSsoPostcode(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">โทรศัพท์ / 전화번호</div>
+                          <Input
+                            placeholder="예: 097-1141183"
+                            value={storeTaxSsoPhone}
+                            onChange={(e) => setStoreTaxSsoPhone(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">โทรสาร / 팩스</div>
+                          <Input
+                            placeholder="팩스 번호"
+                            value={storeTaxSsoFax}
+                            onChange={(e) => setStoreTaxSsoFax(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">อีเมล / 이메일</div>
+                          <Input
+                            placeholder="example@company.com"
+                            value={storeTaxSsoEmail}
+                            onChange={(e) => setStoreTaxSsoEmail(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">ที่ตั้งสำนักงานใหญ่/สาขา / 주소</div>
+                          <Input
+                            placeholder="예: Future Park Rangsit B Floor ..."
+                            value={storeTaxSsoAddress}
+                            onChange={(e) => setStoreTaxSsoAddress(e.target.value)}
+                            disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void loadStoreTaxFilingProfileForm()}
+                        disabled={storeTaxProfileLoading || storeTaxProfileSaving}
+                      >
+                        {storeTaxProfileLoading ? t("loading") : t("search")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void saveStoreTaxFilingProfileForm()}
+                        disabled={storeTaxProfileSaving || storeTaxProfileLoading || !canWriteCompliance}
+                      >
+                        {storeTaxProfileSaving ? t("loading") : t("accCompSave")}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
+                  {t("accCompStoreTaxProfilePickStore")}
+                </p>
+              )}
+
+              {storeFilterForLedger !== "All" ? (
+                <Card className="border-border/80 bg-muted/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{t("accCompVatPeriodLockTitle")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompVatPeriodLockHint")}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs">{taxMonth}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="font-mono text-xs">{storeFilterForLedger}</span>
+                      {pp30PeriodCloseLoading ? (
+                        <span className="text-xs text-muted-foreground">{t("loading")}</span>
+                      ) : pp30PeriodClose?.isClosed ? (
+                        <span className="text-xs text-amber-700 dark:text-amber-300">{t("accCompPeriodClosedLabel")}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{t("accCompPeriodProgress")}</span>
+                      )}
+                    </div>
+                    {pp30PeriodClose?.closedViaAll ? (
+                      <p className="text-xs text-amber-800/90 dark:text-amber-200/80">{t("accCompVatPeriodClosedViaAll")}</p>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={pp30PeriodClose?.isClosed ? "secondary" : "default"}
+                      disabled={
+                        pp30PeriodCloseLoading ||
+                        (pp30PeriodClose?.isClosed ? !canApproveUnlock : !canApproveCompliance)
+                      }
+                      onClick={() => void togglePeriod(taxMonth, !pp30PeriodClose?.isClosed)}
+                    >
+                      {pp30PeriodClose?.isClosed ? t("accCompPeriodOpen") : t("accCompPeriodClose")}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">
+                  {t("accCompVatPeriodPickStoreForLock")}
+                </p>
+              )}
+
+              {storeFilterForLedger !== "All" ? (
+                <Card className="border-border/80 bg-muted/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">본사발행 ↔ 매장매입 대사 (월마감 전 점검)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void loadIntercompanyVatRecon()}
+                        disabled={intercompanyVatReconLoading}
+                      >
+                        {intercompanyVatReconLoading ? t("loading") : t("accCompReloadReconcile")}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        기준: {taxMonth} / {storeFilterForLedger}
+                      </span>
+                    </div>
+                    {intercompanyVatRecon ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
+                          <div>본사발행 건수: <b>{intercompanyVatRecon.issuedCount.toLocaleString()}</b></div>
+                          <div>일치 건수: <b>{intercompanyVatRecon.matchedCount.toLocaleString()}</b></div>
+                          <div>매장누락: <b>{intercompanyVatRecon.missingInStoreCount.toLocaleString()}</b></div>
+                          <div>매장초과: <b>{intercompanyVatRecon.extraInStoreCount.toLocaleString()}</b></div>
+                          <div>금액불일치: <b>{intercompanyVatRecon.diffCount.toLocaleString()}</b></div>
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                          <div>본사 발행공급가: <b>{intercompanyVatRecon.hqIssuedNetTotal.toLocaleString()}</b></div>
+                          <div>매장 매입공급가: <b>{intercompanyVatRecon.storeInputNetTotal.toLocaleString()}</b></div>
+                          <div>매장 매입VAT: <b>{intercompanyVatRecon.storeInputVatTotal.toLocaleString()}</b></div>
+                          <div>
+                            공급가 차이:{" "}
+                            <b className={Math.abs(Number(intercompanyVatRecon.diffNetTotal || 0)) > 0.01 ? "text-rose-600" : ""}>
+                              {intercompanyVatRecon.diffNetTotal.toLocaleString()}
+                            </b>
+                          </div>
+                        </div>
+                        {intercompanyVatRecon.rows.length > 0 ? (
+                          <div className="rounded border border-border/60 overflow-auto max-h-56">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b bg-muted/30">
+                                  <th className="text-left p-2">상태</th>
+                                  <th className="text-left p-2">문서번호</th>
+                                  <th className="text-right p-2">본사발행</th>
+                                  <th className="text-right p-2">매장매입</th>
+                                  <th className="text-right p-2">차이</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {intercompanyVatRecon.rows.slice(0, 20).map((r, idx) => (
+                                  <tr key={`${r.referenceNo}-${idx}`} className="border-b border-border/40">
+                                    <td className="p-2">
+                                      {r.status === "missing_in_store_input"
+                                        ? "매장누락"
+                                        : r.status === "extra_in_store_input"
+                                          ? "매장초과"
+                                          : "금액차이"}
+                                    </td>
+                                    <td className="p-2 font-mono">{r.referenceNo || "-"}</td>
+                                    <td className="p-2 text-right">{r.hqIssuedNet.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{r.storeInputNet.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{r.diffNet.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                            본사발행 기준으로 매장 매입자료가 현재 일치합니다.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        검색 후 자동 계산됩니다. (본사 발행번호 `reference_no` 기준)
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              <p className="text-[11px] text-muted-foreground">{t("accCompPp30XlsxIncludesEfiling")}</p>
 
               {!pp30Queried ? (
                 <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
@@ -4710,6 +5601,24 @@ export function AdminAccountingCompliance({
                 </div>
               ) : (
                 <>
+              {vatStoreNameGapsLoading ? (
+                <p className="text-xs text-muted-foreground">{t("accCompStoreNameGapsLoading")}</p>
+              ) : null}
+              {vatStoreNameGaps && vatStoreNameGaps.emptyStoreNameRowCount > 0 ? (
+                <div className="rounded-md border border-amber-300/80 bg-amber-50/90 dark:bg-amber-950/30 px-3 py-3 text-xs space-y-2">
+                  <div className="font-medium text-amber-900 dark:text-amber-100">{t("accCompStoreNameGapsTitle")}</div>
+                  <p className="text-amber-800/90 dark:text-amber-200/80 leading-relaxed whitespace-pre-line">
+                    {tr(t, "accCompStoreNameGapsBody", {
+                      count: String(vatStoreNameGaps.emptyStoreNameRowCount),
+                      outVat: Math.round(vatStoreNameGaps.emptyStoreNameOutputVat).toLocaleString(),
+                      inVat: Math.round(vatStoreNameGaps.emptyStoreNameInputVat).toLocaleString(),
+                    })}
+                  </p>
+                  {storeFilterForLedger !== "All" ? (
+                    <p className="text-amber-800/80 dark:text-amber-200/70">{t("accCompStoreNameGapsPerStoreNote")}</p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
                 {allowedPp30Views.includes("output") && (
                   <Button
@@ -5047,6 +5956,47 @@ export function AdminAccountingCompliance({
                                 )
                               }
                             />
+                            <Select
+                              value={row.invoice_evidence_status}
+                              onValueChange={(v) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          invoice_evidence_status: v as
+                                            | "required_pending"
+                                            | "received"
+                                            | "not_required"
+                                            | "unobtainable",
+                                        }
+                                      : x
+                                  )
+                                )
+                              }
+                            >
+                              <SelectTrigger className="md:col-span-2">
+                                <SelectValue placeholder="증빙 상태" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="required_pending">증빙미완료</SelectItem>
+                                <SelectItem value="received">증빙완료</SelectItem>
+                                <SelectItem value="not_required">증빙불요</SelectItem>
+                                <SelectItem value="unobtainable">수취불가/신고제외</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              className="md:col-span-2"
+                              placeholder="증빙 사유 코드 (small_amount, supplier_refused...)"
+                              value={row.invoice_evidence_reason_code}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx ? { ...x, invoice_evidence_reason_code: e.target.value } : x
+                                  )
+                                )
+                              }
+                            />
                             <Input
                               className="md:col-span-2"
                               placeholder={t("accCompPhMemo")}
@@ -5119,6 +6069,23 @@ export function AdminAccountingCompliance({
                     <div>
                       {t("accCompVatRowsPurchase")}: {vatInputRowsFiltered.length.toLocaleString()} / {t("accCompVatTotalRows")}:{" "}
                       {(taxSummary?.vat.rowCount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs rounded-md border border-dashed border-border/70 bg-muted/10 p-2">
+                    <div>
+                      신고가능 매입VAT: <b>{Math.round(vatInputClaimable.claimableVat).toLocaleString()}</b>
+                    </div>
+                    <div>
+                      증빙미완료 VAT: <b>{Math.round(vatInputClaimable.pendingVat).toLocaleString()}</b>
+                    </div>
+                    <div>
+                      신고제외 VAT: <b>{Math.round(vatInputClaimable.unobtainableVat).toLocaleString()}</b>
+                    </div>
+                    <div>
+                      체크 건수(완료/미완료/제외):{" "}
+                      <b>
+                        {vatInputClaimable.claimableCount}/{vatInputClaimable.pendingCount}/{vatInputClaimable.unobtainableCount}
+                      </b>
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">{t("accCompInputVatFromExpenseHint")}</p>
@@ -5368,6 +6335,47 @@ export function AdminAccountingCompliance({
                               onChange={(e) =>
                                 setVatRows((prev) =>
                                   prev.map((x, i) => (i === idx ? { ...x, vat_status: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Select
+                              value={row.invoice_evidence_status}
+                              onValueChange={(v) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          invoice_evidence_status: v as
+                                            | "required_pending"
+                                            | "received"
+                                            | "not_required"
+                                            | "unobtainable",
+                                        }
+                                      : x
+                                  )
+                                )
+                              }
+                            >
+                              <SelectTrigger className="md:col-span-2">
+                                <SelectValue placeholder="증빙 상태" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="required_pending">증빙미완료</SelectItem>
+                                <SelectItem value="received">증빙완료</SelectItem>
+                                <SelectItem value="not_required">증빙불요</SelectItem>
+                                <SelectItem value="unobtainable">수취불가/신고제외</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              className="md:col-span-2"
+                              placeholder="증빙 사유 코드 (small_amount, supplier_refused...)"
+                              value={row.invoice_evidence_reason_code}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx ? { ...x, invoice_evidence_reason_code: e.target.value } : x
+                                  )
                                 )
                               }
                             />
@@ -6342,6 +7350,22 @@ export function AdminAccountingCompliance({
                     </Select>
                   </div>
                 ) : null}
+                <div className="shrink-0">
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompSsoFilingWageMode")}</div>
+                  <Select
+                    value={ssoFilingWageMode}
+                    onValueChange={(v) => setSsoFilingWageMode(v as SsoFilingWageMode)}
+                  >
+                    <SelectTrigger className="h-9 w-[220px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contributable">{t("accCompSsoFilingWageContributable")}</SelectItem>
+                      <SelectItem value="gross">{t("accCompSsoFilingWageGross")}</SelectItem>
+                      <SelectItem value="basic">{t("accCompSsoFilingWageBasic")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button
                   type="button"
                   variant="secondary"
@@ -6349,6 +7373,16 @@ export function AdminAccountingCompliance({
                   disabled={ssoPayrollLoading}
                 >
                   {ssoPayrollLoading ? t("loading") : t("accCompSsoLoadPayrollSnapshot")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => void exportEserviceBulkFromPayroll()}
+                  disabled={ssoPayrollExporting || !ssoStep1Ready}
+                  title={t("accCompSsoEserviceBulkHint")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {ssoPayrollExporting ? t("loading") : t("accCompSsoEserviceBulkFromPayroll")}
                 </Button>
                 <Button
                   type="button"
@@ -6368,6 +7402,16 @@ export function AdminAccountingCompliance({
                 >
                   <Download className="h-4 w-4 mr-2" />
                   {ssoPayrollExporting ? t("loading") : t("accCompSsoEformV15FromPayroll")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void exportSps110FromPayroll()}
+                  disabled={ssoPayrollExporting || !ssoStep1Ready}
+                  title={t("accCompSsoSps110Hint")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {ssoPayrollExporting ? t("loading") : t("accCompSsoSps110FromPayroll")}
                 </Button>
                 <Button
                   type="button"

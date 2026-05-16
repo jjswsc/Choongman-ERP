@@ -4,7 +4,10 @@ import {
   calcSSO,
   grossWageBeforeSSO,
   otMinutesForPayroll,
+  roundSsoContributionBaht,
+  ssoContributableWageBaht,
   ssoContributionBaseWage,
+  resolveSsoFilingWageBaht,
 } from './payroll-utils'
 
 describe('payroll-utils', () => {
@@ -86,18 +89,63 @@ describe('payroll-utils', () => {
     })
   })
 
+  describe('ssoContributableWageBaht', () => {
+    it('applies 1650 floor when wage below minimum', () => {
+      expect(ssoContributableWageBaht(1000, 2026)).toBe(1650)
+    })
+
+    it('keeps zero wage as zero', () => {
+      expect(ssoContributableWageBaht(0, 2026)).toBe(0)
+    })
+
+    it('caps at year ceiling', () => {
+      expect(ssoContributableWageBaht(20000, 2026)).toBe(17500)
+    })
+  })
+
+  describe('roundSsoContributionBaht', () => {
+    it('rounds up from 50 satang', () => {
+      expect(roundSsoContributionBaht(82.5)).toBe(83)
+    })
+
+    it('truncates below 50 satang', () => {
+      expect(roundSsoContributionBaht(82.49)).toBe(82)
+    })
+  })
+
   describe('calcSSO', () => {
     it('급여 10000 → contributable 10000, 5% = 500', () => {
       expect(calcSSO(10000, 2025)).toBe(500)
     })
 
     it('급여가 ceiling 초과 시 contributable=ceiling, maxDed 적용', () => {
-      // 20000 > 15000 → contributable=15000, floor(15000*0.05)=750, min(750,750)=750
       expect(calcSSO(20000, 2025)).toBe(750)
     })
 
-    it('급여가 ceiling 이하면 5% 그대로', () => {
-      expect(calcSSO(10000, 2025)).toBe(500)
+    it('2026: 17000 → 850', () => {
+      expect(calcSSO(17000, 2026)).toBe(850)
+    })
+
+    it('2026: below 1650 uses floor then 5%', () => {
+      expect(calcSSO(1200, 2026)).toBe(83)
+    })
+
+    it('2026: above ceiling 17500 → maxDed 875', () => {
+      expect(calcSSO(30000, 2026)).toBe(875)
+    })
+  })
+
+  describe('resolveSsoFilingWageBaht', () => {
+    const row = {
+      ssoBase: 15000,
+      ssoGrossWage: 18000,
+      ssoContributableWage: 17500,
+    }
+
+    it('picks field by mode', () => {
+      expect(resolveSsoFilingWageBaht(row, 'basic')).toBe(15000)
+      expect(resolveSsoFilingWageBaht(row, 'gross')).toBe(18000)
+      expect(resolveSsoFilingWageBaht(row, 'contributable')).toBe(17500)
     })
   })
 })

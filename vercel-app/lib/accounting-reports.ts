@@ -415,14 +415,23 @@ async function getDirectInboundPurchasesByVendor(
   if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
 
   const rows = (await supabaseSelectFilter('stock_logs', filter, {
-    select: 'item_code,qty,unit_cost,vendor_target,location',
+    select: 'item_code,qty,unit_cost,vendor_target,location,reference_no',
     limit: BASE_LIMIT,
-  })) as { item_code?: string; qty?: number; unit_cost?: number | null; vendor_target?: string; location?: string }[] | null
+  })) as {
+    item_code?: string
+    qty?: number
+    unit_cost?: number | null
+    vendor_target?: string
+    location?: string
+    reference_no?: string | null
+  }[] | null
 
   const byVendor: Record<string, number> = {}
   const expenseBySubject = new Map<number | null, number>()
   for (const r of rows || []) {
-    if (String(r.vendor_target || '').trim() === 'From HQ') continue
+    const vendorTarget = String(r.vendor_target || '').trim()
+    const referenceNo = String(r.reference_no || '').trim()
+    if (vendorTarget === 'From HQ' && !referenceNo) continue
     if (excludeHqLocations && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
     const code = String(r.item_code || '').trim()
     if (!code) continue
@@ -435,7 +444,7 @@ async function getDirectInboundPurchasesByVendor(
       addToSubjectMap(expenseBySubject, routed.subjectId, line)
       continue
     }
-    const vRaw = String(r.vendor_target || '').trim()
+    const vRaw = vendorTarget
     const vKey = vRaw || '__pl_vendor_unknown__'
     byVendor[vKey] = (byVendor[vKey] || 0) + line
   }
@@ -1319,7 +1328,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
     inboundFilter += `&${buildStoreFieldOrIlikeFragment('location', storeFilter)}`
   }
   const inboundRaw = (await supabaseSelectFilter('stock_logs', inboundFilter, {
-    select: 'id,log_date,location,item_code,qty,unit_cost,vendor_target',
+    select: 'id,log_date,location,item_code,qty,unit_cost,vendor_target,reference_no',
     limit: BASE_LIMIT,
     order: 'log_date.desc',
   })) as {
@@ -1330,14 +1339,17 @@ export async function computeIncomeStatementPurchaseDrillDown(
     qty?: number
     unit_cost?: number | null
     vendor_target?: string
+    reference_no?: string | null
   }[] | null
 
   const excludeHqInbound = !isHQ && storeFilter === 'All'
   const inboundAcc: IncomeStatementPurchaseDrillInboundRow[] = []
   for (const r of inboundRaw || []) {
-    if (String(r.vendor_target || '').trim() === 'From HQ') continue
+    const vendorTarget = String(r.vendor_target || '').trim()
+    const referenceNo = String(r.reference_no || '').trim()
+    if (vendorTarget === 'From HQ' && !referenceNo) continue
     if (excludeHqInbound && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
-    if (!drillVendorMatchesInboundRow(vendorKey, r.vendor_target)) continue
+    if (!drillVendorMatchesInboundRow(vendorKey, vendorTarget)) continue
     const code = String(r.item_code || '').trim()
     if (!code) continue
     const qty = Number(r.qty) || 0
@@ -1354,7 +1366,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
       qty,
       unitCost,
       lineAmount,
-      vendorTarget: r.vendor_target != null ? String(r.vendor_target).trim() || null : null,
+      vendorTarget: vendorTarget || null,
     })
   }
   const inboundTruncated = inboundAcc.length > PURCHASE_DRILL_LIMIT

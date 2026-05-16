@@ -32,6 +32,7 @@ import {
   translatePayrollExplainDetail,
   translatePayrollExplainReason,
 } from "@/lib/payroll-explain-i18n"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 /** 급여 API·인증 오류: `msg` 또는 `message` 중 하나만 오는 경우 대비 */
 function pickApiMsg(data: { msg?: unknown; message?: unknown }): string {
@@ -800,7 +801,7 @@ export function AdminPayrollCalc() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-1.5 text-[10px] shrink-0"
+                        className={`${ADMIN_BTN_XS_CN} px-1.5 text-[10px] shrink-0`}
                         onClick={() => openEdit(i)}
                       >
                         ✏️ {t("pay_edit")}
@@ -857,7 +858,7 @@ export function AdminPayrollCalc() {
       </CardContent>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{t("pay_modal_title")}</DialogTitle>
           </DialogHeader>
@@ -997,7 +998,7 @@ export function AdminPayrollCalc() {
       </Dialog>
 
       <Dialog open={explainOpen} onOpenChange={setExplainOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className={`max-w-2xl ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{explainTitle || t("pay_explain_title_fallback")}</DialogTitle>
           </DialogHeader>

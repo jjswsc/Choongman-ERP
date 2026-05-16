@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Search, Plus, Pencil, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 type HolidayRow = { id?: number; year: number; date: string; name: string }
 
@@ -251,10 +252,10 @@ export function AdminPublicHolidays() {
                         </td>
                         <td className="p-2 text-right">
                           <div className="flex gap-1 justify-end">
-                            <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditId(null)}>
+                            <Button size="sm" variant="ghost" className={ADMIN_BTN_XS_CN} onClick={() => setEditId(null)}>
                               {t("cancel")}
                             </Button>
-                            <Button size="sm" className="h-7" onClick={handleSaveEdit} disabled={saving}>
+                            <Button size="sm" className={ADMIN_BTN_XS_CN} onClick={handleSaveEdit} disabled={saving}>
                               {saving ? t("loading") : t("pay_save")}
                             </Button>
                           </div>

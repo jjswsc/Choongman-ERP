@@ -1,4 +1,9 @@
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  mergeEvidenceIntoVatLedgerRow,
+  probeVatLedgerEvidenceColumns,
+  vatLedgerRowForSchemaError,
+} from '@/lib/vat-ledger-invoice-evidence'
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
   const src = String(raw || '').trim()
@@ -128,24 +133,30 @@ export async function syncExpenseAccrualInputVatLedger(
   const tin = await lookupVendorTaxId(payeeCode)
   const invoiceNo = `EA-${id}`.slice(0, 128)
 
-  const ledgerRow = {
-    doc_date: expenseDate,
-    tax_month: taxMonth,
-    direction: 'input' as const,
-    counterparty_name: payeeName.slice(0, 500),
-    counterparty_tax_id: tin,
-    invoice_number: invoiceNo,
-    net_amount: Math.round(netAmount * 100) / 100,
-    vat_amount: Math.round(vatAmount * 100) / 100,
-    total_amount: Math.round(gross * 100) / 100,
-    vat_status: 'draft_auto',
-    memo: `${memoTag} 지출발생 부가세 자동`.slice(0, 2000),
-    filing_status: 'draft',
-    submitted_at: null,
-    submitted_by: null,
-    store_name: String(row.store_name || '').trim() || fallbackStoreName || null,
-    updated_at: new Date().toISOString(),
-  }
+  const useEvidenceColumns = await probeVatLedgerEvidenceColumns()
+  const ledgerRow = mergeEvidenceIntoVatLedgerRow(
+    {
+      doc_date: expenseDate,
+      tax_month: taxMonth,
+      direction: 'input' as const,
+      counterparty_name: payeeName.slice(0, 500),
+      counterparty_tax_id: tin,
+      invoice_number: invoiceNo,
+      net_amount: Math.round(netAmount * 100) / 100,
+      vat_amount: Math.round(vatAmount * 100) / 100,
+      total_amount: Math.round(gross * 100) / 100,
+      vat_status: 'draft_auto',
+      memo: `${memoTag} 지출발생 부가세 자동`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: String(row.store_name || '').trim() || fallbackStoreName || null,
+      updated_at: new Date().toISOString(),
+    },
+    'required_pending',
+    null,
+    useEvidenceColumns
+  )
 
   const existing = (await supabaseSelectFilter(
     'vat_ledger_entries',
@@ -179,8 +190,11 @@ export async function syncExpenseAccrualInputVatLedger(
     try {
       await supabaseUpdate('vat_ledger_entries', existingId, ledgerRow)
     } catch (e) {
-      if (!isMissingSubmissionColumnError(e)) throw e
-      await supabaseUpdate('vat_ledger_entries', existingId, stripSubmissionAuditFields(ledgerRow))
+      const fallback = await vatLedgerRowForSchemaError(ledgerRow, e, {
+        submissionStrip: stripSubmissionAuditFields,
+      })
+      if (!fallback) throw e
+      await supabaseUpdate('vat_ledger_entries', existingId, fallback)
     }
     return
   }
@@ -193,7 +207,10 @@ export async function syncExpenseAccrualInputVatLedger(
   try {
     await supabaseInsert('vat_ledger_entries', insertRow)
   } catch (e) {
-    if (!isMissingSubmissionColumnError(e)) throw e
-    await supabaseInsert('vat_ledger_entries', stripSubmissionAuditFields(insertRow))
+    const fallback = await vatLedgerRowForSchemaError(insertRow, e, {
+      submissionStrip: stripSubmissionAuditFields,
+    })
+    if (!fallback) throw e
+    await supabaseInsert('vat_ledger_entries', fallback)
   }
 }

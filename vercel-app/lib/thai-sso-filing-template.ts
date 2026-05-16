@@ -5,6 +5,7 @@
  * 서드파티 **SSO_eForm v1.5**류(Data 시트 12열)는 `thai-sso-eform-v15.ts`를 사용한다.
  */
 import * as XLSX from "xlsx"
+import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
 
 /** UI 표·문서용 — 열 설명 (공식 สปส.1-10·e-Service 일괄파일과 1:1이 아닐 수 있음) */
 export const THAI_SSO_TEMPLATE_COLUMN_HELP: {
@@ -116,7 +117,8 @@ export function downloadThaiSsoFilingBlankTemplateXlsx(params: { yearMonth: stri
 export function mapPayrollCalcRowToSsoDataRow(
   r: Record<string, unknown>,
   seq: number,
-  yearMonth: string
+  yearMonth: string,
+  filingWageMode: SsoFilingWageMode = "contributable"
 ): (string | number)[] {
   const ym = (yearMonth || "").trim().slice(0, 7)
   const ssoExempt = r.ssoExempt === true
@@ -128,7 +130,7 @@ export function mapPayrollCalcRowToSsoDataRow(
   const dob = String(r.dateOfBirth || "").slice(0, 10)
   const jd = String(r.joinDate || "").slice(0, 10)
   const rd = String(r.resignDate || "").slice(0, 10)
-  const ssoBase = Math.max(0, Math.floor(Number(r.ssoBase) || 0))
+  const ssoBase = resolveSsoFilingWageBaht(r, filingWageMode)
   const empSso = Math.max(0, Math.floor(Number(r.sso) || 0))
   const erSso = Math.max(0, Math.floor(Number(r.employerSso ?? r.sso) || 0))
   const memo = store ? `ERP store: ${store}` : "ERP payroll export"
@@ -155,10 +157,14 @@ export function mapPayrollCalcRowToSsoDataRow(
 export function downloadThaiSsoFilingFromPayrollXlsx(params: {
   yearMonth: string
   payrollRows: Record<string, unknown>[]
+  filingWageMode?: SsoFilingWageMode
 }): void {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
+  const filingWageMode = params.filingWageMode || "contributable"
   const wb = XLSX.utils.book_new()
-  const lines = (params.payrollRows || []).map((r, i) => mapPayrollCalcRowToSsoDataRow(r, i + 1, ym))
+  const lines = (params.payrollRows || []).map((r, i) =>
+    mapPayrollCalcRowToSsoDataRow(r, i + 1, ym, filingWageMode)
+  )
   appendSheets(wb, ym, "payroll", lines.length ? lines : [THAI_SSO_TEMPLATE_COLUMN_HELP.map(() => "")])
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
   XLSX.writeFile(wb, `thai-sso-from-payroll-${safeYm}.xlsx`)

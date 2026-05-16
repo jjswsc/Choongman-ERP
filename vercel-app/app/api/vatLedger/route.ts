@@ -13,6 +13,7 @@ import {
 } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
@@ -20,6 +21,15 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  applyEvidenceToVatLedgerRow,
+  enrichVatLedgerEntries,
+  isInvoiceEvidencePending,
+  isMissingEvidenceColumnError,
+  normalizeInvoiceEvidenceStatus,
+  probeVatLedgerEvidenceColumns,
+  vatLedgerRowForSchemaError,
+} from '@/lib/vat-ledger-invoice-evidence'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,6 +83,75 @@ function monthEndYmd(ym: string): string {
   if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return `${ym}-28`
   const d = new Date(Date.UTC(y, m, 0))
   return d.toISOString().slice(0, 10)
+}
+
+type PendingEvidenceLite = {
+  id: number
+  docDate: string
+  counterpartyName: string
+  invoiceNumber: string
+  storeName: string
+  memo: string
+}
+
+async function listPendingEvidenceRows(taxMonth: string, storeScope?: string | null): Promise<PendingEvidenceLite[]> {
+  const ym = String(taxMonth || '').trim().slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(ym)) return []
+  const hasEvidenceColumns = await probeVatLedgerEvidenceColumns()
+  const parts = [`tax_month=eq.${encodeURIComponent(ym)}`]
+  if (hasEvidenceColumns) {
+    parts.push(`invoice_evidence_status=eq.${encodeURIComponent('required_pending')}`)
+  }
+  const store = String(storeScope || '').trim()
+  if (store) parts.push(`store_name=eq.${encodeURIComponent(store)}`)
+  const selectCols = hasEvidenceColumns
+    ? 'id,doc_date,counterparty_name,invoice_number,store_name,memo,invoice_evidence_status,invoice_evidence_reason_code'
+    : 'id,doc_date,counterparty_name,invoice_number,store_name,memo'
+  let rows: {
+    id?: number
+    doc_date?: string | null
+    counterparty_name?: string | null
+    invoice_number?: string | null
+    store_name?: string | null
+    memo?: string | null
+    invoice_evidence_status?: string | null
+    invoice_evidence_reason_code?: string | null
+  }[]
+  try {
+    rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', parts.join('&'), {
+      select: selectCols,
+      order: 'doc_date.asc,id.asc',
+      pageSize: 500,
+      maxRows: 5000,
+    })) as typeof rows
+  } catch (e) {
+    if (isMissingEvidenceColumnError(e)) {
+      rows = (await supabaseSelectFilterAllPages(
+        'vat_ledger_entries',
+        [`tax_month=eq.${encodeURIComponent(ym)}`, store ? `store_name=eq.${encodeURIComponent(store)}` : '']
+          .filter(Boolean)
+          .join('&'),
+        {
+          select: 'id,doc_date,counterparty_name,invoice_number,store_name,memo',
+          order: 'doc_date.asc,id.asc',
+          pageSize: 500,
+          maxRows: 5000,
+        }
+      )) as typeof rows
+    } else {
+      throw e
+    }
+  }
+  return (rows || [])
+    .filter((r) => isInvoiceEvidencePending(r as Record<string, unknown>))
+    .map((r) => ({
+      id: Number(r.id || 0),
+      docDate: String(r.doc_date || '').slice(0, 10),
+      counterpartyName: String(r.counterparty_name || ''),
+      invoiceNumber: String(r.invoice_number || ''),
+      storeName: String(r.store_name || ''),
+      memo: String(r.memo || ''),
+    }))
 }
 
 async function syncInputVatFromExpensesForPeriod(params: {
@@ -213,12 +292,12 @@ export async function GET(request: NextRequest) {
             if (!initialStoreScope.matches(String(row.store_name || ''))) return false
             return matchesFilingStatus(row.filing_status, filingStatus)
           })
-          return NextResponse.json({ entries: refreshedEntries, period }, { headers })
+          return NextResponse.json({ entries: enrichVatLedgerEntries(refreshedEntries), period }, { headers })
         } catch (e) {
           console.warn('vatLedger GET refresh after input backfill failed:', e)
         }
       }
-      return NextResponse.json({ entries: initialEntries, period }, { headers })
+      return NextResponse.json({ entries: enrichVatLedgerEntries(initialEntries), period }, { headers })
     }
     try {
       await syncTaxVatLedgersFromStockAndExpenses({
@@ -239,7 +318,7 @@ export async function GET(request: NextRequest) {
       if (!storeScope.matches(String(row.store_name || ''))) return false
       return matchesFilingStatus(row.filing_status, filingStatus)
     })
-    return NextResponse.json({ entries, period }, { headers })
+    return NextResponse.json({ entries: enrichVatLedgerEntries(entries), period }, { headers })
   } catch (e) {
     console.error('vatLedger GET:', e)
     return NextResponse.json({ entries: [], error: 'QUERY_FAILED' }, { headers })
@@ -296,6 +375,15 @@ export async function POST(request: NextRequest) {
     else assertCanWriteAccountingCompliance(userRole)
     const submittedAtRaw = String((body.submittedAt ?? body.submitted_at ?? '') || '').trim()
     const submittedByRaw = String((body.submittedBy ?? body.submitted_by ?? body.createdBy ?? actorName ?? '') || '').trim()
+    const evidenceStatus = normalizeInvoiceEvidenceStatus(
+      body.invoiceEvidenceStatus ?? body.invoice_evidence_status
+    )
+    const evidenceReason =
+      body.invoiceEvidenceReasonCode != null || body.invoice_evidence_reason_code != null
+        ? String((body.invoiceEvidenceReasonCode ?? body.invoice_evidence_reason_code) || '')
+            .trim()
+            .slice(0, 64) || null
+        : null
     if (!docDate || !/^\d{4}-\d{2}$/.test(taxMonth) || (direction !== 'output' && direction !== 'input')) {
       await writeAccountingComplianceAudit({
         actionType: 'vat_ledger_post',
@@ -315,26 +403,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'INVALID_BODY' }, { status: 400, headers })
     }
 
-    const row = {
-      doc_date: docDate,
-      tax_month: taxMonth,
-      direction,
-      counterparty_name: body.counterpartyName != null ? String(body.counterpartyName).slice(0, 500) : null,
-      counterparty_tax_id: body.counterpartyTaxId != null ? String(body.counterpartyTaxId).slice(0, 32) : null,
-      invoice_number: body.invoiceNumber != null ? String(body.invoiceNumber).slice(0, 128) : null,
-      net_amount: Number(body.netAmount ?? body.net_amount) || 0,
-      vat_amount: Number(body.vatAmount ?? body.vat_amount) || 0,
-      total_amount: Number(body.totalAmount ?? body.total_amount) || 0,
-      vat_status: body.vatStatus != null ? String(body.vatStatus).slice(0, 64) : null,
-      memo: body.memo != null ? String(body.memo).slice(0, 2000) : null,
-      filing_status: filingStatus,
-      submitted_at: filingStatus === 'submitted' ? submittedAtRaw || new Date().toISOString() : null,
-      submitted_by: filingStatus === 'submitted' ? submittedByRaw || null : null,
-      submitted_by_employee_id: filingStatus === 'submitted' ? actorEmployeeId : null,
-      submitted_by_employee_code: filingStatus === 'submitted' ? actorEmployeeCode : null,
-      store_name: effectiveStoreName ? String(effectiveStoreName).slice(0, 200) : null,
-      updated_at: new Date().toISOString(),
+    const periodStoreForCheck = effectiveStoreName || null
+    if (await isAccountingPeriodClosed(taxMonth, periodStoreForCheck)) {
+      await writeAccountingComplianceAudit({
+        actionType: 'vat_ledger_post',
+        userRole,
+        actor: actorName,
+        decision: 'deny',
+        reasonCode: 'PERIOD_CLOSED',
+        yearMonth: taxMonth,
+        periodType: 'monthly',
+        storeScope: periodStoreForCheck,
+        filingType: 'vat_pp30',
+        targetType: 'vat_ledger',
+      })
+      return NextResponse.json({ success: false, error: 'PERIOD_CLOSED' }, { status: 409, headers })
     }
+    if (filingStatus === 'submitted' && evidenceStatus === 'required_pending') {
+      await writeAccountingComplianceAudit({
+        actionType: 'vat_ledger_post',
+        userRole,
+        actor: actorName,
+        decision: 'deny',
+        reasonCode: 'EVIDENCE_REQUIRED_FOR_SUBMIT',
+        yearMonth: taxMonth,
+        periodType: 'monthly',
+        storeScope: periodStoreForCheck,
+        filingType: 'vat_pp30',
+        targetType: 'vat_ledger',
+      })
+      return NextResponse.json({ success: false, error: 'EVIDENCE_REQUIRED_FOR_SUBMIT' }, { status: 409, headers })
+    }
+
+    const row = await applyEvidenceToVatLedgerRow(
+      {
+        doc_date: docDate,
+        tax_month: taxMonth,
+        direction,
+        counterparty_name: body.counterpartyName != null ? String(body.counterpartyName).slice(0, 500) : null,
+        counterparty_tax_id: body.counterpartyTaxId != null ? String(body.counterpartyTaxId).slice(0, 32) : null,
+        invoice_number: body.invoiceNumber != null ? String(body.invoiceNumber).slice(0, 128) : null,
+        net_amount: Number(body.netAmount ?? body.net_amount) || 0,
+        vat_amount: Number(body.vatAmount ?? body.vat_amount) || 0,
+        total_amount: Number(body.totalAmount ?? body.total_amount) || 0,
+        vat_status: body.vatStatus != null ? String(body.vatStatus).slice(0, 64) : null,
+        memo: body.memo != null ? String(body.memo).slice(0, 2000) : null,
+        filing_status: filingStatus,
+        submitted_at: filingStatus === 'submitted' ? submittedAtRaw || new Date().toISOString() : null,
+        submitted_by: filingStatus === 'submitted' ? submittedByRaw || null : null,
+        submitted_by_employee_id: filingStatus === 'submitted' ? actorEmployeeId : null,
+        submitted_by_employee_code: filingStatus === 'submitted' ? actorEmployeeCode : null,
+        store_name: effectiveStoreName ? String(effectiveStoreName).slice(0, 200) : null,
+        updated_at: new Date().toISOString(),
+      },
+      evidenceStatus,
+      evidenceReason
+    )
 
     if (id > 0) {
       const existingRows = (await supabaseSelectFilter('vat_ledger_entries', `id=eq.${id}`, {
@@ -352,11 +476,33 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
         }
       }
+      const lockStore = effectiveStoreName || existingStoreName || null
+      if (await isAccountingPeriodClosed(taxMonth, lockStore)) {
+        return NextResponse.json({ success: false, error: 'PERIOD_CLOSED' }, { status: 409, headers })
+      }
+      if (filingStatus === 'submitted') {
+        const pendingAll = await listPendingEvidenceRows(taxMonth, lockStore)
+        const pendingRows = pendingAll.filter((x) => !(x.id === id && evidenceStatus !== 'required_pending'))
+        if (pendingRows.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'EVIDENCE_PENDING_IN_MONTH',
+              pendingEvidenceCount: pendingRows.length,
+              pendingEvidenceRows: pendingRows.slice(0, 20),
+            },
+            { status: 409, headers }
+          )
+        }
+      }
       try {
         await supabaseUpdate('vat_ledger_entries', id, { ...row })
       } catch (e) {
-        if (!isMissingSubmissionColumnError(e)) throw e
-        await supabaseUpdate('vat_ledger_entries', id, stripSubmissionAuditFields(row))
+        const fallbackRow = await vatLedgerRowForSchemaError({ ...row }, e, {
+          submissionStrip: stripSubmissionAuditFields,
+        })
+        if (!fallbackRow) throw e
+        await supabaseUpdate('vat_ledger_entries', id, fallbackRow)
       }
       await writeAccountingComplianceAudit({
         actionType: 'vat_ledger_post',
@@ -381,14 +527,29 @@ export async function POST(request: NextRequest) {
       created_by_employee_code: actorEmployeeCode,
       created_at: new Date().toISOString(),
     }
+    if (filingStatus === 'submitted') {
+      const pendingRows = await listPendingEvidenceRows(taxMonth, periodStoreForCheck)
+      if (pendingRows.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'EVIDENCE_PENDING_IN_MONTH',
+            pendingEvidenceCount: pendingRows.length,
+            pendingEvidenceRows: pendingRows.slice(0, 20),
+          },
+          { status: 409, headers }
+        )
+      }
+    }
     let inserted: { id?: number }[] = []
     try {
       inserted = (await supabaseInsert('vat_ledger_entries', insertRow)) as { id?: number }[]
     } catch (e) {
-      if (!isMissingSubmissionColumnError(e)) throw e
-      inserted = (await supabaseInsert('vat_ledger_entries', stripSubmissionAuditFields(insertRow))) as {
-        id?: number
-      }[]
+      const fallbackRow = await vatLedgerRowForSchemaError({ ...insertRow }, e, {
+        submissionStrip: stripSubmissionAuditFields,
+      })
+      if (!fallbackRow) throw e
+      inserted = (await supabaseInsert('vat_ledger_entries', fallbackRow)) as { id?: number }[]
     }
     const newId = Number(inserted?.[0]?.id || 0)
     await writeAccountingComplianceAudit({
@@ -477,9 +638,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     const existingRows = (await supabaseSelectFilter('vat_ledger_entries', `id=eq.${id}`, {
-      select: 'id,store_name',
+      select: 'id,store_name,tax_month',
       limit: 1,
-    })) as { id?: number; store_name?: string | null }[] | null
+    })) as { id?: number; store_name?: string | null; tax_month?: string | null }[] | null
     const existing = existingRows?.[0]
     if (!existing?.id) {
       return NextResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404, headers })
@@ -490,6 +651,10 @@ export async function DELETE(request: NextRequest) {
       if (!canAccessExisting) {
         return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
       }
+    }
+    const taxMonthDel = String(existing.tax_month || '').trim().slice(0, 7)
+    if (taxMonthDel && (await isAccountingPeriodClosed(taxMonthDel, existingStoreName || null))) {
+      return NextResponse.json({ success: false, error: 'PERIOD_CLOSED' }, { status: 409, headers })
     }
 
     await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${id}`)

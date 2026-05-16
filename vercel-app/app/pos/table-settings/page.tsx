@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, tOr } from '@/lib/i18n'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -56,6 +56,7 @@ export default function TableSettingsPage() {
 
   const currentStore = stores.find(s => s.id === currentStoreId)!
   const selectedTable = currentStore.tables.find(t => t.id === selectedTableId)
+  const tableNumberSuffix = tOr(t, 'posTableNumberSuffix', '번')
 
   const [gridCols, setGridCols] = useState(currentStore.gridCols)
   const [gridRows, setGridRows] = useState(currentStore.gridRows)
@@ -85,7 +86,7 @@ export default function TableSettingsPage() {
       const newId = `t${Date.now()}`
       const newTable: Table = {
         id: newId,
-        name: `${currentStore.tables.length + 1}번`,
+        name: `${currentStore.tables.length + 1}${tableNumberSuffix}`,
         seats: shape === 'rectangle' ? 6 : 4,
         x: 0,
         y: 0,
@@ -144,7 +145,7 @@ export default function TableSettingsPage() {
     const names = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     const renamedTables = currentStore.tables.map((table, idx) => ({
       ...table,
-      name: names[idx] ?? `${idx + 1}번`
+      name: names[idx] ?? `${idx + 1}${tableNumberSuffix}`
     }))
     updateStore({ tables: renamedTables })
   }

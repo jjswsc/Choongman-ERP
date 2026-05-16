@@ -41,6 +41,7 @@ import { useSearchParams } from "next/navigation"
 import { useRouter } from "next/navigation"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
 import { addDaysYmd } from "@/lib/pos-business-day"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 import { MarketingMaterialGiftsPanel } from "@/components/marketing/material-gifts-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -1558,7 +1559,7 @@ export default function MarketingMaterialsPage() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-0 text-xs text-muted-foreground hover:text-foreground"
+                            className={`${ADMIN_BTN_XS_CN} px-0 text-xs text-muted-foreground hover:text-foreground`}
                             onClick={() => toggleDeploymentEditor(deploymentEditorKey)}
                           >
                             {isDeploymentEditorOpen
@@ -1708,7 +1709,7 @@ export default function MarketingMaterialsPage() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-7 px-0 text-xs text-muted-foreground hover:text-foreground"
+                              className={`${ADMIN_BTN_XS_CN} px-0 text-xs text-muted-foreground hover:text-foreground`}
                               onClick={() => toggleDeploymentEditor(deploymentEditorKey)}
                             >
                               {isDeploymentEditorOpen
@@ -2022,7 +2023,7 @@ export default function MarketingMaterialsPage() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-0 text-xs text-muted-foreground hover:text-foreground"
+                            className={`${ADMIN_BTN_XS_CN} px-0 text-xs text-muted-foreground hover:text-foreground`}
                             onClick={() => toggleDeploymentEditor(deploymentEditorKey)}
                           >
                             {isDeploymentEditorOpen

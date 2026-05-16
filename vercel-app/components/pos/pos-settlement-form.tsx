@@ -50,6 +50,7 @@ import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings, isAccountingRole } from '@/lib/permissions'
+import { filterNonOfficeStores } from '@/lib/store-view-context'
 import { cn, escapeHtml, formatBahtNum } from '@/lib/utils'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
@@ -710,11 +711,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   ])
 
   React.useEffect(() => {
-    if (canSearchAll && stores.length && !storeFilter) {
-      setStoreFilter(stores[0])
-    } else if (!canSearchAll && auth?.store) {
-      setStoreFilter(auth.store)
+    if (canSearchAll) {
+      if (storeFilter) return
+      const branches = filterNonOfficeStores(stores)
+      const first = branches[0] || stores[0]
+      if (first) setStoreFilter(first)
+      return
     }
+    if (auth?.store) setStoreFilter(auth.store)
   }, [canSearchAll, stores, auth?.store, storeFilter])
 
   React.useEffect(() => {

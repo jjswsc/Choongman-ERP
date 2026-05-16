@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { updateVatLedgerEntryEvidence } from '@/lib/vat-ledger-invoice-evidence'
 
 /** 통장 거래 인보이스 수령 체크 (매입 대금 건)
  * purchase_order_id가 있으면 발주서와 동기화 */
@@ -49,6 +50,71 @@ export async function POST(request: NextRequest) {
     const poId = typeof poIdRaw === 'number' && !isNaN(poIdRaw) ? poIdRaw : null
     if (poId != null && typeof invoiceReceived === 'boolean') {
       await supabaseUpdate('purchase_orders', poId, { invoice_received: invoiceReceived })
+    }
+
+    // 연동: 통장 인보이스 체크 상태를 VAT 보조장부 증빙상태에 동기화
+    if (typeof invoiceReceived === 'boolean') {
+      const evidenceStatus = invoiceReceived ? 'received' : 'required_pending'
+      const evidenceReasonCode = invoiceReceived ? null : 'missing_invoice'
+
+      // 1) 지출발생(expense_accruals) 기반 VAT 행 동기화
+      const payableRows = (await supabaseSelectFilter(
+        'payable_transactions',
+        `bank_transaction_id=eq.${bankTxId}`,
+        { select: 'expense_accrual_id', limit: 200 }
+      )) as { expense_accrual_id?: number | null }[] | null
+      const expenseIds = [...new Set((payableRows || []).map((r) => Number(r.expense_accrual_id || 0)).filter((n) => n > 0))]
+      for (const expenseId of expenseIds) {
+        const memoTag = encodeURIComponent(`%[AUTO:EXPENSE_ACCRUAL:${expenseId}]%`)
+        const vatRows = (await supabaseSelectFilter(
+          'vat_ledger_entries',
+          `memo=ilike.${memoTag}`,
+          { select: 'id', limit: 20 }
+        )) as { id?: number }[] | null
+        for (const v of vatRows || []) {
+          const vid = Number(v.id || 0)
+          if (vid > 0) {
+            await updateVatLedgerEntryEvidence(vid, evidenceStatus, evidenceReasonCode)
+          }
+        }
+      }
+
+      // 2) 발주/입고(stock_logs) 기반 VAT 행 동기화 (purchase_order_id 연결 시)
+      if (poId != null) {
+        try {
+          const batches = (await supabaseSelectFilter(
+            'inbound_batches',
+            `purchase_order_id=eq.${poId}`,
+            { select: 'id', limit: 200 }
+          )) as { id?: number }[] | null
+          const batchIds = (batches || []).map((b) => Number(b.id || 0)).filter((n) => n > 0)
+          if (batchIds.length > 0) {
+            const logs = (await supabaseSelectFilter(
+              'stock_logs',
+              `inbound_batch_id=in.(${batchIds.join(',')})`,
+              { select: 'id', limit: 2000 }
+            )) as { id?: number }[] | null
+            for (const lg of logs || []) {
+              const sid = Number(lg.id || 0)
+              if (sid <= 0) continue
+              const memoTag = encodeURIComponent(`%[AUTO:STOCK_LOG:${sid}]%`)
+              const vatRows = (await supabaseSelectFilter(
+                'vat_ledger_entries',
+                `memo=ilike.${memoTag}`,
+                { select: 'id', limit: 20 }
+              )) as { id?: number }[] | null
+              for (const v of vatRows || []) {
+                const vid = Number(v.id || 0)
+                if (vid > 0) {
+                  await updateVatLedgerEntryEvidence(vid, evidenceStatus, evidenceReasonCode)
+                }
+              }
+            }
+          }
+        } catch {
+          // 스키마 차이(inbound_batch_id 미존재 등) 환경에서는 VAT 연동만 스킵
+        }
+      }
     }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })

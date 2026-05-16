@@ -7,7 +7,8 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
-import { useStoreView } from "@/lib/store-view-context"
+import { useStoreList } from "@/lib/api-client"
+import { useStoreView, filterNonOfficeStores } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
@@ -38,14 +39,29 @@ export default function AdminOpsCenterPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { viewStore } = useStoreView()
+  const { stores, formatStoreLabel, loading: storesLoading } = useStoreList()
 
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""))
 
-  const effectiveStoreCode = React.useMemo(() => {
-    if (isOfficeSelector && viewStore) return viewStore.trim()
-    return (auth?.store || "").trim()
-  }, [isOfficeSelector, viewStore, auth?.store])
+  const branchStores = React.useMemo(() => filterNonOfficeStores(stores), [stores])
+
+  /** 운영 KPI·경보 API는 매장 단일만 허용. 본사에서「전체」·미선택이면 첫 지점으로 조회 */
+  const apiStoreCode = React.useMemo(() => {
+    if (!isOfficeSelector) {
+      return String(auth?.store || "").trim()
+    }
+    const raw = String(viewStore || "").trim() || String(auth?.store || "").trim()
+    if (raw && raw !== "All") return raw
+    return branchStores[0] || ""
+  }, [isOfficeSelector, viewStore, auth?.store, branchStores])
+
+  const scopeLabel = React.useMemo(() => {
+    if (!apiStoreCode) {
+      return storesLoading ? t("adminOpsCenterStoreLoading") : t("adminOpsCenterNeedBranchStore")
+    }
+    return formatStoreLabel(apiStoreCode) || apiStoreCode
+  }, [apiStoreCode, storesLoading, formatStoreLabel, t])
 
   const [date, setDate] = React.useState(() => getBangkokTodayDateString())
   const [loading, setLoading] = React.useState(false)
@@ -53,19 +69,28 @@ export default function AdminOpsCenterPage() {
   const [kpi, setKpi] = React.useState<OpsKpi | null>(null)
   const [alerts, setAlerts] = React.useState<OpsAlert[]>([])
 
-  const scopeLabel =
-    effectiveStoreCode === "All" || !effectiveStoreCode
-      ? t("store_all_stores")
-      : effectiveStoreCode || "—"
-
   const load = React.useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
+      if (isOfficeSelector && !apiStoreCode.trim()) {
+        if (storesLoading) {
+          setKpi(null)
+          setAlerts([])
+          setLoading(false)
+          return
+        }
+        setLoadError(t("adminOpsCenterNeedBranchStore"))
+        setKpi(null)
+        setAlerts([])
+        setLoading(false)
+        return
+      }
+
       const qs = new URLSearchParams()
       qs.set("date", date.slice(0, 10))
-      if (effectiveStoreCode && effectiveStoreCode !== "All") {
-        qs.set("storeCode", effectiveStoreCode)
+      if (apiStoreCode.trim()) {
+        qs.set("storeCode", apiStoreCode.trim())
       }
       const q = qs.toString()
       const [kpiRes, alertRes] = await Promise.all([
@@ -103,7 +128,7 @@ export default function AdminOpsCenterPage() {
     } finally {
       setLoading(false)
     }
-  }, [date, effectiveStoreCode, t])
+  }, [date, apiStoreCode, isOfficeSelector, storesLoading, t])
 
   React.useEffect(() => {
     void load()

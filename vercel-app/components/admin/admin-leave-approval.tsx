@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
 import { displayLabelShort } from "@/lib/utils"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -327,14 +328,14 @@ export function AdminLeaveApproval() {
                     <td className="p-2 text-center">
                       {item.status === "대기" ? (
                         <div className="flex items-center justify-center gap-1.5">
-                          <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleRejectClick(item.id)}>{t("adminRejected")}</Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium text-destructive hover:text-destructive" onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                          <Button size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium`} onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
+                          <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium`} onClick={() => handleRejectClick(item.id)}>{t("adminRejected")}</Button>
+                          <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium text-destructive hover:text-destructive`} onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       ) : (
                         <div className="flex items-center justify-center gap-1.5">
                           <Badge variant={item.status === "승인" || item.status === "Approved" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                          <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs text-destructive hover:text-destructive`} onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       )}
                     </td>
@@ -348,7 +349,7 @@ export function AdminLeaveApproval() {
     </Card>
 
     <Dialog open={!!rejectDialog} onOpenChange={(open) => !open && setRejectDialog(null)}>
-      <DialogContent className="max-w-md">
+      <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
         <DialogHeader>
           <DialogTitle>{t("leaveRejectTitle") || "반려 사유"}</DialogTitle>
         </DialogHeader>
@@ -369,7 +370,7 @@ export function AdminLeaveApproval() {
     </Dialog>
 
     <Dialog open={!!certPreviewUrl} onOpenChange={(open) => !open && setCertPreviewUrl(null)}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className={`max-w-2xl ${ADMIN_DIALOG_SCROLL_CN}`}>
         <DialogHeader>
           <DialogTitle>{t("leaveCertView")}</DialogTitle>
         </DialogHeader>

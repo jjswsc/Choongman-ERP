@@ -89,7 +89,6 @@ export async function GET(request: NextRequest) {
   headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const settleDate = String(searchParams.get('settleDate') || searchParams.get('date') || '').trim()
-  const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
 
   if (!settleDate) {
     return NextResponse.json(
@@ -108,9 +107,27 @@ export async function GET(request: NextRequest) {
 
   try {
     const settleYmd = settleDate.trim().slice(0, 10)
-    const bizStart = await loadPosBusinessDayStartForServer(
-      storeCode && storeCode !== 'All' ? storeCode : null
-    )
+    const rawStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+    /** 전 매장·미지정 시 pos_orders 2만 건 등 광역 조회 방지 — 단일 매장만 집계 */
+    const hasSingleStore = Boolean(rawStore) && rawStore.toLowerCase() !== 'all'
+    if (!hasSingleStore) {
+      return NextResponse.json(
+        {
+          systemTotal: 0,
+          systemSubtotal: 0,
+          systemVat: 0,
+          systemCashFromOrders: 0,
+          tillNetForSettleDate: 0,
+          linkpos: null,
+          settlement: null,
+          closeRun: null,
+        },
+        { headers }
+      )
+    }
+    const storeCode = rawStore
+
+    const bizStart = await loadPosBusinessDayStartForServer(storeCode)
     const { startISO, endISOExclusive } =
       /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)
         ? posBusinessDateYmdToUtcRange(settleYmd, bizStart)
@@ -153,7 +170,7 @@ export async function GET(request: NextRequest) {
 
     const orderFilter =
       `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
-      (storeCode && storeCode !== 'All' ? `&store_code=ilike.${encodeURIComponent(storeCode)}` : '')
+      `&store_code=ilike.${encodeURIComponent(storeCode)}`
 
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
@@ -289,7 +306,7 @@ export async function GET(request: NextRequest) {
     for (const a of attempts || []) {
       const orderRef = Array.isArray(a.pos_orders) ? a.pos_orders[0] : a.pos_orders
       const attemptStoreCode = String(orderRef?.store_code ?? '').trim()
-      if (storeCode && storeCode !== 'All' && attemptStoreCode !== storeCode) continue
+      if (attemptStoreCode !== storeCode) continue
       const amount = Number(a.approved_amount ?? a.request_amount ?? 0)
       if (!(amount > 0)) continue
       const haystack = buildTenderHaystack(
@@ -310,7 +327,7 @@ export async function GET(request: NextRequest) {
 
     /** 결산일 `trans_date` 기준 입출금(시재)·매출출금 순액 → 마감 예상 돈통에 반영 */
     let tillNetForSettleDate = 0
-    if (storeCode && storeCode !== 'All' && /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(settleYmd)) {
       try {
         const tillRows = (await supabaseSelectFilter(
           'pos_till_transactions',
@@ -326,10 +343,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const storeFilter =
-      storeCode && storeCode !== 'All'
-        ? `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${settleDate}`
-        : `settle_date=eq.${settleDate}`
+    const storeFilter = `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${settleDate}`
 
     const settlements = (await supabaseSelectFilter('pos_settlements', storeFilter, {
       limit: 500,
@@ -379,16 +393,14 @@ export async function GET(request: NextRequest) {
       cashActualDenoms: mapCashActualDenomsFromDb(s.cash_actual_denoms),
     }))
 
-    const closeRuns = ((storeCode && storeCode !== 'All'
-      ? await supabaseSelectFilter(
+    const closeRuns = ((await supabaseSelectFilter(
           'pos_close_runs',
           `store_code=eq.${encodeURIComponent(storeCode)}&business_date=eq.${encodeURIComponent(settleYmd)}`,
           {
             limit: 1,
             select: 'id,status,checks_json,totals_json,settlement_ref,posted_journal_entry_id,validated_at,finalized_at',
           }
-        ).catch(() => [])
-      : []) ?? []) as
+        ).catch(() => [])) ?? []) as
       | {
           id?: number
           status?: string
@@ -422,7 +434,7 @@ export async function GET(request: NextRequest) {
           autoDineInDeliveryBreakdown,
           autoOtherBreakdown,
         },
-        settlement: storeCode && storeCode !== 'All' ? list[0] ?? null : list,
+        settlement: list[0] ?? null,
         closeRun: closeRun
           ? {
               id: Number(closeRun.id || 0),

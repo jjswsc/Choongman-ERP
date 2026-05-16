@@ -41,6 +41,12 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
+    if (!referenceNoBatch) {
+      return NextResponse.json(
+        { success: false, message: '세금계산서/참조번호(reference_no)는 필수입니다.' },
+        { status: 400, headers }
+      )
+    }
 
     const uniqCodes = [
       ...new Set(
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
             ? snapPrice
             : null
 
-      const refPatch = referenceNoBatch ? { reference_no: referenceNoBatch } : {}
+      const refPatch = { reference_no: referenceNoBatch }
       rows.push({
         location: store,
         item_code: code,

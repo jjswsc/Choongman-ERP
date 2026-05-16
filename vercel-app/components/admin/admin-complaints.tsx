@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -578,7 +579,7 @@ export function AdminComplaints() {
                               )}
                             </td>
                             <td className="p-2 text-center">
-                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openDetail(item)}>
+                              <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => openDetail(item)}>
                                 {t("complaint_btn_detail")}
                               </Button>
                             </td>
@@ -594,7 +595,7 @@ export function AdminComplaints() {
         </Tabs>
 
         <Dialog open={!!photoPreviewUrl} onOpenChange={(open) => !open && setPhotoPreviewUrl(null)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className={`max-w-2xl ${ADMIN_DIALOG_SCROLL_CN}`}>
             <DialogHeader>
               <DialogTitle>{t("photo")}</DialogTitle>
             </DialogHeader>

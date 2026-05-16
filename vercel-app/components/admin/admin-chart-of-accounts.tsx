@@ -29,6 +29,7 @@ import {
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 type CoaTab = "all" | "asset" | "liability" | "equity" | "revenue" | "expense" | "transfer"
 
@@ -408,12 +409,12 @@ export function AdminChartOfAccounts() {
           <div className="flex shrink-0 gap-1">
             {canEdit ? (
               <>
-                <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => openEdit(row)}>
+                <Button type="button" variant="outline" size="sm" className={ADMIN_BTN_XS_CN} onClick={() => openEdit(row)}>
                   <Pencil className="mr-1 h-3.5 w-3.5" />
                   {tt("coaEdit", "수정")}
                 </Button>
                 {!row.isSystem ? (
-                  <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => handleDelete(row)}>
+                  <Button type="button" variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-destructive`} onClick={() => handleDelete(row)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 ) : null}

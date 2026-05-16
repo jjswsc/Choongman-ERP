@@ -8,9 +8,9 @@ import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok 
 import {
   calcSSO,
   clockOutCountsForPayroll,
+  grossWageBeforeSSO,
   isEmployeeSsoExemptFlag,
   otMinutesForPayroll,
-  ssoContributionBaseWage,
 } from '@/lib/payroll-utils'
 import { hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
@@ -476,8 +476,17 @@ export async function GET(request: NextRequest) {
         }
         const previewYear = targetDate.getFullYear()
         const ssoExempt = isEmployeeSsoExemptFlag(e.sso_exempt)
-        const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
-        sso = ssoExempt ? 0 : calcSSO(ssoBase, previewYear)
+        const ssoGrossWage = grossWageBeforeSSO({
+          salary,
+          posAllow,
+          hazAllow,
+          birthBonus,
+          holidayPay,
+          otAmt,
+          lateDed,
+          earlyDed,
+        })
+        sso = ssoExempt ? 0 : calcSSO(ssoGrossWage, previewYear)
       }
 
       const effectivePosAllow = isDirectorRole ? 0 : posAllow

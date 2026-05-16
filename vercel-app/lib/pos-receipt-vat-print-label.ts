@@ -7,11 +7,11 @@ export function buildPosReceiptVatPrintLabelEscaped(params: {
   tr: (key: string, fallback: string) => string
   esc: (value: string) => string
 }): string {
-  const { vatFeeMode, t, tr, esc } = params
-  const base = t('posVatLabel') || '부가세'
+  const { vatFeeMode, tr, esc } = params
+  const base = tr('posVatReceiptShortLabel', 'VAT')
   const label =
     vatFeeMode === 'included'
-      ? `${base}${tr('posVatIncludedInTotalReceiptHint', ' (부가세는 총액에 포함)')}`
+      ? `${base}${tr('posVatIncludedInTotalReceiptHint', ' (VAT incl. in total)')}`
       : base
   return esc(label)
 }

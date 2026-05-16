@@ -83,6 +83,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "Head Office", "HQ", "Head office", "head office"]
 
@@ -405,6 +406,10 @@ export default function OutboundPage() {
       await appAlert(t("outEmptyList"))
       return
     }
+    if (!outReferenceNo.trim()) {
+      await appAlert(`${t("outReferenceNoLabel")} ${t("required")}`)
+      return
+    }
     if (!await appConfirm(t("outConfirmMsg"))) return
     setSaving(true)
     try {
@@ -419,7 +424,7 @@ export default function OutboundPage() {
       }))
       const res = await forceOutboundBatch(list, {
         processorName: auth?.user,
-        referenceNo: outReferenceNo.trim() || undefined,
+        referenceNo: outReferenceNo.trim(),
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
@@ -1873,7 +1878,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-7 text-destructive hover:text-destructive"
+                                    className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
                                     onClick={() => handleRemoveFromCart(idx)}
                                   >
                                     {t("delete")}

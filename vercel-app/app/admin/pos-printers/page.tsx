@@ -80,6 +80,7 @@ import {
   type PrintPosHtmlDocumentOptions,
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
+import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 type PreviewKind = "receipt" | "kitchen"
 
@@ -2165,7 +2166,7 @@ export default function PosPrintersPage() {
       </div>
 
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={cn("max-w-md", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{tr("posPrinterCopySettings", "설정 복사")}</DialogTitle>
             <DialogDescription className="text-left">
@@ -2252,7 +2253,7 @@ export default function PosPrintersPage() {
       </Dialog>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className={cn("max-w-3xl", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{tr("posPrintPreviewBothTitle", "영수증 · 주방 미리보기")}</DialogTitle>
             <DialogDescription className="text-left text-sm">

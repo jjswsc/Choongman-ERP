@@ -12,7 +12,9 @@ import { requireAuth } from '@/lib/verify-auth'
 import {
   clockOutCountsForPayroll,
   calcSSO,
+  grossWageBeforeSSO,
   isEmployeeSsoExemptFlag,
+  ssoContributableWageBaht,
   ssoContributionBaseWage,
   OT_PAYROLL_MIN_MINUTES,
   otMinutesForPayroll,
@@ -663,8 +665,12 @@ export interface PayrollCalcRow {
   earlyMin: number
   earlyDed: number
   sso: number
-  /** SSO 산정 기준 임금(기본급·시급제 월 환산) — 사회보험 신고 열 wage_base 와 동일 */
+  /** SSO 산정 기준 임금(기본급·시급제 월 환산) */
   ssoBase?: number
+  /** 당월 총지급(수당·OT·지각공제 등 반영) — ค่าจ้างที่จ่ายจริง 후보 */
+  ssoGrossWage?: number
+  /** 1,650·연도 상한 적용 후 5% 산정 기준 */
+  ssoContributableWage?: number
   /** 인사 마스터 SSO 공제 제외 */
   ssoExempt?: boolean
   /** 인사 id_number (신분증 번호, 엑셀 citizen_id 등에 사용) */
@@ -1452,7 +1458,20 @@ export async function GET(request: NextRequest) {
         salary + posAllowAmount + hazAllow + diligenceAllow + birthBonus + holidayPay + otAmt
       const ssoExempt = isEmployeeSsoExemptFlag((e as EmpRowPayroll).sso_exempt)
       const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
-      const sso = ssoExempt ? 0 : calcSSO(ssoBase, year)
+      const ssoGrossWage = grossWageBeforeSSO({
+        salary,
+        posAllow: posAllowAmount,
+        hazAllow,
+        diligenceAllow,
+        birthBonus,
+        holidayPay,
+        otAmt,
+        lateDed,
+        earlyDed,
+        unpaidAbsenceDed,
+      })
+      const ssoContributableWage = ssoExempt ? 0 : ssoContributableWageBaht(ssoGrossWage, year)
+      const sso = ssoExempt ? 0 : calcSSO(ssoGrossWage, year)
       const deduct = lateDed + earlyDed + sso + unpaidAbsenceDed
       const netPay = Math.max(0, income - deduct)
       const ot15 = Math.round((otMin / 60) * 10) / 10
@@ -1682,7 +1701,7 @@ export async function GET(request: NextRequest) {
         reason: 'SSO(사회보험) 공제',
         detail: ssoExempt
           ? '인사 설정: SSO 공제 제외 (미가입 등)'
-          : `기본급 기준 ${fmtMoney(ssoBase)} × 5% (연도 상한 적용)`,
+          : `총지급 ${fmtMoney(ssoGrossWage)} → 산정기준 ${fmtMoney(ssoContributableWage)} × 5% (1,650·상한·50สต. 반올림)`,
         amount: sso,
       })
 
@@ -1723,6 +1742,8 @@ export async function GET(request: NextRequest) {
         earlyDed,
         sso,
         ssoBase,
+        ssoGrossWage,
+        ssoContributableWage,
         ssoExempt,
         ...(idDigits ? { idNumber: idDigits.length === 13 ? idDigits : idNumRaw } : {}),
         ...(nameTitle ? { nameTitle } : {}),

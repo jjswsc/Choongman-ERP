@@ -14,11 +14,21 @@ export async function GET(req: NextRequest) {
     const qs = new URL(req.url).searchParams
     const ymd = String(qs.get('date') || getBangkokTodayDateString()).slice(0, 10)
     const requestedStore = String(qs.get('storeCode') || '').trim()
-    const storeCode = isOfficeRole(auth.role || '')
-      ? requestedStore
-      : String(auth.store || '').trim()
+    const isOffice = isOfficeRole(auth.role || '')
+    if (isOffice) {
+      if (!requestedStore || requestedStore === 'All') {
+        return NextResponse.json(
+          {
+            success: false,
+            message: '본사·오피스 조회에는 storeCode(단일 매장)가 필요합니다.',
+          },
+          { status: 400, headers }
+        )
+      }
+    }
+    const storeCode = isOffice ? requestedStore : String(auth.store || '').trim()
 
-    if (!isOfficeRole(auth.role || '') && !storeCode) {
+    if (!isOffice && !storeCode) {
       return NextResponse.json(
         { success: false, message: '로그인 매장 정보가 없어 집계할 수 없습니다.' },
         { status: 400, headers }
@@ -83,7 +93,7 @@ export async function GET(req: NextRequest) {
       {
         success: true,
         date: ymd,
-        storeCode: storeCode || 'ALL',
+        storeCode: storeCode || '',
         kpi: {
           orderSuccess,
           orderFailed,

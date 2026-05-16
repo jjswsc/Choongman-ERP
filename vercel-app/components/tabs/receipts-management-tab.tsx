@@ -44,7 +44,8 @@ import {
 } from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
-import { useT, tr as i18nTr } from '@/lib/i18n'
+import { useT, tr as i18nTr, tOr } from '@/lib/i18n'
+import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
 import { isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
@@ -129,14 +130,20 @@ function posDeliveryCodeToLabel(code: string | undefined | null): string {
   return ''
 }
 
+function receiptTableDisplayName(raw: string | undefined | null): string {
+  const trimmed = String(raw ?? '').trim()
+  if (!trimmed) return ''
+  return translateReceiptTableDisplayName(trimmed)
+}
+
 /** 목록「구분」열: 매장=테이블명, 배달=배달앱 종류, 포장=라벨 */
 function receiptSegmentCell(o: PosOrder): string {
   const type = normalizePosOrderTypeKey(o.orderType)
   if (type === 'dine_in') {
-    return (o.tableName || '').trim() || '-'
+    return receiptTableDisplayName(o.tableName) || '-'
   }
   if (type === 'takeout') {
-    return (o.tableName || '').trim() || '-'
+    return receiptTableDisplayName(o.tableName) || '-'
   }
   if (type === 'delivery') {
     const fromCode = posDeliveryCodeToLabel(o.deliveryAppCode)
@@ -315,7 +322,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     return list
   }, [stores, auth?.role, auth?.store, auth?.allowedStores, resolveStoreKey])
 
-  /** 본사(또는 JWT 매장 없음) + 본사 역할 → 영수증 API에서 매장 미지정 시 기간 전체(전 매장) */
+  /** 본사(또는 JWT 매장 없음) + 본사 역할 — 영수증 목록은 매장별만 조회(기본 첫 매장, 전 매장 통합 없음) */
   const isHqWideAccess = React.useMemo(() => {
     const role = String(auth?.role || '')
     if (!isOfficeRole(role)) return false
@@ -332,6 +339,14 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       setStoreFilter(st)
     }
   }, [isHqWideAccess, receiptStoreChoices, storeFilter, auth?.store, resolveStoreKey])
+
+  /** 본사: 매장 미선택 시 상태를 첫 매장으로 맞춤(조회 키·드롭다운과 일치) */
+  React.useEffect(() => {
+    if (!isHqWideAccess) return
+    if (receiptStoreChoices.length < 1) return
+    if (storeFilter.trim()) return
+    setStoreFilter(receiptStoreChoices[0])
+  }, [isHqWideAccess, receiptStoreChoices, storeFilter])
 
   const payCorrectOtherDetailOptions = React.useMemo(() => {
     const base: { key: string; label: string }[] = [
@@ -356,7 +371,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const catalogStoreKey = React.useMemo(() => {
     const nf = storeFilter ? resolveStoreKey(storeFilter) : ''
     const nu = storeCode ? resolveStoreKey(storeCode) : ''
-    if (isHqWideAccess) return nf || nu || ''
+    if (isHqWideAccess) {
+      const first = receiptStoreChoices[0]
+      const firstKey = first ? (resolveStoreKey(first) || String(first).trim()).trim() : ''
+      return nf || nu || firstKey || ''
+    }
     if (receiptStoreChoices.length === 1) {
       const only = receiptStoreChoices[0]
       return (only ? resolveStoreKey(only) : '') || only || nu || storeCode || ''
@@ -480,6 +499,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     let store: string | undefined
     if (isHqWideAccess) {
       store = normalizedStoreFilter || undefined
+      if (!store && receiptStoreChoices.length > 0) {
+        const first = receiptStoreChoices[0]
+        store = (resolveStoreKey(first) || String(first).trim()).trim() || undefined
+      }
     } else if (receiptStoreChoices.length === 1) {
       const only = receiptStoreChoices[0]
       store = (resolveStoreKey(only) || only || normalizedUserStore || storeCode || '').trim() || undefined
@@ -737,9 +760,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         lastTrackingId = printTrackingId
         const segLabel =
           normalizePosOrderTypeKey(o.orderType) === 'dine_in'
-            ? ki.t('posTable') || '테이블'
-            : ki.t('posReceiptColSegment') || '구분'
-        const tablePart = o.tableName ? ` · ${segLabel}: ${o.tableName}` : ''
+            ? tOr(ki.t, 'posTable', '테이블')
+            : tOr(ki.t, 'posReceiptColSegment', '구분')
+        const tablePart = o.tableName
+          ? ` · ${segLabel}: ${translateReceiptTableDisplayName(o.tableName)}`
+          : ''
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
           orderNo: String(o.orderNo ?? ''),
@@ -1276,7 +1301,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             {receiptStoreChoices.length > 1 && (
               <Select
                 value={
-                  isHqWideAccess ? storeFilter || '__all__' : storeFilter || receiptStoreChoices[0] || '__all__'
+                  isHqWideAccess
+                    ? storeFilter || receiptStoreChoices[0] || ''
+                    : storeFilter || receiptStoreChoices[0] || '__all__'
                 }
                 onValueChange={(v) => setStoreFilter(v === '__all__' ? '' : v)}
               >
@@ -1284,9 +1311,6 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   <SelectValue placeholder={t('posStoreSelect') || '매장'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {isHqWideAccess && (
-                    <SelectItem value="__all__">{t('posStatusAll') || '전체'}</SelectItem>
-                  )}
                   {receiptStoreChoices.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
@@ -1320,9 +1344,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             <Select value={segmentDeliveryCode || '__all__'} onValueChange={(v) => setSegmentDeliveryCode(v)}>
               <SelectTrigger
                 className="h-9 w-[112px] shrink-0 sm:w-[154px]"
-                aria-label={t('posReceiptDeliveryAppFilter') || '배달앱'}
+                aria-label={tOr(t, 'posReceiptDeliveryAppFilter', '배달앱')}
               >
-                <SelectValue placeholder={t('posReceiptDeliveryAppFilter') || '배달앱'} />
+                <SelectValue placeholder={tOr(t, 'posReceiptDeliveryAppFilter', '배달앱')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">{t('posStatusAll') || '전체'}</SelectItem>
@@ -1395,7 +1419,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderNo') || '주문번호'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStoreSelect') || '매장'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderType') || '유형'}</th>
-                  <th className="px-4 py-3 text-left font-semibold">{t('posReceiptColSegment') || '구분'}</th>
+                  <th className="px-4 py-3 text-left font-semibold">{tOr(t, 'posReceiptColSegment', '구분')}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('posInputTotal') || '합계'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStatus') || '상태'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderDateTime')}</th>
@@ -1491,8 +1515,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                     ) &&
                                       receiptSegmentCell(o) !== '-')) && (
                                     <div className="text-muted-foreground">
-                                      {t('posReceiptColSegment') || '구분'}:{' '}
-                                      {o.tableName?.trim() || receiptSegmentCell(o)}
+                                      {tOr(t, 'posReceiptColSegment', '구분')}:{' '}
+                                      {receiptTableDisplayName(o.tableName) || receiptSegmentCell(o)}
                                     </div>
                                   )}
                                   {o.memo && (

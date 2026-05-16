@@ -17,3 +17,8 @@ AS $$
     AND COALESCE(btrim(o.store_code), '') <> ''
   ORDER BY 1;
 $$;
+
+COMMENT ON FUNCTION public.get_pos_sales_filter_store_codes(timestamptz, timestamptz) IS
+  '매출 관리 매장 필터: pos_orders UTC 구간 내 DISTINCT store_code (앱 posSalesFilterOptions).';
+
+GRANT EXECUTE ON FUNCTION public.get_pos_sales_filter_store_codes(timestamptz, timestamptz) TO anon, authenticated, service_role;

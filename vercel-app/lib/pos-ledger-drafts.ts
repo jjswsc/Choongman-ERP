@@ -1,4 +1,8 @@
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  applyEvidenceToVatLedgerRow,
+  vatLedgerRowForSchemaError,
+} from '@/lib/vat-ledger-invoice-evidence'
 
 function toBangkokYmd(inputIso?: string): string {
   const src = String(inputIso || '').trim()
@@ -7,6 +11,14 @@ function toBangkokYmd(inputIso?: string): string {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
   }
   return base.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+}
+
+function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.filing_status
+  delete next.submitted_at
+  delete next.submitted_by
+  return next
 }
 
 export async function upsertPosVatLedgerDraft(params: {
@@ -29,24 +41,28 @@ export async function upsertPosVatLedgerDraft(params: {
   const taxMonth = docDate.slice(0, 7)
   const invoiceNo = String(params.orderNo || `POS-${orderId}`).trim() || `POS-${orderId}`
   const memoTag = `[AUTO:POS_ORDER:${orderId}]`
-  const row = {
-    doc_date: docDate,
-    tax_month: taxMonth,
-    direction: 'output',
-    counterparty_name: 'POS SALES',
-    counterparty_tax_id: null,
-    invoice_number: invoiceNo.slice(0, 128),
-    net_amount: Math.max(0, Number(params.subtotal ?? total - vatAmount) || 0),
-    vat_amount: vatAmount,
-    total_amount: total,
-    vat_status: 'draft_auto',
-    memo: `${memoTag} POS 완료 자동 생성`.slice(0, 2000),
-    filing_status: 'draft',
-    submitted_at: null,
-    submitted_by: null,
-    store_name: String(params.storeCode || '').trim() || null,
-    updated_at: new Date().toISOString(),
-  }
+  const row = await applyEvidenceToVatLedgerRow(
+    {
+      doc_date: docDate,
+      tax_month: taxMonth,
+      direction: 'output',
+      counterparty_name: 'POS SALES',
+      counterparty_tax_id: null,
+      invoice_number: invoiceNo.slice(0, 128),
+      net_amount: Math.max(0, Number(params.subtotal ?? total - vatAmount) || 0),
+      vat_amount: vatAmount,
+      total_amount: total,
+      vat_status: 'draft_auto',
+      memo: `${memoTag} POS 완료 자동 생성`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: String(params.storeCode || '').trim() || null,
+      updated_at: new Date().toISOString(),
+    },
+    'not_required',
+    'pos_auto_excluded'
+  )
 
   const existing = (await supabaseSelectFilter(
     'vat_ledger_entries',
@@ -59,18 +75,10 @@ export async function upsertPosVatLedgerDraft(params: {
       await supabaseUpdate('vat_ledger_entries', existingId, row)
       return
     } catch (e) {
-      const msg = String(e || '').toLowerCase()
-      if (
-        !msg.includes('filing_status') &&
-        !msg.includes('submitted_at') &&
-        !msg.includes('submitted_by')
-      ) {
-        throw e
-      }
-      const fallback = { ...row } as Record<string, unknown>
-      delete fallback.filing_status
-      delete fallback.submitted_at
-      delete fallback.submitted_by
+      const fallback = await vatLedgerRowForSchemaError(row, e, {
+        submissionStrip: stripSubmissionAuditFields,
+      })
+      if (!fallback) throw e
       await supabaseUpdate('vat_ledger_entries', existingId, fallback)
       return
     }
@@ -84,14 +92,10 @@ export async function upsertPosVatLedgerDraft(params: {
   try {
     await supabaseInsert('vat_ledger_entries', insertRow)
   } catch (e) {
-    const msg = String(e || '').toLowerCase()
-    if (!msg.includes('filing_status') && !msg.includes('submitted_at') && !msg.includes('submitted_by')) {
-      throw e
-    }
-    const fallback = { ...insertRow } as Record<string, unknown>
-    delete fallback.filing_status
-    delete fallback.submitted_at
-    delete fallback.submitted_by
+    const fallback = await vatLedgerRowForSchemaError(insertRow, e, {
+      submissionStrip: stripSubmissionAuditFields,
+    })
+    if (!fallback) throw e
     await supabaseInsert('vat_ledger_entries', fallback)
   }
 }

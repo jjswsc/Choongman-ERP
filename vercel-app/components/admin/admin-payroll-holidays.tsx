@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 type HolidayRow = {
   id: number
@@ -267,10 +268,10 @@ export function AdminPayrollHolidays({ readOnly = false }: AdminPayrollHolidaysP
                       </td>
                       <td className="p-2">
                         <div className="flex flex-row gap-1">
-                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={cancelEdit}>
+                          <Button size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={cancelEdit}>
                             {t("cancel")}
                           </Button>
-                          <Button size="sm" className="h-7 text-xs" onClick={handleUpdate} disabled={saving}>
+                          <Button size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={handleUpdate} disabled={saving}>
                             {t("holiday_save")}
                           </Button>
                         </div>
@@ -284,13 +285,13 @@ export function AdminPayrollHolidays({ readOnly = false }: AdminPayrollHolidaysP
                       {!readOnly && (
                         <td className="p-2">
                           <div className="flex flex-row gap-1">
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(r)} disabled={saving}>
+                            <Button size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => startEdit(r)} disabled={saving}>
                               {t("emp_edit")}
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 text-xs text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+                              className={`${ADMIN_BTN_XS_CN} text-xs text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive`}
                               onClick={() => handleDelete(r.id)}
                               disabled={saving}
                             >

@@ -25,13 +25,50 @@ export function clockOutCountsForPayroll(approvedRaw: unknown, statusRaw: unknow
   return true
 }
 
-/** 연도별 SSO 한도 (태국) */
+/** สปส.1-10: 임금이 이 금액 미만이면 산정 기준을 1,650바트로 (0원은 0 유지) */
+export const SSO_MIN_CONTRIBUTION_WAGE_THB = 1650
+
+/** 연도별 SSO 한도 (태국) — พ.ศ. 2569~2571 → 17,500 / 875 (2026~2028) 등 */
 export function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
   const y = year
   if (y <= 2025) return { ceiling: 15000, maxDed: 750 }
   if (y <= 2028) return { ceiling: 17500, maxDed: 875 }
   if (y <= 2031) return { ceiling: 20000, maxDed: 1000 }
   return { ceiling: 23000, maxDed: 1150 }
+}
+
+/** สปส.: สตางค์ 50 이상 올림, 미만 버림 */
+export function roundSsoContributionBaht(amountBaht: number): number {
+  const n = Math.max(0, Number(amountBaht) || 0)
+  const whole = Math.floor(n)
+  const frac = n - whole
+  if (frac >= 0.5) return whole + 1
+  return whole
+}
+
+/** 상·하한 적용 후 5% 산정에 쓰는 기준 임금(바트, 정수) */
+export function ssoContributableWageBaht(rawWage: number, year: number): number {
+  const base = Math.max(0, Math.floor(Number(rawWage) || 0))
+  if (base === 0) return 0
+  const { ceiling } = getSSOLimitsByYear(year)
+  const withFloor = Math.max(SSO_MIN_CONTRIBUTION_WAGE_THB, base)
+  return Math.min(withFloor, ceiling)
+}
+
+/** e-Service ค่าจ้างที่จ่ายจริง 열 표시 방식 */
+export type SsoFilingWageMode = 'contributable' | 'gross' | 'basic'
+
+export function resolveSsoFilingWageBaht(
+  row: Record<string, unknown>,
+  mode: SsoFilingWageMode
+): number {
+  if (mode === 'basic') {
+    return Math.max(0, Math.floor(Number(row.ssoBase) || 0))
+  }
+  if (mode === 'gross') {
+    return Math.max(0, Math.floor(Number(row.ssoGrossWage) || 0))
+  }
+  return Math.max(0, Math.floor(Number(row.ssoContributableWage) || 0))
 }
 
 /**
@@ -81,9 +118,11 @@ export function ssoContributionBaseWage(isHourly: boolean, salAmt: number, hourl
   return Math.max(0, Math.floor(Number(salAmt) || 0))
 }
 
-/** SSO 공제액: 산정기준액의 5%, ceiling·maxDed 한도 */
+/** SSO 공제액: 기준임금 → 1,650 하한·연도 상한 → 5% → 50 satang 반올림 → maxDed 캡 */
 export function calcSSO(contributionBase: number, year: number): number {
-  const { ceiling, maxDed } = getSSOLimitsByYear(year)
-  const contributable = Math.min(contributionBase, ceiling)
-  return Math.min(Math.floor(contributable * 0.05), maxDed)
+  const contributable = ssoContributableWageBaht(contributionBase, year)
+  if (contributable === 0) return 0
+  const { maxDed } = getSSOLimitsByYear(year)
+  const raw = contributable * 0.05
+  return Math.min(roundSsoContributionBaht(raw), maxDed)
 }

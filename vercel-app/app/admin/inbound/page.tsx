@@ -72,6 +72,7 @@ import {
 import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/inbound-excel-html"
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -1407,7 +1408,7 @@ export default function InboundPage() {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="h-7 text-destructive hover:text-destructive"
+                                      className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
                                       onClick={() => handleRemoveFromCart(idx)}
                                     >
                                       {t("delete")}

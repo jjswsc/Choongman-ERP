@@ -32,6 +32,7 @@ import { isOfficeRole, canAccessPosSettlement } from "@/lib/permissions"
 import { POS_TAX_INVOICE_SHARED_STORE_CODE } from "@/lib/pos-tax-invoice"
 import { appAlert } from "@/lib/app-message"
 import { cn } from "@/lib/utils"
+import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 type SearchBy = "phone" | "taxId" | "name" | "memberNo"
 
@@ -210,7 +211,7 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
       </div>
 
       <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={cn("max-w-md", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
             <DialogTitle>{t("itemsBtnEdit")}</DialogTitle>
           </DialogHeader>

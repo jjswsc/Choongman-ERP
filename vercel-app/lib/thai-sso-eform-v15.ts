@@ -7,6 +7,7 @@
  * (안내 시트 `README_SSO_eForm` 참고)
  */
 import * as XLSX from "xlsx"
+import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
 
 /** A–L 헤더(태국어) — SSO_eForm 안내(คอลัมน์ J/K/L)와 열 위치를 맞춤 */
 export const THAI_SSO_EFORM_V15_DATA_HEADERS_TH = [
@@ -79,7 +80,8 @@ function citizenDigits13(raw: unknown): string {
 export function mapPayrollCalcRowToSsoEformV15DataRow(
   r: Record<string, unknown>,
   seq: number,
-  yearMonth: string
+  yearMonth: string,
+  filingWageMode: SsoFilingWageMode = "contributable"
 ): (string | number)[] {
   const parsed = parseYearMonth(yearMonth)
   const monthNum = parsed?.m ?? ""
@@ -102,7 +104,7 @@ export function mapPayrollCalcRowToSsoEformV15DataRow(
     jCell = formatDateDdMmYyyy(join)
   }
 
-  const ssoBase = Math.max(0, Math.floor(Number(r.ssoBase) || 0))
+  const ssoBase = resolveSsoFilingWageBaht(r, filingWageMode)
 
   return [
     seq,
@@ -141,15 +143,22 @@ function readmeRows(ym: string): string[][] {
   ]
 }
 
-export function downloadThaiSsoEformV15FromPayrollXlsx(params: { yearMonth: string; payrollRows: Record<string, unknown>[] }): void {
+export function downloadThaiSsoEformV15FromPayrollXlsx(params: {
+  yearMonth: string
+  payrollRows: Record<string, unknown>[]
+  filingWageMode?: SsoFilingWageMode
+}): void {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
+  const filingWageMode = params.filingWageMode || "contributable"
   const wb = XLSX.utils.book_new()
 
   const wsReadme = XLSX.utils.aoa_to_sheet(readmeRows(ym))
   wsReadme["!cols"] = [{ wch: 100 }]
   XLSX.utils.book_append_sheet(wb, wsReadme, SHEET_README)
 
-  const lines = (params.payrollRows || []).map((r, i) => mapPayrollCalcRowToSsoEformV15DataRow(r, i + 1, ym))
+  const lines = (params.payrollRows || []).map((r, i) =>
+    mapPayrollCalcRowToSsoEformV15DataRow(r, i + 1, ym, filingWageMode)
+  )
   const aoa: (string | number)[][] = [[...THAI_SSO_EFORM_V15_DATA_HEADERS_TH], ...lines]
   if (lines.length === 0) {
     aoa.push(THAI_SSO_EFORM_V15_DATA_HEADERS_TH.map(() => ""))

@@ -28,6 +28,7 @@ import { getMondayOfWeekBangkok, addDaysSchedule, todayStrBangkok } from "@/lib/
 import { cn, displayLabelShort } from "@/lib/utils"
 import { findStaffForScheduleSlotName } from "@/lib/employee-display-name"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 function get30MinIntervals(start: string, end: string): string[] {
   const result: string[] = []
@@ -791,12 +792,12 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
             <h6 className="font-bold">{t("att_staff_select")}</h6>
             <Dialog open={leaveModalOpen} onOpenChange={setLeaveModalOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`}>
                   <CalendarDays className="mr-1 h-3.5 w-3.5" />
                   {t("scheduleLeaveThisWeek") || "이번 주 휴가"}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-sm">
+              <DialogContent className={cn("max-w-sm", ADMIN_DIALOG_SCROLL_CN)}>
                 <DialogHeader>
                   <DialogTitle>{t("scheduleLeaveThisWeek") || "이번 주 휴가 현황"}</DialogTitle>
                 </DialogHeader>

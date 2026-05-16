@@ -3,7 +3,7 @@ import { assertCanApproveAccountingCompliance } from '@/lib/accounting-auth'
 import { computeTrialBalanceReport } from '@/lib/trial-balance-report'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
-import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
+import { isAccountingPeriodClosed, upsertAccountingPeriodRecord } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { requireAuth } from '@/lib/verify-auth'
 import {
@@ -11,7 +11,6 @@ import {
   supabaseInsert,
   supabaseInsertMany,
   supabaseSelectFilter,
-  supabaseUpsertMerge,
 } from '@/lib/supabase-server'
 
 function isMissingClosingRunTableError(e: unknown): boolean {
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json({ success: false, error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })
     }
-    if (await isAccountingPeriodClosed(yearMonth)) {
+    if (await isAccountingPeriodClosed(yearMonth, storeFilter)) {
       await writeAccountingComplianceAudit({
         actionType: 'income_expense_closing_post',
         userRole,
@@ -203,8 +202,9 @@ export async function POST(request: NextRequest) {
 
     if (autoLockPeriod) {
       const lockedAt = new Date().toISOString()
-      await supabaseUpsertMerge('accounting_periods', 'year_month', {
+      await upsertAccountingPeriodRecord({
         year_month: yearMonth,
+        store_scope: storeFilter,
         is_closed: true,
         closed_at: lockedAt,
         closed_by: postedBy,

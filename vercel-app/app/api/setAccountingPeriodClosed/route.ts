@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpsert } from '@/lib/supabase-server'
+import { normalizeAccountingPeriodStoreScope } from '@/lib/accounting-period-store-scope'
+import { upsertAccountingPeriodRecord } from '@/lib/accounting-period-server'
+import { supabaseInsert } from '@/lib/supabase-server'
 import {
   assertCanApproveAccountingCompliance,
   assertCanApproveAccountingPeriodUnlock,
@@ -10,17 +12,6 @@ import { requireAuth } from '@/lib/verify-auth'
 function isMissingClosingRunTableError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
   return msg.includes('income_expense_closing_runs') || msg.includes('42p01')
-}
-
-function isMissingUnlockColumnError(e: unknown): boolean {
-  const msg = String(e || '').toLowerCase()
-  return (
-    msg.includes('unlocked_at') ||
-    msg.includes('unlocked_by') ||
-    msg.includes('unlock_reason') ||
-    msg.includes('unlock_approved_by') ||
-    msg.includes('42703')
-  )
 }
 
 export async function POST(request: NextRequest) {
@@ -38,6 +29,9 @@ export async function POST(request: NextRequest) {
     assertCanApproveAccountingCompliance(userRole)
 
     const yearMonth = String(body.yearMonth || '').trim().slice(0, 7)
+    const storeScope = await normalizeAccountingPeriodStoreScope(
+      String(body.storeScope || body.storeFilter || 'All').trim()
+    )
     if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
       await writeAccountingComplianceAudit({
         actionType: 'accounting_period_toggle',
@@ -76,8 +70,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const row = {
+    await upsertAccountingPeriodRecord({
       year_month: yearMonth,
+      store_scope: storeScope,
       is_closed: closed,
       closed_at: closed ? nowIso : null,
       closed_by: closed ? closedBy : null,
@@ -85,24 +80,7 @@ export async function POST(request: NextRequest) {
       unlocked_by: closed ? null : closedBy,
       unlock_reason: closed ? null : unlockReason,
       unlock_approved_by: closed ? null : unlockApprovedBy,
-    }
-    try {
-      await supabaseUpsert('accounting_periods', [row], 'year_month')
-    } catch (e) {
-      if (!isMissingUnlockColumnError(e)) throw e
-      await supabaseUpsert(
-        'accounting_periods',
-        [
-          {
-            year_month: yearMonth,
-            is_closed: closed,
-            closed_at: closed ? nowIso : null,
-            closed_by: closed ? closedBy : null,
-          },
-        ],
-        'year_month'
-      )
-    }
+    })
 
     if (!closed) {
       try {
@@ -116,7 +94,7 @@ export async function POST(request: NextRequest) {
         }
         await supabaseInsert('income_expense_closing_runs', {
           year_month: yearMonth,
-          store_scope: 'All',
+          store_scope: storeScope,
           status: 'unlock_request',
           profit_loss_account_code: '3120',
           revenue_total: 0,
@@ -151,7 +129,7 @@ export async function POST(request: NextRequest) {
       try {
         await supabaseInsert('income_expense_closing_runs', {
           year_month: yearMonth,
-          store_scope: 'All',
+          store_scope: storeScope,
           status: 'period_locked',
           profit_loss_account_code: '3120',
           revenue_total: 0,
@@ -177,13 +155,14 @@ export async function POST(request: NextRequest) {
       reasonCode: closed ? 'PERIOD_LOCKED' : 'PERIOD_UNLOCKED',
       yearMonth,
       targetType: 'accounting_period',
-      targetId: yearMonth,
+      targetId: `${yearMonth}|${storeScope}`,
+      storeScope,
       payload: closed
-        ? { closedBy }
-        : { unlockReason, unlockApprovedBy, requestedBy: closedBy },
+        ? { closedBy, storeScope }
+        : { unlockReason, unlockApprovedBy, requestedBy: closedBy, storeScope },
     })
 
-    return NextResponse.json({ success: true, yearMonth, closed }, { headers })
+    return NextResponse.json({ success: true, yearMonth, storeScope, closed }, { headers })
   } catch (e) {
     if (
       e instanceof Error &&

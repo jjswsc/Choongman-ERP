@@ -2572,13 +2572,17 @@ export async function saveAccountingFilingPreferences(params: {
   return res.json() as Promise<{ success: boolean; responsibilities?: Record<string, ThaiFilingResponsibility>; error?: string }>
 }
 
-export async function getAccountingPeriods(params: { userRole: string }) {
+export async function getAccountingPeriods(params: { userRole: string; storeFilter?: string }) {
   const q = new URLSearchParams({ userRole: params.userRole })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getAccountingPeriods?${q}`)
   return res.json() as Promise<{
+    storeScope?: string
     periods: {
       yearMonth: string
+      storeScope?: string
       isClosed: boolean
+      closedViaAll?: boolean
       closedAt: string | null
       closedBy: string | null
       unlockedAt?: string | null
@@ -2589,10 +2593,31 @@ export async function getAccountingPeriods(params: { userRole: string }) {
   }>
 }
 
+export async function getAccountingPeriodCloseStatus(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, yearMonth: params.yearMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getAccountingPeriodCloseStatus?${q}`)
+  return res.json() as Promise<{
+    snapshot?: {
+      yearMonth: string
+      storeScope: string
+      isClosed: boolean
+      closedViaAll: boolean
+    }
+    error?: string
+  }>
+}
+
 export async function setAccountingPeriodClosed(params: {
   userRole: string
   yearMonth: string
   closed: boolean
+  storeScope?: string
+  storeFilter?: string
   closedBy?: string | null
   unlockReason?: string | null
   unlockApprovedBy?: string | null
@@ -2694,13 +2719,178 @@ export async function getVatLedger(params: {
   return { entries: data.entries || [], error: data.error }
 }
 
+export type StoreTaxFilingProfileDto = {
+  storeCode: string
+  taxpayerName: string
+  taxId: string
+  branchNo: string
+  placeOfBusiness: string
+  ssoAccountNo?: string
+  ssoBranchCode?: string
+  ssoOfficeAddress?: string
+  ssoPostcode?: string
+  ssoPhone?: string
+  ssoFax?: string
+  ssoEmail?: string
+  updatedAt?: string | null
+  updatedBy?: string | null
+}
+
+export async function getStoreTaxFilingProfile(storeCode: string) {
+  const q = new URLSearchParams({ storeCode })
+  const res = await apiFetchWithOffline(`/api/storeTaxFilingProfiles?${q}`)
+  const data = (await res.json()) as { profile?: StoreTaxFilingProfileDto; error?: string }
+  if (!res.ok) {
+    return { profile: null, error: data?.error || `HTTP_${res.status}` }
+  }
+  return { profile: data.profile || null }
+}
+
+export async function getStoreTaxFilingProfiles() {
+  const res = await apiFetchWithOffline('/api/storeTaxFilingProfiles')
+  const data = (await res.json()) as {
+    profiles?: StoreTaxFilingProfileDto[]
+    tableMissing?: boolean
+    error?: string
+  }
+  if (!res.ok) {
+    return { profiles: [] as StoreTaxFilingProfileDto[], error: data?.error || `HTTP_${res.status}` }
+  }
+  return { profiles: data.profiles || [], tableMissing: !!data.tableMissing }
+}
+
+export async function saveStoreTaxFilingProfile(params: {
+  storeCode: string
+  taxpayerName: string
+  taxId: string
+  branchNo: string
+  placeOfBusiness?: string
+  ssoAccountNo?: string
+  ssoBranchCode?: string
+  ssoOfficeAddress?: string
+  ssoPostcode?: string
+  ssoPhone?: string
+  ssoFax?: string
+  ssoEmail?: string
+}) {
+  const res = await apiFetchWithOffline('/api/storeTaxFilingProfiles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success?: boolean
+    profile?: StoreTaxFilingProfileDto
+    error?: string
+    hint?: string
+  }>
+}
+
+export type VatLedgerStoreNameGapsReportDto = {
+  taxMonths: string[]
+  storeFilter: string
+  inScopeRowCount: number
+  emptyStoreNameRowCount: number
+  emptyStoreNameOutputNet: number
+  emptyStoreNameOutputVat: number
+  emptyStoreNameInputNet: number
+  emptyStoreNameInputVat: number
+  otherStoreRowCount: number
+  otherStoreOutputVat: number
+  otherStoreInputVat: number
+  samples: {
+    id?: number
+    doc_date: string
+    direction: string
+    net_amount: number
+    vat_amount: number
+    counterparty_name: string
+    invoice_number: string
+    memo: string
+  }[]
+}
+
+export type IntercompanyVatReconcileReportDto = {
+  months: string[]
+  storeFilter: string
+  issuedCount: number
+  matchedCount: number
+  missingInStoreCount: number
+  extraInStoreCount: number
+  diffCount: number
+  hqIssuedNetTotal: number
+  storeInputNetTotal: number
+  storeInputVatTotal: number
+  diffNetTotal: number
+  rows: {
+    storeName: string
+    referenceNo: string
+    hqIssuedNet: number
+    storeInputNet: number
+    storeInputVat: number
+    diffNet: number
+    status: 'missing_in_store_input' | 'extra_in_store_input' | 'net_diff'
+  }[]
+}
+
+export async function getVatLedgerStoreNameGaps(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getVatLedgerStoreNameGaps?${q}`)
+  const data = (await res.json()) as { report?: VatLedgerStoreNameGapsReportDto; error?: string }
+  if (!res.ok) {
+    return { report: null, error: data?.error || `HTTP_${res.status}` }
+  }
+  return { report: data.report || null }
+}
+
+export async function getIntercompanyVatReconcile(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/ops/intercompany-vat-reconcile?${q}`)
+  const data = (await res.json()) as { report?: IntercompanyVatReconcileReportDto; error?: string }
+  if (!res.ok) {
+    return { report: null, error: data?.error || `HTTP_${res.status}` }
+  }
+  return { report: data.report || null }
+}
+
 export async function saveVatLedgerEntry(params: Record<string, unknown> & { userRole: string }) {
   const res = await apiFetchWithOffline('/api/vatLedger', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    id?: number
+    error?: string
+    pendingEvidenceCount?: number
+    pendingEvidenceRows?: {
+      id: number
+      docDate: string
+      counterpartyName: string
+      invoiceNumber: string
+      storeName: string
+      memo: string
+    }[]
+  }>
 }
 
 export async function deleteVatLedgerEntry(params: { userRole: string; id: number }) {

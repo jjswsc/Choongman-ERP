@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { apiFetch, useStoreList, sendNotice } from "@/lib/api-client"
 import { Megaphone, FileSpreadsheet, Calendar, Clock, ChevronDown } from "lucide-react"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 function toMonthStr(d?: Date): string {
   const x = d || new Date()
@@ -577,7 +578,7 @@ ${rows.map((row, ri) => {
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 gap-1 px-2 text-[10px]"
+                              className={`${ADMIN_BTN_XS_CN} text-[10px]`}
                             >
                               {t("pay_records_verify_btn")}
                               <ChevronDown className="h-3 w-3 opacity-70" />

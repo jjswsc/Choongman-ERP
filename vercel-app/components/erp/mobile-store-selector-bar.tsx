@@ -44,12 +44,14 @@ export function MobileStoreSelectorBar() {
     return [ALL_STORE_VALUE, ...branches]
   }, [stores, auth?.store])
 
-  // 목록 있으면 선택 없을 때 "전체 매장"을 기본값으로
+  /** 기본「전체」대신 첫 실매장 — DB 부하 완화. 지점 목록이 비면 선택은 두지 않음(「전체」는 사용자가 명시 선택). */
   React.useEffect(() => {
-    if (storeOptions.length > 0 && !viewStore) {
-      setViewStore(ALL_STORE_VALUE)
+    if (viewStore) return
+    const branches = filterNonOfficeStores(stores)
+    if (branches.length > 0) {
+      setViewStore(branches[0])
     }
-  }, [storeOptions, viewStore, setViewStore])
+  }, [stores, viewStore, setViewStore])
 
   if (!isOfficeStaff) return null
   if (storeOptions.length === 0) return null

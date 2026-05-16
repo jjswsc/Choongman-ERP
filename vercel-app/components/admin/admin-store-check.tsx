@@ -50,6 +50,7 @@ import {
   type ChecklistItem,
   type CheckHistoryItem,
 } from "@/lib/api-client"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -557,7 +558,7 @@ export function AdminStoreCheck() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 px-2 text-xs w-full max-w-[140px] justify-start truncate"
+                                className={`${ADMIN_BTN_XS_CN} w-full max-w-[140px] justify-start truncate`}
                                 onClick={() => setRemarkModalIdx(idx)}
                                 title={r.remark || t("store_remark_add_btn")}
                               >
@@ -603,7 +604,7 @@ export function AdminStoreCheck() {
               </CardContent>
             </Card>
             <Dialog open={remarkModalIdx !== null} onOpenChange={(open) => !open && setRemarkModalIdx(null)}>
-              <DialogContent className="max-w-md">
+              <DialogContent className={cn("max-w-md", ADMIN_DIALOG_SCROLL_CN)}>
                 <DialogHeader>
                   <DialogTitle>
                     {t("store_remark_modal_title")}
@@ -779,13 +780,13 @@ export function AdminStoreCheck() {
                             <td className="p-2 text-center">{h.result}</td>
                             <td className="p-2">
                               <div className="flex gap-1 justify-center">
-                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => loadHistoryIntoForm(h, true)} title={lang === "ko" ? "보기 (수정 불가)" : "View (read-only)"}>
+                                <Button size="sm" variant="outline" className={ADMIN_BTN_XS_CN} onClick={() => loadHistoryIntoForm(h, true)} title={lang === "ko" ? "보기 (수정 불가)" : "View (read-only)"}>
                                   <Eye className="h-3 w-3" />
                                 </Button>
-                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => loadHistoryIntoForm(h, false)} title={lang === "ko" ? "수정하기" : "Edit"}>
+                                <Button size="sm" variant="outline" className={ADMIN_BTN_XS_CN} onClick={() => loadHistoryIntoForm(h, false)} title={lang === "ko" ? "수정하기" : "Edit"}>
                                   <Pencil className="h-3 w-3" />
                                 </Button>
-                                <Button size="sm" variant="destructive" className="h-7 px-2" onClick={() => handleDeleteHistory(h.id)}>
+                                <Button size="sm" variant="destructive" className={ADMIN_BTN_XS_CN} onClick={() => handleDeleteHistory(h.id)}>
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
                               </div>
@@ -907,7 +908,7 @@ export function AdminStoreCheck() {
                               />
                             </td>
                             <td className="p-2 text-center">
-                              <Button size="sm" variant="destructive" className="h-7 px-2" onClick={() => handleDeleteCheckItem(it.id)}>
+                              <Button size="sm" variant="destructive" className={ADMIN_BTN_XS_CN} onClick={() => handleDeleteCheckItem(it.id)}>
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </td>

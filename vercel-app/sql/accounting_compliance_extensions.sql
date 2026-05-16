@@ -27,6 +27,22 @@ CREATE TABLE IF NOT EXISTS accounting_filing_preferences (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 매장별 PP30·e-Filing 납세자 프로필 (store_code = erp_stores.store_code)
+CREATE TABLE IF NOT EXISTS store_tax_filing_profiles (
+  store_code TEXT PRIMARY KEY,
+  taxpayer_name TEXT NOT NULL DEFAULT '',
+  tax_id TEXT NOT NULL DEFAULT '',
+  branch_no TEXT NOT NULL DEFAULT '00000',
+  place_of_business TEXT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT NULL
+);
+
+ALTER TABLE store_tax_filing_profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all store_tax_filing_profiles" ON store_tax_filing_profiles;
+CREATE POLICY "Allow all store_tax_filing_profiles" ON store_tax_filing_profiles
+  FOR ALL USING (true) WITH CHECK (true);
+
 INSERT INTO accounting_filing_preferences (id, responsibilities)
 VALUES (1, '{}')
 ON CONFLICT (id) DO NOTHING;
@@ -49,6 +65,9 @@ CREATE TABLE IF NOT EXISTS vat_ledger_entries (
   total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
   vat_status TEXT NULL,
   filing_status TEXT NULL,
+  invoice_evidence_status TEXT NOT NULL DEFAULT 'required_pending'
+    CHECK (invoice_evidence_status IN ('required_pending', 'received', 'not_required', 'unobtainable')),
+  invoice_evidence_reason_code TEXT NULL,
   submitted_at TIMESTAMPTZ NULL,
   submitted_by TEXT NULL,
   memo TEXT NULL,
@@ -60,6 +79,7 @@ CREATE TABLE IF NOT EXISTS vat_ledger_entries (
 
 CREATE INDEX IF NOT EXISTS idx_vat_ledger_tax_month ON vat_ledger_entries(tax_month);
 CREATE INDEX IF NOT EXISTS idx_vat_ledger_doc_date ON vat_ledger_entries(doc_date);
+CREATE INDEX IF NOT EXISTS idx_vat_ledger_invoice_evidence_status ON vat_ledger_entries(invoice_evidence_status, tax_month);
 
 ALTER TABLE vat_ledger_entries ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all vat_ledger_entries" ON vat_ledger_entries;

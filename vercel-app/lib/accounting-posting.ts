@@ -40,10 +40,10 @@ function monthOf(dateYmd: string): string {
   return String(dateYmd || '').slice(0, 7)
 }
 
-export async function assertAccountingDateOpen(dateYmd: string) {
+export async function assertAccountingDateOpen(dateYmd: string, storeName?: string | null) {
   const ymd = String(dateYmd || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return
-  if (await isAccountingPeriodClosed(monthOf(ymd))) {
+  if (await isAccountingPeriodClosed(monthOf(ymd), storeName)) {
     throw new Error('ACCOUNTING_PERIOD_CLOSED')
   }
 }
@@ -133,7 +133,7 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
     throw new Error(`분개 차대 불일치: debit=${debitSum}, credit=${creditSum}`)
   }
 
-  if (await isAccountingPeriodClosed(monthOf(accountingDate))) {
+  if (await isAccountingPeriodClosed(monthOf(accountingDate), params.storeName)) {
     throw new Error('ACCOUNTING_PERIOD_CLOSED')
   }
 
