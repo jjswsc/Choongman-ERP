@@ -39,6 +39,11 @@ export interface Vendor {
 
 export type VendorTypeFilter = "all" | "purchase" | "sales"
 
+export type VendorLinkedStore = {
+  storeCode: string
+  via: "vendor_code" | "sales_outlet" | "gps_name"
+}
+
 export interface VendorTableProps {
   vendors: Vendor[]
   hasSearched: boolean
@@ -49,6 +54,7 @@ export interface VendorTableProps {
   onSearch: () => void
   onEdit: (vendor: Vendor) => void
   onDelete: (vendor: Vendor) => void
+  linkedStoresByVendor?: Record<string, VendorLinkedStore[]>
 }
 
 export function VendorTable({
@@ -61,6 +67,7 @@ export function VendorTable({
   onSearch,
   onEdit,
   onDelete,
+  linkedStoresByVendor = {},
 }: VendorTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -111,6 +118,7 @@ export function VendorTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 min-w-[92px]">{t("vendorColType")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[140px]">{t("vendorColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("vendorColLinkedStores")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("vendorDirectSettlement")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32 min-w-[130px]">{t("vendorColPhone")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("vendorColAction")}</th>
@@ -119,13 +127,13 @@ export function VendorTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorSearchHint")}
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorNoResults")}
                 </td>
               </tr>
@@ -166,6 +174,36 @@ export function VendorTable({
                         ? vendor.gps_name?.trim() || vendor.sales_outlet
                         : vendor.name}
                     </span>
+                  </td>
+                  <td className="px-5 py-3 min-w-[120px]">
+                    {(() => {
+                      const links = linkedStoresByVendor[vendor.code] || []
+                      if (links.length === 0) {
+                        return <span className="text-[11px] text-muted-foreground">{t("vendorLinkedStoresNone")}</span>
+                      }
+                      return (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {links.slice(0, 3).map((l) => (
+                            <span
+                              key={`${vendor.code}-${l.storeCode}`}
+                              className="inline-flex rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground"
+                              title={
+                                l.via === "vendor_code"
+                                  ? t("vendorLinkedViaProfile")
+                                  : l.via === "sales_outlet"
+                                    ? t("vendorLinkedViaSalesOutlet")
+                                    : t("vendorLinkedViaGps")
+                              }
+                            >
+                              {l.storeCode}
+                            </span>
+                          ))}
+                          {links.length > 3 ? (
+                            <span className="text-[10px] text-muted-foreground">+{links.length - 3}</span>
+                          ) : null}
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="px-5 py-3 text-center">
                     {vendor.direct_settlement ? (

@@ -23,6 +23,22 @@ export function formatBahtNum(n: number | null | undefined): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** POS 더치페이 등 좁은 영역: 바트 정수(반올림)·천 단위 구분만 (계산은 내부 소수 유지) */
+export function formatBahtWhole(n: number | null | undefined): string {
+  const v = Number(n ?? 0)
+  if (!Number.isFinite(v)) return '0'
+  return Math.round(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
+/** 수량 표시: 정수 수량이면 `.00` 생략 */
+export function formatPosQtyCompact(n: number | null | undefined): string {
+  const v = Number(n ?? 0)
+  if (!Number.isFinite(v)) return '0'
+  const r = Math.round(v * 100) / 100
+  if (Math.abs(r - Math.round(r)) < 0.001) return String(Math.round(r))
+  return r.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
 /** 직원 닉네임/역할 표시 시 "(Part-Time)"을 "(P/T)"로 줄여서 표시 */
 export function displayLabelShort(val: string | null | undefined): string {
   const s = String(val ?? '').trim()

@@ -20,6 +20,12 @@ import {
   type InvoiceEvidenceStatus,
   vatLedgerRowForSchemaError,
 } from '@/lib/vat-ledger-invoice-evidence'
+import {
+  buildHqOutboundIndexes,
+  findHqOutboundMatchForStoreInbound,
+  hqIssuedInvoiceNumberForStoreInput,
+  unitPriceForStoreHqInputLog,
+} from '@/lib/hq-store-vat-pricing'
 
 type ItemTaxMeta = {
   price: number
@@ -157,18 +163,6 @@ function normalizeStoreFilter(storeFilter?: string): string {
   const s = String(storeFilter || '').trim()
   if (!s || s === 'All' || s === '*') return ''
   return s
-}
-
-function normalizeReferenceNo(raw: unknown): string {
-  return String(raw || '').trim().slice(0, 200)
-}
-
-function buildIssuedHqOutboundKey(orderId: number, store: string, itemCode: string): string {
-  return `${orderId}|${String(store || '').trim()}|${String(itemCode || '').trim()}`
-}
-
-function buildIssuedHqOutboundFallbackKey(docDate: string, store: string, itemCode: string, qtyAbs: number): string {
-  return `${docDate}|${String(store || '').trim()}|${String(itemCode || '').trim()}|${qtyAbs}`
 }
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string } {
@@ -400,30 +394,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${dupId}`)
   }
 
-  const issuedHqOutboundRefByKey = new Map<string, string>()
-  const issuedHqOutboundRefByFallback = new Map<string, string>()
-  for (const log of stockLogs || []) {
-    const logType = String(log.log_type || '').trim()
-    if (logType !== 'Outbound' && logType !== 'ForceOutbound') continue
-    const ref = normalizeReferenceNo(log.reference_no)
-    if (!ref) continue
-    const hqLoc = String(log.location || '').trim()
-    if (!(hqLoc === '본사' || isHeadOfficeLikeStoreName(hqLoc))) continue
-    const targetStore = String(log.vendor_target || '').trim()
-    const itemCode = String(log.item_code || '').trim()
-    if (!targetStore || !itemCode) continue
-    const orderId = Math.floor(Number(log.order_id) || 0)
-    if (orderId > 0) {
-      const k = buildIssuedHqOutboundKey(orderId, targetStore, itemCode)
-      if (!issuedHqOutboundRefByKey.has(k)) issuedHqOutboundRefByKey.set(k, ref)
-    }
-    const ymd = bangkokYmdFromLogDate(log.log_date)
-    const qtyAbs = Math.abs(Number(log.qty) || 0)
-    if (ymd && qtyAbs > 0) {
-      const fk = buildIssuedHqOutboundFallbackKey(ymd, targetStore, itemCode, qtyAbs)
-      if (!issuedHqOutboundRefByFallback.has(fk)) issuedHqOutboundRefByFallback.set(fk, ref)
-    }
-  }
+  const hqOutboundIndexes = buildHqOutboundIndexes(stockLogs || [])
 
   const seenStockIds = new Set<number>()
   let stockUpserted = 0
@@ -459,25 +430,12 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     const cartForPrice = orderId > 0 ? orderCartById[String(orderId)] : undefined
     const isInputLog = logType === 'Inbound' || logType === 'ForcePush'
     const isInternalHqMove = isInputLog && (vendor === 'From HQ' || vendor === 'HQ')
-    let issuedRef = ''
-    if (isInternalHqMove) {
-      if (logType === 'ForcePush') {
-        issuedRef = normalizeReferenceNo(log.reference_no)
-      } else {
-        const storeName = loc || scopedStore
-        if (orderId > 0) {
-          issuedRef = issuedHqOutboundRefByKey.get(buildIssuedHqOutboundKey(orderId, storeName, code)) || ''
-        }
-        if (!issuedRef) {
-          issuedRef =
-            issuedHqOutboundRefByFallback.get(
-              buildIssuedHqOutboundFallbackKey(docDate, storeName, code, qty)
-            ) || ''
-        }
-      }
-      // 본사 발행(reference_no) 확정 건만 매장 매입자료로 반영
-      if (!issuedRef) continue
-    }
+    const hqMatch = isInternalHqMove ? findHqOutboundMatchForStoreInbound(log, hqOutboundIndexes) : null
+    const issuedRef = isInternalHqMove
+      ? hqIssuedInvoiceNumberForStoreInput({ inbound: log, logType, hqMatch })
+      : ''
+    // 본사→매장 출고와 짝이 없으면 PP30 매입 자동 반영 제외(출고 관리 목록과 정합)
+    if (isInternalHqMove && !issuedRef) continue
     const unit =
       !isInputLog
         ? (() => {
@@ -486,15 +444,18 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
             const unitCost = Number(log.unit_cost) || 0
             return unitCost > 0 ? unitCost : 0
           })()
-        : logType === 'ForcePush'
-          ? Number(log.invoice_unit_price) > 0
-            ? Number(log.invoice_unit_price)
-            : Number(log.unit_cost) > 0
-              ? Number(log.unit_cost)
-              : Number(item.cost) || 0
-        : Number(log.unit_cost) > 0
-          ? Number(log.unit_cost)
-          : Number(item.cost) || 0
+        : isInternalHqMove
+          ? unitPriceForStoreHqInputLog({
+              inbound: log,
+              logType,
+              hqMatch,
+              orderCartById,
+              masterPrice: Number(item.price) || 0,
+              masterCost: Number(item.cost) || 0,
+            })
+          : Number(log.unit_cost) > 0
+            ? Number(log.unit_cost)
+            : Number(item.cost) || 0
     const net = round2(qty * unit)
     if (net <= 0) continue
     const vat = round2(net * vatRateFromTaxType(item.taxType))

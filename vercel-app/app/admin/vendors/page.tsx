@@ -8,8 +8,10 @@ import { VendorTable, type VendorTypeFilter } from "@/components/erp/vendor-tabl
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAdminVendors, saveVendor, deleteVendor } from "@/lib/api-client"
+import { getAdminVendors, getStoreTaxFilingProfiles, saveVendor, deleteVendor, useStoreList } from "@/lib/api-client"
 import type { Vendor } from "@/components/erp/vendor-table"
+import type { VendorLinkedStore } from "@/components/erp/vendor-table"
+import { storesLinkedToVendor } from "@/lib/store-vendor-tax-link"
 
 const emptyForm: VendorFormData = {
   code: "",
@@ -36,13 +38,60 @@ export default function VendorsPage() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<VendorTypeFilter>("all")
+  const [profilesByStore, setProfilesByStore] = React.useState<Record<string, { storeCode: string; vendorCode?: string }>>({})
+  const { stores: storeList, storeLabels, legacyToCanonical } = useStoreList()
+
+  const storeCodes = React.useMemo(
+    () =>
+      Array.from(new Set((storeList || []).map((s) => String(s).trim()).filter((s) => s && s !== "All"))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [storeList]
+  )
 
   React.useEffect(() => {
-    getAdminVendors()
-      .then((list) => setVendors(list))
-      .catch(() => setVendors([]))
+    Promise.all([getAdminVendors(), getStoreTaxFilingProfiles()])
+      .then(([list, profRes]) => {
+        setVendors(list)
+        const map: Record<string, { storeCode: string; vendorCode?: string }> = {}
+        for (const p of profRes.profiles || []) {
+          const sc = String(p.storeCode || "").trim()
+          if (sc) map[sc] = { storeCode: sc, vendorCode: p.vendorCode }
+        }
+        setProfilesByStore(map)
+      })
+      .catch(() => {
+        setVendors([])
+        setProfilesByStore({})
+      })
       .finally(() => setLoading(false))
   }, [])
+
+  const linkedStoresByVendor = React.useMemo(() => {
+    const out: Record<string, VendorLinkedStore[]> = {}
+    const profiles = Object.values(profilesByStore)
+    for (const v of vendors) {
+      out[v.code] = storesLinkedToVendor(
+        {
+          code: v.code,
+          name: v.name,
+          tax_no: v.tax_no,
+          gps_name: v.gps_name,
+          sales_outlet: v.sales_outlet,
+        },
+        storeCodes,
+        profiles,
+        storeLabels,
+        legacyToCanonical
+      )
+    }
+    return out
+  }, [vendors, storeCodes, profilesByStore, storeLabels, legacyToCanonical])
+
+  const editingLinkedStores = React.useMemo(
+    () => (editingCode ? linkedStoresByVendor[editingCode] || [] : []),
+    [editingCode, linkedStoresByVendor]
+  )
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -212,6 +261,7 @@ export default function VendorsPage() {
             onSave={handleSave}
             onReset={handleReset}
             onNewRegister={handleNewRegister}
+            linkedStores={editingLinkedStores}
           />
           </div>
           <VendorTable
@@ -224,6 +274,7 @@ export default function VendorsPage() {
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            linkedStoresByVendor={linkedStoresByVendor}
           />
         </div>
       </div>

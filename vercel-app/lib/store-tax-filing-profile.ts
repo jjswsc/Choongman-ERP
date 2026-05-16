@@ -1,9 +1,15 @@
 import { fetchErpStoresMaster, buildLegacyToCanonicalMap } from '@/lib/erp-store-master'
 import { normStoreKey } from '@/lib/store-list-keys'
-import { supabaseSelectFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
+import {
+  findExplicitVendorForStore,
+  normalizeVendorCode,
+  type VendorTaxLinkInput,
+} from '@/lib/store-vendor-tax-link'
+import { supabaseSelect, supabaseSelectFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
 
 export type StoreTaxFilingProfile = {
   storeCode: string
+  vendorCode: string
   taxpayerName: string
   taxId: string
   branchNo: string
@@ -21,6 +27,7 @@ export type StoreTaxFilingProfile = {
 
 export type StoreTaxFilingProfileRow = {
   store_code?: string
+  vendor_code?: string | null
   taxpayer_name?: string | null
   tax_id?: string | null
   branch_no?: string | null
@@ -58,6 +65,7 @@ export function isValidStoreTaxId(taxId: string): boolean {
 export function mapStoreTaxFilingProfileRow(row: StoreTaxFilingProfileRow): StoreTaxFilingProfile {
   return {
     storeCode: String(row.store_code || '').trim(),
+    vendorCode: String(row.vendor_code || '').trim(),
     taxpayerName: String(row.taxpayer_name || '').trim(),
     taxId: normalizeStoreTaxId(row.tax_id),
     branchNo: normalizeBranchNo(row.branch_no),
@@ -93,6 +101,54 @@ export function listMissingProfileFields(profile: StoreTaxFilingProfile): ('taxp
   return missing
 }
 
+type VendorTaxProfileRow = {
+  code?: string | null
+  name?: string | null
+  tax_id?: string | null
+  gps_name?: string | null
+  sales_outlet?: string | null
+}
+
+async function loadVendorsForTaxLink(): Promise<VendorTaxLinkInput[]> {
+  try {
+    const rows = (await supabaseSelect('vendors', {
+      select: 'code,name,tax_id,gps_name,sales_outlet',
+      order: 'id.asc',
+      limit: 5000,
+    })) as VendorTaxProfileRow[] | null
+    return (rows || [])
+      .map((row) => ({
+        code: String(row.code || '').trim(),
+        name: String(row.name || '').trim(),
+        taxId: normalizeStoreTaxId(row.tax_id),
+        gps_name: String(row.gps_name || '').trim(),
+        sales_outlet: String(row.sales_outlet || '').trim(),
+      }))
+      .filter((v) => v.code)
+  } catch {
+    return []
+  }
+}
+
+async function resolveVendorTaxProfile(opts: {
+  storeCode: string
+  explicitVendorCode?: string
+}): Promise<{ code: string; name: string; taxId: string } | null> {
+  const storeCode = String(opts.storeCode || '').trim()
+  const vendors = await loadVendorsForTaxLink()
+  const hit = findExplicitVendorForStore(storeCode, vendors, opts.explicitVendorCode)
+  if (!hit) return null
+  return {
+    code: String(hit.code || '').trim(),
+    name: String(hit.name || '').trim(),
+    taxId: vendorTaxIdFromInput(hit),
+  }
+}
+
+function vendorTaxIdFromInput(v: VendorTaxLinkInput): string {
+  return normalizeStoreTaxId(v.taxId ?? v.tax_no)
+}
+
 export async function canonicalizeStoreCodeForTaxProfile(storeKey: string): Promise<string> {
   const raw = String(storeKey || '').trim()
   if (!raw || raw === 'All' || raw === '*') return ''
@@ -109,7 +165,7 @@ export async function fetchStoreTaxFilingProfiles(): Promise<StoreTaxFilingProfi
   try {
     const rows = (await supabaseSelectFilter('store_tax_filing_profiles', '', {
       select:
-        'store_code,taxpayer_name,tax_id,branch_no,place_of_business,sso_account_no,sso_branch_code,sso_office_address,sso_postcode,sso_phone,sso_fax,sso_email,updated_at,updated_by',
+        'store_code,vendor_code,taxpayer_name,tax_id,branch_no,place_of_business,sso_account_no,sso_branch_code,sso_office_address,sso_postcode,sso_phone,sso_fax,sso_email,updated_at,updated_by',
       order: 'store_code.asc',
       limit: 500,
     })) as StoreTaxFilingProfileRow[] | null
@@ -128,7 +184,7 @@ export async function fetchStoreTaxFilingProfileByCode(storeCode: string): Promi
       `store_code=eq.${encodeURIComponent(code)}`,
       {
         select:
-          'store_code,taxpayer_name,tax_id,branch_no,place_of_business,sso_account_no,sso_branch_code,sso_office_address,sso_postcode,sso_phone,sso_fax,sso_email,updated_at,updated_by',
+          'store_code,vendor_code,taxpayer_name,tax_id,branch_no,place_of_business,sso_account_no,sso_branch_code,sso_office_address,sso_postcode,sso_phone,sso_fax,sso_email,updated_at,updated_by',
         limit: 1,
       }
     )) as StoreTaxFilingProfileRow[] | null
@@ -146,6 +202,7 @@ export async function resolveStoreTaxFilingProfile(
     Pick<
       StoreTaxFilingProfile,
       | 'taxpayerName'
+      | 'vendorCode'
       | 'taxId'
       | 'branchNo'
       | 'placeOfBusiness'
@@ -161,11 +218,16 @@ export async function resolveStoreTaxFilingProfile(
 ): Promise<StoreTaxFilingProfile> {
   const storeCode = await canonicalizeStoreCodeForTaxProfile(storeKey)
   const fromDb = storeCode ? await fetchStoreTaxFilingProfileByCode(storeCode) : null
+  const resolvedVendor = await resolveVendorTaxProfile({
+    storeCode: storeCode || String(storeKey || '').trim(),
+    explicitVendorCode: fromDb?.vendorCode || fallback?.vendorCode,
+  })
   const fb = fallback || {}
   return {
     storeCode: storeCode || String(storeKey || '').trim(),
-    taxpayerName: String(fromDb?.taxpayerName || fb.taxpayerName || '').trim(),
-    taxId: normalizeStoreTaxId(fromDb?.taxId || fb.taxId),
+    vendorCode: normalizeVendorCode(fromDb?.vendorCode || resolvedVendor?.code || fb.vendorCode),
+    taxpayerName: String(fromDb?.taxpayerName || resolvedVendor?.name || fb.taxpayerName || '').trim(),
+    taxId: normalizeStoreTaxId(fromDb?.taxId || resolvedVendor?.taxId || fb.taxId),
     branchNo: normalizeBranchNo(fromDb?.branchNo || fb.branchNo),
     placeOfBusiness: String(fromDb?.placeOfBusiness || fb.placeOfBusiness || '').trim(),
     ssoAccountNo: String(fromDb?.ssoAccountNo || fb.ssoAccountNo || '').trim(),
@@ -182,6 +244,7 @@ export async function resolveStoreTaxFilingProfile(
 
 export async function upsertStoreTaxFilingProfile(input: {
   storeCode: string
+  vendorCode?: string
   taxpayerName: string
   taxId: string
   branchNo: string
@@ -198,8 +261,16 @@ export async function upsertStoreTaxFilingProfile(input: {
   const storeCode = await canonicalizeStoreCodeForTaxProfile(input.storeCode)
   if (!storeCode) throw new Error('INVALID_STORE_CODE')
 
+  let vendorCode = normalizeVendorCode(input.vendorCode)
+  if (!vendorCode) {
+    const vendors = await loadVendorsForTaxLink()
+    const hit = findExplicitVendorForStore(storeCode, vendors, '')
+    if (hit?.code) vendorCode = hit.code
+  }
+
   const row = {
     store_code: storeCode,
+    vendor_code: vendorCode || null,
     taxpayer_name: String(input.taxpayerName || '').trim().slice(0, 500),
     tax_id: normalizeStoreTaxId(input.taxId),
     branch_no: normalizeBranchNo(input.branchNo),

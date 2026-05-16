@@ -1,15 +1,13 @@
 "use client"
 
-
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
@@ -17,6 +15,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -35,8 +34,9 @@ import { TaxFilingCitTab } from "@/components/admin/tax-filing/tab-cit"
 import { TaxFilingSsoTab } from "@/components/admin/tax-filing/tab-sso"
 import { TaxFilingDbdTab } from "@/components/admin/tax-filing/tab-dbd"
 import { TaxFilingWorkflowTab } from "@/components/admin/tax-filing/tab-workflow"
+import { TaxFilingStoreProfilesTab } from "@/components/admin/tax-filing/tab-store-profiles"
 
-type FilingTabKey = "vat" | "wht" | "cit" | "sso" | "dbd" | "workflow"
+type FilingTabKey = "vat" | "wht" | "cit" | "sso" | "dbd" | "workflow" | "storeProfiles"
 
 function useFilingTabFilters(
   storeOptions: string[],
@@ -45,7 +45,8 @@ function useFilingTabFilters(
   managerStore: string,
   storeOptionLabel: (code: string) => string,
   tAccCompYearMonth: string,
-  tAccCompStore: string
+  tAccCompStore: string,
+  tSearch: string
 ) {
   const defaultYm = React.useCallback(() => getBangkokRecentYearMonths(1)[0], [])
   const defaultStore = React.useCallback(
@@ -65,6 +66,7 @@ function useFilingTabFilters(
   const [dbdStore, setDbdStore] = React.useState(defaultStore)
   const [workflowYm, setWorkflowYm] = React.useState(defaultYm)
   const [workflowStore, setWorkflowStore] = React.useState(defaultStore)
+  const [storeProfilesStore, setStoreProfilesStore] = React.useState(defaultStore)
 
   React.useEffect(() => {
     if (isManager && managerStore) {
@@ -74,6 +76,7 @@ function useFilingTabFilters(
       setSsoStore(managerStore)
       setDbdStore(managerStore)
       setWorkflowStore(managerStore)
+      setStoreProfilesStore(managerStore)
     }
   }, [isManager, managerStore])
 
@@ -84,12 +87,16 @@ function useFilingTabFilters(
       onYearMonthChange,
       storeFilter,
       onStoreFilterChange,
+      onSearch,
+      searchDisabled,
     }: {
       tabKey: FilingTabKey
       yearMonth: string
       onYearMonthChange: (v: string) => void
       storeFilter: string
       onStoreFilterChange: (v: string) => void
+      onSearch?: () => void
+      searchDisabled?: boolean
     }) => (
       <Card className="border-border/80">
         <CardContent className="pt-4 pb-4">
@@ -124,11 +131,29 @@ function useFilingTabFilters(
                 {tAccCompStore}: <span className="text-foreground font-medium">{managerStore}</span>
               </div>
             ) : null}
+            {onSearch ? (
+              <div className="shrink-0">
+                <Button
+                  type="button"
+                  variant="default"
+                  className={cn(
+                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                    "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                  )}
+                  disabled={searchDisabled}
+                  onClick={onSearch}
+                >
+                  {tSearch}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
     ),
-    [isOffice, isManager, managerStore, storeOptionLabel, storeOptions, tAccCompStore, tAccCompYearMonth]
+    [isOffice, isManager, managerStore, storeOptionLabel, storeOptions, tAccCompStore, tAccCompYearMonth, tSearch]
   )
 
   const tabProps = React.useMemo(
@@ -173,7 +198,7 @@ function useFilingTabFilters(
     [vatYm, vatStore, whtYm, whtStore, citYm, citStore, ssoYm, ssoStore, dbdYm, dbdStore, workflowYm, workflowStore]
   )
 
-  return { FilingFiltersCard, tabProps }
+  return { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore }
 }
 
 export function TaxFilingShell() {
@@ -187,7 +212,23 @@ export function TaxFilingShell() {
   const isOffice = isOfficeRole(role) || officeByStore
   const isManager = !isOffice && isManagerOrFranchiseeRole(role)
 
+  const searchParams = useSearchParams()
   const [tab, setTab] = React.useState("vat")
+
+  React.useEffect(() => {
+    const q = String(searchParams.get("tab") || "").trim()
+    if (
+      q === "storeProfiles" ||
+      q === "vat" ||
+      q === "wht" ||
+      q === "cit" ||
+      q === "sso" ||
+      q === "dbd" ||
+      q === "workflow"
+    ) {
+      setTab(q)
+    }
+  }, [searchParams])
 
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []
@@ -199,14 +240,17 @@ export function TaxFilingShell() {
 
   const storeOptionLabel = React.useCallback((code: string) => (code === "All" ? t("all") : code), [t])
 
-  const { FilingFiltersCard, tabProps } = useFilingTabFilters(
+  const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
+
+  const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
     isOffice,
     isManager,
     managerStore,
     storeOptionLabel,
     t("accCompYearMonth"),
-    t("accCompStore")
+    t("accCompStore"),
+    t("search")
   )
 
   return (
@@ -214,6 +258,9 @@ export function TaxFilingShell() {
       <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
         <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>
+                {t("taxFilingTabStoreProfiles")}
+              </TabsTrigger>
               <TabsTrigger value="vat" className={adminTabsTriggerCn}>
                 {t("taxFilingTabVat")}
               </TabsTrigger>
@@ -235,11 +282,31 @@ export function TaxFilingShell() {
             </TabsList>
           </AdminTabsBarWithHelp>
 
+        <TabsContent value="storeProfiles" className={cn(adminTabsContentCn, "space-y-3")}>
+          <TaxFilingStoreProfilesTab
+            filingStoreFilter={storeProfilesStore}
+            onFilingStoreFilterChange={setStoreProfilesStore}
+          />
+        </TabsContent>
         <TabsContent value="vat" className={cn(adminTabsContentCn, "space-y-3")}>
-          <TaxFilingVatTab {...tabProps.vat} />
+          <TaxFilingVatTab
+            {...tabProps.vat}
+            onOpenStoreProfiles={() => {
+              const s = tabProps.vat.filingStoreFilter
+              if (s && s !== "All") setStoreProfilesStore(s)
+              setTab("storeProfiles")
+            }}
+          />
         </TabsContent>
         <TabsContent value="wht" className={cn(adminTabsContentCn, "space-y-3")}>
-          <TaxFilingWhtTab {...tabProps.wht} />
+          <TaxFilingWhtTab
+            {...tabProps.wht}
+            onOpenStoreProfiles={() => {
+              const s = tabProps.wht.filingStoreFilter
+              if (s && s !== "All") setStoreProfilesStore(s)
+              setTab("storeProfiles")
+            }}
+          />
         </TabsContent>
         <TabsContent value="cit" className={cn(adminTabsContentCn, "space-y-3")}>
           <FilingFiltersCard
@@ -249,7 +316,14 @@ export function TaxFilingShell() {
             storeFilter={tabProps.cit.filingStoreFilter}
             onStoreFilterChange={tabProps.cit.onFilingStoreFilterChange}
           />
-          <TaxFilingCitTab {...tabProps.cit} />
+          <TaxFilingCitTab
+            {...tabProps.cit}
+            onOpenStoreProfiles={() => {
+              const s = tabProps.cit.filingStoreFilter
+              if (s && s !== "All") setStoreProfilesStore(s)
+              setTab("storeProfiles")
+            }}
+          />
         </TabsContent>
         <TabsContent value="sso" className={cn(adminTabsContentCn, "space-y-3")}>
           <FilingFiltersCard
@@ -258,8 +332,9 @@ export function TaxFilingShell() {
             onYearMonthChange={tabProps.sso.onFilingYearMonthChange}
             storeFilter={tabProps.sso.filingStoreFilter}
             onStoreFilterChange={tabProps.sso.onFilingStoreFilterChange}
+            onSearch={() => setSsoSearchTick((n) => n + 1)}
           />
-          <TaxFilingSsoTab {...tabProps.sso} />
+          <TaxFilingSsoTab {...tabProps.sso} filingSearchTick={ssoSearchTick} />
         </TabsContent>
         <TabsContent value="dbd" className={cn(adminTabsContentCn, "space-y-3")}>
           <FilingFiltersCard

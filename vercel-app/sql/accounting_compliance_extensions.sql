@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS accounting_filing_preferences (
 -- 매장별 PP30·e-Filing 납세자 프로필 (store_code = erp_stores.store_code)
 CREATE TABLE IF NOT EXISTS store_tax_filing_profiles (
   store_code TEXT PRIMARY KEY,
+  vendor_code TEXT NULL,
   taxpayer_name TEXT NOT NULL DEFAULT '',
   tax_id TEXT NOT NULL DEFAULT '',
   branch_no TEXT NOT NULL DEFAULT '00000',
@@ -37,6 +38,9 @@ CREATE TABLE IF NOT EXISTS store_tax_filing_profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_store_tax_filing_profiles_vendor_code
+  ON store_tax_filing_profiles(vendor_code);
 
 ALTER TABLE store_tax_filing_profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all store_tax_filing_profiles" ON store_tax_filing_profiles;

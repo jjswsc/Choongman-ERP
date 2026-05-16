@@ -9,12 +9,18 @@ import { useT, tOr } from "@/lib/i18n"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useStoreList } from "@/lib/api-client"
 import { useStoreView, filterNonOfficeStores } from "@/lib/store-view-context"
-import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 const OPS_CENTER_HELP_SUM = hrefToHelpSummaryKey("/admin/ops-center")
@@ -38,7 +44,7 @@ export default function AdminOpsCenterPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { viewStore } = useStoreView()
+  const { viewStore, setViewStore } = useStoreView()
   const { stores, formatStoreLabel, loading: storesLoading } = useStoreList()
 
   const isOfficeSelector =
@@ -46,22 +52,31 @@ export default function AdminOpsCenterPage() {
 
   const branchStores = React.useMemo(() => filterNonOfficeStores(stores), [stores])
 
-  /** 운영 KPI·경보 API는 매장 단일만 허용. 본사에서「전체」·미선택이면 첫 지점으로 조회 */
+  /** 운영 KPI·경보는 매장 단일만 — 전역「전체 매장」과 분리해 이 화면에서만 지점 선택 */
+  const [opsStoreCode, setOpsStoreCode] = React.useState("")
+
+  React.useEffect(() => {
+    if (!isOfficeSelector || branchStores.length === 0) return
+    setOpsStoreCode((prev) => {
+      if (prev && branchStores.includes(prev)) return prev
+      const fromView = String(viewStore || "").trim()
+      if (fromView && fromView !== "All" && branchStores.includes(fromView)) return fromView
+      return branchStores[0]
+    })
+  }, [isOfficeSelector, branchStores, viewStore])
+
   const apiStoreCode = React.useMemo(() => {
     if (!isOfficeSelector) {
       return String(auth?.store || "").trim()
     }
-    const raw = String(viewStore || "").trim() || String(auth?.store || "").trim()
-    if (raw && raw !== "All") return raw
-    return branchStores[0] || ""
-  }, [isOfficeSelector, viewStore, auth?.store, branchStores])
+    return opsStoreCode.trim()
+  }, [isOfficeSelector, auth?.store, opsStoreCode])
 
-  const scopeLabel = React.useMemo(() => {
-    if (!apiStoreCode) {
-      return storesLoading ? t("adminOpsCenterStoreLoading") : t("adminOpsCenterNeedBranchStore")
-    }
-    return formatStoreLabel(apiStoreCode) || apiStoreCode
-  }, [apiStoreCode, storesLoading, formatStoreLabel, t])
+  const franchiseStoreLabel = React.useMemo(() => {
+    const code = String(auth?.store || "").trim()
+    if (!code) return ""
+    return formatStoreLabel(code) || code
+  }, [auth?.store, formatStoreLabel])
 
   const [date, setDate] = React.useState(() => getBangkokTodayDateString())
   const [loading, setLoading] = React.useState(false)
@@ -156,10 +171,7 @@ export default function AdminOpsCenterPage() {
                 {tOr(t, "adminOpsCenterTitle", t("adminOpsCenter"))}
               </h1>
             </div>
-            <p className="text-xs text-muted-foreground">{scopeLabel}</p>
-            <p className="text-xs text-muted-foreground">
-              {t("adminOpsCenterSub")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("adminOpsCenterSub")}</p>
             <HelpSumHowBlocks helpSumKey={OPS_CENTER_HELP_SUM} className="mt-2 max-w-xl" compact />
           </div>
           <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => void load()} disabled={loading}>
@@ -168,9 +180,43 @@ export default function AdminOpsCenterPage() {
           </Button>
         </div>
 
-        {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
-
         <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-card/40 p-4">
+          {isOfficeSelector ? (
+            <div className="grid gap-2">
+              <Label htmlFor="ops-center-store" className="text-xs text-muted-foreground">
+                {t("adminOpsCenterStoreLabel")}
+              </Label>
+              {storesLoading && branchStores.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("adminOpsCenterStoreLoading")}</p>
+              ) : branchStores.length === 0 ? (
+                <p className="text-sm text-destructive">{t("adminOpsCenterNeedBranchStore")}</p>
+              ) : (
+                <Select
+                  value={opsStoreCode || branchStores[0]}
+                  onValueChange={(code) => {
+                    setOpsStoreCode(code)
+                    setViewStore(code)
+                  }}
+                >
+                  <SelectTrigger id="ops-center-store" className="h-9 w-[min(100%,14rem)] text-sm">
+                    <SelectValue placeholder={t("adminOpsCenterStoreLabel")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branchStores.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {formatStoreLabel(code) || code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          ) : franchiseStoreLabel ? (
+            <div className="grid gap-2">
+              <Label className="text-xs text-muted-foreground">{t("adminOpsCenterStoreLabel")}</Label>
+              <p className="text-sm font-medium">{franchiseStoreLabel}</p>
+            </div>
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="ops-center-date" className="text-xs text-muted-foreground">
               {t("adminOpsCenterDateLabel")}

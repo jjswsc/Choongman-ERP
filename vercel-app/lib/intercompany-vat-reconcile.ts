@@ -1,7 +1,11 @@
 import { isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
-import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import {
+  supabaseSelect,
+  supabaseSelectFilterRange,
+  supabaseSelectFilterAllPages,
+} from '@/lib/supabase-server'
 
 type StockLogRow = {
   log_date?: string | null
@@ -248,4 +252,46 @@ export async function analyzeIntercompanyVatReconcile(params: {
     diffNetTotal: round2(storeInputNetTotal - hqIssuedNetTotal),
     rows: rows.slice(0, 80),
   }
+}
+
+/** 해당 기간·매장에 본사 출고(세금계산서 reference) 이력이 있는지 — 대사 UI 노출 여부 판단용 */
+export async function probeStoreHasHqOutboundSupply(params: {
+  months: string[]
+  matchesStore: (storeName: string) => boolean
+}): Promise<boolean> {
+  const months = (params.months || []).map((x) => String(x || '').slice(0, 7)).filter(Boolean)
+  if (!months.length) return false
+
+  const startYmd = monthStartYmd(months[0]!)
+  const endYmd = monthEndYmd(months[months.length - 1]!)
+  const stockFilter = [
+    'log_type=in.(Outbound,ForceOutbound)',
+    `log_date=gte.${startYmd}`,
+    `log_date=lte.${endYmd}T23:59:59.999`,
+  ].join('&')
+
+  const pageSize = 2000
+  const maxScan = 20000
+  for (let start = 0; start < maxScan; start += pageSize) {
+    const end = start + pageSize - 1
+    const page = (await supabaseSelectFilterRange('stock_logs', stockFilter, {
+      select: 'location,vendor_target,reference_no',
+      order: 'id.asc',
+      rangeStart: start,
+      rangeEnd: end,
+    })) as StockLogRow[] | null
+    const rows = page || []
+    if (!rows.length) break
+    for (const r of rows) {
+      const location = String(r.location || '').trim()
+      if (!(isOfficeStore(location) || isHeadOfficeLikeStoreName(location) || location === '본사')) continue
+      const storeName = String(r.vendor_target || '').trim()
+      if (!storeName || !params.matchesStore(storeName)) continue
+      const referenceNo = String(r.reference_no || '').trim()
+      if (!referenceNo) continue
+      return true
+    }
+    if (rows.length < pageSize) break
+  }
+  return false
 }

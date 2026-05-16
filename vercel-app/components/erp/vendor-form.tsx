@@ -27,6 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import Link from "next/link"
+import type { VendorLinkedStore } from "@/components/erp/vendor-table"
 
 export interface VendorFormData {
   code: string
@@ -50,9 +52,18 @@ export interface VendorFormProps {
   onSave: () => void
   onReset: () => void
   onNewRegister: () => void
+  linkedStores?: VendorLinkedStore[]
 }
 
-export function VendorForm({ formData, setFormData, isEditing, onSave, onReset, onNewRegister }: VendorFormProps) {
+export function VendorForm({
+  formData,
+  setFormData,
+  isEditing,
+  onSave,
+  onReset,
+  onNewRegister,
+  linkedStores = [],
+}: VendorFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const update = (key: keyof VendorFormData, value: string) => {
@@ -242,6 +253,24 @@ export function VendorForm({ formData, setFormData, isEditing, onSave, onReset, 
             onChange={(e) => update("memo", e.target.value)}
           />
         </div>
+
+        {isEditing && linkedStores.length > 0 ? (
+          <div className="rounded-md border border-border/60 bg-muted/10 px-3 py-2.5 space-y-1.5">
+            <div className="text-xs font-semibold text-foreground">{t("vendorFormLinkedStores")}</div>
+            <div className="flex flex-wrap gap-1">
+              {linkedStores.map((l) => (
+                <span key={l.storeCode} className="inline-flex rounded-md bg-background border border-border/60 px-2 py-0.5 text-[11px]">
+                  {l.storeCode}
+                </span>
+              ))}
+            </div>
+            <Button type="button" variant="link" className="h-auto p-0 text-[11px]" asChild>
+              <Link href="/admin/tax-filing?tab=storeProfiles">{t("vendorFormOpenTaxProfiles")}</Link>
+            </Button>
+          </div>
+        ) : isEditing ? (
+          <p className="text-[11px] text-muted-foreground">{t("vendorFormLinkedStoresNone")}</p>
+        ) : null}
 
         <div className="flex gap-3 pt-1">
           <Button className="flex-1 h-11 text-sm font-bold" onClick={onSave}>

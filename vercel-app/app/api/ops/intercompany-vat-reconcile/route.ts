@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { analyzeIntercompanyVatReconcile } from '@/lib/intercompany-vat-reconcile'
+import { analyzeIntercompanyVatReconcile, probeStoreHasHqOutboundSupply } from '@/lib/intercompany-vat-reconcile'
 import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
@@ -70,10 +70,22 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const matchesStore = (name: string) => storeScope.matches(name)
+    const probeOnly = String(searchParams.get('probeOnly') || '').trim() === '1'
+    if (probeOnly) {
+      if (!storeFilter || storeFilter === 'All') {
+        return NextResponse.json({ period, applicable: false }, { headers })
+      }
+      const applicable = await probeStoreHasHqOutboundSupply({
+        months: period.months,
+        matchesStore,
+      })
+      return NextResponse.json({ period, applicable }, { headers })
+    }
     const report = await analyzeIntercompanyVatReconcile({
       months: period.months,
       storeFilter: storeFilter || 'All',
-      matchesStore: (name) => storeScope.matches(name),
+      matchesStore,
     })
     return NextResponse.json({ period, report }, { headers })
   } catch (e) {

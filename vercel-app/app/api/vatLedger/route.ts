@@ -257,44 +257,46 @@ export async function GET(request: NextRequest) {
       if (!initialStoreScope.matches(String(row.store_name || ''))) return false
       return matchesFilingStatus(row.filing_status, filingStatus)
     })
+    const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
+    const filterScopedEntries = (rows: Record<string, unknown>[] | null) =>
+      (rows || []).filter((row) => {
+        if (!initialStoreScope.matches(String(row.store_name || ''))) return false
+        return matchesFilingStatus(row.filing_status, filingStatus)
+      })
+
+    const runVatAutoSync = async () => {
+      await syncInputVatFromExpensesForPeriod({
+        startMonth: period.startMonth,
+        endMonth: period.endMonth,
+        storeFilter,
+      })
+      await syncTaxVatLedgersFromStockAndExpenses({
+        months: period.months,
+        storeFilter,
+      })
+    }
+
     if (initialEntries.length > 0) {
       const hasInputEntries = initialEntries.some(
         (row) => String(row.direction || '').trim().toLowerCase() === 'input'
       )
-      if (!hasInputEntries) {
-        // 매출 등만 있고 매입 행이 없을 때: 지출 기반 매입만 채우면 입고(stock_logs Inbound) 매입이
-        // 영구히 빠진 채로 조기 반환되는 문제가 있어, 입고·지출 통합 동기화도 같이 돌린다.
+      // 매입 1건이라도 있으면 조기 반환하던 동작은, 특정 매장 조회 시 누락(본사 1건만 보임)을 유발함.
+      const needsAutoSync = !hasInputEntries || scopedStoreFilter
+      if (needsAutoSync) {
         try {
-          await syncInputVatFromExpensesForPeriod({
-            startMonth: period.startMonth,
-            endMonth: period.endMonth,
-            storeFilter,
-          })
-        } catch (e) {
-          console.warn('vatLedger GET expense-input quick sync skipped:', e)
-        }
-        try {
-          await syncTaxVatLedgersFromStockAndExpenses({
-            months: period.months,
-            storeFilter,
-          })
-        } catch (e) {
-          console.warn('vatLedger GET stock+expense auto-sync skipped:', e)
-        }
-        try {
+          await runVatAutoSync()
           const refreshedRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
             select: '*',
             order: 'doc_date.asc,id.asc',
             pageSize: 4000,
             maxRows: 100000,
           })) as Record<string, unknown>[] | null
-          const refreshedEntries = (refreshedRows || []).filter((row) => {
-            if (!initialStoreScope.matches(String(row.store_name || ''))) return false
-            return matchesFilingStatus(row.filing_status, filingStatus)
-          })
-          return NextResponse.json({ entries: enrichVatLedgerEntries(refreshedEntries), period }, { headers })
+          return NextResponse.json(
+            { entries: enrichVatLedgerEntries(filterScopedEntries(refreshedRows)), period },
+            { headers }
+          )
         } catch (e) {
-          console.warn('vatLedger GET refresh after input backfill failed:', e)
+          console.warn('vatLedger GET refresh after auto-sync failed:', e)
         }
       }
       return NextResponse.json({ entries: enrichVatLedgerEntries(initialEntries), period }, { headers })

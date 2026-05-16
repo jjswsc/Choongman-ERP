@@ -2721,6 +2721,7 @@ export async function getVatLedger(params: {
 
 export type StoreTaxFilingProfileDto = {
   storeCode: string
+  vendorCode?: string
   taxpayerName: string
   taxId: string
   branchNo: string
@@ -2761,6 +2762,7 @@ export async function getStoreTaxFilingProfiles() {
 
 export async function saveStoreTaxFilingProfile(params: {
   storeCode: string
+  vendorCode?: string
   taxpayerName: string
   taxId: string
   branchNo: string
@@ -2869,6 +2871,30 @@ export async function getIntercompanyVatReconcile(params: {
     return { report: null, error: data?.error || `HTTP_${res.status}` }
   }
   return { report: data.report || null }
+}
+
+/** 본사 출고(세금계산서) 이력이 있을 때만 매장↔본사 VAT 대사 UI를 노출 */
+export async function probeIntercompanyVatReconcileApplicable(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    taxMonth: params.taxMonth,
+    storeFilter: params.storeFilter,
+    probeOnly: '1',
+  })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  const res = await apiFetchWithOffline(`/api/ops/intercompany-vat-reconcile?${q}`)
+  const data = (await res.json()) as { applicable?: boolean; error?: string }
+  if (!res.ok) {
+    return { applicable: false, error: data?.error || `HTTP_${res.status}` }
+  }
+  return { applicable: Boolean(data.applicable) }
 }
 
 export async function saveVatLedgerEntry(params: Record<string, unknown> & { userRole: string }) {

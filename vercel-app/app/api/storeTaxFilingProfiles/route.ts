@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
     const storeCode = String(body.storeCode || body.store_code || '').trim()
+    const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const taxpayerName = String(body.taxpayerName || body.taxpayer_name || '').trim()
     const taxId = normalizeStoreTaxId(body.taxId ?? body.tax_id)
     const branchNo = normalizeBranchNo(body.branchNo ?? body.branch_no)
@@ -86,15 +87,16 @@ export async function POST(request: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ error: 'INVALID_STORE_CODE' }, { status: 400, headers })
     }
-    if (!taxpayerName) {
+    if (!taxpayerName && !vendorCode) {
       return NextResponse.json({ error: 'TAXPAYER_NAME_REQUIRED' }, { status: 400, headers })
     }
-    if (!isValidStoreTaxId(taxId)) {
+    if (!isValidStoreTaxId(taxId) && !vendorCode) {
       return NextResponse.json({ error: 'INVALID_TAX_ID' }, { status: 400, headers })
     }
 
     const profile = await upsertStoreTaxFilingProfile({
       storeCode,
+      vendorCode,
       taxpayerName,
       taxId,
       branchNo,
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
       decision: 'allow',
       targetType: 'store_tax_filing_profile',
       targetId: profile.storeCode,
-      payload: { taxIdLast4: taxId.slice(-4) },
+      payload: { taxIdLast4: taxId.slice(-4), vendorCode: profile.vendorCode || null },
     })
 
     return NextResponse.json({ success: true, profile }, { headers })
