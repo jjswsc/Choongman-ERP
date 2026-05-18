@@ -1095,6 +1095,7 @@ export default function OutboundPage() {
       const allConflicts: string[] = []
       const receivableMerge: Record<string, number> = {}
       let totalLogCount = 0
+      let anyOrderCancelOnly = false
       for (const j of jobs) {
         const preview = await previewDeleteOutbound({
           mode: j.mode,
@@ -1105,6 +1106,7 @@ export default function OutboundPage() {
           await appAlert(translateApiMessage(preview?.message, t) || preview?.message || "삭제 대상 조회에 실패했습니다.")
           return
         }
+        if (preview.orderCancelWithoutOutboundLogs) anyOrderCancelOnly = true
         totalLogCount += Number(preview.targetCount || 0)
         for (const c of preview.conflicts || []) {
           allConflicts.push(`- ${c.message}`)
@@ -1123,11 +1125,19 @@ export default function OutboundPage() {
       if (jobs.length > 5) {
         detailLines.push(`- … ${t("inEtcCount")} ${jobs.length - 5}`)
       }
-      const summaryLines = [
-        `대상 그룹: ${jobs.length.toLocaleString()}건, 출고 로그(항목) 합계: ${totalLogCount.toLocaleString()}건`,
-        ...detailLines,
-        "",
-      ]
+      const summaryLines =
+        anyOrderCancelOnly && totalLogCount === 0
+          ? [
+              "승인만 된 주문(출고 로그 없음) → 주문 취소(반려) 처리됩니다.",
+              `대상: ${jobs.length.toLocaleString()}건`,
+              ...detailLines,
+              "",
+            ]
+          : [
+              `대상 그룹: ${jobs.length.toLocaleString()}건, 출고 로그(항목) 합계: ${totalLogCount.toLocaleString()}건`,
+              ...detailLines,
+              "",
+            ]
       if (receivableImpactLines.length > 0) {
         summaryLines.push("삭제 시 미수금 감소 예상:", ...receivableImpactLines)
       }
@@ -1139,11 +1149,14 @@ export default function OutboundPage() {
       const reason = (await appPrompt(`${summaryLines.join("\n")}\n\n삭제 사유를 입력해 주세요.`))?.trim()
       if (!reason) return
       const ok2 = await appConfirm(
-        `출고 소프트 삭제를 진행할까요?\n\n사유: ${reason}\n대상 그룹: ${jobs.length.toLocaleString()}건, 출고 항목: ${totalLogCount.toLocaleString()}건`
+        anyOrderCancelOnly && totalLogCount === 0
+          ? `승인 주문을 취소(반려)할까요?\n\n사유: ${reason}\n대상: ${jobs.length.toLocaleString()}건 (출고 전)`
+          : `출고 소프트 삭제를 진행할까요?\n\n사유: ${reason}\n대상 그룹: ${jobs.length.toLocaleString()}건, 출고 항목: ${totalLogCount.toLocaleString()}건`
       )
       if (!ok2) return
 
       const allWarnings: string[] = []
+      let didOrderCancelOnly = false
       for (const j of jobs) {
         const idempotencyKey =
           typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -1156,6 +1169,7 @@ export default function OutboundPage() {
           ...(j.mode === "force" && j.stockLogIds?.length ? { stockLogIds: j.stockLogIds } : {}),
           idempotencyKey,
         })
+        if (result.orderCancelWithoutOutboundLogs) didOrderCancelOnly = true
         if (!result.success) {
           const conflictMsg = (result.conflicts || []).map((c) => `- ${c.message}`).join("\n")
           await appAlert(
@@ -1177,7 +1191,9 @@ export default function OutboundPage() {
       const warnText = allWarnings.slice(0, 12).join("\n")
       await appAlert(
         [
-          `선택 ${jobs.length.toLocaleString()}개 그룹이 삭제되었습니다.`,
+          didOrderCancelOnly && totalLogCount === 0
+            ? `선택 ${jobs.length.toLocaleString()}건 주문이 취소(반려)되었습니다.`
+            : `선택 ${jobs.length.toLocaleString()}개 그룹이 삭제되었습니다.`,
           warnText ? `후속 점검 메시지:\n${warnText}` : "",
         ]
           .filter(Boolean)

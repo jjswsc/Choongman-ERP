@@ -37,6 +37,8 @@ export type PosMenuUpsertApiBody = {
   descriptionDefault?: string
   descriptionDelivery?: string | null
   descriptionTable?: string | null
+  /** 원가 계산기 배달앱 수수료(%) — 0 허용, null이면 DB NULL(앱 기본 25%) */
+  deliveryAppFeePercent?: number | null
   id?: string
   storeCode?: string
   storeCodes?: string[]
@@ -68,6 +70,7 @@ type ExistingMenuRow = {
   description_default?: string | null
   description_delivery?: string | null
   description_table?: string | null
+  delivery_app_fee_percent?: number | null
 }
 
 /**
@@ -216,6 +219,13 @@ export async function upsertPosMenuFromBody(
   const hasDescriptionDelivery = 'descriptionDelivery' in body
   const hasDescriptionTable = 'descriptionTable' in body
   const hasSortOrder = body.sortOrder != null && Number.isFinite(Number(body.sortOrder))
+  const hasDeliveryAppFeePercent = 'deliveryAppFeePercent' in body
+  const deliveryAppFeePercent =
+    hasDeliveryAppFeePercent && body.deliveryAppFeePercent != null
+      ? Math.max(0, Math.min(100, Number(body.deliveryAppFeePercent)))
+      : hasDeliveryAppFeePercent
+        ? null
+        : undefined
   const baseRow: Record<string, unknown> = {
     code,
     name,
@@ -244,6 +254,12 @@ export async function upsertPosMenuFromBody(
   }
   if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
   if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
+  if (hasDeliveryAppFeePercent) {
+    baseRow.delivery_app_fee_percent =
+      deliveryAppFeePercent != null && Number.isFinite(deliveryAppFeePercent)
+        ? deliveryAppFeePercent
+        : null
+  }
   baseRow.is_banban = isBanban
   if (!editingId || hasDescriptionDefault) {
     baseRow.description_default = String(body.descriptionDefault ?? '').trim()
@@ -278,7 +294,7 @@ export async function upsertPosMenuFromBody(
           {
             limit: 1,
             select:
-              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table',
+              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,delivery_app_fee_percent',
           }
         )) as ExistingMenuRow[] | null
       } catch {
@@ -392,6 +408,7 @@ export async function upsertPosMenuFromBody(
             fieldUnchanged('description_default', normStr) &&
             fieldUnchanged('description_delivery', normStr) &&
             fieldUnchanged('description_table', normStr) &&
+            fieldUnchanged('delivery_app_fee_percent', normNum) &&
             fieldUnchanged('option_selection_groups', normStrArr) &&
             fieldUnchanged('option_selection_config', normalizeOptionConfig)
           if (!sameFieldsExceptImage) {
@@ -462,6 +479,7 @@ export async function upsertPosMenuFromBody(
             const rowWithout = { ...row } as Record<string, unknown>
             if (String(colErr).includes('category_main')) delete rowWithout.category_main
             if (String(colErr).includes('is_banban')) delete rowWithout.is_banban
+            if (String(colErr).includes('delivery_app_fee_percent')) delete rowWithout.delivery_app_fee_percent
             await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, rowWithout)
           } else throw colErr
         }

@@ -37,6 +37,22 @@ export interface MenuItem {
 
 export const MISE_DEFAULT = 3
 
+/** 원가 계산기·DB 미설정 시 배달앱 수수료 기본값(%) */
+export const DELIVERY_APP_FEE_PERCENT_DEFAULT = 25
+
+export function normalizeDeliveryAppFeePercent(value: unknown): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return DELIVERY_APP_FEE_PERCENT_DEFAULT
+  return Math.max(0, Math.min(100, Math.round(n * 100) / 100))
+}
+
+export function resolveDeliveryAppFeePercent(stored: unknown): number {
+  if (stored === null || stored === undefined || stored === "") {
+    return DELIVERY_APP_FEE_PERCENT_DEFAULT
+  }
+  return normalizeDeliveryAppFeePercent(stored)
+}
+
 /** 초기 상태: 메뉴 미선택 */
 export const emptyMenuItem: MenuItem = {
   menuCode: "",
@@ -45,7 +61,7 @@ export const emptyMenuItem: MenuItem = {
   description: "",
   inclVat: 0,
   serviceType: "Dine-In",
-  deliveryPercent: 25,
+  deliveryPercent: DELIVERY_APP_FEE_PERCENT_DEFAULT,
   misePercent: MISE_DEFAULT,
 }
 

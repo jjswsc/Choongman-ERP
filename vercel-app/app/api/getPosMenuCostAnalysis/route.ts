@@ -31,6 +31,7 @@ type MenuRow = {
   price_delivery?: number | null
   vat_included?: boolean
   cooking_time_min?: number | null
+  delivery_app_fee_percent?: number | null
 }
 type IngRow = {
   id?: number
@@ -132,7 +133,7 @@ async function loadPosMenusPaged(): Promise<MenuRow[]> {
   try {
     return (await supabaseSelectAllPages('pos_menus', {
       order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
-      select: 'id,code,name,category,category_main,promo_id,price,price_delivery,vat_included,cooking_time_min',
+      select: 'id,code,name,category,category_main,promo_id,price,price_delivery,vat_included,cooking_time_min,delivery_app_fee_percent',
     })) as MenuRow[]
   } catch {
     return (await supabaseSelectAllPages('pos_menus', {
@@ -384,6 +385,7 @@ export async function GET(request: NextRequest) {
       costDelivery: number
       breakdown: BreakdownRow[]
       cookingTimeMin?: number | null
+      deliveryAppFeePercent?: number | null
     }
 
     const result: MenuCostRow[] = []
@@ -680,6 +682,10 @@ export async function GET(request: NextRequest) {
       const categoryMain = normalizePromotionCategoryMain(menu.category_main)
       const cookingTimeMin = menu.cooking_time_min != null && Number.isFinite(menu.cooking_time_min) ? menu.cooking_time_min : null
       const vatIncluded = menu.vat_included !== false
+      const deliveryAppFeePercent =
+        menu.delivery_app_fee_percent != null && Number.isFinite(Number(menu.delivery_app_fee_percent))
+          ? Number(menu.delivery_app_fee_percent)
+          : null
       result.push({
         menuId: String(menu.id ?? ''),
         menuCode: String(menu.code ?? ''),
@@ -689,6 +695,7 @@ export async function GET(request: NextRequest) {
         priceHall,
         priceDelivery,
         vatIncluded,
+        deliveryAppFeePercent,
         optionId: null,
         optionCode: null,
         optionName: null,
@@ -723,6 +730,7 @@ export async function GET(request: NextRequest) {
             priceHall: optPriceHall,
             priceDelivery: optPriceDelivery,
             vatIncluded,
+            deliveryAppFeePercent,
             optionId: String(opt.id ?? ''),
             optionCode: String(opt.option_code ?? '').trim() || `${String(menu.code ?? '')}-${Math.max(0, Number(opt.sort_order ?? 0)) + 1}`,
             optionName: String(opt.name ?? ''),
@@ -750,6 +758,7 @@ export async function GET(request: NextRequest) {
             priceHall: optPriceHall,
             priceDelivery: optPriceDelivery,
             vatIncluded,
+            deliveryAppFeePercent,
             optionId: String(opt.id ?? ''),
             optionCode: String(opt.option_code ?? '').trim() || `${String(menu.code ?? '')}-${Math.max(0, Number(opt.sort_order ?? 0)) + 1}`,
             optionName: String(opt.name ?? ''),

@@ -6674,6 +6674,8 @@ export interface PosMenuCostAnalysisRow {
   costHall: number
   costDelivery: number
   cookingTimeMin?: number | null
+  /** 배달앱 수수료(%) — null이면 UI 기본 25% */
+  deliveryAppFeePercent?: number | null
   breakdown: {
     itemCode: string
     itemName: string
@@ -6957,6 +6959,7 @@ export async function savePosMenu(
     optionSelectionConfig?: PosOptionSelectionGroupConfig[]
     kitchenPrinter?: number | null
     cookingTimeMin?: number | null
+    deliveryAppFeePercent?: number | null
     isBanban?: boolean
     descriptionDefault?: string
     descriptionDelivery?: string | null
@@ -10618,6 +10621,8 @@ export type DeleteOutboundPreview = {
   restoreByLocation?: Record<string, number>
   receivableDeleteByStore?: Record<string, number>
   projectedOutstandingByStore?: Record<string, number>
+  /** 출고 로그 없이 승인만 된 주문 — 반려 취소 경로 */
+  orderCancelWithoutOutboundLogs?: boolean
   conflicts?: { kind: 'journal_exists' | 'over_receive'; message: string; store?: string; orderId?: number }[]
   message?: string
 }
@@ -10670,6 +10675,7 @@ export async function deleteOutbound(params: {
     duplicated?: boolean
     message?: string
     deletedCount?: number
+    orderCancelWithoutOutboundLogs?: boolean
     warnings?: string[]
     preview?: DeleteOutboundPreview
     conflicts?: { kind: 'journal_exists' | 'over_receive'; message: string; store?: string; orderId?: number }[]

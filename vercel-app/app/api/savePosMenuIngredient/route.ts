@@ -11,7 +11,10 @@ export async function POST(req: NextRequest) {
     const id = body?.id
     const menuId = Number(body?.menuId)
     const itemCode = String(body?.itemCode ?? '').trim()
-    const quantity = Math.max(0.001, Number(body?.quantity) ?? 1)
+    const quantity = Math.max(0, Number(body?.quantity) ?? 1)
+    if (quantity <= 0) {
+      return NextResponse.json({ success: false, message: 'quantity must be greater than 0' }, { headers })
+    }
     const lossRate = Math.max(0, Math.min(100, Number(body?.lossRate) ?? 0))
     const optionId = body?.optionId != null ? Number(body.optionId) : null
     const ingredientType = (body?.ingredientType ?? 'food') === 'packaging' ? 'packaging' : 'food'

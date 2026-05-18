@@ -4,6 +4,7 @@ import {
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
   supabaseUpdate,
+  supabaseDeleteByFilter,
 } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
@@ -202,6 +203,145 @@ async function recomputeOrderDeliveryStatus(orderId: number): Promise<void> {
   })
 }
 
+function parseReceivedIndices(raw: unknown): number[] {
+  if (raw == null) return []
+  if (Array.isArray(raw)) {
+    return raw.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n >= 0)
+  }
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n >= 0)
+  } catch {
+    return []
+  }
+}
+
+type ApprovedOrderCancelPreview = {
+  orderCancelWithoutOutboundLogs: true
+  orderIds: number[]
+  forceOutboundIds: number[]
+  stores: string[]
+  restoreByLocation: Record<string, number>
+  receivableDeleteByStore: Record<string, number>
+  projectedOutstandingByStore: Record<string, number>
+  conflicts: DeletePreviewConflict[]
+}
+
+async function buildApprovedOrderCancelPreview(orderId: number): Promise<
+  | { ok: false; message: string; status: number }
+  | { ok: true; preview: ApprovedOrderCancelPreview }
+> {
+  const orders = (await supabaseSelectFilter('orders', `id=eq.${orderId}`, {
+    limit: 1,
+    select: 'id,status,store_name,delivery_status,received_indices',
+  })) as {
+    id?: number
+    status?: string
+    store_name?: string
+    delivery_status?: string
+    received_indices?: string | number[] | null
+  }[]
+  const o = orders?.[0]
+  if (!o?.id) {
+    return { ok: false, message: '해당 주문을 찾을 수 없습니다.', status: 404 }
+  }
+  const status = String(o.status || '').trim()
+  if (status !== 'Approved') {
+    return {
+      ok: false,
+      message:
+        status === 'Rejected'
+          ? '이미 반려·취소된 주문입니다.'
+          : '출고 로그가 없고, 승인(Approved) 상태 주문만 출고 화면에서 취소할 수 있습니다.',
+      status: 409,
+    }
+  }
+  const received = parseReceivedIndices(o.received_indices)
+  if (received.length > 0) {
+    return {
+      ok: false,
+      message: '매장 수령이 시작된 주문은 여기서 취소할 수 없습니다. 출고 로그 삭제 또는 수령 조정이 필요합니다.',
+      status: 409,
+    }
+  }
+  const ds = String(o.delivery_status || '').trim()
+  if (ds === '배송완료' || ds === '일부배송완료') {
+    return {
+      ok: false,
+      message: '배송 완료(또는 일부 완료) 주문은 출고 삭제로 취소할 수 없습니다.',
+      status: 409,
+    }
+  }
+
+  const hasJournal = await hasJournalForSource('store_purchase', orderId)
+  const conflicts: DeletePreviewConflict[] = []
+  if (hasJournal) {
+    conflicts.push({
+      kind: 'journal_exists',
+      orderId,
+      message: `주문 ${orderId}는 회계 분개(store_purchase)가 존재하여 취소를 차단했습니다.`,
+    })
+  }
+
+  const storeName = String(o.store_name || '').trim()
+  const receivableDeleteByStore = await computeDeleteAmountByStore({ orderIds: [orderId], forceOutboundIds: [] })
+  const allStores = [...new Set([storeName, ...Object.keys(receivableDeleteByStore)].filter(Boolean))]
+  const currentOutstanding = await sumReceivableForStores(allStores)
+  const projection = projectOutstandingAfterDelete({
+    currentOutstandingByStore: currentOutstanding,
+    deletingReceivableByStore: receivableDeleteByStore,
+  })
+  for (const hit of projection.overReceivedStores) {
+    conflicts.push({
+      kind: 'over_receive',
+      store: hit.store,
+      message: `${hit.store}는 취소 후 미수금이 음수(${hit.projected.toLocaleString()})가 되어 수금 초과 상태가 됩니다.`,
+    })
+  }
+
+  return {
+    ok: true,
+    preview: {
+      orderCancelWithoutOutboundLogs: true,
+      orderIds: [orderId],
+      forceOutboundIds: [],
+      stores: allStores,
+      restoreByLocation: {},
+      receivableDeleteByStore,
+      projectedOutstandingByStore: projection.projectedByStore,
+      conflicts,
+    },
+  }
+}
+
+async function cancelApprovedOrderWithoutOutboundLogs(params: {
+  orderId: number
+  reason: string
+}): Promise<{ ok: true } | { ok: false; message: string; status: number; conflicts?: DeletePreviewConflict[] }> {
+  const built = await buildApprovedOrderCancelPreview(params.orderId)
+  if (!built.ok) {
+    return { ok: false, message: built.message, status: built.status }
+  }
+  if (built.preview.conflicts.length > 0) {
+    return {
+      ok: false,
+      message: '취소 전 충돌이 발견되어 중단했습니다. (회계 분개/수금 초과 확인)',
+      status: 409,
+      conflicts: built.preview.conflicts,
+    }
+  }
+  await supabaseUpdate('orders', params.orderId, {
+    status: 'Rejected',
+    reject_reason: params.reason,
+  })
+  await supabaseDeleteByFilter(
+    'receivable_transactions',
+    `ref_type=eq.Order&ref_id=eq.${params.orderId}`
+  )
+  return { ok: true }
+}
+
 async function buildPreview(mode: DeleteMode, rows: StockLogRow[]): Promise<{
   orderIds: number[]
   forceOutboundIds: number[]
@@ -323,6 +463,76 @@ export async function POST(request: NextRequest) {
 
     const targetRows = await loadTargetRows({ mode, orderId, referenceNo, stockLogIds })
     if (!targetRows.length) {
+      if (mode === 'order' && orderId > 0) {
+        const cancelBuilt = await buildApprovedOrderCancelPreview(orderId)
+        if (!cancelBuilt.ok) {
+          return NextResponse.json(
+            { success: false, message: cancelBuilt.message },
+            { status: cancelBuilt.status, headers }
+          )
+        }
+        const cancelPreview = cancelBuilt.preview
+        if (dryRun) {
+          return NextResponse.json(
+            {
+              success: true,
+              dryRun: true,
+              targetCount: 0,
+              mode,
+              orderId,
+              ...cancelPreview,
+            },
+            { headers }
+          )
+        }
+        if (cancelPreview.conflicts.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: '취소 전 충돌이 발견되어 중단했습니다. (회계 분개/수금 초과 확인)',
+              conflicts: cancelPreview.conflicts,
+              preview: cancelPreview,
+            },
+            { status: 409, headers }
+          )
+        }
+        if (idempotencyKey) {
+          const duplicated = await reserveRequestIdempotencyKey({
+            scope: 'cancel-approved-order-without-outbound',
+            key: idempotencyKey,
+            payload: { orderId },
+          })
+          if (duplicated) {
+            return NextResponse.json(
+              { success: true, duplicated: true, message: '이미 처리된 취소 요청입니다.' },
+              { headers }
+            )
+          }
+        }
+        const cancelled = await cancelApprovedOrderWithoutOutboundLogs({ orderId, reason })
+        if (!cancelled.ok) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: cancelled.message,
+              conflicts: cancelled.conflicts,
+            },
+            { status: cancelled.status, headers }
+          )
+        }
+        return NextResponse.json(
+          {
+            success: true,
+            message: `승인 주문 #${orderId}을(를) 취소(반려)했습니다. (출고 전 — 출고 로그 없음)`,
+            deletedCount: 0,
+            mode,
+            orderIds: [orderId],
+            orderCancelWithoutOutboundLogs: true,
+            preview: cancelPreview,
+          },
+          { headers }
+        )
+      }
       return NextResponse.json(
         {
           success: false,

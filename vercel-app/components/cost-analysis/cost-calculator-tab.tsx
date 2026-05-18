@@ -23,6 +23,7 @@ import {
   getIngredientCodeByItemCode,
   getIngredient,
   MISE_DEFAULT,
+  resolveDeliveryAppFeePercent,
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
@@ -167,6 +168,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     if (row) {
       const priceHall = row.priceHall ?? 0
       const priceDelivery = row.priceDelivery ?? null
+      const useDeliveryChannel = priceDelivery != null && priceDelivery > 0
+      const deliveryPercent = resolveDeliveryAppFeePercent(row.deliveryAppFeePercent)
       const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
       setMenuItem({
         ...emptyMenuItem,
@@ -174,10 +177,12 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         menuName: (row.menuName ?? "") + (row.optionName ? ` (${row.optionName})` : ""),
         category: row.category ?? "",
         categoryMain: row.categoryMain ?? "",
-        inclVat: priceHall,
+        serviceType: useDeliveryChannel ? "Delivery" : "Dine-In",
+        inclVat: useDeliveryChannel ? (priceDelivery ?? priceHall) : priceHall,
         vatIncluded: row.vatIncluded !== false,
         priceHall,
         priceDelivery,
+        deliveryPercent,
         cookingTimeMin: row.cookingTimeMin ?? null,
       })
 
@@ -285,6 +290,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       const resolved = getIngredientItemCode(r.ingredientCode) ?? r.savedItemCode
       const itemCode = String(resolved ?? "").trim()
       if (!itemCode) continue
+      if (!(Number(r.quantity) > 0)) continue
       toSave.push({
         itemCode,
         quantity: r.quantity,
@@ -345,6 +351,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         stripTrailingParenOption(String(menuItem.menuName ?? ""))
       const category = String(initialLoadFromRow.category ?? "").trim()
       const categoryMain = String(initialLoadFromRow.categoryMain ?? "").trim()
+      const feePayload = { deliveryAppFeePercent: menuItem.deliveryPercent }
       if (optionId != null) {
         const baseRow = menuRows?.find((r) => r.menuId === String(menuId) && isCostAnalysisBaseRow(r))
         const baseHall = baseRow?.priceHall ?? 0
@@ -361,6 +368,21 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
           },
           { requireOnline: true }
         )
+        if (code && name) {
+          await savePosMenu(
+            {
+              id: String(menuId),
+              code,
+              name,
+              category,
+              categoryMain,
+              price: Math.round(baseHall),
+              priceDelivery: baseDelivery != null ? Math.round(baseDelivery) : null,
+              ...feePayload,
+            },
+            { requireOnline: true }
+          )
+        }
       } else if (code && name) {
         await savePosMenu(
           {
@@ -371,6 +393,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             categoryMain,
             price: Math.round(pHall),
             priceDelivery: pDelivery != null ? Math.round(pDelivery) : null,
+            ...feePayload,
           },
           { requireOnline: true }
         )
