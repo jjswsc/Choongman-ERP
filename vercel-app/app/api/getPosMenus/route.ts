@@ -262,6 +262,134 @@ export async function GET(request: Request) {
       }]
     })
 
+    // 매장 코드 표기 차이(레거시 별칭, CM 접두 유무 등)로 필터 결과가 0건이면
+    // POS 빈 화면을 막기 위해 1회 전체 목록 폴백을 허용한다.
+    if (requestedStoreCode && list.length === 0 && (typedRows || []).length > 0) {
+      const fallbackList = (typedRows || []).map((row) => {
+        const rowMenuId = Number(row.id || 0)
+        const scopedStores = normalizeMenuScopeStoreCodes(
+          rowMenuId > 0 ? storeCodesByMenuId.get(rowMenuId) || [] : []
+        )
+        const v = row.option_selection_groups
+        let optionSelectionGroups: string[] = []
+        if (Array.isArray(v)) optionSelectionGroups = v
+        else if (v && typeof v === 'string') try { optionSelectionGroups = JSON.parse(v) as string[] } catch { /* ignore */ }
+        const c = row.option_selection_config
+        let optionSelectionConfig: { key: string; label?: string; required?: boolean; minSelect?: number; maxSelect?: number }[] = []
+        if (Array.isArray(c)) {
+          optionSelectionConfig = c
+            .map((cfg) => {
+              if (!cfg || typeof cfg !== 'object') return null
+              const o = cfg as Record<string, unknown>
+              const key = String(o.key ?? '').trim()
+              if (!key) return null
+              const label = String(o.label ?? '').trim()
+              const minRaw = Number(o.minSelect)
+              const maxRaw = Number(o.maxSelect)
+              const required = o.required === true
+              const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
+              const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
+              return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
+            })
+            .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+        } else if (c && typeof c === 'string') {
+          try {
+            const arr = JSON.parse(c) as unknown
+            if (Array.isArray(arr)) {
+              optionSelectionConfig = arr
+                .map((cfg) => {
+                  if (!cfg || typeof cfg !== 'object') return null
+                  const o = cfg as Record<string, unknown>
+                  const key = String(o.key ?? '').trim()
+                  if (!key) return null
+                  const label = String(o.label ?? '').trim()
+                  const minRaw = Number(o.minSelect)
+                  const maxRaw = Number(o.maxSelect)
+                  const required = o.required === true
+                  const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
+                  const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
+                  return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
+                })
+                .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        const menuLinks = linksByMenuId.get(Number(row.id || 0)) || []
+        const columnGroups =
+          optionSelectionGroups.length > 0
+            ? normalizeOptionGroupsForMenu(optionSelectionGroups, row.code)
+            : []
+        if (menuLinks.length > 0 && groupsById.size > 0) {
+          const resolved = buildSelectionConfigFromLinks(menuLinks, groupsById)
+          if (resolved.optionSelectionGroups.length > 0) {
+            let mergedGroups = resolved.optionSelectionGroups
+            let mergedConfig = resolved.optionSelectionConfig
+            if (columnGroups.length > 0) {
+              const unionKeys = [...mergedGroups]
+              for (const k of columnGroups) {
+                if (!unionKeys.includes(k)) unionKeys.push(k)
+              }
+              mergedGroups = normalizeOptionGroupsForMenu(unionKeys, row.code)
+              mergedConfig = syncOptionSelectionConfigToGroupKeys(mergedGroups, [
+                ...mergedConfig,
+                ...optionSelectionConfig,
+              ])
+            }
+            if (
+              isChickenMenuCode(row.code) &&
+              columnGroups.length > 0 &&
+              !columnGroups.includes('size') &&
+              mergedGroups.includes('size')
+            ) {
+              mergedGroups = normalizeChickenOptionSelectionGroups(mergedGroups.filter((k) => k !== 'size'))
+              mergedConfig = syncOptionSelectionConfigToGroupKeys(mergedGroups, mergedConfig)
+            }
+            optionSelectionGroups = mergedGroups
+            optionSelectionConfig = mergedConfig
+          }
+        } else if (columnGroups.length > 0) {
+          optionSelectionGroups = columnGroups
+        }
+        const kp = row.kitchen_printer
+        const ctm = row.cooking_time_min
+        const isBanban = (row as { is_banban?: boolean }).is_banban === true
+        const pid = row.promo_id
+        return {
+          id: String(row.id ?? ''),
+          code: String(row.code ?? ''),
+          name: String(row.name ?? ''),
+          category: normalizePromotionCategoryMain(String(row.category ?? '').trim()),
+          categoryMain: normalizePromotionCategoryMain((row as { category_main?: string }).category_main),
+          price: Number(row.price) ?? 0,
+          priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
+          imageUrl: String(row.image ?? ''),
+          vatIncluded: !!row.vat_included,
+          isActive: row.is_active !== false,
+          sortOrder: Number(row.sort_order) ?? 0,
+          soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
+          optionSelectionGroups,
+          optionSelectionConfig,
+          kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
+          cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
+          isBanban,
+          promoId: pid != null && Number(pid) > 0 ? String(pid) : null,
+          descriptionDefault: String(row.description_default ?? ''),
+          descriptionDelivery:
+            row.description_delivery == null ? null : String(row.description_delivery),
+          descriptionTable:
+            row.description_table == null ? null : String(row.description_table),
+          storeCodes: scopedStores,
+        }
+      })
+      console.warn('getPosMenus scope fallback to all menus', {
+        requestedStoreCode,
+        rowCount: (typedRows || []).length,
+      })
+      return NextResponse.json(fallbackList, { headers })
+    }
+
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getPosMenus:', e)
