@@ -1,6 +1,9 @@
 import {
+  buildHqVendorMatchIndex,
+  isHqVendorPurchaseKey,
   partitionPurchaseVendorMapByHqCodes,
   shouldSkipStoreInboundForHqPurchase,
+  type HqVendorMatchIndex,
 } from '@/lib/accounting-reports-purchase-hq-dedupe'
 import {
   supabaseCountFilter,
@@ -10,7 +13,13 @@ import {
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 
-export { partitionPurchaseVendorMapByHqCodes, shouldSkipStoreInboundForHqPurchase } from '@/lib/accounting-reports-purchase-hq-dedupe'
+export {
+  buildHqVendorMatchIndex,
+  isHqVendorPurchaseKey,
+  partitionPurchaseVendorMapByHqCodes,
+  shouldSkipStoreInboundForHqPurchase,
+  vendorRowIsHeadOffice,
+} from '@/lib/accounting-reports-purchase-hq-dedupe'
 
 const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 const BASE_LIMIT = 20000
@@ -246,24 +255,17 @@ function mergeVendorAmountMap(target: Record<string, number>, add: Record<string
   }
 }
 
-/** 본사(Head Office) 법인 등 — 통장 매입지급을 손익 매입에서 제외할 거래처 코드(소문자) */
-async function loadHqVendorCodeNormSet(): Promise<Set<string>> {
-  const out = new Set<string>()
+/** 본사 법인 거래처 — 코드·상호명(입고 vendor_target) 매칭용 */
+async function loadHqVendorMatchIndex(): Promise<HqVendorMatchIndex> {
   try {
-    const rows = (await supabaseSelect('vendors', { select: 'code,type', limit: 20000 })) as
-      | { code?: string; type?: string }[]
-      | null
-    for (const r of rows || []) {
-      const t = String(r.type || '').trim().toLowerCase()
-      if (t === '본사' || t === 'head office' || t === 'hq') {
-        const c = String(r.code || '').trim().toLowerCase()
-        if (c) out.add(c)
-      }
-    }
+    const rows = (await supabaseSelect('vendors', {
+      select: 'code,name,gps_name,type',
+      limit: 20000,
+    })) as { code?: string; name?: string; gps_name?: string | null; type?: string }[] | null
+    return buildHqVendorMatchIndex(rows || [])
   } catch {
-    // ignore
+    return { codes: new Set(), names: new Set() }
   }
-  return out
 }
 
 /**
@@ -411,6 +413,7 @@ type DirectInboundPurchaseOpts = {
   excludeHqLocations?: boolean
   /** 매장 손익: From HQ 입고는 본사 창고 출고와 이중 */
   excludeFromHqInbound?: boolean
+  hqIndex?: HqVendorMatchIndex
 }
 
 async function getDirectInboundPurchasesByVendor(
@@ -424,6 +427,7 @@ async function getDirectInboundPurchasesByVendor(
 ): Promise<{ byVendor: Record<string, number>; expenseBySubject: Map<number | null, number> }> {
   const excludeHqLocations = Boolean(opts.excludeHqLocations)
   const excludeFromHqInbound = Boolean(opts.excludeFromHqInbound)
+  const hqIndex = opts.hqIndex
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   let filter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
   if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
@@ -445,7 +449,7 @@ async function getDirectInboundPurchasesByVendor(
   for (const r of rows || []) {
     const vendorTarget = String(r.vendor_target || '').trim()
     const referenceNo = String(r.reference_no || '').trim()
-    if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInbound)) continue
+    if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInbound, hqIndex)) continue
     if (excludeHqLocations && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
     const code = String(r.item_code || '').trim()
     if (!code) continue
@@ -866,12 +870,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
-    const [orders, hqVendorCodes, hqOutboundAgg] = await Promise.all([
+    const [orders, hqVendorIndex, hqOutboundAgg] = await Promise.all([
       supabaseSelectFilter('orders', orderFilter, {
         select: 'total',
         limit: BASE_LIMIT,
       }) as Promise<{ total?: number }[] | null>,
-      loadHqVendorCodeNormSet(),
+      loadHqVendorMatchIndex(),
       sumHqOutboundPurchaseFromOffice(
         storeFilter === 'All' ? null : storeFilter,
         startStr,
@@ -907,6 +911,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
     const storeInboundOpts: DirectInboundPurchaseOpts = {
       excludeFromHqInbound: true,
+      hqIndex: hqVendorIndex,
       ...(storeFilter === 'All' ? { excludeHqLocations: true } : {}),
     }
     const inboundStore = await getDirectInboundPurchasesByVendor(
@@ -920,7 +925,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     )
     const { kept: inboundByVendorStore, excluded: inboundHqExcluded } = partitionPurchaseVendorMapByHqCodes(
       inboundStore.byVendor,
-      hqVendorCodes
+      hqVendorIndex
     )
     for (const row of inboundHqExcluded) excludedHqVendorDupRaw.push(row)
     const bankPayByVendorRaw = await fetchBankPurchasePaymentsByVendor({
@@ -933,8 +938,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     for (const [k, v] of Object.entries(bankPayByVendorRaw)) {
       const amt = Number(v) || 0
       if (amt <= 0) continue
-      const norm = String(k).trim().toLowerCase()
-      if (hqVendorCodes.has(norm)) {
+      if (isHqVendorPurchaseKey(k, hqVendorIndex)) {
         excludedHqVendorDupRaw.push({ key: k, amount: amt })
         continue
       }
@@ -1354,13 +1358,12 @@ export async function computeIncomeStatementPurchaseDrillDown(
   }[] | null
 
   const excludeFromHqInboundDrill = !isHQ
-  const hqVendorCodesDrill = excludeFromHqInboundDrill ? await loadHqVendorCodeNormSet() : new Set<string>()
+  const hqVendorIndexDrill = excludeFromHqInboundDrill ? await loadHqVendorMatchIndex() : { codes: new Set<string>(), names: new Set<string>() }
   const inboundAcc: IncomeStatementPurchaseDrillInboundRow[] = []
   for (const r of inboundRaw || []) {
     const vendorTarget = String(r.vendor_target || '').trim()
     const referenceNo = String(r.reference_no || '').trim()
-    if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInboundDrill)) continue
-    if (excludeFromHqInboundDrill && hqVendorCodesDrill.has(vendorTarget.toLowerCase())) continue
+    if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInboundDrill, hqVendorIndexDrill)) continue
     if (
       !isHQ &&
       storeFilter === 'All' &&

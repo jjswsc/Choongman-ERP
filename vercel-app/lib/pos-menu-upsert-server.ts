@@ -73,6 +73,138 @@ type ExistingMenuRow = {
   delivery_app_fee_percent?: number | null
 }
 
+/** 수정 시 요청 본문에 포함된 필드만 DB에 반영 (미포함 필드는 기존값 유지) */
+export function buildPosMenuUpsertRow(
+  body: PosMenuUpsertApiBody,
+  opts: {
+    isEdit: boolean
+    optionSelectionGroupsExplicit: boolean
+    optionSelectionGroupsLegacyFinal: string[] | null
+    optionSelectionGroupsFinal: string[] | null
+    optionSelectionConfigExplicit: boolean
+    optionSelectionConfigFinal:
+      | {
+          key: string
+          label: string
+          audience: 'all' | 'hall' | 'delivery'
+          required: boolean
+          minSelect: number
+          maxSelect: number
+        }[]
+      | null
+    hasSortOrder: boolean
+    hasDeliveryAppFeePercent: boolean
+    deliveryAppFeePercent: number | null | undefined
+    kitchenPrinterInBody: boolean
+    kitchenPrinter: number | null
+    cookingTimeInBody: boolean
+    cookingTimeMin: number | null
+    hasDescriptionDefault: boolean
+    hasDescriptionDelivery: boolean
+    hasDescriptionTable: boolean
+  }
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {}
+
+  if (!opts.isEdit) {
+    row.code = String(body.code ?? '').trim()
+    row.name = String(body.name ?? '').trim()
+    row.category = String(body.category ?? '').trim()
+    row.category_main = String(body.categoryMain ?? '').trim()
+    row.price = Number(body.price) ?? 0
+    row.price_delivery = body.priceDelivery != null ? Number(body.priceDelivery) : null
+    row.image = String(body.imageUrl ?? '').trim()
+    row.vat_included = body.vatIncluded !== false
+    row.is_active = body.isActive !== false
+    if (opts.hasSortOrder) row.sort_order = Number(body.sortOrder)
+    if (opts.optionSelectionGroupsExplicit) {
+      row.option_selection_groups =
+        opts.optionSelectionGroupsFinal && opts.optionSelectionGroupsFinal.length > 0
+          ? opts.optionSelectionGroupsFinal
+          : []
+    } else if (opts.optionSelectionGroupsLegacyFinal && opts.optionSelectionGroupsLegacyFinal.length > 0) {
+      row.option_selection_groups = opts.optionSelectionGroupsLegacyFinal
+    }
+    if (opts.optionSelectionConfigExplicit) {
+      row.option_selection_config =
+        opts.optionSelectionConfigFinal && opts.optionSelectionConfigFinal.length > 0
+          ? opts.optionSelectionConfigFinal
+          : []
+    }
+    if (opts.kitchenPrinterInBody && opts.kitchenPrinter != null) {
+      row.kitchen_printer = opts.kitchenPrinter
+    }
+    if (opts.cookingTimeInBody) {
+      row.cooking_time_min = opts.cookingTimeMin
+    }
+    if (opts.hasDeliveryAppFeePercent) {
+      row.delivery_app_fee_percent =
+        opts.deliveryAppFeePercent != null && Number.isFinite(opts.deliveryAppFeePercent)
+          ? opts.deliveryAppFeePercent
+          : null
+    }
+    row.is_banban = 'isBanban' in body ? body.isBanban === true : false
+    row.description_default = String(body.descriptionDefault ?? '').trim()
+    const vDel = body.descriptionDelivery
+    row.description_delivery = vDel == null ? null : String(vDel).trim()
+    const vTbl = body.descriptionTable
+    row.description_table = vTbl == null ? null : String(vTbl).trim()
+    return row
+  }
+
+  if ('code' in body) row.code = String(body.code ?? '').trim()
+  if ('name' in body) row.name = String(body.name ?? '').trim()
+  if ('category' in body) row.category = String(body.category ?? '').trim()
+  if ('categoryMain' in body) row.category_main = String(body.categoryMain ?? '').trim()
+  if ('price' in body) row.price = Number(body.price) ?? 0
+  if ('priceDelivery' in body) {
+    row.price_delivery = body.priceDelivery != null ? Number(body.priceDelivery) : null
+  }
+  if ('imageUrl' in body) row.image = String(body.imageUrl ?? '').trim()
+  if ('vatIncluded' in body) row.vat_included = body.vatIncluded !== false
+  if ('isActive' in body) row.is_active = body.isActive !== false
+  if (opts.hasSortOrder) row.sort_order = Number(body.sortOrder)
+  if (opts.optionSelectionGroupsExplicit) {
+    row.option_selection_groups =
+      opts.optionSelectionGroupsFinal && opts.optionSelectionGroupsFinal.length > 0
+        ? opts.optionSelectionGroupsFinal
+        : []
+  } else if (opts.optionSelectionGroupsLegacyFinal && opts.optionSelectionGroupsLegacyFinal.length > 0) {
+    row.option_selection_groups = opts.optionSelectionGroupsLegacyFinal
+  }
+  if (opts.optionSelectionConfigExplicit) {
+    row.option_selection_config =
+      opts.optionSelectionConfigFinal && opts.optionSelectionConfigFinal.length > 0
+        ? opts.optionSelectionConfigFinal
+        : []
+  }
+  if (opts.kitchenPrinterInBody) {
+    row.kitchen_printer = opts.kitchenPrinter
+  }
+  if (opts.cookingTimeInBody) {
+    row.cooking_time_min = opts.cookingTimeMin
+  }
+  if (opts.hasDeliveryAppFeePercent) {
+    row.delivery_app_fee_percent =
+      opts.deliveryAppFeePercent != null && Number.isFinite(opts.deliveryAppFeePercent)
+        ? opts.deliveryAppFeePercent
+        : null
+  }
+  if ('isBanban' in body) row.is_banban = body.isBanban === true
+  if (opts.hasDescriptionDefault) {
+    row.description_default = String(body.descriptionDefault ?? '').trim()
+  }
+  if (opts.hasDescriptionDelivery) {
+    const v = body.descriptionDelivery
+    row.description_delivery = v == null ? null : String(v).trim()
+  }
+  if (opts.hasDescriptionTable) {
+    const v = body.descriptionTable
+    row.description_table = v == null ? null : String(v).trim()
+  }
+  return row
+}
+
 /**
  * POS 메뉴 단건 저장. upsertByCode=true이면 동일 코드가 있으면 해당 행을 수정(일괄 업로드용).
  */
@@ -92,11 +224,12 @@ export async function upsertPosMenuFromBody(
   const code = String(body.code ?? '').trim()
   const name = String(body.name ?? '').trim()
   let editingId = body.id ? String(body.id).trim() : null
-  const isChickenMenu = code.toLowerCase().startsWith('c')
+  const isEdit = !!editingId
+  const isChickenMenu = ('code' in body ? code : '').toLowerCase().startsWith('c')
 
   // imageOnly 요청은 image 컬럼만 갱신하므로 code/name 입력을 강제하지 않는다.
   const isImageOnlyEdit = body.imageOnly === true && !!editingId
-  if (!isImageOnlyEdit && (!code || !name)) {
+  if (!isImageOnlyEdit && !isEdit && (!code || !name)) {
     return { success: false, message: '코드와 메뉴명이 필요합니다.' }
   }
 
@@ -203,6 +336,7 @@ export async function upsertPosMenuFromBody(
           optionSelectionConfigCleaned
         )
       : optionSelectionConfigCleaned
+  const kitchenPrinterInBody = 'kitchenPrinter' in body
   const kitchenPrinter =
     body.kitchenPrinter === 0 ||
     body.kitchenPrinter === 1 ||
@@ -210,11 +344,11 @@ export async function upsertPosMenuFromBody(
     body.kitchenPrinter === 3
       ? body.kitchenPrinter
       : null
+  const cookingTimeInBody = 'cookingTimeMin' in body
   const cookingTimeMin =
     body.cookingTimeMin != null && Number.isFinite(body.cookingTimeMin) && body.cookingTimeMin >= 0
       ? body.cookingTimeMin
       : null
-  const isBanban = body.isBanban === true
   const hasDescriptionDefault = 'descriptionDefault' in body
   const hasDescriptionDelivery = 'descriptionDelivery' in body
   const hasDescriptionTable = 'descriptionTable' in body
@@ -226,52 +360,24 @@ export async function upsertPosMenuFromBody(
       : hasDeliveryAppFeePercent
         ? null
         : undefined
-  const baseRow: Record<string, unknown> = {
-    code,
-    name,
-    category: String(body.category ?? '').trim(),
-    category_main: String(body.categoryMain ?? '').trim(),
-    price: Number(body.price) ?? 0,
-    price_delivery: body.priceDelivery != null ? Number(body.priceDelivery) : null,
-    image: String(body.imageUrl ?? '').trim(),
-    vat_included: body.vatIncluded !== false,
-    is_active: body.isActive !== false,
-  }
-  if (hasSortOrder) baseRow.sort_order = Number(body.sortOrder)
-  if (optionSelectionGroupsExplicit) {
-    baseRow.option_selection_groups =
-      optionSelectionGroupsFinal && optionSelectionGroupsFinal.length > 0
-        ? optionSelectionGroupsFinal
-        : []
-  } else if (optionSelectionGroupsLegacyFinal && optionSelectionGroupsLegacyFinal.length > 0) {
-    baseRow.option_selection_groups = optionSelectionGroupsLegacyFinal
-  }
-  if (optionSelectionConfigExplicit) {
-    baseRow.option_selection_config =
-      optionSelectionConfigFinal && optionSelectionConfigFinal.length > 0
-        ? optionSelectionConfigFinal
-        : []
-  }
-  if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
-  if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
-  if (hasDeliveryAppFeePercent) {
-    baseRow.delivery_app_fee_percent =
-      deliveryAppFeePercent != null && Number.isFinite(deliveryAppFeePercent)
-        ? deliveryAppFeePercent
-        : null
-  }
-  baseRow.is_banban = isBanban
-  if (!editingId || hasDescriptionDefault) {
-    baseRow.description_default = String(body.descriptionDefault ?? '').trim()
-  }
-  if (!editingId || hasDescriptionDelivery) {
-    const v = body.descriptionDelivery
-    baseRow.description_delivery = v == null ? null : String(v).trim()
-  }
-  if (!editingId || hasDescriptionTable) {
-    const v = body.descriptionTable
-    baseRow.description_table = v == null ? null : String(v).trim()
-  }
+  const baseRow = buildPosMenuUpsertRow(body, {
+    isEdit,
+    optionSelectionGroupsExplicit,
+    optionSelectionGroupsLegacyFinal,
+    optionSelectionGroupsFinal,
+    optionSelectionConfigExplicit,
+    optionSelectionConfigFinal,
+    hasSortOrder,
+    hasDeliveryAppFeePercent,
+    deliveryAppFeePercent,
+    kitchenPrinterInBody,
+    kitchenPrinter,
+    cookingTimeInBody,
+    cookingTimeMin,
+    hasDescriptionDefault,
+    hasDescriptionDelivery,
+    hasDescriptionTable,
+  })
 
   const doSave = async (
     row: Record<string, unknown>
@@ -306,10 +412,17 @@ export async function upsertPosMenuFromBody(
       }
       if (existing && existing.length > 0) {
         const prev = existing[0]
-        // sortOrder를 payload에서 보내지 않은 수정은 기존 값을 유지해야
-        // 프로모 연동 메뉴의 "이미지 단독 수정"이 불필요한 필드 차이로 막히지 않는다.
-        if (!hasSortOrder) {
-          baseRow.sort_order = prev.sort_order ?? 0
+
+        if (Object.keys(row).length === 0) {
+          return {
+            success: true,
+            message: '수정되었습니다.',
+            syncHint: {
+              imageChanged: false,
+              changedFields: [],
+              partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+            },
+          }
         }
 
         // imageOnly 플래그가 켜진 요청은 image 컬럼만 갱신한다.
@@ -418,45 +531,55 @@ export async function upsertPosMenuFromBody(
             }
           }
         }
-        if (pid != null && Number(pid) > 0) {
+        if (pid != null && Number(pid) > 0 && 'imageUrl' in body) {
           const incomingImage = String(body.imageUrl ?? '').trim()
           if (!incomingImage && prev.image != null && String(prev.image).trim()) {
             row.image = String(prev.image).trim()
           }
         }
         const changedFields: string[] = []
-        const nextName = String(row.name ?? prev.name ?? '').trim()
-        const nextCategoryMain = String(row.category_main ?? prev.category_main ?? '').trim()
-        const nextCategory = String(row.category ?? prev.category ?? '').trim()
-        const nextImage = String(row.image ?? prev.image ?? '').trim()
-        const nextPrice = Number(row.price ?? prev.price ?? 0)
-        const nextPriceDelivery = row.price_delivery != null ? Number(row.price_delivery) : null
         const prevName = String(prev.name ?? '').trim()
         const prevCategoryMain = String(prev.category_main ?? '').trim()
         const prevCategory = String(prev.category ?? '').trim()
         const prevImage = String(prev.image ?? '').trim()
         const prevPrice = Number(prev.price ?? 0)
         const prevPriceDelivery = prev.price_delivery != null ? Number(prev.price_delivery) : null
-        if (nextName !== prevName) changedFields.push('name')
-        if (nextCategoryMain !== prevCategoryMain) changedFields.push('category_main')
-        if (nextCategory !== prevCategory) changedFields.push('category')
-        if (nextImage !== prevImage) changedFields.push('image')
-        if (nextPrice !== prevPrice) changedFields.push('price')
-        if (nextPriceDelivery !== prevPriceDelivery) changedFields.push('price_delivery')
+        if ('name' in row) {
+          const nextName = String(row.name ?? '').trim()
+          if (nextName !== prevName) changedFields.push('name')
+        }
+        if ('category_main' in row) {
+          const nextCategoryMain = String(row.category_main ?? '').trim()
+          if (nextCategoryMain !== prevCategoryMain) changedFields.push('category_main')
+        }
+        if ('category' in row) {
+          const nextCategory = String(row.category ?? '').trim()
+          if (nextCategory !== prevCategory) changedFields.push('category')
+        }
+        if ('image' in row) {
+          const nextImage = String(row.image ?? '').trim()
+          if (nextImage !== prevImage) changedFields.push('image')
+        }
         const catMain = (prev.category_main || '').trim()
         const cat = (prev.category || '').trim()
         const changes: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
-        const newPrice = Number(row.price ?? prev.price ?? 0)
-        const newPriceDelivery = row.price_delivery != null ? Number(row.price_delivery) : null
-        if (Number(prev.price) !== newPrice) {
-          changes.push({ fieldName: 'price', oldValue: prev.price ?? null, newValue: newPrice })
+        if ('price' in row) {
+          const newPrice = Number(row.price ?? 0)
+          if (Number(prev.price) !== newPrice) {
+            changedFields.push('price')
+            changes.push({ fieldName: 'price', oldValue: prev.price ?? null, newValue: newPrice })
+          }
         }
-        if ((prev.price_delivery ?? null) !== newPriceDelivery) {
-          changes.push({
-            fieldName: 'price_delivery',
-            oldValue: prev.price_delivery ?? null,
-            newValue: newPriceDelivery,
-          })
+        if ('price_delivery' in row) {
+          const newPriceDelivery = row.price_delivery != null ? Number(row.price_delivery) : null
+          if ((prev.price_delivery ?? null) !== newPriceDelivery) {
+            changedFields.push('price_delivery')
+            changes.push({
+              fieldName: 'price_delivery',
+              oldValue: prev.price_delivery ?? null,
+              newValue: newPriceDelivery,
+            })
+          }
         }
         if (changes.length > 0) {
           recordPriceChanges({
@@ -577,12 +700,15 @@ export async function upsertPosMenuFromBody(
     }
   }
 
+  const itemsSyncCode = String(('code' in body ? body.code : code) ?? '').trim()
   try {
     const result = await doSave(baseRow)
-    if (result.success && code && (baseRow.price != null || body.price != null)) {
-      const newPrice = Number(baseRow.price ?? body.price ?? 0)
+    if (result.success && itemsSyncCode && 'price' in body) {
+      const newPrice = Number(body.price ?? 0)
       try {
-        await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(code)}`, { price: newPrice })
+        await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(itemsSyncCode)}`, {
+          price: newPrice,
+        })
       } catch {
         /* items에 해당 code 없으면 무시 */
       }
@@ -633,9 +759,9 @@ export async function upsertPosMenuFromBody(
       (optionSelectionGroupsExplicit ||
         optionSelectionConfigExplicit ||
         optionSelectionGroupsLegacy ||
-        kitchenPrinter != null ||
-        cookingTimeMin != null ||
-        isBanban ||
+        kitchenPrinterInBody ||
+        cookingTimeInBody ||
+        'isBanban' in body ||
         hasDescriptionDefault ||
         hasDescriptionDelivery ||
         hasDescriptionTable) &&
@@ -659,10 +785,12 @@ export async function upsertPosMenuFromBody(
       delete rowWithout.description_delivery
       delete rowWithout.description_table
       const result = await doSave(rowWithout)
-      if (result.success && code && (baseRow.price != null || body.price != null)) {
-        const newPrice = Number(baseRow.price ?? body.price ?? 0)
+      if (result.success && itemsSyncCode && 'price' in body) {
+        const newPrice = Number(body.price ?? 0)
         try {
-          await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(code)}`, { price: newPrice })
+          await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(itemsSyncCode)}`, {
+            price: newPrice,
+          })
         } catch {
           /* ignore */
         }

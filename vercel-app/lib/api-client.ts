@@ -6945,8 +6945,9 @@ export async function deletePosMenuOption(params: { id: string }) {
 export async function savePosMenu(
   params: {
     id?: string
-    code: string
-    name: string
+    /** 신규 등록 시 필수. 수정(id 있음) 시 생략 가능(부분 갱신) */
+    code?: string
+    name?: string
     category?: string
     categoryMain?: string
     price?: number

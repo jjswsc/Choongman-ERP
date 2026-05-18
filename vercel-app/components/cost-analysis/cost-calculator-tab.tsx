@@ -341,17 +341,10 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
       const pHall = menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0
       const pDelivery = menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null
-      const stripTrailingOptionCode = (c: string) => String(c ?? "").replace(/-\d+$/, "").trim()
       const stripTrailingParenOption = (n: string) => String(n ?? "").replace(/\s*\([^)]+\)$/, "").trim()
-      const code =
-        stripTrailingOptionCode(String(initialLoadFromRow.menuCode ?? "")) ||
-        stripTrailingOptionCode(String(menuItem.menuCode ?? ""))
-      const name =
+      const optionDisplayName =
         stripTrailingParenOption(String(initialLoadFromRow.menuName ?? "")) ||
         stripTrailingParenOption(String(menuItem.menuName ?? ""))
-      const category = String(initialLoadFromRow.category ?? "").trim()
-      const categoryMain = String(initialLoadFromRow.categoryMain ?? "").trim()
-      const feePayload = { deliveryAppFeePercent: menuItem.deliveryPercent }
       if (optionId != null) {
         const baseRow = menuRows?.find((r) => r.menuId === String(menuId) && isCostAnalysisBaseRow(r))
         const baseHall = baseRow?.priceHall ?? 0
@@ -362,42 +355,21 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
           {
             id: String(optionId),
             menuId,
-            name: String(initialLoadFromRow.optionName ?? "").trim() || name,
+            name: String(initialLoadFromRow.optionName ?? "").trim() || optionDisplayName,
             priceModifier: modHall,
             priceModifierDelivery: modDelivery,
           },
           { requireOnline: true }
         )
-        if (code && name) {
-          await savePosMenu(
-            {
-              id: String(menuId),
-              code,
-              name,
-              category,
-              categoryMain,
-              price: Math.round(baseHall),
-              priceDelivery: baseDelivery != null ? Math.round(baseDelivery) : null,
-              ...feePayload,
-            },
-            { requireOnline: true }
-          )
-        }
-      } else if (code && name) {
-        await savePosMenu(
-          {
-            id: String(menuId),
-            code,
-            name,
-            category,
-            categoryMain,
-            price: Math.round(pHall),
-            priceDelivery: pDelivery != null ? Math.round(pDelivery) : null,
-            ...feePayload,
-          },
-          { requireOnline: true }
-        )
       }
+      /** POS 메뉴 마스터(카테고리·사진·판매가)는 메뉴 관리에서만 수정 — 원가 전용 필드만 반영 */
+      await savePosMenu(
+        {
+          id: String(menuId),
+          deliveryAppFeePercent: menuItem.deliveryPercent,
+        },
+        { requireOnline: true }
+      )
 
       const reloadIngs = await getPosMenuIngredients(
         {
@@ -485,25 +457,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
               initialLoadFromRow
                 ? async (id, cookingTimeMin) => {
                     try {
-                      const code = String(initialLoadFromRow.menuCode ?? "").replace(/-\d+$/, "").trim()
-                      const name = String(initialLoadFromRow.menuName ?? "").replace(/\s*\([^)]+\)$/, "").trim()
-                      if (code && name) {
-                        // 조리 시간만 바꿔도 category·가격이 사라지지 않도록 현재 값을 함께 전달
-                        await savePosMenu(
-                          {
-                            id,
-                            code,
-                            name,
-                            cookingTimeMin,
-                            category: menuItem.category ?? initialLoadFromRow.category ?? "",
-                            categoryMain: menuItem.categoryMain ?? initialLoadFromRow.categoryMain ?? "",
-                            price: menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0,
-                            priceDelivery: menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null,
-                          },
-                          { requireOnline: true }
-                        )
-                        onSaveSuccess?.()
-                      }
+                      await savePosMenu({ id, cookingTimeMin }, { requireOnline: true })
+                      onSaveSuccess?.()
                     } catch (e) {
                       await appAlert(String(e))
                     }
