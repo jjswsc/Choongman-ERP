@@ -3,8 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react"
 import {
   normalizePosMenuImageUrl,
-  shouldProxyPosMenuImageForHybrid,
-  toHybridProxiedMenuImageHref,
+  toPosMenuDisplayImageHref,
 } from "@/lib/pos-menu-image-url"
 
 export { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
@@ -35,8 +34,7 @@ function cnAbsoluteFill(extra: string) {
 function resolveDisplayHref(href: string, httpsThumbnailProxy: boolean, skipProxy: boolean): string {
   if (!href) return ""
   if (skipProxy || !httpsThumbnailProxy) return href
-  if (!shouldProxyPosMenuImageForHybrid(href)) return href
-  return toHybridProxiedMenuImageHref(href)
+  return toPosMenuDisplayImageHref(href, { preferProxy: true })
 }
 
 /**
@@ -72,12 +70,7 @@ export function PosMenuFillImage({
   )
 
   const handleImageError = () => {
-    const proxied =
-      href &&
-      httpsThumbnailProxy &&
-      !skipProxy &&
-      shouldProxyPosMenuImageForHybrid(href) &&
-      displayHref !== href
+    const proxied = href && httpsThumbnailProxy && !skipProxy && displayHref !== href
     if (proxied) {
       setSkipProxy(true)
       return

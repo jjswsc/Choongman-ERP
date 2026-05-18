@@ -13,6 +13,10 @@ import {
   syncOptionSelectionConfigToGroupKeys,
 } from '@/lib/pos-option-selection-groups'
 import { recordPriceChanges } from '@/lib/price-history'
+import { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
+import { validatePosMenuImageUrlForMenu } from '@/lib/pos-menu-image-storage-path'
+
+export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
 export type PosMenuUpsertApiBody = {
   code?: string
@@ -116,7 +120,8 @@ export function buildPosMenuUpsertRow(
     row.category_main = String(body.categoryMain ?? '').trim()
     row.price = Number(body.price) ?? 0
     row.price_delivery = body.priceDelivery != null ? Number(body.priceDelivery) : null
-    row.image = String(body.imageUrl ?? '').trim()
+    const imageCol = resolveMenuImageColumnForUpsert(body, { isEdit: false })
+    if (imageCol.includeInRow) row.image = imageCol.image
     row.vat_included = body.vatIncluded !== false
     row.is_active = body.isActive !== false
     if (opts.hasSortOrder) row.sort_order = Number(body.sortOrder)
@@ -163,7 +168,8 @@ export function buildPosMenuUpsertRow(
   if ('priceDelivery' in body) {
     row.price_delivery = body.priceDelivery != null ? Number(body.priceDelivery) : null
   }
-  if ('imageUrl' in body) row.image = String(body.imageUrl ?? '').trim()
+  const imageCol = resolveMenuImageColumnForUpsert(body, { isEdit: true })
+  if (imageCol.includeInRow) row.image = imageCol.image
   if ('vatIncluded' in body) row.vat_included = body.vatIncluded !== false
   if ('isActive' in body) row.is_active = body.isActive !== false
   if (opts.hasSortOrder) row.sort_order = Number(body.sortOrder)
@@ -244,6 +250,16 @@ export async function upsertPosMenuFromBody(
     )) as { id?: number }[] | null
     if (byCode?.[0]?.id != null) {
       editingId = String(byCode[0].id)
+    }
+  }
+  if ('imageUrl' in body) {
+    const incomingImg = String(body.imageUrl ?? '').trim()
+    const menuIdForImg = editingId || body.id
+    if (incomingImg && menuIdForImg) {
+      const imgCheck = validatePosMenuImageUrlForMenu(incomingImg, menuIdForImg)
+      if (!imgCheck.ok) {
+        return { success: false, message: imgCheck.message }
+      }
     }
   }
   const hasStoreCodesPayload = Array.isArray(body.storeCodes)

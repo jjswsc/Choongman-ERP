@@ -63,6 +63,7 @@ import {
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
 import { isChickenDefaultOptionName } from '@/lib/pos-chicken-option-inference'
+import { shouldUseFlatBarBqChickenOptionPicker } from '@/lib/pos-barbq-option-picker-ui'
 import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
@@ -860,7 +861,15 @@ export function PosTerminalMenuScreen({
         }
         return
       }
-      const res = await uploadPosMenuImage({ file: toSend })
+      const uploadMenuId = String(menuEditTargetId ?? '').trim()
+      if (!uploadMenuId) {
+        await appAlert(
+          t('posMenuSaveBeforeImageUpload') ||
+            '메뉴를 먼저 저장한 뒤 사진을 올려 주세요. (사진 파일명에 메뉴 id가 들어가야 합니다.)'
+        )
+        return
+      }
+      const res = await uploadPosMenuImage({ file: toSend, menuId: uploadMenuId })
       if (res?.success && res?.url) {
         const newUrl = res.url
         setMenuEditForm((p) => ({ ...p, imageUrl: newUrl }))
@@ -869,10 +878,8 @@ export function PosTerminalMenuScreen({
          * 사진만 즉시 DB에 반영해 둔다. 마케팅 화면을 거치지 않고도
          * 운영자가 메뉴 화면에서 사진을 갱신할 수 있어야 하기 때문.
          */
-        const targetMenu = menuEditTargetId
-          ? menus.find((m) => m.id === menuEditTargetId)
-          : null
-        if (targetMenu && targetMenu.promoId && targetMenu.promoId.trim()) {
+        const targetMenu = menus.find((m) => m.id === uploadMenuId) ?? null
+        if (targetMenu) {
           try {
             const saveRes = await savePosMenu({
               id: targetMenu.id,
@@ -1507,7 +1514,12 @@ export function PosTerminalMenuScreen({
             const optsWithStepsToShow = isChickenBase
               ? optsWithSteps.filter((o) => !isChickenDefaultOption(o.name))
               : optsWithSteps
-            const useMultiStep = groups.length > 0 && optsWithStepsToShow.length > 0
+            const useFlatBarBqList = shouldUseFlatBarBqChickenOptionPicker({
+              menu: optionPickerMenu,
+              options: opts,
+            })
+            const useMultiStep =
+              groups.length > 0 && optsWithStepsToShow.length > 0 && !useFlatBarBqList
             const defaultBtn = isChickenBase && (
               <button
                 type="button"

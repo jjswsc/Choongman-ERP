@@ -93,6 +93,49 @@ export function toHybridProxiedMenuImageHref(absoluteUrl: string): string {
   return `/api/posMenuImageProxy?u=${encodeURIComponent(absoluteUrl)}`
 }
 
+function toGeneralImageProxyHref(absoluteUrl: string): string {
+  return `/api/imageProxy?url=${encodeURIComponent(absoluteUrl)}`
+}
+
+/**
+ * POS 타일·미리보기용 최종 img src.
+ * - Supabase Storage → posMenuImageProxy (비공개 버킷·SW 호환)
+ * - Google Drive 등 기타 http(s) → imageProxy (관리자 품목/재고 화면과 동일)
+ */
+export function toPosMenuDisplayImageHref(
+  normalizedUrl: string,
+  opts?: { preferProxy?: boolean; pageOrigin?: string }
+): string {
+  const u = String(normalizedUrl || '').trim()
+  if (!u) return ''
+  if (u.startsWith('data:') || u.startsWith('blob:')) return u
+
+  const preferProxy =
+    opts?.preferProxy ??
+    (typeof window !== 'undefined' && window.location?.protocol === 'https:')
+  if (!preferProxy) return u
+
+  const pageOrigin =
+    opts?.pageOrigin ??
+    (typeof window !== 'undefined' ? window.location.origin : '')
+
+  try {
+    const parsed = new URL(u, pageOrigin || undefined)
+    if (pageOrigin && parsed.origin === pageOrigin) {
+      return parsed.href
+    }
+    if (shouldProxyPosMenuImageForHybrid(parsed.href)) {
+      return toHybridProxiedMenuImageHref(parsed.href)
+    }
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return toGeneralImageProxyHref(parsed.href)
+    }
+  } catch {
+    if (/^https?:\/\//i.test(u)) return toGeneralImageProxyHref(u)
+  }
+  return u
+}
+
 /** IndexedDB·프리패치에 넣을 수 있는 출처만 허용 */
 export function isPosMenuImageUrlCacheable(url: string, pageOrigin: string): boolean {
   try {

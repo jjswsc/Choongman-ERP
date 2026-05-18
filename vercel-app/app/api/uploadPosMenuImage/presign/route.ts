@@ -3,6 +3,7 @@ import {
   supabaseCreateSignedUploadUrl,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { buildPosMenuImageStorageObjectName } from '@/lib/pos-menu-image-storage-path'
 
 const BUCKET = 'pos-menu-images'
 const MAX_FILE_BYTES = 4 * 1024 * 1024
@@ -17,6 +18,8 @@ export async function POST(request: NextRequest) {
       fileName?: string
       contentType?: string
       fileSize?: number
+      /** 있으면 Storage 파일명에 포함 → 나중에 메뉴 id 로 복구·검증 가능 */
+      menuId?: number | string
     }
     const fileName = String(body.fileName || 'image.jpg').trim() || 'image.jpg'
     const contentType = String(body.contentType || 'image/jpeg').toLowerCase().split(';')[0].trim()
@@ -42,8 +45,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const storagePath = `${Date.now()}-${safeName}`
+    const menuIdNum = Math.floor(Number(body.menuId))
+    const storagePath =
+      Number.isFinite(menuIdNum) && menuIdNum > 0
+        ? buildPosMenuImageStorageObjectName(menuIdNum, fileName)
+        : `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
     const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
     const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)

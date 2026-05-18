@@ -7099,8 +7099,9 @@ export async function refreshPosMenusCatalogCache(params?: { storeCode?: string 
 /** uploadPosMenuImage: 비 JSON 응답(413 HTML 등) 시 message로 구분 */
 export const POS_MENU_UPLOAD_TOO_LARGE = '__POS_MENU_UPLOAD_TOO_LARGE__'
 
-export async function uploadPosMenuImage(params: { file: File }) {
+export async function uploadPosMenuImage(params: { file: File; menuId?: string | number }) {
   const file = params.file
+  const menuIdRaw = params.menuId
   const pres = await apiFetchWithOffline('/api/uploadPosMenuImage/presign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -7108,6 +7109,9 @@ export async function uploadPosMenuImage(params: { file: File }) {
       fileName: file.name,
       contentType: file.type || 'application/octet-stream',
       fileSize: file.size,
+      ...(menuIdRaw != null && String(menuIdRaw).trim() !== ''
+        ? { menuId: String(menuIdRaw).trim() }
+        : {}),
     }),
   })
   const rawPres = await pres.text()

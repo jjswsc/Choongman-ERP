@@ -1932,7 +1932,6 @@ export default function PosMenusPage() {
             sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
             price: optionsConfigSelectedMenu.price,
             priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
-            imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
             vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
             isActive: optionsConfigSelectedMenu.isActive ?? true,
             optionSelectionGroups: mergedGroupKeys,
@@ -2303,7 +2302,6 @@ export default function PosMenusPage() {
         sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
         price: optionsConfigSelectedMenu.price,
         priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
-        imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
         vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
         isActive: optionsConfigSelectedMenu.isActive ?? true,
         optionSelectionGroups: parsed,
@@ -2696,7 +2694,6 @@ export default function PosMenusPage() {
           sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
           price: optionsConfigSelectedMenu.price,
           priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
-          imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
           vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
           isActive: optionsConfigSelectedMenu.isActive ?? true,
           optionSelectionGroups: sourceGroups,
@@ -3446,7 +3443,7 @@ export default function PosMenusPage() {
           }
           return
         }
-        const res = await uploadPosMenuImage({ file: toSend })
+        const res = await uploadPosMenuImage({ file: toSend, menuId })
         if (res?.success && res?.url) {
           upsertDeliveryMenuPolicy(menuId, { imageUrl: res.url })
           return

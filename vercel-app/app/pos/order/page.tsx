@@ -86,6 +86,7 @@ import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/l
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
 import { isChickenDefaultOptionName } from "@/lib/pos-chicken-option-inference"
+import { shouldUseFlatBarBqChickenOptionPicker } from "@/lib/pos-barbq-option-picker-ui"
 import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
@@ -2313,7 +2314,12 @@ export default function PosOrderPage() {
               (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
             )
             const optsWithStepsToShow = isChickenBasePrice ? optsWithSteps.filter((o) => !isChickenDefaultOption(o.name)) : optsWithSteps
-            const useMultiStep = groups.length > 0 && optsWithStepsToShow.length > 0
+            const useFlatBarBqList = shouldUseFlatBarBqChickenOptionPicker({
+              menu: optionPickerMenu,
+              options: opts,
+            })
+            const useMultiStep =
+              groups.length > 0 && optsWithStepsToShow.length > 0 && !useFlatBarBqList
             /** S 사이즈 기본(S Boneless)은 배달에서만 사용: 배달일 때만 기본 버튼 표시 */
             const defaultBtn = isChickenBasePrice && orderType === "delivery" && (
               <button
