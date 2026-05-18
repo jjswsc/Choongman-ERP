@@ -105,6 +105,7 @@ import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-de
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
+  preparePosOrderItemsForKitchenSlip,
   mergeKitchenSlipGroupsCancelledFirst,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
@@ -829,14 +830,18 @@ export default function PosTerminalPage() {
   const kitchenItemsWithResolvedPromo = useCallback(
     <T extends Record<string, unknown>>(rows: T[]): T[] => {
       if (!rows.length) return rows
-      const expanded = enrichPosOrderLikeItemsWithPromoSnapshot(rows, posReceiptLineOpts)
-      return expanded.map((it) => {
-        const list = (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
-        if (!Array.isArray(list) || list.length === 0) return it
-        return { ...it, promoItems: enrichPromoItemsWithOptionName(list) } as T
+      const prepared = preparePosOrderItemsForKitchenSlip(
+        rows as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        { ...posReceiptLineOpts, menus }
+      )
+      return prepared.map((it) => {
+        const list = (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] })
+          .promoItems
+        if (!Array.isArray(list) || list.length === 0) return it as T
+        return { ...it, promoItems: enrichPromoItemsWithOptionName(list) } as unknown as T
       })
     },
-    [posReceiptLineOpts, enrichPromoItemsWithOptionName]
+    [posReceiptLineOpts, enrichPromoItemsWithOptionName, menus]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)

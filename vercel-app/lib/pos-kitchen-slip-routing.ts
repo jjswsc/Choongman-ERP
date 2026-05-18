@@ -1,5 +1,16 @@
 import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import { resolveCartLineQuantityForSave } from "@/lib/pos-order-item-map"
+import { resolvePosOrderItemMenuDisplayName } from "@/lib/pos-order-item-display-name"
+import {
+  buildKitchenMenuNameLookup,
+  kitchenMenuNameOrPlaceholder,
+  resolveKitchenMenuNameFromLookup,
+  type KitchenMenuNameLookup,
+} from "@/lib/pos-kitchen-menu-display-name"
+import {
+  enrichPosOrderLikeItemsWithPromoSnapshot,
+  type PosOrderReceiptLineOptions,
+} from "@/lib/pos-payment-receipt-from-order"
 import type { OrderItem } from "@/lib/pos-types"
 
 /**
@@ -23,7 +34,14 @@ export type KitchenSlipRoutingItem = {
   name?: string
   qty?: number
   note?: string
-  promoItems?: { menuId: string; optionId: string | null; optionName?: string | null; quantity: number }[]
+  promoItems?: {
+    menuId: string
+    optionId: string | null
+    optionName?: string | null
+    /** 주문 저장 시점 메뉴명 스냅샷(매장 스코프·비활성 메뉴로 카탈로그에 없을 때 주방 표기용) */
+    menuName?: string | null
+    quantity: number
+  }[]
 }
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */
@@ -147,11 +165,10 @@ export function buildKitchenSlipGroupOpts(
  */
 function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
   items: T[],
-  menuNameByMenuId: Record<string, string>,
+  lookup: KitchenMenuNameLookup,
   enabled: boolean
 ): T[] {
   if (!enabled) return items
-  const names = menuNameByMenuId || {}
   const out: T[] = []
   for (const it of items) {
     const pi = it.promoItems
@@ -164,7 +181,14 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
         if (!mid) continue
         n += 1
         const q = Math.max(0.0001, Number(p.quantity ?? 1)) * parentQty
-        const childName = (names[mid] || '').trim() || mid
+        const childName = kitchenMenuNameOrPlaceholder(
+          mid,
+          resolveKitchenMenuNameFromLookup(
+            mid,
+            lookup,
+            String((p as { menuName?: string | null }).menuName ?? '').trim()
+          )
+        )
         const optionName = String((p as { optionName?: string }).optionName ?? '').trim()
         const optionLabel = optionName ? ` (${optionName})` : ''
         const displayName = parentName ? `[${parentName}] ${childName}` : childName
@@ -199,7 +223,14 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const splitPromo = opts.splitPromoKitchenLines !== false
   const nameMap = opts.menuNameByMenuId || {}
   const codeMap = opts.menuCodeByMenuId || {}
-  const expanded = expandPromoLinesForKitchenRouting(items, nameMap, splitPromo) as T[]
+  const menuLookup = buildKitchenMenuNameLookup(
+    Object.entries(nameMap).map(([id, name]) => ({
+      id,
+      name,
+      code: codeMap[id],
+    }))
+  )
+  const expanded = expandPromoLinesForKitchenRouting(items, menuLookup, splitPromo) as T[]
 
   const catMap = opts.categoryByMenuId || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
@@ -519,4 +550,55 @@ export function alignKitchenCategoryRouteKeyMap(
     if (key) out[key] = v
   }
   return out
+}
+
+type KitchenPrepareMenuLike = { id?: string | number; name?: string; code?: string }
+
+function enrichPromoItemsMenuNames<T extends KitchenSlipRoutingItem['promoItems']>(
+  promoItems: T,
+  lookup: KitchenMenuNameLookup
+): T {
+  if (!Array.isArray(promoItems) || promoItems.length === 0) return promoItems
+  return promoItems.map((p) => {
+    const mid = String(p.menuId ?? '').trim()
+    const existing = String((p as { menuName?: string | null }).menuName ?? '').trim()
+    const menuName = existing || resolveKitchenMenuNameFromLookup(mid, lookup)
+    return menuName ? { ...p, menuName } : p
+  }) as T
+}
+
+/**
+ * 주방 슬립 라우팅 전: promoItems 스냅샷 보강·구성 메뉴명·줄 표시명 복원.
+ * (매장 스코프로 카탈로그에 없는 메뉴 id가 주문 JSON에만 남아 "26"처럼 찍히는 현상 방지)
+ */
+export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingItem>(
+  items: T[],
+  opts: PosOrderReceiptLineOptions & { menus?: KitchenPrepareMenuLike[] }
+): T[] {
+  const menus = opts.menus ?? []
+  const lookup = buildKitchenMenuNameLookup(menus)
+  const enriched = enrichPosOrderLikeItemsWithPromoSnapshot(
+    items as unknown as Record<string, unknown>[],
+    opts
+  ) as T[]
+
+  return enriched.map((it) => {
+    const menuId = String(
+      it.menuId ?? it.menuId1 ?? it.menu_id1 ?? it.menuId2 ?? ''
+    ).trim()
+    const resolvedName = resolvePosOrderItemMenuDisplayName(
+      {
+        id: String(it.id ?? ''),
+        name: String(it.name ?? ''),
+        menuId,
+      },
+      menus as Parameters<typeof resolvePosOrderItemMenuDisplayName>[1]
+    )
+    const promoItems = enrichPromoItemsMenuNames(it.promoItems, lookup)
+    return {
+      ...it,
+      name: resolvedName,
+      ...(promoItems ? { promoItems } : {}),
+    } as T
+  })
 }

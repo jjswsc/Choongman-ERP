@@ -57,7 +57,11 @@ import {
   ADMIN_BTN_XS_CN,
   ADMIN_DIALOG_SCROLL_CN,
 } from '@/lib/admin-ui-standards'
-import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
+import {
+  buildKitchenSlipGroupOpts,
+  buildKitchenSlipGroups,
+  preparePosOrderItemsForKitchenSlip,
+} from '@/lib/pos-kitchen-slip-routing'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import {
   parsePosOrderMemo,
@@ -731,10 +735,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
       const ki = kitchenSlipPrintI18n(settings, lang)
-      const items = enrichPosOrderLikeItemsWithPromoSnapshot(
-        (o.items || []) as unknown as Record<string, unknown>[],
-        posReceiptLineOptsKitchen
-      ) as { id?: string; name?: string; price?: number; qty?: number }[]
+      const items = preparePosOrderItemsForKitchenSlip(
+        (o.items || []) as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        { ...posReceiptLineOptsKitchen, menus }
+      )
       const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, ki.kLabels))
       if (!slips.length) {
         await appAlert(t('posKitchenNoItemsToPrint'))

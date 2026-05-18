@@ -16,7 +16,13 @@ export type PosOrderReceiptLineOptions = {
   menus?: PosMenu[]
 }
 
-type ReceiptPromoLine = { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }
+type ReceiptPromoLine = {
+  menuId: string
+  optionId: string | null
+  optionCode?: string | null
+  menuName?: string
+  quantity: number
+}
 type CatalogPromoLine = ReceiptPromoLine & { choiceGroup: string | null }
 
 export function posOrderRowPaymentSum(row: Record<string, unknown>): number {
@@ -158,10 +164,13 @@ function normalizeReceiptPromoLines(raw: unknown[]): ReceiptPromoLine[] {
     const optStr = opt != null && String(opt).trim() ? String(opt).trim() : null
     const optionCode = o.optionCode ?? o.option_code
     const optionCodeStr = optionCode != null && String(optionCode).trim() ? String(optionCode).trim() : null
+    const menuNameRaw = o.menuName ?? o.menu_name
+    const menuNameStr = menuNameRaw != null && String(menuNameRaw).trim() ? String(menuNameRaw).trim() : ''
     return {
       menuId: String(o.menuId ?? o.menu_id ?? ''),
       optionId: optStr,
       ...(optionCodeStr ? { optionCode: optionCodeStr } : {}),
+      ...(menuNameStr ? { menuName: menuNameStr } : {}),
       quantity: Math.max(1, Number(o.quantity ?? o.qty ?? 1) || 1),
     }
   })

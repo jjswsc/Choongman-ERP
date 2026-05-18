@@ -71,7 +71,11 @@ import {
 } from "@/lib/admin-ui-standards"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
-import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
+import {
+  buildKitchenSlipGroupOpts,
+  buildKitchenSlipGroups,
+  preparePosOrderItemsForKitchenSlip,
+} from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import {
@@ -853,7 +857,10 @@ export default function PosOrdersPage() {
     try {
       const settings = await getPosPrinterSettings({ storeCode })
       const ki = kitchenSlipPrintI18n(settings, lang)
-      const items = o.items as { id?: string; name?: string; price?: number; qty?: number }[]
+      const items = preparePosOrderItemsForKitchenSlip(
+        (o.items || []) as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        { menus }
+      )
       const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, ki.kLabels))
       if (!slips.length) {
         await appAlert(t("posKitchenNoItemsToPrint"))

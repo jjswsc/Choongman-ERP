@@ -16,7 +16,11 @@ import {
   resolveKitchenSlipDesign,
 } from '@/lib/pos-kitchen-slip-html'
 import { resolvePosReceiptOrderNoRaw } from '@/lib/pos-delivery-platform'
-import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
+import {
+  buildKitchenSlipGroupOpts,
+  buildKitchenSlipGroups,
+  preparePosOrderItemsForKitchenSlip,
+} from '@/lib/pos-kitchen-slip-routing'
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
   type PosOrderReceiptLineOptions,
@@ -276,9 +280,9 @@ export function PosReceiptModal({
         printerSettingsRef?.current ??
         (await getPosPrinterSettings({ storeCode: receiptData.storeCode }))
       const ki = kitchenSlipPrintI18n(settings, lang)
-      const itemsForKitchen = enrichPosOrderLikeItemsWithPromoSnapshot(
-        receiptData.items as unknown as Record<string, unknown>[],
-        kitchenPromoLineEnrich
+      const itemsForKitchen = preparePosOrderItemsForKitchenSlip(
+        receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        { ...kitchenPromoLineEnrich, menus }
       ) as ReceiptModalData['items']
       const slips = buildKitchenSlipGroups(
         itemsForKitchen,

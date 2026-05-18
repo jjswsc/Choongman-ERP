@@ -24,7 +24,14 @@ export type CartLineForPosOrder = {
   deliveryAppCode?: string
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
+  promoItems?: {
+    menuId: string
+    optionId: string | null
+    optionCode?: string | null
+    quantity: number
+    menuName?: string
+    optionName?: string | null
+  }[]
 }
 
 /** items_json / API 줄 단위 — qty·quantity 외 레거시/연동 키 보강 */

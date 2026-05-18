@@ -67,4 +67,19 @@ describe('buildKitchenSlipGroups printer overlay', () => {
     })
     expect(slips).toHaveLength(0)
   })
+
+  it('expands promo lines with menuName snapshot when catalog id missing', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      {
+        id: 'promo-1',
+        name: 'Festival Set',
+        qty: 1,
+        promoItems: [{ menuId: '26', optionId: null, menuName: 'Crispy Chicken', quantity: 1 }],
+      },
+    ]
+    const slips = buildKitchenSlipGroups(items, {
+      ...baseOpts({ menuNameByMenuId: {} }),
+    })
+    expect(slips[0]?.items[0]?.name).toBe('[Festival Set] Crispy Chicken')
+  })
 })

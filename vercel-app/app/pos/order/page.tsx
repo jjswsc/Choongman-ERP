@@ -75,7 +75,11 @@ import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
-import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
+import {
+  buildKitchenSlipGroupOpts,
+  buildKitchenSlipGroups,
+  preparePosOrderItemsForKitchenSlip,
+} from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
@@ -694,11 +698,13 @@ export default function PosOrderPage() {
             : isChickenMenu(menu?.code)
               ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
               : ''
+          const menuName = (menu?.name ?? "").trim()
           return {
             menuId: String(r.menuId ?? ""),
             optionId: optId,
             ...(option?.optionCode ? { optionCode: option.optionCode } : {}),
             quantity: Math.max(1, Number(r.quantity) || 1),
+            ...(menuName ? { menuName } : {}),
             ...(optName ? { optionName: optName } : {}),
           }
         })
@@ -860,11 +866,13 @@ export default function PosOrderPage() {
         : isChickenMenu(menu?.code)
           ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
           : ''
+      const menuName = (menu?.name ?? "").trim()
       return {
         menuId: String(x.menuId),
         optionId: optId,
         ...(optCode ? { optionCode: optCode } : {}),
         quantity: Math.max(1, Number(x.quantity) || 1),
+        ...(menuName ? { menuName } : {}),
         ...(optName ? { optionName: optName } : {}),
       }
     })
@@ -1399,9 +1407,9 @@ export default function PosOrderPage() {
     try {
       const settings = await getPrinterSettingsForStore(receiptData.storeCode)
       const ki = kitchenSlipPrintI18n(settings, lang)
-      const itemsForKitchen = enrichPosOrderLikeItemsWithPromoSnapshot(
-        receiptData.items as unknown as Record<string, unknown>[],
-        posReceiptLineOptsKitchen
+      const itemsForKitchen = preparePosOrderItemsForKitchenSlip(
+        receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        { ...posReceiptLineOptsKitchen, menus }
       ) as unknown as typeof receiptData.items
       const slips = buildKitchenSlipGroups(
         itemsForKitchen,

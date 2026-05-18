@@ -514,11 +514,13 @@ export function PosTerminalMenuScreen({
         : isChickenMenu(menu?.code)
           ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
           : ''
+      const menuName = (menu?.name ?? '').trim()
       return {
         menuId: String(x.menuId),
         optionId: optId,
         ...(option?.optionCode ? { optionCode: option.optionCode } : {}),
         quantity: Math.max(1, Number(x.quantity) || 1),
+        ...(menuName ? { menuName } : {}),
         ...(optName ? { optionName: optName } : {}),
       }
     })
