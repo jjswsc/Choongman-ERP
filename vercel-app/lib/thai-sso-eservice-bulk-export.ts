@@ -32,6 +32,17 @@ export const SSO_ESERVICE_BULK_HEADERS_TH = [
   "เงินสมทบผู้ประกันตน (สต.)",
 ] as const
 
+/** UI 열 안내 — `SSO_ESERVICE_BULK_HEADERS_TH` 순서와 동일 */
+export const SSO_ESERVICE_BULK_COLUMN_HELP: { labelTh: string; labelEn: string }[] = [
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[0], labelEn: "Line number" },
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[1], labelEn: "National ID (13 digits, text)" },
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[2], labelEn: "Title + full name" },
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[3], labelEn: "Wage paid (baht)" },
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[4], labelEn: "Wage (satang)" },
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[5], labelEn: "Employee contribution (baht)" },
+  { labelTh: SSO_ESERVICE_BULK_HEADERS_TH[6], labelEn: "Employee contribution (satang)" },
+]
+
 function splitBahtSatang(amount: number): { baht: number; satang: string } {
   const n = Math.max(0, Math.round(amount))
   return { baht: n, satang: "00" }
@@ -56,9 +67,10 @@ function readmeRows(ym: string): (string | number)[][] {
   return [
     ["SSO e-Service bulk upload — CM ERP"],
     [""],
-    [`Sheet «${SHEET_UPLOAD}»: use this for e-Service import (row 1 = headers, row 2+ = employees).`],
+    [`Sheet 1 «${SHEET_UPLOAD}»: e-Service import (row 1 = headers, row 2+ = employees). Upload this file or select this sheet on the portal.`],
     ["Do not include total/summary rows on the upload sheet."],
-    [`Sheet «${SHEET_EMPLOYER}»: employer account/address from store profile (verify before filing).`],
+    [`Sheet 2 «${SHEET_EMPLOYER}»: employer account/address from store profile (verify before filing).`],
+    [`Sheet 3 «${SHEET_README}»: this guide.`],
     [""],
     ["Before upload: download the latest bulk template from www.sso.go.th/eservices and compare column titles in row 1."],
     [
@@ -121,22 +133,16 @@ function applyCitizenIdTextFormat(ws: XLSX.WorkSheet, rowCount: number): void {
   }
 }
 
-export function downloadThaiSsoEserviceBulkFromPayrollXlsx(params: {
-  yearMonth: string
-  payrollRows: Record<string, unknown>[]
-  employer?: Sps110EmployerInfo
-  filingWageMode?: SsoFilingWageMode
-}): void {
-  const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
-  const rows = params.payrollRows || []
-  const totals = computeSps110Part2Totals(rows)
-  const wb = XLSX.utils.book_new()
+function storeSlugFromEmployer(employer?: Sps110EmployerInfo): string {
+  return String(employer?.branchCode || employer?.branchName || "store")
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .slice(0, 24)
+}
 
-  const wsReadme = XLSX.utils.aoa_to_sheet(readmeRows(ym))
-  wsReadme["!cols"] = [{ wch: 92 }]
-  XLSX.utils.book_append_sheet(wb, wsReadme, SHEET_README)
-
-  const filingWageMode = params.filingWageMode || "contributable"
+function buildUploadWorksheet(
+  rows: Record<string, unknown>[],
+  filingWageMode: SsoFilingWageMode
+): XLSX.WorkSheet {
   const uploadAoa = buildUploadSheet(rows, filingWageMode)
   const wsUpload = XLSX.utils.aoa_to_sheet(uploadAoa)
   wsUpload["!cols"] = [
@@ -149,16 +155,35 @@ export function downloadThaiSsoEserviceBulkFromPayrollXlsx(params: {
     { wch: 8 },
   ]
   applyCitizenIdTextFormat(wsUpload, rows.length)
-  XLSX.utils.book_append_sheet(wb, wsUpload, SHEET_UPLOAD)
+  return wsUpload
+}
+
+/** e-Service 통합본 — 업로드 시트(1)·사업장(2)·README(3) */
+export function downloadThaiSsoEserviceBulkFromPayrollXlsx(params: {
+  yearMonth: string
+  payrollRows: Record<string, unknown>[]
+  employer?: Sps110EmployerInfo
+  filingWageMode?: SsoFilingWageMode
+}): void {
+  const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
+  const rows = params.payrollRows || []
+  const totals = computeSps110Part2Totals(rows)
+  const wb = XLSX.utils.book_new()
+  const filingWageMode = params.filingWageMode || "contributable"
+
+  // Upload sheet first — some e-Service imports read the first worksheet only.
+  XLSX.utils.book_append_sheet(wb, buildUploadWorksheet(rows, filingWageMode), SHEET_UPLOAD)
 
   const employerAoa = buildEmployerSheet(ym, params.employer || {}, totals)
   const wsEmployer = XLSX.utils.aoa_to_sheet(employerAoa)
   wsEmployer["!cols"] = [{ wch: 28 }, { wch: 48 }]
   XLSX.utils.book_append_sheet(wb, wsEmployer, SHEET_EMPLOYER)
 
+  const wsReadme = XLSX.utils.aoa_to_sheet(readmeRows(ym))
+  wsReadme["!cols"] = [{ wch: 92 }]
+  XLSX.utils.book_append_sheet(wb, wsReadme, SHEET_README)
+
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
-  const storeSlug = String(params.employer?.branchCode || params.employer?.branchName || "store")
-    .replace(/[/\\?%*:|"<>]/g, "-")
-    .slice(0, 24)
+  const storeSlug = storeSlugFromEmployer(params.employer)
   XLSX.writeFile(wb, `thai-sso-eservice-bulk-${storeSlug}-${safeYm}.xlsx`)
 }

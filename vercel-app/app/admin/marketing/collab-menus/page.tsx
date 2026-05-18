@@ -211,36 +211,60 @@ export default function MarketingCollabMenusPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="edit" className="mt-0 space-y-6 focus-visible:outline-none">
-          <MarketingHubCampaignContextStrip
-            value={selectedCampaignId}
-            onChange={setSelectedCampaignId}
-            campaigns={list}
-            hideHubLinkFilter
-            allowEmpty
-            emptyOptionLabel={t("marketingCollabMenusCampaignPickerAll")}
-            onRefresh={load}
-            maxListHeightClass="max-h-52"
-            disabled={loading}
-            aside={
-              <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
-                <Link href="/admin/marketing/campaigns">
-                  <Megaphone className="h-3.5 w-3.5" />
-                  {t("adminMarketingCampaigns")}
-                </Link>
-              </Button>
-            }
-          />
+        <TabsContent value="edit" className="mt-0 focus-visible:outline-none">
+          {loading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
+
+          {!loading && list.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                {t("marketingCollabMenusEmpty")}
+              </CardContent>
+            </Card>
+          )}
 
           {!loading && list.length > 0 && (
-            <Card className="overflow-hidden border-primary/15 shadow-md ring-1 ring-primary/5">
-              <CardContent className="space-y-4 p-4 sm:p-5">
-                <h2 className="text-sm font-semibold text-foreground">
-                  {t("marketingCollabDetailEditorTitle")}
-                </h2>
-                <p className="text-xs text-muted-foreground">{t("marketingCollabDetailEditorDesc")}</p>
+            <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+              <MarketingHubCampaignContextStrip
+                value={selectedCampaignId}
+                onChange={setSelectedCampaignId}
+                campaigns={list}
+                hideHubLinkFilter
+                allowEmpty
+                emptyOptionLabel={t("marketingCollabMenusCampaignPickerAll")}
+                onRefresh={load}
+                maxListHeightClass="max-h-[min(52vh,30rem)] min-h-[14rem] sm:min-h-[18rem]"
+                disabled={loading}
+                className="mb-0 rounded-none border-0 bg-muted/15 shadow-none ring-0"
+                aside={
+                  <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
+                    <Link href="/admin/marketing/campaigns">
+                      <Megaphone className="h-3.5 w-3.5" />
+                      {t("adminMarketingCampaigns")}
+                    </Link>
+                  </Button>
+                }
+              />
+
+              <section
+                aria-labelledby="collab-detail-heading"
+                className="border-t border-border/70 bg-background"
+              >
+                <div className="border-b border-border/50 bg-muted/20 px-4 py-3 sm:px-5">
+                  <h2 id="collab-detail-heading" className="text-sm font-semibold text-foreground">
+                    {t("marketingCollabDetailEditorTitle")}
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {t("marketingCollabDetailEditorDesc")}
+                  </p>
+                </div>
+                <div className="p-4 sm:p-5">
                 {!selectedCampaignId ? (
-                  <p className="text-sm text-muted-foreground">{t("marketingCollabDetailPickCampaignHint")}</p>
+                  <div className="flex min-h-[10rem] flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/10 px-4 py-10 text-center">
+                    <Handshake className="mb-3 h-8 w-8 text-muted-foreground/50" />
+                    <p className="max-w-md text-sm text-muted-foreground">
+                      {t("marketingCollabDetailPickCampaignHint")}
+                    </p>
+                  </div>
                 ) : loadedDetail ? (
                   <>
                     <MarketingLinkedCampaignStrip
@@ -343,22 +367,15 @@ export default function MarketingCollabMenusPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground">{t("marketingCollabDetailLoadError")}</p>
                 )}
-              </CardContent>
-            </Card>
-          )}
+                </div>
+              </section>
 
-          {loading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
-
-          {!loading && list.length === 0 && (
-            <Card>
-              <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                {t("marketingCollabMenusEmpty")}
-              </CardContent>
-            </Card>
-          )}
-
-          {!loading && list.length > 0 && collabOnly.length === 0 && (
-            <p className="text-center text-xs text-muted-foreground">{t("marketingCollabMenusEmptyNoCollabFlag")}</p>
+              {!loading && collabOnly.length === 0 && (
+                <p className="border-t border-border/60 bg-muted/10 px-4 py-2 text-center text-xs text-muted-foreground sm:px-5">
+                  {t("marketingCollabMenusEmptyNoCollabFlag")}
+                </p>
+              )}
+            </div>
           )}
         </TabsContent>
 

@@ -109,6 +109,7 @@ import {
   type TrialBalanceRow,
   apiFetch,
   uploadSsoEvidenceFile,
+  syncPayrollSsoExpenseAccruals,
   uploadEtaxEvidenceFile,
   getExportEtaxTimestampAuditCsvUrl,
 } from "@/lib/api-client"
@@ -126,16 +127,13 @@ import { StoreVendorTaxLinkBanner } from "@/components/admin/tax-filing/store-ve
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import {
-  downloadThaiSsoFilingBlankTemplateXlsx,
-  downloadThaiSsoFilingFromPayrollXlsx,
-  THAI_SSO_TEMPLATE_COLUMN_HELP,
-} from "@/lib/thai-sso-filing-template"
-import { downloadThaiSsoEformV15FromPayrollXlsx } from "@/lib/thai-sso-eform-v15"
-import {
   downloadThaiSsoSps110FromPayrollXlsx,
   type Sps110EmployerInfo,
 } from "@/lib/thai-sso-sps1-10-export"
-import { downloadThaiSsoEserviceBulkFromPayrollXlsx } from "@/lib/thai-sso-eservice-bulk-export"
+import {
+  downloadThaiSsoEserviceBulkFromPayrollXlsx,
+  SSO_ESERVICE_BULK_COLUMN_HELP,
+} from "@/lib/thai-sso-eservice-bulk-export"
 import { type SsoFilingWageMode } from "@/lib/payroll-utils"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
@@ -962,6 +960,7 @@ export function AdminAccountingCompliance({
   const [ssoAttachmentInput, setSsoAttachmentInput] = React.useState("")
   const [ssoEvidenceUploading, setSsoEvidenceUploading] = React.useState(false)
   const [ssoSubmissionSaving, setSsoSubmissionSaving] = React.useState(false)
+  const [ssoAccountingSyncing, setSsoAccountingSyncing] = React.useState(false)
   const [ssoFilingWageMode, setSsoFilingWageMode] = React.useState<SsoFilingWageMode>("contributable")
   const [ssoWorkflowRow, setSsoWorkflowRow] = React.useState<AccountingWorkflowStatusRow | null>(null)
   const [pnd1PayerTaxId, setPnd1PayerTaxId] = React.useState("")
@@ -1986,38 +1985,6 @@ export function AdminAccountingCompliance({
     ]
   )
 
-  const exportSsoFromPayroll = React.useCallback(async () => {
-    if (!canUse || !auth?.user) return
-    setSsoPayrollExporting(true)
-    try {
-      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
-      if (!rows || rows.length === 0) return
-      downloadThaiSsoFilingFromPayrollXlsx({
-        yearMonth: taxMonth,
-        payrollRows: rows,
-        filingWageMode: ssoFilingWageMode,
-      })
-    } finally {
-      setSsoPayrollExporting(false)
-    }
-  }, [canUse, auth?.user, ssoFilingWageMode, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
-
-  const exportSsoEformV15FromPayroll = React.useCallback(async () => {
-    if (!canUse || !auth?.user) return
-    setSsoPayrollExporting(true)
-    try {
-      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
-      if (!rows || rows.length === 0) return
-      downloadThaiSsoEformV15FromPayrollXlsx({
-        yearMonth: taxMonth,
-        payrollRows: rows,
-        filingWageMode: ssoFilingWageMode,
-      })
-    } finally {
-      setSsoPayrollExporting(false)
-    }
-  }, [canUse, auth?.user, ssoFilingWageMode, ssoPayrollRows, fetchSsoPayrollRows, taxMonth])
-
   const resolveSsoEmployerHeader = React.useCallback(async (): Promise<Sps110EmployerInfo> => {
     let employer: Sps110EmployerInfo = { contributionRatePercent: "5.00" }
     const year = Number(taxMonth.slice(0, 4))
@@ -2171,6 +2138,48 @@ export function AdminAccountingCompliance({
     t,
   ])
 
+  const runSsoAccountingSync = React.useCallback(async () => {
+    if (!canUse || !auth?.user) return null
+    const pickStore = externalFiling ? storeTb : ssoStoreFilter
+    const effectiveStore = isManager && managerStore ? managerStore : pickStore
+    setSsoAccountingSyncing(true)
+    try {
+      const res = await syncPayrollSsoExpenseAccruals({
+        yearMonth: taxMonth,
+        storeFilter: effectiveStore && effectiveStore !== "All" ? effectiveStore : undefined,
+        postedBy: auth.user || undefined,
+      })
+      if (!res.success || !res.sync) {
+        appAlert(res.error || t("accCompSsoAccountingSyncFail"))
+        return null
+      }
+      const s = res.sync
+      appAlert(
+        tr(t, "accCompSsoAccountingSyncDone", {
+          created: String(s.created),
+          updated: String(s.updated),
+          stores: String(s.stores.length),
+        })
+      )
+      return res.sync
+    } catch {
+      appAlert(t("accCompSsoAccountingSyncFail"))
+      return null
+    } finally {
+      setSsoAccountingSyncing(false)
+    }
+  }, [
+    canUse,
+    auth?.user,
+    externalFiling,
+    isManager,
+    managerStore,
+    ssoStoreFilter,
+    storeTb,
+    t,
+    taxMonth,
+  ])
+
   const markSsoSubmissionDone = React.useCallback(async () => {
     if (!canUse || !auth?.user) return
     if (!canApproveCompliance) {
@@ -2185,6 +2194,17 @@ export function AdminAccountingCompliance({
     setSsoSubmissionSaving(true)
     try {
       const pickStore = externalFiling ? storeTb : ssoStoreFilter
+      const effectiveStoreForSync =
+        isManager && managerStore ? managerStore : pickStore && pickStore !== "All" ? pickStore : undefined
+      try {
+        await syncPayrollSsoExpenseAccruals({
+          yearMonth: taxMonth,
+          storeFilter: effectiveStoreForSync,
+          postedBy: auth.user || undefined,
+        })
+      } catch {
+        /* submission still recorded; user can retry 지급예정 반영 */
+      }
       const effectiveStore = isManager && managerStore ? managerStore : pickStore
       const summaryLine = `SSO rows=${preview.rowCount}, employee_sso=${Math.round(
         preview.totalEmployeeSso
@@ -2223,6 +2243,7 @@ export function AdminAccountingCompliance({
     loadSsoWorkflowStatus,
     managerStore,
     role,
+    runSsoAccountingSync,
     ssoAttachmentUrls,
     ssoSubmissionMemo,
     ssoPayrollPreview,
@@ -7342,25 +7363,6 @@ export function AdminAccountingCompliance({
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => void exportSsoFromPayroll()}
-                  disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {ssoPayrollExporting ? t("loading") : t("accCompSsoFromPayroll")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void exportSsoEformV15FromPayroll()}
-                  disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
-                  title={t("accCompSsoEformV15Hint")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {ssoPayrollExporting ? t("loading") : t("accCompSsoEformV15FromPayroll")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
                   onClick={() => void exportSps110FromPayroll()}
                   disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
                   title={t("accCompSsoSps110Hint")}
@@ -7368,16 +7370,8 @@ export function AdminAccountingCompliance({
                   <Download className="h-4 w-4 mr-2" />
                   {ssoPayrollExporting ? t("loading") : t("accCompSsoSps110FromPayroll")}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => downloadThaiSsoFilingBlankTemplateXlsx({ yearMonth: taxMonth })}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {t("accCompSsoDownloadBlank")}
-                </Button>
                 <Button type="button" variant="outline" asChild>
-                  <a href="https://www.sso.go.th/" target="_blank" rel="noopener noreferrer">
+                  <a href="https://www.sso.go.th/eservices" target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4 mr-2" />
                     {t("accCompSsoOpenSsoSite")}
                   </a>
@@ -7461,8 +7455,24 @@ export function AdminAccountingCompliance({
               </div>
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                 <div className="text-xs font-medium">{t("accCompSsoStep3Title")}</div>
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-[11px] text-muted-foreground whitespace-pre-line">
                   {t("accCompSsoStep3Guide")}
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void runSsoAccountingSync()}
+                    disabled={
+                      ssoAccountingSyncing ||
+                      ssoSubmissionSaving ||
+                      !ssoQueried ||
+                      !ssoStep2Ready
+                    }
+                  >
+                    {ssoAccountingSyncing ? t("loading") : t("accCompSsoAccountingSyncBtn")}
+                  </Button>
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {t("accCompColStatus")}: {ssoStep3Ready ? t("accCompReady") : t("accCompNeedsPreparation")}
@@ -7595,18 +7605,17 @@ export function AdminAccountingCompliance({
               <CardTitle className="text-base">{t("accCompSsoColumnGuideTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto pt-0">
+              <p className="text-[11px] text-muted-foreground mb-2">{t("accCompSsoColumnGuideNote")}</p>
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2 font-medium">{t("accCompField")}</th>
                     <th className="text-left p-2 font-medium">ไทย</th>
                     <th className="text-left p-2 font-medium">{t("accCompEnglish")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {THAI_SSO_TEMPLATE_COLUMN_HELP.map((c) => (
-                    <tr key={c.field} className="border-b border-border/50">
-                      <td className="p-2 font-mono text-[11px]">{c.field}</td>
+                  {SSO_ESERVICE_BULK_COLUMN_HELP.map((c) => (
+                    <tr key={c.labelTh} className="border-b border-border/50">
                       <td className="p-2">{c.labelTh}</td>
                       <td className="p-2 text-muted-foreground">{c.labelEn}</td>
                     </tr>

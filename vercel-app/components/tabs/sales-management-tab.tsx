@@ -38,6 +38,7 @@ import {
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
+import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
 import { addDaysYmd } from "@/lib/pos-business-day"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
@@ -164,6 +165,37 @@ function mapPosSalesPeriodRowToChartRow(
 function normalizeStoreCodes(values: string[]): string[] {
   return [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b)
+  )
+}
+
+type StoreSalesAggregateRow = {
+  storeName: string
+  count: number
+  subtotal: number
+  vat: number
+  discount?: number
+  service?: number
+  total: number
+}
+
+function filterStoreRowsBySalesSelection<T extends { storeName: string }>(
+  rows: T[],
+  stores: string[] | undefined
+): T[] {
+  if (!stores?.length) return rows
+  return rows.filter((r) => stores.some((code) => rowMatchesSalesStoreSelection(r.storeName, code)))
+}
+
+function sumStoreSalesTotals(rows: StoreSalesAggregateRow[]) {
+  return rows.reduce(
+    (acc, r) => ({
+      subtotal: acc.subtotal + Number(r.subtotal ?? 0),
+      vat: acc.vat + Number(r.vat ?? 0),
+      discount: acc.discount + Number(r.discount ?? 0),
+      service: acc.service + Number(r.service ?? 0),
+      total: acc.total + Number(r.total ?? 0),
+    }),
+    { subtotal: 0, vat: 0, discount: 0, service: 0, total: 0 }
   )
 }
 
@@ -382,6 +414,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
   const storePickerRef = React.useRef<HTMLDivElement | null>(null)
+  /** 전체 해제 후 첫 매장 자동 선택(useEffect)을 막기 위함 */
+  const skipDefaultStoreAutoSelectRef = React.useRef(false)
   /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
   const [compareStores, setCompareStores] = React.useState(false)
@@ -539,15 +573,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [posStoreNameLookup]
   )
 
-  const storeChartRows = React.useMemo(
-    () =>
-      storeData.map((r) => ({
-        ...r,
-        storeDisplayName: posStoreDisplayName(r.storeName),
-      })),
-    [storeData, posStoreDisplayName]
-  )
-
   const selectedStoresKey = React.useMemo(
     () => normalizeStoreCodes(selectedStores).join(","),
     [selectedStores]
@@ -564,6 +589,24 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
     return undefined
   }, [selectedStoresKey, selectedStoresParam, canSearchAll, posBizDayStoreChoices])
+
+  /** API·표기 차이로 요청 매장 외 행이 섞일 때 화면·합계를 선택 매장에 맞춤 */
+  const scopedStoreData = React.useMemo(
+    () => filterStoreRowsBySalesSelection(storeData, salesFetchStoresParam),
+    [storeData, salesFetchStoresParam]
+  )
+
+  const storeChartRows = React.useMemo(
+    () =>
+      scopedStoreData.map((r) => ({
+        ...r,
+        storeDisplayName: posStoreDisplayName(r.storeName),
+        axisLabel: posStoreDisplayName(r.storeName),
+        sales: r.total,
+      })),
+    [scopedStoreData, posStoreDisplayName]
+  )
+
   const filteredStoreOptions = React.useMemo(() => {
     const q = storeSearch.trim().toLowerCase()
     if (!q) return posOptions
@@ -964,6 +1007,28 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     return { subtotal, vat, discount, service, total, gross: subtotal + vat }
   }, [periodChartRows])
 
+  const storeTotalsSummary = React.useMemo(() => {
+    const t = sumStoreSalesTotals(scopedStoreData)
+    return { ...t, gross: t.subtotal + t.vat }
+  }, [scopedStoreData])
+
+  const paymentTotalsSummary = React.useMemo(() => {
+    const total = paymentData.reduce((a, r) => a + Number(r.sales ?? 0), 0)
+    return { subtotal: 0, vat: 0, discount: 0, service: 0, total, gross: total }
+  }, [paymentData])
+
+  const activeTotalsSummary = React.useMemo(() => {
+    if (selectedView === "store" || selectedView === "store-category") return storeTotalsSummary
+    if (selectedView === "payment") return paymentTotalsSummary
+    return totalsSummary
+  }, [selectedView, storeTotalsSummary, paymentTotalsSummary, totalsSummary])
+
+  const activeSummaryCurrent = React.useMemo(() => {
+    if (selectedView === "store" || selectedView === "store-category") return storeTotalsSummary.total
+    if (selectedView === "payment") return paymentTotalsSummary.total
+    return summaryCards.current
+  }, [selectedView, storeTotalsSummary.total, paymentTotalsSummary.total, summaryCards.current])
+
   const insightTopMenus = React.useMemo(
     () => [...menuData].sort((a, b) => b.sales - a.sales).slice(0, 3),
     [menuData]
@@ -1056,6 +1121,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       orderTypesKey: normalizedOrderTypesKey,
       compare: preset.compareStores,
     }
+    skipDefaultStoreAutoSelectRef.current = normalizedStores.length === 0
     setSelectedStores(normalizedStores)
     setPeriodGroup(normalizedPeriodGroup)
     setOrderTypesKey(normalizedOrderTypesKey)
@@ -1283,6 +1349,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   React.useEffect(() => {
     if (!canSearchAll) return
     if (selectedStores.length > 0) return
+    if (skipDefaultStoreAutoSelectRef.current) return
     const first = posBizDayStoreChoices[0]
     if (!first) return
     setSelectedStores(normalizeStoreCodes([first]))
@@ -1371,20 +1438,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             setPeriodData(res.rows)
             setPeriodTruncated(res.truncated)
           }
-          if (needCurrentSummaryOnly) {
-            gSummary({
-              current: sumPeriodTotal(res as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
-              prevRange: 0,
-              prevWeek: 0,
-            })
-          }
         })
         .catch(() => {
           if (loadIdRef.current !== id) return
           setPeriodSplitSeries(null)
           setPeriodData([])
           setPeriodTruncated(false)
-          if (needCurrentSummaryOnly) gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
         })
     )
     if (needDelivery) {
@@ -1419,8 +1478,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
-          .then(gPayment)
-          .catch(() => gPayment([]))
+          .then((rows) => {
+            gPayment(rows)
+            if (needCurrentSummaryOnly && !needStore) {
+              const total = rows.reduce((a, r) => a + Number(r.sales ?? 0), 0)
+              gSummary({ current: total, prevRange: 0, prevWeek: 0 })
+            }
+          })
+          .catch(() => {
+            gPayment([])
+            if (needCurrentSummaryOnly && !needStore) gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
       )
     }
     if (needStore) {
@@ -1431,8 +1499,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
-          .then(gStore)
-          .catch(() => gStore([]))
+          .then((rows) => {
+            gStore(rows)
+            if (needCurrentSummaryOnly) {
+              const scoped = filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
+              gSummary({
+                current: sumStoreSalesTotals(scoped).total,
+                prevRange: 0,
+                prevWeek: 0,
+              })
+            }
+          })
+          .catch(() => {
+            gStore([])
+            if (needCurrentSummaryOnly) gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
       )
     }
     if (needMenu) {
@@ -1685,6 +1766,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           size="sm"
                           variant="outline"
                           onClick={() => {
+                            skipDefaultStoreAutoSelectRef.current = false
                             const all = normalizeStoreCodes([...posOptions])
                             userSelectedRef.current.storesKey = all.join(",")
                             setSelectedStores(all)
@@ -1697,6 +1779,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           size="sm"
                           variant="outline"
                           onClick={() => {
+                            skipDefaultStoreAutoSelectRef.current = true
                             userSelectedRef.current.storesKey = ""
                             setSelectedStores([])
                           }}
@@ -1723,6 +1806,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               <Checkbox
                                 checked={active}
                                 onCheckedChange={() => {
+                                  skipDefaultStoreAutoSelectRef.current = false
                                   setSelectedStores((prev) => {
                                     const exists = prev.includes(p)
                                     const next = exists ? prev.filter((v) => v !== p) : [...prev, p]
@@ -2184,7 +2268,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <div className="mb-3 max-w-sm">
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.current)}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(activeSummaryCurrent)}</p>
               </div>
             </div>
           ) : null}
@@ -2200,13 +2284,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               {insightShowTotals ? (
                 <div className="rounded-lg border bg-card p-3">
                   <p className="text-xs text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(totalsSummary.gross)}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(activeTotalsSummary.gross)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.discount)}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(activeTotalsSummary.discount)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesServiceAmount", "서비스처리 금액")}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.service)}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(activeTotalsSummary.service)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
-                  <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(totalsSummary.total)}</p>
+                  <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(activeTotalsSummary.total)}</p>
                 </div>
               ) : null}
               {insightShowMenu ? (
@@ -2922,7 +3006,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 <>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
+                      <BarChart data={storeChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
@@ -2949,7 +3033,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         </tr>
                       </thead>
                       <tbody>
-                        {storeData.map((r) => {
+                        {scopedStoreData.map((r) => {
                           const guestSum = r.guestSum ?? 0
                           const dineInOrderCount = r.dineInOrderCount ?? 0
                           const dineInGuestSum = r.dineInGuestSum ?? 0
@@ -3009,14 +3093,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           </tr>
                           )
                         })}
-                        {storeData.length > 0 && (
+                        {scopedStoreData.length > 0 && (
                           <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
                             <td className="px-4 py-3">{tr("salesTotalLabel", "합계")}</td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {storeData.reduce((a, r) => a + r.count, 0).toLocaleString()}
+                              {scopedStoreData.reduce((a, r) => a + r.count, 0).toLocaleString()}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {storeData.reduce((a, r) => {
+                              {scopedStoreData.reduce((a, r) => {
                                 const g = r.guestSum ?? 0
                                 const legacy =
                                   r.dineInGuestSum === undefined &&
@@ -3028,16 +3112,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
                               {(() => {
-                                const c = storeData.reduce((a, r) => a + (r.dineInOrderCount ?? 0), 0)
-                                const t = storeData.reduce((a, r) => a + (r.dineInTotal ?? 0), 0)
+                                const c = scopedStoreData.reduce((a, r) => a + (r.dineInOrderCount ?? 0), 0)
+                                const t = scopedStoreData.reduce((a, r) => a + (r.dineInTotal ?? 0), 0)
                                 return c > 0 ? formatSalesAmount(Math.round((t / c) * 100) / 100) : "—"
                               })()}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
                               {(() => {
-                                const gD = storeData.reduce((a, r) => a + (r.dineInGuestSum ?? 0), 0)
-                                const tD = storeData.reduce((a, r) => a + (r.dineInTotal ?? 0), 0)
-                                const gH = storeData.reduce((a, r) => {
+                                const gD = scopedStoreData.reduce((a, r) => a + (r.dineInGuestSum ?? 0), 0)
+                                const tD = scopedStoreData.reduce((a, r) => a + (r.dineInTotal ?? 0), 0)
+                                const gH = scopedStoreData.reduce((a, r) => {
                                   const g = r.guestSum ?? 0
                                   const legacy =
                                     r.dineInGuestSum === undefined &&
@@ -3045,7 +3129,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                     r.dineInTotal === undefined
                                   return a + (legacy ? g : (r.dineInGuestSum ?? 0))
                                 }, 0)
-                                const tAll = storeData.reduce((a, r) => a + r.total, 0)
+                                const tAll = scopedStoreData.reduce((a, r) => a + r.total, 0)
                                 if (gD > 0 && tD > 0)
                                   return formatSalesAmount(Math.round((tD / gD) * 100) / 100)
                                 if (gH > 0 && tAll > 0)
@@ -3055,25 +3139,25 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
                               {(() => {
-                                const c = storeData.reduce((a, r) => a + r.count, 0)
-                                const t = storeData.reduce((a, r) => a + r.total, 0)
+                                const c = scopedStoreData.reduce((a, r) => a + r.count, 0)
+                                const t = scopedStoreData.reduce((a, r) => a + r.total, 0)
                                 return c > 0 ? formatSalesAmount(Math.round((t / c) * 100) / 100) : "—"
                               })()}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatSalesAmount(storeData.reduce((a, r) => a + r.subtotal, 0))}
+                              {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.subtotal, 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatSalesAmount(storeData.reduce((a, r) => a + r.vat, 0))}
+                              {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.vat, 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatSalesAmount(storeData.reduce((a, r) => a + (r.discount ?? 0), 0))}
+                              {formatSalesAmount(scopedStoreData.reduce((a, r) => a + (r.discount ?? 0), 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatSalesAmount(storeData.reduce((a, r) => a + (r.service ?? 0), 0))}
+                              {formatSalesAmount(scopedStoreData.reduce((a, r) => a + (r.service ?? 0), 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatSalesAmount(storeData.reduce((a, r) => a + r.total, 0))}
+                              {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.total, 0))}
                             </td>
                           </tr>
                         )}
@@ -3090,7 +3174,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       "손님 수(홀)·홀 건당·홀 1인당은 dine_in 주문과 POS guest_count만 사용합니다. 건당은 현재 매출액 종류 필터에 포함된 주문 전체의 매출÷건수입니다. 포장·배달은 인원 미입력이므로 홀 지표와 섞지 않습니다."
                     )}
                   </p>
-                  {storeData.length === 0 && (
+                  {scopedStoreData.length === 0 && (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
                     </p>

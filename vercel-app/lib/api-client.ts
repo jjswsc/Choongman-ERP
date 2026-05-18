@@ -3898,6 +3898,31 @@ export async function saveAccountingWorkflowStatus(params: {
   return res.json() as Promise<{ success: boolean; id?: number; error?: string; fallbackUsed?: boolean }>
 }
 
+export type PayrollSsoExpenseSyncDto = {
+  created: number
+  updated: number
+  skippedPaid: number
+  deleted: number
+  stores: { store: string; totalBaht: number; employeeCount: number }[]
+}
+
+export async function syncPayrollSsoExpenseAccruals(params: {
+  yearMonth: string
+  storeFilter?: string
+  postedBy?: string
+}) {
+  const res = await apiFetch('/api/syncPayrollSsoExpenseAccruals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    sync?: PayrollSsoExpenseSyncDto
+    error?: string
+  }>
+}
+
 // ─── 감가상각·고정자산 ───
 export async function getFixedAssets(params: { storeFilter?: string; status?: string }) {
   const q = new URLSearchParams()

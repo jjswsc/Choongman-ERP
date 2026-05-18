@@ -98,6 +98,11 @@ export async function GET(request: NextRequest) {
     }
     const preFilterRowCount = rows.length
     rows = filterRowsByPosSalesBusinessDateRange(rows, bizCtx, startStr, endStr)
+    if (stores.length > 0) {
+      rows = rows.filter((r) =>
+        stores.some((code) => rowMatchesSalesStoreSelection(r.store_code, code))
+      )
+    }
     const truncated =
       preFilterRowCount >= PERIOD_FETCH_MAX_ROWS || (usedRpc && preFilterRowCount >= FETCH_LIMIT)
     if (truncated) headers.set('X-Sales-Truncated', '1')

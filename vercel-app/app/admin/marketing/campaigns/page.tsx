@@ -25,8 +25,6 @@ import {
   getMarketingCampaignCosts,
   getMarketingAds,
   getMarketingInfluencers,
-  saveMarketingInfluencer,
-  deleteMarketingInfluencer,
   getPosPromos,
   getMarketingMaterials,
   saveMarketingMaterial,
@@ -207,18 +205,6 @@ const defaultForm = {
   kpiUnit: "order",
   campaignPerformance: "",
   conclusion: "",
-}
-
-const defaultInfForm = {
-  name: "",
-  followers: "",
-  contentTopic: "",
-  hireType: "pay",
-  budget: "",
-  actualCost: "",
-  shootingDate: "",
-  publishDate: "",
-  note: "",
 }
 
 const defaultMatForm = {
@@ -419,10 +405,7 @@ export default function MarketingCampaignsPage() {
   /** 필터 조합으로 0건일 때 서버에서 받은 전체 목록을 그대로 보기 */
   const [listFilterBypass, setListFilterBypass] = React.useState(false)
 
-  // 인플루언서 인라인
   const [linkedInfluencers, setLinkedInfluencers] = React.useState<MarketingInfluencer[]>([])
-  const [infForm, setInfForm] = React.useState(defaultInfForm)
-  const [savingInf, setSavingInf] = React.useState(false)
 
   // 홍보물 인라인
   const [materials, setMaterials] = React.useState<MarketingMaterial[]>([])
@@ -711,7 +694,6 @@ export default function MarketingCampaignsPage() {
     })
     setCustomCampaignType("")
     setChannelState({ online: false, hall: false, takeout: false, apps: [] })
-    setInfForm(defaultInfForm)
     setMatForm({ ...defaultMatForm })
     setMaterialGifts([])
     setExpandedGiftMatId(null)
@@ -1151,54 +1133,6 @@ export default function MarketingCampaignsPage() {
     }
   }
 
-  // ─── 인플루언서 인라인 핸들러 ───────────────────────────────────────────────
-  const handleAddInfluencer = async () => {
-    if (!editingId || !infForm.name.trim()) {
-      await appAlert(tr("이름을 입력하세요.", "Please enter name.", "กรุณากรอกชื่อ"))
-      return
-    }
-    setSavingInf(true)
-    try {
-      const res = await saveMarketingInfluencer({
-        campaignId: editingId,
-        name: infForm.name.trim(),
-        followers: infForm.followers.trim(),
-        contentTopic: infForm.contentTopic.trim(),
-        hireType: infForm.hireType,
-        budget: Number(infForm.budget) || 0,
-        actualCost: Number(infForm.actualCost) || 0,
-        shootingDate: infForm.shootingDate || null,
-        publishDate: infForm.publishDate || null,
-        note: infForm.note.trim(),
-        status: "finish",
-        userRole: auth?.role,
-        userName: auth?.user,
-        userStore: auth?.store,
-      })
-      if (res.success) {
-        setInfForm(defaultInfForm)
-        loadSubActivities(editingId)
-        loadLinkedCounts(editingId)
-        if (res.expenseSyncMessage) await appAlert(res.expenseSyncMessage)
-      } else {
-        await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))
-      }
-    } finally {
-      setSavingInf(false)
-    }
-  }
-
-  const handleDeleteInfluencer = async (inf: MarketingInfluencer) => {
-    if (!await appConfirm(`"${inf.name}" ${tr("삭제하시겠습니까?", "Delete this item?", "ต้องการลบรายการนี้หรือไม่?")}`)) return
-    const res = await deleteMarketingInfluencer({ id: inf.id })
-    if (res.success && editingId) {
-      loadSubActivities(editingId)
-      loadLinkedCounts(editingId)
-    } else if (!res.success) {
-      await appAlert(res.message || tr("삭제 실패", "Delete failed", "ลบไม่สำเร็จ"))
-    }
-  }
-
   // ─── 홍보물 인라인 핸들러 ──────────────────────────────────────────────────
   const handleAddMaterial = async () => {
     if (!editingId || !matForm.name.trim()) {
@@ -1515,6 +1449,10 @@ export default function MarketingCampaignsPage() {
                     <Button type="button" size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`}
                       onClick={() => router.push(`/admin/marketing/ads?campaignId=${editingId}`)}>
                       <ExternalLink className="h-3 w-3" />{tr("광고", "Ads", "โฆษณา")}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`}
+                      onClick={() => router.push(`/admin/marketing/influencers?campaignId=${editingId}`)}>
+                      <ExternalLink className="h-3 w-3" />{tr("인플루언서", "Influencers", "อินฟลูเอนเซอร์")}
                     </Button>
                     <Button type="button" size="sm" variant="outline" className={`${ADMIN_BTN_XS_CN} text-xs`}
                       onClick={() => router.push(`/admin/marketing/promos?campaignId=${editingId}`)}>
@@ -2013,114 +1951,55 @@ export default function MarketingCampaignsPage() {
                 ))}
               </div>
 
-              {/* ── 인플루언서 탭 ─────────────────────────────────────────── */}
+              {/* ── 인플루언서 탭 (조회·건수만, 등록은 인플루언서 메뉴) ───────── */}
               {activeTab === "influencers" && (
-                <div className="p-4 space-y-4">
-                  {/* 빠른 등록 */}
-                  <div className="rounded-lg border bg-muted/20 p-3">
-                    <p className="mb-2 text-xs font-semibold">{tr("인플루언서 추가", "Add Influencer", "เพิ่มอินฟลูเอนเซอร์")}</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">{tr("이름 *", "Name *", "ชื่อ *")}</label>
-                        <Input value={infForm.name} onChange={(e) => setInfForm((f) => ({ ...f, name: e.target.value }))}
-                          placeholder="@username" className="mt-0.5 h-8 text-xs" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">{tr("팔로워", "Followers", "ผู้ติดตาม")}</label>
-                        <Input value={infForm.followers} onChange={(e) => setInfForm((f) => ({ ...f, followers: e.target.value }))}
-                          placeholder="181.4K" className="mt-0.5 h-8 text-xs" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">{tr("콘텐츠 주제", "Content Topic", "หัวข้อคอนเทนต์")}</label>
-                        <Input value={infForm.contentTopic} onChange={(e) => setInfForm((f) => ({ ...f, contentTopic: e.target.value }))}
-                          placeholder="Korean Food Review" className="mt-0.5 h-8 text-xs" />
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                        <label className="text-[10px] text-muted-foreground">{tr("고용 형태", "Hire Type", "รูปแบบการจ้าง")}</label>
-                          <select value={infForm.hireType} onChange={(e) => setInfForm((f) => ({ ...f, hireType: e.target.value }))}
-                            className="mt-0.5 flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs">
-                            <option value="pay">{tr("유상", "Paid", "มีค่าใช้จ่าย")}</option>
-                            <option value="free">{tr("무상", "Free", "ไม่มีค่าใช้จ่าย")}</option>
-                          </select>
-                        </div>
-                        <div className="flex-1">
-                        <label className="text-[10px] text-muted-foreground">{tr("예산 (฿)", "Budget (฿)", "งบประมาณ (฿)")}</label>
-                          <Input type="number" min={0} value={infForm.budget}
-                            onChange={(e) => setInfForm((f) => ({ ...f, budget: e.target.value }))}
-                            className="mt-0.5 h-8 text-xs" />
-                        </div>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="text-[10px] text-muted-foreground">
-                          {tr("실제 비용 (฿)", "Actual cost (฿)", "ค่าใช้จ่ายจริง (฿)")}
-                        </label>
-                        <Input type="number" min={0} value={infForm.actualCost}
-                          onChange={(e) => setInfForm((f) => ({ ...f, actualCost: e.target.value }))}
-                          className="mt-0.5 h-8 text-xs" />
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {tr("본사 권한으로 저장 시 지출관리 「지급예정」에 반영됩니다.", "Office role: syncs to Expense → Planned payment.", "สิทธิ์สำนักงาน: เชื่อมไปยังค่าใช้จ่าย → กำหนดจ่าย")}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">{tr("촬영일", "Shoot Date", "วันที่ถ่ายทำ")}</label>
-                        <Input type="date" value={infForm.shootingDate}
-                          onChange={(e) => setInfForm((f) => ({ ...f, shootingDate: e.target.value }))}
-                          className="mt-0.5 h-8 text-xs" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">{tr("게시일", "Publish Date", "วันที่เผยแพร่")}</label>
-                        <Input type="date" value={infForm.publishDate}
-                          onChange={(e) => setInfForm((f) => ({ ...f, publishDate: e.target.value }))}
-                          className="mt-0.5 h-8 text-xs" />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="text-[10px] text-muted-foreground">{tr("메모", "Note", "บันทึก")}</label>
-                        <Input value={infForm.note} onChange={(e) => setInfForm((f) => ({ ...f, note: e.target.value }))}
-                          placeholder={tr("연락처, 플랫폼 링크 등", "Contact info, platform links, etc.", "ข้อมูลติดต่อ ลิงก์แพลตฟอร์ม ฯลฯ")} className="mt-0.5 h-8 text-xs" />
-                      </div>
-                    </div>
-                    <Button size="sm" className="mt-2 h-8 text-xs gap-1" onClick={handleAddInfluencer} disabled={savingInf}>
-                      {savingInf ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                      {tr("추가", "Add", "เพิ่ม")}
-                    </Button>
-                    <p className="mt-1.5 text-[10px] text-muted-foreground">
-                      {tr("상세 관리는", "Detailed management is available on", "จัดการรายละเอียดได้ที่")}{" "}
-                      <button type="button" className="underline text-primary"
-                        onClick={() => router.push(`/admin/marketing/influencers?campaignId=${editingId}`)}>
-                        {tr("인플루언서 페이지", "Influencer Page", "หน้าอินฟลูเอนเซอร์")}
-                      </button>{tr("에서 할 수 있습니다.", " for detailed management.", " สำหรับจัดการรายละเอียด")}
+                <div className="p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {tr(
+                        "이 캠페인에 연결된 인플루언서입니다. 등록·수정·삭제는 인플루언서 메뉴에서 합니다.",
+                        "Influencers linked to this campaign. Add, edit, or remove them on the Influencers page.",
+                        "อินฟลูเนเซอร์ที่เชื่อมกับแคมเปญนี้ — เพิ่ม/แก้ไข/ลบได้ที่เมนูอินฟลูเนเซอร์"
+                      )}
                     </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className={`${ADMIN_BTN_XS_CN} shrink-0 text-xs gap-1`}
+                      onClick={() => router.push(`/admin/marketing/influencers?campaignId=${editingId}`)}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {tr("인플루언서 관리", "Manage Influencers", "จัดการอินฟลูเนเซอร์")}
+                    </Button>
                   </div>
-
                   {/* 목록 */}
                   {linkedInfluencers.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">{tr("등록된 인플루언서가 없습니다.", "No influencers.", "ไม่มีอินฟลูเอนเซอร์")}</p>
+                    <p className="py-4 text-center text-xs text-muted-foreground">
+                      {tr(
+                        "연결된 인플루언서가 없습니다. 인플루언서 메뉴에서 추가하세요.",
+                        "No linked influencers. Add them on the Influencers page.",
+                        "ยังไม่มีอินฟลูเนเซอร์ที่เชื่อม — เพิ่มได้ที่เมนูอินฟลูเนเซอร์"
+                      )}
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {linkedInfluencers.map((inf) => (
-                        <div key={inf.id}
-                          className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
-                          <div className="min-w-0 flex-1">
-                            <span className="font-medium">{inf.name}</span>
-                            {inf.followers && <span className="ml-2 text-xs text-muted-foreground">{inf.followers}</span>}
-                            {inf.contentTopic && <span className="ml-2 text-xs text-muted-foreground">· {inf.contentTopic}</span>}
-                            <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              {inf.budget > 0 && (
-                                <span>{tr("예산", "Budget", "งบ")} ฿{inf.budget.toLocaleString()}</span>
-                              )}
-                              {(inf.actualCost ?? 0) > 0 && (
-                                <span className="text-foreground">
-                                  {tr("실비", "Actual", "จริง")} ฿{(inf.actualCost ?? 0).toLocaleString()}
-                                </span>
-                              )}
-                              {inf.publishDate && <span>{tr("게시", "Published", "เผยแพร่")}: {inf.publishDate}</span>}
-                            </div>
+                        <div key={inf.id} className="rounded-lg border px-3 py-2 text-sm">
+                          <span className="font-medium">{inf.name}</span>
+                          {inf.followers && <span className="ml-2 text-xs text-muted-foreground">{inf.followers}</span>}
+                          {inf.contentTopic && <span className="ml-2 text-xs text-muted-foreground">· {inf.contentTopic}</span>}
+                          <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {inf.budget > 0 && (
+                              <span>{tr("예산", "Budget", "งบ")} ฿{inf.budget.toLocaleString()}</span>
+                            )}
+                            {(inf.actualCost ?? 0) > 0 && (
+                              <span className="text-foreground">
+                                {tr("실비", "Actual", "จริง")} ฿{(inf.actualCost ?? 0).toLocaleString()}
+                              </span>
+                            )}
+                            {inf.publishDate && <span>{tr("게시", "Published", "เผยแพร่")}: {inf.publishDate}</span>}
                           </div>
-                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive ml-2 shrink-0"
-                            onClick={() => handleDeleteInfluencer(inf)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
                         </div>
                       ))}
                     </div>

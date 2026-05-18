@@ -540,8 +540,10 @@ export function AdminPayrollCalc() {
         setError(null)
         const created = Number(data?.payrollExpenseSync?.created || 0)
         const updated = Number(data?.payrollExpenseSync?.updated || 0)
+        const ssoCreated = Number(data?.ssoExpenseSync?.created || 0)
+        const ssoUpdated = Number(data?.ssoExpenseSync?.updated || 0)
         await appAlert(
-          `${t("pay_save_success")}\n${i18nVar(t("pay_save_expense_sync"), { c: created, u: updated })}`
+          `${t("pay_save_success")}\n${i18nVar(t("pay_save_expense_sync"), { c: created, u: updated })}\n${i18nVar(t("pay_save_sso_expense_sync"), { c: ssoCreated, u: ssoUpdated })}`
         )
       } else {
         setError(translateApiMessage(pickApiMsg(data)) || t("pay_save_fail"))

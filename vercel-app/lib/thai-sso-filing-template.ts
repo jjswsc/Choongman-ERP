@@ -79,8 +79,8 @@ function instructionRows(ym: string, source: "blank" | "payroll"): string[][] {
     ["• Split ชื่อ/นามสกุล if the portal requires separate columns — ERP exports combined name + optional title."],
     [""],
     ["Suggested workflow:"],
-    ["• Use this sheet for internal review, then map columns to the official SSO bulk file."],
-    ["• Blank template vs “Export from payroll” (wage base, contributions, id_number, sso_number, dates from HR)."],
+    ["• Prefer «e-Service upload» export from ERP (thai-sso-eservice-bulk-export.ts)."],
+    ["• This legacy sheet is for internal review only if you still use it."],
     ...payrollNote.map((line) => [line]),
     [""],
     [`Selected period (ERP): ${ym}`],
@@ -99,18 +99,6 @@ function appendSheets(wb: XLSX.WorkBook, ym: string, source: "blank" | "payroll"
   const wsData = XLSX.utils.aoa_to_sheet(aoa)
   wsData["!cols"] = COL_WIDTHS
   XLSX.utils.book_append_sheet(wb, wsData, SHEET_DATA)
-}
-
-export function downloadThaiSsoFilingBlankTemplateXlsx(params: { yearMonth: string }): void {
-  const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
-  const wb = XLSX.utils.book_new()
-  const empty: (string | number)[][] = []
-  for (let i = 0; i < 5; i++) {
-    empty.push(THAI_SSO_TEMPLATE_COLUMN_HELP.map(() => ""))
-  }
-  appendSheets(wb, ym, "blank", empty)
-  const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
-  XLSX.writeFile(wb, `thai-sso-contribution-template-${safeYm}.xlsx`)
 }
 
 /** getPayrollCalc API list 항목 한 줄 */

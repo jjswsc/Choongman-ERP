@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
+import { syncPayrollSsoExpenseAccruals } from '@/lib/payroll-sso-expense-sync'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   supabaseDeleteByFilter,
@@ -416,6 +417,21 @@ export async function POST(request: NextRequest) {
       createdAccrualCount++
     }
 
+    let ssoExpenseSync = { created: 0, updated: 0, skippedPaid: 0, deleted: 0, stores: [] as { store: string; totalBaht: number; employeeCount: number }[] }
+    try {
+      ssoExpenseSync = await syncPayrollSsoExpenseAccruals({
+        month: monthStr,
+        postedBy: auth.name || undefined,
+        payrollRows: list.map((r) => ({
+          store: String(r.store || '').trim(),
+          sso: Number(r.sso) || 0,
+          name: String(r.name || '').trim(),
+        })),
+      })
+    } catch (ssoSyncErr) {
+      console.error('savePayroll sso expense sync:', ssoSyncErr)
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -424,6 +440,7 @@ export async function POST(request: NextRequest) {
           created: createdAccrualCount,
           updated: updatedAccrualCount,
         },
+        ssoExpenseSync,
       },
       { headers }
     )

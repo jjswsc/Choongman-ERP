@@ -194,10 +194,23 @@ export function StoreTaxFilingProfilesPanel({
   }, [selectedVendorInfo, taxpayerName, taxId])
 
   const applyVendorMaster = React.useCallback(() => {
-    if (!selectedVendorInfo) return
-    setTaxpayerName(selectedVendorInfo.name)
-    setTaxId(selectedVendorInfo.taxId)
-  }, [selectedVendorInfo])
+    if (!selectedVendorInfo) {
+      appAlert(t("taxFilingStoreProfilesVendorHint"))
+      return
+    }
+    const nextName = selectedVendorInfo.name
+    const nextTaxId = selectedVendorInfo.taxId
+    const normTin = (s: string) => s.replace(/\D/g, "").trim()
+    const sameName = taxpayerName.trim() === nextName.trim()
+    const sameTaxId = normTin(taxId) === normTin(nextTaxId)
+    if (sameName && sameTaxId) {
+      void appAlert(t("taxFilingStoreProfilesApplyVendorUnchanged"))
+      return
+    }
+    setTaxpayerName(nextName)
+    setTaxId(nextTaxId)
+    void appAlert(t("taxFilingStoreProfilesApplyVendorDone"))
+  }, [selectedVendorInfo, taxpayerName, taxId, t])
 
   React.useEffect(() => {
     if (!selectedStore) {
@@ -272,7 +285,7 @@ export function StoreTaxFilingProfilesPanel({
         setProfilesByStore((prev) => ({ ...prev, [selectedStore]: res.profile! }))
         applyProfileToForm(res.profile)
       }
-      appAlert(t("msg_save_ok"))
+      appAlert(t("msg_saved"))
     } catch {
       appAlert(t("msg_save_fail"))
     } finally {
@@ -473,7 +486,14 @@ export function StoreTaxFilingProfilesPanel({
                             </span>
                           )}
                           {selectedVendorInfo ? (
-                            <Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" onClick={applyVendorMaster}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] shrink-0"
+                              disabled={formLoading || saving}
+                              onClick={() => applyVendorMaster()}
+                            >
                               {t("taxFilingStoreProfilesApplyVendor")}
                             </Button>
                           ) : null}

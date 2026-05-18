@@ -602,7 +602,17 @@ export function MarketingCampaignFinderPanel({
         )}
       </div>
 
-      <div className={cn("divide-y overflow-y-auto overflow-x-hidden", maxListHeightClass)}>
+      <div className="border-t border-border/60">
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/25 px-3 py-1.5 text-[11px] text-muted-foreground">
+          <span className="font-medium">{tr("캠페인 목록", "Campaign list", "รายการแคมเปญ")}</span>
+          {!dataLoading && (
+            <span>
+              {filteredList.length}
+              {tr("건", "", " รายการ")}
+            </span>
+          )}
+        </div>
+        <div className={cn("divide-y overflow-y-auto overflow-x-hidden", maxListHeightClass)}>
         {dataLoading && (
           <div className="flex items-center gap-2 px-3 py-6 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -615,7 +625,7 @@ export function MarketingCampaignFinderPanel({
             disabled={disabled}
             onClick={() => onChange("")}
             className={cn(
-              "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/50",
+              "flex w-full min-h-[3.25rem] flex-col items-start justify-center gap-0.5 px-3 py-3 text-left text-sm transition-colors hover:bg-muted/50",
               !value.trim() && "bg-muted/40"
             )}
           >
@@ -641,8 +651,8 @@ export function MarketingCampaignFinderPanel({
               disabled={disabled}
               onClick={() => onChange(c.id)}
               className={cn(
-                "flex w-full flex-col items-start gap-1 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/50",
-                value === c.id && "bg-primary/10 ring-1 ring-inset ring-primary/25"
+                "flex w-full min-h-[3.5rem] flex-col items-start justify-center gap-1 px-3 py-3 text-left text-sm transition-colors hover:bg-muted/50",
+                value === c.id && "bg-primary/10 ring-2 ring-inset ring-primary/30"
               )}
             >
               <div className="flex flex-wrap items-center gap-2">
@@ -678,6 +688,7 @@ export function MarketingCampaignFinderPanel({
               </div>
             </button>
           ))}
+        </div>
       </div>
     </div>
   )

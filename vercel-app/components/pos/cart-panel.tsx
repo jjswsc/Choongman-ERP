@@ -4724,7 +4724,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               {[
                 { key: 'cash', value: payCash, set: setPayCash, label: t('posPaymentCash') || '현금', icon: Banknote },
                 { key: 'card', value: payCard, set: setPayCard, label: t('posPaymentCard') || '카드', icon: CreditCard },
-                { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: `${t('posPaymentQr') || 'QR'} 코드`, icon: QrCode },
+                { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: tr('posPaymentQrCode', 'QR Code'), icon: QrCode },
               ]
                 .filter(({ key }) => (activePaymentTab === 'other' || activePaymentTab === 'delivery_app' ? false : key === activePaymentTab))
                 .map(({ key, value, set, label, icon: Icon }) => (
