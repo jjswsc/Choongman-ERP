@@ -135,6 +135,17 @@ function storeScopeCodesEqual(a: string[], b: string[]): boolean {
   return sa.every((v, i) => v === sb[i])
 }
 
+function normalizeScopeStoreCodes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const v of raw) {
+    const code = String(v || "").trim()
+    if (!code) continue
+    if (!out.some((x) => x.toLowerCase() === code.toLowerCase())) out.push(code)
+  }
+  return out
+}
+
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
 const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as const
 
@@ -568,6 +579,18 @@ export default function PosMenusPage() {
   }, [canSearchAllStores, auth?.store, availableScopeStores])
   const [selectedStoreCodes, setSelectedStoreCodes] = React.useState<string[]>([])
   const [storeScopeDirty, setStoreScopeDirty] = React.useState(false)
+  const allScopeStoreCodes = React.useMemo(
+    () => normalizeScopeStoreCodes(availableScopeStores),
+    [availableScopeStores]
+  )
+  // 운영 완화: 편집 화면에서는 우선 전체 매장을 기본 체크로 고정해 메뉴별 편차를 제거한다.
+  const getEditorScopeStoreCodes = React.useCallback(
+    (menu?: PosMenu | null): string[] => {
+      if (allScopeStoreCodes.length > 0) return allScopeStoreCodes
+      return menu ? menuScopeStoreCodes(menu) : []
+    },
+    [allScopeStoreCodes]
+  )
   const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
     const normalized = String(storeCode || "").trim()
     if (!normalized) return
@@ -1079,7 +1102,7 @@ export default function PosMenusPage() {
     if (editingId) {
       const m = menus.find((x) => x.id === editingId)
       if (m) {
-        setSelectedStoreCodes(menuScopeStoreCodes(m))
+        setSelectedStoreCodes(getEditorScopeStoreCodes(m))
         setStoreScopeDirty(false)
         setFormData({
           ...emptyForm,
@@ -1239,6 +1262,7 @@ export default function PosMenusPage() {
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
     const scopeForSave = (() => {
       if (!editingMenu || storeScopeDirty) return selectedStoreCodes
+      if (selectedStoreCodes.length > 0) return selectedStoreCodes
       const stableScope = menuScopeStoreCodes(editingMenu)
       return stableScope.length > 0 ? stableScope : selectedStoreCodes
     })()
@@ -1339,7 +1363,7 @@ export default function PosMenusPage() {
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
     })
-    setSelectedStoreCodes(menuScopeStoreCodes(menu))
+    setSelectedStoreCodes(getEditorScopeStoreCodes(menu))
     setStoreScopeDirty(false)
     setEditingId(menu.id)
     requestAnimationFrame(() => {
@@ -1364,9 +1388,9 @@ export default function PosMenusPage() {
     if (storeScopeDirty) return
     const m = menus.find((x) => x.id === editingId)
     if (!m) return
-    const scope = menuScopeStoreCodes(m)
+    const scope = getEditorScopeStoreCodes(m)
     setSelectedStoreCodes((prev) => (storeScopeCodesEqual(prev, scope) ? prev : scope))
-  }, [editingId, menus, storeScopeDirty])
+  }, [editingId, menus, storeScopeDirty, getEditorScopeStoreCodes])
 
   const resumeEditFromCostAnalysisRef = React.useRef(false)
   React.useEffect(() => {
