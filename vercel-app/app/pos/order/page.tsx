@@ -116,6 +116,7 @@ import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-recei
 import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
+import { resolvePromoTileImageSrc } from "@/lib/pos-menu-display-image"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
 import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
 import { isChickenMenu } from "@/lib/pos-menu-categories"
@@ -1609,14 +1610,20 @@ export default function PosOrderPage() {
         {/* Oll star pos 15dlscl (1024x768/1366x768) 최적화: 1024 이하 3열, 이상 4~5열 */}
         <div className="flex-1 overflow-y-auto p-2 sm:p-3">
           <div className="grid content-start auto-rows-max grid-cols-3 items-start gap-2 sm:gap-2.5 min-[1025px]:grid-cols-4 min-[1200px]:grid-cols-5">
-            {filteredPromos.map((p) => (
+            {filteredPromos.map((p) => {
+              const promoImageSrc = resolvePromoTileImageSrc(p, menus)
+              return (
               <button
                 key={`promo-${p.id}`}
                 onClick={() => void addPromoToCart(p)}
                 className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98] touch-manipulation"
               >
                 <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-amber-100 flex items-center justify-center">
-                  <span className="font-pos-emoji text-3xl">🏷️</span>
+                  {promoImageSrc ? (
+                    <PosMenuFillImage src={promoImageSrc} alt={p.name} />
+                  ) : (
+                    <span className="font-pos-emoji text-3xl">🏷️</span>
+                  )}
                 </div>
                 <div
                   className="mt-1 overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
@@ -1633,7 +1640,8 @@ export default function PosOrderPage() {
                   {(getPromoPrice(p)) > 0 ? `${formatBahtNum(getPromoPrice(p))} ฿` : "-"}
                 </div>
               </button>
-            ))}
+              )
+            })}
             {filteredMenus.map((m) => {
               const menuDesc = showMenuDescriptions
                 ? resolvePosMenuDescriptionForChannel(m, descriptionChannel)

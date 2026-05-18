@@ -60,23 +60,6 @@ export function normalizePosMenuImageUrl(raw: string): string {
        */
       if (urlIsLoopback && !onLocalPage) {
         const rewritten = `${window.location.origin}${parsed.pathname}${parsed.search}`
-        // #region agent log
-        fetch('http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': 'd9674e',
-          },
-          body: JSON.stringify({
-            sessionId: 'd9674e',
-            hypothesisId: 'H1',
-            location: 'pos-menu-image-url.ts:loopback-rewrite',
-            message: 'rewrote loopback menu image URL to page origin',
-            data: { fromHost: uh, fromPath: parsed.pathname.slice(0, 120), rewrittenLen: rewritten.length },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
         return normalizePosMenuImageUrl(rewritten)
       }
     }

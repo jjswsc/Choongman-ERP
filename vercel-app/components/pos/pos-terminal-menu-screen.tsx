@@ -51,6 +51,7 @@ import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
+import { resolvePromoTileImageSrc } from '@/lib/pos-menu-display-image'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from '@/lib/pos-promo-choice'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
@@ -1129,7 +1130,9 @@ export function PosTerminalMenuScreen({
               placeContent: 'start',
             }}
           >
-            {filteredPromos.map((p) => (
+            {filteredPromos.map((p) => {
+              const promoImageSrc = resolvePromoTileImageSrc(p, menus)
+              return (
               <button
                 key={`promo-${p.id}`}
                 type="button"
@@ -1145,7 +1148,11 @@ export function PosTerminalMenuScreen({
                 data-menu-card="promo"
               >
                 <div className="relative flex h-[92px] shrink-0 items-center justify-center overflow-hidden rounded-lg bg-amber-100">
-                  <span className="font-pos-emoji text-2xl">🏷️</span>
+                  {promoImageSrc ? (
+                    <PosMenuFillImage src={promoImageSrc} alt={p.name} />
+                  ) : (
+                    <span className="font-pos-emoji text-2xl">🏷️</span>
+                  )}
                 </div>
                 <div
                   className="mt-1 overflow-hidden break-words font-medium leading-tight text-slate-800"
@@ -1162,7 +1169,8 @@ export function PosTerminalMenuScreen({
                 </div>
                 <div className="mt-auto text-xs font-bold text-amber-600">{getPromoPrice(p).toLocaleString()} ฿</div>
               </button>
-            ))}
+              )
+            })}
             {filteredMenus.map((m) => {
               const menuDesc = showMenuDescriptions
                 ? resolvePosMenuDescriptionForChannel(m, descriptionChannel)
