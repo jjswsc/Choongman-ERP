@@ -14,6 +14,8 @@ describe('pos-menu-store-scope', () => {
   it('matches store variants with CM prefix differences', () => {
     expect(menuScopeIncludesStore(['CM Rama9'], 'Rama9')).toBe(true)
     expect(menuScopeIncludesStore(['Rama9'], 'CM Rama9')).toBe(true)
+    expect(menuScopeIncludesStore(['CM-MBK'], 'CM MBK')).toBe(true)
+    expect(menuScopeIncludesStore(['cm_mbk'], 'CM MBK')).toBe(true)
     expect(menuScopeIncludesStore(['Ekkamai'], 'Asoke')).toBe(false)
   })
 

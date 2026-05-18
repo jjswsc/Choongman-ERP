@@ -15,8 +15,27 @@ export function normalizeMenuScopeStoreCodes(raw: unknown): string[] {
 export function menuScopeIncludesStore(scopedStores: string[], requestedStoreCode: string): boolean {
   const selected = String(requestedStoreCode || '').trim()
   if (!selected) return false
-  const variants = new Set(storeCodeSearchVariants(selected).map((x) => x.toLowerCase()))
-  return scopedStores.some((x) => variants.has(String(x || '').trim().toLowerCase()))
+  const normalizedForms = (raw: string): string[] => {
+    const base = String(raw || '').trim()
+    if (!base) return []
+    const out = new Set<string>()
+    const push = (v: string) => {
+      const t = String(v || '').trim().toLowerCase()
+      if (!t) return
+      out.add(t)
+      // 구분자 차이(CM-MBK / CM MBK / cm_mbk)까지 동일 매장으로 처리
+      out.add(t.replace(/[\s\-_]+/g, ''))
+    }
+    push(base)
+    for (const v of storeCodeSearchVariants(base)) push(v)
+    return Array.from(out)
+  }
+
+  const selectedSet = new Set(normalizedForms(selected))
+  return scopedStores.some((x) => {
+    const candidateForms = normalizedForms(String(x || ''))
+    return candidateForms.some((v) => selectedSet.has(v))
+  })
 }
 
 export function shouldMenuBeVisibleForStore(params: {
