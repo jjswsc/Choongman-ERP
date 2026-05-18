@@ -81,7 +81,7 @@ export default function MarketingPromosPage() {
   const loadMenusAndMeta = React.useCallback(async () => {
     try {
       const [list, catRes, config, campRes] = await Promise.all([
-        getPosMenus(),
+        getPosMenus({ fresh: true }),
         getPosMenuCategories().catch(() => ({ categories: [] as string[], mainCategories: [] as string[] })),
         getPosMenuCategoriesConfig().catch(() => null),
         getMarketingCampaigns().catch(() => []),

@@ -627,7 +627,7 @@ export default function PosOrdersPage() {
     setEditDiscountAmt(String(o.discountAmt ?? 0))
     setEditDiscountReason(o.discountReason ?? "")
     setAddMenuId("")
-    getPosMenus().then(setMenus).catch(() => setMenus([]))
+    getPosMenus({ fresh: true }).then(setMenus).catch(() => setMenus([]))
   }
 
   const handleSaveEdit = async () => {
@@ -1300,7 +1300,7 @@ export default function PosOrdersPage() {
   }, [activeTab, auditQuickSearchTick, loadAuditTrail])
 
   React.useEffect(() => {
-    getPosMenus().then(setMenus).catch(() => setMenus([]))
+    getPosMenus({ fresh: true }).then(setMenus).catch(() => setMenus([]))
   }, [])
 
   React.useEffect(() => {

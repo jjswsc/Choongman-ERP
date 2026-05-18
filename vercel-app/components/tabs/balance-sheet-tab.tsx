@@ -15,7 +15,13 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
-import { useStoreList, getBalanceSheet, translateTexts, type BalanceSheetData } from "@/lib/api-client"
+import {
+  useStoreList,
+  getBalanceSheet,
+  isBalanceSheetData,
+  translateTexts,
+  type BalanceSheetData,
+} from "@/lib/api-client"
 import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
   FINANCIAL_COMPARE_MAX_MONTHS,
@@ -45,7 +51,7 @@ type BsMetrics = {
 }
 
 function metricsFromBalance(d: BalanceSheetData | undefined): BsMetrics | null {
-  if (!d) return null
+  if (!isBalanceSheetData(d)) return null
   return {
     cash: d.assets.cashAndBanks,
     inv: d.assets.inventory,
@@ -79,6 +85,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   )
   const [loading, setLoading] = React.useState(false)
   const [data, setData] = React.useState<BalanceSheetData | null>(null)
+  const [fetchError, setFetchError] = React.useState<string | null>(null)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const [compareBalanceRows, setCompareBalanceRows] = React.useState<{ ym: string; data: BalanceSheetData }[]>([])
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
@@ -153,6 +160,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   const runBalanceFetch = React.useCallback(() => {
     const sf = storeFilter !== "All" ? storeFilter : undefined
     const months = periodMonths
+    setFetchError(null)
     if (months.length <= 1) {
       const ym = months[0] ?? yearMonthEnd
       setLoading(true)
@@ -163,37 +171,60 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
         userStore: auth?.store,
         userRole: auth?.role,
       })
-        .then((r) => setData(r))
-        .catch(() => setData(null))
+        .then((r) => {
+          setData(r)
+          setFetchError(null)
+        })
+        .catch((e) => {
+          setData(null)
+          setFetchError(e instanceof Error ? e.message : String(e))
+        })
         .finally(() => setLoading(false))
       return
     }
     setLoading(true)
     setData(null)
     Promise.all(
-      months.map((ym) =>
-        getBalanceSheet({
-          yearMonth: ym,
-          storeFilter: sf,
-          userStore: auth?.store,
-          userRole: auth?.role,
-        })
-      )
-    )
-      .then((arr) =>
-        setCompareBalanceRows(
-          months.map((ym, i) => ({
+      months.map(async (ym) => {
+        try {
+          const data = await getBalanceSheet({
+            yearMonth: ym,
+            storeFilter: sf,
+            userStore: auth?.store,
+            userRole: auth?.role,
+          })
+          return { ym, data }
+        } catch (e) {
+          return {
             ym,
-            data: arr[i] as BalanceSheetData,
-          }))
+            data: null,
+            error: e instanceof Error ? e.message : String(e || "FETCH_FAILED"),
+          }
+        }
+      })
+    )
+      .then((results) => {
+        const rows = results.filter(
+          (row): row is { ym: string; data: BalanceSheetData } =>
+            row.data != null && isBalanceSheetData(row.data)
         )
-      )
-      .catch(() => setCompareBalanceRows([]))
+        setCompareBalanceRows(rows)
+        const firstErr = results.find((r) => r.error)?.error
+        if (rows.length === 0) {
+          setFetchError(firstErr || t("inNoData") || "No data found.")
+        } else if (firstErr) {
+          setFetchError(firstErr)
+        }
+      })
+      .catch((e) => {
+        setCompareBalanceRows([])
+        setFetchError(e instanceof Error ? e.message : String(e))
+      })
       .finally(() => {
         setBalanceCompareFetchId((x) => x + 1)
         setLoading(false)
       })
-  }, [periodMonths, storeFilter, auth?.store, auth?.role, yearMonthEnd])
+  }, [periodMonths, storeFilter, auth?.store, auth?.role, yearMonthEnd, t])
 
   React.useEffect(() => {
     if (!props.hideControls) return
@@ -346,6 +377,11 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
             <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : (
             <>
+              {fetchError && (
+                <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {fetchError}
+                </p>
+              )}
               {showBalanceCompareTable && (
                 <div className="mb-6 space-y-3">
                   {periodRangeTruncated && (
@@ -451,10 +487,10 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                   <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query")}</p>
                 )}
 
-              {!isRangeCompare && data ? (
+              {!isRangeCompare && isBalanceSheetData(data) ? (
                 <div className="space-y-3">
                   <div className="text-sm text-muted-foreground">
-                    {data.yearMonth} · {data.storeFilter}
+                    {data.yearMonth} · {storeLabel}
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-lg border p-3">

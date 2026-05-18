@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { computeBalanceSheetReport } from '@/lib/accounting-reports'
 import { requireAuth } from '@/lib/verify-auth'
 
+/** 연초~해당월 손익 반복 집계로 계산 시간이 길 수 있음 */
+export const maxDuration = 120
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

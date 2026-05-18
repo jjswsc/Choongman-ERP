@@ -16,7 +16,11 @@ import {
   listHqOutboundPurchaseDrillLines,
   sumHqOutboundSubtotalMatchingOutboundManagement,
 } from '@/lib/hq-outbound-income-total'
-import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import {
+  buildStoreFieldOrIlikeFragment,
+  sqlIlikeContains,
+  storeMatchesIncomeFilter,
+} from '@/lib/accounting-store-match'
 import {
   supabaseCountFilter,
   supabaseRpc,
@@ -25,7 +29,6 @@ import {
   supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
-import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 import { resolveInventoryAsOfUtcIso } from '@/lib/accounting-inventory-asof'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 
@@ -148,30 +151,6 @@ export type BalanceSheetReport = {
 export function isOfficeStore(s: string): boolean {
   const x = String(s || '').trim()
   return OFFICE_STORES.some((o) => x === o || x.toLowerCase().includes('office'))
-}
-
-/**
- * 손익·재고 등 매장 스코프: 드롭다운 값(직원 store 문자열) + POS `store_code` 표기(CM 접두 등) 통일.
- * @see storeCodeSearchVariants — 매출 API와 동일 규칙
- */
-function incomeStoreSearchVariants(term: string): string[] {
-  const raw = String(term || '').trim()
-  if (!raw) return []
-  return [...new Set([raw, ...storeCodeSearchVariants(raw)])].filter(Boolean)
-}
-
-/** PostgREST 단일 컬럼: 변형 중 하나라도 ilike 일치 (이름·코드 혼용 DB 대응) */
-function buildStoreFieldOrIlikeFragment(field: string, storeFilter: string): string {
-  if (!storeFilter || storeFilter === 'All') return ''
-  if (storeFilter === '입고등록') {
-    return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`
-  }
-  const variants = incomeStoreSearchVariants(storeFilter)
-  if (variants.length === 1) {
-    return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(variants[0]))}`
-  }
-  const inner = variants.map((v) => `${field}.ilike.${encodeURIComponent(sqlIlikeContains(v))}`).join(',')
-  return `or=(${inner})`
 }
 
 export { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
@@ -485,7 +464,7 @@ async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaR
       select: 'id,code,name,name_en,name_th,type,p_and_l_section,statement_type',
       limit: 2000,
       order: 'sort_order.asc,code.asc',
-    })) as { id?: number; code?: string; name?: string; name_en?: string | null; name_th?: string | null }[] | null
+    })) as
       | {
           id?: number
           code?: string
@@ -873,22 +852,34 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
-    const [orders, hqVendorIndex, hqOutboundAgg] = await Promise.all([
+    const [orders, hqVendorIndex] = await Promise.all([
       supabaseSelectFilterAllPages('orders', orderFilter, {
         select: 'total',
         pageSize: 8000,
         maxRows: 200_000,
       }) as Promise<{ total?: number }[]>,
       loadHqVendorMatchIndex(),
-      sumHqOutboundPurchaseFromOffice(
+    ])
+    let hqOutboundAgg: {
+      purchaseTotal: number
+      expenseBySubject: Map<number | null, number>
+      truncated?: boolean
+    }
+    try {
+      hqOutboundAgg = await sumHqOutboundPurchaseFromOffice(
         storeFilter === 'All' ? null : storeFilter,
         startStr,
         endStr,
         itemCostMap,
         itemAccountSubjectMap,
         subjectMeta
-      ),
-    ])
+      )
+    } catch (e) {
+      warnings.push(
+        `본사 창고 출고(매입) 조회 실패 — 해당 금액을 0으로 처리했습니다. (${String(e).slice(0, 120)})`
+      )
+      hqOutboundAgg = { purchaseTotal: 0, expenseBySubject: new Map(), truncated: false }
+    }
     let ordersApprovedSubtotal = 0
     for (const o of orders) ordersApprovedSubtotal += Number(o.total) || 0
     limits.orders_purchase = { fetched: orders.length, limit: BASE_LIMIT }
@@ -924,15 +915,23 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       hqIndex: hqVendorIndex,
       ...(storeFilter === 'All' ? { excludeHqLocations: true } : {}),
     }
-    const inboundStore = await getDirectInboundPurchasesByVendor(
-      storeFilter !== 'All' ? storeFilter : null,
-      startStr,
-      endStr,
-      itemCostMap,
-      storeInboundOpts,
-      itemAccountSubjectMap,
-      subjectMeta
-    )
+    let inboundStore: Awaited<ReturnType<typeof getDirectInboundPurchasesByVendor>>
+    try {
+      inboundStore = await getDirectInboundPurchasesByVendor(
+        storeFilter !== 'All' ? storeFilter : null,
+        startStr,
+        endStr,
+        itemCostMap,
+        storeInboundOpts,
+        itemAccountSubjectMap,
+        subjectMeta
+      )
+    } catch (e) {
+      warnings.push(
+        `직접 입고(매입) 조회 실패 — 해당 금액을 0으로 처리했습니다. (${String(e).slice(0, 120)})`
+      )
+      inboundStore = { byVendor: {}, expenseBySubject: new Map() }
+    }
     const { kept: inboundByVendorStore, excluded: inboundHqExcluded } = partitionPurchaseVendorMapByHqCodes(
       inboundStore.byVendor,
       hqVendorIndex
@@ -1135,11 +1134,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     salesByCustomer,
     diagnostics:
       input.includeDebug ||
+      warnings.length > 0 ||
       purchaseInboundBankOverlapVendorKeys.length > 0 ||
       purchaseHqOutboundBasis != null ||
       (purchaseExcludedHqBankPayments?.length ?? 0) > 0
         ? {
-            warnings: input.includeDebug ? warnings : [],
+            warnings,
             limits: input.includeDebug ? limits : {},
             ...(purchaseInboundBankOverlapVendorKeys.length > 0
               ? { purchaseInboundBankOverlapVendorKeys }

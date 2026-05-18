@@ -550,7 +550,7 @@ export default function PosPrintersPage() {
     Promise.all([
       getPosPrinterSettings({ storeCode: effectiveStore }),
       getPosMenuCategories(),
-      getPosMenus(),
+      getPosMenus({ fresh: true }),
     ])
       .then(([settings, catRes, menus]) => {
         if (requestSeq !== loadRequestSeqRef.current) return
@@ -589,7 +589,7 @@ export default function PosPrintersPage() {
   const refreshMenuCatalogOnly = React.useCallback(() => {
     if (!effectiveStore) return
     const requestSeq = ++catalogRequestSeqRef.current
-    Promise.all([getPosMenuCategories(), getPosMenus()])
+    Promise.all([getPosMenuCategories(), getPosMenus({ fresh: true })])
       .then(([catRes, menus]) => {
         if (requestSeq !== catalogRequestSeqRef.current) return
         setCategories(catRes.categories || [])

@@ -11,9 +11,15 @@ export type PosSalesSumResult = {
   source: 'rpc' | 'select'
 }
 
-function isMissingPosSalesRpcError(e: unknown): boolean {
+function shouldFallbackPosSalesRpc(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
-  return msg.includes('get_pos_sales_period_summary') || msg.includes('42883')
+  return (
+    msg.includes('get_pos_sales_period_summary') ||
+    msg.includes('42883') ||
+    msg.includes('42703') ||
+    msg.includes('timeout') ||
+    msg.includes('supabase rpc failed')
+  )
 }
 
 /**
@@ -51,7 +57,7 @@ export async function sumCompletedPosSalesTotal(params: {
       }
     }
   } catch (e) {
-    if (!isMissingPosSalesRpcError(e)) throw e
+    if (!shouldFallbackPosSalesRpc(e)) throw e
   }
 
   let filter = `created_at=gte.${encodeURIComponent(params.startUtcIso)}&created_at=lt.${encodeURIComponent(params.endUtcExclusive)}`

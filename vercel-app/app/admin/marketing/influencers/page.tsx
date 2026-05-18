@@ -191,7 +191,7 @@ export default function MarketingInfluencersPage() {
     if (mainTab !== "compose") return
     let cancelled = false
     setPosMenusLoading(true)
-    getPosMenus()
+    getPosMenus({ fresh: true })
       .then((rows: PosMenu[]) => {
         if (!cancelled) setPosMenus(Array.isArray(rows) ? rows : [])
       })

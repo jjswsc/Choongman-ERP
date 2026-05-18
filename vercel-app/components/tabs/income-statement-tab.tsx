@@ -22,6 +22,7 @@ import {
   fetchIncomeStatementOverrides,
   getIncomeStatement,
   getIncomeStatementPurchaseDrillDown,
+  isIncomeStatementData,
   saveIncomeStatementOverrides,
   useStoreList,
   type IncomeStatementData,
@@ -930,7 +931,7 @@ function formatOverrideSavedClockBangkok(ms: number, lang: string): string {
 }
 
 function incomeMetricsForCompare(d: IncomeStatementData | undefined) {
-  if (!d || d.error) return null
+  if (!isIncomeStatementData(d) || d.error) return null
   const sales = Number(d.sales) || 0
   const purchases = Number(d.purchases) || 0
   const expenses = Number(d.expenses) || 0
@@ -1206,6 +1207,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [compareIncomeRows, setCompareIncomeRows] = React.useState<
     { ym: string; data: IncomeStatementData }[]
   >([])
+  const [compareFetchError, setCompareFetchError] = React.useState<string | null>(null)
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
   const [incomeCompareFetchId, setIncomeCompareFetchId] = React.useState(0)
 
@@ -1218,6 +1220,20 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const runIncomeFetch = React.useCallback(() => {
     const sf = storeFilter !== "All" ? storeFilter : undefined
     const months = periodMonths
+    setCompareFetchError(null)
+
+    const emptyIncomeOnFetchError = (ym: string, message: string): IncomeStatementData => ({
+      yearMonth: ym,
+      startStr: "",
+      endStr: "",
+      storeFilter: sf ?? "All",
+      sales: 0,
+      purchases: 0,
+      expenses: 0,
+      grossProfit: 0,
+      netProfit: 0,
+      error: message,
+    })
 
     if (months.length <= 1) {
       const ym = months[0] ?? yearMonthEnd
@@ -1231,7 +1247,14 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         includeDebug: showExpenseDetails,
       })
         .then((r) => setData(r))
-        .catch(() => setData(null))
+        .catch((e) =>
+          setData(
+            emptyIncomeOnFetchError(
+              ym,
+              e instanceof Error ? e.message : String(e || "FETCH_FAILED")
+            )
+          )
+        )
         .finally(() => setLoading(false))
       return
     }
@@ -1239,25 +1262,39 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     setLoading(true)
     setData(null)
     Promise.all(
-      months.map((ym) =>
-        getIncomeStatement({
-          yearMonth: ym,
-          storeFilter: sf,
-          userStore: auth?.store,
-          userRole: auth?.role,
-          includeDebug: showExpenseDetails,
-        })
-      )
-    )
-      .then((arr) =>
-        setCompareIncomeRows(
-          months.map((ym, i) => ({
+      months.map(async (ym) => {
+        try {
+          const row = await getIncomeStatement({
+            yearMonth: ym,
+            storeFilter: sf,
+            userStore: auth?.store,
+            userRole: auth?.role,
+            includeDebug: showExpenseDetails,
+          })
+          return { ym, data: row }
+        } catch (e) {
+          return {
             ym,
-            data: arr[i] as IncomeStatementData,
-          }))
-        )
-      )
-      .catch(() => setCompareIncomeRows([]))
+            data: emptyIncomeOnFetchError(
+              ym,
+              e instanceof Error ? e.message : String(e || "FETCH_FAILED")
+            ),
+          }
+        }
+      })
+    )
+      .then((rows) => {
+        const ok = rows.filter((r) => isIncomeStatementData(r.data))
+        setCompareIncomeRows(ok)
+        const err = rows
+          .map((r) => (r.data as IncomeStatementData | undefined)?.error)
+          .find((m) => typeof m === "string" && m.trim())
+        setCompareFetchError(err?.trim() || (ok.length === 0 ? t("inNoData") || "No data found." : null))
+      })
+      .catch(() => {
+        setCompareIncomeRows([])
+        setCompareFetchError(t("inNoData") || "No data found.")
+      })
       .finally(() => {
         setIncomeCompareFetchId((x) => x + 1)
         setLoading(false)
@@ -1269,6 +1306,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     auth?.role,
     showExpenseDetails,
     yearMonthEnd,
+    t,
   ])
 
   React.useEffect(() => {
@@ -1426,7 +1464,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       : []
 
   const view = React.useMemo(() => {
-    if (!data) return null
+    if (!isIncomeStatementData(data) || data.error) return null
     const expenses = data.expenses
     const purchases = data.purchases
     const endingInv = data.endingInventory ?? 0
@@ -1865,8 +1903,14 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                     · {storeLabel}
                   </div>
                   {incomeCompareCols.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      {t("inNoData") || "No data found."}
+                    <p
+                      className={
+                        compareFetchError
+                          ? "text-sm text-destructive text-center py-4"
+                          : "text-sm text-muted-foreground text-center py-4"
+                      }
+                    >
+                      {compareFetchError || t("inNoData") || "No data found."}
                     </p>
                   ) : (
                     <>
@@ -2778,7 +2822,17 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 </div>
               )}
 
-              {!isRangeCompare && data && view ? (
+              {!isRangeCompare && data?.error ? (
+                <p className="text-sm text-destructive py-4 px-1">{data.error}</p>
+              ) : null}
+              {!isRangeCompare && (data?.diagnostics?.warnings?.length ?? 0) > 0 ? (
+                <div className="mb-3 space-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                  {data!.diagnostics!.warnings.map((w) => (
+                    <p key={w}>{w}</p>
+                  ))}
+                </div>
+              ) : null}
+              {!isRangeCompare && isIncomeStatementData(data) && !data.error && view ? (
                 <div className="overflow-x-auto">
                   <IncomePlDetailTableContent
                     data={data}
@@ -2800,7 +2854,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                     }}
                   />
                 </div>
-              ) : !isRangeCompare ? (
+              ) : !isRangeCompare && !data ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   {t("msg_click_query") || "Click Query button."}
                 </p>

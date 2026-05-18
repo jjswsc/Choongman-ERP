@@ -2296,6 +2296,10 @@ export async function getPayableTransactionItems(params: {
 }
 
 // ─── 손익계산서 (1단계) ───
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v)
+}
+
 export interface IncomeStatementData {
   yearMonth: string
   startStr: string
@@ -2342,6 +2346,24 @@ export interface IncomeStatementData {
   error?: string
 }
 
+/** API 응답이 손익계산서 본문인지 검사 (오류 JSON·빈 객체 방지) */
+export function isIncomeStatementData(v: unknown): v is IncomeStatementData {
+  if (!v || typeof v !== 'object') return false
+  const o = v as IncomeStatementData
+  if (typeof o.error === 'string' && o.error.trim()) return false
+  return (
+    typeof o.yearMonth === 'string' &&
+    typeof o.startStr === 'string' &&
+    typeof o.endStr === 'string' &&
+    typeof o.storeFilter === 'string' &&
+    isFiniteNumber(o.sales) &&
+    isFiniteNumber(o.purchases) &&
+    isFiniteNumber(o.expenses) &&
+    isFiniteNumber(o.grossProfit) &&
+    isFiniteNumber(o.netProfit)
+  )
+}
+
 export async function getIncomeStatement(params: {
   yearMonth?: string
   storeFilter?: string
@@ -2356,7 +2378,15 @@ export async function getIncomeStatement(params: {
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.includeDebug) q.set('includeDebug', '1')
   const res = await apiFetchWithOffline(`/api/getIncomeStatement?${q}`)
-  return res.json() as Promise<IncomeStatementData>
+  const payload = (await res.json()) as IncomeStatementData & { error?: string }
+  if (!res.ok) {
+    throw new Error(payload.error || `HTTP ${res.status}`)
+  }
+  if (!isIncomeStatementData(payload)) {
+    const errBody = payload as { error?: string }
+    throw new Error(errBody.error || 'Invalid income statement response')
+  }
+  return payload
 }
 
 /** 손익 매입 거래처 행 상세 (직접입고 / 통장 매입지급 / 본사승인 발주) */
@@ -2531,6 +2561,33 @@ export interface BalanceSheetData {
   unpostedBankWithdrawals?: UnpostedBankTransaction[]
 }
 
+/** API 응답이 재무상태표 본문인지 검사 (오류 JSON·빈 객체 방지) */
+export function isBalanceSheetData(v: unknown): v is BalanceSheetData {
+  if (!v || typeof v !== 'object') return false
+  const o = v as BalanceSheetData
+  const a = o.assets
+  const l = o.liabilities
+  const e = o.equity
+  return (
+    typeof o.yearMonth === 'string' &&
+    typeof o.endStr === 'string' &&
+    !!a &&
+    !!l &&
+    !!e &&
+    isFiniteNumber(a.cashAndBanks) &&
+    isFiniteNumber(a.inventory) &&
+    isFiniteNumber(a.receivables) &&
+    isFiniteNumber(a.total) &&
+    isFiniteNumber(l.payables) &&
+    isFiniteNumber(l.total) &&
+    isFiniteNumber(e.openingCapital) &&
+    isFiniteNumber(e.retainedEarningsYtd) &&
+    isFiniteNumber(e.currentPeriodProfit) &&
+    isFiniteNumber(e.total) &&
+    isFiniteNumber(o.balanceCheckDiff)
+  )
+}
+
 export async function getBalanceSheet(params: {
   yearMonth?: string
   storeFilter?: string
@@ -2543,7 +2600,15 @@ export async function getBalanceSheet(params: {
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getBalanceSheet?${q}`)
-  return res.json() as Promise<BalanceSheetData>
+  const payload = (await res.json()) as BalanceSheetData & { error?: string }
+  if (!res.ok) {
+    throw new Error(payload.error || `HTTP ${res.status}`)
+  }
+  if (!isBalanceSheetData(payload)) {
+    const errBody = payload as { error?: string }
+    throw new Error(errBody.error || 'Invalid balance sheet response')
+  }
+  return payload
 }
 
 export type ThaiFilingResponsibility = 'in_house' | 'tax_agent' | 'tbd'

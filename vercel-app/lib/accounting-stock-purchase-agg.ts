@@ -17,9 +17,87 @@ function isOfficeLocation(loc: string): boolean {
   return ['office', '본사', '오피스', '본점'].some((x) => n === x || n.includes(x))
 }
 
-function isMissingPurchaseAggRpcError(e: unknown): boolean {
+function shouldFallbackStockLogPurchaseAgg(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
-  return msg.includes('get_stock_logs_purchase_agg') || msg.includes('42883')
+  return (
+    msg.includes('get_stock_logs_purchase_agg') ||
+    msg.includes('42883') ||
+    msg.includes('42703') ||
+    msg.includes('reference_no') ||
+    msg.includes('timeout') ||
+    msg.includes('supabase rpc failed')
+  )
+}
+
+async function fetchStockLogsPurchaseAggSelect(params: {
+  logTypes: string[]
+  startUtcIso: string
+  endUtcExclusive: string
+  locationPatterns: string[]
+  vendorPatterns: string[] | null
+  includeReferenceNo: boolean
+}): Promise<StockLogPurchaseAggRow[]> {
+  const typeList = params.logTypes.map((t) => encodeURIComponent(t)).join(',')
+  let filter =
+    `log_type=in.(${typeList})` +
+    `&log_date=gte.${params.startUtcIso}&log_date=lt.${params.endUtcExclusive}`
+  if (params.locationPatterns.length === 1) {
+    filter += `&location=ilike.${encodeURIComponent(params.locationPatterns[0])}`
+  } else if (params.locationPatterns.length > 1) {
+    filter += `&or=(${params.locationPatterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
+  }
+  if (params.vendorPatterns && params.vendorPatterns.length === 1) {
+    filter += `&vendor_target=ilike.${encodeURIComponent(params.vendorPatterns[0])}`
+  } else if (params.vendorPatterns && params.vendorPatterns.length > 1) {
+    filter += `&or=(${params.vendorPatterns.map((p) => `vendor_target.ilike.${encodeURIComponent(p)}`).join(',')})`
+  }
+
+  const selectCols = params.includeReferenceNo
+    ? 'item_code,qty,unit_cost,invoice_unit_price,vendor_target,location,reference_no'
+    : 'item_code,qty,unit_cost,invoice_unit_price,vendor_target,location'
+
+  const rawRows = (await supabaseSelectFilterAllPages('stock_logs', filter, {
+    select: selectCols,
+    order: 'id.asc',
+    pageSize: 8000,
+    maxRows: 200_000,
+  })) as {
+    item_code?: string
+    qty?: number
+    unit_cost?: number | null
+    invoice_unit_price?: number | null
+    vendor_target?: string
+    location?: string
+    reference_no?: string | null
+  }[]
+
+  const bucket = new Map<string, StockLogPurchaseAggRow>()
+  for (const r of rawRows) {
+    const item_code = String(r.item_code || '').trim()
+    if (!item_code) continue
+    const vendor_target = String(r.vendor_target || '').trim()
+    const reference_no = params.includeReferenceNo ? String(r.reference_no || '').trim() : ''
+    const location = String(r.location || '').trim()
+    const key = `${item_code}\0${vendor_target}\0${reference_no}\0${location}`
+    const qty = Math.abs(Number(r.qty) || 0)
+    const unit = Number(r.invoice_unit_price ?? r.unit_cost ?? 0) || 0
+    const amt = qty * unit
+    const prev = bucket.get(key)
+    if (prev) {
+      prev.line_qty += qty
+      prev.line_amount += amt
+    } else {
+      bucket.set(key, {
+        item_code,
+        vendor_target,
+        reference_no,
+        location,
+        line_qty: qty,
+        line_amount: amt,
+      })
+    }
+  }
+  return [...bucket.values()]
 }
 
 async function resolveDistinctNonOfficeLocationPatterns(): Promise<string[]> {
@@ -61,66 +139,25 @@ export async function fetchStockLogPurchaseAgg(params: {
     }))
     return { rows, source: 'rpc' }
   } catch (e) {
-    if (!isMissingPurchaseAggRpcError(e)) throw e
+    if (!shouldFallbackStockLogPurchaseAgg(e)) throw e
   }
 
-  const typeList = params.logTypes.map((t) => encodeURIComponent(t)).join(',')
-  let filter =
-    `log_type=in.(${typeList})` +
-    `&log_date=gte.${params.startUtcIso}&log_date=lt.${params.endUtcExclusive}`
-  if (params.locationPatterns.length === 1) {
-    filter += `&location=ilike.${encodeURIComponent(params.locationPatterns[0])}`
-  } else if (params.locationPatterns.length > 1) {
-    filter += `&or=(${params.locationPatterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
+  try {
+    const rows = await fetchStockLogsPurchaseAggSelect({
+      ...params,
+      vendorPatterns,
+      includeReferenceNo: true,
+    })
+    return { rows, source: 'select' }
+  } catch (e2) {
+    if (!shouldFallbackStockLogPurchaseAgg(e2)) throw e2
+    const rows = await fetchStockLogsPurchaseAggSelect({
+      ...params,
+      vendorPatterns,
+      includeReferenceNo: false,
+    })
+    return { rows, source: 'select' }
   }
-  if (vendorPatterns && vendorPatterns.length === 1) {
-    filter += `&vendor_target=ilike.${encodeURIComponent(vendorPatterns[0])}`
-  } else if (vendorPatterns && vendorPatterns.length > 1) {
-    filter += `&or=(${vendorPatterns.map((p) => `vendor_target.ilike.${encodeURIComponent(p)}`).join(',')})`
-  }
-
-  const rawRows = (await supabaseSelectFilterAllPages('stock_logs', filter, {
-    select: 'item_code,qty,unit_cost,invoice_unit_price,vendor_target,location,reference_no',
-    order: 'id.asc',
-    pageSize: 8000,
-    maxRows: 200_000,
-  })) as {
-    item_code?: string
-    qty?: number
-    unit_cost?: number | null
-    invoice_unit_price?: number | null
-    vendor_target?: string
-    location?: string
-    reference_no?: string | null
-  }[]
-
-  const bucket = new Map<string, StockLogPurchaseAggRow>()
-  for (const r of rawRows) {
-    const item_code = String(r.item_code || '').trim()
-    if (!item_code) continue
-    const vendor_target = String(r.vendor_target || '').trim()
-    const reference_no = String(r.reference_no || '').trim()
-    const location = String(r.location || '').trim()
-    const key = `${item_code}\0${vendor_target}\0${reference_no}\0${location}`
-    const qty = Math.abs(Number(r.qty) || 0)
-    const unit = Number(r.invoice_unit_price ?? r.unit_cost ?? 0) || 0
-    const amt = qty * unit
-    const prev = bucket.get(key)
-    if (prev) {
-      prev.line_qty += qty
-      prev.line_amount += amt
-    } else {
-      bucket.set(key, {
-        item_code,
-        vendor_target,
-        reference_no,
-        location,
-        line_qty: qty,
-        line_amount: amt,
-      })
-    }
-  }
-  return { rows: [...bucket.values()], source: 'select' }
 }
 
 /** 손익 입고 location 패턴 — 재고 화면과 동일 alias */

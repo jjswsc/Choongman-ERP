@@ -118,6 +118,23 @@ import {
 } from "@/lib/pos-option-selection-groups"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
+/** 원가 분석 화면 이동 후 복귀 시 편집 중이던 메뉴·노출 매장 복원 */
+const POS_MENUS_EDIT_RESUME_KEY = "cm_pos_menus_edit_resume_v1"
+
+function menuScopeStoreCodes(menu: PosMenu): string[] {
+  return Array.isArray(menu.storeCodes)
+    ? menu.storeCodes.map((x) => String(x || "").trim()).filter(Boolean)
+    : []
+}
+
+function storeScopeCodesEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const norm = (xs: string[]) => [...xs].map((x) => x.toLowerCase()).sort()
+  const sa = norm(a)
+  const sb = norm(b)
+  return sa.every((v, i) => v === sb[i])
+}
+
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
 const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as const
 
@@ -550,9 +567,11 @@ export default function PosMenusPage() {
     return []
   }, [canSearchAllStores, auth?.store, availableScopeStores])
   const [selectedStoreCodes, setSelectedStoreCodes] = React.useState<string[]>([])
+  const [storeScopeDirty, setStoreScopeDirty] = React.useState(false)
   const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
     const normalized = String(storeCode || "").trim()
     if (!normalized) return
+    setStoreScopeDirty(true)
     setSelectedStoreCodes((prev) => {
       const has = prev.some((x) => x.toLowerCase() === normalized.toLowerCase())
       if (checked) return has ? prev : [...prev, normalized]
@@ -695,11 +714,13 @@ export default function PosMenusPage() {
     }
   }, [canSearchAllStores, stores, auth?.store, deliveryOpsStoreCode])
 
+  /** 신규 등록 시에만 기본 노출 매장 — 편집 중(editingId)에는 handleEdit·서버 목록과 동기화 */
   React.useEffect(() => {
+    if (editingId) return
     if (selectedStoreCodes.length > 0) return
     if (defaultScopeStoreCodes.length === 0) return
     setSelectedStoreCodes(defaultScopeStoreCodes)
-  }, [defaultScopeStoreCodes, selectedStoreCodes.length])
+  }, [defaultScopeStoreCodes, selectedStoreCodes.length, editingId])
 
   React.useEffect(() => {
     if (mainTab !== "set" && mainTab !== "setInquiry") return
@@ -718,7 +739,7 @@ export default function PosMenusPage() {
     try {
       // 세 API를 동시에 호출해 대기 시간 단축 (순차 호출 대비)
       const [list, catRes, config] = await Promise.all([
-        getPosMenus(),
+        getPosMenus({ fresh: true }),
         getPosMenuCategories().catch(() => ({ categories: [] as string[], mainCategories: [] as string[] })),
         getPosMenuCategoriesConfig().catch(() => null),
       ])
@@ -1039,6 +1060,7 @@ export default function PosMenusPage() {
   const handleNewRegister = () => {
     setEditingId(null)
     setSelectedStoreCodes(defaultScopeStoreCodes)
+    setStoreScopeDirty(false)
     setPackagingChecklistRows([])
     const filter = mainCategoryFilter === "all" ? "" : mainCategoryFilter.trim()
     if (!filter) {
@@ -1057,10 +1079,8 @@ export default function PosMenusPage() {
     if (editingId) {
       const m = menus.find((x) => x.id === editingId)
       if (m) {
-        const scope = Array.isArray(m.storeCodes)
-          ? m.storeCodes.map((x) => String(x || "").trim()).filter(Boolean)
-          : []
-        setSelectedStoreCodes(scope)
+        setSelectedStoreCodes(menuScopeStoreCodes(m))
+        setStoreScopeDirty(false)
         setFormData({
           ...emptyForm,
           code: m.code,
@@ -1082,6 +1102,7 @@ export default function PosMenusPage() {
     } else {
       setFormData(emptyForm)
       setSelectedStoreCodes(defaultScopeStoreCodes)
+      setStoreScopeDirty(false)
       setPackagingChecklistRows([])
     }
   }
@@ -1206,10 +1227,6 @@ export default function PosMenusPage() {
       await appAlert(t("posMenuAlertCodeName"))
       return
     }
-    if (selectedStoreCodes.length === 0) {
-      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
-      return
-    }
     if (!editingId && menus.some((m) => m.code === code)) {
       await appAlert(t("itemsAlertCodeExists"))
       return
@@ -1220,6 +1237,18 @@ export default function PosMenusPage() {
       effectiveCategory = normalizePromotionSubcategory(effectiveCategory)
     }
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
+    const scopeForSave = (() => {
+      if (!editingMenu || storeScopeDirty) return selectedStoreCodes
+      const stableScope = menuScopeStoreCodes(editingMenu)
+      return stableScope.length > 0 ? stableScope : selectedStoreCodes
+    })()
+    if (scopeForSave.length === 0) {
+      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
+      return
+    }
+    if (!storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
+      setSelectedStoreCodes(scopeForSave)
+    }
     const res = await savePosMenu({
       id: editingId || undefined,
       code,
@@ -1235,13 +1264,13 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
-      storeCodes: selectedStoreCodes,
+      storeCodes: scopeForSave,
     })
     if (!res.success) {
       await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
-    const scopeTargets = Array.from(new Set(selectedStoreCodes.map((x) => String(x || "").trim()).filter(Boolean)))
+    const scopeTargets = Array.from(new Set(scopeForSave.map((x) => String(x || "").trim()).filter(Boolean)))
     if (scopeTargets.length > 0) {
       await Promise.all(scopeTargets.map((sc) => refreshPosMenusCatalogCache({ storeCode: sc })))
     } else {
@@ -1265,15 +1294,16 @@ export default function PosMenusPage() {
       optionSelectionGroups: editingMenu?.optionSelectionGroups,
       optionSelectionConfig: editingMenu?.optionSelectionConfig,
       isBanban: formData.isBanban,
-      storeCodes: selectedStoreCodes,
+      storeCodes: scopeForSave,
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
       await appAlert(t("itemsAlertUpdated"))
     } else {
-      getPosMenus().then(setMenus)
+      getPosMenus({ fresh: true }).then(setMenus)
       await appAlert(t("itemsAlertSaved"))
     }
+    setStoreScopeDirty(false)
     const newCat = effectiveCategory
     if (newCat && !allCategories.includes(newCat)) {
       setAllCategories((prev) => [...prev, newCat].sort())
@@ -1309,11 +1339,8 @@ export default function PosMenusPage() {
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
     })
-    setSelectedStoreCodes(
-      Array.isArray(menu.storeCodes)
-        ? menu.storeCodes.map((x) => String(x || "").trim()).filter(Boolean)
-        : []
-    )
+    setSelectedStoreCodes(menuScopeStoreCodes(menu))
+    setStoreScopeDirty(false)
     setEditingId(menu.id)
     requestAnimationFrame(() => {
       document
@@ -1330,6 +1357,45 @@ export default function PosMenusPage() {
     setSelectedIngredientOptionId("")
     void loadPackagingChecklistRows(menu.id)
   }
+
+  /** 목록 새로고침·원가 저장 후 복귀 등 — 서버 storeCodes 로 체크박스 유지 */
+  React.useEffect(() => {
+    if (!editingId) return
+    if (storeScopeDirty) return
+    const m = menus.find((x) => x.id === editingId)
+    if (!m) return
+    const scope = menuScopeStoreCodes(m)
+    setSelectedStoreCodes((prev) => (storeScopeCodesEqual(prev, scope) ? prev : scope))
+  }, [editingId, menus, storeScopeDirty])
+
+  const resumeEditFromCostAnalysisRef = React.useRef(false)
+  React.useEffect(() => {
+    if (menus.length === 0 || resumeEditFromCostAnalysisRef.current) return
+    try {
+      const raw = sessionStorage.getItem(POS_MENUS_EDIT_RESUME_KEY)
+      if (!raw) return
+      resumeEditFromCostAnalysisRef.current = true
+      sessionStorage.removeItem(POS_MENUS_EDIT_RESUME_KEY)
+      const parsed = JSON.parse(raw) as { editingId?: string; selectedStoreCodes?: string[] }
+      const id = String(parsed.editingId ?? "").trim()
+      if (!id) return
+      const m = menus.find((x) => x.id === id)
+      if (m) {
+        handleEdit(m)
+        return
+      }
+      const cachedScope = Array.isArray(parsed.selectedStoreCodes)
+        ? parsed.selectedStoreCodes.map((x) => String(x || "").trim()).filter(Boolean)
+        : []
+      if (cachedScope.length > 0) {
+        setEditingId(id)
+        setSelectedStoreCodes(cachedScope)
+        setStoreScopeDirty(false)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [menus, handleEdit])
 
   const handleAddOption = async () => {
     if (!editingId || !newOptionName.trim()) return
@@ -1474,7 +1540,7 @@ export default function PosMenusPage() {
       const opts = await getPosMenuOptions({ menuId })
       setExpandedMenuData(opts && opts.length > 0 ? { options: opts } : null)
       if (!opts || opts.length === 0) setExpandedMenuId(null)
-      getPosMenus().then(setMenus)
+      getPosMenus({ fresh: true }).then(setMenus)
     } else {
       await appAlert(res.message)
     }
@@ -1514,7 +1580,7 @@ export default function PosMenusPage() {
       if (res.success) {
         const opts = await getPosMenuOptions({ menuId })
         setExpandedMenuData(opts && opts.length > 0 ? { options: opts } : null)
-        getPosMenus().then(setMenus)
+        getPosMenus({ fresh: true }).then(setMenus)
       } else {
         await appAlert(res.message)
       }
@@ -3922,6 +3988,17 @@ export default function PosMenusPage() {
                             variant="outline"
                             className="text-xs"
                             onClick={() => {
+                              try {
+                                sessionStorage.setItem(
+                                  POS_MENUS_EDIT_RESUME_KEY,
+                                  JSON.stringify({
+                                    editingId,
+                                    selectedStoreCodes,
+                                  })
+                                )
+                              } catch {
+                                /* ignore */
+                              }
                               const qs = new URLSearchParams({
                                 menuId: editingId,
                                 menuCode: formData.code || "",

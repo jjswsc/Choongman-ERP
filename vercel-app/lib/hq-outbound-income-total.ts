@@ -4,7 +4,7 @@
  */
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
-import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import { buildStoreFieldOrIlikeFragment, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
 import {
   type OrderCartLine,
@@ -48,8 +48,35 @@ function appendLocationPatternFilter(base: string, patterns: string[]): string {
   return `${base}&or=(${patterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
 }
 
-function buildOutboundLogDateFilter(startStr: string, endStr: string): string {
-  return `log_date=gte.${startStr}&log_date=lte.${endStr}T23:59:59.999&is_deleted=is.false`
+function buildOutboundLogDateFilter(startStr: string, endStr: string, includeSoftDeleteFilter: boolean): string {
+  const base = `log_date=gte.${startStr}&log_date=lte.${endStr}T23:59:59.999`
+  return includeSoftDeleteFilter ? `${base}&is_deleted=is.false` : base
+}
+
+async function fetchOutboundLogsPage(
+  logType: 'Outbound' | 'ForceOutbound',
+  locFilter: string,
+  select: string
+): Promise<OutboundLogRow[]> {
+  const typeEq = logType === 'Outbound' ? 'log_type=eq.Outbound' : 'log_type=eq.ForceOutbound'
+  try {
+    return (await supabaseSelectFilterAllPages('stock_logs', `${typeEq}&${locFilter}`, {
+      order: 'log_date.desc',
+      select,
+      pageSize: 8000,
+      maxRows: 100_000,
+    })) as OutboundLogRow[]
+  } catch (e) {
+    const msg = String(e || '').toLowerCase()
+    if (!msg.includes('is_deleted') && !msg.includes('42703')) throw e
+    const relaxed = locFilter.replace(/&is_deleted=is\.false/g, '')
+    return (await supabaseSelectFilterAllPages('stock_logs', `${typeEq}&${relaxed}`, {
+      order: 'log_date.desc',
+      select,
+      pageSize: 8000,
+      maxRows: 100_000,
+    })) as OutboundLogRow[]
+  }
 }
 
 async function loadItemPriceByCode(): Promise<Record<string, number>> {
@@ -97,23 +124,32 @@ export async function loadHqOutboundProcessedLines(params: {
   const { startStr, endStr, storeFilter } = params
   const itemPriceByCode = await loadItemPriceByCode()
   const locationPatterns = getStockLocationPatterns('본사')
-  const dateFilter = buildOutboundLogDateFilter(startStr, endStr)
-  const locFilter = appendLocationPatternFilter(dateFilter, locationPatterns)
+  let dateFilter = buildOutboundLogDateFilter(startStr, endStr, true)
+  let locFilter = appendLocationPatternFilter(dateFilter, locationPatterns)
+  if (storeFilter && storeFilter !== 'All') {
+    const storeFrag = buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)
+    if (storeFrag) locFilter += `&${storeFrag}`
+  }
 
-  const [outboundLogs, forceLogs] = await Promise.all([
-    supabaseSelectFilterAllPages('stock_logs', `log_type=eq.Outbound&${locFilter}`, {
-      order: 'log_date.desc',
-      select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
-      pageSize: 8000,
-      maxRows: 100_000,
-    }) as Promise<OutboundLogRow[]>,
-    supabaseSelectFilterAllPages('stock_logs', `log_type=eq.ForceOutbound&${locFilter}`, {
-      order: 'log_date.desc',
-      select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
-      pageSize: 8000,
-      maxRows: 100_000,
-    }) as Promise<OutboundLogRow[]>,
-  ])
+  let outboundLogs: OutboundLogRow[]
+  let forceLogs: OutboundLogRow[]
+  try {
+    ;[outboundLogs, forceLogs] = await Promise.all([
+      fetchOutboundLogsPage('Outbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
+      fetchOutboundLogsPage('ForceOutbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
+    ])
+  } catch {
+    dateFilter = buildOutboundLogDateFilter(startStr, endStr, false)
+    locFilter = appendLocationPatternFilter(dateFilter, locationPatterns)
+    if (storeFilter && storeFilter !== 'All') {
+      const storeFrag = buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)
+      if (storeFrag) locFilter += `&${storeFrag}`
+    }
+    ;[outboundLogs, forceLogs] = await Promise.all([
+      fetchOutboundLogsPage('Outbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
+      fetchOutboundLogsPage('ForceOutbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
+    ])
+  }
 
   const hitRowCap = outboundLogs.length + forceLogs.length >= 100_000
   const allLogs = [...outboundLogs, ...forceLogs]

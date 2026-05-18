@@ -1,6 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { upsertPosMenuFromBody } from '@/lib/pos-menu-upsert-server'
 import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import { writePosMenuAuditTrail } from '@/lib/pos-menu-audit'
+
+function normalizeStoreCodes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const v of raw) {
+    const code = String(v || '').trim()
+    if (!code) continue
+    if (out.some((x) => x.toLowerCase() === code.toLowerCase())) continue
+    out.push(code)
+  }
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+async function loadMenuAuditSnapshot(menuId: string): Promise<Record<string, unknown> | null> {
+  const id = String(menuId || '').trim()
+  if (!id) return null
+  const rows = (await supabaseSelectFilter(
+    'pos_menus',
+    `id=eq.${encodeURIComponent(id)}`,
+    {
+      limit: 1,
+      select:
+        'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,delivery_app_fee_percent',
+    }
+  )) as {
+    id?: number
+    code?: string
+    name?: string
+    category?: string
+    category_main?: string
+    price?: number
+    price_delivery?: number | null
+    image?: string
+    vat_included?: boolean
+    is_active?: boolean
+    sort_order?: number
+    delivery_app_fee_percent?: number | null
+  }[] | null
+  const row = rows?.[0]
+  if (!row?.id) return null
+  let scopeRows: { store_code?: string | null; enabled?: boolean | null }[] = []
+  try {
+    scopeRows = (await supabaseSelectFilter(
+      'pos_menu_store_scopes',
+      `menu_id=eq.${encodeURIComponent(String(row.id))}`,
+      { limit: 1000, select: 'store_code,enabled' }
+    )) as { store_code?: string | null; enabled?: boolean | null }[] | null || []
+  } catch {
+    scopeRows = []
+  }
+  const storeCodes = normalizeStoreCodes(
+    scopeRows
+      .filter((r) => r.enabled !== false)
+      .map((r) => String(r.store_code || '').trim())
+      .filter(Boolean)
+  )
+  return {
+    id: row.id,
+    code: String(row.code ?? ''),
+    name: String(row.name ?? ''),
+    category: String(row.category ?? ''),
+    categoryMain: String(row.category_main ?? ''),
+    price: Number(row.price ?? 0),
+    priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
+    imageUrl: String(row.image ?? ''),
+    vatIncluded: row.vat_included !== false,
+    isActive: row.is_active !== false,
+    sortOrder: Number(row.sort_order ?? 0),
+    deliveryAppFeePercent:
+      row.delivery_app_fee_percent != null ? Number(row.delivery_app_fee_percent) : null,
+    storeCodes,
+  }
+}
 
 /** POS 메뉴 저장 (등록/수정) */
 export async function POST(req: NextRequest) {
@@ -21,6 +97,8 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
+    const beforeId = String(body.id || '').trim()
+    const beforeSnapshot = beforeId ? await loadMenuAuditSnapshot(beforeId) : null
     const result = await upsertPosMenuFromBody(body, { upsertByCode: false })
     if (result.success) {
       const changed = result.syncHint?.changedFields || []
@@ -39,6 +117,40 @@ export async function POST(req: NextRequest) {
           reason,
           partnerMerchantID: result.syncHint?.partnerMerchantID ?? null,
         })
+      }
+      try {
+        const menuId = String(result.newId || body.id || '').trim()
+        if (menuId) {
+          const afterSnapshot = await loadMenuAuditSnapshot(menuId)
+          if (afterSnapshot) {
+            const auth = await getVerifiedAuth(req).catch(() => null)
+            await writePosMenuAuditTrail({
+              menuId: Number(menuId),
+              menuCode: String(afterSnapshot.code ?? body.code ?? ''),
+              actionType: beforeSnapshot ? 'update' : 'create',
+              actor: auth
+                ? {
+                    name: auth.name || null,
+                    role: auth.role || null,
+                    store: auth.store || null,
+                    employeeCode: auth.employeeCode || null,
+                    employeeId: auth.employeeId ?? null,
+                  }
+                : null,
+              source: 'api/savePosMenu',
+              reason: Array.isArray(changed) && changed.length > 0 ? changed.join(',') : null,
+              before: beforeSnapshot,
+              after: afterSnapshot,
+              detail: {
+                requestIncludesStoreCodes: Array.isArray(body.storeCodes),
+                requestStoreCodes: normalizeStoreCodes(body.storeCodes),
+                syncChangedFields: changed,
+              },
+            })
+          }
+        }
+      } catch (auditErr) {
+        console.warn('savePosMenu audit skipped:', auditErr)
       }
     }
     return NextResponse.json(result, { headers })

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
 import { requireAuth } from '@/lib/verify-auth'
 
+export const maxDuration = 120
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
