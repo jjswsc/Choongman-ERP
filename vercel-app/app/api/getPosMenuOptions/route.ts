@@ -136,10 +136,31 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const linkedStepKeysByMenuId = new Map<number, Set<string>>()
+    for (const opt of linkedOptions) {
+      const mid = Number(opt.menuId || 0)
+      if (!mid) continue
+      if (!linkedStepKeysByMenuId.has(mid)) linkedStepKeysByMenuId.set(mid, new Set())
+      const keys = linkedStepKeysByMenuId.get(mid)!
+      for (const k of Object.keys(opt.optionStepValues || {})) {
+        const t = String(k).trim()
+        if (t) keys.add(t)
+      }
+    }
+
     const list = (rows || [])
       .filter((row) => {
         const mid = Number(row.menu_id || 0)
-        return !linkedMenuIds.has(mid)
+        if (!linkedMenuIds.has(mid)) return true
+        const stepValues = row.option_step_values
+        const sv =
+          stepValues && typeof stepValues === 'object' && !Array.isArray(stepValues)
+            ? (stepValues as Record<string, string>)
+            : null
+        if (!sv || Object.keys(sv).length === 0) return true
+        const linkedKeys = linkedStepKeysByMenuId.get(mid)
+        if (!linkedKeys || linkedKeys.size === 0) return true
+        return Object.keys(sv).some((k) => !linkedKeys.has(k))
       })
       .map((row) => {
       const stepValues = row.option_step_values

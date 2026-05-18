@@ -69,6 +69,8 @@ import {
   COMPANY_HYBRID_DOCS_STORE_ALL,
   companyHybridDocVisibilityFromDocType,
   isCompanyHybridDocTypePermissionMeta,
+  isCompanyHybridDocCategoryRoot,
+  sortCompanyHybridDocCategoriesTree,
   type CompanyHybridDocVisibility,
   isCompanyHybridDocsListAllStoresParam,
 } from "@/lib/company-hybrid-documents"
@@ -215,6 +217,8 @@ export function CompanyHybridDocumentsPanel() {
 
   const [list, setList] = React.useState<CompanyHybridDocumentListItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  /** 목록 API는 검색 버튼(또는 조회 후 제목 정렬)으로만 호출 */
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [categories, setCategories] = React.useState<CompanyHybridDocumentCategory[]>([])
 
   const [driveTitle, setDriveTitle] = React.useState("")
@@ -287,6 +291,24 @@ export function CompanyHybridDocumentsPanel() {
     return cache
   }, [categories])
 
+  const categoryById = React.useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+
+  const { ordered: orderedCategories, depthById: categoryDepthById } = React.useMemo(
+    () => sortCompanyHybridDocCategoriesTree(categories, { store: selectedStore }),
+    [categories, selectedStore]
+  )
+
+  const labelCategoryOption = React.useCallback(
+    (c: CompanyHybridDocumentCategory) => {
+      const path = categoryLabelById.get(c.id) || c.name
+      if (isCompanyHybridDocsListAllStoresParam(selectedStore)) {
+        return `${formatStoreLabel(c.store)} · ${path}`
+      }
+      return path
+    },
+    [categoryLabelById, formatStoreLabel, selectedStore]
+  )
+
   const labelForDocumentCategory = React.useCallback(
     (row: CompanyHybridDocumentListItem) => {
       if (row.category_id != null && categoryLabelById.has(row.category_id)) {
@@ -342,6 +364,13 @@ export function CompanyHybridDocumentsPanel() {
     return first || null
   }, [selectedStore, auth?.store, visibleStores])
 
+  const rootCategoriesForWriteStore = React.useMemo(() => {
+    if (!writeStoreForMutations) return []
+    return categories
+      .filter((c) => c.store === writeStoreForMutations && isCompanyHybridDocCategoryRoot(c))
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+  }, [categories, writeStoreForMutations])
+
   const canMutateDocStore = React.useCallback(
     (rowStore: string) => {
       if (!auth) return false
@@ -382,19 +411,37 @@ export function CompanyHybridDocumentsPanel() {
     void loadCategories()
   }, [loadCategories])
 
-  const load = React.useCallback(async () => {
+  type ListFetchOverrides = {
+    sortTitle?: "asc" | "desc" | null
+    categoryId?: string
+    searchTitle?: string
+    corrPresence?: CorrespondencePresence
+    corrDirection?: "" | "outbound" | "inbound"
+    corrStatus?: "" | "draft" | "sent" | "filed" | "replied"
+    corrCounterpartySearch?: string
+  }
+
+  const load = React.useCallback(async (overrides?: ListFetchOverrides) => {
     if (!initialized || !auth) return
     if (!selectedStore) return
+    const sortTitle = overrides?.sortTitle !== undefined ? overrides.sortTitle : titleSort
+    const categoryId = overrides?.categoryId ?? listCategoryFilter
+    const searchTitle = overrides?.searchTitle ?? listTitleSearch
+    const corrPresence = overrides?.corrPresence ?? listCorrPresence
+    const corrDirection = overrides?.corrDirection ?? listCorrDirection
+    const corrStatus = overrides?.corrStatus ?? listCorrStatus
+    const corrCounterpartySearch =
+      overrides?.corrCounterpartySearch ?? listCorrCounterpartySearch
     setLoading(true)
     try {
       const q: Parameters<typeof getCompanyHybridDocuments>[0] = { store: selectedStore }
-      q.categoryId = listCategoryFilter
-      if (listTitleSearch.trim()) q.searchTitle = listTitleSearch.trim()
-      if (titleSort) q.sortTitle = titleSort
-      if (listCorrPresence !== "all") q.corrPresence = listCorrPresence
-      if (listCorrDirection) q.corrDirection = listCorrDirection
-      if (listCorrStatus) q.corrStatus = listCorrStatus
-      if (listCorrCounterpartySearch.trim()) q.corrCounterpartySearch = listCorrCounterpartySearch.trim()
+      q.categoryId = categoryId
+      if (searchTitle.trim()) q.searchTitle = searchTitle.trim()
+      if (sortTitle) q.sortTitle = sortTitle
+      if (corrPresence !== "all") q.corrPresence = corrPresence
+      if (corrDirection) q.corrDirection = corrDirection
+      if (corrStatus) q.corrStatus = corrStatus
+      if (corrCounterpartySearch.trim()) q.corrCounterpartySearch = corrCounterpartySearch.trim()
       const res = await getCompanyHybridDocuments(q)
       if (redirectToAdminLoginIfUnauthorized(res.httpStatus, setAuth)) {
         setList([])
@@ -427,11 +474,22 @@ export function CompanyHybridDocumentsPanel() {
     setAuth,
   ])
 
-  React.useEffect(() => {
-    if (mainTab === "list") {
-      void load()
-    }
-  }, [load, mainTab])
+  const handleListSearch = React.useCallback(() => {
+    setHasSearched(true)
+    void load()
+  }, [load])
+
+  const invalidateListSearch = React.useCallback(() => {
+    setHasSearched(false)
+    setList([])
+    setTitleSort(null)
+  }, [])
+
+  const onListDropdownFilterChange = React.useCallback(() => {
+    setHasSearched(false)
+    setList([])
+    setTitleSort(null)
+  }, [])
 
   const resetForm = () => {
     setDriveTitle("")
@@ -782,17 +840,23 @@ export function CompanyHybridDocumentsPanel() {
                   formatStoreLabel={formatStoreLabel}
                   onStoreChange={(v) => {
                     setSelectedStore(v)
-                    setTitleSort(null)
                     setListCorrPresence("all")
                     setListCorrDirection("")
                     setListCorrStatus("")
                     setListCorrCounterpartySearch("")
+                    invalidateListSearch()
                     resetForm()
                   }}
                 />
                 <div className="min-w-[150px] space-y-1.5">
                   <Label>{t("companyHybridDocColCategory")}</Label>
-                  <Select value={listCategoryFilter} onValueChange={setListCategoryFilter}>
+                  <Select
+                    value={listCategoryFilter}
+                    onValueChange={(v) => {
+                      setListCategoryFilter(v)
+                      onListDropdownFilterChange()
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -801,9 +865,9 @@ export function CompanyHybridDocumentsPanel() {
                       <SelectItem value="uncategorized">
                         {t("companyHybridDocCategoryFilterUncat")}
                       </SelectItem>
-                      {categories.map((c) => (
+                      {orderedCategories.map((c) => (
                         <SelectItem key={c.id} value={String(c.id)}>
-                          {c.name}
+                          {labelCategoryOption(c)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -814,10 +878,16 @@ export function CompanyHybridDocumentsPanel() {
                   <Input
                     value={listTitleSearch}
                     onChange={(e) => setListTitleSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleListSearch()
+                      }
+                    }}
                     placeholder="…"
                   />
                 </div>
-                <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
+                <Button type="button" variant="secondary" onClick={handleListSearch} disabled={loading}>
                   {t("stockBtnSearch")}
                 </Button>
               </div>
@@ -827,7 +897,10 @@ export function CompanyHybridDocumentsPanel() {
                   <Label className="text-xs">{t("companyHybridCorrTab")}</Label>
                   <Select
                     value={listCorrPresence}
-                    onValueChange={(v) => setListCorrPresence(v as CorrespondencePresence)}
+                    onValueChange={(v) => {
+                      setListCorrPresence(v as CorrespondencePresence)
+                      onListDropdownFilterChange()
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -843,9 +916,12 @@ export function CompanyHybridDocumentsPanel() {
                   <Label className="text-xs">{t("companyHybridCorrDirection")}</Label>
                   <Select
                     value={listCorrDirection || LIST_CORR_SELECT_NONE}
-                    onValueChange={(v) =>
-                      setListCorrDirection(v === LIST_CORR_SELECT_NONE ? "" : (v as "outbound" | "inbound"))
-                    }
+                    onValueChange={(v) => {
+                      setListCorrDirection(
+                        v === LIST_CORR_SELECT_NONE ? "" : (v as "outbound" | "inbound")
+                      )
+                      onListDropdownFilterChange()
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t("companyHybridCorrDirectionPh")} />
@@ -861,11 +937,12 @@ export function CompanyHybridDocumentsPanel() {
                   <Label className="text-xs">{t("companyHybridCorrStatus")}</Label>
                   <Select
                     value={listCorrStatus || LIST_CORR_SELECT_NONE}
-                    onValueChange={(v) =>
+                    onValueChange={(v) => {
                       setListCorrStatus(
                         v === LIST_CORR_SELECT_NONE ? "" : (v as "draft" | "sent" | "filed" | "replied")
                       )
-                    }
+                      onListDropdownFilterChange()
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t("companyHybridCorrStatusPh")} />
@@ -884,6 +961,12 @@ export function CompanyHybridDocumentsPanel() {
                   <Input
                     value={listCorrCounterpartySearch}
                     onChange={(e) => setListCorrCounterpartySearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleListSearch()
+                      }
+                    }}
                     placeholder="…"
                   />
                 </div>
@@ -901,6 +984,8 @@ export function CompanyHybridDocumentsPanel() {
             <CardContent>
               {loading ? (
                 <p className="text-sm text-muted-foreground">…</p>
+              ) : !hasSearched ? (
+                <p className="text-sm text-muted-foreground">{t("msg_click_query")}</p>
               ) : list.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("companyHybridDocListEmpty")}</p>
               ) : (
@@ -924,7 +1009,9 @@ export function CompanyHybridDocumentsPanel() {
                               "hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             )}
                             onClick={() => {
-                              setTitleSort((prev) => (prev === "asc" ? "desc" : "asc"))
+                              const next = titleSort === "asc" ? "desc" : "asc"
+                              setTitleSort(next)
+                              if (hasSearched) void load({ sortTitle: next })
                             }}
                             title={t("companyHybridDocTitleSortHint")}
                           >
@@ -1070,11 +1157,11 @@ export function CompanyHybridDocumentsPanel() {
                   formatStoreLabel={formatStoreLabel}
                   onStoreChange={(v) => {
                     setSelectedStore(v)
-                    setTitleSort(null)
                     setListCorrPresence("all")
                     setListCorrDirection("")
                     setListCorrStatus("")
                     setListCorrCounterpartySearch("")
+                    invalidateListSearch()
                     resetForm()
                   }}
                 />
@@ -1105,11 +1192,9 @@ export function CompanyHybridDocumentsPanel() {
                     <SelectItem value={FORM_CAT_NONE}>
                       {t("companyHybridDocCategoryFilterUncat")}
                     </SelectItem>
-                    {categories.map((c) => (
+                    {orderedCategories.map((c) => (
                       <SelectItem key={`${c.store}-${c.id}`} value={String(c.id)}>
-                        {isCompanyHybridDocsListAllStoresParam(selectedStore)
-                          ? `${formatStoreLabel(c.store)} · ${categoryLabelById.get(c.id) || c.name}`
-                          : categoryLabelById.get(c.id) || c.name}
+                        {labelCategoryOption(c)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1346,11 +1431,11 @@ export function CompanyHybridDocumentsPanel() {
                   formatStoreLabel={formatStoreLabel}
                   onStoreChange={(v) => {
                     setSelectedStore(v)
-                    setTitleSort(null)
                     setListCorrPresence("all")
                     setListCorrDirection("")
                     setListCorrStatus("")
                     setListCorrCounterpartySearch("")
+                    invalidateListSearch()
                     resetForm()
                   }}
                 />
@@ -1360,10 +1445,18 @@ export function CompanyHybridDocumentsPanel() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("companyHybridCategoryManageTitle")}</CardTitle>
+              <CardDescription className="whitespace-pre-line">
+                {t("companyHybridCategoryHierarchyHint")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex max-w-2xl flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="min-w-0 flex-1 space-y-1.5">
+              {!writeStoreForMutations && (
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  {t("companyHybridCategoryPickStoreHint")}
+                </p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-1">
                   <Label>{t("companyHybridCategoryNew")}</Label>
                   <Input
                     value={newCategoryName}
@@ -1372,7 +1465,7 @@ export function CompanyHybridDocumentsPanel() {
                     disabled={!writeStoreForMutations}
                   />
                 </div>
-                <div className="w-28 space-y-1.5">
+                <div className="space-y-1.5">
                   <Label>{t("companyHybridCategorySort")}</Label>
                   <Input
                     type="number"
@@ -1381,26 +1474,25 @@ export function CompanyHybridDocumentsPanel() {
                     disabled={!writeStoreForMutations}
                   />
                 </div>
-                <div className="min-w-[13rem] space-y-1.5">
-                  <Label>상위 카테고리</Label>
+                <div className="space-y-1.5">
+                  <Label>{t("companyHybridCategoryParent")}</Label>
                   <Select value={newCategoryParentId} onValueChange={setNewCategoryParentId} disabled={!writeStoreForMutations}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder={t("companyHybridCategoryParentPh")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={FORM_CAT_NONE}>없음(최상위)</SelectItem>
-                      {categories
-                        .filter((c) => c.store === writeStoreForMutations)
-                        .map((c) => (
-                          <SelectItem key={`new-parent-${c.id}`} value={String(c.id)}>
-                            {categoryLabelById.get(c.id) || c.name}
-                          </SelectItem>
-                        ))}
+                      <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
+                      {rootCategoriesForWriteStore.map((c) => (
+                        <SelectItem key={`new-parent-${c.id}`} value={String(c.id)}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <Button
                   type="button"
+                  className="w-full sm:w-auto"
                   onClick={() => void onAddCategory()}
                   disabled={!writeStoreForMutations}
                 >
@@ -1410,7 +1502,7 @@ export function CompanyHybridDocumentsPanel() {
 
               {editingCategory && (
                 <div
-                  className="flex max-w-2xl flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-end"
+                  className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
                   onKeyDown={(e) => e.stopPropagation()}
                 >
                   <div className="min-w-0 flex-1 space-y-1.5">
@@ -1433,8 +1525,8 @@ export function CompanyHybridDocumentsPanel() {
                       }}
                     />
                   </div>
-                  <div className="min-w-[13rem] space-y-1.5">
-                    <Label>상위 카테고리</Label>
+                  <div className="space-y-1.5">
+                    <Label>{t("companyHybridCategoryParent")}</Label>
                     <Select
                       value={
                         editingCategory.parent_category_id != null
@@ -1451,17 +1543,23 @@ export function CompanyHybridDocumentsPanel() {
                             : null
                         )
                       }
+                      disabled={isCompanyHybridDocCategoryRoot(editingCategory)}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder={t("companyHybridCategoryParentPh")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={FORM_CAT_NONE}>없음(최상위)</SelectItem>
+                        <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
                         {categories
-                          .filter((c) => c.store === editingCategory.store && c.id !== editingCategory.id)
+                          .filter(
+                            (c) =>
+                              c.store === editingCategory.store &&
+                              c.id !== editingCategory.id &&
+                              isCompanyHybridDocCategoryRoot(c)
+                          )
                           .map((c) => (
                             <SelectItem key={`edit-parent-${c.id}`} value={String(c.id)}>
-                              {categoryLabelById.get(c.id) || c.name}
+                              {c.name}
                             </SelectItem>
                           ))}
                       </SelectContent>
@@ -1487,20 +1585,40 @@ export function CompanyHybridDocumentsPanel() {
                       <TableRow>
                         <TableHead className="w-16">{t("companyHybridCategorySort")}</TableHead>
                         <TableHead className="whitespace-nowrap">{t("companyHybridDocColStore")}</TableHead>
+                        <TableHead>{t("companyHybridCategoryColParent")}</TableHead>
                         <TableHead>{t("companyHybridCategoryName")}</TableHead>
                         <TableHead className="text-right">{t("stockColAction")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {categories.map((c) => {
+                      {orderedCategories.map((c) => {
                         const canCat = canMutateDocStore(c.store)
+                        const depth = categoryDepthById.get(c.id) ?? 0
+                        const parentId =
+                          c.parent_category_id != null && Number(c.parent_category_id) > 0
+                            ? Number(c.parent_category_id)
+                            : null
+                        const parentName = parentId ? categoryById.get(parentId)?.name : null
                         return (
                         <TableRow key={`${c.store}-${c.id}`}>
                           <TableCell className="text-muted-foreground">{c.sort_order}</TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                             {formatStoreLabel(c.store)}
                           </TableCell>
-                          <TableCell className="font-medium">{categoryLabelById.get(c.id) || c.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {parentName || "—"}
+                          </TableCell>
+                          <TableCell
+                            className="font-medium"
+                            style={{ paddingLeft: depth > 0 ? `${Math.min(depth, 4) * 1.25}rem` : undefined }}
+                          >
+                            {depth > 0 ? (
+                              <span className="text-muted-foreground" aria-hidden>
+                                └{" "}
+                              </span>
+                            ) : null}
+                            {c.name}
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1">
                               {canCat && (
@@ -1564,6 +1682,13 @@ export function CompanyHybridDocumentsPanel() {
                   setListCorrStatus("")
                   setListCorrCounterpartySearch("")
                   setMainTab("list")
+                  setHasSearched(true)
+                  void load({
+                    corrPresence: "yes",
+                    corrDirection: "",
+                    corrStatus: "",
+                    corrCounterpartySearch: "",
+                  })
                 }}
               >
                 {t("companyHybridCorrGoToFilteredList")}

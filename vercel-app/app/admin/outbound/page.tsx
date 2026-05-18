@@ -1715,8 +1715,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     }
   }
 
+  /** 기간 총액: 실제 stock_logs 출고만(미수령 발주 가상 줄 제외) — 손익 본사 출고 매입과 맞춤 */
   const periodTotal = React.useMemo(() => {
-    if (isOffice) return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
+    const sumOutboundLogs = (rows: typeof historyList) =>
+      rows
+        .filter((i) => i.stockLogId != null && i.stockLogId > 0)
+        .reduce((sum, i) => sum + (i.amount || 0), 0)
+    if (isOffice) return sumOutboundLogs(historyList)
     return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
   }, [historyList, usageList, isOffice])
   const periodTotalsWithVat = React.useMemo(() => thaiInvoiceTotalsFromRawSubtotal(periodTotal), [periodTotal])

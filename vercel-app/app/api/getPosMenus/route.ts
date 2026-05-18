@@ -12,6 +12,7 @@ import {
 import {
   isChickenMenuCode,
   normalizeChickenOptionSelectionGroups,
+  normalizeOptionGroupsForMenu,
   syncOptionSelectionConfigToGroupKeys,
 } from '@/lib/pos-option-selection-groups'
 import { normalizeMenuScopeStoreCodes, shouldMenuBeVisibleForStore } from '@/lib/pos-menu-store-scope'
@@ -193,16 +194,31 @@ export async function GET(request: Request) {
         }
       }
       const menuLinks = linksByMenuId.get(Number(row.id || 0)) || []
+      const columnGroups =
+        optionSelectionGroups.length > 0
+          ? normalizeOptionGroupsForMenu(optionSelectionGroups, row.code)
+          : []
       if (menuLinks.length > 0 && groupsById.size > 0) {
         const resolved = buildSelectionConfigFromLinks(menuLinks, groupsById)
         if (resolved.optionSelectionGroups.length > 0) {
           let mergedGroups = resolved.optionSelectionGroups
           let mergedConfig = resolved.optionSelectionConfig
+          if (columnGroups.length > 0) {
+            const unionKeys = [...mergedGroups]
+            for (const k of columnGroups) {
+              if (!unionKeys.includes(k)) unionKeys.push(k)
+            }
+            mergedGroups = normalizeOptionGroupsForMenu(unionKeys, row.code)
+            mergedConfig = syncOptionSelectionConfigToGroupKeys(mergedGroups, [
+              ...mergedConfig,
+              ...optionSelectionConfig,
+            ])
+          }
           /** 치킨: DB 컬럼에 size가 없는데 링크된 공통 그룹에 size 키가 있으면 컬럼 의도를 존중해 size 제거 (size 단계 폐기 후 링크만으로 부활하는 현상 방지) */
           if (
             isChickenMenuCode(row.code) &&
-            optionSelectionGroups.length > 0 &&
-            !optionSelectionGroups.includes('size') &&
+            columnGroups.length > 0 &&
+            !columnGroups.includes('size') &&
             mergedGroups.includes('size')
           ) {
             mergedGroups = normalizeChickenOptionSelectionGroups(mergedGroups.filter((k) => k !== 'size'))
@@ -211,6 +227,8 @@ export async function GET(request: Request) {
           optionSelectionGroups = mergedGroups
           optionSelectionConfig = mergedConfig
         }
+      } else if (columnGroups.length > 0) {
+        optionSelectionGroups = columnGroups
       }
       const kp = row.kitchen_printer
       const ctm = row.cooking_time_min

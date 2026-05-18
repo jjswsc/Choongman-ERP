@@ -15,3 +15,4 @@ ALTER FUNCTION public.eval_json_total_score(text) SET search_path = public;
 ALTER FUNCTION public.get_evaluation_analytics(date, date, text, text) SET search_path = public;
 ALTER FUNCTION public.set_members_updated_at() SET search_path = public;
 ALTER FUNCTION public.get_store_stock(text[], timestamptz) SET search_path = public;
+ALTER FUNCTION public.get_stock_logs_purchase_agg(text[], timestamptz, timestamptz, text[], text[]) SET search_path = public;

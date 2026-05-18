@@ -1,10 +1,13 @@
 import {
   supabaseSelectFilter,
-  supabaseInsert,
   supabaseUpdateByFilter,
   supabaseDeleteByFilter,
   supabaseUpsert,
 } from '@/lib/supabase-server'
+import {
+  supabaseInsertWithPgrst204Fallback,
+  supabaseUpdateByFilterWithPgrst204Fallback,
+} from '@/lib/supabase-pgrst204-retry'
 import {
   normalizeChickenOptionSelectionGroups,
   syncOptionSelectionConfigToGroupKeys,
@@ -542,8 +545,6 @@ export async function upsertPosMenuFromBody(
         const prevCategoryMain = String(prev.category_main ?? '').trim()
         const prevCategory = String(prev.category ?? '').trim()
         const prevImage = String(prev.image ?? '').trim()
-        const prevPrice = Number(prev.price ?? 0)
-        const prevPriceDelivery = prev.price_delivery != null ? Number(prev.price_delivery) : null
         if ('name' in row) {
           const nextName = String(row.name ?? '').trim()
           if (nextName !== prevName) changedFields.push('name')
@@ -591,21 +592,12 @@ export async function upsertPosMenuFromBody(
             categoryMain: catMain || undefined,
           }).catch(() => {})
         }
-        try {
-          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
-        } catch (colErr: unknown) {
-          if (
-            String(colErr).includes('category_main') ||
-            String(colErr).includes('42703') ||
-            String(colErr).includes('is_banban')
-          ) {
-            const rowWithout = { ...row } as Record<string, unknown>
-            if (String(colErr).includes('category_main')) delete rowWithout.category_main
-            if (String(colErr).includes('is_banban')) delete rowWithout.is_banban
-            if (String(colErr).includes('delivery_app_fee_percent')) delete rowWithout.delivery_app_fee_percent
-            await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, rowWithout)
-          } else throw colErr
-        }
+        await supabaseUpdateByFilterWithPgrst204Fallback(
+          'pos_menus',
+          `id=eq.${editingId}`,
+          row,
+          'savePosMenu'
+        )
         return {
           success: true,
           message: '수정되었습니다.',
@@ -627,76 +619,44 @@ export async function upsertPosMenuFromBody(
       return { success: false, message: '이미 존재하는 메뉴 코드입니다.' }
     }
 
-    try {
-      const inserted = (await supabaseInsert('pos_menus', row)) as { id?: number }[] | { id?: number }
-      const newRow = Array.isArray(inserted) ? inserted[0] : inserted
-      const newId = newRow?.id != null ? String(newRow.id) : undefined
-      if (newId && (baseRow.price != null || body.price != null)) {
-        const catMain = ((baseRow.category_main as string) || '').trim()
-        const cat = ((baseRow.category as string) || '').trim()
-        const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
-        const price = Number(baseRow.price ?? body.price ?? 0)
-        const priceDelivery =
-          baseRow.price_delivery != null
-            ? Number(baseRow.price_delivery)
-            : body.priceDelivery != null
-              ? Number(body.priceDelivery)
-              : null
-        initChanges.push({ fieldName: 'price', oldValue: null, newValue: price })
-        if (priceDelivery != null) {
-          initChanges.push({ fieldName: 'price_delivery', oldValue: null, newValue: priceDelivery })
-        }
-        recordPriceChanges({
-          entityType: 'pos_menu',
-          entityId: newId,
-          entityDisplayName: name,
-          changes: initChanges,
-          category: cat || undefined,
-          categoryMain: catMain || undefined,
-        }).catch(() => {})
+    const inserted = (await supabaseInsertWithPgrst204Fallback('pos_menus', row, 'savePosMenu')) as
+      | { id?: number }[]
+      | { id?: number }
+    const newRow = Array.isArray(inserted) ? inserted[0] : inserted
+    const newId = newRow?.id != null ? String(newRow.id) : undefined
+    if (newId && (baseRow.price != null || body.price != null)) {
+      const catMain = ((baseRow.category_main as string) || '').trim()
+      const cat = ((baseRow.category as string) || '').trim()
+      const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
+      const price = Number(baseRow.price ?? body.price ?? 0)
+      const priceDelivery =
+        baseRow.price_delivery != null
+          ? Number(baseRow.price_delivery)
+          : body.priceDelivery != null
+            ? Number(body.priceDelivery)
+            : null
+      initChanges.push({ fieldName: 'price', oldValue: null, newValue: price })
+      if (priceDelivery != null) {
+        initChanges.push({ fieldName: 'price_delivery', oldValue: null, newValue: priceDelivery })
       }
-      return {
-        success: true,
-        message: '저장되었습니다.',
-        newId,
-        syncHint: {
-          imageChanged: !!String(row.image ?? '').trim(),
-          changedFields: ['insert'],
-          partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
-        },
-      }
-    } catch (insErr: unknown) {
-      if (String(insErr).includes('category_main') || String(insErr).includes('42703')) {
-        const rowWithout = { ...row }
-        delete rowWithout.category_main
-        const inserted = (await supabaseInsert('pos_menus', rowWithout)) as
-          | { id?: number }[]
-          | { id?: number }
-        const newRow = Array.isArray(inserted) ? inserted[0] : inserted
-        const newId = newRow?.id != null ? String(newRow.id) : undefined
-        if (newId && (baseRow.price != null || body.price != null)) {
-          const cat = ((baseRow.category as string) || '').trim()
-          const price = Number(baseRow.price ?? body.price ?? 0)
-          recordPriceChanges({
-            entityType: 'pos_menu',
-            entityId: newId,
-            entityDisplayName: name,
-            changes: [{ fieldName: 'price', oldValue: null, newValue: price }],
-            category: cat || undefined,
-          }).catch(() => {})
-        }
-        return {
-          success: true,
-          message: '저장되었습니다.',
-          newId,
-          syncHint: {
-            imageChanged: !!String(rowWithout.image ?? '').trim(),
-            changedFields: ['insert'],
-            partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
-          },
-        }
-      }
-      throw insErr
+      recordPriceChanges({
+        entityType: 'pos_menu',
+        entityId: newId,
+        entityDisplayName: name,
+        changes: initChanges,
+        category: cat || undefined,
+        categoryMain: catMain || undefined,
+      }).catch(() => {})
+    }
+    return {
+      success: true,
+      message: '저장되었습니다.',
+      newId,
+      syncHint: {
+        imageChanged: !!String(row.image ?? '').trim(),
+        changedFields: ['insert'],
+        partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+      },
     }
   }
 

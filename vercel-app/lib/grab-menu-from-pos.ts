@@ -5,11 +5,15 @@ import { fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { normStoreKey } from '@/lib/store-list-keys'
 import {
   type PosOptionGroupRow,
-  buildMenuOptionsFromLinks,
+  buildMenuOptionsFromLinksPerGroup,
   buildSelectionConfigFromLinks,
   loadMenuGroupLinks,
   loadPosOptionGroupsWithItems,
 } from '@/lib/pos-option-groups-server'
+import {
+  resolveGrabModifierAssignments,
+  shouldIncludeStandaloneOptionForLinkedMenu,
+} from '@/lib/grab-option-modifier-assign'
 import {
   buildCategoryOrderMap,
   buildMenuPolicyMap,
@@ -96,6 +100,28 @@ function parseOptionSelectionConfigEntries(raw: unknown): OptionSelectionConfigE
     out.push({ key, label, audience, required, minSelect: minClamped, maxSelect: maxClamped })
   }
   return out
+}
+
+function mergeSelectionConfigEntries(
+  fromLinks: OptionSelectionConfigEntry[],
+  fromColumn: OptionSelectionConfigEntry[]
+): OptionSelectionConfigEntry[] {
+  const byKey = new Map<string, OptionSelectionConfigEntry>()
+  for (const e of fromLinks) byKey.set(e.key.trim().toLowerCase(), e)
+  for (const e of fromColumn) {
+    const k = e.key.trim().toLowerCase()
+    if (!byKey.has(k)) byKey.set(k, e)
+  }
+  const order: string[] = []
+  for (const e of fromLinks) {
+    const k = e.key.trim().toLowerCase()
+    if (k && !order.includes(k)) order.push(k)
+  }
+  for (const e of fromColumn) {
+    const k = e.key.trim().toLowerCase()
+    if (k && !order.includes(k)) order.push(k)
+  }
+  return order.map((k) => byKey.get(k)).filter((x): x is OptionSelectionConfigEntry => !!x)
 }
 
 /** 버킷 그룹명(옵션명 접두)과 POS에 저장한 key·label 중 하나가 같으면 규칙 적용 */
@@ -229,22 +255,6 @@ function sectionSortKey(name: string): number {
   if (s === 'regular' || s.includes('regular')) return 50
   if (s.includes('late')) return 60
   return 100
-}
-
-function splitOptionGroupAndName(rawName: string): { groupName: string; optionName: string } {
-  const src = String(rawName || '').trim()
-  if (!src) return { groupName: 'Options', optionName: 'Option' }
-  const separators = [':', ' - ', ' | ', '/', ' > ']
-  for (const sep of separators) {
-    const idx = src.indexOf(sep)
-    if (idx <= 0) continue
-    const left = src.slice(0, idx).trim()
-    const right = src.slice(idx + sep.length).trim()
-    if (left && right) {
-      return { groupName: left.slice(0, 60), optionName: right.slice(0, 100) }
-    }
-  }
-  return { groupName: 'Options', optionName: src.slice(0, 100) }
 }
 
 function localizeGrabOptionLabel(raw: string): string {
@@ -584,6 +594,7 @@ export async function buildGrabMenuFromPos(params: {
   const options = await loadOptions()
   const linkedMenuIds = new Set<number>()
   const linkedOptions: OptionRow[] = []
+  const linkedStepKeysByMenuId = new Map<number, Set<string>>()
   const linkedSelectionConfigByMenuId = new Map<number, OptionSelectionConfigEntry[]>()
   try {
     const [{ groups, itemsByGroupId }, links] = await Promise.all([
@@ -605,8 +616,13 @@ export async function buildGrabMenuFromPos(params: {
       linksByMenuId.get(mid)!.push(link)
     }
     for (const [mid, menuLinks] of linksByMenuId.entries()) {
-      const built = buildMenuOptionsFromLinks(mid, menuLinks, groupsById, itemsByGroupId)
+      const built = buildMenuOptionsFromLinksPerGroup(mid, menuLinks, groupsById, itemsByGroupId)
+      const stepKeys = new Set<string>()
       for (const row of built) {
+        for (const k of Object.keys(row.optionStepValues || {})) {
+          const t = String(k).trim()
+          if (t) stepKeys.add(t)
+        }
         linkedOptions.push({
           id: Number(String(row.id).replace(/[^\d]/g, '')) || undefined,
           menu_id: Number(row.menuId),
@@ -618,6 +634,7 @@ export async function buildGrabMenuFromPos(params: {
           option_step_values: row.optionStepValues || null,
         })
       }
+      linkedStepKeysByMenuId.set(mid, stepKeys)
       const cfg = buildSelectionConfigFromLinks(menuLinks, groupsById)
       linkedSelectionConfigByMenuId.set(
         mid,
@@ -631,7 +648,13 @@ export async function buildGrabMenuFromPos(params: {
   for (const opt of options) {
     const menuId = Number(opt.menu_id ?? 0)
     if (!menuId) continue
-    if (linkedMenuIds.has(menuId)) continue
+    if (linkedMenuIds.has(menuId)) {
+      const sv =
+        opt.option_step_values && typeof opt.option_step_values === 'object' && !Array.isArray(opt.option_step_values)
+          ? opt.option_step_values
+          : null
+      if (!shouldIncludeStandaloneOptionForLinkedMenu(sv, linkedStepKeysByMenuId.get(menuId))) continue
+    }
     if (opt.sell_delivery === false) continue
     const list = optionByMenuId.get(menuId) || []
     list.push(opt)
@@ -694,9 +717,11 @@ export async function buildGrabMenuFromPos(params: {
     })
     const items = sortedMenus.map((menu, itemIndex) => {
       const menuId = Number(menu.id ?? 0)
-      const selectionConfigEntries =
-        linkedSelectionConfigByMenuId.get(menuId) ||
+      const selectionConfigEntries = mergeSelectionConfigEntries(
+        linkedSelectionConfigByMenuId.get(menuId) || [],
         parseOptionSelectionConfigEntries(menu.option_selection_config)
+      )
+      const preferredGroupKeys = selectionConfigEntries.map((cfg) => cfg.key)
       const policy = menuPolicyMap.get(menuId)
       const itemId = buildGrabItemId(menu, itemIndex)
       const menuOptions = (optionByMenuId.get(menuId) || []).sort((a, b) => {
@@ -707,56 +732,32 @@ export async function buildGrabMenuFromPos(params: {
       })
       const modifierGroupBuckets = new Map<string, ModifierGroupBucket>()
       for (const opt of menuOptions) {
-        const originalName = String(opt.name ?? '').trim()
-        let split = splitOptionGroupAndName(originalName)
-        const stepValues = opt.option_step_values
-        if (
-          stepValues &&
-          typeof stepValues === 'object' &&
-          !Array.isArray(stepValues)
-        ) {
-          const entries = Object.entries(stepValues).filter(
-            ([k, v]) => String(k).trim() && String(v).trim()
-          )
-          if (entries.length > 0) {
-            const preferredKeys = selectionConfigEntries
-              .map((cfg) => String(cfg.key || '').trim().toLowerCase())
-              .filter(Boolean)
-            let chosen = entries[0]
-            for (const preferredKey of preferredKeys) {
-              const matched = entries.find(([k]) => String(k || '').trim().toLowerCase() === preferredKey)
-              if (matched) {
-                chosen = matched
-                break
-              }
-            }
-            // 치킨(part 단일화) 레거시 행은 stepValues에 size+part가 함께 남아도 part를 우선 그룹으로 사용
-            if (String(menu.code ?? '').trim().toLowerCase().startsWith('c')) {
-              const chickenPart = entries.find(([k]) => String(k || '').trim().toLowerCase() === 'part')
-              if (chickenPart) chosen = chickenPart
-            }
-            const [groupKey, optionValue] = chosen
-            split = {
-              groupName: String(groupKey).trim(),
-              optionName: String(optionValue).trim(),
-            }
-          }
-        }
-        const key = split.groupName.toLowerCase()
+        const assignments = resolveGrabModifierAssignments(
+          opt,
+          String(menu.code ?? ''),
+          preferredGroupKeys
+        )
         const sort = Number(opt.sort_order ?? 0)
-        if (!modifierGroupBuckets.has(key)) {
-          modifierGroupBuckets.set(key, { sourceGroupName: split.groupName, firstSort: sort, rows: [] })
+        for (const assign of assignments) {
+          const key = assign.groupName.toLowerCase()
+          if (!modifierGroupBuckets.has(key)) {
+            modifierGroupBuckets.set(key, {
+              sourceGroupName: assign.groupName,
+              firstSort: sort,
+              rows: [],
+            })
+          }
+          const bucket = modifierGroupBuckets.get(key)!
+          if (sort < bucket.firstSort) bucket.firstSort = sort
+          const normalizedOptionName =
+            assign.groupName && assign.groupName.toLowerCase() !== 'options'
+              ? `${assign.groupName} - ${assign.optionName}`
+              : assign.optionName
+          bucket.rows.push({
+            ...opt,
+            name: localizeGrabOptionLabel(normalizedOptionName),
+          })
         }
-        const bucket = modifierGroupBuckets.get(key)!
-        if (sort < bucket.firstSort) bucket.firstSort = sort
-        const normalizedOptionName =
-          split.groupName && split.groupName.toLowerCase() !== 'options'
-            ? `${split.groupName} - ${split.optionName}`
-            : split.optionName
-        bucket.rows.push({
-          ...opt,
-          name: localizeGrabOptionLabel(normalizedOptionName),
-        })
       }
       const modifierGroups = Array.from(modifierGroupBuckets.values())
         .sort((a, b) => {

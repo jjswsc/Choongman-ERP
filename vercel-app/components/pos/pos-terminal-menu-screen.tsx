@@ -61,23 +61,14 @@ import {
 } from '@/lib/pos-menu-display-description'
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
-import { posOptionRowMatchesPickerSelections } from '@/lib/pos-option-step-selection-match'
+import { isChickenDefaultOptionName } from '@/lib/pos-chicken-option-inference'
+import {
+  collectPosOptionPickerStepValues,
+  resolvePosOptionPickerMatch,
+} from '@/lib/pos-option-picker-resolve'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
 
-function isChickenDefaultOption(name: string | undefined): boolean {
-  if (!name?.trim()) return false
-  const n = name.trim()
-  return (
-    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
-    /^S\s*[-]?\s*boneless\s*$/i.test(n) ||
-    n === 'S 순살' ||
-    n === 'S - 순살' ||
-    n === 'S-순살' ||
-    n === 'S Boneless' ||
-    n === 'S - Boneless' ||
-    n === 'S-Boneless'
-  )
-}
+const isChickenDefaultOption = isChickenDefaultOptionName
 
 export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
 
@@ -1521,18 +1512,26 @@ export function PosTerminalMenuScreen({
               const groupKey = groups[optionPickerStep]
               const groupCfg = groupConfigMap.get(groupKey)
               const groupRequired = groupCfg?.required !== false
-              const values = [
-                ...new Set(
-                  optsWithStepsToShow.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean)
-                ),
-              ] as string[]
+              const values = collectPosOptionPickerStepValues({
+                groupKey,
+                groups,
+                menuCode: optionPickerMenu.code,
+                options: opts,
+                optionsWithSteps: optsWithStepsToShow,
+                isChickenMenu: isChickenBase,
+              })
               const handleStepSelect = (value: string) => {
                 const next = { ...optionPickerSelections, [groupKey]: value }
                 setOptionPickerSelections(next)
                 if (optionPickerStep >= groups.length - 1) {
-                  const match = optsWithStepsToShow.find((o) =>
-                    posOptionRowMatchesPickerSelections(o.optionStepValues, groups, next, groupConfigMap)
-                  )
+                  const match = resolvePosOptionPickerMatch({
+                    menuCode: optionPickerMenu.code,
+                    groups,
+                    selections: next,
+                    optionsWithSteps: optsWithStepsToShow,
+                    allOptions: opts,
+                    groupConfigByKey: groupConfigMap,
+                  })
                   if (match) addWithOption(optionPickerMenu, match)
                 } else {
                   setOptionPickerStep((s) => s + 1)
@@ -1579,9 +1578,14 @@ export function PosTerminalMenuScreen({
                         delete next[groupKey]
                         setOptionPickerSelections(next)
                         if (optionPickerStep >= groups.length - 1) {
-                          const match = optsWithStepsToShow.find((o) =>
-                            posOptionRowMatchesPickerSelections(o.optionStepValues, groups, next, groupConfigMap)
-                          )
+                          const match = resolvePosOptionPickerMatch({
+                            menuCode: optionPickerMenu.code,
+                            groups,
+                            selections: next,
+                            optionsWithSteps: optsWithStepsToShow,
+                            allOptions: opts,
+                            groupConfigByKey: groupConfigMap,
+                          })
                           if (match) void addWithOption(optionPickerMenu, match)
                           else void addWithOption(optionPickerMenu, null)
                         } else {

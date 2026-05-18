@@ -143,3 +143,65 @@ export type CompanyHybridDocumentRow = {
   updated_at: string
   deleted_at: string | null
 }
+
+/** 문서 카테고리 — 상위 없음(최상위) */
+export type CompanyHybridDocCategoryRow = {
+  id: number
+  store: string
+  name: string
+  sort_order: number
+  parent_category_id: number | null
+}
+
+export function isCompanyHybridDocCategoryRoot(
+  c: Pick<CompanyHybridDocCategoryRow, 'parent_category_id'>
+): boolean {
+  return c.parent_category_id == null || Number(c.parent_category_id) <= 0
+}
+
+/** 매장별 트리 순서(최상위 → 하위)와 목록 들여쓰기 깊이 */
+export function sortCompanyHybridDocCategoriesTree(
+  items: CompanyHybridDocCategoryRow[],
+  opts?: { store?: string }
+): { ordered: CompanyHybridDocCategoryRow[]; depthById: Map<number, number> } {
+  const depthById = new Map<number, number>()
+  let pool = items
+  if (opts?.store && !isCompanyHybridDocsListAllStoresParam(opts.store)) {
+    pool = items.filter((c) => c.store === opts.store)
+  }
+
+  const byStore = new Map<string, CompanyHybridDocCategoryRow[]>()
+  for (const c of pool) {
+    if (!byStore.has(c.store)) byStore.set(c.store, [])
+    byStore.get(c.store)!.push(c)
+  }
+
+  const ordered: CompanyHybridDocCategoryRow[] = []
+  const storeKeys = [...byStore.keys()].sort((a, b) => a.localeCompare(b, 'ko'))
+
+  for (const store of storeKeys) {
+    const list = byStore.get(store)!
+    const byParent = new Map<number | null, CompanyHybridDocCategoryRow[]>()
+    for (const c of list) {
+      const pid =
+        c.parent_category_id != null && Number(c.parent_category_id) > 0
+          ? Number(c.parent_category_id)
+          : null
+      if (!byParent.has(pid)) byParent.set(pid, [])
+      byParent.get(pid)!.push(c)
+    }
+    const sortSiblings = (arr: CompanyHybridDocCategoryRow[]) =>
+      [...arr].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+
+    const walk = (parentId: number | null, depth: number) => {
+      for (const c of sortSiblings(byParent.get(parentId) || [])) {
+        depthById.set(c.id, depth)
+        ordered.push(c)
+        walk(c.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+  }
+
+  return { ordered, depthById }
+}

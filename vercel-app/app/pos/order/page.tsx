@@ -81,7 +81,11 @@ import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
-import { posOptionRowMatchesPickerSelections } from "@/lib/pos-option-step-selection-match"
+import { isChickenDefaultOptionName } from "@/lib/pos-chicken-option-inference"
+import {
+  collectPosOptionPickerStepValues,
+  resolvePosOptionPickerMatch,
+} from "@/lib/pos-option-picker-resolve"
 import type { PosDescriptionChannel } from "@/lib/pos-menu-display-description"
 import {
   resolvePosMenuDescriptionForChannel,
@@ -114,21 +118,7 @@ import { isChickenMenu } from "@/lib/pos-menu-categories"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
-/** 치킨 기본 옵션(S Boneless): POS 옵션 목록에서 제외, 기본 버튼으로만 선택 */
-function isChickenDefaultOption(name: string | undefined): boolean {
-  if (!name?.trim()) return false
-  const n = name.trim()
-  return (
-    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
-    /^S\s*[-]?\s*boneless\s*$/i.test(n) ||
-    n === "S 순살" ||
-    n === "S - 순살" ||
-    n === "S-순살" ||
-    n === "S Boneless" ||
-    n === "S - Boneless" ||
-    n === "S-Boneless"
-  )
-}
+const isChickenDefaultOption = isChickenDefaultOptionName
 
 interface CartItem {
   id: string
@@ -2323,14 +2313,26 @@ export default function PosOrderPage() {
               const groupKey = groups[optionPickerStep]
               const groupCfg = groupConfigMap.get(groupKey)
               const groupRequired = groupCfg?.required !== false
-              const values = [...new Set(optsWithStepsToShow.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean))] as string[]
+              const values = collectPosOptionPickerStepValues({
+                groupKey,
+                groups,
+                menuCode: optionPickerMenu.code,
+                options: opts,
+                optionsWithSteps: optsWithStepsToShow,
+                isChickenMenu: isChickenBasePrice,
+              })
               const handleStepSelect = (value: string) => {
                 const nextSelections = { ...optionPickerSelections, [groupKey]: value }
                 setOptionPickerSelections(nextSelections)
                 if (optionPickerStep >= groups.length - 1) {
-                  const match = optsWithStepsToShow.find((o) =>
-                    posOptionRowMatchesPickerSelections(o.optionStepValues, groups, nextSelections, groupConfigMap)
-                  )
+                  const match = resolvePosOptionPickerMatch({
+                    menuCode: optionPickerMenu.code,
+                    groups,
+                    selections: nextSelections,
+                    optionsWithSteps: optsWithStepsToShow,
+                    allOptions: opts,
+                    groupConfigByKey: groupConfigMap,
+                  })
                   if (match) {
                     addToCartWithOption(optionPickerMenu, match)
                   }
@@ -2378,9 +2380,14 @@ export default function PosOrderPage() {
                         delete nextSelections[groupKey]
                         setOptionPickerSelections(nextSelections)
                         if (optionPickerStep >= groups.length - 1) {
-                          const match = optsWithStepsToShow.find((o) =>
-                            posOptionRowMatchesPickerSelections(o.optionStepValues, groups, nextSelections, groupConfigMap)
-                          )
+                          const match = resolvePosOptionPickerMatch({
+                            menuCode: optionPickerMenu.code,
+                            groups,
+                            selections: nextSelections,
+                            optionsWithSteps: optsWithStepsToShow,
+                            allOptions: opts,
+                            groupConfigByKey: groupConfigMap,
+                          })
                           if (match) {
                             addToCartWithOption(optionPickerMenu, match)
                           } else {

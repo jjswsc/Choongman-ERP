@@ -6,12 +6,28 @@ import {
   type HqVendorMatchIndex,
 } from '@/lib/accounting-reports-purchase-hq-dedupe'
 import {
+  sumBankTransactionsForAccounts,
+  sumPayablesBalance,
+  sumReceivablesBalance,
+} from '@/lib/accounting-balance-summaries'
+import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
+import { fetchStockLogPurchaseAgg, resolvePurchaseLocationPatterns } from '@/lib/accounting-stock-purchase-agg'
+import {
+  listHqOutboundPurchaseDrillLines,
+  sumHqOutboundSubtotalMatchingOutboundManagement,
+} from '@/lib/hq-outbound-income-total'
+import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import {
   supabaseCountFilter,
+  supabaseRpc,
   supabaseSelect,
   supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
+import { resolveInventoryAsOfUtcIso } from '@/lib/accounting-inventory-asof'
+import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 
 export {
   buildHqVendorMatchIndex,
@@ -158,50 +174,7 @@ function buildStoreFieldOrIlikeFragment(field: string, storeFilter: string): str
   return `or=(${inner})`
 }
 
-/**
- * pos_orders.store_code 기준: **정확 일치(eq)** + **부분 일치(ilike)** 를 OR로 묶음.
- * ERP 매장명과 POS 코드가 같을 때는 eq가 우선, 다를 때 ilike·CM 변형으로 보조.
- */
-function buildPosStoreCodeFilterFragment(storeFilter: string): string {
-  if (!storeFilter || storeFilter === 'All') return ''
-  const variants = incomeStoreSearchVariants(storeFilter)
-  const clauses: string[] = []
-  const seen = new Set<string>()
-  for (const v of variants) {
-    const t = String(v).trim()
-    if (!t) continue
-    const eq = `store_code.eq.${encodeURIComponent(t)}`
-    const like = `store_code.ilike.${encodeURIComponent(sqlIlikeContains(t))}`
-    for (const c of [eq, like]) {
-      if (!seen.has(c)) {
-        seen.add(c)
-        clauses.push(c)
-      }
-    }
-  }
-  if (clauses.length === 0) return ''
-  if (clauses.length === 1) return clauses[0]
-  return `or=(${clauses.join(',')})`
-}
-
-/** 손익·통장 행 등 JS 측 매장 매칭 (변형 허용) */
-export function storeMatchesIncomeFilter(storeValue: string, filter: string): boolean {
-  const a = String(storeValue || '').trim().toLowerCase()
-  if (!filter || filter.trim().toLowerCase() === 'all') return true
-  if (!a) return false
-  for (const v of incomeStoreSearchVariants(filter)) {
-    const b = String(v || '').trim().toLowerCase()
-    if (!b) continue
-    if (a === b || a.includes(b) || b.includes(a)) return true
-  }
-  return false
-}
-
-function sqlIlikeContains(term: string): string {
-  const t = String(term || '').trim()
-  if (!t) return '%'
-  return `%${t.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
-}
+export { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 
 /** vendors.code(대소문자 무시) → 표시용 이름 */
 async function loadVendorCodeNormToNameMap(): Promise<Record<string, string>> {
@@ -269,48 +242,34 @@ async function loadHqVendorMatchIndex(): Promise<HqVendorMatchIndex> {
 }
 
 /**
- * 본사 창고에서 매장으로 나간 출고(Outbound / ForceOutbound) 금액 합계 — 손익 매입의 본사 라인 기준.
- * 단가: invoice_unit_price → 품목 cost.
+ * 본사 창고 출고 매입 — 출고 관리(getCombinedOutboundHistory) 실제 출고 로그와 동일 단가·기간.
+ * (미수령 발주 가상 줄·Usage 는 제외)
  */
 async function sumHqOutboundPurchaseFromOffice(
   storeFilter: string | null,
   startStr: string,
   endStr: string,
-  itemCostMap: Record<string, number>,
+  _itemCostMap: Record<string, number>,
   itemAccountSubjectMap: Map<string, number>,
   accountSubjectMeta: Map<number, AccountSubjectMetaRow>
-): Promise<{ purchaseTotal: number; expenseBySubject: Map<number | null, number> }> {
-  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
-  let filter =
-    `log_type=in.(Outbound,ForceOutbound)` +
-    `&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}` +
-    `&${buildStoreFieldOrIlikeFragment('location', '본사')}`
-  if (storeFilter && storeFilter !== 'All') {
-    filter += `&${buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)}`
-  }
-  const rows = (await supabaseSelectFilter('stock_logs', filter, {
-    select: 'item_code,qty,invoice_unit_price',
-    limit: BASE_LIMIT,
-  })) as { item_code?: string; qty?: number; invoice_unit_price?: number | null }[] | null
-  let total = 0
+): Promise<{
+  purchaseTotal: number
+  expenseBySubject: Map<number | null, number>
+  truncated?: boolean
+}> {
   const expenseBySubject = new Map<number | null, number>()
-  for (const r of rows || []) {
-    const qty = Math.abs(Number(r.qty) || 0)
-    if (!qty) continue
-    const code = String(r.item_code || '').trim()
-    const unit =
-      r.invoice_unit_price != null && !isNaN(Number(r.invoice_unit_price))
-        ? Number(r.invoice_unit_price)
-        : (itemCostMap[code] ?? 0)
-    const lineAmount = qty * unit
-    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
-    if (routed.isExpense) {
-      addToSubjectMap(expenseBySubject, routed.subjectId, lineAmount)
-      continue
-    }
-    total += lineAmount
+  const split = await sumHqOutboundSubtotalMatchingOutboundManagement({
+    startStr,
+    endStr,
+    storeFilter,
+    isExpenseRoutedItem: (code) => isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta),
+    addExpenseToMap: (sid, amt) => addToSubjectMap(expenseBySubject, sid, amt),
+  })
+  return {
+    purchaseTotal: split.purchaseTotal,
+    expenseBySubject,
+    truncated: split.hitRowCap || split.lineCount >= 100_000,
   }
-  return { purchaseTotal: total, expenseBySubject }
 }
 
 function buildHqOutboundFromOfficeFilter(
@@ -420,7 +379,7 @@ async function getDirectInboundPurchasesByVendor(
   locationFilter: string | null,
   startStr: string,
   endStr: string,
-  itemCostMap: Record<string, number>,
+  _itemCostMap: Record<string, number>,
   opts: DirectInboundPurchaseOpts = {},
   itemAccountSubjectMap: Map<string, number> = new Map(),
   accountSubjectMeta: Map<number, AccountSubjectMetaRow> = new Map()
@@ -429,41 +388,32 @@ async function getDirectInboundPurchasesByVendor(
   const excludeFromHqInbound = Boolean(opts.excludeFromHqInbound)
   const hqIndex = opts.hqIndex
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
-  let filter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
-  if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
-
-  const rows = (await supabaseSelectFilter('stock_logs', filter, {
-    select: 'item_code,qty,unit_cost,vendor_target,location,reference_no',
-    limit: BASE_LIMIT,
-  })) as {
-    item_code?: string
-    qty?: number
-    unit_cost?: number | null
-    vendor_target?: string
-    location?: string
-    reference_no?: string | null
-  }[] | null
+  const locationPatterns = await resolvePurchaseLocationPatterns(locationFilter, excludeHqLocations)
+  const { rows } = await fetchStockLogPurchaseAgg({
+    logTypes: ['Inbound'],
+    startUtcIso: dayStartUtcIso,
+    endUtcExclusive: nextDayStartUtcIso,
+    locationPatterns,
+    vendorPatterns: null,
+  })
 
   const byVendor: Record<string, number> = {}
   const expenseBySubject = new Map<number | null, number>()
-  for (const r of rows || []) {
-    const vendorTarget = String(r.vendor_target || '').trim()
-    const referenceNo = String(r.reference_no || '').trim()
+  for (const r of rows) {
+    const vendorTarget = r.vendor_target
+    const referenceNo = r.reference_no
     if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInbound, hqIndex)) continue
-    if (excludeHqLocations && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
-    const code = String(r.item_code || '').trim()
+    if (excludeHqLocations && (r.location === INBOUND_HQ_LOCATION || isOfficeStore(r.location))) continue
+    const code = r.item_code
     if (!code) continue
-    const qty = Number(r.qty) || 0
-    const unitCost = r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : (itemCostMap[code] ?? 0)
-    const line = qty * unitCost
+    const line = r.line_amount
     if (!line) continue
     const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
     if (routed.isExpense) {
       addToSubjectMap(expenseBySubject, routed.subjectId, line)
       continue
     }
-    const vRaw = vendorTarget
-    const vKey = vRaw || '__pl_vendor_unknown__'
+    const vKey = vendorTarget || '__pl_vendor_unknown__'
     byVendor[vKey] = (byVendor[vKey] || 0) + line
   }
   return { byVendor, expenseBySubject }
@@ -648,6 +598,72 @@ function buildExpenseByAccountList(
   return rows
 }
 
+function isExcludedHqStockLocation(location: string): boolean {
+  const n = String(location || '').trim().toLowerCase()
+  if (!n) return true
+  if (n === INBOUND_HQ_LOCATION.toLowerCase()) return true
+  return isOfficeStore(location)
+}
+
+async function resolveInventoryLocationPatterns(
+  locationFilter: string | null,
+  excludeHq: boolean
+): Promise<string[]> {
+  if (locationFilter) return getStockLocationPatterns(locationFilter)
+  if (!excludeHq) return []
+  try {
+    const rows = (await supabaseRpc<{ location: string }[]>('get_distinct_stock_locations', {})) as
+      | { location?: string }[]
+      | null
+    return (rows || [])
+      .map((r) => String(r.location || '').trim())
+      .filter((loc) => loc && !isExcludedHqStockLocation(loc))
+  } catch {
+    return []
+  }
+}
+
+/** get_store_stock RPC 우선, 미배포 시 getAppData와 동일한 select fallback */
+async function fetchStoreStockQtyByItem(
+  locationPatterns: string[],
+  asOfUtcIso: string
+): Promise<Record<string, number>> {
+  try {
+    const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>('get_store_stock', {
+      p_location_patterns: locationPatterns,
+      p_as_of_date: asOfUtcIso,
+    })) as { item_code?: string; total_qty?: number }[] | null
+
+    const m: Record<string, number> = {}
+    for (const r of rows || []) {
+      const code = String(r.item_code || '').trim()
+      if (!code) continue
+      m[code] = Number(r.total_qty ?? 0)
+    }
+    return m
+  } catch {
+    let locFilter = 'id=gt.0'
+    if (locationPatterns.length === 1) {
+      locFilter = `location=ilike.${encodeURIComponent(locationPatterns[0])}`
+    } else if (locationPatterns.length > 1) {
+      locFilter = `or=(${locationPatterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
+    }
+    const dateSuffix = `&log_date=lte.${encodeURIComponent(asOfUtcIso)}`
+    const rows = (await supabaseSelectFilter('stock_logs', `${locFilter}${dateSuffix}`, {
+      order: 'id.asc',
+      limit: 50000,
+      select: 'item_code,qty',
+    })) as { item_code?: string; qty?: number }[] | null
+    const m: Record<string, number> = {}
+    for (const r of rows || []) {
+      const code = String(r.item_code || '').trim()
+      if (!code) continue
+      m[code] = (m[code] || 0) + Number(r.qty || 0)
+    }
+    return m
+  }
+}
+
 async function getInventoryValue(
   locationFilter: string | null,
   cutoffDate: string,
@@ -657,31 +673,14 @@ async function getInventoryValue(
   itemAccountSubjectMap: Map<string, number> = new Map(),
   accountSubjectMeta: Map<number, AccountSubjectMetaRow> = new Map()
 ): Promise<number> {
-  const op = isBefore ? 'lt' : 'lt'
-  const boundary = isBefore ? cutoffDate : cutoffDate
-  const cutoffUtcIso = isBefore
-    ? getBangkokDateRangeUtc(boundary, boundary).dayStartUtcIso
-    : getBangkokDateRangeUtc(boundary, boundary).nextDayStartUtcIso
-  let filter = `log_date=${op}.${cutoffUtcIso}`
-  if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
-
-  const rows = (await supabaseSelectFilter('stock_logs', filter, {
-    select: 'location,item_code,qty',
-    limit: BASE_LIMIT,
-  })) as { location?: string; item_code?: string; qty?: number }[] | null
-
-  const byItem: Record<string, number> = {}
-  for (const r of rows || []) {
-    if (excludeHq && isOfficeStore(String(r.location || ''))) continue
-    const code = String(r.item_code || '').trim()
-    if (!code) continue
-    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
-    if (routed.isExpense) continue
-    byItem[code] = (byItem[code] || 0) + Number(r.qty || 0)
-  }
+  const asOfUtcIso = resolveInventoryAsOfUtcIso(cutoffDate, isBefore)
+  const locationPatterns = await resolveInventoryLocationPatterns(locationFilter, excludeHq)
+  const byItem = await fetchStoreStockQtyByItem(locationPatterns, asOfUtcIso)
 
   let total = 0
   for (const [code, qty] of Object.entries(byItem)) {
+    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
+    if (routed.isExpense) continue
     const cost = itemCostMap[code] ?? 0
     total += qty * cost
   }
@@ -728,19 +727,23 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const outboundFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       `&or=(delivery_status.eq.${encodeURIComponent('배송완료')},delivery_status.eq.${encodeURIComponent('일부배송완료')})`
-    const outboundOrders = (await supabaseSelectFilter('orders', outboundFilter, {
+    const outboundOrders = (await supabaseSelectFilterAllPages('orders', outboundFilter, {
       select: 'total,store_name',
-      limit: BASE_LIMIT,
-    })) as { total?: number; store_name?: string }[] | null
+      pageSize: 8000,
+      maxRows: 200_000,
+    })) as { total?: number; store_name?: string }[]
     const salesByStoreMap: Record<string, number> = {}
-    for (const o of outboundOrders || []) {
+    for (const o of outboundOrders) {
       const amt = Number(o.total) || 0
       sales += amt
       const raw = String(o.store_name || '').trim()
       const k = raw || '__pl_sales_customer_unknown__'
       salesByStoreMap[k] = (salesByStoreMap[k] || 0) + amt
     }
-    limits.orders_outbound = { fetched: outboundOrders?.length || 0, limit: BASE_LIMIT }
+    limits.orders_outbound = { fetched: outboundOrders.length, limit: BASE_LIMIT }
+    if (outboundOrders.length >= 200_000) {
+      warnings.push('orders(본사 출고 매출) 조회 상한에 도달해 매출이 과소할 수 있습니다.')
+    }
     salesByCustomer = Object.entries(salesByStoreMap)
       .filter(([, v]) => v > 0)
       .map(([key, amount]) => ({ key, amount }))
@@ -853,28 +856,29 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       .map(([key, amount]) => ({ key, amount }))
       .sort((a, b) => b.amount - a.amount)
   } else {
-    const posFilter =
-      `created_at=gte.${dayStartUtcIso}&created_at=lt.${nextDayStartUtcIso}` +
-      (storeFilter !== 'All' ? `&${buildPosStoreCodeFilterFragment(storeFilter)}` : '')
-    const posOrders = (await supabaseSelectFilter('pos_orders', posFilter, {
-      select: 'total,status',
-      limit: BASE_LIMIT,
-    })) as { total?: number; status?: string }[] | null
-    const completedStatuses = new Set(['completed', 'paid', 'ready'])
-    for (const o of posOrders || []) {
-      if (!completedStatuses.has(String(o.status || ''))) continue
-      sales += Number(o.total) || 0
+    const posSalesSum = await sumCompletedPosSalesTotal({
+      startUtcIso: dayStartUtcIso,
+      endUtcExclusive: nextDayStartUtcIso,
+      storeFilter,
+    })
+    sales += posSalesSum.total
+    limits.pos_orders = {
+      fetched: posSalesSum.completedCount,
+      limit: 50000,
     }
-    limits.pos_orders = { fetched: posOrders?.length || 0, limit: BASE_LIMIT }
+    if (posSalesSum.truncated) {
+      warnings.push('pos_orders 조회가 상한(50,000건)에 도달해 매출이 과소할 수 있습니다.')
+    }
 
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
     const [orders, hqVendorIndex, hqOutboundAgg] = await Promise.all([
-      supabaseSelectFilter('orders', orderFilter, {
+      supabaseSelectFilterAllPages('orders', orderFilter, {
         select: 'total',
-        limit: BASE_LIMIT,
-      }) as Promise<{ total?: number }[] | null>,
+        pageSize: 8000,
+        maxRows: 200_000,
+      }) as Promise<{ total?: number }[]>,
       loadHqVendorMatchIndex(),
       sumHqOutboundPurchaseFromOffice(
         storeFilter === 'All' ? null : storeFilter,
@@ -886,8 +890,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       ),
     ])
     let ordersApprovedSubtotal = 0
-    for (const o of orders || []) ordersApprovedSubtotal += Number(o.total) || 0
-    limits.orders_purchase = { fetched: orders?.length || 0, limit: BASE_LIMIT }
+    for (const o of orders) ordersApprovedSubtotal += Number(o.total) || 0
+    limits.orders_purchase = { fetched: orders.length, limit: BASE_LIMIT }
+    if (orders.length >= 200_000) {
+      warnings.push('orders(승인 발주) 조회 상한에 도달해 참고 합계가 과소할 수 있습니다.')
+    }
     try {
       const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
       const obFilter = buildHqOutboundFromOfficeFilter(
@@ -903,6 +910,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
     ordersPurchaseSubtotal = hqOutboundAgg.purchaseTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, hqOutboundAgg.expenseBySubject)
+    if (hqOutboundAgg.truncated) {
+      warnings.push('stock_logs(본사 창고 출고) 조회 상한에 도달해 매입이 과소할 수 있습니다.')
+    }
     purchaseHqOutboundBasis = {
       outboundTotal: hqOutboundAgg.purchaseTotal,
       approvedOrdersTotal: ordersApprovedSubtotal,
@@ -1254,63 +1264,42 @@ export async function computeIncomeStatementPurchaseDrillDown(
 
   if (vendorKey === '__pl_hq_orders__') {
     if (isHQ) return { ...empty, isHqOrders: true }
-    const itemCostMap = await loadItemCostMapForDrill()
-    const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
-    const obFilter = buildHqOutboundFromOfficeFilter(
-      storeFilter === 'All' ? null : storeFilter,
-      dayStartUtcIso,
-      nextDayStartUtcIso
-    )
-    const obRaw = (await supabaseSelectFilter('stock_logs', obFilter, {
-      select: 'id,log_date,log_type,vendor_target,item_code,qty,invoice_unit_price',
-      limit: BASE_LIMIT,
-      order: 'log_date.desc',
-    })) as {
-      id?: number
-      log_date?: string
-      log_type?: string
-      vendor_target?: string
-      item_code?: string
-      qty?: number
-      invoice_unit_price?: number | null
-    }[] | null
-    const hqOutbounds: IncomeStatementPurchaseDrillHqOutboundRow[] = []
-    for (const r of obRaw || []) {
-      const qty = Math.abs(Number(r.qty) || 0)
-      const code = String(r.item_code || '').trim()
-      const unit =
-        r.invoice_unit_price != null && !isNaN(Number(r.invoice_unit_price))
-          ? Number(r.invoice_unit_price)
-          : (itemCostMap[code] ?? 0)
-      const lineAmount = round2(qty * unit)
-      if (!qty && !lineAmount) continue
-      const id = Number(r.id)
-      if (!id) continue
-      hqOutbounds.push({
-        kind: 'hq_outbound',
-        id,
-        logDate: String(r.log_date || '').slice(0, 10),
-        logType: r.log_type != null ? String(r.log_type) : null,
-        itemCode: code,
-        targetStore: r.vendor_target != null ? String(r.vendor_target).trim() || null : null,
-        qty,
-        unitPrice: unit,
-        lineAmount,
-      })
-    }
-    const obTruncated = hqOutbounds.length > PURCHASE_DRILL_LIMIT
+    const [subjectMeta, itemAccountSubjectMap] = await Promise.all([
+      loadAccountSubjectMeta(),
+      loadItemAccountSubjectMap(),
+    ])
+    const isExpense = (code: string) => isExpenseRoutedItem(code, itemAccountSubjectMap, subjectMeta)
+    const { lines: obLines, hitRowCap } = await listHqOutboundPurchaseDrillLines({
+      startStr,
+      endStr,
+      storeFilter: storeFilter === 'All' ? null : storeFilter,
+      isExpenseRoutedItem: (code) => isExpense(code),
+    })
+    const hqOutbounds: IncomeStatementPurchaseDrillHqOutboundRow[] = obLines.map((line) => ({
+      kind: 'hq_outbound',
+      id: line.id,
+      logDate: line.logDate,
+      logType: line.logType,
+      itemCode: line.itemCode,
+      targetStore: line.targetStore,
+      qty: line.qty,
+      unitPrice: line.unitPrice,
+      lineAmount: line.lineAmount,
+    }))
+    const obTruncated = hitRowCap || hqOutbounds.length > PURCHASE_DRILL_LIMIT
     const hqOutboundsSlice = obTruncated ? hqOutbounds.slice(0, PURCHASE_DRILL_LIMIT) : hqOutbounds
 
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
-    const orders = (await supabaseSelectFilter('orders', orderFilter, {
+    const orders = (await supabaseSelectFilterAllPages('orders', orderFilter, {
       select: 'id,order_date,total,store_name,status',
-      limit: BASE_LIMIT,
+      pageSize: 8000,
+      maxRows: 200_000,
       order: 'order_date.desc',
-    })) as { id?: number; order_date?: string; total?: number; store_name?: string; status?: string }[] | null
+    })) as { id?: number; order_date?: string; total?: number; store_name?: string; status?: string }[]
     const hqOrders: IncomeStatementPurchaseDrillOrderRow[] = []
-    for (const o of orders || []) {
+    for (const o of orders) {
       const oid = Number(o.id)
       if (!oid) continue
       hqOrders.push({
@@ -1322,7 +1311,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
         status: o.status != null ? String(o.status) : null,
       })
     }
-    const ordTruncated = hqOrders.length > PURCHASE_DRILL_LIMIT
+    const ordTruncated = orders.length >= 200_000 || hqOrders.length > PURCHASE_DRILL_LIMIT
     const hqOrdersSlice = ordTruncated ? hqOrders.slice(0, PURCHASE_DRILL_LIMIT) : hqOrders
 
     return {
@@ -1529,13 +1518,8 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
 
   let bankDelta = 0
   if (accountIds.length > 0) {
-    const idList = accountIds.join(',')
-    const rows = (await supabaseSelectFilter(
-      'bank_transactions',
-      `account_id=in.(${idList})&trans_date=lte.${endStr}`,
-      { select: 'amount', limit: 50000 }
-    )) as { amount?: number }[] | null
-    for (const r of rows || []) bankDelta += Number(r.amount) || 0
+    const bankSum = await sumBankTransactionsForAccounts(accountIds, endStr)
+    bankDelta = bankSum.total
   }
   const cashAndBanks = openingCash + bankDelta
 
@@ -1557,44 +1541,16 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
 
   let receivables = 0
   try {
-    const receivableFilter =
-      storeFilter !== 'All' && !isHQ
-        ? buildStoreFieldOrIlikeFragment('store_name', storeFilter)
-        : 'id=gt.0'
-    const recvRows = (await supabaseSelectFilter('receivable_transactions', receivableFilter, {
-      select: 'amount',
-      limit: 50000,
-    })) as { amount?: number }[] | null
-    receivables = (recvRows || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    const recv = await sumReceivablesBalance({ endStr, storeFilter, isHQ })
+    receivables = recv.total
   } catch {
     receivables = 0
   }
 
   let payables = 0
   try {
-    const payableFilter =
-      storeFilter !== 'All' && !isHQ
-        ? buildStoreFieldOrIlikeFragment('store_name', storeFilter)
-        : 'id=gt.0'
-    let payRows: { amount?: number }[] | null = null
-    try {
-      payRows = (await supabaseSelectFilter('payable_transactions', payableFilter, {
-        select: 'amount',
-        limit: 50000,
-      })) as { amount?: number }[] | null
-    } catch (innerError) {
-      // 구 스키마 호환: store_name 대신 store 컬럼만 있는 환경 대응
-      if (storeFilter !== 'All' && !isHQ) {
-        const fallbackFilter = buildStoreFieldOrIlikeFragment('store', storeFilter)
-        payRows = (await supabaseSelectFilter('payable_transactions', fallbackFilter, {
-          select: 'amount',
-          limit: 50000,
-        })) as { amount?: number }[] | null
-      } else {
-        throw innerError
-      }
-    }
-    payables = (payRows || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    const pay = await sumPayablesBalance({ endStr, storeFilter, isHQ })
+    payables = pay.total
   } catch {
     payables = 0
   }

@@ -726,7 +726,7 @@ export const i18n = {
     companyHybridDocTabList: '목록',
     companyHybridDocTabRegister: '등록',
     companyHybridDocTabCategories: '카테고리',
-    companyHybridDocListFilterHint: '매장을 선택한 뒤 목록을 불러옵니다. 카테고리·제목·연결로 좁힐 수 있습니다.',
+    companyHybridDocListFilterHint: '매장·필터를 맞춘 뒤 검색을 눌러 목록을 불러옵니다. 카테고리·제목·공문 조건으로 좁힐 수 있습니다.',
     companyHybridDocColCategory: '카테고리',
     companyHybridDocCategoryFilterAll: '전체',
     companyHybridDocSearchTitle: '제목 검색',
@@ -779,6 +779,14 @@ export const i18n = {
     companyHybridCategorySave: '저장',
     companyHybridCategoryEmpty: '카테고리가 없습니다.',
     companyHybridCategoryEdit: '수정',
+    companyHybridCategoryParent: '상위 카테고리',
+    companyHybridCategoryParentPh: '상위 선택',
+    companyHybridCategoryParentNone: '없음 (최상위)',
+    companyHybridCategoryColParent: '상위',
+    companyHybridCategoryHierarchyHint:
+      '① 최상위: 상위를 「없음 (최상위)」으로 두고 이름을 입력해 추가합니다.\n② 하위: 상위 카테고리(최상위만 선택 가능)를 고른 뒤 하위 이름(예: 공지, 매뉴얼)을 입력해 추가합니다.',
+    companyHybridCategoryPickStoreHint:
+      '카테고리를 추가·수정하려면 「전체 매장」이 아닌, 해당 매장을 선택해 주세요.',
     companyHybridDocSessionRelogin: '로그인 토큰이 없습니다. 다시 로그인한 뒤 문서 관리를 이용해 주세요.',
     companyHybridErrStoreRequired: '매장을 지정해 주세요.',
     companyHybridErrStoreForbidden: '이 매장에 접근할 권한이 없습니다.',
@@ -6926,7 +6934,7 @@ export const i18n = {
     helpSum_admin_company_documents:
       '매장별 계약·면허·세무 등 회사 문서를 Drive 링크 또는 파일 업로드로 등록하고, 목록에서 검색·정렬·발급일·등록일을 확인하는 화면입니다.',
     helpHow_admin_company_documents:
-      '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② 목록: 필터를 맞춘 뒤「조회」로 불러옵니다. 제목 열 머리글을 누르면 제목 오름차순·내림차순이 전환되고, 기본은 등록일 최신순입니다. 행의 연필(수정)로 등록 탭에 불러와 제목·카테고리·권한·날짜·비고를 고칠 수 있습니다(업로드 파일은「문서 정보」에서 저장, Drive는 링크 저장).\n③ 등록: 「문서 정보」에 제목·카테고리·연결·발급 날짜·만료일·비고를 입력한 뒤, Drive URL 저장 또는 파일 업로드를 진행합니다.\n④ 카테고리: 매장별 분류 이름·순서를 추가·수정합니다.\n⑤ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
+      '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② 목록: 필터를 맞춘 뒤「조회」로 불러옵니다. 제목 열 머리글을 누르면 제목 오름차순·내림차순이 전환되고, 기본은 등록일 최신순입니다. 행의 연필(수정)로 등록 탭에 불러와 제목·카테고리·권한·날짜·비고를 고칠 수 있습니다(업로드 파일은「문서 정보」에서 저장, Drive는 링크 저장).\n③ 등록: 「문서 정보」에 제목·카테고리·연결·발급 날짜·만료일·비고를 입력한 뒤, Drive URL 저장 또는 파일 업로드를 진행합니다.\n④ 카테고리: 매장을 선택한 뒤 최상위(상위 없음) 또는 상위를 지정한 하위(예: 공지·매뉴얼)를 추가·수정합니다.\n⑤ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
     helpSum_admin_employees:
       '직원 명단을 매장·직무·등급·재직 상태로 조회하고, 좌측 폼에서 인적·급여·은행·세무 정보를 등록·수정하며, 인원 이동·적정 인원·평가·경고장 등 HR 보조 탭을 한 화면에서 다룹니다.',
     helpHow_admin_employees:
@@ -8905,7 +8913,7 @@ Only matters the employee must handle personally on a working day:
     companyHybridDocTabList: 'List',
     companyHybridDocTabRegister: 'Register',
     companyHybridDocTabCategories: 'Categories',
-    companyHybridDocListFilterHint: 'Pick a store to load the list. Narrow by category, title, or relation.',
+    companyHybridDocListFilterHint: 'Set store and filters, then press Search to load the list. Narrow by category, title, or correspondence.',
     companyHybridDocColCategory: 'Category',
     companyHybridDocCategoryFilterAll: 'All',
     companyHybridDocSearchTitle: 'Search title',
@@ -8958,6 +8966,13 @@ Only matters the employee must handle personally on a working day:
     companyHybridCategorySave: 'Save',
     companyHybridCategoryEmpty: 'No categories yet.',
     companyHybridCategoryEdit: 'Edit',
+    companyHybridCategoryParent: 'Parent category',
+    companyHybridCategoryParentPh: 'Select parent',
+    companyHybridCategoryParentNone: 'None (top level)',
+    companyHybridCategoryColParent: 'Parent',
+    companyHybridCategoryHierarchyHint:
+      '① Top level: leave Parent as None, enter a name, and add.\n② Subcategory: pick a top-level parent, enter the subcategory name (e.g. notices, manuals), and add.',
+    companyHybridCategoryPickStoreHint: 'Select a specific store (not All stores) to add or edit categories.',
     companyHybridDocSessionRelogin: 'No login token. Please sign in again to use document management.',
     companyHybridErrStoreRequired: 'Please select a store.',
     companyHybridErrStoreForbidden: 'You do not have access to this store.',
@@ -15116,7 +15131,7 @@ orderItemQty: 'Qty',
     helpSum_admin_company_documents:
       'Register and browse company documents per store via Drive links or file uploads; search, sort by title, and see issue and created dates.',
     helpHow_admin_company_documents:
-      '① Store: pick the store to query at the top. With permission, choose All stores to see every store’s documents.\n② List: set filters and press Search. Click the Title header to toggle ascending/descending by title; default order is newest by registration time. Use the row pencil to open the Register tab with that document; adjust title, category, visibility, dates, and notes—uploaded files: Save under Document details; Drive links: Save under Add Drive link.\n③ Register: fill Document details (title, category, relation, issue/expiry dates, note), then save a Drive URL or upload a file.\n④ Categories: add or edit per-store category names and sort order.\n⑤ Use Help on the right for the full guide, then Back to screen when finished.',
+      '① Store: pick the store to query at the top. With permission, choose All stores to see every store’s documents.\n② List: set filters and press Search. Click the Title header to toggle ascending/descending by title; default order is newest by registration time. Use the row pencil to open the Register tab with that document; adjust title, category, visibility, dates, and notes—uploaded files: Save under Document details; Drive links: Save under Add Drive link.\n③ Register: fill Document details (title, category, relation, issue/expiry dates, note), then save a Drive URL or upload a file.\n④ Categories: pick a store, then add top-level categories (no parent) or subcategories under a parent (e.g. notices, manuals).\n⑤ Use Help on the right for the full guide, then Back to screen when finished.',
     helpSum_admin_employees:
       'Look up staff by store, job, grade, and employment status; edit HR, payroll, bank, and tax fields in the left form; and use satellite tabs for movement, headcount, evaluations, and warning letters in one place.',
     helpHow_admin_employees:

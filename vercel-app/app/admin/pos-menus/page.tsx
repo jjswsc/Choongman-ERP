@@ -112,7 +112,10 @@ import {
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { translatePosMenuLineForReceipt, chickenPartDedupeKey, prettyChickenPartLibraryLabel } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
-import { normalizeOptionGroupsForMenu } from "@/lib/pos-option-selection-groups"
+import {
+  normalizeOptionGroupsForMenu,
+  syncOptionSelectionConfigToGroupKeys,
+} from "@/lib/pos-option-selection-groups"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
@@ -1312,6 +1315,11 @@ export default function PosMenusPage() {
         : []
     )
     setEditingId(menu.id)
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-menu-row-id="${CSS.escape(menu.id)}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    })
     setNewOptionName("")
     setNewOptionModifier("0")
     setNewOptionModifierDelivery("")
@@ -1802,6 +1810,57 @@ export default function PosMenusPage() {
           return
         }
         await loadMenusAndCategories(setOptionsConfigListLoading)
+        const linkedGroups = await getPosOptionGroups({ menuId: optionsConfigSelectedMenuId })
+        const keysFromLinks = (linkedGroups || [])
+          .filter((g) => g.link)
+          .map((g) => String(g.key ?? "").trim())
+          .filter(Boolean)
+        const draftKeys = parseOptionGroupsFromText(optionsConfigGroupsDraft)
+        const mergedGroupKeys = normalizeOptionGroupsForMenu(
+          Array.from(new Set([...keysFromLinks, ...draftKeys])),
+          optionsConfigSelectedMenu.code
+        )
+        const currentGroupKeys = normalizeOptionGroupsForMenu(
+          (optionsConfigSelectedMenu.optionSelectionGroups ?? [])
+            .map((x) => String(x).trim())
+            .filter(Boolean),
+          optionsConfigSelectedMenu.code
+        )
+        if (JSON.stringify(mergedGroupKeys) !== JSON.stringify(currentGroupKeys)) {
+          const nextConfig = applyChickenDeliveryRulesToConfig(
+            mergedGroupKeys,
+            syncOptionSelectionConfigToGroupKeys(mergedGroupKeys, optionsConfigGroupRulesDraft),
+            optionsConfigSelectedMenu.code,
+            t
+          )
+          const syncRes = await savePosMenu({
+            id: optionsConfigSelectedMenuId,
+            code: optionsConfigSelectedMenu.code,
+            name: optionsConfigSelectedMenu.name,
+            category: optionsConfigSelectedMenu.category ?? "",
+            categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
+            sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
+            price: optionsConfigSelectedMenu.price,
+            priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
+            imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
+            vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
+            isActive: optionsConfigSelectedMenu.isActive ?? true,
+            optionSelectionGroups: mergedGroupKeys,
+            optionSelectionConfig: nextConfig,
+            isBanban: optionsConfigSelectedMenu.isBanban ?? false,
+          })
+          if (syncRes.success) {
+            setMenus((prev) =>
+              prev.map((m) =>
+                m.id === optionsConfigSelectedMenuId
+                  ? { ...m, optionSelectionGroups: mergedGroupKeys, optionSelectionConfig: nextConfig }
+                  : m
+              )
+            )
+            setOptionsConfigGroupsDraft(mergedGroupKeys.join(", "))
+            setOptionsConfigGroupRulesDraft(nextConfig)
+          }
+        }
         const opts = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
         applyLoadedOptionsForConfig(Array.isArray(opts) ? opts : [])
         const refreshedLib = await getPosOptionGroups()
@@ -1816,6 +1875,8 @@ export default function PosMenusPage() {
       applyLoadedOptionsForConfig,
       loadMenusAndCategories,
       optionsConfigLibraryGroupsForUi,
+      optionsConfigGroupsDraft,
+      optionsConfigGroupRulesDraft,
       optionsConfigMenuOptions,
       optionsConfigSelectedMenu,
       optionsConfigSelectedMenuId,
@@ -4588,6 +4649,7 @@ export default function PosMenusPage() {
                     </tr>
                   ) : (
                     filteredMenus.map((m, idx) => {
+                      const isEditingRow = editingId === m.id
                       const isSoldOutToday = m.soldOutDate === todayStr
                       const isExpanded = expandedMenuId === m.id
                       const expanded = isExpanded ? expandedMenuData : null
@@ -4676,9 +4738,13 @@ export default function PosMenusPage() {
                       return (
                       <React.Fragment key={m.id}>
                       <tr
+                        data-menu-row-id={m.id}
                         className={cn(
-                          "border-b hover:bg-muted/20 cursor-pointer",
-                          idx % 2 === 1 && "bg-muted/5"
+                          "border-b cursor-pointer transition-colors",
+                          isEditingRow
+                            ? "bg-primary/20 hover:bg-primary/25 border-l-4 border-l-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]"
+                            : "hover:bg-muted/20",
+                          !isEditingRow && idx % 2 === 1 && "bg-muted/5"
                         )}
                         onClick={() => handleExpandMenu(m.id)}
                       >
