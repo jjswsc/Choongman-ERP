@@ -822,23 +822,45 @@ export function PosSetMenuTabWorkspace({
 
   const groupSelectValue = form.name.trim() ? form.name.trim() : "__new__"
 
-  const applyPromoGroupPick = React.useCallback((raw: string) => {
-    preserveLinesAfterMasterSaveRef.current = null
-    lastHydratedPromoIdRef.current = null
-    if (raw === "__new__") {
-      setForm((p) => ({ ...p, name: "", code: "" }))
+  /** 그룹(표시명)과 일치하는 프로모 — 캠페인 고정 화면이면 해당 캠페인만 */
+  const promosMatchingDisplayName = React.useCallback(
+    (displayName: string) => {
+      const key = displayName.trim()
+      if (!key) return [] as PosPromo[]
+      return promos.filter((p) => {
+        if ((p.name ?? "").trim() !== key) return false
+        if (!fixedCid) return true
+        return String(p.marketingCampaignId ?? "").trim() === fixedCid
+      })
+    },
+    [promos, fixedCid]
+  )
+
+  const applyPromoGroupPick = React.useCallback(
+    (raw: string) => {
+      preserveLinesAfterMasterSaveRef.current = null
+      lastHydratedPromoIdRef.current = null
+      if (raw === "__new__") {
+        setForm((p) => ({ ...p, name: "", code: "" }))
+        setEditPromoId(null)
+        setLines([])
+        setPickPricingBasis("hall")
+        setPriceAnalysisChannel("hall")
+        return
+      }
+      const matches = promosMatchingDisplayName(raw)
+      if (matches.length === 1) {
+        setEditPromoId(String(matches[0].id))
+        return
+      }
+      setForm((p) => ({ ...p, name: raw, code: "" }))
       setEditPromoId(null)
       setLines([])
       setPickPricingBasis("hall")
       setPriceAnalysisChannel("hall")
-      return
-    }
-    setForm((p) => ({ ...p, name: raw, code: "" }))
-    setEditPromoId(null)
-    setLines([])
-    setPickPricingBasis("hall")
-    setPriceAnalysisChannel("hall")
-  }, [])
+    },
+    [promosMatchingDisplayName]
+  )
 
   /** 오른쪽 목록: 프로모션명(마스터 name) 기준 그룹 */
   const mirrorMenusByPromoName = React.useMemo(() => {
