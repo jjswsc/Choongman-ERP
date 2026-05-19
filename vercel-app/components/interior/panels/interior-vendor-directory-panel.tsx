@@ -22,8 +22,6 @@ import {
   deleteInteriorVendorDirectory,
   type InteriorVendorDirectoryEntry,
 } from "@/lib/api-client"
-import { InteriorVendorSectionTabs } from "@/components/interior/interior-vendor-section-tabs"
-
 function formatBangkokDateTime(iso: string | null | undefined) {
   if (!iso) return "—"
   try {
@@ -41,7 +39,7 @@ function formatBangkokDateTime(iso: string | null | undefined) {
   }
 }
 
-export function InteriorVendorDirectoryPanel() {
+export function InteriorVendorDirectoryPanel({ embedded = false }: { embedded?: boolean }) {
   const t = useT(useLang().lang)
   const [list, setList] = React.useState<InteriorVendorDirectoryEntry[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -131,11 +129,13 @@ export function InteriorVendorDirectoryPanel() {
     }
   }
 
-  return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <InteriorVendorSectionTabs active="directory" />
+  const outerClass = embedded
+    ? "space-y-4"
+    : "mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4"
 
+  return (
+    <div className={embedded ? "" : "flex-1 overflow-auto"}>
+      <div className={outerClass}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">

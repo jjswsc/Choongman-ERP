@@ -53,6 +53,11 @@ export function getCorrespondenceFromMetadata(metadata: unknown): CompanyHybridC
   return sanitizeCorrespondenceFromBody(c)
 }
 
+/** 목록·필터 — 유효한 공문 필드가 하나라도 있을 때만 true (빈 `{}` 키만 있으면 false) */
+export function documentHasCorrespondence(metadata: unknown): boolean {
+  return getCorrespondenceFromMetadata(metadata) != null
+}
+
 function hasAnyCorrespondenceField(c: CompanyHybridCorrespondence): boolean {
   return !!(
     c.direction ||

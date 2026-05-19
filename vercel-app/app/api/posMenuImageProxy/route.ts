@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(null, { status: 403 })
   }
 
-  let upstream = await fetch(parsed.href, {
+  const upstream = await fetch(parsed.href, {
     redirect: 'follow',
     cache: 'no-store',
     headers: { Accept: 'image/*,*/*;q=0.8' },

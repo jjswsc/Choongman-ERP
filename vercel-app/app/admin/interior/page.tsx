@@ -41,7 +41,7 @@ import {
   type InteriorDashboardTotals,
 } from "@/lib/api-client"
 import { InteriorProjectFormDialog } from "@/components/interior/interior-project-form-dialog"
-import { INTERIOR_ADMIN, withInteriorProjectId } from "@/lib/interior-admin-nav"
+import { INTERIOR_ADMIN, withInteriorProjectId, withInteriorVendorsHref } from "@/lib/interior-admin-nav"
 
 export default function InteriorPage() {
   const { lang } = useLang()
@@ -268,8 +268,8 @@ export default function InteriorPage() {
                             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild title={t("interiorSchedule")}>
                               <Link href={withInteriorProjectId(INTERIOR_ADMIN.schedule, p.id)}><Calendar className="h-3.5 w-3.5" /></Link>
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild title={t("interiorVendorTracks")}>
-                              <Link href={withInteriorProjectId(INTERIOR_ADMIN.vendors, p.id)}><HandCoins className="h-3.5 w-3.5" /></Link>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild title={t("interiorVendorsHub")}>
+                              <Link href={withInteriorVendorsHref(p.id, "tracks")}><HandCoins className="h-3.5 w-3.5" /></Link>
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild title={t("interiorHubSpecs")}>
                               <Link href={withInteriorProjectId(INTERIOR_ADMIN.specs, p.id, "materials")}><PackageSearch className="h-3.5 w-3.5" /></Link>

@@ -6,6 +6,7 @@ import { canViewCompanyHybridDocument, resolveCompanyHybridListScope } from '@/l
 import {
   COMPANY_HYBRID_CORRESPONDENCE_DIRECTIONS,
   COMPANY_HYBRID_CORRESPONDENCE_STATUSES,
+  documentHasCorrespondence,
 } from '@/lib/company-hybrid-correspondence'
 
 export const dynamic = 'force-dynamic'
@@ -51,11 +52,7 @@ export async function GET(request: NextRequest) {
     }
 
     const corrPresence = String(searchParams.get('corrPresence') || '').trim().toLowerCase()
-    if (corrPresence === 'yes') {
-      filterParts.push('metadata->correspondence=not.is.null')
-    } else if (corrPresence === 'no') {
-      filterParts.push('metadata->correspondence=is.null')
-    }
+    // corrPresence yes/no는 조회 후 documentHasCorrespondence로 판정(빈 correspondence {} 제외)
 
     const corrDirection = String(searchParams.get('corrDirection') || '').trim().toLowerCase()
     if (
@@ -99,7 +96,14 @@ export async function GET(request: NextRequest) {
       return canViewCompanyHybridDocument(auth, rowStore, visibility)
     })
 
-    return NextResponse.json({ success: true, list: visibleRows }, { headers })
+    const list =
+      corrPresence === 'yes'
+        ? visibleRows.filter((row) => documentHasCorrespondence((row as { metadata?: unknown }).metadata))
+        : corrPresence === 'no'
+          ? visibleRows.filter((row) => !documentHasCorrespondence((row as { metadata?: unknown }).metadata))
+          : visibleRows
+
+    return NextResponse.json({ success: true, list }, { headers })
   } catch (e) {
     console.error('getCompanyHybridDocuments:', e)
     return NextResponse.json(

@@ -32,8 +32,6 @@ import {
   type InteriorWorkPackage,
   type InteriorVendorDirectoryEntry,
 } from "@/lib/api-client"
-import { InteriorVendorSectionTabs } from "@/components/interior/interior-vendor-section-tabs"
-
 const VENDOR_STATUS: { value: string; labelKey: string }[] = [
   { value: "planned", labelKey: "interiorVnPlanned" },
   { value: "ordered", labelKey: "interiorVnOrdered" },
@@ -80,7 +78,7 @@ function delayLabel(t: (k: string) => string, key: "payment" | "material" | "wor
   return t("interiorDelayWork")
 }
 
-export function InteriorVendorsPanel({ projectId }: { projectId: string }) {
+export function InteriorVendorsPanel({ projectId, embedded = false }: { projectId: string; embedded?: boolean }) {
   const t = useT(useLang().lang)
   const [list, setList] = React.useState<InteriorVendorTrack[]>([])
   const [vendorDirectory, setVendorDirectory] = React.useState<InteriorVendorDirectoryEntry[]>([])
@@ -176,11 +174,13 @@ export function InteriorVendorsPanel({ projectId }: { projectId: string }) {
       .slice(0, 8)
   }, [vendorDirectory])
 
-  return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <InteriorVendorSectionTabs active="tracks" />
+  const outerClass = embedded
+    ? "space-y-4"
+    : "mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4"
 
+  return (
+    <div className={embedded ? "" : "flex-1 overflow-auto"}>
+      <div className={outerClass}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">

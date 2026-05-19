@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/applyDuePriceSchedules",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [

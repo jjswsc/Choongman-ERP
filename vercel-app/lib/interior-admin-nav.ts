@@ -3,6 +3,7 @@ export const INTERIOR_ADMIN = {
   hub: "/admin/interior",
   schedule: "/admin/interior/schedule",
   vendors: "/admin/interior/vendors",
+  /** @deprecated `/admin/interior/vendors?tab=directory` 로 리다이렉트 */
   vendorDirectory: "/admin/interior/vendor-directory",
   /** 사양·자재 (자재 사양 | 사양서) */
   specs: "/admin/interior/specs",
@@ -36,4 +37,12 @@ export function withInteriorProjectId(
   if (tab) params.set("tab", tab)
   const q = params.toString()
   return q ? `${path}${path.includes("?") ? "&" : "?"}${q}` : path
+}
+
+/** 인테리어 업체 통합 메뉴 — tab: directory(목록) | tracks(프로젝트·계약) */
+export function withInteriorVendorsHref(
+  projectId?: string | number | null,
+  vendorTab: "directory" | "tracks" = "tracks"
+): string {
+  return withInteriorProjectId(INTERIOR_ADMIN.vendors, projectId, vendorTab)
 }
