@@ -15,6 +15,7 @@ import {
 import { recordPriceChanges } from '@/lib/price-history'
 import { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 import { validatePosMenuImageUrlForMenu } from '@/lib/pos-menu-image-storage-path'
+import { isStrictBonelessBbqChickenCode } from '@/lib/pos-bbq-option-guard'
 
 export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
@@ -235,6 +236,19 @@ export async function upsertPosMenuFromBody(
   let editingId = body.id ? String(body.id).trim() : null
   const isEdit = !!editingId
   const isChickenMenu = ('code' in body ? code : '').toLowerCase().startsWith('c')
+  let effectiveCode = code
+  if (!effectiveCode && editingId) {
+    try {
+      const rows = (await supabaseSelectFilter(
+        'pos_menus',
+        `id=eq.${encodeURIComponent(editingId)}`,
+        { limit: 1, select: 'code' }
+      )) as { code?: string }[] | null
+      effectiveCode = String(rows?.[0]?.code ?? '').trim()
+    } catch {
+      /* ignore */
+    }
+  }
 
   // imageOnly 요청은 image 컬럼만 갱신하므로 code/name 입력을 강제하지 않는다.
   const isImageOnlyEdit = body.imageOnly === true && !!editingId
@@ -355,6 +369,19 @@ export async function upsertPosMenuFromBody(
           optionSelectionConfigCleaned
         )
       : optionSelectionConfigCleaned
+  if (
+    isStrictBonelessBbqChickenCode(effectiveCode) &&
+    (
+      (optionSelectionGroupsFinal && optionSelectionGroupsFinal.length > 0) ||
+      (optionSelectionGroupsLegacyFinal && optionSelectionGroupsLegacyFinal.length > 0)
+    )
+  ) {
+    return {
+      success: false,
+      message:
+        'BBQ 치킨(C020~C023)은 옵션 그룹 단계를 사용할 수 없습니다. 메뉴 옵션은 "M - Boneless" 단일 행만 유지해 주세요.',
+    }
+  }
   const kitchenPrinterInBody = 'kitchenPrinter' in body
   const kitchenPrinter =
     body.kitchenPrinter === 0 ||

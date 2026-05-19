@@ -3,19 +3,25 @@ import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/
 import { recordPriceChanges } from '@/lib/price-history'
 import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
 import { createMenuOptionCodeAllocator } from '@/lib/pos-option-code-server'
+import { validateStrictBonelessBbqOption } from '@/lib/pos-bbq-option-guard'
 
-async function getMenuCategories(menuId: number): Promise<{ categoryMain: string; category: string }> {
+async function getMenuMeta(menuId: number): Promise<{ code: string; categoryMain: string; category: string }> {
   try {
-    const menus = (await supabaseSelectFilter('pos_menus', `id=eq.${menuId}`, { limit: 1 })) as { category_main?: string; category?: string }[] | null
+    const menus = (await supabaseSelectFilter('pos_menus', `id=eq.${menuId}`, { limit: 1 })) as {
+      code?: string
+      category_main?: string
+      category?: string
+    }[] | null
     if (menus && menus.length > 0) {
       const m = menus[0]
       return {
+        code: (m.code || '').trim(),
         categoryMain: (m.category_main || '').trim(),
         category: (m.category || '').trim(),
       }
     }
   } catch { /* ignore */ }
-  return { categoryMain: '', category: '' }
+  return { code: '', categoryMain: '', category: '' }
 }
 
 /** POS 메뉴 옵션 저장 */
@@ -53,6 +59,16 @@ export async function POST(req: NextRequest) {
 
     if (!menuId || !name) {
       return NextResponse.json({ success: false, message: 'menuId and name required' }, { headers })
+    }
+    const menuMeta = await getMenuMeta(menuId)
+    const bbqGuard = validateStrictBonelessBbqOption({
+      menuCode: menuMeta.code,
+      optionType,
+      optionName: name,
+      optionStepValues,
+    })
+    if (!bbqGuard.ok) {
+      return NextResponse.json({ success: false, message: bbqGuard.message }, { headers })
     }
 
     const isAdditive = optionType === 'additive'
@@ -110,7 +126,7 @@ export async function POST(req: NextRequest) {
             changes.push({ fieldName: 'price_modifier_packaging', oldValue: prev.price_modifier_packaging ?? null, newValue: priceModifierPackaging })
           }
           if (changes.length > 0) {
-            const { categoryMain, category } = await getMenuCategories(menuId)
+            const { categoryMain, category } = menuMeta
             recordPriceChanges({
               entityType: 'pos_menu_option',
               entityId: String(id),
@@ -129,7 +145,7 @@ export async function POST(req: NextRequest) {
         const newRow = Array.isArray(inserted) ? inserted[0] : inserted
         const newId = newRow?.id != null ? String(newRow.id) : null
         if (newId) {
-          const { categoryMain, category } = await getMenuCategories(menuId)
+          const { categoryMain, category } = menuMeta
           const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
           initChanges.push({ fieldName: 'price_modifier', oldValue: null, newValue: priceModifier })
           if (priceModifierDelivery != null) initChanges.push({ fieldName: 'price_modifier_delivery', oldValue: null, newValue: priceModifierDelivery })

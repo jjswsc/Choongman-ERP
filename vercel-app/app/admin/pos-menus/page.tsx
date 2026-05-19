@@ -117,6 +117,7 @@ import {
   syncOptionSelectionConfigToGroupKeys,
 } from "@/lib/pos-option-selection-groups"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
+import { validatePosMenuImageUrlForMenu } from "@/lib/pos-menu-image-storage-path"
 
 /** 원가 분석 화면 이동 후 복귀 시 편집 중이던 메뉴·노출 매장 복원 */
 const POS_MENUS_EDIT_RESUME_KEY = "cm_pos_menus_edit_resume_v1"
@@ -1272,6 +1273,15 @@ export default function PosMenusPage() {
     }
     if (!storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
       setSelectedStoreCodes(scopeForSave)
+    }
+    if (editingId) {
+      const imageCheck = validatePosMenuImageUrlForMenu(formData.imageUrl.trim(), editingId)
+      if (!imageCheck.ok) {
+        await appAlert(
+          `${imageCheck.message}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드한 뒤 저장해 주세요."}`
+        )
+        return
+      }
     }
     const res = await savePosMenu({
       id: editingId || undefined,

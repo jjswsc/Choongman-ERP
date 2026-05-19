@@ -3,6 +3,7 @@ import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from "@/
 import { recordPriceChanges } from "@/lib/price-history"
 import { triggerGrabMenuNotification } from "@/lib/grab-menu-sync-trigger"
 import { createMenuOptionCodeAllocator } from "@/lib/pos-option-code-server"
+import { validateStrictBonelessBbqOption } from '@/lib/pos-bbq-option-guard'
 
 type SavePosMenuOptionInput = {
   id?: string
@@ -23,14 +24,16 @@ type SavePosMenuOptionInput = {
   sellPackaging?: boolean
 }
 
-async function getMenuCategories(menuId: number): Promise<{ categoryMain: string; category: string }> {
+async function getMenuMeta(menuId: number): Promise<{ code: string; categoryMain: string; category: string }> {
   try {
     const menus = (await supabaseSelectFilter("pos_menus", `id=eq.${menuId}`, {
       limit: 1,
-    })) as { category_main?: string; category?: string }[] | null
+      select: 'code,category_main,category',
+    })) as { code?: string; category_main?: string; category?: string }[] | null
     if (menus && menus.length > 0) {
       const m = menus[0]
       return {
+        code: (m.code || '').trim(),
         categoryMain: (m.category_main || "").trim(),
         category: (m.category || "").trim(),
       }
@@ -38,7 +41,7 @@ async function getMenuCategories(menuId: number): Promise<{ categoryMain: string
   } catch {
     // ignore
   }
-  return { categoryMain: "", category: "" }
+  return { code: '', categoryMain: "", category: "" }
 }
 
 async function saveSingleOption(
@@ -74,6 +77,14 @@ async function saveSingleOption(
   if (!menuId || !name) {
     throw new Error("menuId and name required")
   }
+  const menuMeta = await getMenuMeta(menuId)
+  const bbqGuard = validateStrictBonelessBbqOption({
+    menuCode: menuMeta.code,
+    optionType,
+    optionName: name,
+    optionStepValues: optionStepValues as Record<string, string> | null,
+  })
+  if (!bbqGuard.ok) throw new Error(bbqGuard.message)
 
   const row: Record<string, unknown> = {
     name,
@@ -120,7 +131,7 @@ async function saveSingleOption(
         })
       }
       if (changes.length > 0) {
-        const { categoryMain, category } = await getMenuCategories(menuId)
+        const { categoryMain, category } = menuMeta
         recordPriceChanges({
           entityType: "pos_menu_option",
           entityId: String(id),
@@ -163,7 +174,7 @@ async function saveSingleOption(
     preferredCode: optionCode || undefined,
     fallbackSortOrder: sortOrder,
   })
-  const { categoryMain, category } = await getMenuCategories(menuId)
+  const { categoryMain, category } = menuMeta
   const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
   initChanges.push({ fieldName: "price_modifier", oldValue: null, newValue: priceModifier })
   if (priceModifierDelivery != null) {

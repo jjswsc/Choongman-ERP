@@ -5,6 +5,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
+import { isStrictBonelessBbqChickenCode } from '@/lib/pos-bbq-option-guard'
 
 type LinkInput = {
   id?: string
@@ -29,6 +30,22 @@ export async function POST(req: NextRequest) {
     if (!menuId) {
       return NextResponse.json(
         { success: false, message: "menuId and links required" },
+        { headers }
+      )
+    }
+    const menuRows = (await supabaseSelectFilter(
+      'pos_menus',
+      `id=eq.${menuId}`,
+      { limit: 1, select: 'code' }
+    )) as { code?: string }[] | null
+    const menuCode = String(menuRows?.[0]?.code ?? '').trim()
+    if (isStrictBonelessBbqChickenCode(menuCode) && links.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            'BBQ 치킨(C020~C023)은 단계형 옵션 그룹을 사용할 수 없습니다. 그룹 링크를 비우고 "M - Boneless" 단일 옵션만 사용해 주세요.',
+        },
         { headers }
       )
     }

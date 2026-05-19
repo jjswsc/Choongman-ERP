@@ -64,6 +64,7 @@ import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } fr
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
 import { isChickenDefaultOptionName } from '@/lib/pos-chicken-option-inference'
 import { shouldUseFlatBarBqChickenOptionPicker } from '@/lib/pos-barbq-option-picker-ui'
+import { validatePosMenuImageUrlForMenu } from '@/lib/pos-menu-image-storage-path'
 import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
@@ -146,7 +147,7 @@ export function PosTerminalMenuScreen({
     [t]
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
-  usePosMenusCatalogLiveRefresh(
+  const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
     React.useCallback((list) => setMenus(list), []),
     storeCode || null
   )
@@ -182,6 +183,17 @@ export function PosTerminalMenuScreen({
   const [menuEditTargetId, setMenuEditTargetId] = React.useState<string | null>(null)
   const [menuEditTab, setMenuEditTab] = React.useState<'menu' | 'general' | 'item'>('menu')
   const [imageUploading, setImageUploading] = React.useState(false)
+  const posCatalogSyncLabel = React.useMemo(() => {
+    if (!lastSyncedAtMs) return t('posCatalogSyncWaiting') || '메뉴 동기화 대기'
+    const hhmmss = new Date(lastSyncedAtMs).toLocaleTimeString('en-GB', {
+      timeZone: 'Asia/Bangkok',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+    return `${t('posCatalogSyncLabel') || '메뉴 동기화'} ${hhmmss}`
+  }, [lastSyncedAtMs, t])
   const menuListRef = React.useRef<HTMLDivElement | null>(null)
   const categoryPanelRef = React.useRef<HTMLElement | null>(null)
   const menuGridRef = React.useRef<HTMLDivElement | null>(null)
@@ -789,6 +801,11 @@ export function PosTerminalMenuScreen({
       if (normalizePromotionCategoryMain(cm) === PROMOTION_MAIN_CATEGORY) {
         cat = normalizePromotionSubcategory(cat)
       }
+      const imageCheck = validatePosMenuImageUrlForMenu(menuEditForm.imageUrl.trim(), menuEditTargetId)
+      if (!imageCheck.ok) {
+        await appAlert(imageCheck.message)
+        return
+      }
       const res = await savePosMenu({
         id: menuEditTargetId,
         code,
@@ -1004,6 +1021,7 @@ export function PosTerminalMenuScreen({
           <span className="text-sm font-medium text-muted-foreground">
             {t('posTableLabel')}: <span className="text-foreground font-semibold">{selectedTableName}</span>
           </span>
+          <span className="ml-auto text-[11px] text-muted-foreground">{posCatalogSyncLabel}</span>
         </div>
       )}
       <div
@@ -1860,6 +1878,9 @@ export function PosTerminalMenuScreen({
                             {imageUploading ? (t('loading') || '업로드 중...') : (t('posMenuImageUpload') || '파일 업로드')}
                           </Button>
                           <Input className="h-9 text-xs" placeholder={t('posMenuImageUrlPlaceholder') || '또는 이미지 URL 입력'} value={menuEditForm.imageUrl} onChange={(e) => setMenuEditForm((p) => ({ ...p, imageUrl: e.target.value }))} />
+                          <p className="text-[11px] text-muted-foreground">
+                            {t('posMenuImageUploadHint') || '다른 메뉴에서 업로드한 URL은 저장이 거부될 수 있습니다. 이 메뉴에서 다시 업로드해 주세요.'}
+                          </p>
                         </div>
                       </div>
                     </div>

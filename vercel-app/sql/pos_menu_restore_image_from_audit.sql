@@ -1,7 +1,10 @@
 -- pos_menus.image 가 비었을 때 복구 (감사·items·배달·Storage)
 -- ⚠ 치킨 사진이 엉뚱한 메뉴로 붙었을 때는 이 파일 대신 pos_menu_fix_chicken_images_strict.sql 사용
 --    (코드/감사/items 매칭은 잘못된 URL 을 다시 붙일 수 있음)
--- 실행 순서: pos_menu_chicken_image_audit_diagnostic.sql 로 B~E 확인 후 이 파일 실행
+-- 실행 순서:
+-- 1) pos_menu_restore_image_precheck.sql (대상/근거 사전 점검)
+-- 2) pos_menu_chicken_image_audit_diagnostic.sql 로 B~E 확인
+-- 3) 이 파일 실행
 
 -- 공개 URL 접두어 (프로젝트에 맞게 1행만 있으면 자동)
 CREATE TEMP TABLE IF NOT EXISTS _pos_menu_image_public_base (prefix text) ON COMMIT DROP;

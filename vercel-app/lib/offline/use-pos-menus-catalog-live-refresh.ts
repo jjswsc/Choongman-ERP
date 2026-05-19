@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PosMenu } from '@/lib/api-client'
+import { getErpCacheCachedAt } from '@/lib/offline/cache'
 import { posMenusCatalogCacheKey } from '@/lib/offline/pos-catalog-offline'
 import { warmPosMenuImagesFromMenuList } from '@/lib/offline/pos-menu-images-cache'
 
@@ -15,7 +16,20 @@ export function usePosMenusCatalogLiveRefresh(
 ) {
   const ref = useRef(onUpdate)
   ref.current = onUpdate
+  const [lastSyncedAtMs, setLastSyncedAtMs] = useState<number | null>(null)
   const cacheKey = posMenusCatalogCacheKey(storeCode || null)
+
+  useEffect(() => {
+    let cancelled = false
+    void getErpCacheCachedAt(cacheKey).then((cachedAt) => {
+      if (!cancelled && cachedAt != null) {
+        setLastSyncedAtMs((prev) => (prev == null || cachedAt > prev ? cachedAt : prev))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [cacheKey])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -25,9 +39,14 @@ export function usePosMenusCatalogLiveRefresh(
       if (!Array.isArray(list)) return
       const menus = list as PosMenu[]
       ref.current(menus)
+      setLastSyncedAtMs(Date.now())
       void warmPosMenuImagesFromMenuList(menus, { concurrency: 3 })
     }
     window.addEventListener('cm-erp-pos-catalog-updated', handler as EventListener)
     return () => window.removeEventListener('cm-erp-pos-catalog-updated', handler as EventListener)
   }, [cacheKey])
+
+  return {
+    lastSyncedAtMs,
+  }
 }

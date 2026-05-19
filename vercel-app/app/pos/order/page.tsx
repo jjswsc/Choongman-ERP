@@ -195,10 +195,21 @@ export default function PosOrderPage() {
   const [orderType] = React.useState<OrderType>(() => getInitialOrderType(searchParams))
   const descriptionChannel: PosDescriptionChannel = orderType
   const [storeCode, setStoreCode] = React.useState("")
-  usePosMenusCatalogLiveRefresh(
+  const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
     React.useCallback((list) => setMenus(list), []),
     storeCode || null
   )
+  const posCatalogSyncLabel = React.useMemo(() => {
+    if (!lastSyncedAtMs) return t("posCatalogSyncWaiting") || "메뉴 동기화 대기"
+    const hhmmss = new Date(lastSyncedAtMs).toLocaleTimeString("en-GB", {
+      timeZone: "Asia/Bangkok",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+    return `${t("posCatalogSyncLabel") || "메뉴 동기화"} ${hhmmss}`
+  }, [lastSyncedAtMs, t])
   const [tableName, setTableName] = React.useState("")
   const [tableOptions, setTableOptions] = React.useState<{ id: string; name: string }[]>([])
   const [discountType, setDiscountType] = React.useState<"pct" | "amt">("amt")
@@ -1736,6 +1747,9 @@ export default function PosOrderPage() {
               </Select>
             </div>
           )}
+          <div className="text-[11px] text-slate-500">
+            {posCatalogSyncLabel}
+          </div>
           <div className="flex items-center gap-2">
             <span className="shrink-0 text-xs text-slate-600 w-12">
               {t("posOrderType") || "유형"}

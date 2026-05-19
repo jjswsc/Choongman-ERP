@@ -143,6 +143,33 @@ export async function getFromErpCache<T>(cacheKey: string): Promise<T | null> {
   })
 }
 
+/** ERP 캐시 항목 저장 시각(ms). 만료·없음이면 null */
+export async function getErpCacheCachedAt(cacheKey: string): Promise<number | null> {
+  const db = await getDB()
+  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return null
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORES.ERP_CACHE, 'readonly')
+    const store = tx.objectStore(STORES.ERP_CACHE)
+    const req = store.get(cacheKey)
+    req.onsuccess = () => {
+      const entry = req.result as (CacheEntry<unknown> & { cacheKey: string }) | undefined
+      if (!entry) {
+        resolve(null)
+        return
+      }
+      const age = Date.now() - entry.cachedAt
+      if (age > erpCacheMaxAgeMs(cacheKey)) {
+        const delTx = db.transaction(STORES.ERP_CACHE, 'readwrite')
+        delTx.objectStore(STORES.ERP_CACHE).delete(cacheKey)
+        resolve(null)
+        return
+      }
+      resolve(entry.cachedAt)
+    }
+    req.onerror = () => resolve(null)
+  })
+}
+
 export async function setErpCache<T>(cacheKey: string, data: T): Promise<void> {
   const db = await getDB()
   if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
