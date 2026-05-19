@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolveGrabMerchantPosTotal } from '@/lib/grab-pos-order-enrich'
 import {
   buildGrabPosCatalog,
   grabItemNameImpliesAllInPrice,
@@ -8,6 +9,19 @@ import {
   resolveGrabLineUnitMinor,
   resolveOptionCodesToLabels,
 } from '@/lib/grab-pos-order-enrich'
+
+describe('resolveGrabMerchantPosTotal', () => {
+  it('subtracts Grab platform delivery fee from webhook total', () => {
+    expect(
+      resolveGrabMerchantPosTotal({
+        itemsSubtotal: 1107,
+        pricingFinalTotal: 1107,
+        totalFromWebhook: 1117,
+        grabPlatformDeliveryFee: 10,
+      })
+    ).toBe(1107)
+  })
+})
 
 describe('grab-pos-order-enrich', () => {
   it('parses Grab partner item id to menu id', () => {

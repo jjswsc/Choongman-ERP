@@ -85,11 +85,13 @@ import {
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
+import { resolveGrabDeliveryLineNote } from '@/lib/grab-pos-order-enrich'
 import {
   parsePosOrderMemo,
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
+import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -731,6 +733,21 @@ export default function PosTerminalPage() {
     }
     return out
   }, [menuOptions])
+  const formatLineNoteForPrint = useCallback(
+    (rawNote?: string | null): string => {
+      const raw = String(rawNote ?? '').trim()
+      if (!raw) return ''
+      const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(raw)
+      const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(raw) || hasGrabOptionToken
+      if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
+      const grabMeta = resolveGrabDeliveryLineNote(raw, optionNameByCode)
+      const option = String(grabMeta.optionSummary || '').trim()
+      const request = String(grabMeta.requestSummary || '').trim()
+      if (option || request) return [option, request].filter(Boolean).join(' · ')
+      return normalizePosLineNote(raw, { keepOptionSummary: false })
+    },
+    [optionNameByCode]
+  )
   const promoCatalogById = useMemo(() => {
     const m = new Map<string, PosPromoWithItems>()
     for (const p of promosWithItems) {
@@ -1639,7 +1656,7 @@ export default function PosTerminalPage() {
                 items: slip.items.map((it) => ({
                   name: translatePosMenuLineForReceipt(it.name, ki.t),
                   qty: it.qty,
-                  note: it.note,
+                  note: formatLineNoteForPrint(it.note),
                 })),
                 memoLine: memoLine || null,
                 escapeHtml,
@@ -1845,7 +1862,7 @@ export default function PosTerminalPage() {
                         items: slip.items.map((it) => ({
                           name: translatePosMenuLineForReceipt(it.name, ki.t),
                           qty: it.qty,
-                          note: it.note,
+                          note: formatLineNoteForPrint(it.note),
                         })),
                         memoLine: memoLine || null,
                         escapeHtml,
@@ -2360,8 +2377,15 @@ export default function PosTerminalPage() {
   ) {
     if (posDemoRef.current) return
     const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
+    const payloadForPrint = {
+      ...payload,
+      items: (payload.items || []).map((it) => ({
+        ...it,
+        note: formatLineNoteForPrint(it.note),
+      })),
+    }
     let receiptHtml = buildPosHallOrderReceiptDocumentHtml({
-      payload,
+      payload: payloadForPrint,
       t: tPrint,
       lang: printLang,
       resolveOrderItemDisplayName: (it) =>
@@ -2825,7 +2849,7 @@ export default function PosTerminalPage() {
                 items: slip.items.map((it) => ({
                   name: translatePosMenuLineForReceipt(it.name, ki.t),
                   qty: it.qty,
-                  note: it.note,
+                  note: formatLineNoteForPrint(it.note),
                 })),
                 memoLine: memoLine || null,
                 escapeHtml,
@@ -3133,7 +3157,7 @@ export default function PosTerminalPage() {
         price: it.price,
         quantity: it.qty,
         qty: it.qty,
-        ...(it.note ? { note: it.note } : {}),
+        ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
         ...(it.menuId ? { menuId: it.menuId } : {}),
         ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
       }))
@@ -3248,7 +3272,7 @@ export default function PosTerminalPage() {
                 items: slip.items.map((it) => ({
                   name: translatePosMenuLineForReceipt(it.name, ki.t),
                   qty: it.qty,
-                  note: it.note,
+                  note: formatLineNoteForPrint(it.note),
                 })),
                 memoLine: memoLine || null,
                 escapeHtml,
@@ -3555,7 +3579,7 @@ export default function PosTerminalPage() {
                     items: slip.items.map((it) => ({
                       name: translatePosMenuLineForReceipt(it.name, ki.t),
                       qty: it.qty,
-                      note: it.note,
+                      note: formatLineNoteForPrint(it.note),
                     })),
                     memoLine: memoLine || null,
                     escapeHtml,
@@ -5214,7 +5238,7 @@ export default function PosTerminalPage() {
                           items: slip.items.map((it) => ({
                             name: translatePosMenuLineForReceipt(it.name, ki.t),
                             qty: it.qty,
-                            note: it.note,
+                            note: formatLineNoteForPrint(it.note),
                           })),
                           memoLine: memoLine || null,
                           escapeHtml,
@@ -5744,7 +5768,7 @@ export default function PosTerminalPage() {
                           items: slip.items.map((it) => ({
                             name: translatePosMenuLineForReceipt(it.name, ki.t),
                             qty: it.qty,
-                            note: it.note,
+                            note: formatLineNoteForPrint(it.note),
                           })),
                           memoLine: memoLine || null,
                           escapeHtml,

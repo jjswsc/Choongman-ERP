@@ -10,6 +10,7 @@ import {
   parseGrabPartnerItemMenuRef,
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
+  resolveGrabMerchantPosTotal,
   resolveOptionCodesToLabels,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
@@ -678,10 +679,13 @@ export async function buildGrabPosOrderSnapshot(
   const items = await buildPosItems(order)
   let subtotal = 0
   for (const item of items) subtotal += item.price * item.qty
+  subtotal = Math.round(subtotal * 100) / 100
 
   const exponent = currencyExponent(order)
   const price = asRecord(order.price)
-  const deliveryFee = minorToMajor(price.deliveryFee, exponent)
+  /** Grab 고객 배달비 — POS delivery_fee·매장 빌 합계에 포함하지 않음 */
+  const grabPlatformDeliveryFee = minorToMajor(price.deliveryFee, exponent)
+  const deliveryFee = 0
   const packagingFee = minorToMajor(price.merchantChargeFee, exponent)
   const discountMinor = Math.max(
     0,
@@ -707,7 +711,12 @@ export async function buildGrabPosOrderSnapshot(
     cardPaymentAmount: 0,
     adjustments: {},
   })
-  const total = totalFromWebhook > 0 ? totalFromWebhook : pricing.finalTotal
+  const total = resolveGrabMerchantPosTotal({
+    itemsSubtotal: subtotal,
+    pricingFinalTotal: pricing.finalTotal,
+    totalFromWebhook,
+    grabPlatformDeliveryFee,
+  })
   const vat = tax > 0 ? tax : pricing.vatFeeAmt
   const paymentCash = paymentType === 'CASH' ? total : 0
   const paymentDeliveryApp = paymentType === 'CASHLESS' ? total : 0

@@ -457,6 +457,31 @@ export function grabItemNameImpliesAllInPrice(name: string): boolean {
  * Grab 줄 단가(minor). line total이 있으면 우선.
  * line total이 없을 때 item.price가 이미 옵션 포함가이면 modifier 합산을 하지 않는다.
  */
+/**
+ * Grab `price.deliveryFee`는 고객→플랫폼 배달비(매장 주방·간단주문서 합계에 넣지 않음).
+ * POS `total`은 품목 합(subtotal) 기준; 웹훅 total에 배달비가 포함돼 있으면 차감해 맞춘다.
+ */
+export function resolveGrabMerchantPosTotal(params: {
+  itemsSubtotal: number
+  pricingFinalTotal: number
+  totalFromWebhook: number
+  grabPlatformDeliveryFee: number
+}): number {
+  const sub = Math.max(0, Number(params.itemsSubtotal) || 0)
+  const priced = Math.max(0, Number(params.pricingFinalTotal) || 0)
+  const webhook = Math.max(0, Number(params.totalFromWebhook) || 0)
+  const grabDel = Math.max(0, Number(params.grabPlatformDeliveryFee) || 0)
+  if (webhook > 0 && grabDel > 0.009) {
+    const foodFromWebhook = Math.round((webhook - grabDel) * 100) / 100
+    if (Math.abs(foodFromWebhook - priced) <= 0.05 || Math.abs(foodFromWebhook - sub) <= 0.05) {
+      return foodFromWebhook
+    }
+  }
+  if (webhook > 0 && Math.abs(webhook - priced) <= 0.05) return webhook
+  if (webhook > 0 && grabDel <= 0.009 && Math.abs(webhook - sub) <= 0.05) return webhook
+  return priced > 0 ? priced : sub
+}
+
 export function resolveGrabLineUnitMinor(params: {
   lineMinor: number
   qty: number
