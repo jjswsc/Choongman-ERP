@@ -23,13 +23,7 @@ export type KitchenSlipDesignResolved = {
   fontScale: KitchenSlipFontScale
   showLineNotes: boolean
   showOrderMemo: boolean
-  optionGroupPrint: {
-    size: boolean
-    part: boolean
-    flavor: boolean
-    side: boolean
-    other: boolean
-  }
+  optionGroupPrint: Record<string, boolean>
 }
 
 /** getPosPrinterSettings 응답 등에서 주방 슬립 디자인 정규화 */
@@ -37,13 +31,7 @@ export function resolveKitchenSlipDesign(s?: {
   kitchenSlipFontScale?: string
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
-  kitchenSlipOptionGroupPrint?: {
-    size?: boolean
-    part?: boolean
-    flavor?: boolean
-    side?: boolean
-    other?: boolean
-  }
+  kitchenSlipOptionGroupPrint?: Record<string, boolean>
 }): KitchenSlipDesignResolved {
   const raw = String(s?.kitchenSlipFontScale || 'md').toLowerCase()
   const fontScale: KitchenSlipFontScale = raw === 'sm' ? 'sm' : raw === 'lg' ? 'lg' : 'md'
@@ -51,13 +39,7 @@ export function resolveKitchenSlipDesign(s?: {
     fontScale,
     showLineNotes: s?.kitchenSlipShowLineNotes !== false,
     showOrderMemo: s?.kitchenSlipShowOrderMemo !== false,
-    optionGroupPrint: {
-      size: s?.kitchenSlipOptionGroupPrint?.size !== false,
-      part: s?.kitchenSlipOptionGroupPrint?.part !== false,
-      flavor: s?.kitchenSlipOptionGroupPrint?.flavor !== false,
-      side: s?.kitchenSlipOptionGroupPrint?.side !== false,
-      other: s?.kitchenSlipOptionGroupPrint?.other !== false,
-    },
+    optionGroupPrint: normalizeKitchenSlipOptionGroupPrintMap(s?.kitchenSlipOptionGroupPrint),
   }
 }
 
@@ -134,12 +116,33 @@ export function localizeKitchenSlipLineNote(rawNote: string): string {
   return note
 }
 
-type KitchenOptionGroupKey = keyof KitchenSlipDesignResolved['optionGroupPrint']
+function normalizeKitchenOptionGroupKey(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+}
 
-function classifyKitchenOptionToken(token: string): KitchenOptionGroupKey {
+function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, boolean> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = normalizeKitchenOptionGroupKey(k)
+    if (!key) continue
+    out[key] = v !== false
+  }
+  return out
+}
+
+function classifyKitchenOptionToken(token: string): string {
   const s = String(token || '').trim()
   const low = s.toLowerCase()
   if (!s) return 'other'
+  const labelMatch = /^([^:]{1,40})\s*:\s*(.+)$/.exec(s)
+  if (labelMatch) {
+    const key = normalizeKitchenOptionGroupKey(labelMatch[1])
+    if (key) return key
+  }
   if (/^(xxl|xl|l|m|s)\b/i.test(s) || /\b(size|ไซส์)\b/i.test(s)) return 'size'
   if (/(boneless|drumette|joint wing|wing|leg|part|순살|뼈|โดบา|ปีก)/i.test(s)) return 'part'
   if (/(kimchi|radish|pickle|side|sidedish|side dish|피클|깍두기|หัวไชเท้า)/i.test(s)) return 'side'
@@ -153,48 +156,40 @@ function filterKitchenLineNoteByGroupPolicy(
 ): string {
   const note = String(rawNote || '').trim()
   if (!note) return ''
-  if (Object.values(policy).every(Boolean)) return note
+  const normalizedPolicy = normalizeKitchenSlipOptionGroupPrintMap(policy)
+  const policyEntries = Object.entries(normalizedPolicy)
+  if (policyEntries.length === 0 || policyEntries.every(([, enabled]) => enabled !== false)) return note
 
-  const groupValues: Record<KitchenOptionGroupKey, string[]> = {
-    size: [],
-    part: [],
-    flavor: [],
-    side: [],
-    other: [],
-  }
-  const pushGrouped = (g: KitchenOptionGroupKey, v: string) => {
-    const text = String(v || '').trim()
-    if (!text) return
-    if (!groupValues[g].includes(text)) groupValues[g].push(text)
+  const isAllowed = (groupKey: string) => {
+    const key = normalizeKitchenOptionGroupKey(groupKey)
+    if (!key) return true
+    if (!(key in normalizedPolicy)) return true
+    return normalizedPolicy[key] !== false
   }
 
   const chunks = note.split('·').map((x) => x.trim()).filter(Boolean)
+  const out: string[] = []
   for (const chunk of chunks) {
-    const tokens = chunk.split(',').map((x) => x.trim()).filter(Boolean)
-    if (tokens.length <= 1) {
-      const g = classifyKitchenOptionToken(chunk)
-      pushGrouped(g, chunk)
+    const labelMatch = /^([^:]{1,40})\s*:\s*(.+)$/.exec(chunk)
+    if (labelMatch) {
+      const key = normalizeKitchenOptionGroupKey(labelMatch[1])
+      if (isAllowed(key)) out.push(chunk)
       continue
     }
-    for (const token of tokens) {
-      if (/^\d+$/.test(token)) continue
-      const g = classifyKitchenOptionToken(token)
-      pushGrouped(g, token)
+    const tokens = chunk.split(',').map((x) => x.trim()).filter(Boolean)
+    if (tokens.length === 0) continue
+    if (tokens.length === 1) {
+      const g = classifyKitchenOptionToken(tokens[0])
+      if (isAllowed(g)) out.push(tokens[0])
+      continue
     }
+    const kept = tokens.filter((token) => {
+      if (/^\d+$/.test(token)) return false
+      const g = classifyKitchenOptionToken(token)
+      return isAllowed(g)
+    })
+    if (kept.length > 0) out.push(kept.join(', '))
   }
-
-  const labels: Record<KitchenOptionGroupKey, string> = {
-    size: 'Size',
-    part: 'Part',
-    flavor: 'Flavor',
-    side: 'Side',
-    other: 'Option',
-  }
-  const ordered: KitchenOptionGroupKey[] = ['size', 'part', 'flavor', 'side', 'other']
-  const out = ordered
-    .filter((g) => policy[g] && groupValues[g].length > 0)
-    .map((g) => `${labels[g]}: ${groupValues[g].join(', ')}`)
-
   return out.join(' · ')
 }
 
@@ -240,13 +235,7 @@ export function formatKitchenSlipItemRowHtml(
     : ''
   const groupedFilteredNote = filterKitchenLineNoteByGroupPolicy(
     rawNormalizedNote,
-    opts?.optionGroupPrint ?? {
-      size: true,
-      part: true,
-      flavor: true,
-      side: true,
-      other: true,
-    }
+    opts?.optionGroupPrint ?? {}
   )
   const note = showLineNotes ? localizeKitchenSlipLineNote(groupedFilteredNote) : ''
   const banban = parseKitchenSlipBanbanFromName(it.name)

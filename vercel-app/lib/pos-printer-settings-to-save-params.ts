@@ -1,6 +1,17 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
 import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
 
+function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, boolean> {
+  if (!raw || typeof raw !== "object") return {}
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k ?? "").trim()
+    if (!key) continue
+    out[key] = v !== false
+  }
+  return out
+}
+
 export type PosPrinterSettingsToSaveParamsOptions = {
   /**
    * true: kitchenRoute* 필드를 본문에서 제외 → API가 해당 JSON 컬럼을 갱신하지 않음.
@@ -131,13 +142,9 @@ export function posPrinterSettingsToSaveParams(
         : "md") as "sm" | "md" | "lg",
     kitchenSlipShowLineNotes: s.kitchenSlipShowLineNotes !== false,
     kitchenSlipShowOrderMemo: s.kitchenSlipShowOrderMemo !== false,
-    kitchenSlipOptionGroupPrint: {
-      size: s.kitchenSlipOptionGroupPrint?.size !== false,
-      part: s.kitchenSlipOptionGroupPrint?.part !== false,
-      flavor: s.kitchenSlipOptionGroupPrint?.flavor !== false,
-      side: s.kitchenSlipOptionGroupPrint?.side !== false,
-      other: s.kitchenSlipOptionGroupPrint?.other !== false,
-    },
+    kitchenSlipOptionGroupPrint: normalizeKitchenSlipOptionGroupPrintMap(
+      s.kitchenSlipOptionGroupPrint
+    ),
     escPosCutAfterKitchenHtml: s.escPosCutAfterKitchenHtml !== false,
     escPosCutAfterHallOrderHtml: Boolean(s.escPosCutAfterHallOrderHtml),
     escPosCutAfterPaymentReceiptHtml: Boolean(s.escPosCutAfterPaymentReceiptHtml),

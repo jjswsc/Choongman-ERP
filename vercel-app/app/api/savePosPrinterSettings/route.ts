@@ -41,6 +41,17 @@ function parseCookingInt(v: unknown, fallback: number): number {
   return Number.isFinite(n) ? Math.trunc(n) : fallback
 }
 
+function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, boolean> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k ?? '').trim()
+    if (!key) continue
+    out[key] = v !== false
+  }
+  return out
+}
+
 function extractMissingColumnName(error: unknown): string | null {
   const msg = String(error ?? '')
   const m = msg.match(/Could not find the '([^']+)' column/i)
@@ -241,17 +252,9 @@ export async function POST(req: NextRequest) {
     const kitchenSlipFontScale = kitchenSlipScaleRaw === 'sm' ? 'sm' : kitchenSlipScaleRaw === 'lg' ? 'lg' : 'md'
     const kitchenSlipShowLineNotes = body?.kitchenSlipShowLineNotes !== false
     const kitchenSlipShowOrderMemo = body?.kitchenSlipShowOrderMemo !== false
-    const kitchenSlipOptionGroupPrintRaw =
-      body?.kitchenSlipOptionGroupPrint && typeof body.kitchenSlipOptionGroupPrint === 'object'
-        ? (body.kitchenSlipOptionGroupPrint as Record<string, unknown>)
-        : {}
-    const kitchenSlipOptionGroupPrint = {
-      size: kitchenSlipOptionGroupPrintRaw.size !== false,
-      part: kitchenSlipOptionGroupPrintRaw.part !== false,
-      flavor: kitchenSlipOptionGroupPrintRaw.flavor !== false,
-      side: kitchenSlipOptionGroupPrintRaw.side !== false,
-      other: kitchenSlipOptionGroupPrintRaw.other !== false,
-    }
+    const kitchenSlipOptionGroupPrint = normalizeKitchenSlipOptionGroupPrintMap(
+      body?.kitchenSlipOptionGroupPrint
+    )
     const escPosCutAfterKitchenHtml = parseBoolParam(body?.escPosCutAfterKitchenHtml, true)
     const escPosCutAfterHallOrderHtml = parseBoolParam(body?.escPosCutAfterHallOrderHtml, true)
     const escPosCutAfterPaymentReceiptHtml = parseBoolParam(body?.escPosCutAfterPaymentReceiptHtml, true)

@@ -4,6 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -550,6 +551,11 @@ export default function PosMenusPage() {
   const [mainTab, setMainTab] = React.useState<
     "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "finalPrice" | "deliveryOps"
   >("screen")
+  const searchParams = useSearchParams()
+  React.useEffect(() => {
+    const tab = String(searchParams.get("tab") || "").trim()
+    if (tab === "optionsConfig") setMainTab("optionsConfig")
+  }, [searchParams])
   const [priceManageTab, setPriceManageTab] = React.useState<"history" | "schedule">("history")
   const [pricingStoreCode, setPricingStoreCode] = React.useState("")
   const canSearchAllStores = isOfficeRole(auth?.role || "")
