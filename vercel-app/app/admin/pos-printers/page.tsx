@@ -151,6 +151,72 @@ const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
   }
 `
 
+type KitchenSlipOptionGroupPrintState = {
+  size: boolean
+  part: boolean
+  flavor: boolean
+  side: boolean
+  other: boolean
+}
+
+function KitchenSlipOptionGroupPrintSection({
+  value,
+  onChange,
+  tr,
+  t,
+}: {
+  value: KitchenSlipOptionGroupPrintState
+  onChange: React.Dispatch<React.SetStateAction<KitchenSlipOptionGroupPrintState>>
+  tr: (key: string, fallback: string) => string
+  t: (k: string) => string
+}) {
+  return (
+    <div className="rounded-md border p-3 space-y-2">
+      <div className="text-sm font-medium">
+        {tr("posKitchenSlipOptionGroupFilterLabel", "주방 주문서 옵션 그룹 출력")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {tr(
+          "posKitchenSlipOptionGroupFilterHint",
+          "그룹별로 출력/숨김을 선택합니다. (Size, 부위, 맛, 사이드, 기타)"
+        )}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <ToggleRow
+          label={tr("posKitchenSlipOptionGroupSize", "Size")}
+          value={value.size}
+          onChange={(v) => onChange((prev) => ({ ...prev, size: v }))}
+          t={t}
+        />
+        <ToggleRow
+          label={tr("posKitchenSlipOptionGroupPart", "부위")}
+          value={value.part}
+          onChange={(v) => onChange((prev) => ({ ...prev, part: v }))}
+          t={t}
+        />
+        <ToggleRow
+          label={tr("posKitchenSlipOptionGroupFlavor", "맛/소스")}
+          value={value.flavor}
+          onChange={(v) => onChange((prev) => ({ ...prev, flavor: v }))}
+          t={t}
+        />
+        <ToggleRow
+          label={tr("posKitchenSlipOptionGroupSide", "사이드")}
+          value={value.side}
+          onChange={(v) => onChange((prev) => ({ ...prev, side: v }))}
+          t={t}
+        />
+        <ToggleRow
+          label={tr("posKitchenSlipOptionGroupOther", "기타")}
+          value={value.other}
+          onChange={(v) => onChange((prev) => ({ ...prev, other: v }))}
+          t={t}
+        />
+      </div>
+    </div>
+  )
+}
+
 function ToggleRow({
   label,
   value,
@@ -1823,6 +1889,12 @@ export default function PosPrintersPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <KitchenSlipOptionGroupPrintSection
+                  value={kitchenSlipOptionGroupPrint}
+                  onChange={setKitchenSlipOptionGroupPrint}
+                  tr={tr}
+                  t={t}
+                />
                 <ToggleRow label={tr("posLogoPrint", "로고 인쇄")} value={logoPrint} onChange={setLogoPrint} t={t} />
                 <ToggleRow label={tr("posSignatureLine", "서명란 출력")} value={signatureLine} onChange={setSignatureLine} t={t} />
                 <ToggleRow label={tr("posReceiptBarcode", "영수증 바코드")} value={receiptBarcode} onChange={setReceiptBarcode} t={t} />
@@ -1892,59 +1964,12 @@ export default function PosPrintersPage() {
                   onChange={setKitchenSlipShowOrderMemo}
                   t={t}
                 />
-                <div className="rounded-md border p-3 space-y-2">
-                  <div className="text-sm font-medium">
-                    {tr("posKitchenSlipOptionGroupFilterLabel", "주방 주문서 옵션 그룹 출력")}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {tr(
-                      "posKitchenSlipOptionGroupFilterHint",
-                      "그룹별로 출력/숨김을 선택합니다. (Size, 부위, 맛, 사이드, 기타)"
-                    )}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <ToggleRow
-                      label={tr("posKitchenSlipOptionGroupSize", "Size")}
-                      value={kitchenSlipOptionGroupPrint.size}
-                      onChange={(v) =>
-                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, size: v }))
-                      }
-                      t={t}
-                    />
-                    <ToggleRow
-                      label={tr("posKitchenSlipOptionGroupPart", "부위")}
-                      value={kitchenSlipOptionGroupPrint.part}
-                      onChange={(v) =>
-                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, part: v }))
-                      }
-                      t={t}
-                    />
-                    <ToggleRow
-                      label={tr("posKitchenSlipOptionGroupFlavor", "맛/소스")}
-                      value={kitchenSlipOptionGroupPrint.flavor}
-                      onChange={(v) =>
-                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, flavor: v }))
-                      }
-                      t={t}
-                    />
-                    <ToggleRow
-                      label={tr("posKitchenSlipOptionGroupSide", "사이드")}
-                      value={kitchenSlipOptionGroupPrint.side}
-                      onChange={(v) =>
-                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, side: v }))
-                      }
-                      t={t}
-                    />
-                    <ToggleRow
-                      label={tr("posKitchenSlipOptionGroupOther", "기타")}
-                      value={kitchenSlipOptionGroupPrint.other}
-                      onChange={(v) =>
-                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, other: v }))
-                      }
-                      t={t}
-                    />
-                  </div>
-                </div>
+                <KitchenSlipOptionGroupPrintSection
+                  value={kitchenSlipOptionGroupPrint}
+                  onChange={setKitchenSlipOptionGroupPrint}
+                  tr={tr}
+                  t={t}
+                />
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />
