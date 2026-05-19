@@ -1,9 +1,18 @@
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelect, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { consumeDeliveryMenuStockByName } from '@/lib/pos-delivery-policy'
 import { buildGrabOrderMemo, mergeGrabStateIntoFullMemo } from '@/lib/grab-order-memo'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import {
+  buildGrabPosCatalog,
+  deepReadGrabLineMinorTotal,
+  parseGrabPartnerItemMenuRef,
+  resolveGrabItemNameAndMeta,
+  resolveGrabLineUnitMinor,
+  resolveOptionCodesToLabels,
+  type GrabPosCatalog,
+} from '@/lib/grab-pos-order-enrich'
 
 type GrabOrderPersistResult =
   | {
@@ -37,10 +46,20 @@ type PosItem = {
   name: string
   price: number
   qty: number
+  menuId1?: string
   optionCode?: string | null
+  optionCode1?: string
   optionCodes?: string[]
   note?: string
   deliveryAppCode?: string
+  promoId?: string
+  promoCode?: string
+  promoItems?: {
+    menuId: string
+    optionId: string | null
+    optionCode?: string | null
+    quantity: number
+  }[]
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -344,6 +363,77 @@ async function loadPosMenuNameById(): Promise<Map<number, string>> {
   }
 }
 
+async function loadGrabPosCatalog(): Promise<GrabPosCatalog> {
+  try {
+    const [menus, options, promos] = await Promise.all([
+      supabaseSelectFilter('pos_menus', 'id=gt.0', {
+        limit: 20000,
+        select: 'id,name,code',
+        order: 'id.asc',
+      }) as Promise<{ id?: number; name?: string; code?: string }[] | null>,
+      supabaseSelectFilter('pos_menu_options', 'id=gt.0', {
+        limit: 50000,
+        select: 'id,name,option_code',
+        order: 'id.asc',
+      }) as Promise<{ id?: number; name?: string; option_code?: string }[] | null>,
+      supabaseSelect('pos_promos', {
+        limit: 5000,
+        select: 'id,name,code',
+        order: 'id.asc',
+      }) as Promise<{ id?: string | number; name?: string; code?: string }[] | null>,
+    ])
+    const promoIds = (promos || [])
+      .map((p) => String(p.id ?? '').trim())
+      .filter(Boolean)
+    const promoItemsByPromoId = new Map<string, NonNullable<PosItem['promoItems']>>()
+    if (promoIds.length > 0) {
+      const itemRows = (await supabaseSelectFilter('pos_promo_items', 'promo_id=not.is.null', {
+        limit: 50000,
+        select: 'promo_id,menu_id,option_id,option_code,quantity',
+        order: 'promo_id.asc',
+      })) as {
+        promo_id?: string | number
+        menu_id?: string | number
+        option_id?: string | number | null
+        option_code?: string | null
+        quantity?: number
+      }[] | null
+      for (const row of itemRows || []) {
+        const pid = String(row.promo_id ?? '').trim()
+        const menuId = String(row.menu_id ?? '').trim()
+        if (!pid || !menuId) continue
+        const list = promoItemsByPromoId.get(pid) || []
+        list.push({
+          menuId,
+          optionId: row.option_id != null && String(row.option_id).trim() ? String(row.option_id).trim() : null,
+          ...(row.option_code ? { optionCode: String(row.option_code).trim() } : {}),
+          quantity: Math.max(1, Number(row.quantity) || 1),
+        })
+        promoItemsByPromoId.set(pid, list)
+      }
+    }
+    const promosWithItems = (promos || []).map((p) => {
+      const id = String(p.id ?? '').trim()
+      return {
+        id,
+        name: String(p.name ?? '').trim(),
+        code: String(p.code ?? '').trim(),
+        items: id ? promoItemsByPromoId.get(id) || [] : [],
+      }
+    })
+    return buildGrabPosCatalog(
+      menus || [],
+      (options || []).map((o) => ({
+        name: o.name,
+        optionCode: o.option_code,
+      })),
+      promosWithItems
+    )
+  } catch {
+    return buildGrabPosCatalog([], [], [])
+  }
+}
+
 function extractReadableNamesFromMachineIds(
   item: Record<string, unknown>,
   menuNameById: Map<number, string>
@@ -431,7 +521,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
   const exponent = currencyExponent(order)
   const rawItems = Array.isArray(order.items) ? order.items : []
   const ecoSummary = resolveEcoCutlerySummary(order)
-  const menuNameById = await loadPosMenuNameById()
+  const [menuNameById, catalog] = await Promise.all([loadPosMenuNameById(), loadGrabPosCatalog()])
   const out: PosItem[] = []
   let idx = 0
 
@@ -481,6 +571,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     for (const n of extractReadableNamesFromMachineIds(item, menuNameById)) {
       if (!modifierNames.includes(n)) modifierNames.push(n)
     }
+    for (const label of resolveOptionCodesToLabels(Array.from(optionCodeSet), catalog.optionNameByCode)) {
+      if (!modifierNames.includes(label)) modifierNames.push(label)
+    }
     const banbanSlots = extractBanbanSlotNumbersFromItem(item)
     if (banbanSlots.length > 0) {
       // 반반치킨은 영수증 길이 절감을 위해 선택 맛 이름 대신 슬롯 번호(1,2)만 표기
@@ -488,9 +581,25 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       for (const s of banbanSlots) modifierNames.push(s)
     }
 
+    const resolved = resolveGrabItemNameAndMeta(item, catalog)
+    const rawDisplayName = String(
+      item.name ??
+        item.title ??
+        item.displayName ??
+        item.itemName ??
+        item.grabItemName ??
+        ''
+    ).trim()
+    const itemName = resolved.name || rawDisplayName || `Grab item ${idx + 1}`
     const unitBaseMinor = toNumber(item.price)
-    const unitMinorByParts = unitBaseMinor + modifierMinor
-    const lineMinor = readLineMinorTotal(item)
+    const lineMinor = deepReadGrabLineMinorTotal(item) || readLineMinorTotal(item)
+    const unitMinorResolved = resolveGrabLineUnitMinor({
+      lineMinor,
+      qty,
+      unitBaseMinor,
+      modifierMinorPerLine: modifierMinor,
+      itemName: rawDisplayName || itemName,
+    })
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,
@@ -502,33 +611,26 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       modifierNames.length ? `mods:${modifierNames.join(',')}` : '',
       ecoSummary || '',
     ].filter(Boolean)
-    if (optionCodeSet.size > 0) {
-      noteParts.push(`optc:${Array.from(optionCodeSet).join(',')}`)
-    }
 
     const itemBaseId = String(item.id ?? item.grabItemID ?? idx)
-    const itemName = String(
-      item.name ??
-        item.title ??
-        item.displayName ??
-        item.itemName ??
-        item.grabItemName ??
-        item.grabItemID ??
-        item.id ??
-        `Grab item ${idx + 1}`
-    )
     const itemNote = noteParts.length ? noteParts.join(' · ') : undefined
+    const menuRef = parseGrabPartnerItemMenuRef(itemBaseId)
+    const menuId1 = resolved.menuId || (menuRef ? String(menuRef.menuId) : undefined)
+    const optionCodes = Array.from(optionCodeSet)
 
     const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {
       if (rowQty <= 0) return
-      const optionCodes = Array.from(optionCodeSet)
       out.push({
         id: `grab:${itemBaseId}${rowSuffix}`,
         name: itemName,
         price: minorToMajor(unitMinor, exponent),
         qty: rowQty,
-        ...(optionCodes.length === 1 ? { optionCode: optionCodes[0] } : {}),
+        ...(menuId1 ? { menuId1 } : {}),
+        ...(optionCodes.length === 1 ? { optionCode: optionCodes[0], optionCode1: optionCodes[0] } : {}),
         ...(optionCodes.length > 1 ? { optionCodes } : {}),
+        ...(resolved.promoId ? { promoId: resolved.promoId } : {}),
+        ...(resolved.promoCode ? { promoCode: resolved.promoCode } : {}),
+        ...(resolved.promoItems && resolved.promoItems.length > 0 ? { promoItems: resolved.promoItems } : {}),
         note: itemNote,
         deliveryAppCode: 'grab',
       })
@@ -546,7 +648,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         pushPosItem(baseMinor, qty - remainder, '-lo')
       }
     } else {
-      pushPosItem(unitMinorByParts, qty, '')
+      pushPosItem(unitMinorResolved, qty, '')
     }
     idx += 1
   }

@@ -3,6 +3,7 @@ import {
   filterOptionSelectionGroupsForAudience,
   filterPosOptionsForVisibleGroups,
   isGroupVisibleForStepAudience,
+  normalizeOptionGroupsForMenu,
   parseOptionSelectionConfigFromDb,
 } from "@/lib/pos-option-selection-groups"
 
@@ -38,5 +39,9 @@ describe("pos-option-selection-groups audience", () => {
   it("isGroupVisibleForStepAudience treats missing as all", () => {
     expect(isGroupVisibleForStepAudience(undefined, "hall")).toBe(true)
     expect(isGroupVisibleForStepAudience("delivery", "hall")).toBe(false)
+  })
+
+  it("BBQ menu codes keep sidedish without auto-injecting part", () => {
+    expect(normalizeOptionGroupsForMenu(["sidedish", "part"], "C021")).toEqual(["sidedish"])
   })
 })

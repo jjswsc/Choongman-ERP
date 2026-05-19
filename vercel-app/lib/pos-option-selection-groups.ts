@@ -1,4 +1,8 @@
 import type { PosOptionSelectionGroupConfig } from "@/lib/api-client"
+import {
+  isStrictBonelessBbqChickenCode,
+  normalizeBbqChickenOptionSelectionGroups,
+} from "@/lib/pos-bbq-option-guard"
 
 const CHICKEN_CODE_PREFIX = "c"
 
@@ -46,6 +50,9 @@ export function normalizeOptionGroupsForMenu(groups: string[], menuCode: string 
     orderedDedup.push(k)
   }
   if (!isChickenMenuCode(menuCode)) return orderedDedup
+  if (isStrictBonelessBbqChickenCode(menuCode)) {
+    return normalizeBbqChickenOptionSelectionGroups(orderedDedup)
+  }
   return normalizeChickenOptionSelectionGroups(orderedDedup)
 }
 

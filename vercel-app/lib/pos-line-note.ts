@@ -35,6 +35,7 @@ export function normalizePosLineNote(
       else out.push(readable.join(', '))
       continue
     }
+    if (/^optc:\s*/i.test(chunk)) continue
     if (isMachineLikeToken(chunk)) continue
     out.push(chunk)
   }

@@ -29,7 +29,7 @@ import {
   supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
-import { resolveInventoryAsOfUtcIso } from '@/lib/accounting-inventory-asof'
+import { resolveInventoryAsOfUtcIso, resolveStockValuationUnitCost } from '@/lib/accounting-inventory-asof'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 
 export {
@@ -221,32 +221,26 @@ async function loadHqVendorMatchIndex(): Promise<HqVendorMatchIndex> {
 }
 
 /**
- * 본사 창고 출고 매입 — 출고 관리(getCombinedOutboundHistory) 실제 출고 로그와 동일 단가·기간.
+ * 본사 창고 출고 매입 — 출고 관리와 동일: invoice 스냅샷 → 발주 cart 단가 → items.price(본사→매장 판매가).
  * (미수령 발주 가상 줄·Usage 는 제외)
  */
 async function sumHqOutboundPurchaseFromOffice(
   storeFilter: string | null,
   startStr: string,
-  endStr: string,
-  _itemCostMap: Record<string, number>,
-  itemAccountSubjectMap: Map<string, number>,
-  accountSubjectMeta: Map<number, AccountSubjectMetaRow>
+  endStr: string
 ): Promise<{
   purchaseTotal: number
   expenseBySubject: Map<number | null, number>
   truncated?: boolean
 }> {
-  const expenseBySubject = new Map<number | null, number>()
   const split = await sumHqOutboundSubtotalMatchingOutboundManagement({
     startStr,
     endStr,
     storeFilter,
-    isExpenseRoutedItem: (code) => isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta),
-    addExpenseToMap: (sid, amt) => addToSubjectMap(expenseBySubject, sid, amt),
   })
   return {
     purchaseTotal: split.purchaseTotal,
-    expenseBySubject,
+    expenseBySubject: new Map(),
     truncated: split.hitRowCap || split.lineCount >= 100_000,
   }
 }
@@ -643,14 +637,26 @@ async function fetchStoreStockQtyByItem(
   }
 }
 
+async function loadItemValuationUnitCostMap(): Promise<Record<string, number>> {
+  const rows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost,price' })) as
+    | { code?: string; cost?: number | null; price?: number | null }[]
+    | null
+  const out: Record<string, number> = {}
+  for (const r of rows || []) {
+    const code = String(r.code || '').trim()
+    if (!code) continue
+    out[code] = resolveStockValuationUnitCost(r.cost, r.price)
+  }
+  return out
+}
+
+/** 재고 금액 — 재고 현황(getAppData·stock-table)과 동일: 전 품목 × (cost ?? price) */
 async function getInventoryValue(
   locationFilter: string | null,
   cutoffDate: string,
   isBefore: boolean,
-  itemCostMap: Record<string, number>,
-  excludeHq = false,
-  itemAccountSubjectMap: Map<string, number> = new Map(),
-  accountSubjectMeta: Map<number, AccountSubjectMetaRow> = new Map()
+  itemUnitCostMap: Record<string, number>,
+  excludeHq = false
 ): Promise<number> {
   const asOfUtcIso = resolveInventoryAsOfUtcIso(cutoffDate, isBefore)
   const locationPatterns = await resolveInventoryLocationPatterns(locationFilter, excludeHq)
@@ -658,10 +664,8 @@ async function getInventoryValue(
 
   let total = 0
   for (const [code, qty] of Object.entries(byItem)) {
-    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
-    if (routed.isExpense) continue
-    const cost = itemCostMap[code] ?? 0
-    total += qty * cost
+    const unit = itemUnitCostMap[code] ?? 0
+    total += qty * unit
   }
   return total
 }
@@ -674,13 +678,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const limits: Record<string, { fetched: number; limit: number; total?: number }> = {}
   let purchaseInboundBankOverlapVendorKeys: string[] = []
 
-  const itemRows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost' })) as { code?: string; cost?: number }[] | null
-  const itemCostMap: Record<string, number> = {}
-  for (const r of itemRows || []) {
-    const code = String(r.code || '').trim()
-    if (code) itemCostMap[code] = Number(r.cost) || 0
-  }
-  const [subjectMeta, itemAccountSubjectMap] = await Promise.all([
+  const [itemUnitCostMap, subjectMeta, itemAccountSubjectMap] = await Promise.all([
+    loadItemValuationUnitCostMap(),
     loadAccountSubjectMeta(),
     loadItemAccountSubjectMap(),
   ])
@@ -732,7 +731,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       '입고등록',
       startStr,
       endStr,
-      itemCostMap,
+      itemUnitCostMap,
       {},
       itemAccountSubjectMap,
       subjectMeta
@@ -812,24 +811,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       fixedExpenses += fx.total
       mergeExpenseSubjectMaps(expenseBySubjectMap, fx.byAccountSubjectId)
     }
-    beginningInventory = await getInventoryValue(
-      '본사',
-      startStr,
-      true,
-      itemCostMap,
-      false,
-      itemAccountSubjectMap,
-      subjectMeta
-    )
-    endingInventory = await getInventoryValue(
-      '본사',
-      endStr,
-      false,
-      itemCostMap,
-      false,
-      itemAccountSubjectMap,
-      subjectMeta
-    )
+    beginningInventory = await getInventoryValue('본사', startStr, true, itemUnitCostMap, false)
+    endingInventory = await getInventoryValue('본사', endStr, false, itemUnitCostMap, false)
     purchaseByVendor = Object.entries(purchaseVendorMapHq)
       .filter(([, v]) => v > 0)
       .map(([key, amount]) => ({ key, amount }))
@@ -869,10 +852,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       hqOutboundAgg = await sumHqOutboundPurchaseFromOffice(
         storeFilter === 'All' ? null : storeFilter,
         startStr,
-        endStr,
-        itemCostMap,
-        itemAccountSubjectMap,
-        subjectMeta
+        endStr
       )
     } catch (e) {
       warnings.push(
@@ -921,7 +901,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         storeFilter !== 'All' ? storeFilter : null,
         startStr,
         endStr,
-        itemCostMap,
+        itemUnitCostMap,
         storeInboundOpts,
         itemAccountSubjectMap,
         subjectMeta
@@ -1027,43 +1007,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     }
 
     if (storeFilter !== 'All') {
-      beginningInventory = await getInventoryValue(
-        storeFilter,
-        startStr,
-        true,
-        itemCostMap,
-        false,
-        itemAccountSubjectMap,
-        subjectMeta
-      )
-      endingInventory = await getInventoryValue(
-        storeFilter,
-        endStr,
-        false,
-        itemCostMap,
-        false,
-        itemAccountSubjectMap,
-        subjectMeta
-      )
+      beginningInventory = await getInventoryValue(storeFilter, startStr, true, itemUnitCostMap, false)
+      endingInventory = await getInventoryValue(storeFilter, endStr, false, itemUnitCostMap, false)
     } else {
-      beginningInventory = await getInventoryValue(
-        null,
-        startStr,
-        true,
-        itemCostMap,
-        true,
-        itemAccountSubjectMap,
-        subjectMeta
-      )
-      endingInventory = await getInventoryValue(
-        null,
-        endStr,
-        false,
-        itemCostMap,
-        true,
-        itemAccountSubjectMap,
-        subjectMeta
-      )
+      beginningInventory = await getInventoryValue(null, startStr, true, itemUnitCostMap, true)
+      endingInventory = await getInventoryValue(null, endStr, false, itemUnitCostMap, true)
     }
 
     purchaseByVendor = []
@@ -1264,16 +1212,10 @@ export async function computeIncomeStatementPurchaseDrillDown(
 
   if (vendorKey === '__pl_hq_orders__') {
     if (isHQ) return { ...empty, isHqOrders: true }
-    const [subjectMeta, itemAccountSubjectMap] = await Promise.all([
-      loadAccountSubjectMeta(),
-      loadItemAccountSubjectMap(),
-    ])
-    const isExpense = (code: string) => isExpenseRoutedItem(code, itemAccountSubjectMap, subjectMeta)
     const { lines: obLines, hitRowCap } = await listHqOutboundPurchaseDrillLines({
       startStr,
       endStr,
       storeFilter: storeFilter === 'All' ? null : storeFilter,
-      isExpenseRoutedItem: (code) => isExpense(code),
     })
     const hqOutbounds: IncomeStatementPurchaseDrillHqOutboundRow[] = obLines.map((line) => ({
       kind: 'hq_outbound',
@@ -1523,21 +1465,12 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
   }
   const cashAndBanks = openingCash + bankDelta
 
-  const [itemRows, subjectMeta, itemAccountSubjectMap] = await Promise.all([
-    supabaseSelect('items', { limit: 50000, select: 'code,cost' }) as Promise<{ code?: string; cost?: number }[] | null>,
-    loadAccountSubjectMeta(),
-    loadItemAccountSubjectMap(),
-  ])
-  const itemCostMap: Record<string, number> = {}
-  for (const r of itemRows || []) {
-    const code = String(r.code || '').trim()
-    if (code) itemCostMap[code] = Number(r.cost) || 0
-  }
+  const itemUnitCostMap = await loadItemValuationUnitCostMap()
   const inventory = isHQ
-    ? await getInventoryValue('본사', endStr, false, itemCostMap, false, itemAccountSubjectMap, subjectMeta)
+    ? await getInventoryValue('본사', endStr, false, itemUnitCostMap, false)
     : storeFilter !== 'All'
-      ? await getInventoryValue(storeFilter, endStr, false, itemCostMap, false, itemAccountSubjectMap, subjectMeta)
-      : await getInventoryValue(null, endStr, false, itemCostMap, false, itemAccountSubjectMap, subjectMeta)
+      ? await getInventoryValue(storeFilter, endStr, false, itemUnitCostMap, false)
+      : await getInventoryValue(null, endStr, false, itemUnitCostMap, true)
 
   let receivables = 0
   try {

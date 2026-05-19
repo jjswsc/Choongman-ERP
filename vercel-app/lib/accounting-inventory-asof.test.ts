@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { resolveInventoryAsOfUtcIso } from '@/lib/accounting-inventory-asof'
+import { resolveInventoryAsOfUtcIso, resolveStockValuationUnitCost } from '@/lib/accounting-inventory-asof'
 import { getBangkokDateRangeUtc, getBangkokEndOfDayUtcIso } from '@/lib/bangkok-time'
+
+describe('resolveStockValuationUnitCost', () => {
+  it('matches stock-table: cost ?? price', () => {
+    expect(resolveStockValuationUnitCost(12, 99)).toBe(12)
+    expect(resolveStockValuationUnitCost(0, 99)).toBe(0)
+    expect(resolveStockValuationUnitCost(null, 99)).toBe(99)
+    expect(resolveStockValuationUnitCost(undefined, 50)).toBe(50)
+  })
+})
 
 describe('resolveInventoryAsOfUtcIso', () => {
   it('기말재고는 해당일 방콕 말 시각(<=)과 동일', () => {

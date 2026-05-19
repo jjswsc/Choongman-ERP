@@ -133,6 +133,11 @@ import {
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
+import { isGrabCustomerCancelPosOrderUpdate } from '@/lib/pos-grab-customer-cancel'
+import {
+  consumePosSelfInitiatedGrabCancel,
+  markPosSelfInitiatedGrabCancel,
+} from '@/lib/pos-grab-cancel-alert-suppress'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import {
   publishPosCustomerDisplayState,
@@ -1413,6 +1418,7 @@ export default function PosTerminalPage() {
   const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
   const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
+  const promptedGrabCustomerCancelIdsRef = useRef<Set<number>>(new Set())
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
   /** 메인 포스: dine_in 품목 id 스냅샷(다른 단말 UPDATE 시 추가분만 홀/주방 자동인쇄) */
@@ -1897,6 +1903,7 @@ export default function PosTerminalPage() {
           return
         }
 
+        markPosSelfInitiatedGrabCancel(orderId)
         const rejectRes = await updatePosOrderStatus({
           id: orderId,
           status: 'cancelled',
@@ -2001,6 +2008,36 @@ export default function PosTerminalPage() {
       }, 120)
     },
     [playIncomingOrderBeep, t, refetchStores, decideIncomingPendingDeliveryOrder]
+  )
+
+  /** Grab 고객 취소(push order state) — Realtime UPDATE 시 팝업·알림음 */
+  const notifyGrabCustomerCancelledOrder = useCallback(
+    (params: { orderId: number; tableName?: string; orderNo?: string }) => {
+      const orderId = Number(params.orderId)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      if (consumePosSelfInitiatedGrabCancel(orderId)) return
+      if (promptedGrabCustomerCancelIdsRef.current.has(orderId)) return
+      promptedGrabCustomerCancelIdsRef.current.add(orderId)
+
+      playIncomingOrderBeep()
+      if (typeof window !== 'undefined') {
+        window.setTimeout(() => playIncomingOrderBeep(), 420)
+      }
+      refetchCurrentStore()
+      setActiveTab('delivery')
+      setDeliveryListMode('all')
+      setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+
+      const label =
+        String(params.tableName ?? '').trim() ||
+        (params.orderNo ? `POS #${params.orderNo}` : `Order #${orderId}`)
+      const msg = (t('posGrabCustomerCancelledAlert') || '고객이 Grab에서 주문을 취소했습니다.\n\n{{label}}').replace(
+        '{{label}}',
+        label
+      )
+      void appAlert(msg)
+    },
+    [playIncomingOrderBeep, refetchCurrentStore, t]
   )
 
   const isCurrentStoreOrder = useCallback(
@@ -2894,6 +2931,38 @@ export default function PosTerminalPage() {
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
   ])
+
+  useEffect(() => {
+    if (!currentStoreId) return
+    const rowMatchesStore = (rowStore: string) => {
+      const variants = [
+        currentStoreId,
+        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
+        currentStoreId.replace(/^CM\s+/i, ''),
+      ].filter(Boolean)
+      return variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))
+    }
+
+    const channel = subscribePosOrdersUpdate((payload) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const oldRow = payload?.old as Record<string, unknown> | undefined
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      const rowStore = String(row.store_code ?? '').trim()
+      if (!rowStore || !rowMatchesStore(rowStore)) return
+      if (!isGrabCustomerCancelPosOrderUpdate(row, oldRow)) return
+      notifyGrabCustomerCancelledOrder({
+        orderId,
+        tableName: String(row.table_name ?? ''),
+        orderNo: String(row.order_no ?? ''),
+      })
+    }, { store: currentStoreId })
+
+    return () => {
+      channel?.unsubscribe()
+    }
+  }, [currentStoreId, notifyGrabCustomerCancelledOrder])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
@@ -6291,6 +6360,8 @@ export default function PosTerminalPage() {
             <DeliveryOrderPanel
               orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
               menus={menus}
+              menuOptions={menuOptions}
+              promos={promosWithItems}
               deliveryApps={deliveryAppsFromApi}
               order={selectedDeliveryOrder}
               onPackaged={() => refetchStores({ scope: 'all' })}

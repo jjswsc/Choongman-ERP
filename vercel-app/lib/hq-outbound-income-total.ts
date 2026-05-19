@@ -48,6 +48,27 @@ function appendLocationPatternFilter(base: string, patterns: string[]): string {
   return `${base}&or=(${patterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
 }
 
+/** 출고 관리·손익 공통 — 본사 창고 location + 기간 + (선택) 매출처 (log_type 은 호출측에서 붙임) */
+export function buildHqWarehouseOutboundStockLogsFilter(params: {
+  startStr: string
+  endStr: string
+  vendorFilter?: string | null
+  includeSoftDeleteFilter?: boolean
+}): string {
+  let f = buildOutboundLogDateFilter(
+    params.startStr,
+    params.endStr,
+    params.includeSoftDeleteFilter !== false
+  )
+  f = appendLocationPatternFilter(f, getStockLocationPatterns('본사'))
+  const vf = String(params.vendorFilter || '').trim()
+  if (vf && vf !== 'All' && vf !== '전체 매출처') {
+    const storeFrag = buildStoreFieldOrIlikeFragment('vendor_target', vf)
+    if (storeFrag) f += `&${storeFrag}`
+  }
+  return f
+}
+
 function buildOutboundLogDateFilter(startStr: string, endStr: string, includeSoftDeleteFilter: boolean): string {
   const base = `log_date=gte.${startStr}&log_date=lte.${endStr}T23:59:59.999`
   return includeSoftDeleteFilter ? `${base}&is_deleted=is.false` : base
@@ -79,6 +100,7 @@ async function fetchOutboundLogsPage(
   }
 }
 
+/** 품목 마스터 판매가(items.price) — 매장 매입 단가 폴백(본사 내부 원가 items.cost 아님) */
 async function loadItemPriceByCode(): Promise<Record<string, number>> {
   const rows = (await supabaseSelect('items', {
     order: 'id.asc',
@@ -123,31 +145,56 @@ export async function loadHqOutboundProcessedLines(params: {
 }): Promise<{ lines: HqOutboundProcessedLine[]; hitRowCap: boolean }> {
   const { startStr, endStr, storeFilter } = params
   const itemPriceByCode = await loadItemPriceByCode()
-  const locationPatterns = getStockLocationPatterns('본사')
-  let dateFilter = buildOutboundLogDateFilter(startStr, endStr, true)
-  let locFilter = appendLocationPatternFilter(dateFilter, locationPatterns)
-  if (storeFilter && storeFilter !== 'All') {
-    const storeFrag = buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)
-    if (storeFrag) locFilter += `&${storeFrag}`
-  }
+  const vendorForFilter =
+    storeFilter && storeFilter !== 'All' ? storeFilter : null
 
   let outboundLogs: OutboundLogRow[]
   let forceLogs: OutboundLogRow[]
   try {
     ;[outboundLogs, forceLogs] = await Promise.all([
-      fetchOutboundLogsPage('Outbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
-      fetchOutboundLogsPage('ForceOutbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
+      fetchOutboundLogsPage(
+        'Outbound',
+        buildHqWarehouseOutboundStockLogsFilter({
+          startStr,
+          endStr,
+          vendorFilter: vendorForFilter,
+          includeSoftDeleteFilter: true,
+        }),
+        STOCK_LOG_OUTBOUND_HISTORY_COLS
+      ),
+      fetchOutboundLogsPage(
+        'ForceOutbound',
+        buildHqWarehouseOutboundStockLogsFilter({
+          startStr,
+          endStr,
+          vendorFilter: vendorForFilter,
+          includeSoftDeleteFilter: true,
+        }),
+        STOCK_LOG_OUTBOUND_HISTORY_COLS
+      ),
     ])
   } catch {
-    dateFilter = buildOutboundLogDateFilter(startStr, endStr, false)
-    locFilter = appendLocationPatternFilter(dateFilter, locationPatterns)
-    if (storeFilter && storeFilter !== 'All') {
-      const storeFrag = buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)
-      if (storeFrag) locFilter += `&${storeFrag}`
-    }
     ;[outboundLogs, forceLogs] = await Promise.all([
-      fetchOutboundLogsPage('Outbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
-      fetchOutboundLogsPage('ForceOutbound', locFilter, STOCK_LOG_OUTBOUND_HISTORY_COLS),
+      fetchOutboundLogsPage(
+        'Outbound',
+        buildHqWarehouseOutboundStockLogsFilter({
+          startStr,
+          endStr,
+          vendorFilter: vendorForFilter,
+          includeSoftDeleteFilter: false,
+        }),
+        STOCK_LOG_OUTBOUND_HISTORY_COLS
+      ),
+      fetchOutboundLogsPage(
+        'ForceOutbound',
+        buildHqWarehouseOutboundStockLogsFilter({
+          startStr,
+          endStr,
+          vendorFilter: vendorForFilter,
+          includeSoftDeleteFilter: false,
+        }),
+        STOCK_LOG_OUTBOUND_HISTORY_COLS
+      ),
     ])
   }
 
@@ -236,8 +283,6 @@ export async function sumHqOutboundSubtotalMatchingOutboundManagement(params: {
   startStr: string
   endStr: string
   storeFilter: string | null
-  isExpenseRoutedItem?: (itemCode: string) => { isExpense: boolean; subjectId: number | null }
-  addExpenseToMap?: (subjectId: number | null, amount: number) => void
 }): Promise<HqOutboundIncomeSplit> {
   const { lines, hitRowCap } = await loadHqOutboundProcessedLines({
     startStr: params.startStr,
@@ -245,29 +290,16 @@ export async function sumHqOutboundSubtotalMatchingOutboundManagement(params: {
     storeFilter: params.storeFilter,
   })
 
-  let subtotalBeforeExpenseSplit = 0
   let purchaseTotal = 0
-  const expenseBySubject = new Map<number | null, number>()
-
   for (const line of lines) {
-    const amount = line.lineAmount
-    subtotalBeforeExpenseSplit += amount
-
-    const routed = params.isExpenseRoutedItem?.(line.itemCode)
-    if (routed?.isExpense) {
-      const sid = routed.subjectId
-      expenseBySubject.set(sid, (expenseBySubject.get(sid) || 0) + amount)
-      params.addExpenseToMap?.(sid, amount)
-    } else {
-      purchaseTotal += amount
-    }
+    purchaseTotal += line.lineAmount
   }
 
   return {
     purchaseTotal,
-    expenseBySubject,
+    expenseBySubject: new Map(),
     lineCount: lines.length,
-    subtotalBeforeExpenseSplit,
+    subtotalBeforeExpenseSplit: purchaseTotal,
     hitRowCap,
   }
 }
@@ -277,16 +309,10 @@ export async function listHqOutboundPurchaseDrillLines(params: {
   startStr: string
   endStr: string
   storeFilter: string | null
-  isExpenseRoutedItem?: (itemCode: string) => { isExpense: boolean; subjectId: number | null }
 }): Promise<{ lines: HqOutboundProcessedLine[]; hitRowCap: boolean }> {
-  const { lines, hitRowCap } = await loadHqOutboundProcessedLines({
+  return loadHqOutboundProcessedLines({
     startStr: params.startStr,
     endStr: params.endStr,
     storeFilter: params.storeFilter,
   })
-  const filtered = lines.filter((line) => {
-    const routed = params.isExpenseRoutedItem?.(line.itemCode)
-    return !routed?.isExpense
-  })
-  return { lines: filtered, hitRowCap }
 }

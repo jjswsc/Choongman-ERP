@@ -5,8 +5,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
-import type { PosDeliveryApp, PosMenu, PosOrderPackagingChecklistGroup } from '@/lib/api-client'
+import type {
+  PosDeliveryApp,
+  PosMenu,
+  PosMenuOption,
+  PosOrderPackagingChecklistGroup,
+  PosPromoWithItems,
+} from '@/lib/api-client'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
+import {
+  buildOptionNameByCodeFromMenus,
+  resolveGrabDeliveryLineNote,
+} from '@/lib/grab-pos-order-enrich'
 import {
   getPosPackagingChecklistByOrder,
   grabCancelOrderByStoreApi,
@@ -23,6 +33,7 @@ import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { extractGrabOrderIdFromMemo, extractGrabStateFromMemo } from '@/lib/grab-order-memo'
+import { markPosSelfInitiatedGrabCancel } from '@/lib/pos-grab-cancel-alert-suppress'
 import {
   grabStateToStageIndex,
   GRAB_DELIVERY_PROGRESS_STAGE_COUNT,
@@ -48,6 +59,8 @@ export interface DeliveryOrderPanelProps {
   order: Order | null
   /** 품목 `name`이 코드로만 온 경우(Grab 등) POS 메뉴명으로 복원 */
   menus?: PosMenu[]
+  menuOptions?: PosMenuOption[]
+  promos?: PosPromoWithItems[]
   deliveryApps?: PosDeliveryApp[]
   onPackaged?: () => void
   /** pending 주문 수락(รับออเดอร์) 직후 상위에서 후속 처리(예: 자동 인쇄) */
@@ -74,6 +87,8 @@ export function DeliveryOrderPanel({
   orderLabel,
   order,
   menus: menusFromProps = [],
+  menuOptions: menuOptionsFromProps = [],
+  promos: promosFromProps = [],
   deliveryApps: _deliveryApps = [],
   onPackaged,
   onAccepted,
@@ -102,8 +117,20 @@ export function DeliveryOrderPanel({
   const [checklistSubmitting, setChecklistSubmitting] = useState(false)
   const [checklistGroups, setChecklistGroups] = useState<PosOrderPackagingChecklistGroup[]>([])
 
+  const isGrabDeliveryOrder = Boolean(order && /grab_order:/i.test(String(order.memo ?? '')))
+
+  const optionNameByCode = useMemo(
+    () => buildOptionNameByCodeFromMenus(menusFromProps, menuOptionsFromProps),
+    [menusFromProps, menuOptionsFromProps]
+  )
+
   const parseItemMeta = (rawNote?: string) => {
-    const note = normalizePosLineNote(String(rawNote || ''), { keepOptionSummary: true })
+    const raw = String(rawNote || '').trim()
+    if (!raw) return { optionSummary: '', optionChips: [] as string[], requestSummary: '' }
+    if (isGrabDeliveryOrder || /optc:/i.test(raw)) {
+      return resolveGrabDeliveryLineNote(raw, optionNameByCode)
+    }
+    const note = normalizePosLineNote(raw, { keepOptionSummary: true })
     if (!note) return { optionSummary: '', optionChips: [] as string[], requestSummary: '' }
     const chunks = note
       .split('·')
@@ -145,7 +172,12 @@ export function DeliveryOrderPanel({
     ;(item.promoItems ?? []).forEach((line, idx) => {
       const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
       const rawMenu = menuNameById.get(String(line.menuId ?? '').trim()) || String(line.menuId ?? '').trim() || `Set ${idx + 1}`
-      const rawOpt = String(line.optionId ?? '').trim()
+      const optCode = String(line.optionCode ?? '').trim().toUpperCase()
+      const optFromCode = optCode ? optionNameByCode.get(optCode) : ''
+      const rawOpt =
+        String(line.optionName ?? '').trim() ||
+        optFromCode ||
+        String(line.optionId ?? '').trim()
       const childLabel = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
       for (let n = 0; n < qty; n += 1) rows.push({ key: buildPosSetChildKey(line, idx, n), label: childLabel })
     })
@@ -322,7 +354,11 @@ export function DeliveryOrderPanel({
       await updatePosOrderStatus({ id: oid, status: 'cancelled' })
       if (order.items.length > 0) {
         const kitchenLines = order.items.map((it) => {
-          const raw = resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
+          const raw = resolvePosOrderItemMenuDisplayName(
+            { id: it.id, name: it.name, menuId: it.menuId, promoId: it.promoId, promoCode: it.promoCode },
+            menusFromProps,
+            promosFromProps
+          )
           return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw, ti))
         })
         await onAfterFullOrderKitchenReprint?.(oid, {
@@ -354,8 +390,9 @@ export function DeliveryOrderPanel({
       return
     }
     const labelRaw = resolvePosOrderItemMenuDisplayName(
-      { id: target.id, name: target.name, menuId: target.menuId },
-      menusFromProps
+      { id: target.id, name: target.name, menuId: target.menuId, promoId: target.promoId, promoCode: target.promoCode },
+      menusFromProps,
+      promosFromProps
     )
     const label = translatePosMenuLineForReceipt(labelRaw, ti)
     const ask = i18nTr(ti, 'posLineItemCancelConfirm', { name: label })
@@ -477,6 +514,7 @@ export function DeliveryOrderPanel({
       if (grabOrderId) setOptimisticGrabState('CANCELLED')
       const id = Number(order.id)
       if (!Number.isNaN(id)) {
+        markPosSelfInitiatedGrabCancel(id)
         await updatePosOrderStatus({ id, status: 'cancelled', ...(grabOrderId ? { grabState: 'CANCELLED' } : {}) })
       }
       if (grabOrderId) {
@@ -488,7 +526,11 @@ export function DeliveryOrderPanel({
       }
       if (!Number.isNaN(id) && order.items.length > 0) {
         const kitchenLines = order.items.map((it) => {
-          const raw = resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
+          const raw = resolvePosOrderItemMenuDisplayName(
+            { id: it.id, name: it.name, menuId: it.menuId, promoId: it.promoId, promoCode: it.promoCode },
+            menusFromProps,
+            promosFromProps
+          )
           return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw, ti))
         })
         await onAfterFullOrderKitchenReprint?.(id, {
@@ -610,8 +652,15 @@ export function DeliveryOrderPanel({
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
                     const displayNameRaw = resolvePosOrderItemMenuDisplayName(
-                      { id: item.id, name: item.name, menuId: item.menuId },
-                      menusFromProps
+                      {
+                        id: item.id,
+                        name: item.name,
+                        menuId: item.menuId,
+                        promoId: item.promoId,
+                        promoCode: item.promoCode,
+                      },
+                      menusFromProps,
+                      promosFromProps
                     )
                     const displayName = translatePosMenuLineForReceipt(displayNameRaw, ti)
                     const packaged = itemPackaged[item.id]

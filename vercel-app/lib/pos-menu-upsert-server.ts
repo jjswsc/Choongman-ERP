@@ -15,7 +15,11 @@ import {
 import { recordPriceChanges } from '@/lib/price-history'
 import { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 import { validatePosMenuImageUrlForMenu } from '@/lib/pos-menu-image-storage-path'
-import { isStrictBonelessBbqChickenCode } from '@/lib/pos-bbq-option-guard'
+import {
+  isStrictBonelessBbqChickenCode,
+  normalizeBbqChickenOptionSelectionGroups,
+  validateBbqOptionSelectionGroups,
+} from '@/lib/pos-bbq-option-guard'
 
 export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
@@ -339,48 +343,50 @@ export async function upsertPosMenuFromBody(
           } => !!x
         )
     : null
+  const normalizeGroupsForMenu = (groups: string[]) => {
+    if (isStrictBonelessBbqChickenCode(effectiveCode)) {
+      return normalizeBbqChickenOptionSelectionGroups(groups)
+    }
+    if (isChickenMenu) return normalizeChickenOptionSelectionGroups(groups)
+    return groups
+  }
+
   const chickenSyncGroupOrder =
     isChickenMenu && optionSelectionGroupsCleaned && optionSelectionGroupsCleaned.length > 0
-      ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsCleaned)
+      ? normalizeGroupsForMenu(optionSelectionGroupsCleaned)
       : isChickenMenu && optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0
-        ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsLegacy)
+        ? normalizeGroupsForMenu(optionSelectionGroupsLegacy)
         : isChickenMenu && optionSelectionConfigCleaned && optionSelectionConfigCleaned.length > 0
-          ? normalizeChickenOptionSelectionGroups(
+          ? normalizeGroupsForMenu(
               optionSelectionConfigCleaned.map((x) => String(x?.key ?? '').trim()).filter(Boolean)
             )
           : null
 
   const optionSelectionGroupsFinal =
     optionSelectionGroupsExplicit && optionSelectionGroupsCleaned != null
-      ? isChickenMenu
-        ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsCleaned)
-        : optionSelectionGroupsCleaned
+      ? normalizeGroupsForMenu(optionSelectionGroupsCleaned)
       : null
   const optionSelectionGroupsLegacyFinal =
     optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0
-      ? isChickenMenu
-        ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsLegacy)
-        : optionSelectionGroupsLegacy
+      ? normalizeGroupsForMenu(optionSelectionGroupsLegacy)
       : null
   const optionSelectionConfigFinal =
     isChickenMenu && optionSelectionConfigExplicit && optionSelectionConfigCleaned != null
       ? syncOptionSelectionConfigToGroupKeys(
-          chickenSyncGroupOrder && chickenSyncGroupOrder.length > 0 ? chickenSyncGroupOrder : ['part'],
+          chickenSyncGroupOrder && chickenSyncGroupOrder.length > 0
+            ? chickenSyncGroupOrder
+            : isStrictBonelessBbqChickenCode(effectiveCode)
+              ? []
+              : ['part'],
           optionSelectionConfigCleaned
         )
       : optionSelectionConfigCleaned
-  if (
-    isStrictBonelessBbqChickenCode(effectiveCode) &&
-    (
-      (optionSelectionGroupsFinal && optionSelectionGroupsFinal.length > 0) ||
-      (optionSelectionGroupsLegacyFinal && optionSelectionGroupsLegacyFinal.length > 0)
-    )
-  ) {
-    return {
-      success: false,
-      message:
-        'BBQ 치킨(C020~C023)은 옵션 그룹 단계를 사용할 수 없습니다. 메뉴 옵션은 "M - Boneless" 단일 행만 유지해 주세요.',
-    }
+  const bbqGroupGuard = validateBbqOptionSelectionGroups(
+    effectiveCode,
+    optionSelectionGroupsFinal ?? optionSelectionGroupsLegacyFinal
+  )
+  if (!bbqGroupGuard.ok) {
+    return { success: false, message: bbqGroupGuard.message }
   }
   const kitchenPrinterInBody = 'kitchenPrinter' in body
   const kitchenPrinter =

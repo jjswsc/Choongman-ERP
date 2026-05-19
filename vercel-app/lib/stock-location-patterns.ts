@@ -18,8 +18,9 @@ export function isOfficeStockSelection(store: string): boolean {
 }
 
 const STORE_ALIASES: Record<string, string[]> = {
-  ekkamai: ['เอกมัย', 'สาขาเอกมัย', 'ekkamai'],
-  'เอกมัย': ['ekkamai', 'สาขาเอกมัย', 'เอกมัย'],
+  ekkamai: ['เอกมัย', 'สาขาเอกมัย', 'ekkamai', 'cm ekkamai', 'cm ekamai', '에까마이'],
+  'เอกมัย': ['ekkamai', 'สาขาเอกมัย', 'เอกมัย', 'cm ekkamai', '에까마이'],
+  '에까마이': ['ekkamai', 'cm ekkamai', 'cm ekamai', 'เอกมัย', 'สาขาเอกมัย', 'CM Ekkamai', '에까마이'],
   jidubang: ['jidubang'],
   huamak: ['huamak'],
   silom: ['silom'],

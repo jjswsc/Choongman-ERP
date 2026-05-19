@@ -5,7 +5,10 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
-import { isStrictBonelessBbqChickenCode } from '@/lib/pos-bbq-option-guard'
+import {
+  BBQ_FORBIDDEN_SELECTION_GROUP_KEYS,
+  isStrictBonelessBbqChickenCode,
+} from '@/lib/pos-bbq-option-guard'
 
 type LinkInput = {
   id?: string
@@ -40,14 +43,27 @@ export async function POST(req: NextRequest) {
     )) as { code?: string }[] | null
     const menuCode = String(menuRows?.[0]?.code ?? '').trim()
     if (isStrictBonelessBbqChickenCode(menuCode) && links.length > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            'BBQ 치킨(C020~C023)은 단계형 옵션 그룹을 사용할 수 없습니다. 그룹 링크를 비우고 "M - Boneless" 단일 옵션만 사용해 주세요.',
-        },
-        { headers }
-      )
+      const groupIds = [...new Set(links.map((l) => Number(l.groupId)).filter((id) => id > 0))]
+      if (groupIds.length > 0) {
+        const groupRows = (await supabaseSelectFilter(
+          'pos_option_groups',
+          `id=in.(${groupIds.join(',')})`,
+          { select: 'id,group_key', limit: 500 }
+        )) as { id?: number; group_key?: string }[] | null
+        const forbidden = (groupRows || []).filter((g) =>
+          BBQ_FORBIDDEN_SELECTION_GROUP_KEYS.has(String(g.group_key ?? '').trim().toLowerCase())
+        )
+        if (forbidden.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                'Bar.B.Q 치킨(C020~C023)에는 size/part 공통 그룹을 연결할 수 없습니다. 치킨무·김치 등 sidedish 그룹만 연결해 주세요.',
+            },
+            { headers }
+          )
+        }
+      }
     }
     const existing = (await supabaseSelectFilter(
       "pos_menu_option_group_links",

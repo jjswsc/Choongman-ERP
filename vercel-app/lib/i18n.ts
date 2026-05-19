@@ -3498,7 +3498,7 @@ export const i18n = {
     pL_diagInboundBankOverlap:
       '아래 거래처는 같은 달에 직접 입고(재고)와 통장 「매입 지급」이 동시에 잡혀 있습니다. 동일 매입을 두 경로에 각각 넣었다면 매입액이 겹칠 수 있으니, 정산 규칙에 맞게 한쪽만 남기거나 금액을 조정하세요.',
     pL_diagHqOutboundBasis:
-      '본사 매입은 「본사 창고→매장 출고」 금액(단가 스냅샷·없으면 품목 원가)으로 집계합니다. 승인 발주 합계와 차이가 나면 직납·부분 수령·단가 조정 등을 의심해 보세요.',
+      '「본사 창고 출고」는 출고 관리 기간 총액(공급가, VAT 제외)과 동일 조건입니다 — 본사 창고 실제 출고 로그만, 단가는 invoice 스냅샷→발주 cart→items.price(본사→매장 판매가). 아래 「승인 발주」는 참고(미수령·직납·기간 차이로 출고 합계와 다를 수 있음).',
     pL_diagExcludedHqBankTitle: '본사 거래처 입고·통장 매입지급 — 매입 합계에서 제외',
     pL_diagExcludedHqBankHint:
       '거래처 마스터 유형이 본사(Head Office)인 코드의 직접 입고·「매입 지급」은 본사 창고→매장 출고 금액과 이중이 되지 않도록 매입 총액에 넣지 않습니다. 미지급 정산만 반영하려면 별도 확인하세요.',
@@ -5926,6 +5926,8 @@ export const i18n = {
     posIncomingDeliveryApprovePrompt: '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?',
     posIncomingDeliveryArrivedPrompt: '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?',
     posIncomingDeliveryDecisionPrompt: '신규 배달 주문입니다.\n이 주문을 수락할까요?',
+    posGrabCustomerCancelledAlert:
+      '고객이 Grab에서 주문을 취소했습니다.\n\n{{label}}\n\n배달 탭에서 확인해 주세요.',
     posGrabDeliveryProgressTitle: 'Grab 배달 단계',
     posGrabDeliveryProgressHint: 'Grab에서 푸시한 배송 상태입니다. 매장 조리·결제 흐름과는 별도로 표시됩니다.',
     posGrabStageWaitConfirm: '확인 대기',
@@ -11740,7 +11742,7 @@ Only matters the employee must handle personally on a working day:
     pL_diagInboundBankOverlap:
       'These vendor codes have both direct inbound (inventory) and bank “purchase payment” in the same month. If the same purchase was recorded in both places, purchase totals may be double-counted—keep one path or adjust amounts per your policy.',
     pL_diagHqOutboundBasis:
-      'HQ-side purchases use outbound from the HQ warehouse to the store (unit price snapshot, else item cost). If this differs from approved order totals, check direct settlement, partial receive, or price changes.',
+      'Store purchases (HQ warehouse → store outbound) match Outbound Management: ① invoice_unit_price on the stock log, else ② approved order cart unit price, else ③ item master selling price (items.price, HQ→store). Internal HQ cost (items.cost) is not used. If this differs from approved order totals, check direct delivery, partial receive, or price changes.',
     pL_diagExcludedHqBankTitle: 'HQ vendor inbound & bank purchase payments — excluded from purchase total',
     pL_diagExcludedHqBankHint:
       'Direct inbound and bank purchase_payment rows for vendors marked as Head Office are not added to purchase totals, to avoid double-counting with HQ warehouse outbound. Review separately if you only need to track AP settlement.',
@@ -14172,6 +14174,8 @@ orderItemQty: 'Qty',
     posIncomingDeliveryApprovePrompt: 'A new delivery order has arrived. Move to the order acceptance screen now?',
     posIncomingDeliveryArrivedPrompt: 'A new delivery order has arrived. Move to the order screen now?',
     posIncomingDeliveryDecisionPrompt: 'New delivery order.\nDo you want to accept this order?',
+    posGrabCustomerCancelledAlert:
+      'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
     posGrabDeliveryProgressTitle: 'Grab delivery stages',
     posGrabDeliveryProgressHint: 'Status from Grab pushes. Shown separately from in-store prep and payment.',
     posGrabStageWaitConfirm: 'Waiting for confirmation',
@@ -22114,6 +22118,8 @@ orderItemQty: 'จำนวน',
     posIncomingDeliveryApprovePrompt: 'มีออเดอร์เดลิเวอรีใหม่ เข้าหน้ารับออเดอร์ตอนนี้หรือไม่?',
     posIncomingDeliveryArrivedPrompt: 'มีออเดอร์เดลิเวอรีใหม่ ไปหน้ารายการออเดอร์ตอนนี้หรือไม่?',
     posIncomingDeliveryDecisionPrompt: 'มีออเดอร์เดลิเวอรีใหม่\nต้องการรับออเดอร์นี้หรือไม่?',
+    posGrabCustomerCancelledAlert:
+      'ลูกค้ายกเลิกออเดอร์นี้ใน Grab แล้ว\n\n{{label}}\n\nโปรดตรวจสอบที่แท็บเดลิเวอรี',
     posGrabDeliveryProgressTitle: 'ขั้น Grab',
     posGrabDeliveryProgressHint: 'สถานะจาก Grab แยกจากการปรุงและชำระเงินในร้าน',
     posGrabStageWaitConfirm: 'รอยืนยัน',

@@ -14,6 +14,7 @@ import {
   unitPriceFromOutboundLogSnapshot,
 } from '@/lib/outbound-order-line-match'
 import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
+import { buildHqWarehouseOutboundStockLogsFilter } from '@/lib/hq-outbound-income-total'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,25 +81,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // DB에서 출고(Outbound/ForceOutbound)만 필터 + 기간 필터 → 다른 로그(Inbound/Usage 등) 500건에 묻혀 조회 누락 방지
-    const dateRange = `log_date=gte.${startStr}&log_date=lte.${endStr}T23:59:59.999`
-    const vendorPart =
-      vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처'
-        ? `&vendor_target=eq.${encodeURIComponent(vendorFilter)}`
-        : ''
+    // 손익 본사 창고 출고와 동일: 본사 창고 location + 기간 + 매출처(변형 ilike)
     const itemPart = itemSearch
       ? `&or=(item_code.ilike.${encodeURIComponent(`%${escapeIlikePattern(itemSearch)}%`)},item_name.ilike.${encodeURIComponent(`%${escapeIlikePattern(itemSearch)}%`)})`
       : ''
-    const baseFilter = dateRange + vendorPart + itemPart
+    const outboundBase = `log_type=eq.Outbound&${buildHqWarehouseOutboundStockLogsFilter({
+      startStr,
+      endStr,
+      vendorFilter,
+    })}`
+    const forceBase = `log_type=eq.ForceOutbound&${buildHqWarehouseOutboundStockLogsFilter({
+      startStr,
+      endStr,
+      vendorFilter,
+    })}`
 
     const [outboundLogs, forceLogs] = await Promise.all([
-      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.Outbound&is_deleted=is.false&${baseFilter}`, {
+      supabaseSelectFilterAllPages('stock_logs', `${outboundBase}${itemPart}`, {
         order: 'log_date.desc',
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
         pageSize: 8000,
         maxRows: 100000,
       }),
-      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.ForceOutbound&is_deleted=is.false&${baseFilter}`, {
+      supabaseSelectFilterAllPages('stock_logs', `${forceBase}${itemPart}`, {
         order: 'log_date.desc',
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
         pageSize: 8000,
@@ -299,6 +304,7 @@ export async function GET(request: NextRequest) {
         info.price
       )
       const isInternalUseForce = typeCode === 'Force' && isInternalForceOutboundTarget(target)
+      const lineAmount = isInternalUseForce ? 0 : Math.round(unitPrice * qtyAbs * 100) / 100
       const frozen = frozenInvoiceUnitPriceFromLog(row)
       const sid = row.id != null ? Number(row.id) : NaN
       const fromCartLr = findLineRemarksInOrderCart(
@@ -314,7 +320,7 @@ export async function GET(request: NextRequest) {
         code,
         spec: info.spec,
         qty: qtyAbs,
-        amount: isInternalUseForce ? 0 : unitPrice * qtyAbs,
+        amount: lineAmount,
         orderRowId: orderRowId || undefined,
         deliveryStatus: deliveryStatus || undefined,
         deliveryDate: deliveryDateForItem || undefined,

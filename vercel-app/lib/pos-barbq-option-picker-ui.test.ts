@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getBarBqAncillarySelectionGroups,
   isBarBqChickenMenu,
+  shouldUseBarBqTwoPhaseOptionPicker,
   shouldUseFlatBarBqChickenOptionPicker,
 } from '@/lib/pos-barbq-option-picker-ui'
 
@@ -15,7 +17,7 @@ describe('pos-barbq-option-picker-ui', () => {
     ).toBe(true)
   })
 
-  it('forces flat list when part group but M - options exist', () => {
+  it('forces flat list when part group but M - options exist (legacy)', () => {
     expect(
       shouldUseFlatBarBqChickenOptionPicker({
         menu: {
@@ -27,6 +29,36 @@ describe('pos-barbq-option-picker-ui', () => {
         options: [
           { id: '1', menuId: '9', name: 'M - Boneless', priceModifier: 90, optionType: 'substitution' },
         ],
+      })
+    ).toBe(true)
+  })
+
+  it('uses two-phase when only sidedish group and M options exist', () => {
+    expect(
+      shouldUseFlatBarBqChickenOptionPicker({
+        menu: {
+          code: 'C020',
+          category: 'Bar.B.Q',
+          categoryMain: 'Chicken',
+          optionSelectionGroups: ['sidedish'],
+        },
+        options: [
+          { id: '1', menuId: '9', name: 'M - Boneless', priceModifier: 90, optionType: 'substitution' },
+        ],
+      })
+    ).toBe(false)
+    expect(
+      shouldUseBarBqTwoPhaseOptionPicker({
+        menu: {
+          code: 'C020',
+          category: 'Bar.B.Q',
+          categoryMain: 'Chicken',
+          optionSelectionGroups: ['sidedish'],
+        },
+        options: [
+          { id: '1', menuId: '9', name: 'M - Boneless', priceModifier: 90, optionType: 'substitution' },
+        ],
+        ancillaryGroups: getBarBqAncillarySelectionGroups(['sidedish']),
       })
     ).toBe(true)
   })

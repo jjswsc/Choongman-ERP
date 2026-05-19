@@ -12,21 +12,42 @@ from public.pos_menus m
 where m.code in ('C020', 'C021', 'C022', 'C023')
 order by m.code;
 
--- 1) 다단계 그룹 해제 — Bar.B.Q 4종 모두 동일 UI (직접 옵션 목록)
-update public.pos_menus
-set
-  option_selection_groups = '[]'::jsonb,
-  option_selection_config = '[]'::jsonb
-where code in ('C020', 'C021', 'C022', 'C023');
+-- 1) size/part 단계만 제거 (sidedish 등 부가 단계는 유지). 최초 1회 전체 해제가 필요하면 아래 주석 해제.
+-- update public.pos_menus
+-- set option_selection_groups = '[]'::jsonb, option_selection_config = '[]'::jsonb
+-- where code in ('C020', 'C021', 'C022', 'C023');
 
--- 2) 공통 옵션 그룹 링크가 size/part 를 다시 끼우면 제거 (테이블 있을 때만)
+update public.pos_menus m
+set
+  option_selection_groups = coalesce(
+    (
+      select jsonb_agg(to_jsonb(trim(elem)))
+      from jsonb_array_elements_text(coalesce(m.option_selection_groups, '[]'::jsonb)) as elem
+      where lower(trim(elem)) not in ('size', 'part')
+    ),
+    '[]'::jsonb
+  ),
+  option_selection_config = coalesce(
+    (
+      select jsonb_agg(cfg)
+      from jsonb_array_elements(coalesce(m.option_selection_config, '[]'::jsonb)) as cfg
+      where lower(trim(coalesce(cfg->>'key', ''))) not in ('size', 'part')
+    ),
+    '[]'::jsonb
+  )
+where m.code in ('C020', 'C021', 'C022', 'C023');
+
+-- 2) size/part 공통 그룹 링크만 제거 (sidedish 링크는 유지)
 do $$
 begin
-  if to_regclass('public.pos_menu_option_group_links') is not null then
+  if to_regclass('public.pos_menu_option_group_links') is not null
+     and to_regclass('public.pos_option_groups') is not null then
     delete from public.pos_menu_option_group_links l
-    using public.pos_menus m
+    using public.pos_menus m, public.pos_option_groups g
     where l.menu_id = m.id
-      and m.code in ('C020', 'C021', 'C022', 'C023');
+      and l.group_id = g.id
+      and m.code in ('C020', 'C021', 'C022', 'C023')
+      and lower(trim(coalesce(g.group_key, ''))) in ('size', 'part');
   end if;
 end $$;
 
