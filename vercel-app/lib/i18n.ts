@@ -749,6 +749,8 @@ export const i18n = {
     companyHybridDocSource: '출처',
     companyHybridDocColRelated: '연결',
     companyHybridDocColIssued: '발급 날짜',
+    companyHybridDocColValidity: '발급·만료',
+    companyHybridDocColType: '종류',
     companyHybridDocColCreated: '등록일',
     companyHybridDocSourceDrive: 'Google Drive',
     companyHybridDocSourceStorage: '업로드(스토리지)',
@@ -785,6 +787,12 @@ export const i18n = {
     companyHybridCategoryColParent: '상위',
     companyHybridCategoryHierarchyHint:
       '① 최상위: 상위를 「없음 (최상위)」으로 두고 이름을 입력해 추가합니다.\n② 하위: 상위 카테고리(최상위만 선택 가능)를 고른 뒤 하위 이름(예: 공지, 매뉴얼)을 입력해 추가합니다.',
+    companyHybridCategoryGlobalHint:
+      '카테고리는 전 매장에서 공통으로 사용합니다. 여기서 추가·수정하면 목록·등록 화면의 카테고리 선택에 동일하게 표시됩니다.',
+    companyHybridCategoryLegacyHint:
+      '기존 매장별 카테고리만 있습니다. 아래에서 전사 공통 카테고리를 추가하면 모든 매장 문서에서 같은 목록을 쓸 수 있습니다.',
+    companyHybridCategoryNoPermissionHint:
+      '카테고리 추가·수정 권한이 없습니다. 매장 관리자 또는 본사 권한이 필요합니다.',
     companyHybridCategoryPickStoreHint:
       '카테고리를 추가·수정하려면 「전체 매장」이 아닌, 해당 매장을 선택해 주세요.',
     companyHybridDocSessionRelogin: '로그인 토큰이 없습니다. 다시 로그인한 뒤 문서 관리를 이용해 주세요.',
@@ -6934,7 +6942,7 @@ export const i18n = {
     helpSum_admin_company_documents:
       '매장별 계약·면허·세무 등 회사 문서를 Drive 링크 또는 파일 업로드로 등록하고, 목록에서 검색·정렬·발급일·등록일을 확인하는 화면입니다.',
     helpHow_admin_company_documents:
-      '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② 목록: 필터를 맞춘 뒤「조회」로 불러옵니다. 제목 열 머리글을 누르면 제목 오름차순·내림차순이 전환되고, 기본은 등록일 최신순입니다. 행의 연필(수정)로 등록 탭에 불러와 제목·카테고리·권한·날짜·비고를 고칠 수 있습니다(업로드 파일은「문서 정보」에서 저장, Drive는 링크 저장).\n③ 등록: 「문서 정보」에 제목·카테고리·연결·발급 날짜·만료일·비고를 입력한 뒤, Drive URL 저장 또는 파일 업로드를 진행합니다.\n④ 카테고리: 매장을 선택한 뒤 최상위(상위 없음) 또는 상위를 지정한 하위(예: 공지·매뉴얼)를 추가·수정합니다.\n⑤ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
+      '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② 목록: 필터를 맞춘 뒤「조회」로 불러옵니다. 제목 열 머리글을 누르면 제목 오름차순·내림차순이 전환되고, 기본은 등록일 최신순입니다. 행의 연필(수정)로 등록 탭에 불러온 뒤「문서 정보」하단「저장」으로 제목·카테고리·권한·날짜·비고·공문을 저장합니다(Drive는 URL을 왼쪽 카드에서 함께 저장).\n③ 등록: 「문서 정보」에 제목·카테고리(전 매장 공통)·연결·발급 날짜·만료일·비고를 입력한 뒤, Drive URL 저장 또는 파일 업로드를 진행합니다.\n④ 카테고리: 카테고리 탭에서 전사 공통 목록을 추가·수정합니다(매장별로 나누지 않음).\n⑤ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
     helpSum_admin_employees:
       '직원 명단을 매장·직무·등급·재직 상태로 조회하고, 좌측 폼에서 인적·급여·은행·세무 정보를 등록·수정하며, 인원 이동·적정 인원·평가·경고장 등 HR 보조 탭을 한 화면에서 다룹니다.',
     helpHow_admin_employees:
@@ -7247,6 +7255,8 @@ export const i18n = {
     posOptionRequiredOne: '필수 1개 선택',
     posOptionOptionalZeroOne: '선택 0~1개',
     posOptionChannelScopeTitle: '채널 설정 (기본채널=홀+포장, 배달)',
+    posOptionChannelScopeStepHint:
+      '선택 단계가 매장·포장/배달 중 어디에 보일지 정합니다. 변경 후 [단계 저장]을 눌러 주세요.',
     posOptionScopeAll: '기본+배달',
     posOptionScopeBaseOnly: '기본채널만',
     posOptionScopeDeliveryOnly: '배달만',
@@ -8939,6 +8949,8 @@ Only matters the employee must handle personally on a working day:
     companyHybridDocSource: 'Source',
     companyHybridDocColRelated: 'Relation',
     companyHybridDocColIssued: 'Issue date',
+    companyHybridDocColValidity: 'Issue / expiry',
+    companyHybridDocColType: 'Type',
     companyHybridDocColCreated: 'Created',
     companyHybridDocSourceDrive: 'Google Drive',
     companyHybridDocSourceStorage: 'Upload (storage)',
@@ -8975,6 +8987,12 @@ Only matters the employee must handle personally on a working day:
     companyHybridCategoryColParent: 'Parent',
     companyHybridCategoryHierarchyHint:
       '① Top level: leave Parent as None, enter a name, and add.\n② Subcategory: pick a top-level parent, enter the subcategory name (e.g. notices, manuals), and add.',
+    companyHybridCategoryGlobalHint:
+      'Categories are shared across all stores. Add or edit here to update the same list on the list and register screens.',
+    companyHybridCategoryLegacyHint:
+      'Only legacy per-store categories exist. Add company-wide categories below to use one list for every store.',
+    companyHybridCategoryNoPermissionHint:
+      'You cannot add or edit categories. Store manager or head-office access is required.',
     companyHybridCategoryPickStoreHint: 'Select a specific store (not All stores) to add or edit categories.',
     companyHybridDocSessionRelogin: 'No login token. Please sign in again to use document management.',
     companyHybridErrStoreRequired: 'Please select a store.',
@@ -15134,7 +15152,7 @@ orderItemQty: 'Qty',
     helpSum_admin_company_documents:
       'Register and browse company documents per store via Drive links or file uploads; search, sort by title, and see issue and created dates.',
     helpHow_admin_company_documents:
-      '① Store: pick the store to query at the top. With permission, choose All stores to see every store’s documents.\n② List: set filters and press Search. Click the Title header to toggle ascending/descending by title; default order is newest by registration time. Use the row pencil to open the Register tab with that document; adjust title, category, visibility, dates, and notes—uploaded files: Save under Document details; Drive links: Save under Add Drive link.\n③ Register: fill Document details (title, category, relation, issue/expiry dates, note), then save a Drive URL or upload a file.\n④ Categories: pick a store, then add top-level categories (no parent) or subcategories under a parent (e.g. notices, manuals).\n⑤ Use Help on the right for the full guide, then Back to screen when finished.',
+      '① Store: pick the store to query at the top. With permission, choose All stores to see every store’s documents.\n② List: set filters and press Search. Click the Title header to toggle ascending/descending by title; default order is newest by registration time. Use the row pencil to open the Register tab; edit fields under Document details and press Save at the bottom (Drive URLs are saved from the left card together with the link).\n③ Register: fill Document details (title, category, relation, issue/expiry dates, note), then save a Drive URL or upload a file.\n④ Categories: pick a store, then add top-level categories (no parent) or subcategories under a parent (e.g. notices, manuals).\n⑤ Use Help on the right for the full guide, then Back to screen when finished.',
     helpSum_admin_employees:
       'Look up staff by store, job, grade, and employment status; edit HR, payroll, bank, and tax fields in the left form; and use satellite tabs for movement, headcount, evaluations, and warning letters in one place.',
     helpHow_admin_employees:
@@ -15444,6 +15462,8 @@ orderItemQty: 'Qty',
     posOptionRequiredOne: 'Required: choose 1',
     posOptionOptionalZeroOne: 'Optional: choose 0 or 1',
     posOptionChannelScopeTitle: 'Channel scope (Base channel = dine-in + takeout, and delivery)',
+    posOptionChannelScopeStepHint:
+      'Sets which channels show this option step. After changing, click Save steps.',
     posOptionScopeAll: 'Base + delivery',
     posOptionScopeBaseOnly: 'Base only',
     posOptionScopeDeliveryOnly: 'Delivery only',
@@ -23216,6 +23236,8 @@ orderItemQty: 'จำนวน',
     posOptionBasePriceLabel: 'ราคาช่องทางฐาน',
     posOptionBasePricePlaceholder: 'ช่องทางฐาน',
     posOptionChannelScopeTitle: 'ขอบเขตช่องทาง (ฐาน = ทานในร้าน + กลับบ้าน และเดลิเวอรี)',
+    posOptionChannelScopeStepHint:
+      'กำหนดว่าขั้นตัวเลือกนี้จะแสดงที่ช่องทางใด หลังเปลี่ยนแล้วกด [บันทึกขั้นตอน]',
     posOptionChannelTitle: 'ช่องทางการขาย',
     posOptionDeliveryPriceLabel: 'ราคาเดลิเวอรี',
     posOptionDeliveryPricePlaceholder: 'เดลิเวอรี (ว่าง = ใช้ราคาฐาน)',

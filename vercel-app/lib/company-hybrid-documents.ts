@@ -7,9 +7,25 @@ import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
 /** 목록 API: 모든 매장 문서를 한 번에 조회할 때 store 쿼리에 넣는 값 */
 export const COMPANY_HYBRID_DOCS_STORE_ALL = '__cm_all_stores__'
 
+/** 문서 카테고리 — 전 매장 공통(문서 store와 무관) */
+export const COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE = '__company__'
+
 export function isCompanyHybridDocsListAllStoresParam(v: string): boolean {
   const s = String(v || '').trim()
   return s === COMPANY_HYBRID_DOCS_STORE_ALL || s.toLowerCase() === 'all'
+}
+
+export function isCompanyHybridDocCategoryGlobalStore(v: string): boolean {
+  return String(v || '').trim() === COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
+}
+
+/** 문서 등록·필터용 카테고리 목록 — 전사 공통 우선, 없으면 기존 매장별 데이터 폴백 */
+export function pickCompanyHybridDocCategoriesForPicker(
+  items: CompanyHybridDocCategoryRow[]
+): CompanyHybridDocCategoryRow[] {
+  const global = items.filter((c) => isCompanyHybridDocCategoryGlobalStore(c.store))
+  if (global.length > 0) return global
+  return items
 }
 
 export const COMPANY_HYBRID_RELATED_TYPES = [

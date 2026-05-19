@@ -13,6 +13,7 @@ import {
   isChickenMenuCode,
   normalizeChickenOptionSelectionGroups,
   normalizeOptionGroupsForMenu,
+  parseOptionSelectionConfigFromDb,
   syncOptionSelectionConfigToGroupKeys,
 } from '@/lib/pos-option-selection-groups'
 import { normalizeMenuScopeStoreCodes, shouldMenuBeVisibleForStore } from '@/lib/pos-menu-store-scope'
@@ -151,48 +152,7 @@ export async function GET(request: Request) {
       let optionSelectionGroups: string[] = []
       if (Array.isArray(v)) optionSelectionGroups = v
       else if (v && typeof v === 'string') try { optionSelectionGroups = JSON.parse(v) as string[] } catch { /* ignore */ }
-      const c = row.option_selection_config
-      let optionSelectionConfig: { key: string; label?: string; required?: boolean; minSelect?: number; maxSelect?: number }[] = []
-      if (Array.isArray(c)) {
-        optionSelectionConfig = c
-          .map((cfg) => {
-            if (!cfg || typeof cfg !== 'object') return null
-            const o = cfg as Record<string, unknown>
-            const key = String(o.key ?? '').trim()
-            if (!key) return null
-            const label = String(o.label ?? '').trim()
-            const minRaw = Number(o.minSelect)
-            const maxRaw = Number(o.maxSelect)
-            const required = o.required === true
-            const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
-            const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
-            return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
-          })
-          .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
-      } else if (c && typeof c === 'string') {
-        try {
-          const arr = JSON.parse(c) as unknown
-          if (Array.isArray(arr)) {
-            optionSelectionConfig = arr
-              .map((cfg) => {
-                if (!cfg || typeof cfg !== 'object') return null
-                const o = cfg as Record<string, unknown>
-                const key = String(o.key ?? '').trim()
-                if (!key) return null
-                const label = String(o.label ?? '').trim()
-                const minRaw = Number(o.minSelect)
-                const maxRaw = Number(o.maxSelect)
-                const required = o.required === true
-                const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
-                const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
-                return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
-              })
-              .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      let optionSelectionConfig = parseOptionSelectionConfigFromDb(row.option_selection_config)
       const menuLinks = linksByMenuId.get(Number(row.id || 0)) || []
       const columnGroups =
         optionSelectionGroups.length > 0
@@ -274,48 +234,7 @@ export async function GET(request: Request) {
         let optionSelectionGroups: string[] = []
         if (Array.isArray(v)) optionSelectionGroups = v
         else if (v && typeof v === 'string') try { optionSelectionGroups = JSON.parse(v) as string[] } catch { /* ignore */ }
-        const c = row.option_selection_config
-        let optionSelectionConfig: { key: string; label?: string; required?: boolean; minSelect?: number; maxSelect?: number }[] = []
-        if (Array.isArray(c)) {
-          optionSelectionConfig = c
-            .map((cfg) => {
-              if (!cfg || typeof cfg !== 'object') return null
-              const o = cfg as Record<string, unknown>
-              const key = String(o.key ?? '').trim()
-              if (!key) return null
-              const label = String(o.label ?? '').trim()
-              const minRaw = Number(o.minSelect)
-              const maxRaw = Number(o.maxSelect)
-              const required = o.required === true
-              const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
-              const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
-              return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
-            })
-            .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
-        } else if (c && typeof c === 'string') {
-          try {
-            const arr = JSON.parse(c) as unknown
-            if (Array.isArray(arr)) {
-              optionSelectionConfig = arr
-                .map((cfg) => {
-                  if (!cfg || typeof cfg !== 'object') return null
-                  const o = cfg as Record<string, unknown>
-                  const key = String(o.key ?? '').trim()
-                  if (!key) return null
-                  const label = String(o.label ?? '').trim()
-                  const minRaw = Number(o.minSelect)
-                  const maxRaw = Number(o.maxSelect)
-                  const required = o.required === true
-                  const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
-                  const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
-                  return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
-                })
-                .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
-            }
-          } catch {
-            /* ignore */
-          }
-        }
+        let optionSelectionConfig = parseOptionSelectionConfigFromDb(row.option_selection_config)
         const menuLinks = linksByMenuId.get(Number(row.id || 0)) || []
         const columnGroups =
           optionSelectionGroups.length > 0

@@ -2157,6 +2157,35 @@ export default function PosMenusPage() {
     [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code, t]
   )
 
+  /** 선택 단계의 노출 채널( audience ) — 단계 저장 시 DB 반영 */
+  const optionsConfigStepChannelScope = React.useMemo((): "all" | "hall" | "delivery" => {
+    const groupKey = optionsConfigEffectiveGroupKey
+    if (groupKey && groupKey !== "__default__" && optionsConfigPanelStepGroups.includes(groupKey)) {
+      const row = optionsConfigGroupRulesDraft.find((x) => x.key === groupKey)
+      if (row?.audience === "hall" || row?.audience === "delivery") return row.audience
+    }
+    if (newOptionChannelScope === "delivery") return "delivery"
+    if (newOptionChannelScope === "hall" || newOptionChannelScope === "packaging") return "hall"
+    return "all"
+  }, [
+    optionsConfigEffectiveGroupKey,
+    optionsConfigPanelStepGroups,
+    optionsConfigGroupRulesDraft,
+    newOptionChannelScope,
+  ])
+
+  const handleOptionsConfigStepChannelScope = React.useCallback(
+    (scope: "all" | "hall" | "delivery") => {
+      setNewOptionChannelScope(scope)
+      const groupKey = optionsConfigEffectiveGroupKey
+      if (!groupKey || groupKey === "__default__" || !optionsConfigPanelStepGroups.includes(groupKey)) {
+        return
+      }
+      handleOptionGroupRuleFieldChange(groupKey, { audience: scope })
+    },
+    [optionsConfigEffectiveGroupKey, optionsConfigPanelStepGroups, handleOptionGroupRuleFieldChange]
+  )
+
   const handleMoveOptionGroup = React.useCallback(
     (groupKey: string, direction: "up" | "down") => {
       const current = [...optionsConfigPanelStepGroups]
@@ -5393,32 +5422,38 @@ export default function PosMenusPage() {
                           <p className="mb-1 text-[11px] font-semibold text-muted-foreground">
                             {t("posOptionChannelScopeTitle") || "채널 설정 (기본채널=홀+포장, 배달)"}
                           </p>
+                          {optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__" ? (
+                            <p className="mb-1.5 text-[10px] leading-snug text-muted-foreground">
+                              {t("posOptionChannelScopeStepHint") ||
+                                "선택 단계가 매장·포장/배달 중 어디에 보일지 정합니다. 변경 후 [단계 저장]을 눌러 주세요."}
+                            </p>
+                          ) : null}
                           <div className="flex flex-wrap items-end justify-between gap-2">
                             <div className="flex flex-wrap gap-1.5">
                               <Button
                                 type="button"
-                                variant={newOptionChannelScope === "all" ? "default" : "outline"}
+                                variant={optionsConfigStepChannelScope === "all" ? "default" : "outline"}
                                 size="sm"
                                 className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                onClick={() => setNewOptionChannelScope("all")}
+                                onClick={() => handleOptionsConfigStepChannelScope("all")}
                               >
                                 {t("posOptionScopeAll") || "기본+배달"}
                               </Button>
                               <Button
                                 type="button"
-                                variant={newOptionChannelScope === "hall" ? "default" : "outline"}
+                                variant={optionsConfigStepChannelScope === "hall" ? "default" : "outline"}
                                 size="sm"
                                 className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                onClick={() => setNewOptionChannelScope("hall")}
+                                onClick={() => handleOptionsConfigStepChannelScope("hall")}
                               >
                                 {t("posOptionScopeBaseOnly") || "기본채널만"}
                               </Button>
                               <Button
                                 type="button"
-                                variant={newOptionChannelScope === "delivery" ? "default" : "outline"}
+                                variant={optionsConfigStepChannelScope === "delivery" ? "default" : "outline"}
                                 size="sm"
                                 className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                onClick={() => setNewOptionChannelScope("delivery")}
+                                onClick={() => handleOptionsConfigStepChannelScope("delivery")}
                               >
                                 {t("posOptionScopeDeliveryOnly") || "배달만"}
                               </Button>

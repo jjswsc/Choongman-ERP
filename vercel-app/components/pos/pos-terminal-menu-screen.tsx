@@ -69,6 +69,11 @@ import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
 } from '@/lib/pos-option-picker-resolve'
+import {
+  filterOptionSelectionGroupsForAudience,
+  filterPosOptionsForVisibleGroups,
+  resolveStepAudienceFromOrderType,
+} from '@/lib/pos-option-selection-groups'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
 
 const isChickenDefaultOption = isChickenDefaultOptionName
@@ -1511,18 +1516,22 @@ export function PosTerminalMenuScreen({
             const isChickenBase =
               (optionPickerMenu.categoryMain ?? '') === 'Chicken' ||
               optionPickerMenu.code?.trim().toLowerCase().startsWith('c')
-            const optsToShow = isChickenBase ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts
             const groupConfigMap = new Map(
               (optionPickerMenu.optionSelectionConfig || [])
                 .map((cfg) => [String(cfg?.key ?? '').trim(), cfg] as const)
                 .filter(([k]) => !!k)
             )
-            const stepAudience = orderType === 'delivery' ? 'delivery' : 'hall'
-            const groups = (optionPickerMenu.optionSelectionGroups || []).filter((key) => {
-              const cfg = groupConfigMap.get(key)
-              const audience = cfg?.audience
-              return !audience || audience === 'all' || audience === stepAudience
-            })
+            const stepAudience = resolveStepAudienceFromOrderType(orderType)
+            const groups = filterOptionSelectionGroupsForAudience(
+              optionPickerMenu.optionSelectionGroups || [],
+              groupConfigMap,
+              stepAudience
+            )
+            const visibleGroupKeys = new Set(groups)
+            const optsFilteredByGroup = filterPosOptionsForVisibleGroups(opts, visibleGroupKeys)
+            const optsToShow = isChickenBase
+              ? optsFilteredByGroup.filter((o) => !isChickenDefaultOption(o.name))
+              : optsFilteredByGroup
             const optsWithSteps = opts.filter(
               (o) =>
                 o.optionType === 'substitution' &&

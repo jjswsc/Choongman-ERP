@@ -5,6 +5,7 @@ import {
   ArrowDownUp,
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
+  ChevronDown,
   CircleHelp,
   FileStack,
   FileUp,
@@ -42,7 +43,9 @@ import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -67,9 +70,12 @@ import {
 import { cn } from "@/lib/utils"
 import {
   COMPANY_HYBRID_DOCS_STORE_ALL,
+  COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE,
   companyHybridDocVisibilityFromDocType,
   isCompanyHybridDocTypePermissionMeta,
   isCompanyHybridDocCategoryRoot,
+  isCompanyHybridDocCategoryGlobalStore,
+  pickCompanyHybridDocCategoriesForPicker,
   sortCompanyHybridDocCategoriesTree,
   type CompanyHybridDocVisibility,
   isCompanyHybridDocsListAllStoresParam,
@@ -293,18 +299,38 @@ export function CompanyHybridDocumentsPanel() {
 
   const categoryById = React.useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
 
-  const { ordered: orderedCategories, depthById: categoryDepthById } = React.useMemo(
-    () => sortCompanyHybridDocCategoriesTree(categories, { store: selectedStore }),
-    [categories, selectedStore]
+  const categoriesForPicker = React.useMemo(() => {
+    const base = pickCompanyHybridDocCategoriesForPicker(categories)
+    if (editing?.category_id != null && editing.category_id > 0) {
+      const cur = categories.find((c) => c.id === editing.category_id)
+      if (cur && !base.some((c) => c.id === cur.id)) return [...base, cur]
+    }
+    return base
+  }, [categories, editing?.category_id])
+
+  const { ordered: orderedCategoriesForPicker, depthById: categoryDepthById } = React.useMemo(
+    () => sortCompanyHybridDocCategoriesTree(categoriesForPicker),
+    [categoriesForPicker]
+  )
+
+  const categoriesForManageTab = React.useMemo(
+    () => categories.filter((c) => isCompanyHybridDocCategoryGlobalStore(c.store)),
+    [categories]
+  )
+
+  const { ordered: orderedManageCategories, depthById: manageCategoryDepthById } = React.useMemo(
+    () => sortCompanyHybridDocCategoriesTree(categoriesForManageTab),
+    [categoriesForManageTab]
   )
 
   const labelCategoryOption = React.useCallback(
     (c: CompanyHybridDocumentCategory) => {
       const path = categoryLabelById.get(c.id) || c.name
+      if (isCompanyHybridDocCategoryGlobalStore(c.store)) return path
       if (isCompanyHybridDocsListAllStoresParam(selectedStore)) {
         return `${formatStoreLabel(c.store)} · ${path}`
       }
-      return path
+      return `${formatStoreLabel(c.store)} · ${path}`
     },
     [categoryLabelById, formatStoreLabel, selectedStore]
   )
@@ -364,12 +390,13 @@ export function CompanyHybridDocumentsPanel() {
     return first || null
   }, [selectedStore, auth?.store, visibleStores])
 
-  const rootCategoriesForWriteStore = React.useMemo(() => {
-    if (!writeStoreForMutations) return []
-    return categories
-      .filter((c) => c.store === writeStoreForMutations && isCompanyHybridDocCategoryRoot(c))
-      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
-  }, [categories, writeStoreForMutations])
+  const rootCategoriesForManage = React.useMemo(
+    () =>
+      categoriesForManageTab
+        .filter((c) => isCompanyHybridDocCategoryRoot(c))
+        .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
+    [categoriesForManageTab]
+  )
 
   const canMutateDocStore = React.useCallback(
     (rowStore: string) => {
@@ -390,11 +417,7 @@ export function CompanyHybridDocumentsPanel() {
       setCategories([])
       return
     }
-    if (!selectedStore) {
-      setCategories([])
-      return
-    }
-    const res = await getCompanyHybridDocumentCategories({ store: selectedStore })
+    const res = await getCompanyHybridDocumentCategories({ store: COMPANY_HYBRID_DOCS_STORE_ALL })
     if (redirectToAdminLoginIfUnauthorized(res.httpStatus, setAuth)) {
       setCategories([])
       return
@@ -405,7 +428,7 @@ export function CompanyHybridDocumentsPanel() {
       return
     }
     setCategories(res.list || [])
-  }, [selectedStore, initialized, auth, t])
+  }, [initialized, auth, t, setAuth])
 
   React.useEffect(() => {
     void loadCategories()
@@ -706,11 +729,7 @@ export function CompanyHybridDocumentsPanel() {
   }
 
   const onAddCategory = async () => {
-    const ws = writeStoreForMutations
-    if (!ws) {
-      void appAlert(t("companyHybridDocPickStoreForRegister"))
-      return
-    }
+    const ws = COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
     const name = newCategoryName.trim()
     if (!name) {
       void appAlert(t("companyHybridCategoryName"))
@@ -746,7 +765,7 @@ export function CompanyHybridDocumentsPanel() {
     const sortOrder = Math.floor(editingCategory.sort_order)
     const res = await saveCompanyHybridDocumentCategory({
       id: editingCategory.id,
-      store: editingCategory.store,
+      store: COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE,
       name,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
       parentCategoryId: editingCategory.parent_category_id,
@@ -783,6 +802,16 @@ export function CompanyHybridDocumentsPanel() {
 
   const canPickStore = isOfficeRole(String(auth?.role || "")) || isFranchiseeRole(String(auth?.role || ""))
 
+  const canManageCategories = React.useMemo(
+    () => (auth ? canMutateDocStore(COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE) : false),
+    [auth, canMutateDocStore]
+  )
+
+  const hasLegacyPerStoreCategories = React.useMemo(
+    () => categories.some((c) => !isCompanyHybridDocCategoryGlobalStore(c.store)),
+    [categories]
+  )
+
   const labelCorrDirectionCell = React.useCallback(
     (d: string | undefined) => {
       if (d === "outbound") return t("companyHybridCorrDirectionOutbound")
@@ -800,6 +829,34 @@ export function CompanyHybridDocumentsPanel() {
       return "—"
     },
     [t]
+  )
+
+  const listShowStoreColumn = isCompanyHybridDocsListAllStoresParam(selectedStore)
+
+  const hasActiveCorrFilters =
+    listCorrPresence !== "all" ||
+    !!listCorrDirection ||
+    !!listCorrStatus ||
+    !!listCorrCounterpartySearch.trim()
+
+  const [listCorrFiltersOpen, setListCorrFiltersOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (hasActiveCorrFilters) setListCorrFiltersOpen(true)
+  }, [hasActiveCorrFilters])
+
+  const formatCorrRowHint = React.useCallback(
+    (corr: ReturnType<typeof getCorrespondenceFromMetadata>) => {
+      if (!corr) return ""
+      const parts: string[] = []
+      if (corr.direction) parts.push(labelCorrDirectionCell(corr.direction))
+      if (corr.counterparty) parts.push(corr.counterparty)
+      if (corr.officialRef) parts.push(corr.officialRef)
+      if (corr.status) parts.push(labelCorrStatusCell(corr.status))
+      if (corr.replyDue) parts.push(formatHybridDocumentIssueDate(corr.replyDue, lang))
+      return parts.join(" · ")
+    },
+    [labelCorrDirectionCell, labelCorrStatusCell, lang]
   )
 
   return (
@@ -865,7 +922,7 @@ export function CompanyHybridDocumentsPanel() {
                       <SelectItem value="uncategorized">
                         {t("companyHybridDocCategoryFilterUncat")}
                       </SelectItem>
-                      {orderedCategories.map((c) => (
+                      {orderedCategoriesForPicker.map((c) => (
                         <SelectItem key={c.id} value={String(c.id)}>
                           {labelCategoryOption(c)}
                         </SelectItem>
@@ -891,8 +948,35 @@ export function CompanyHybridDocumentsPanel() {
                   {t("stockBtnSearch")}
                 </Button>
               </div>
-              <div className="mt-3 flex w-full flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:flex-wrap sm:items-end">
-                <div className="w-full text-xs font-medium text-muted-foreground">{t("companyHybridCorrListFiltersLabel")}</div>
+              <Collapsible
+                open={listCorrFiltersOpen}
+                onOpenChange={setListCorrFiltersOpen}
+                className="mt-3 border-t border-border pt-3"
+              >
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 mb-1 h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <Mail className="h-3.5 w-3.5" aria-hidden />
+                    <span className="text-xs font-medium">{t("companyHybridCorrListFiltersLabel")}</span>
+                    {hasActiveCorrFilters ? (
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                        ON
+                      </Badge>
+                    ) : null}
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform",
+                        listCorrFiltersOpen && "rotate-180"
+                      )}
+                      aria-hidden
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="min-w-[10rem] space-y-1.5">
                   <Label className="text-xs">{t("companyHybridCorrTab")}</Label>
                   <Select
@@ -970,7 +1054,8 @@ export function CompanyHybridDocumentsPanel() {
                     placeholder="…"
                   />
                 </div>
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             </CardHeader>
           </Card>
 
@@ -993,11 +1078,11 @@ export function CompanyHybridDocumentsPanel() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="whitespace-nowrap text-center">
-                          {t("companyHybridDocColStore")}
-                        </TableHead>
+                        {listShowStoreColumn ? (
+                          <TableHead className="whitespace-nowrap">{t("companyHybridDocColStore")}</TableHead>
+                        ) : null}
                         <TableHead
-                          className="min-w-[8rem] text-center"
+                          className="min-w-[10rem]"
                           aria-sort={
                             titleSort === "asc" ? "ascending" : titleSort === "desc" ? "descending" : undefined
                           }
@@ -1005,7 +1090,7 @@ export function CompanyHybridDocumentsPanel() {
                           <button
                             type="button"
                             className={cn(
-                              "-mx-1 -my-0.5 inline-flex w-full max-w-full items-center justify-center gap-1 rounded-md px-1.5 py-1 text-center font-medium",
+                              "-mx-1 -my-0.5 inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-1 font-medium",
                               "hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             )}
                             onClick={() => {
@@ -1025,17 +1110,14 @@ export function CompanyHybridDocumentsPanel() {
                             )}
                           </button>
                         </TableHead>
-                        <TableHead className="text-center">{t("companyHybridDocColCategory")}</TableHead>
-                        <TableHead className="text-center">{t("companyHybridDocColPermission")}</TableHead>
-                        <TableHead className="hidden text-center md:table-cell">{t("companyHybridCorrColDirection")}</TableHead>
-                        <TableHead className="hidden text-center lg:table-cell">{t("companyHybridCorrColCounterparty")}</TableHead>
-                        <TableHead className="hidden text-center lg:table-cell">{t("companyHybridCorrColOfficialRef")}</TableHead>
-                        <TableHead className="hidden text-center md:table-cell">{t("companyHybridCorrColStatus")}</TableHead>
-                        <TableHead className="hidden text-center lg:table-cell">{t("companyHybridCorrColReplyDue")}</TableHead>
-                        <TableHead className="text-center">{t("companyHybridDocSource")}</TableHead>
-                        <TableHead className="whitespace-nowrap text-center">{t("companyHybridDocColIssued")}</TableHead>
-                        <TableHead className="text-center">{t("companyHybridDocColCreated")}</TableHead>
-                        <TableHead className="text-center">{t("stockColAction")}</TableHead>
+                        <TableHead className="min-w-[5rem] max-w-[9rem]">
+                          {t("companyHybridDocColCategory")}
+                        </TableHead>
+                        <TableHead className="hidden whitespace-nowrap md:table-cell">
+                          {t("companyHybridDocColValidity")}
+                        </TableHead>
+                        <TableHead className="w-12 text-center">{t("companyHybridDocColType")}</TableHead>
+                        <TableHead className="w-[7.5rem] text-right">{t("stockColAction")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1044,48 +1126,67 @@ export function CompanyHybridDocumentsPanel() {
                         const corr = getCorrespondenceFromMetadata(row.metadata)
                         return (
                         <TableRow key={row.id}>
-                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                            {formatStoreLabel(row.store)}
+                          {listShowStoreColumn ? (
+                            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                              {formatStoreLabel(row.store)}
+                            </TableCell>
+                          ) : null}
+                          <TableCell>
+                            <div className="font-medium leading-snug">{row.title}</div>
+                            {(companyHybridDocVisibilityFromDocType(row.doc_type) !== "all" || corr) && (
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                {companyHybridDocVisibilityFromDocType(row.doc_type) !== "all" ? (
+                                  <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                                    {labelForVisibility(row)}
+                                  </Badge>
+                                ) : null}
+                                {corr ? (
+                                  <span
+                                    className="inline-flex items-center text-muted-foreground"
+                                    title={formatCorrRowHint(corr)}
+                                  >
+                                    <Mail className="h-3.5 w-3.5" aria-hidden />
+                                    <span className="sr-only">{t("companyHybridCorrTab")}</span>
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
                           </TableCell>
-                          <TableCell className="font-medium">{row.title}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
+                          <TableCell className="max-w-[9rem] truncate text-sm text-muted-foreground">
                             {labelForDocumentCategory(row)}
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {labelForVisibility(row)}
+                          <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell">
+                            {!row.valid_from && !row.valid_to ? (
+                              "—"
+                            ) : (
+                              <>
+                                <div>{formatHybridDocumentIssueDate(row.valid_from, lang)}</div>
+                                {row.valid_to ? (
+                                  <div className="text-[11px] text-muted-foreground/80">
+                                    ~ {formatHybridDocumentIssueDate(row.valid_to, lang)}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
                           </TableCell>
-                          <TableCell className="hidden text-center text-xs text-muted-foreground md:table-cell">
-                            {labelCorrDirectionCell(corr?.direction)}
-                          </TableCell>
-                          <TableCell className="hidden max-w-[10rem] truncate text-xs text-muted-foreground lg:table-cell">
-                            {corr?.counterparty || "—"}
-                          </TableCell>
-                          <TableCell className="hidden max-w-[8rem] truncate text-xs text-muted-foreground lg:table-cell">
-                            {corr?.officialRef || "—"}
-                          </TableCell>
-                          <TableCell className="hidden text-center text-xs text-muted-foreground md:table-cell">
-                            {labelCorrStatusCell(corr?.status)}
-                          </TableCell>
-                          <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground lg:table-cell">
-                            {formatHybridDocumentIssueDate(corr?.replyDue ?? null, lang)}
-                          </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <span
                               className={cn(
-                                "inline-flex rounded-md px-2 py-0.5 text-xs",
-                                row.source === "drive" ? "bg-amber-500/15" : "bg-sky-500/15"
+                                "inline-flex h-8 w-8 items-center justify-center rounded-md",
+                                row.source === "drive" ? "bg-amber-500/15 text-amber-800 dark:text-amber-200" : "bg-sky-500/15 text-sky-800 dark:text-sky-200"
                               )}
+                              title={
+                                row.source === "drive"
+                                  ? t("companyHybridDocSourceDrive")
+                                  : t("companyHybridDocSourceStorage")
+                              }
                             >
-                              {row.source === "drive"
-                                ? t("companyHybridDocSourceDrive")
-                                : t("companyHybridDocSourceStorage")}
+                              {row.source === "drive" ? (
+                                <Link2 className="h-4 w-4" aria-hidden />
+                              ) : (
+                                <FileUp className="h-4 w-4" aria-hidden />
+                              )}
                             </span>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                            {formatHybridDocumentIssueDate(row.valid_from, lang)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                            {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1">
@@ -1171,7 +1272,11 @@ export function CompanyHybridDocumentsPanel() {
           <Card className="mb-6">
             <CardHeader className="py-4">
               <CardTitle className="text-base">{t("companyHybridDocRegisterMetaTitle")}</CardTitle>
-              <CardDescription>{t("companyHybridDocRegisterMetaSub")}</CardDescription>
+              <CardDescription>
+                {editing
+                  ? `${t("companyHybridDocEdit")}: ${editing.title}`
+                  : t("companyHybridDocRegisterMetaSub")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
@@ -1180,11 +1285,7 @@ export function CompanyHybridDocumentsPanel() {
               </div>
               <div className="space-y-1.5">
                 <Label>{t("companyHybridDocCategorySelect")}</Label>
-                <Select
-                  value={formCategoryId}
-                  onValueChange={setFormCategoryId}
-                  disabled={!selectedStore}
-                >
+                <Select value={formCategoryId} onValueChange={setFormCategoryId}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -1192,7 +1293,7 @@ export function CompanyHybridDocumentsPanel() {
                     <SelectItem value={FORM_CAT_NONE}>
                       {t("companyHybridDocCategoryFilterUncat")}
                     </SelectItem>
-                    {orderedCategories.map((c) => (
+                    {orderedCategoriesForPicker.map((c) => (
                       <SelectItem key={`${c.store}-${c.id}`} value={String(c.id)}>
                         {labelCategoryOption(c)}
                       </SelectItem>
@@ -1332,9 +1433,15 @@ export function CompanyHybridDocumentsPanel() {
                   </div>
                 </div>
               </div>
-              {editing && editing.source !== "drive" && (
+              {editing && (
                 <div className="flex flex-wrap gap-2 border-t pt-3">
-                  <Button type="button" onClick={() => void onSaveUploadedDocMeta()} disabled={!storeForDocumentMutation()}>
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      void (editing.source === "drive" ? onSaveDrive() : onSaveUploadedDocMeta())
+                    }
+                    disabled={!storeForDocumentMutation()}
+                  >
                     {t("companyHybridDocSave")}
                   </Button>
                   <Button type="button" variant="outline" onClick={resetForm}>
@@ -1420,39 +1527,23 @@ export function CompanyHybridDocumentsPanel() {
 
         <TabsContent value="categories" className={cn(adminTabsContentCn, "space-y-4")}>
           <Card>
-            <CardHeader className="py-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <CompanyHybridDocumentsStoreField
-                  labelStore={t("companyHybridDocFilterStore")}
-                  labelAllStores={t("companyHybridDocStoreAll")}
-                  canPickStore={canPickStore}
-                  storeSelectOptions={storeSelectOptions}
-                  selectedStore={selectedStore}
-                  formatStoreLabel={formatStoreLabel}
-                  onStoreChange={(v) => {
-                    setSelectedStore(v)
-                    setListCorrPresence("all")
-                    setListCorrDirection("")
-                    setListCorrStatus("")
-                    setListCorrCounterpartySearch("")
-                    invalidateListSearch()
-                    resetForm()
-                  }}
-                />
-              </div>
-            </CardHeader>
-          </Card>
-          <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("companyHybridCategoryManageTitle")}</CardTitle>
               <CardDescription className="whitespace-pre-line">
+                {t("companyHybridCategoryGlobalHint")}
+                {"\n"}
                 {t("companyHybridCategoryHierarchyHint")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!writeStoreForMutations && (
+              {hasLegacyPerStoreCategories && categoriesForManageTab.length === 0 && (
                 <p className="text-sm text-amber-700 dark:text-amber-400">
-                  {t("companyHybridCategoryPickStoreHint")}
+                  {t("companyHybridCategoryLegacyHint")}
+                </p>
+              )}
+              {!canManageCategories && (
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  {t("companyHybridCategoryNoPermissionHint")}
                 </p>
               )}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
@@ -1462,7 +1553,7 @@ export function CompanyHybridDocumentsPanel() {
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     placeholder={t("companyHybridCategoryName")}
-                    disabled={!writeStoreForMutations}
+                    disabled={!canManageCategories}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1471,18 +1562,18 @@ export function CompanyHybridDocumentsPanel() {
                     type="number"
                     value={newCategorySort}
                     onChange={(e) => setNewCategorySort(e.target.value)}
-                    disabled={!writeStoreForMutations}
+                    disabled={!canManageCategories}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("companyHybridCategoryParent")}</Label>
-                  <Select value={newCategoryParentId} onValueChange={setNewCategoryParentId} disabled={!writeStoreForMutations}>
+                  <Select value={newCategoryParentId} onValueChange={setNewCategoryParentId} disabled={!canManageCategories}>
                     <SelectTrigger>
                       <SelectValue placeholder={t("companyHybridCategoryParentPh")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
-                      {rootCategoriesForWriteStore.map((c) => (
+                      {rootCategoriesForManage.map((c) => (
                         <SelectItem key={`new-parent-${c.id}`} value={String(c.id)}>
                           {c.name}
                         </SelectItem>
@@ -1494,7 +1585,7 @@ export function CompanyHybridDocumentsPanel() {
                   type="button"
                   className="w-full sm:w-auto"
                   onClick={() => void onAddCategory()}
-                  disabled={!writeStoreForMutations}
+                  disabled={!canManageCategories}
                 >
                   {t("companyHybridCategoryAdd")}
                 </Button>
@@ -1550,10 +1641,9 @@ export function CompanyHybridDocumentsPanel() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
-                        {categories
+                        {categoriesForManageTab
                           .filter(
                             (c) =>
-                              c.store === editingCategory.store &&
                               c.id !== editingCategory.id &&
                               isCompanyHybridDocCategoryRoot(c)
                           )
@@ -1576,7 +1666,7 @@ export function CompanyHybridDocumentsPanel() {
                 </div>
               )}
 
-              {categories.length === 0 ? (
+              {categoriesForManageTab.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("companyHybridCategoryEmpty")}</p>
               ) : (
                 <div className="overflow-x-auto">
@@ -1584,16 +1674,15 @@ export function CompanyHybridDocumentsPanel() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-16">{t("companyHybridCategorySort")}</TableHead>
-                        <TableHead className="whitespace-nowrap">{t("companyHybridDocColStore")}</TableHead>
                         <TableHead>{t("companyHybridCategoryColParent")}</TableHead>
                         <TableHead>{t("companyHybridCategoryName")}</TableHead>
                         <TableHead className="text-right">{t("stockColAction")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {orderedCategories.map((c) => {
-                        const canCat = canMutateDocStore(c.store)
-                        const depth = categoryDepthById.get(c.id) ?? 0
+                      {orderedManageCategories.map((c) => {
+                        const canCat = canManageCategories
+                        const depth = manageCategoryDepthById.get(c.id) ?? 0
                         const parentId =
                           c.parent_category_id != null && Number(c.parent_category_id) > 0
                             ? Number(c.parent_category_id)
@@ -1602,9 +1691,6 @@ export function CompanyHybridDocumentsPanel() {
                         return (
                         <TableRow key={`${c.store}-${c.id}`}>
                           <TableCell className="text-muted-foreground">{c.sort_order}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                            {formatStoreLabel(c.store)}
-                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {parentName || "—"}
                           </TableCell>

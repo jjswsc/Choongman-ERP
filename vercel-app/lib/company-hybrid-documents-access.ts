@@ -3,6 +3,7 @@ import { franchiseeQueryStoreAllowed, normalizedAllowedStoresFromJwt } from '@/l
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { storeMatches } from '@/lib/admin-employee-store-access'
 import {
+  isCompanyHybridDocCategoryGlobalStore,
   isCompanyHybridDocsListAllStoresParam,
   type CompanyHybridDocVisibility,
 } from '@/lib/company-hybrid-documents'
@@ -37,6 +38,13 @@ export function resolveCompanyHybridListScope(
 export function canAccessStoreForCompanyHybridDocs(jwt: JwtPayload, targetStore: string): boolean {
   const s = String(targetStore || '').trim()
   if (!s) return false
+  if (isCompanyHybridDocCategoryGlobalStore(s)) {
+    return (
+      isOfficeRole(jwt.role || '') ||
+      isManagerOrFranchiseeRole(jwt.role || '') ||
+      isFranchiseeRole(jwt.role || '')
+    )
+  }
   if (isOfficeRole(jwt.role || '')) return true
   if (isFranchiseeRole(jwt.role || '')) {
     return franchiseeQueryStoreAllowed(jwt, s)

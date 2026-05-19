@@ -3,8 +3,12 @@
 --
 -- 포함 테이블: store_job_headcount, store_repair_*, api_request_idempotency_keys,
 --   income_statement_overrides, ai_*, external_*, attendance_employee_manual_map,
+--   attendance_log_adjustments, interior_work_packages, interior_vendor_tracks,
+--   interior_layout_items, interior_material_specs, interior_layout_editor_prefs,
 --   pos_tax_invoice_recipients, po_billing_settings, marketing_campaign_design_tasks,
 --   pos_payment_attempts, pos_linkpos_tender_rules, pos_grab_webhook_events
+--
+-- attendance·interior 6종만 먼저 적용: rls_attendance_interior_supabase_linter_fix.sql
 --
 -- 보안 강화 시: 아래 정책을 역할·매장·JWT 클레임 기준으로 좁히거나, 서버만 service_role 사용.
 -- 서버만 service_role 이면 RLS는 우회되므로 앱 동작은 유지되며, anon/authenticated 는 정책에 묶임.
@@ -194,6 +198,60 @@ CREATE POLICY "Allow all pos_grab_webhook_events"
   USING (true)
   WITH CHECK (true);
 
+-- attendance_log_adjustments (attendance_log_adjustments.sql)
+ALTER TABLE IF EXISTS public.attendance_log_adjustments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all attendance_log_adjustments" ON public.attendance_log_adjustments;
+CREATE POLICY "Allow all attendance_log_adjustments"
+  ON public.attendance_log_adjustments
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- interior_work_packages
+ALTER TABLE IF EXISTS public.interior_work_packages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all interior_work_packages" ON public.interior_work_packages;
+CREATE POLICY "Allow all interior_work_packages"
+  ON public.interior_work_packages
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- interior_vendor_tracks
+ALTER TABLE IF EXISTS public.interior_vendor_tracks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all interior_vendor_tracks" ON public.interior_vendor_tracks;
+CREATE POLICY "Allow all interior_vendor_tracks"
+  ON public.interior_vendor_tracks
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- interior_layout_items
+ALTER TABLE IF EXISTS public.interior_layout_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all interior_layout_items" ON public.interior_layout_items;
+CREATE POLICY "Allow all interior_layout_items"
+  ON public.interior_layout_items
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- interior_material_specs
+ALTER TABLE IF EXISTS public.interior_material_specs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all interior_material_specs" ON public.interior_material_specs;
+CREATE POLICY "Allow all interior_material_specs"
+  ON public.interior_material_specs
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- interior_layout_editor_prefs
+ALTER TABLE IF EXISTS public.interior_layout_editor_prefs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all interior_layout_editor_prefs" ON public.interior_layout_editor_prefs;
+CREATE POLICY "Allow all interior_layout_editor_prefs"
+  ON public.interior_layout_editor_prefs
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
 -- ─── REST(anon / authenticated) 권한 — RLS 정책과 함께 써야 API 키 경로가 동작 ───
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 
@@ -217,5 +275,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   public.marketing_campaign_design_tasks,
   public.pos_payment_attempts,
   public.pos_linkpos_tender_rules,
-  public.pos_grab_webhook_events
+  public.pos_grab_webhook_events,
+  public.attendance_log_adjustments,
+  public.interior_work_packages,
+  public.interior_vendor_tracks,
+  public.interior_layout_items,
+  public.interior_material_specs,
+  public.interior_layout_editor_prefs
 TO anon, authenticated;

@@ -19,3 +19,12 @@ create index if not exists idx_attendance_log_adjustments_log_metric_time
   on public.attendance_log_adjustments (attendance_log_id, metric, changed_at asc, id asc);
 
 comment on table public.attendance_log_adjustments is '근태 조정 이력(before/after) 보존';
+
+-- Supabase linter 0013: RLS (신규 DB는 여기서, 기존 DB는 rls_attendance_interior_supabase_linter_fix.sql)
+alter table public.attendance_log_adjustments enable row level security;
+drop policy if exists "Allow all attendance_log_adjustments" on public.attendance_log_adjustments;
+create policy "Allow all attendance_log_adjustments"
+  on public.attendance_log_adjustments
+  for all
+  using (true)
+  with check (true);

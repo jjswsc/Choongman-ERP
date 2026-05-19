@@ -98,3 +98,84 @@ export function syncOptionSelectionConfigToGroupKeys(
     }
   })
 }
+
+function parseAudienceFromDb(raw: unknown): "all" | "hall" | "delivery" {
+  const audienceRaw = String(raw ?? "all").trim().toLowerCase()
+  return audienceRaw === "hall" || audienceRaw === "delivery" ? audienceRaw : "all"
+}
+
+/** DB `option_selection_config` jsonb → POS 단계 설정( audience 포함 ). */
+export function parseOptionSelectionConfigFromDb(c: unknown): ResolvedPosOptionSelectionGroupConfig[] {
+  let arr: unknown[] = []
+  if (Array.isArray(c)) arr = c
+  else if (c && typeof c === "string") {
+    try {
+      const parsed = JSON.parse(c) as unknown
+      if (Array.isArray(parsed)) arr = parsed
+    } catch {
+      /* ignore */
+    }
+  }
+  return arr
+    .map((cfg) => {
+      if (!cfg || typeof cfg !== "object") return null
+      const o = cfg as Record<string, unknown>
+      const key = String(o.key ?? "").trim()
+      if (!key) return null
+      const label = String(o.label ?? "").trim()
+      const minRaw = Number(o.minSelect)
+      const maxRaw = Number(o.maxSelect)
+      const required = o.required === true
+      const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : required ? 1 : 0
+      const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
+      const audience = parseAudienceFromDb(o.audience)
+      return {
+        key,
+        label: label || key,
+        audience,
+        required,
+        minSelect: Math.min(minSelect, maxSelect),
+        maxSelect,
+      }
+    })
+    .filter((x): x is ResolvedPosOptionSelectionGroupConfig => !!x)
+}
+
+export function resolveStepAudienceFromOrderType(orderType: string): "hall" | "delivery" {
+  const ot = String(orderType ?? "").trim().toLowerCase()
+  return ot === "delivery" ? "delivery" : "hall"
+}
+
+export function isGroupVisibleForStepAudience(
+  audience: "all" | "hall" | "delivery" | undefined,
+  stepAudience: "hall" | "delivery"
+): boolean {
+  return !audience || audience === "all" || audience === stepAudience
+}
+
+export function filterOptionSelectionGroupsForAudience(
+  groups: string[],
+  groupConfigByKey: Map<string, Pick<PosOptionSelectionGroupConfig, "audience"> | undefined>,
+  stepAudience: "hall" | "delivery"
+): string[] {
+  return groups.filter((key) => {
+    const cfg = groupConfigByKey.get(key)
+    return isGroupVisibleForStepAudience(cfg?.audience, stepAudience)
+  })
+}
+
+/** 단계 키가 숨겨진 채널에만 속한 옵션(복합·단일 단계)은 목록에서 제외한다. */
+export function filterPosOptionsForVisibleGroups<T extends { optionStepValues?: Record<string, string> | null }>(
+  options: T[],
+  visibleGroupKeys: ReadonlySet<string>
+): T[] {
+  return options.filter((o) => {
+    const sv = o.optionStepValues
+    if (!sv || typeof sv !== "object") return true
+    const keys = Object.keys(sv)
+      .map((k) => k.trim())
+      .filter(Boolean)
+    if (keys.length === 0) return true
+    return keys.every((k) => visibleGroupKeys.has(k))
+  })
+}
