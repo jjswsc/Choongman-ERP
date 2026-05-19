@@ -241,6 +241,17 @@ export async function POST(req: NextRequest) {
     const kitchenSlipFontScale = kitchenSlipScaleRaw === 'sm' ? 'sm' : kitchenSlipScaleRaw === 'lg' ? 'lg' : 'md'
     const kitchenSlipShowLineNotes = body?.kitchenSlipShowLineNotes !== false
     const kitchenSlipShowOrderMemo = body?.kitchenSlipShowOrderMemo !== false
+    const kitchenSlipOptionGroupPrintRaw =
+      body?.kitchenSlipOptionGroupPrint && typeof body.kitchenSlipOptionGroupPrint === 'object'
+        ? (body.kitchenSlipOptionGroupPrint as Record<string, unknown>)
+        : {}
+    const kitchenSlipOptionGroupPrint = {
+      size: kitchenSlipOptionGroupPrintRaw.size !== false,
+      part: kitchenSlipOptionGroupPrintRaw.part !== false,
+      flavor: kitchenSlipOptionGroupPrintRaw.flavor !== false,
+      side: kitchenSlipOptionGroupPrintRaw.side !== false,
+      other: kitchenSlipOptionGroupPrintRaw.other !== false,
+    }
     const escPosCutAfterKitchenHtml = parseBoolParam(body?.escPosCutAfterKitchenHtml, true)
     const escPosCutAfterHallOrderHtml = parseBoolParam(body?.escPosCutAfterHallOrderHtml, true)
     const escPosCutAfterPaymentReceiptHtml = parseBoolParam(body?.escPosCutAfterPaymentReceiptHtml, true)
@@ -401,6 +412,7 @@ export async function POST(req: NextRequest) {
       kitchen_slip_font_scale: kitchenSlipFontScale,
       kitchen_slip_show_line_notes: kitchenSlipShowLineNotes,
       kitchen_slip_show_order_memo: kitchenSlipShowOrderMemo,
+      kitchen_slip_option_group_print: kitchenSlipOptionGroupPrint,
       esc_pos_cut_after_kitchen_html: escPosCutAfterKitchenHtml,
       esc_pos_cut_after_hall_order_html: escPosCutAfterHallOrderHtml,
       esc_pos_cut_after_payment_receipt_html: escPosCutAfterPaymentReceiptHtml,

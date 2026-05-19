@@ -8581,6 +8581,14 @@ export interface PosPrinterSettings {
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
+  /** 주방 주문서 옵션 그룹 노출 정책 */
+  kitchenSlipOptionGroupPrint?: {
+    size?: boolean
+    part?: boolean
+    flavor?: boolean
+    side?: boolean
+    other?: boolean
+  }
   /** Windows 하이브리드: 주방 주문서 ESC/POS 절단 (기본 true) */
   escPosCutAfterKitchenHtml?: boolean
   /** Windows 하이브리드: 홀 주문서(주문·터미널) 절단 */
@@ -8723,6 +8731,13 @@ export async function savePosPrinterSettings(params: {
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
+  kitchenSlipOptionGroupPrint?: {
+    size?: boolean
+    part?: boolean
+    flavor?: boolean
+    side?: boolean
+    other?: boolean
+  }
   escPosCutAfterKitchenHtml?: boolean
   escPosCutAfterHallOrderHtml?: boolean
   escPosCutAfterPaymentReceiptHtml?: boolean

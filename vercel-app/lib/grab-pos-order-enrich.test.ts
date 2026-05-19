@@ -94,6 +94,19 @@ describe('grab-pos-order-enrich', () => {
     expect(meta.optionChips).toEqual(['M - 순살', 'Kimchi 30g.'])
   })
 
+  it('maps "Item note:" prefixed code list to readable option chips', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [
+        { optionCode: 'c009-1', name: 'M - น้ำลาย' },
+        { optionCode: 'c009-4', name: 'Kimchi 30g.' },
+      ]
+    )
+    const meta = resolveGrabDeliveryLineNote('Item note: C009-1, C009-4', catalog.optionNameByCode)
+    expect(meta.optionChips).toEqual(['M - น้ำลาย', 'Kimchi 30g.'])
+    expect(meta.requestSummary).toBe('')
+  })
+
   it('avoids double-counting M-size surcharge when item name includes size', () => {
     expect(grabItemNameImpliesAllInPrice('GARLIC + M - Boneless')).toBe(true)
     const unit = resolveGrabLineUnitMinor({

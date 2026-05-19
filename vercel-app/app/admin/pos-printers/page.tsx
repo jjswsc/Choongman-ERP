@@ -362,6 +362,13 @@ export default function PosPrintersPage() {
   const [kitchenSlipFontScale, setKitchenSlipFontScale] = React.useState<"sm" | "md" | "lg">("md")
   const [kitchenSlipShowLineNotes, setKitchenSlipShowLineNotes] = React.useState(true)
   const [kitchenSlipShowOrderMemo, setKitchenSlipShowOrderMemo] = React.useState(true)
+  const [kitchenSlipOptionGroupPrint, setKitchenSlipOptionGroupPrint] = React.useState({
+    size: true,
+    part: true,
+    flavor: true,
+    side: true,
+    other: true,
+  })
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStore = String(canSearchAll && storeCode ? storeCode : auth?.store || "").trim()
@@ -542,6 +549,13 @@ export default function PosPrintersPage() {
     )
     setKitchenSlipShowLineNotes(settings.kitchenSlipShowLineNotes !== false)
     setKitchenSlipShowOrderMemo(settings.kitchenSlipShowOrderMemo !== false)
+    setKitchenSlipOptionGroupPrint({
+      size: settings.kitchenSlipOptionGroupPrint?.size !== false,
+      part: settings.kitchenSlipOptionGroupPrint?.part !== false,
+      flavor: settings.kitchenSlipOptionGroupPrint?.flavor !== false,
+      side: settings.kitchenSlipOptionGroupPrint?.side !== false,
+      other: settings.kitchenSlipOptionGroupPrint?.other !== false,
+    })
   }, [])
 
   const loadData = React.useCallback(() => {
@@ -742,6 +756,7 @@ export default function PosPrintersPage() {
         kitchenSlipFontScale,
         kitchenSlipShowLineNotes,
         kitchenSlipShowOrderMemo,
+        kitchenSlipOptionGroupPrint,
       }
       const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
       if (res.success) {
@@ -980,6 +995,7 @@ export default function PosPrintersPage() {
           "kitchenSlipFontScale",
           "kitchenSlipShowLineNotes",
           "kitchenSlipShowOrderMemo",
+          "kitchenSlipOptionGroupPrint",
         ])
       }
       if (copyTabBusiness) {
@@ -1313,6 +1329,7 @@ export default function PosPrintersPage() {
         kitchenSlipFontScale,
         kitchenSlipShowLineNotes,
         kitchenSlipShowOrderMemo,
+        kitchenSlipOptionGroupPrint,
       })
       const ki = kitchenSlipPrintI18n({ kitchenSlipPrintLang }, lang)
       const memoLine = `${ki.t("posCustomerMemo") || "메모"}: ${previewData.memo}`
@@ -1343,6 +1360,7 @@ export default function PosPrintersPage() {
       kitchenSlipFontScale,
       kitchenSlipShowLineNotes,
       kitchenSlipShowOrderMemo,
+      kitchenSlipOptionGroupPrint,
       kitchenSlipPrintLang,
       lang,
     ]
@@ -1874,6 +1892,59 @@ export default function PosPrintersPage() {
                   onChange={setKitchenSlipShowOrderMemo}
                   t={t}
                 />
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="text-sm font-medium">
+                    {tr("posKitchenSlipOptionGroupFilterLabel", "주방 주문서 옵션 그룹 출력")}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {tr(
+                      "posKitchenSlipOptionGroupFilterHint",
+                      "그룹별로 출력/숨김을 선택합니다. (Size, 부위, 맛, 사이드, 기타)"
+                    )}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <ToggleRow
+                      label={tr("posKitchenSlipOptionGroupSize", "Size")}
+                      value={kitchenSlipOptionGroupPrint.size}
+                      onChange={(v) =>
+                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, size: v }))
+                      }
+                      t={t}
+                    />
+                    <ToggleRow
+                      label={tr("posKitchenSlipOptionGroupPart", "부위")}
+                      value={kitchenSlipOptionGroupPrint.part}
+                      onChange={(v) =>
+                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, part: v }))
+                      }
+                      t={t}
+                    />
+                    <ToggleRow
+                      label={tr("posKitchenSlipOptionGroupFlavor", "맛/소스")}
+                      value={kitchenSlipOptionGroupPrint.flavor}
+                      onChange={(v) =>
+                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, flavor: v }))
+                      }
+                      t={t}
+                    />
+                    <ToggleRow
+                      label={tr("posKitchenSlipOptionGroupSide", "사이드")}
+                      value={kitchenSlipOptionGroupPrint.side}
+                      onChange={(v) =>
+                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, side: v }))
+                      }
+                      t={t}
+                    />
+                    <ToggleRow
+                      label={tr("posKitchenSlipOptionGroupOther", "기타")}
+                      value={kitchenSlipOptionGroupPrint.other}
+                      onChange={(v) =>
+                        setKitchenSlipOptionGroupPrint((prev) => ({ ...prev, other: v }))
+                      }
+                      t={t}
+                    />
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />

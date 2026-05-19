@@ -23,6 +23,13 @@ export type KitchenSlipDesignResolved = {
   fontScale: KitchenSlipFontScale
   showLineNotes: boolean
   showOrderMemo: boolean
+  optionGroupPrint: {
+    size: boolean
+    part: boolean
+    flavor: boolean
+    side: boolean
+    other: boolean
+  }
 }
 
 /** getPosPrinterSettings 응답 등에서 주방 슬립 디자인 정규화 */
@@ -30,6 +37,13 @@ export function resolveKitchenSlipDesign(s?: {
   kitchenSlipFontScale?: string
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
+  kitchenSlipOptionGroupPrint?: {
+    size?: boolean
+    part?: boolean
+    flavor?: boolean
+    side?: boolean
+    other?: boolean
+  }
 }): KitchenSlipDesignResolved {
   const raw = String(s?.kitchenSlipFontScale || 'md').toLowerCase()
   const fontScale: KitchenSlipFontScale = raw === 'sm' ? 'sm' : raw === 'lg' ? 'lg' : 'md'
@@ -37,6 +51,13 @@ export function resolveKitchenSlipDesign(s?: {
     fontScale,
     showLineNotes: s?.kitchenSlipShowLineNotes !== false,
     showOrderMemo: s?.kitchenSlipShowOrderMemo !== false,
+    optionGroupPrint: {
+      size: s?.kitchenSlipOptionGroupPrint?.size !== false,
+      part: s?.kitchenSlipOptionGroupPrint?.part !== false,
+      flavor: s?.kitchenSlipOptionGroupPrint?.flavor !== false,
+      side: s?.kitchenSlipOptionGroupPrint?.side !== false,
+      other: s?.kitchenSlipOptionGroupPrint?.other !== false,
+    },
   }
 }
 
@@ -113,6 +134,70 @@ export function localizeKitchenSlipLineNote(rawNote: string): string {
   return note
 }
 
+type KitchenOptionGroupKey = keyof KitchenSlipDesignResolved['optionGroupPrint']
+
+function classifyKitchenOptionToken(token: string): KitchenOptionGroupKey {
+  const s = String(token || '').trim()
+  const low = s.toLowerCase()
+  if (!s) return 'other'
+  if (/^(xxl|xl|l|m|s)\b/i.test(s) || /\b(size|ไซส์)\b/i.test(s)) return 'size'
+  if (/(boneless|drumette|joint wing|wing|leg|part|순살|뼈|โดบา|ปีก)/i.test(s)) return 'part'
+  if (/(kimchi|radish|pickle|side|sidedish|side dish|피클|깍두기|หัวไชเท้า)/i.test(s)) return 'side'
+  if (/(spicy|soy|garlic|yangnyeom|curry|snow onion|bar\.?b\.?q|맛|소스)/i.test(low)) return 'flavor'
+  return 'other'
+}
+
+function filterKitchenLineNoteByGroupPolicy(
+  rawNote: string,
+  policy: KitchenSlipDesignResolved['optionGroupPrint']
+): string {
+  const note = String(rawNote || '').trim()
+  if (!note) return ''
+  if (Object.values(policy).every(Boolean)) return note
+
+  const groupValues: Record<KitchenOptionGroupKey, string[]> = {
+    size: [],
+    part: [],
+    flavor: [],
+    side: [],
+    other: [],
+  }
+  const pushGrouped = (g: KitchenOptionGroupKey, v: string) => {
+    const text = String(v || '').trim()
+    if (!text) return
+    if (!groupValues[g].includes(text)) groupValues[g].push(text)
+  }
+
+  const chunks = note.split('·').map((x) => x.trim()).filter(Boolean)
+  for (const chunk of chunks) {
+    const tokens = chunk.split(',').map((x) => x.trim()).filter(Boolean)
+    if (tokens.length <= 1) {
+      const g = classifyKitchenOptionToken(chunk)
+      pushGrouped(g, chunk)
+      continue
+    }
+    for (const token of tokens) {
+      if (/^\d+$/.test(token)) continue
+      const g = classifyKitchenOptionToken(token)
+      pushGrouped(g, token)
+    }
+  }
+
+  const labels: Record<KitchenOptionGroupKey, string> = {
+    size: 'Size',
+    part: 'Part',
+    flavor: 'Flavor',
+    side: 'Side',
+    other: 'Option',
+  }
+  const ordered: KitchenOptionGroupKey[] = ['size', 'part', 'flavor', 'side', 'other']
+  const out = ordered
+    .filter((g) => policy[g] && groupValues[g].length > 0)
+    .map((g) => `${labels[g]}: ${groupValues[g].join(', ')}`)
+
+  return out.join(' · ')
+}
+
 /**
  * 반반 메뉴명에서 두 가지 맛 추출.
  * `withKitchenCodeName`이 `[CODE] Banban Chicken (Flavor1 / Flavor2)` 형태를 만들 수 있으므로
@@ -142,16 +227,28 @@ export function formatKitchenSlipItemRowHtml(
   it: { name: string; qty: number; note?: string | null | undefined; cancelled?: boolean },
   escapeHtml: (s: string) => string,
   close: (tag: string) => string,
-  opts?: { showLineNotes?: boolean }
+  opts?: {
+    showLineNotes?: boolean
+    optionGroupPrint?: KitchenSlipDesignResolved['optionGroupPrint']
+  }
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
   const cancelled = Boolean(it.cancelled)
   const nameSplit = splitPosPrintItemLine(String(it.name ?? ''))
-  const note = showLineNotes
-    ? localizeKitchenSlipLineNote(
-        normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
-      )
+  const rawNormalizedNote = showLineNotes
+    ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
     : ''
+  const groupedFilteredNote = filterKitchenLineNoteByGroupPolicy(
+    rawNormalizedNote,
+    opts?.optionGroupPrint ?? {
+      size: true,
+      part: true,
+      flavor: true,
+      side: true,
+      other: true,
+    }
+  )
+  const note = showLineNotes ? localizeKitchenSlipLineNote(groupedFilteredNote) : ''
   const banban = parseKitchenSlipBanbanFromName(it.name)
   const baseDisplayName = banban ? banban.baseName : nameSplit.mainName || it.name
   const optionLine = banban ? '' : localizeKitchenSlipLineNote(nameSplit.optionLine)
@@ -204,7 +301,10 @@ export function buildKitchenSlipItemsHtml(
     prependHtml +
     items
       .map((it) =>
-        formatKitchenSlipItemRowHtml(it, escapeHtml, c, { showLineNotes: design.showLineNotes })
+        formatKitchenSlipItemRowHtml(it, escapeHtml, c, {
+          showLineNotes: design.showLineNotes,
+          optionGroupPrint: design.optionGroupPrint,
+        })
       )
       .join('')
   )

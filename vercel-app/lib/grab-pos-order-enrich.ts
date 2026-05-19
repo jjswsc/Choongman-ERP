@@ -273,10 +273,21 @@ export function resolveOptionCodesToLabels(
   codes: string[],
   optionNameByCode: Map<string, string>
 ): string[] {
+  const getCodeLabelCaseInsensitive = (codeUpper: string): string | null => {
+    const exact = optionNameByCode.get(codeUpper)
+    if (exact) return exact
+    const lower = optionNameByCode.get(codeUpper.toLowerCase())
+    if (lower) return lower
+    for (const [k, v] of optionNameByCode.entries()) {
+      if (String(k || '').trim().toUpperCase() === codeUpper) return v
+    }
+    return null
+  }
+
   const resolveLabelByCode = (raw: string): string => {
     const code = String(raw || '').trim().toUpperCase()
     if (!code) return ''
-    const exact = optionNameByCode.get(code)
+    const exact = getCodeLabelCaseInsensitive(code)
     if (exact) return exact
 
     // Grab note 코드가 C020-1-2 처럼 더 길 때, POS option_code 접두(C020-1 / C020)로 fallback
@@ -284,12 +295,13 @@ export function resolveOptionCodesToLabels(
     while (parts.length > 1) {
       parts.pop()
       const prefix = parts.join('-')
-      const byPrefix = optionNameByCode.get(prefix)
+      const byPrefix = getCodeLabelCaseInsensitive(prefix)
       if (byPrefix) return byPrefix
     }
 
     for (const [k, v] of optionNameByCode.entries()) {
-      if (k.startsWith(`${code}-`)) return v
+      const kk = String(k || '').trim().toUpperCase()
+      if (kk.startsWith(`${code}-`)) return v
     }
     return code
   }
@@ -375,19 +387,24 @@ export function resolveGrabDeliveryLineNote(
       requests.push(chunk)
       continue
     }
-    if (chunk.includes(',')) {
-      const rawParts = chunk.split(',').map((s) => s.trim()).filter(Boolean)
+    const normalizedChunk = String(chunk || '')
+      .replace(/^(item\s*note|line\s*note|note)\s*:\s*/i, '')
+      .trim()
+    if (!normalizedChunk) continue
+
+    if (normalizedChunk.includes(',')) {
+      const rawParts = normalizedChunk.split(',').map((s) => s.trim()).filter(Boolean)
       if (rawParts.length > 1 && rawParts.every((p) => isLikelyPosOptionCode(p))) {
         for (const p of rawParts) pushOptionToken(p)
         continue
       }
     }
-    if (isLikelyPosOptionCode(chunk)) {
-      pushOptionToken(chunk)
+    if (isLikelyPosOptionCode(normalizedChunk)) {
+      pushOptionToken(normalizedChunk)
       continue
     }
-    if (isMachineLikeGrabToken(chunk)) continue
-    requests.push(chunk)
+    if (isMachineLikeGrabToken(normalizedChunk)) continue
+    requests.push(normalizedChunk)
   }
 
   return {

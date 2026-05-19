@@ -210,7 +210,9 @@ function extractReadableOptionsFromItemText(item: Record<string, unknown>): stri
         .split(/[·•|,/]/)
         .map((s) => s.trim())
         .filter(Boolean)
+      const hasNonNumericPiece = pieces.some((x) => !/^\d+$/.test(x))
       for (const piece of pieces) {
+        if (hasNonNumericPiece && /^\d+$/.test(piece)) continue
         if (isMachineLikeGrabToken(piece)) continue
         const nk = piece.toLowerCase()
         if (seen.has(nk)) continue
@@ -590,9 +592,8 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       if (!modifierNames.includes(label)) modifierNames.push(label)
     }
     const banbanSlots = extractBanbanSlotNumbersFromItem(item)
-    if (banbanSlots.length > 0) {
-      // 반반치킨은 영수증 길이 절감을 위해 선택 맛 이름 대신 슬롯 번호(1,2)만 표기
-      modifierNames.length = 0
+    if (banbanSlots.length > 0 && modifierNames.length === 0) {
+      // 선택 이름을 못 읽어온 경우에만 슬롯 번호(1,2)로 fallback
       for (const s of banbanSlots) modifierNames.push(s)
     }
 

@@ -131,6 +131,13 @@ export function posPrinterSettingsToSaveParams(
         : "md") as "sm" | "md" | "lg",
     kitchenSlipShowLineNotes: s.kitchenSlipShowLineNotes !== false,
     kitchenSlipShowOrderMemo: s.kitchenSlipShowOrderMemo !== false,
+    kitchenSlipOptionGroupPrint: {
+      size: s.kitchenSlipOptionGroupPrint?.size !== false,
+      part: s.kitchenSlipOptionGroupPrint?.part !== false,
+      flavor: s.kitchenSlipOptionGroupPrint?.flavor !== false,
+      side: s.kitchenSlipOptionGroupPrint?.side !== false,
+      other: s.kitchenSlipOptionGroupPrint?.other !== false,
+    },
     escPosCutAfterKitchenHtml: s.escPosCutAfterKitchenHtml !== false,
     escPosCutAfterHallOrderHtml: Boolean(s.escPosCutAfterHallOrderHtml),
     escPosCutAfterPaymentReceiptHtml: Boolean(s.escPosCutAfterPaymentReceiptHtml),

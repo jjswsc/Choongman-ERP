@@ -85,7 +85,7 @@ import {
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { resolveGrabDeliveryLineNote } from '@/lib/grab-pos-order-enrich'
+import { buildOptionNameByCodeFromMenus, resolveGrabDeliveryLineNote } from '@/lib/grab-pos-order-enrich'
 import {
   parsePosOrderMemo,
   upsertPosOrderTaxInvoiceMemo,
@@ -202,6 +202,34 @@ function posKitchenGuestSpread(
 ): { guestCount: number; guestCountLabel: string } | Record<PropertyKey, never> {
   const g = posGuestCountForThermalPrint(n)
   return g != null ? { guestCount: g, guestCountLabel: label } : {}
+}
+
+type StoreAutoPrintFlags = {
+  receiptOnOrder: boolean
+  receiptOnAddOrder: boolean
+  receiptOnPayment: boolean
+  kitchenOnOrder: boolean
+}
+
+function storeAutoPrintFlagsFromSettings(s: PosPrinterSettings | null | undefined): StoreAutoPrintFlags {
+  return {
+    receiptOnOrder: Boolean(s?.autoPrintReceiptOnOrder),
+    receiptOnAddOrder: Boolean(s?.autoPrintReceiptOnAddOrder || s?.autoPrintReceiptOnOrder),
+    receiptOnPayment: Boolean(s?.autoPrintReceiptOnPayment ?? s?.autoPrintReceiptOnOrder),
+    kitchenOnOrder: Boolean(s?.autoPrintKitchenSlipOnOrder),
+  }
+}
+
+function mergeStoreAutoPrintFlags(
+  fromSettings: StoreAutoPrintFlags,
+  fromState: StoreAutoPrintFlags
+): StoreAutoPrintFlags {
+  return {
+    receiptOnOrder: fromState.receiptOnOrder || fromSettings.receiptOnOrder,
+    receiptOnAddOrder: fromState.receiptOnAddOrder || fromSettings.receiptOnAddOrder,
+    receiptOnPayment: fromState.receiptOnPayment || fromSettings.receiptOnPayment,
+    kitchenOnOrder: fromState.kitchenOnOrder || fromSettings.kitchenOnOrder,
+  }
 }
 
 /** Supabase Realtime INSERT 페이로드의 id는 number가 아닐 수 있음(bigint 등 → 문자열) */
@@ -723,16 +751,10 @@ export default function PosTerminalPage() {
     }
     return out
   }, [menuOptions])
-  const optionNameByCode = useMemo(() => {
-    const out = new Map<string, string>()
-    for (const opt of menuOptions) {
-      const code = String(opt.optionCode ?? '').trim()
-      const name = String(opt.name ?? '').trim()
-      if (!code || !name) continue
-      out.set(code, name)
-    }
-    return out
-  }, [menuOptions])
+  const optionNameByCode = useMemo(
+    () => buildOptionNameByCodeFromMenus(menus, menuOptions),
+    [menus, menuOptions]
+  )
   const formatLineNoteForPrint = useCallback(
     (rawNote?: string | null): string => {
       const raw = String(rawNote ?? '').trim()
@@ -922,6 +944,42 @@ export default function PosTerminalPage() {
     posPrinterSettingsInFlightRef.current = request
     return request
   }, [currentStoreId])
+
+  const storeAutoPrintFromState = useMemo(
+    (): StoreAutoPrintFlags => ({
+      receiptOnOrder: autoPrintReceiptOnOrder,
+      receiptOnAddOrder: autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder,
+      receiptOnPayment: autoPrintReceiptOnPayment,
+      kitchenOnOrder: autoPrintKitchenSlipOnOrder,
+    }),
+    [
+      autoPrintReceiptOnOrder,
+      autoPrintReceiptOnAddOrder,
+      autoPrintReceiptOnPayment,
+      autoPrintKitchenSlipOnOrder,
+    ]
+  )
+
+  const resolveStoreAutoPrintFlags = useCallback(
+    async (targetStoreCode: string): Promise<StoreAutoPrintFlags> => {
+      try {
+        const s = await getPrinterSettingsForStore(targetStoreCode)
+        return mergeStoreAutoPrintFlags(storeAutoPrintFlagsFromSettings(s), storeAutoPrintFromState)
+      } catch {
+        return storeAutoPrintFromState
+      }
+    },
+    [getPrinterSettingsForStore, storeAutoPrintFromState]
+  )
+
+  const readStoreAutoPrintFlagsSync = useCallback((): StoreAutoPrintFlags => {
+    const code = String(currentStoreId || '').trim()
+    const fromRef =
+      code && String(posPrinterSettingsStoreCodeRef.current || '').trim() === code
+        ? storeAutoPrintFlagsFromSettings(posPrinterSettingsRef.current)
+        : storeAutoPrintFlagsFromSettings(null)
+    return mergeStoreAutoPrintFlags(fromRef, storeAutoPrintFromState)
+  }, [currentStoreId, storeAutoPrintFromState])
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -4901,9 +4959,6 @@ export default function PosTerminalPage() {
                 }
               }
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
-              const shouldAutoPrintReceipt = isAddOrder
-                ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
-                : autoPrintReceiptOnOrder
               try {
                 if (isPosDemo) {
                   const tid = selectedTableId
@@ -5157,6 +5212,11 @@ export default function PosTerminalPage() {
                   otherFeeMode: pricing.otherFeeMode,
                   ...posGuestCountSpread(payload.guestCount),
                 }
+                const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
+                const shouldAutoPrintReceipt = isAddOrder
+                  ? storeAutoPrint.receiptOnAddOrder
+                  : storeAutoPrint.receiptOnOrder
+                const autoPrintKitchenForSubmit = storeAutoPrint.kitchenOnOrder
                 const runKitchenAfterDineInSubmit = () => {
                   if (kitchenCartLines.length === 0) return
                   const kitchenPrintKey =
@@ -5272,11 +5332,11 @@ export default function PosTerminalPage() {
                   logPosPrintDebug('submit_receipt_autoprint_dispatch', {
                     orderId: savedOrderId,
                     orderNo: orderNoStr,
-                    autoPrintKitchenSlipOnOrder,
+                    autoPrintKitchenSlipOnOrder: autoPrintKitchenForSubmit,
                     skipLocalAutoPrint,
                     receiptItems: receiptPrintItems.length,
                   })
-                  if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
+                  if (autoPrintKitchenForSubmit && kitchenCartLines.length > 0) {
                     void printReceiptNow(
                       receiptPayloadSubmit,
                       null,
@@ -5290,7 +5350,7 @@ export default function PosTerminalPage() {
                   }
                 } else if (
                   isMainPosDevice &&
-                  autoPrintKitchenSlipOnOrder &&
+                  autoPrintKitchenForSubmit &&
                   !skipLocalAutoPrint &&
                   payloadItemsNormalized.length > 0 &&
                   kitchenCartLines.length > 0
@@ -5306,10 +5366,8 @@ export default function PosTerminalPage() {
                 } else if (
                   isMainPosDevice &&
                   !skipLocalAutoPrint &&
-                  !(isAddOrder
-                    ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
-                    : autoPrintReceiptOnOrder) &&
-                  !autoPrintKitchenSlipOnOrder
+                  !shouldAutoPrintReceipt &&
+                  !autoPrintKitchenForSubmit
                 ) {
                   /** 자동 인쇄(영수증·주방) 모두 꺼진 경우: 수동 인쇄 안내 모달(Windows 인쇄 대화상자로 이어짐) */
                   setReceiptData({
@@ -5797,14 +5855,18 @@ export default function PosTerminalPage() {
                     .catch((e) => console.error('Kitchen slip print(non-dine):', e))
                 }
 
+                const storeAutoPrintNonDine = await resolveStoreAutoPrintFlags(currentStoreId)
+                const autoPrintReceiptNonDine = storeAutoPrintNonDine.receiptOnOrder
+                const autoPrintKitchenNonDine = storeAutoPrintNonDine.kitchenOnOrder
+
                 if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
-                  if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder && payloadItemsNormalized.length > 0) {
+                  if (autoPrintReceiptNonDine && autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)
-                  } else if (autoPrintReceiptOnOrder) {
+                  } else if (autoPrintReceiptNonDine) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
-                  } else if (autoPrintKitchenSlipOnOrder && payloadItemsNormalized.length > 0) {
+                  } else if (autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     setTimeout(runKitchenAfterNonDineSubmit, 180)
                   } else {
@@ -5892,21 +5954,11 @@ export default function PosTerminalPage() {
             }}
           />
   )
-  const hasCurrentStorePrinterSettings =
-    String(posPrinterSettingsStoreCodeRef.current || '').trim() === String(currentStoreId || '').trim()
-  const effectivePrinterSettings = hasCurrentStorePrinterSettings ? posPrinterSettingsRef.current : null
-  const effectiveAutoPrintReceiptOnOrder =
-    autoPrintReceiptOnOrder || Boolean(effectivePrinterSettings?.autoPrintReceiptOnOrder)
-  const effectiveAutoPrintReceiptOnAddOrder =
-    autoPrintReceiptOnAddOrder ||
-    Boolean(effectivePrinterSettings?.autoPrintReceiptOnAddOrder) ||
-    Boolean(effectivePrinterSettings?.autoPrintReceiptOnOrder)
-  const effectiveAutoPrintReceiptOnPayment =
-    autoPrintReceiptOnPayment ||
-    Boolean(effectivePrinterSettings?.autoPrintReceiptOnPayment) ||
-    Boolean(effectivePrinterSettings?.autoPrintReceiptOnOrder)
-  const effectiveAutoPrintKitchenSlipOnOrder =
-    autoPrintKitchenSlipOnOrder || Boolean(effectivePrinterSettings?.autoPrintKitchenSlipOnOrder)
+  const effectiveAutoPrint = readStoreAutoPrintFlagsSync()
+  const effectiveAutoPrintReceiptOnOrder = effectiveAutoPrint.receiptOnOrder
+  const effectiveAutoPrintReceiptOnAddOrder = effectiveAutoPrint.receiptOnAddOrder
+  const effectiveAutoPrintReceiptOnPayment = effectiveAutoPrint.receiptOnPayment
+  const effectiveAutoPrintKitchenSlipOnOrder = effectiveAutoPrint.kitchenOnOrder
 
   return (
     <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>

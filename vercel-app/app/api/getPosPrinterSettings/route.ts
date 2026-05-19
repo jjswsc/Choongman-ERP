@@ -149,6 +149,13 @@ export async function GET(request: NextRequest) {
     kitchenSlipFontScale: 'md' as const,
     kitchenSlipShowLineNotes: true,
     kitchenSlipShowOrderMemo: true,
+    kitchenSlipOptionGroupPrint: {
+      size: true,
+      part: true,
+      flavor: true,
+      side: true,
+      other: true,
+    } as const,
     escPosCutAfterKitchenHtml: true,
     /** DB·런타임 미설정 시 true: 같은 프린터로 거의 동시에 두 기기가 찍으면 컷 없이 한 롤로 이어붙는 사례 방지 */
     escPosCutAfterHallOrderHtml: true,
@@ -254,6 +261,7 @@ export async function GET(request: NextRequest) {
       kitchen_slip_font_scale?: string
       kitchen_slip_show_line_notes?: boolean
       kitchen_slip_show_order_memo?: boolean
+      kitchen_slip_option_group_print?: unknown
       esc_pos_cut_after_kitchen_html?: boolean
       esc_pos_cut_after_hall_order_html?: boolean
       esc_pos_cut_after_payment_receipt_html?: boolean
@@ -288,6 +296,10 @@ export async function GET(request: NextRequest) {
     }[] | null
 
     const raw = rows?.[0]
+    const rawKitchenOptionGroupPrint =
+      raw?.kitchen_slip_option_group_print && typeof raw.kitchen_slip_option_group_print === 'object'
+        ? (raw.kitchen_slip_option_group_print as Record<string, unknown>)
+        : {}
     const kitchen1 = Array.isArray(raw?.kitchen1_categories)
       ? (raw.kitchen1_categories as string[]).filter((c) => typeof c === 'string')
       : []
@@ -398,6 +410,13 @@ export async function GET(request: NextRequest) {
             : 'md',
       kitchenSlipShowLineNotes: raw?.kitchen_slip_show_line_notes !== false,
       kitchenSlipShowOrderMemo: raw?.kitchen_slip_show_order_memo !== false,
+      kitchenSlipOptionGroupPrint: {
+        size: rawKitchenOptionGroupPrint.size !== false,
+        part: rawKitchenOptionGroupPrint.part !== false,
+        flavor: rawKitchenOptionGroupPrint.flavor !== false,
+        side: rawKitchenOptionGroupPrint.side !== false,
+        other: rawKitchenOptionGroupPrint.other !== false,
+      },
       escPosCutAfterKitchenHtml:
         raw?.esc_pos_cut_after_kitchen_html === false
           ? false
