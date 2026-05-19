@@ -401,15 +401,8 @@ export function CompanyHybridDocumentsPanel() {
   }, [mainTab])
 
   const labelCategoryOption = React.useCallback(
-    (c: CompanyHybridDocumentCategory) => {
-      const path = categoryLabelById.get(c.id) || c.name
-      if (isCompanyHybridDocCategoryGlobalStore(c.store)) return path
-      if (isCompanyHybridDocsListAllStoresParam(selectedStore)) {
-        return `${formatStoreLabel(c.store)} · ${path}`
-      }
-      return `${formatStoreLabel(c.store)} · ${path}`
-    },
-    [categoryLabelById, formatStoreLabel, selectedStore]
+    (c: CompanyHybridDocumentCategory) => categoryLabelById.get(c.id) || c.name,
+    [categoryLabelById]
   )
 
   const labelForDocumentCategory = React.useCallback(
