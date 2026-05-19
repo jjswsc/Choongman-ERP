@@ -2186,6 +2186,100 @@ export default function PosMenusPage() {
     [optionsConfigEffectiveGroupKey, optionsConfigPanelStepGroups, handleOptionGroupRuleFieldChange]
   )
 
+  const resolveAudienceFromChannelToggle = React.useCallback(
+    (current: "all" | "hall" | "delivery" | undefined, channel: "hall" | "delivery", checked: boolean) => {
+      const hallOn = channel === "hall" ? checked : current === "all" || current === "hall"
+      const delOn = channel === "delivery" ? checked : current === "all" || current === "delivery"
+      if (hallOn && delOn) return "all" as const
+      if (delOn) return "delivery" as const
+      if (hallOn) return "hall" as const
+      return "all" as const
+    },
+    []
+  )
+
+  const handleToggleGroupAudienceForConfig = React.useCallback(
+    (groupKey: string, channel: "hall" | "delivery", checked: boolean) => {
+      const row = optionsConfigGroupRulesDraft.find((x) => x.key === groupKey)
+      const current =
+        row?.audience === "hall" || row?.audience === "delivery" ? row.audience : ("all" as const)
+      handleOptionGroupRuleFieldChange(groupKey, {
+        audience: resolveAudienceFromChannelToggle(current, channel, checked),
+      })
+    },
+    [optionsConfigGroupRulesDraft, handleOptionGroupRuleFieldChange, resolveAudienceFromChannelToggle]
+  )
+
+  const persistOptionGroupConfigFromDraft = React.useCallback(async (): Promise<{
+    ok: boolean
+    message?: string
+    skipped?: boolean
+  }> => {
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return { ok: true, skipped: true }
+    const pid = optionsConfigSelectedMenu.promoId?.trim()
+    if (pid) {
+      return {
+        ok: false,
+        message: t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.",
+      }
+    }
+    const parsed = normalizeOptionGroupsForMenu(
+      parseOptionGroupsFromText(optionsConfigGroupsDraft),
+      optionsConfigSelectedMenu.code
+    )
+    const normalized = normalizeOptionSelectionConfig(parsed, optionsConfigGroupRulesDraft)
+    const nextConfig = applyChickenDeliveryRulesToConfig(
+      parsed,
+      normalized,
+      optionsConfigSelectedMenu.code,
+      t
+    )
+    const savedGroups = normalizeOptionGroupsForMenu(
+      (optionsConfigSelectedMenu.optionSelectionGroups ?? []).map((x) => String(x).trim()).filter(Boolean),
+      optionsConfigSelectedMenu.code
+    )
+    const savedConfig = applyChickenDeliveryRulesToConfig(
+      savedGroups,
+      normalizeOptionSelectionConfig(savedGroups, optionsConfigSelectedMenu.optionSelectionConfig),
+      optionsConfigSelectedMenu.code,
+      t
+    )
+    if (JSON.stringify(parsed) === JSON.stringify(savedGroups) && JSON.stringify(nextConfig) === JSON.stringify(savedConfig)) {
+      return { ok: true, skipped: true }
+    }
+    const res = await savePosMenu({
+      id: optionsConfigSelectedMenuId,
+      code: optionsConfigSelectedMenu.code,
+      name: optionsConfigSelectedMenu.name,
+      category: optionsConfigSelectedMenu.category ?? "",
+      categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
+      sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
+      price: optionsConfigSelectedMenu.price,
+      priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
+      vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
+      isActive: optionsConfigSelectedMenu.isActive ?? true,
+      optionSelectionGroups: parsed,
+      optionSelectionConfig: nextConfig,
+      isBanban: optionsConfigSelectedMenu.isBanban ?? false,
+    })
+    if (!res.success) return { ok: false, message: res.message || t("msg_save_fail_detail") }
+    setMenus((prev) =>
+      prev.map((m) =>
+        m.id === optionsConfigSelectedMenuId
+          ? { ...m, optionSelectionGroups: parsed, optionSelectionConfig: nextConfig }
+          : m
+      )
+    )
+    setOptionsConfigGroupRulesDraft(nextConfig)
+    return { ok: true, skipped: false }
+  }, [
+    optionsConfigSelectedMenuId,
+    optionsConfigSelectedMenu,
+    optionsConfigGroupsDraft,
+    optionsConfigGroupRulesDraft,
+    t,
+  ])
+
   const handleMoveOptionGroup = React.useCallback(
     (groupKey: string, direction: "up" | "down") => {
       const current = [...optionsConfigPanelStepGroups]
@@ -2319,43 +2413,18 @@ export default function PosMenusPage() {
 
   const handleApplyOptionGroupsForConfig = async () => {
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
-    const pid = optionsConfigSelectedMenu.promoId?.trim()
-    if (pid) {
-      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
-      return
-    }
-    const parsed = normalizeOptionGroupsForMenu(
-      parseOptionGroupsFromText(optionsConfigGroupsDraft),
-      optionsConfigSelectedMenu.code
-    )
-    const normalized = normalizeOptionSelectionConfig(parsed, optionsConfigGroupRulesDraft)
-    const nextConfig = applyChickenDeliveryRulesToConfig(parsed, normalized, optionsConfigSelectedMenu.code, t)
     setOptionsConfigApplyingGroups(true)
     try {
-      const res = await savePosMenu({
-        id: optionsConfigSelectedMenuId,
-        code: optionsConfigSelectedMenu.code,
-        name: optionsConfigSelectedMenu.name,
-        category: optionsConfigSelectedMenu.category ?? "",
-        categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
-        sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
-        price: optionsConfigSelectedMenu.price,
-        priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
-        vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
-        isActive: optionsConfigSelectedMenu.isActive ?? true,
-        optionSelectionGroups: parsed,
-        optionSelectionConfig: nextConfig,
-        isBanban: optionsConfigSelectedMenu.isBanban ?? false,
-      })
-      if (res.success) {
-        setMenus((prev) =>
-          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: parsed, optionSelectionConfig: nextConfig } : m))
-        )
-        setOptionsConfigGroupRulesDraft(nextConfig)
+      const res = await persistOptionGroupConfigFromDraft()
+      if (!res.ok) {
+        await appAlert(res.message || t("msg_save_fail_detail"))
+        return
+      }
+      if (!res.skipped) {
         setOptionsConfigNewStepValues({})
         await appAlert(t("msg_save_success") || "저장되었습니다.")
       } else {
-        await appAlert(res.message || t("msg_save_fail_detail"))
+        await appAlert(t("posOptionConfigNoGroupChanges") || "변경된 단계 설정이 없습니다.")
       }
     } finally {
       setOptionsConfigApplyingGroups(false)
@@ -2832,6 +2901,11 @@ export default function PosMenusPage() {
   const handleSaveOptionsForConfig = async () => {
     if (!optionsConfigSelectedMenuId || optionsConfigMenuOptions.length === 0) return
     try {
+      const groupRes = await persistOptionGroupConfigFromDraft()
+      if (!groupRes.ok) {
+        await appAlert(groupRes.message || t("msg_save_fail_detail"))
+        return
+      }
       const currentNumericIds = new Set(
         optionsConfigMenuOptions
           .map((o) => String(o.id ?? ""))
@@ -5084,7 +5158,8 @@ export default function PosMenusPage() {
                   groups={optionsConfigGroupPanelItems}
                   selectedGroupKey={optionsConfigEffectiveGroupKey || optionsConfigGroupPanelItems[0]?.key || ""}
                   onSelectGroup={setOptionsConfigSelectedGroupKey}
-                  stepListReadOnly
+                  stepListReadOnly={false}
+                  onToggleGroupAudience={handleToggleGroupAudienceForConfig}
                   moveUpLabel={t("move_up") || "위로"}
                   moveDownLabel={t("move_down") || "아래로"}
                   isMoveUpDisabled={isOptionStepMoveUpDisabled}
@@ -5126,6 +5201,10 @@ export default function PosMenusPage() {
                   <div className="space-y-4">
                     <p className="text-[11px] text-muted-foreground">
                       {t("posOptionResetHint") || "기존 옵션을 지우고 새로 적용하려면 먼저 [초기화]를 누른 뒤 옵션을 추가하세요."}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("posOptionSaveIncludesStepsHint") ||
+                        "상단 [저장]은 옵션 항목·가격·판매 채널과 함께 왼쪽 단계의 채널(홀/배달) 설정도 DB에 반영합니다. 단계 순서·추가만 바꾼 경우 [단계 저장]을 눌러 주세요."}
                     </p>
                     <div className="rounded border border-dashed border-border/70 bg-muted/15 p-3 space-y-2">
                       <p className="text-xs font-semibold">{t("posOptionAddStepTitle") || "선택 단계 추가"}</p>

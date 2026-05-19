@@ -75,11 +75,20 @@ export async function POST(request: NextRequest) {
       if (!row || row.deleted_at) {
         return NextResponse.json({ success: false, message: '문서를 찾을 수 없습니다.' }, { status: 404, headers })
       }
-      if (String(row.store) !== store) {
-        return NextResponse.json(
-          { success: false, message: '기존 문서의 store와 일치하도록 store를 맞추세요.' },
-          { status: 400, headers }
-        )
+      const oldStore = String(row.store || '').trim()
+      if (oldStore !== store) {
+        if (!canAccessStoreForCompanyHybridDocs(auth, oldStore)) {
+          return NextResponse.json(
+            { success: false, message: '기존 매장 문서를 수정할 권한이 없습니다.' },
+            { status: 403, headers }
+          )
+        }
+        if (!canAccessStoreForCompanyHybridDocs(auth, store)) {
+          return NextResponse.json(
+            { success: false, message: '이동할 매장에 대한 권한이 없습니다.' },
+            { status: 403, headers }
+          )
+        }
       }
       if (sourceInput && isCompanyHybridSource(sourceInput) && sourceInput !== String(row.source)) {
         return NextResponse.json(
@@ -101,6 +110,7 @@ export async function POST(request: NextRequest) {
           )
         }
         await supabaseUpdate('company_hybrid_documents', id, {
+          ...(oldStore !== store ? { store } : {}),
           title,
           related_type: 'none',
           related_id: null,
@@ -115,6 +125,7 @@ export async function POST(request: NextRequest) {
         })
       } else {
         await supabaseUpdate('company_hybrid_documents', id, {
+          ...(oldStore !== store ? { store } : {}),
           title,
           related_type: 'none',
           related_id: null,

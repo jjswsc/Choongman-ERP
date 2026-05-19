@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { touchInteriorVendorDirectoryFromTrack } from '@/lib/interior-vendor-directory-server'
 
 const ALLOWED_STATUS = new Set(['planned', 'ordered', 'paid', 'received', 'done', 'delayed', 'cancelled'])
 
@@ -50,6 +51,8 @@ export async function POST(request: NextRequest) {
       note: note || null,
       sort_order: sortOrder,
     }
+
+    await touchInteriorVendorDirectoryFromTrack({ vendorName, vendorCode: vendorCode || null })
 
     if (id && !Number.isNaN(id)) {
       await supabaseUpdate('interior_vendor_tracks', id, row)

@@ -95,6 +95,12 @@ body {
 }
 
 @layer utilities {
+  /** 금액·건수 — 본문 Pretendard와 어울리도록 가변폭 + tabular lining figures */
+  .font-erp-numeric {
+    font-family: var(--font-pretendard), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum", "lnum";
+  }
   .text-balance {
     text-wrap: balance;
   }

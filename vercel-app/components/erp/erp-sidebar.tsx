@@ -193,6 +193,7 @@ const menuSections: MenuSection[] = [
     items: [
       { titleKey: "adminInteriorProjects", icon: LayoutGrid, href: "/admin/interior" },
       { titleKey: "interiorSchedule", icon: Calendar, href: "/admin/interior/schedule" },
+      { titleKey: "interiorVendorDirectory", icon: Building2, href: "/admin/interior/vendor-directory" },
       { titleKey: "interiorVendorTracks", icon: HandCoins, href: "/admin/interior/vendors" },
       { titleKey: "interiorHubSpecs", icon: PackageSearch, href: "/admin/interior/specs" },
       { titleKey: "interiorHubDrawings", icon: LayoutPanelTop, href: "/admin/interior/drawings" },

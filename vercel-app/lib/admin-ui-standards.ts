@@ -11,3 +11,12 @@ export const ADMIN_PANEL_WARNING_CN =
 
 /** 관리자 액션 버튼(소형) 표준 */
 export const ADMIN_BTN_XS_CN = 'h-8 gap-1.5 px-2 text-xs'
+
+/** 금액·건수·비율 등 숫자 표시 (globals.css `.font-erp-numeric`) */
+export const ADMIN_NUMERIC_CN = 'font-erp-numeric tabular-nums lining-nums'
+
+/** Recharts 축·툴팁 숫자 */
+export const ERP_NUMERIC_CHART_TICK = {
+  fontFamily: 'var(--font-pretendard), var(--font-inter), ui-sans-serif, system-ui, sans-serif',
+  fontFeatureSettings: '"tnum", "lnum"',
+} as const

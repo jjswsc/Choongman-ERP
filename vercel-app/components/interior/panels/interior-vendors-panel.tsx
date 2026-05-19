@@ -27,9 +27,12 @@ import {
   saveInteriorVendorTrack,
   deleteInteriorVendorTrack,
   getInteriorWorkPackages,
+  getInteriorVendorDirectory,
   type InteriorVendorTrack,
   type InteriorWorkPackage,
+  type InteriorVendorDirectoryEntry,
 } from "@/lib/api-client"
+import { InteriorVendorSectionTabs } from "@/components/interior/interior-vendor-section-tabs"
 
 const VENDOR_STATUS: { value: string; labelKey: string }[] = [
   { value: "planned", labelKey: "interiorVnPlanned" },
@@ -80,6 +83,7 @@ function delayLabel(t: (k: string) => string, key: "payment" | "material" | "wor
 export function InteriorVendorsPanel({ projectId }: { projectId: string }) {
   const t = useT(useLang().lang)
   const [list, setList] = React.useState<InteriorVendorTrack[]>([])
+  const [vendorDirectory, setVendorDirectory] = React.useState<InteriorVendorDirectoryEntry[]>([])
   const [workPackages, setWorkPackages] = React.useState<InteriorWorkPackage[]>([])
   const [loading, setLoading] = React.useState(true)
   const [editing, setEditing] = React.useState<InteriorVendorTrack | null>(null)
@@ -92,10 +96,12 @@ export function InteriorVendorsPanel({ projectId }: { projectId: string }) {
     Promise.all([
       getInteriorVendorTracks({ projectId }).catch(() => []),
       getInteriorWorkPackages({ projectId }).catch(() => []),
+      getInteriorVendorDirectory().catch(() => []),
     ])
-      .then(([tracks, packages]) => {
+      .then(([tracks, packages, directory]) => {
         setList(tracks || [])
         setWorkPackages((packages || []).filter((x) => !x.isLegacy))
+        setVendorDirectory(directory || [])
       })
       .finally(() => setLoading(false))
   }, [projectId])
@@ -155,9 +161,26 @@ export function InteriorVendorsPanel({ projectId }: { projectId: string }) {
     }
   }
 
+  const pickVendorFromDirectory = (entry: InteriorVendorDirectoryEntry) => {
+    if (!editing) return
+    setEditing({
+      ...editing,
+      vendorName: entry.name || editing.vendorName,
+      vendorCode: entry.code || editing.vendorCode,
+    })
+  }
+
+  const frequentVendors = React.useMemo(() => {
+    return [...vendorDirectory]
+      .sort((a, b) => (b.useCount ?? 0) - (a.useCount ?? 0) || String(a.name).localeCompare(String(b.name)))
+      .slice(0, 8)
+  }, [vendorDirectory])
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <InteriorVendorSectionTabs active="tracks" />
+
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
@@ -177,10 +200,48 @@ export function InteriorVendorsPanel({ projectId }: { projectId: string }) {
               <div>
                 <label className="text-xs text-muted-foreground">{t("interiorVendorName")}</label>
                 <Input
+                  list="interior-vendor-name-options"
                   value={editing.vendorName || ""}
                   onChange={(e) => setEditing({ ...editing, vendorName: e.target.value })}
                   placeholder={t("interiorVendorNamePh")}
                 />
+                <datalist id="interior-vendor-name-options">
+                  {vendorDirectory.map((v) => (
+                    <option key={v.id ?? v.name} value={v.name || ""} />
+                  ))}
+                </datalist>
+                {frequentVendors.length > 0 ? (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {frequentVendors.map((v) => (
+                      <Button
+                        key={v.id ?? v.name}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => pickVendorFromDirectory(v)}
+                      >
+                        {v.name}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">{t("posMenuCode")}</label>
+                <Input
+                  list="interior-vendor-code-options"
+                  value={editing.vendorCode || ""}
+                  onChange={(e) => setEditing({ ...editing, vendorCode: e.target.value })}
+                  placeholder={t("interiorVendorCodePh")}
+                />
+                <datalist id="interior-vendor-code-options">
+                  {vendorDirectory
+                    .filter((v) => v.code)
+                    .map((v) => (
+                      <option key={v.id ?? v.code} value={v.code || ""} />
+                    ))}
+                </datalist>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">{t("interiorWorkPackageLink")}</label>

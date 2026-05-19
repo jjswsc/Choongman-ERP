@@ -1,0 +1,232 @@
+﻿                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("companyHybridCategorySort")}</Label>
+                  <Input
+                    type="number"
+                    value={newCategorySort}
+                    onChange={(e) => setNewCategorySort(e.target.value)}
+                    disabled={!canManageCategories}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("companyHybridCategoryParent")}</Label>
+                  <Select value={newCategoryParentId} onValueChange={setNewCategoryParentId} disabled={!canManageCategories}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("companyHybridCategoryParentPh")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
+                      {rootCategoriesForManage.map((c) => (
+                        <SelectItem key={`new-parent-${c.id}`} value={String(c.id)}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => void onAddCategory()}
+                  disabled={!canManageCategories}
+                >
+                  {t("companyHybridCategoryAdd")}
+                </Button>
+              </div>
+
+              {editingCategory && (
+                <div
+                  className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Label>{t("companyHybridCategoryEditing")}</Label>
+                    <Input
+                      value={editingCategory.name}
+                      onChange={(e) =>
+                        setEditingCategory((prev) => (prev ? { ...prev, name: e.target.value } : null))
+                      }
+                    />
+                  </div>
+                  <div className="w-28 space-y-1.5">
+                    <Label>{t("companyHybridCategorySort")}</Label>
+                    <Input
+                      type="number"
+                      value={editingCategory.sort_order}
+                      onChange={(e) => {
+                        const n = Math.floor(Number(e.target.value) || 0)
+                        setEditingCategory((prev) => (prev ? { ...prev, sort_order: n } : null))
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("companyHybridCategoryParent")}</Label>
+                    <Select
+                      value={
+                        editingCategory.parent_category_id != null
+                          ? String(editingCategory.parent_category_id)
+                          : FORM_CAT_NONE
+                      }
+                      onValueChange={(v) =>
+                        setEditingCategory((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                parent_category_id: v !== FORM_CAT_NONE ? Math.floor(Number(v) || 0) : null,
+                              }
+                            : null
+                        )
+                      }
+                      disabled={isCompanyHybridDocCategoryRoot(editingCategory)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("companyHybridCategoryParentPh")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
+                        {categoriesForManageTab
+                          .filter(
+                            (c) =>
+                              c.id !== editingCategory.id &&
+                              isCompanyHybridDocCategoryRoot(c)
+                          )
+                          .map((c) => (
+                            <SelectItem key={`edit-parent-${c.id}`} value={String(c.id)}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" onClick={() => void onSaveEditingCategory()}>
+                      {t("companyHybridCategorySave")}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setEditingCategory(null)}>
+                      {t("companyHybridDocCancel")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {categoriesForManageTab.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("companyHybridCategoryEmpty")}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">{t("companyHybridCategorySort")}</TableHead>
+                        <TableHead>{t("companyHybridCategoryColParent")}</TableHead>
+                        <TableHead>{t("companyHybridCategoryName")}</TableHead>
+                        <TableHead className="text-right">{t("stockColAction")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orderedManageCategories.map((c) => {
+                        const canCat = canManageCategories
+                        const depth = manageCategoryDepthById.get(c.id) ?? 0
+                        const parentId =
+                          c.parent_category_id != null && Number(c.parent_category_id) > 0
+                            ? Number(c.parent_category_id)
+                            : null
+                        const parentName = parentId ? categoryById.get(parentId)?.name : null
+                        return (
+                        <TableRow key={`${c.store}-${c.id}`}>
+                          <TableCell className="text-muted-foreground">{c.sort_order}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {parentName || "ΓÇö"}
+                          </TableCell>
+                          <TableCell
+                            className="font-medium"
+                            style={{ paddingLeft: depth > 0 ? `${Math.min(depth, 4) * 1.25}rem` : undefined }}
+                          >
+                            {depth > 0 ? (
+                              <span className="text-muted-foreground" aria-hidden>
+                                Γöö{" "}
+                              </span>
+                            ) : null}
+                            {c.name}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex flex-wrap justify-end gap-1">
+                              {canCat && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setEditingCategory({
+                                      id: c.id,
+                                      name: c.name,
+                                      sort_order: c.sort_order,
+                                      store: c.store,
+                                      parent_category_id: c.parent_category_id ?? null,
+                                    })
+                                  }
+                                >
+                                  {t("companyHybridCategoryEdit")}
+                                </Button>
+                              )}
+                              {canCat && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => void onDeleteCategory(c)}
+                                >
+                                  {t("companyHybridCategoryDelete")}
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="correspondence" className={cn(adminTabsContentCn, "space-y-4")}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Mail className="h-4 w-4" />
+                {t("companyHybridCorrGuideTitle")}
+              </CardTitle>
+              <CardDescription>{t("companyHybridCorrTabHint")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{t("companyHybridCorrGuideBody")}</p>
+              <Button
+                type="button"
+                onClick={() => {
+                  setListCorrPresence("yes")
+                  setListCorrDirection("")
+                  setListCorrStatus("")
+                  setListCorrCounterpartySearch("")
+                  setMainTab("list")
+                  setHasSearched(true)
+                  void load({
+                    corrPresence: "yes",
+                    corrDirection: "",
+                    corrStatus: "",
+                    corrCounterpartySearch: "",
+                  })
+                }}
+              >
+                {t("companyHybridCorrGoToFilteredList")}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}

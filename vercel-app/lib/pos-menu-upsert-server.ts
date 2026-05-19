@@ -522,6 +522,9 @@ export async function upsertPosMenuFromBody(
                 const required = c.required === true
                 const minRaw = Number(c.minSelect)
                 const maxRaw = Number(c.maxSelect)
+                const audienceRaw = String(c.audience ?? 'all').trim().toLowerCase()
+                const audience: 'all' | 'hall' | 'delivery' =
+                  audienceRaw === 'hall' || audienceRaw === 'delivery' ? audienceRaw : 'all'
                 const minSelect = Number.isFinite(minRaw)
                   ? Math.max(0, Math.floor(minRaw))
                   : (required ? 1 : 0)
@@ -529,9 +532,18 @@ export async function upsertPosMenuFromBody(
                   ? Math.max(0, Math.floor(maxRaw))
                   : 1
                 const maxSelect = Math.max(1, maxFromInput, minSelect)
-                return { key, label, required, minSelect, maxSelect }
+                return { key, label, audience, required, minSelect, maxSelect }
               })
-              .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+              .filter(
+                (x): x is {
+                  key: string
+                  label: string
+                  audience: 'all' | 'hall' | 'delivery'
+                  required: boolean
+                  minSelect: number
+                  maxSelect: number
+                } => !!x
+              )
             return JSON.stringify(list)
           }
           /**

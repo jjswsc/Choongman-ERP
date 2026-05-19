@@ -36,7 +36,7 @@ import {
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
-import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
@@ -790,12 +790,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         ? {
             angle: -55,
             textAnchor: "end" as const,
-            tick: { fontSize: 9 },
+            tick: { fontSize: 9, ...ERP_NUMERIC_CHART_TICK },
             height: 72,
             interval: 0,
           }
-        : { tick: { fontSize: 11 } },
+        : { tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK } },
     [periodGroup]
+  )
+
+  const periodChartYAxisProps = React.useMemo(
+    () => ({
+      tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK },
+      tickFormatter: (v: number) => `${(v / 1000).toFixed(0)}k`,
+    }),
+    []
   )
 
   const currentSubMenu = SALES_IA.find((menu) => menu.id === activeSubMenuId) ?? SALES_IA[0]
@@ -2253,22 +2261,22 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.current)}</p>
+                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCards.current)}</p>
               </div>
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevRange", "직전 동일기간")}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.prevRange)}</p>
+                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCards.prevRange)}</p>
               </div>
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevWeek", "전주 동기간")}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.prevWeek)}</p>
+                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCards.prevWeek)}</p>
               </div>
             </div>
           ) : summaryRowShowCurrentOnly ? (
             <div className="mb-3 max-w-sm">
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(activeSummaryCurrent)}</p>
+                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(activeSummaryCurrent)}</p>
               </div>
             </div>
           ) : null}
@@ -2284,13 +2292,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               {insightShowTotals ? (
                 <div className="rounded-lg border bg-card p-3">
                   <p className="text-xs text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(activeTotalsSummary.gross)}</p>
+                  <p className="mt-1 text-sm font-semibold font-erp-numeric">{formatSalesAmount(activeTotalsSummary.gross)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(activeTotalsSummary.discount)}</p>
+                  <p className="mt-1 text-sm font-semibold font-erp-numeric">-{formatSalesAmount(activeTotalsSummary.discount)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesServiceAmount", "서비스처리 금액")}</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(activeTotalsSummary.service)}</p>
+                  <p className="mt-1 text-sm font-semibold font-erp-numeric">-{formatSalesAmount(activeTotalsSummary.service)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
-                  <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(activeTotalsSummary.total)}</p>
+                  <p className="mt-1 text-base font-bold font-erp-numeric">{formatSalesAmount(activeTotalsSummary.total)}</p>
                 </div>
               ) : null}
               {insightShowMenu ? (
@@ -2303,7 +2311,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {insightTopMenus.map((row) => (
                         <li key={`top-${row.name}`} className="flex items-center justify-between gap-2">
                           <span className="truncate">{row.name}</span>
-                          <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                          <span className="shrink-0 font-erp-numeric font-medium">{formatSalesAmount(row.sales)}</span>
                         </li>
                       ))}
                     </ul>
@@ -2316,7 +2324,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {insightBottomMenus.map((row) => (
                         <li key={`low-${row.name}`} className="flex items-center justify-between gap-2">
                           <span className="truncate">{row.name}</span>
-                          <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                          <span className="shrink-0 font-erp-numeric font-medium">{formatSalesAmount(row.sales)}</span>
                         </li>
                       ))}
                     </ul>
@@ -2333,7 +2341,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {insightTopChannels.map((row) => (
                         <li key={`ch-${row.channelKey}`} className="flex items-center justify-between gap-2">
                           <span className="truncate">{row.axisLabel}</span>
-                          <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                          <span className="shrink-0 font-erp-numeric font-medium">{formatSalesAmount(row.sales)}</span>
                         </li>
                       ))}
                     </ul>
@@ -2359,7 +2367,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             {row.count}
                             {tr("posCount", "건")})
                           </span>
-                          <span className="shrink-0 tabular-nums font-medium">
+                          <span className="shrink-0 font-erp-numeric font-medium">
                             {formatSalesAmount(row.amount)}
                           </span>
                         </button>
@@ -2396,7 +2404,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             {row.count}
                             {tr("posCount", "건")})
                           </span>
-                          <span className="shrink-0 tabular-nums font-medium">
+                          <span className="shrink-0 font-erp-numeric font-medium">
                             {formatSalesAmount(row.amount)}
                           </span>
                         </button>
@@ -2470,7 +2478,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={showComparePeriodChart ? comparePeriodChartRows : periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip
                           formatter={(v: number, name: string) => [formatSalesAmount(v), name]}
                         />
@@ -2516,41 +2524,41 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {periodChartRows.map((r) => (
                         <tr key={r.key} className="border-b">
                           <td className="py-1.5">{r.axisLabel}</td>
-                          <td className="py-1.5 text-right font-mono">{r.count.toLocaleString()}</td>
-                          <td className="py-1.5 text-right font-mono">{r.hallGuestSum.toLocaleString()}</td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">{r.hallGuestSum.toLocaleString()}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {r.dineInOrderCount > 0 ? formatSalesAmount(r.salesPerDineInOrder) : "—"}
                           </td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {r.hallGuestSum > 0 ? formatSalesAmount(r.salesPerGuestHall) : "—"}
                           </td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {r.count > 0 ? formatSalesAmount(r.salesPerOrder) : "—"}
                           </td>
-                          <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
-                          <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
-                          <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.discount)}</td>
-                          <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.service ?? 0)}</td>
-                          <td className="py-1.5 text-right font-mono font-medium">{formatSalesAmount(r.total)}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.subtotal)}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.vat)}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.discount)}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.service ?? 0)}</td>
+                          <td className="py-1.5 text-right font-erp-numeric font-medium">{formatSalesAmount(r.total)}</td>
                         </tr>
                       ))}
                       {periodChartRows.length > 0 && (
                         <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
                           <td className="py-2">{tr("salesTotalLabel", "합계")}</td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {periodChartRows.reduce((a, x) => a + x.count, 0).toLocaleString()}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {periodChartRows.reduce((a, x) => a + x.hallGuestSum, 0).toLocaleString()}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {(() => {
                               const c = periodChartRows.reduce((a, x) => a + x.dineInOrderCount, 0)
                               const t = periodChartRows.reduce((a, x) => a + x.dineInTotal, 0)
                               return c > 0 ? formatSalesAmount(Math.round((t / c) * 100) / 100) : "—"
                             })()}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {(() => {
                               const gD = periodChartRows.reduce((a, x) => a + x.dineInGuestSum, 0)
                               const tD = periodChartRows.reduce((a, x) => a + x.dineInTotal, 0)
@@ -2563,26 +2571,26 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               return "—"
                             })()}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {(() => {
                               const c = periodChartRows.reduce((a, x) => a + x.count, 0)
                               const t = periodChartRows.reduce((a, x) => a + x.total, 0)
                               return c > 0 ? formatSalesAmount(Math.round((t / c) * 100) / 100) : "—"
                             })()}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.subtotal, 0))}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.vat, 0))}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.discount, 0))}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + (x.service ?? 0), 0))}
                           </td>
-                          <td className="py-2 text-right font-mono">
+                          <td className="py-2 text-right font-erp-numeric">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.total, 0))}
                           </td>
                         </tr>
@@ -2660,22 +2668,22 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             <tr key={`${r.storeCode}\t${r.key}`} className="border-b border-border/60">
                               <td className="px-3 py-1.5 font-medium">{r.storeDisplay}</td>
                               <td className="px-3 py-1.5">{r.axisLabel}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{r.count.toLocaleString()}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{r.hallGuestSum.toLocaleString()}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{r.hallGuestSum.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
                                 {r.dineInOrderCount > 0 ? formatSalesAmount(r.salesPerDineInOrder) : "—"}
                               </td>
-                              <td className="px-3 py-1.5 text-right font-mono">
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
                                 {r.hallGuestSum > 0 ? formatSalesAmount(r.salesPerGuestHall) : "—"}
                               </td>
-                              <td className="px-3 py-1.5 text-right font-mono">
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
                                 {r.count > 0 ? formatSalesAmount(r.salesPerOrder) : "—"}
                               </td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.discount)}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.service ?? 0)}</td>
-                              <td className="px-3 py-1.5 text-right font-mono font-medium">
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.subtotal)}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.vat)}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.discount)}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.service ?? 0)}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric font-medium">
                                 {formatSalesAmount(r.total)}
                               </td>
                             </tr>
@@ -2727,7 +2735,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
@@ -2772,7 +2780,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         {deliveryPieRows.map((r) => (
                           <tr key={r.channelKey} className="border-b">
                             <td className="py-1.5">{r.axisLabel}</td>
-                            <td className="py-1.5 text-right font-mono">
+                            <td className="py-1.5 text-right font-erp-numeric">
                               {formatSalesAmount(r.sales)}
                             </td>
                             <td className="py-1.5 text-right text-muted-foreground">
@@ -2834,7 +2842,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                   {deliveryPlatformPieRows.map((r) => (
                                     <tr key={r.code} className="border-b">
                                       <td className="py-1.5">{r.axisLabel}</td>
-                                      <td className="py-1.5 text-right font-mono">
+                                      <td className="py-1.5 text-right font-erp-numeric">
                                         {formatSalesAmount(r.sales)}
                                       </td>
                                       <td className="py-1.5 text-right text-muted-foreground">
@@ -2880,7 +2888,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
@@ -2890,7 +2898,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={channelChartRows} layout="vertical" margin={{ left: 80 }}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <XAxis type="number" {...periodChartYAxisProps} />
                         <YAxis dataKey="axisLabel" type="category" width={80} tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#22c55e" name={tr("pL_sales", "매출")} />
@@ -2908,7 +2916,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {channelChartRows.slice(0, 30).map((r) => (
                         <tr key={r.channelKey} className="border-b">
                           <td className="py-1.5">{r.axisLabel}</td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
@@ -2938,7 +2946,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
@@ -2971,10 +2979,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {menuData.slice(0, 100).map((r) => (
                         <tr key={r.name} className="border-b">
                           <td className="py-1.5">{r.name}</td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {r.qty.toLocaleString()}
                           </td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
@@ -3009,7 +3017,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={storeChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
@@ -3074,32 +3082,32 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           return (
                           <tr key={r.storeName} className="border-t border-slate-100 hover:bg-slate-50">
                             <td className="px-4 py-2.5 font-medium">{posStoreDisplayName(r.storeName)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{r.count.toLocaleString()}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{hallGuestSum.toLocaleString()}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">{hallGuestSum.toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">
                               {dineInOrderCount > 0 ? formatSalesAmount(salesPerDineInOrder) : "—"}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono">
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">
                               {hallGuestSum > 0 ? formatSalesAmount(salesPerGuestHall) : "—"}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono">
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">
                               {r.count > 0 ? formatSalesAmount(salesPerOrder) : "—"}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.discount ?? 0)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.service ?? 0)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold">{formatSalesAmount(r.total)}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.subtotal)}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.vat)}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.discount ?? 0)}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.service ?? 0)}</td>
+                            <td className="px-4 py-2.5 text-right font-erp-numeric font-semibold">{formatSalesAmount(r.total)}</td>
                           </tr>
                           )
                         })}
                         {scopedStoreData.length > 0 && (
                           <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
                             <td className="px-4 py-3">{tr("salesTotalLabel", "합계")}</td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {scopedStoreData.reduce((a, r) => a + r.count, 0).toLocaleString()}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {scopedStoreData.reduce((a, r) => {
                                 const g = r.guestSum ?? 0
                                 const legacy =
@@ -3110,14 +3118,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                 return a + hall
                               }, 0).toLocaleString()}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {(() => {
                                 const c = scopedStoreData.reduce((a, r) => a + (r.dineInOrderCount ?? 0), 0)
                                 const t = scopedStoreData.reduce((a, r) => a + (r.dineInTotal ?? 0), 0)
                                 return c > 0 ? formatSalesAmount(Math.round((t / c) * 100) / 100) : "—"
                               })()}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {(() => {
                                 const gD = scopedStoreData.reduce((a, r) => a + (r.dineInGuestSum ?? 0), 0)
                                 const tD = scopedStoreData.reduce((a, r) => a + (r.dineInTotal ?? 0), 0)
@@ -3137,26 +3145,26 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                 return "—"
                               })()}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {(() => {
                                 const c = scopedStoreData.reduce((a, r) => a + r.count, 0)
                                 const t = scopedStoreData.reduce((a, r) => a + r.total, 0)
                                 return c > 0 ? formatSalesAmount(Math.round((t / c) * 100) / 100) : "—"
                               })()}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.subtotal, 0))}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.vat, 0))}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {formatSalesAmount(scopedStoreData.reduce((a, r) => a + (r.discount ?? 0), 0))}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {formatSalesAmount(scopedStoreData.reduce((a, r) => a + (r.service ?? 0), 0))}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono">
+                            <td className="px-4 py-3 text-right font-erp-numeric">
                               {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.total, 0))}
                             </td>
                           </tr>
@@ -3202,7 +3210,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
@@ -3247,8 +3255,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           {storeChartRows.slice(0, 12).map((r) => (
                             <tr key={r.storeName} className="border-t">
                               <td className="px-3 py-1.5">{r.storeDisplayName}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{r.count.toLocaleString()}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.total)}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.total)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3261,7 +3269,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={channelChartRows} layout="vertical" margin={{ left: 60 }}>
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                          <XAxis type="number" {...periodChartYAxisProps} />
                           <YAxis dataKey="axisLabel" type="category" width={60} tick={{ fontSize: 10 }} />
                           <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                           <Bar dataKey="sales" fill="#f59e0b" name={tr("salesSalesAmount", "판매 금액")} />
@@ -3280,7 +3288,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           {channelChartRows.map((r) => (
                             <tr key={r.channelKey} className="border-t">
                               <td className="px-3 py-1.5">{r.axisLabel}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.sales)}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.sales)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3315,7 +3323,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis {...periodChartYAxisProps} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
@@ -3353,7 +3361,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {paymentChartRows.map((r) => (
                         <tr key={r.paymentKey} className="border-b">
                           <td className="py-1.5 pr-4">{r.axisLabel}</td>
-                          <td className="py-1.5 text-right font-mono">
+                          <td className="py-1.5 text-right font-erp-numeric">
                             {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
@@ -3388,7 +3396,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <p className="text-xs text-muted-foreground">
                         {tr("adminLiveStoreSalesWaitingRevenue", "현재 대기 주문 매출액")}
                       </p>
-                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
                         {formatSalesAmount(realtimeRevenueData.store.waitingRevenue)}
                       </p>
                     </div>
@@ -3396,7 +3404,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <p className="text-xs text-muted-foreground">
                         {tr("adminLiveStoreSalesAvgCookingMins", "평균 조리시간(분)")}
                       </p>
-                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
                         {Number(realtimeRevenueData.store.revenueWeightedCookingMinutes || 0).toFixed(1)}m
                       </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -3408,7 +3416,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <p className="text-xs text-muted-foreground">
                         {tr("adminLiveStoreSalesDelayedOrders", "지연 주문 카운트")}
                       </p>
-                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
                         {Math.max(0, Number(realtimeRevenueData.store.delayedOrders || 0)).toLocaleString()}
                         {tr("posCount", "건")}
                       </p>
@@ -3422,7 +3430,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <p className="text-xs text-muted-foreground">
                         {tr("adminLiveStoreSalesDelayedRevenue", "지연 주문 매출액")}
                       </p>
-                      <p className="mt-1 text-2xl font-bold tabular-nums">
+                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
                         {formatSalesAmount(realtimeRevenueData.store.delayedRevenue)}
                       </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -3450,16 +3458,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           {realtimeRevenueData.office.stores.map((row) => (
                             <tr key={row.storeCode} className="border-b">
                               <td className="px-3 py-2">{posStoreDisplayName(row.storeCode)}</td>
-                              <td className="px-3 py-2 text-right font-mono">{formatSalesAmount(row.completedRevenue)}</td>
-                              <td className="px-3 py-2 text-right font-mono">{formatSalesAmount(row.waitingRevenue)}</td>
-                              <td className="px-3 py-2 text-right font-mono">{formatSalesAmount(row.delayedRevenue)}</td>
-                              <td className="px-3 py-2 text-right font-mono">
+                              <td className="px-3 py-2 text-right font-erp-numeric">{formatSalesAmount(row.completedRevenue)}</td>
+                              <td className="px-3 py-2 text-right font-erp-numeric">{formatSalesAmount(row.waitingRevenue)}</td>
+                              <td className="px-3 py-2 text-right font-erp-numeric">{formatSalesAmount(row.delayedRevenue)}</td>
+                              <td className="px-3 py-2 text-right font-erp-numeric">
                                 {formatPeakHourRange(row.peakHour)} ({formatSalesAmount(row.peakHourRevenue)})
                               </td>
-                              <td className="px-3 py-2 text-right font-mono">
+                              <td className="px-3 py-2 text-right font-erp-numeric">
                                 {(Math.max(0, Number(row.stockoutRate || 0)) * 100).toFixed(1)}%
                               </td>
-                              <td className="px-3 py-2 text-right font-mono">
+                              <td className="px-3 py-2 text-right font-erp-numeric">
                                 {(Math.max(0, Number(row.cancelRate || 0)) * 100).toFixed(1)}%
                               </td>
                             </tr>

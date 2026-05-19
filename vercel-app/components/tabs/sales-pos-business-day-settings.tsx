@@ -332,11 +332,11 @@ export function SalesPosBusinessDaySettings({
           <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
             <p className="font-medium">{tr('salesPosBizDayPreviewTitle', '미리보기 (현재 시각 기준)')}</p>
             <p className="text-muted-foreground">
-              {tr('salesPosBizDayPreviewCal', '방콕 달력일')}: <span className="font-mono text-foreground">{preview.cal}</span>
+              {tr('salesPosBizDayPreviewCal', '방콕 달력일')}: <span className="font-erp-numeric text-foreground">{preview.cal}</span>
             </p>
             <p className="text-muted-foreground">
               {tr('salesPosBizDayPreviewBiz', 'POS 영업일 라벨')}:{' '}
-              <span className="font-mono text-foreground">{preview.biz}</span>
+              <span className="font-erp-numeric text-foreground">{preview.biz}</span>
             </p>
             <p className="text-xs text-muted-foreground break-all pt-1">
               {tr('salesPosBizDayUtcRange', '집계 UTC 구간')}: {preview.startISO} ~ {preview.endISOExclusive}{' '}

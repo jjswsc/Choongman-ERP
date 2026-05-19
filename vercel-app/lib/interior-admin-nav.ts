@@ -3,6 +3,7 @@ export const INTERIOR_ADMIN = {
   hub: "/admin/interior",
   schedule: "/admin/interior/schedule",
   vendors: "/admin/interior/vendors",
+  vendorDirectory: "/admin/interior/vendor-directory",
   /** 사양·자재 (자재 사양 | 사양서) */
   specs: "/admin/interior/specs",
   /** 도면·배치 (도면 배치 | 도면·견적 파일) */

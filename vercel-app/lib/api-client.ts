@@ -5349,6 +5349,50 @@ export async function deleteInteriorWorkPackage(params: { id: number }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface InteriorVendorDirectoryEntry {
+  id?: number
+  code?: string
+  name?: string
+  contactName?: string
+  phone?: string
+  email?: string
+  address?: string
+  specialty?: string
+  memo?: string
+  useCount?: number
+  lastUsedAt?: string | null
+  isActive?: boolean
+  sortOrder?: number
+}
+
+export async function getInteriorVendorDirectory(options?: { includeInactive?: boolean }) {
+  const q = new URLSearchParams()
+  if (options?.includeInactive) q.set('includeInactive', '1')
+  const suffix = q.toString() ? `?${q}` : ''
+  const res = await apiFetchWithOffline(`/api/getInteriorVendorDirectory${suffix}`)
+  return jsonAsArray<InteriorVendorDirectoryEntry>(await res.json())
+}
+
+export async function saveInteriorVendorDirectory(
+  params: Partial<InteriorVendorDirectoryEntry> & { name: string }
+) {
+  const res = await apiFetchWithOffline('/api/saveInteriorVendorDirectory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorVendorDirectory(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deleteInteriorVendorDirectory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface InteriorVendorTrack {
   id?: number
   projectId?: number
