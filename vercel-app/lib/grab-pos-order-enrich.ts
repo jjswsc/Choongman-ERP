@@ -375,6 +375,17 @@ export function resolveGrabDeliveryLineNote(
       requests.push(chunk)
       continue
     }
+    if (chunk.includes(',')) {
+      const rawParts = chunk.split(',').map((s) => s.trim()).filter(Boolean)
+      if (rawParts.length > 1 && rawParts.every((p) => isLikelyPosOptionCode(p))) {
+        for (const p of rawParts) pushOptionToken(p)
+        continue
+      }
+    }
+    if (isLikelyPosOptionCode(chunk)) {
+      pushOptionToken(chunk)
+      continue
+    }
     if (isMachineLikeGrabToken(chunk)) continue
     requests.push(chunk)
   }
