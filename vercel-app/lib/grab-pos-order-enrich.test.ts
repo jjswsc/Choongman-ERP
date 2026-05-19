@@ -26,11 +26,39 @@ describe('grab-pos-order-enrich', () => {
     expect(resolveOptionCodesToLabels(['C022-1'], catalog.optionNameByCode)).toEqual(['Boneless'])
   })
 
+  it('falls back to POS menu code when item id menuId is stale', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 74, name: 'GARLIC Bar.B.Q FRIED CHICKEN', code: 'C022' }],
+      []
+    )
+    const resolved = resolveGrabItemNameAndMeta({ id: 'item-9999-c022', name: 'item-9999-c022' }, catalog)
+    expect(resolved.name).toBe('GARLIC Bar.B.Q FRIED CHICKEN')
+    expect(resolved.menuId).toBe('74')
+  })
+
   it('converts optc note chunk to readable option chips', () => {
     const catalog = buildGrabPosCatalog([], [{ optionCode: 'C009-5', name: 'Pickled Radish' }])
     const meta = resolveGrabDeliveryLineNote('optc:C009-5', catalog.optionNameByCode)
     expect(meta.optionChips).toEqual(['Pickled Radish'])
     expect(meta.requestSummary).toBe('')
+  })
+
+  it('converts mods note chunk with POS option codes to readable chips', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [
+        { optionCode: 'C020-1', name: 'Boneless' },
+        { optionCode: 'C020-4', name: 'Kimchi' },
+      ]
+    )
+    const meta = resolveGrabDeliveryLineNote('mods:C020-1, C020-4', catalog.optionNameByCode)
+    expect(meta.optionChips).toEqual(['Boneless', 'Kimchi'])
+  })
+
+  it('maps extended optc codes by prefix fallback', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C020-1', name: 'Boneless' }])
+    const meta = resolveGrabDeliveryLineNote('optc:C020-1-2', catalog.optionNameByCode)
+    expect(meta.optionChips).toEqual(['Boneless'])
   })
 
   it('avoids double-counting M-size surcharge when item name includes size', () => {
@@ -52,6 +80,18 @@ describe('grab-pos-order-enrich', () => {
       unitBaseMinor: 15900,
       modifierMinorPerLine: 10000,
       itemName: 'SOY SAUCE FRIED CHICKEN',
+    })
+    expect(unit).toBe(25900)
+  })
+
+  it('does not add modifier surcharge when selection is already present', () => {
+    const unit = resolveGrabLineUnitMinor({
+      lineMinor: 0,
+      qty: 1,
+      unitBaseMinor: 25900,
+      modifierMinorPerLine: 10000,
+      itemName: 'GOCHUJANG Bar.B.Q FRIED CHICKEN',
+      hasSelections: true,
     })
     expect(unit).toBe(25900)
   })

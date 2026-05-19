@@ -116,7 +116,7 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
     const promoCode = String(it.promoCode ?? '').trim()
     const deliveryAppCode = String(it.deliveryAppCode ?? '').trim()
     const promoItems =
-      promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0 ? it.promoItems : undefined
+      Array.isArray(it.promoItems) && it.promoItems.length > 0 ? it.promoItems : undefined
     const setChildrenState =
       it.setChildrenState && typeof it.setChildrenState === 'object' && !Array.isArray(it.setChildrenState)
         ? (it.setChildrenState as Record<string, { servedAt?: string | null; servedBy?: string | null; packedAt?: string | null; packedBy?: string | null }>)
@@ -159,14 +159,9 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       cancelledAt: typeof it.cancelledAt === 'string' ? it.cancelledAt : null,
       cancelledBy: typeof it.cancelledBy === 'string' ? it.cancelledBy : null,
       cancelReason: typeof it.cancelReason === 'string' ? it.cancelReason : null,
-      ...(promoId
-        ? {
-            promoId,
-            ...(promoCode ? { promoCode } : {}),
-            ...(promoItems ? { promoItems } : {}),
-            ...(setChildrenState ? { setChildrenState } : {}),
-          }
-        : {}),
+      ...(promoId ? { promoId, ...(promoCode ? { promoCode } : {}) } : {}),
+      ...(promoItems ? { promoItems } : {}),
+      ...(setChildrenState ? { setChildrenState } : {}),
       ...(deliveryAppCode ? { deliveryAppCode } : {}),
     })
   }

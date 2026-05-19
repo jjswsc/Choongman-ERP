@@ -133,7 +133,11 @@ import {
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
-import { isGrabCustomerCancelPosOrderUpdate } from '@/lib/pos-grab-customer-cancel'
+import {
+  applyGrabCancelWatchRealtimeRow,
+  syncGrabCancelWatchSnapshot,
+  type GrabCancelWatchSnap,
+} from '@/lib/pos-grab-cancel-watch'
 import {
   consumePosSelfInitiatedGrabCancel,
   markPosSelfInitiatedGrabCancel,
@@ -1419,6 +1423,8 @@ export default function PosTerminalPage() {
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
   const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
   const promptedGrabCustomerCancelIdsRef = useRef<Set<number>>(new Set())
+  const grabCancelWatchSnapshotRef = useRef<Map<number, GrabCancelWatchSnap>>(new Map())
+  const grabCancelWatchSeededRef = useRef(false)
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
   /** 메인 포스: dine_in 품목 id 스냅샷(다른 단말 UPDATE 시 추가분만 홀/주방 자동인쇄) */
@@ -2038,6 +2044,32 @@ export default function PosTerminalPage() {
       void appAlert(msg)
     },
     [playIncomingOrderBeep, refetchCurrentStore, t]
+  )
+
+  const runGrabCancelWatchOnOrders = useCallback(
+    (
+      orders: Array<{ id?: number; status?: string; memo?: string; orderType?: string; tableName?: string; orderNo?: string }>,
+      opts: { seedOnly?: boolean }
+    ): boolean => {
+      const newlyCancelled = syncGrabCancelWatchSnapshot(orders, grabCancelWatchSnapshotRef.current, {
+        seedOnly: Boolean(opts.seedOnly),
+      })
+      if (opts.seedOnly) {
+        grabCancelWatchSeededRef.current = true
+        return false
+      }
+      if (!grabCancelWatchSeededRef.current) return false
+      for (const orderId of newlyCancelled) {
+        const order = orders.find((o) => Number(o.id) === orderId)
+        notifyGrabCustomerCancelledOrder({
+          orderId,
+          tableName: order?.tableName,
+          orderNo: order?.orderNo,
+        })
+      }
+      return newlyCancelled.length > 0
+    },
+    [notifyGrabCustomerCancelledOrder]
   )
 
   const isCurrentStoreOrder = useCallback(
@@ -2930,39 +2962,72 @@ export default function PosTerminalPage() {
     refetchCurrentStore,
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
+    runGrabCancelWatchOnOrders,
+    notifyGrabCustomerCancelledOrder,
   ])
 
   useEffect(() => {
     if (!currentStoreId) return
-    const rowMatchesStore = (rowStore: string) => {
-      const variants = [
-        currentStoreId,
-        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
-        currentStoreId.replace(/^CM\s+/i, ''),
-      ].filter(Boolean)
-      return variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))
+    const deliveryList = [...deliveryOrders, ...packagedDeliveryOrders, ...completedDeliveryOrders]
+    if (!deliveryList.length) return
+    const rows = deliveryList.map((o) => ({
+      id: Number(o.id),
+      status: o.status,
+      memo: o.memo,
+      orderType: 'delivery' as const,
+      tableName: o.tableName,
+      orderNo: o.orderNo,
+    }))
+    if (!grabCancelWatchSeededRef.current) {
+      runGrabCancelWatchOnOrders(rows, { seedOnly: true })
+      return
     }
+    runGrabCancelWatchOnOrders(rows, { seedOnly: false })
+  }, [
+    currentStoreId,
+    deliveryOrders,
+    packagedDeliveryOrders,
+    completedDeliveryOrders,
+    runGrabCancelWatchOnOrders,
+  ])
 
-    const channel = subscribePosOrdersUpdate((payload) => {
+  useEffect(() => {
+    if (!currentStoreId) return
+
+    const handleUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
-      const oldRow = payload?.old as Record<string, unknown> | undefined
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
-      const rowStore = String(row.store_code ?? '').trim()
-      if (!rowStore || !rowMatchesStore(rowStore)) return
-      if (!isGrabCustomerCancelPosOrderUpdate(row, oldRow)) return
+      if (!isCurrentStoreOrder(row.store_code)) return
+
+      const shouldAlert = applyGrabCancelWatchRealtimeRow({
+        orderId,
+        row: {
+          id: orderId,
+          status: row.status,
+          memo: row.memo,
+          order_type: row.order_type,
+        },
+        snapshot: grabCancelWatchSnapshotRef.current,
+        seeded: grabCancelWatchSeededRef.current,
+      })
+      if (!shouldAlert) return
       notifyGrabCustomerCancelledOrder({
         orderId,
         tableName: String(row.table_name ?? ''),
         orderNo: String(row.order_no ?? ''),
       })
-    }, { store: currentStoreId })
+      refetchCurrentStore()
+    }
+
+    /** store 필터 Realtime이 UPDATE에서 누락되는 환경 대비 — 핸들러에서 매장 일치 검사 */
+    const channel = subscribePosOrdersUpdate(handleUpdate)
 
     return () => {
       channel?.unsubscribe()
     }
-  }, [currentStoreId, notifyGrabCustomerCancelledOrder])
+  }, [currentStoreId, isCurrentStoreOrder, notifyGrabCustomerCancelledOrder, refetchCurrentStore])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
@@ -3266,6 +3331,8 @@ export default function PosTerminalPage() {
       lastSeenOrderIdPersistedRef.current = persistedLastSeen
       startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
       prevStoreForPollRef.current = currentStoreId
+      grabCancelWatchSnapshotRef.current.clear()
+      grabCancelWatchSeededRef.current = false
     }
     const today = getPosBusinessDateStr()
     const poll = async () => {
@@ -3352,6 +3419,7 @@ export default function PosTerminalPage() {
           const seededMax = Math.max(lastSeenOrderIdRef.current, maxId)
           bumpLastSeenOrderId(seededMax)
           hasInitializedMainPosPollRef.current = true
+          runGrabCancelWatchOnOrders(orders, { seedOnly: true })
           await runPaymentReceiptScan()
           return
         }
@@ -3553,6 +3621,26 @@ export default function PosTerminalPage() {
         if (shouldRefreshCurrentStore) {
           refetchCurrentStore()
         }
+
+        try {
+          const watchOrders = await getPosOrders({
+            startStr: today,
+            endStr: today,
+            posBizDayScope: true,
+            storeCode: currentStoreId,
+            strictStore: true,
+            limit: 800,
+            orderBy: 'id.desc',
+          })
+          if (!grabCancelWatchSeededRef.current) {
+            runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
+          } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
+            refetchCurrentStore()
+          }
+        } catch {
+          /* grab cancel watch */
+        }
+
         await runPaymentReceiptScan()
       } catch {
         // ignore poll errors

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildKitchenSlipGroups, type KitchenSlipRoutingItem } from '@/lib/pos-kitchen-slip-routing'
+import {
+  buildKitchenSlipGroups,
+  resolveEffectiveKitchenRouteForMenu,
+  type KitchenSlipRoutingItem,
+} from '@/lib/pos-kitchen-slip-routing'
 
 const labels = {
   unified: 'Kitchen',
@@ -66,6 +70,41 @@ describe('buildKitchenSlipGroups printer overlay', () => {
       }),
     })
     expect(slips).toHaveLength(0)
+  })
+
+  it('routes by menu code when order menuId differs from printer settings id', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      {
+        id: 'line-1',
+        name: 'Spicy Yangnyeom Chicken Dosirak',
+        qty: 1,
+        menuId: 'order-row-id',
+      },
+    ]
+    const slips = buildKitchenSlipGroups(items, {
+      ...baseOpts({
+        kitchenMode: 2,
+        kitchenPrinterByMenuId: { 'order-row-id': 2, 'settings-row-id': 2 },
+        kitchenRouteByMenu: { 'settings-row-id': 1 },
+        menuCodeByMenuId: { 'order-row-id': 'k032', 'settings-row-id': 'k032' },
+        categoryByMenuId: { 'order-row-id': 'Dosirak', 'settings-row-id': 'Dosirak' },
+      }),
+      kitchenRouteByMenuCode: { k032: 1 },
+    })
+    expect(slips).toHaveLength(1)
+    expect(slips[0].station).toBe(1)
+  })
+
+  it('resolveEffectiveKitchenRouteForMenu uses kitchen_printer when route map empty', () => {
+    const route = resolveEffectiveKitchenRouteForMenu(
+      { id: 'm1', code: 'K032', category: 'Dosirak', kitchenPrinter: 2 },
+      {
+        kitchenRouteByMenu: {},
+        categoryByMenuId: { m1: 'Dosirak' },
+        menuCodeByMenuId: { m1: 'K032' },
+      }
+    )
+    expect(route).toBe(2)
   })
 
   it('expands promo lines with menuName snapshot when catalog id missing', () => {

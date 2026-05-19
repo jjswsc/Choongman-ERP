@@ -62,6 +62,20 @@ type PosItem = {
   }[]
 }
 
+export type GrabPosOrderSnapshot = {
+  items: PosItem[]
+  subtotal: number
+  discountAmt: number
+  deliveryFee: number
+  packagingFee: number
+  vat: number
+  total: number
+  paymentCash: number
+  paymentDeliveryApp: number
+  tableName: string
+  orderType: 'delivery' | 'dine_in'
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 }
@@ -598,8 +612,10 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       qty,
       unitBaseMinor,
       modifierMinorPerLine: modifierMinor,
-      itemName: rawDisplayName || itemName,
+      itemName: [rawDisplayName || itemName, ...modifierNames].filter(Boolean).join(' + '),
+      hasSelections: modifierNames.length > 0 || optionCodeSet.size > 0,
     })
+    const optionCodes = Array.from(optionCodeSet)
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,
@@ -609,6 +625,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         item.specifications
       ),
       modifierNames.length ? `mods:${modifierNames.join(',')}` : '',
+      optionCodes.length ? `optc:${optionCodes.join(',')}` : '',
       ecoSummary || '',
     ].filter(Boolean)
 
@@ -616,7 +633,6 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     const itemNote = noteParts.length ? noteParts.join(' · ') : undefined
     const menuRef = parseGrabPartnerItemMenuRef(itemBaseId)
     const menuId1 = resolved.menuId || (menuRef ? String(menuRef.menuId) : undefined)
-    const optionCodes = Array.from(optionCodeSet)
 
     const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {
       if (rowQty <= 0) return
@@ -654,6 +670,61 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
   }
 
   return out
+}
+
+export async function buildGrabPosOrderSnapshot(
+  order: Record<string, unknown>
+): Promise<GrabPosOrderSnapshot> {
+  const items = await buildPosItems(order)
+  let subtotal = 0
+  for (const item of items) subtotal += item.price * item.qty
+
+  const exponent = currencyExponent(order)
+  const price = asRecord(order.price)
+  const deliveryFee = minorToMajor(price.deliveryFee, exponent)
+  const packagingFee = minorToMajor(price.merchantChargeFee, exponent)
+  const discountMinor = Math.max(
+    0,
+    readFirstFinite(
+      price.totalDiscount,
+      price.totalPromo,
+      price.discount,
+      price.merchantFundPromo,
+      price.promoDiscount,
+      0
+    )
+  )
+  const discountAmt = Math.max(0, minorToMajor(discountMinor, exponent))
+  const tax = Math.max(0, minorToMajor(price.tax, exponent))
+  const totalFromWebhook = Math.max(0, minorToMajor(price.total, exponent))
+
+  const paymentType = String(order.paymentType ?? '').trim().toUpperCase()
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt,
+    deliveryFee,
+    packagingFee,
+    cardPaymentAmount: 0,
+    adjustments: {},
+  })
+  const total = totalFromWebhook > 0 ? totalFromWebhook : pricing.finalTotal
+  const vat = tax > 0 ? tax : pricing.vatFeeAmt
+  const paymentCash = paymentType === 'CASH' ? total : 0
+  const paymentDeliveryApp = paymentType === 'CASHLESS' ? total : 0
+
+  return {
+    items,
+    subtotal,
+    discountAmt,
+    deliveryFee,
+    packagingFee,
+    vat,
+    total,
+    paymentCash,
+    paymentDeliveryApp,
+    tableName: resolveDisplayName(order),
+    orderType: resolveOrderType(order),
+  }
 }
 
 function resolveOrderType(order: Record<string, unknown>): 'delivery' | 'dine_in' {
@@ -737,66 +808,30 @@ export async function persistGrabOrderToPos(
     }
   }
 
-  const items = await buildPosItems(order)
-  if (!items.length) return { ok: false, message: 'no line items' }
-
-  let subtotal = 0
-  for (const item of items) subtotal += item.price * item.qty
-
-  const exponent = currencyExponent(order)
-  const price = asRecord(order.price)
-  const deliveryFee = minorToMajor(price.deliveryFee, exponent)
-  const packagingFee = minorToMajor(price.merchantChargeFee, exponent)
-  const discountMinor = Math.max(
-    0,
-    readFirstFinite(
-      price.totalDiscount,
-      price.totalPromo,
-      price.discount,
-      price.merchantFundPromo,
-      price.promoDiscount,
-      0
-    )
-  )
-  const discountAmt = Math.max(0, minorToMajor(discountMinor, exponent))
-  const tax = Math.max(0, minorToMajor(price.tax, exponent))
-  const totalFromWebhook = Math.max(0, minorToMajor(price.total, exponent))
-
-  const paymentType = String(order.paymentType ?? '').trim().toUpperCase()
-  const pricing = computePosPricing({
-    subtotal,
-    discountAmt,
-    deliveryFee,
-    packagingFee,
-    cardPaymentAmount: 0,
-    adjustments: {},
-  })
-  const total = totalFromWebhook > 0 ? totalFromWebhook : pricing.finalTotal
-  const vat = tax > 0 ? tax : pricing.vatFeeAmt
-  const paymentCash = paymentType === 'CASH' ? total : 0
-  const paymentDeliveryApp = paymentType === 'CASHLESS' ? total : 0
+  const snapshot = await buildGrabPosOrderSnapshot(order)
+  if (!snapshot.items.length) return { ok: false, message: 'no line items' }
 
   const orderNo = await allocateNextPosOrderNo(storeCode)
   const row = {
     order_no: orderNo,
     store_code: storeCode,
-    order_type: resolveOrderType(order),
-    table_name: resolveDisplayName(order),
+    order_type: snapshot.orderType,
+    table_name: snapshot.tableName,
     memo,
-    discount_amt: discountAmt,
+    discount_amt: snapshot.discountAmt,
     discount_reason: '',
-    delivery_fee: deliveryFee,
-    packaging_fee: packagingFee,
-    items_json: JSON.stringify(items),
-    subtotal,
-    vat,
-    total,
+    delivery_fee: snapshot.deliveryFee,
+    packaging_fee: snapshot.packagingFee,
+    items_json: JSON.stringify(snapshot.items),
+    subtotal: snapshot.subtotal,
+    vat: snapshot.vat,
+    total: snapshot.total,
     status: initialStatus,
-    payment_cash: paymentCash,
+    payment_cash: snapshot.paymentCash,
     payment_card: 0,
     payment_qr: 0,
     payment_other: 0,
-    payment_delivery_app: paymentDeliveryApp,
+    payment_delivery_app: snapshot.paymentDeliveryApp,
     member_id: null,
     member_no: null,
     coupon_code: null,
@@ -814,7 +849,7 @@ export async function persistGrabOrderToPos(
   await consumeDeliveryMenuStockByName({
     storeCode,
     appCode: 'grab',
-    items: items.map((item) => ({ name: item.name, qty: item.qty })),
+    items: snapshot.items.map((item) => ({ name: item.name, qty: item.qty })),
   }).catch(() => {})
 
   return {

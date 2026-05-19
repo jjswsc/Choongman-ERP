@@ -865,26 +865,3 @@ COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_hall_order_html 
   'Windows 설치형 POS: 홀/터미널 주문서 인쇄 후 절단';
 COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_payment_receipt_html IS
   'Windows 설치형 POS: 결제 영수증 인쇄 후 절단';
-
--- ------------------------------------------------------------
--- POS: 메뉴 매장 노출 스코프
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.pos_menu_store_scopes (
-  id BIGSERIAL PRIMARY KEY,
-  menu_id BIGINT NOT NULL REFERENCES public.pos_menus(id) ON DELETE CASCADE,
-  store_code TEXT NOT NULL,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  created_by TEXT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (store_code, menu_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_pos_menu_store_scopes_menu
-  ON public.pos_menu_store_scopes(menu_id);
-
-CREATE INDEX IF NOT EXISTS idx_pos_menu_store_scopes_store_enabled
-  ON public.pos_menu_store_scopes(store_code, enabled);
-
-COMMENT ON TABLE public.pos_menu_store_scopes IS
-  'POS 메뉴별 매장 노출 스코프. 메뉴 본문(pos_menus)은 공통으로 유지하고 매장별 노출만 분리한다.';

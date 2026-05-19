@@ -1,7 +1,7 @@
 'use client'
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
@@ -51,8 +51,11 @@ import {
 } from '@/lib/pos-order-line-update'
 import {
   kitchenRoutingItemFromOrderItem,
+  preparePosOrderItemsForKitchenSlip,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
+import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
+import type { OrderItem } from '@/lib/pos-types'
 
 export interface DeliveryOrderPanelProps {
   orderLabel: string
@@ -166,19 +169,101 @@ export function DeliveryOrderPanel({
     return m
   }, [menusFromProps])
 
+  const optionNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    menuOptionsFromProps.forEach((opt) => {
+      const id = String(opt.id ?? '').trim()
+      const name = String(opt.name ?? '').trim()
+      if (id && name) m.set(id, name)
+    })
+    return m
+  }, [menuOptionsFromProps])
+
+  const promoCatalogById = useMemo(() => {
+    const m = new Map<string, PosPromoWithItems>()
+    for (const p of promosFromProps) {
+      const id = String(p?.id ?? '').trim()
+      if (id) m.set(id, p)
+    }
+    return m
+  }, [promosFromProps])
+
+  const posReceiptLineOpts: PosOrderReceiptLineOptions = useMemo(
+    () => ({ promoCatalogById, menus: menusFromProps }),
+    [promoCatalogById, menusFromProps]
+  )
+
+  const enrichPromoItemsWithOptionName = useCallback(
+    (list: NonNullable<OrderItem['promoItems']>) =>
+      list.map((p) => ({
+        ...p,
+        ...(p.optionCode && optionNameByCode.get(String(p.optionCode).trim())
+          ? { optionName: optionNameByCode.get(String(p.optionCode).trim()) }
+          : {}),
+        ...(p.optionId && optionNameById.get(String(p.optionId).trim())
+          ? { optionName: optionNameById.get(String(p.optionId).trim()) }
+          : {}),
+      })),
+    [optionNameByCode, optionNameById]
+  )
+
+  /** 주방 슬립과 동일: DB 스냅샷·카탈로그로 세트 구성 보강 */
+  const displayItems = useMemo((): OrderItem[] => {
+    if (!order?.items?.length) return []
+    const routingRows = order.items.map((it) => {
+      const raw = resolvePosOrderItemMenuDisplayName(
+        { id: it.id, name: it.name, menuId: it.menuId, promoId: it.promoId, promoCode: it.promoCode },
+        menusFromProps,
+        promosFromProps
+      )
+      return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw, ti))
+    })
+    const prepared = preparePosOrderItemsForKitchenSlip(routingRows, {
+      ...posReceiptLineOpts,
+      menus: menusFromProps,
+    })
+    return order.items.map((orig, idx) => {
+      const fromPrepared = prepared[idx]?.promoItems
+      const promoItems =
+        Array.isArray(fromPrepared) && fromPrepared.length > 0
+          ? enrichPromoItemsWithOptionName(fromPrepared as NonNullable<OrderItem['promoItems']>)
+          : Array.isArray(orig.promoItems) && orig.promoItems.length > 0
+            ? enrichPromoItemsWithOptionName(orig.promoItems)
+            : undefined
+      return promoItems ? { ...orig, promoItems } : orig
+    })
+  }, [
+    order?.items,
+    menusFromProps,
+    promosFromProps,
+    posReceiptLineOpts,
+    enrichPromoItemsWithOptionName,
+    ti,
+  ])
+
   const childStateMapKey = (itemId: string, childKey: string) => `${itemId}::${childKey}`
-  const resolveSetChildRows = (item: NonNullable<typeof order>['items'][number]) => {
+  const resolveSetChildRows = (
+    item: OrderItem,
+    parentDisplayName: string
+  ) => {
     const rows: Array<{ key: string; label: string }> = []
+    const parentLabel = String(parentDisplayName ?? '').trim()
+    const parentQty = Math.max(1, Math.trunc(Number(item.quantity ?? 1) || 1))
     ;(item.promoItems ?? []).forEach((line, idx) => {
-      const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
-      const rawMenu = menuNameById.get(String(line.menuId ?? '').trim()) || String(line.menuId ?? '').trim() || `Set ${idx + 1}`
+      const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1)) * parentQty
+      const rawMenu =
+        menuNameById.get(String(line.menuId ?? '').trim()) ||
+        String(line.menuName ?? '').trim() ||
+        String(line.menuId ?? '').trim() ||
+        `Set ${idx + 1}`
       const optCode = String(line.optionCode ?? '').trim().toUpperCase()
       const optFromCode = optCode ? optionNameByCode.get(optCode) : ''
       const rawOpt =
         String(line.optionName ?? '').trim() ||
         optFromCode ||
         String(line.optionId ?? '').trim()
-      const childLabel = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
+      const childCore = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
+      const childLabel = parentLabel ? `[${parentLabel}] ${childCore}` : childCore
       for (let n = 0; n < qty; n += 1) rows.push({ key: buildPosSetChildKey(line, idx, n), label: childLabel })
     })
     return rows
@@ -200,7 +285,8 @@ export function DeliveryOrderPanel({
       })
       setItemChildPackaged((prev) => {
         const next = { ...prev }
-        order.items.forEach((it) => {
+        const enriched = displayItems.length ? displayItems : order.items
+        enriched.forEach((it) => {
           const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
           if (!childKeys.length) return
           const childState = readPosSetChildrenState(it.setChildrenState)
@@ -220,7 +306,7 @@ export function DeliveryOrderPanel({
         return next
       })
     }
-  }, [order?.id, order?.items])
+  }, [order?.id, order?.items, displayItems])
 
   useEffect(() => {
     setOptimisticGrabState(null)
@@ -650,7 +736,7 @@ export function DeliveryOrderPanel({
             <>
               <ScrollArea className="flex-1 min-h-0 rounded-md border">
                 <ul className="p-2 space-y-2">
-                  {order.items.map((item) => {
+                  {(displayItems.length ? displayItems : order.items).map((item) => {
                     const displayNameRaw = resolvePosOrderItemMenuDisplayName(
                       {
                         id: item.id,
@@ -743,40 +829,40 @@ export function DeliveryOrderPanel({
                               {(t('posMenuDescriptionLabel') || '요청사항') + ': ' + meta.requestSummary}
                             </p>
                           )}
-                          {expandedItemId === item.id && (
-                            <div className="mt-1 space-y-1.5">
-                              <p className="text-xs text-muted-foreground whitespace-normal break-words">
-                                {displayName}
-                              </p>
-                              {Array.isArray(item.promoItems) && item.promoItems.length > 0 && (
-                                <div className="w-full max-w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
-                                  {resolveSetChildRows(item).map(({ key: childKey, label: childLabel }, idx) => {
-                                    const mapKey = childStateMapKey(item.id, childKey)
-                                    const childDone = Boolean(itemChildPackaged[mapKey])
-                                    return (
-                                      <button
-                                        key={`${item.id}-${childKey}-${idx}`}
-                                        type="button"
-                                        className={cn(
-                                          'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-base font-medium transition-colors',
-                                          childDone
-                                            ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
-                                            : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                                        )}
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          void toggleSetChildPackaged(item.id, childKey)
-                                        }}
-                                        disabled={savingItemId === item.id || removingItemId !== null || cancelled}
-                                      >
-                                        <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, ti)}</span>
-                                        {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                              )}
+                          {Array.isArray(item.promoItems) && item.promoItems.length > 0 && (
+                            <div className="mt-1.5 w-full max-w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
+                              {resolveSetChildRows(item, mainName).map(({ key: childKey, label: childLabel }, idx) => {
+                                const mapKey = childStateMapKey(item.id, childKey)
+                                const childDone = Boolean(itemChildPackaged[mapKey])
+                                return (
+                                  <button
+                                    key={`${item.id}-${childKey}-${idx}`}
+                                    type="button"
+                                    className={cn(
+                                      'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-sm font-medium transition-colors',
+                                      childDone
+                                        ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void toggleSetChildPackaged(item.id, childKey)
+                                    }}
+                                    disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                                  >
+                                    <span className="truncate pr-1 leading-snug">
+                                      {translatePosMenuLineForReceipt(childLabel, ti)}
+                                    </span>
+                                    {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
+                                  </button>
+                                )
+                              })}
                             </div>
+                          )}
+                          {expandedItemId === item.id && (
+                            <p className="mt-1 text-xs text-muted-foreground whitespace-normal break-words">
+                              {displayName}
+                            </p>
                           )}
                           {cancelled && (
                             <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">

@@ -19,7 +19,7 @@ import type { OrderItem } from "@/lib/pos-types"
  * - kitchenMode 2·3일 때만 메뉴별 pos_menus.kitchen_printer(0~3)로 버킷을 나눈다.
  * - 프린터 설정의 `kitchenRouteByMenu` / `kitchenRouteByCategory` / `kitchenRouteByCategoryMain`은
  *   저장 시 pos_menus에 실체화되지만, 인쇄 시점에는 **DB(kpMap)보다 우선** 적용되어(미동기·직접 DB 수정 대비)
- *   `getPosPrinterSettings` 값과 주방 출력이 어긋나는 것을 줄인다. 우선순위: 메뉴 id → 소분류 → 대분류 → pos_menus.
+ *   `getPosPrinterSettings` 값과 주방 출력이 어긋나는 것을 줄인다. 우선순위: 메뉴 id → 메뉴 code → 소분류 → 대분류 → pos_menus(동일 code 중복 id 포함).
  * - 프로모션 줄에 promoItems 가 있으면(저장된 스냅샷) 구성 메뉴별로 펼쳐 각 메뉴의 주방으로 라우팅(splitPromoKitchenLines 기본 true)
  */
 
@@ -71,6 +71,8 @@ export type BuildKitchenSlipGroupsOpts = {
   categoryByMenuId: Record<string, string>
   categoryMainByMenuId?: Record<string, string>
   kitchenRouteByMenu?: Record<string, KitchenRouteValue>
+  /** kitchenRouteByMenu + 메뉴 코드로 파생(동일 code 중복 id 보정) */
+  kitchenRouteByMenuCode?: Record<string, KitchenRouteValue>
   kitchenRouteByCategory?: Record<string, KitchenRouteValue>
   kitchenRouteByCategoryMain?: Record<string, KitchenRouteValue>
   /** pos_menus.kitchen_printer: 0 미인쇄, 1~3 주방 */
@@ -112,6 +114,127 @@ function normRouteMap(raw?: Record<string, number | undefined>): Record<string, 
   return out
 }
 
+export type KitchenRouteOverlayContext = {
+  kitchenRouteByMenu?: Record<string, KitchenRouteValue>
+  kitchenRouteByMenuCode?: Record<string, KitchenRouteValue>
+  kitchenRouteByCategory?: Record<string, KitchenRouteValue>
+  kitchenRouteByCategoryMain?: Record<string, KitchenRouteValue>
+  categoryByMenuId?: Record<string, string>
+  categoryMainByMenuId?: Record<string, string>
+  menuCodeByMenuId?: Record<string, string>
+  kitchenMode?: number
+}
+
+/** 메뉴 id → 코드(소문자). 동일 코드 중복 행은 배열로 묶음 */
+export function buildMenuIdsGroupedByCode(
+  menuCodeByMenuId: Record<string, string>
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const [id, rawCode] of Object.entries(menuCodeByMenuId)) {
+    const code = String(rawCode || '').trim().toLowerCase()
+    if (!code) continue
+    if (!out[code]) out[code] = []
+    out[code].push(id)
+  }
+  return out
+}
+
+/** 프린터 설정(메뉴 id) → 메뉴 코드별 라우트(주문이 다른 id·같은 code 로 저장된 경우 보정) */
+export function buildKitchenRouteByMenuCode(
+  kitchenRouteByMenu: Record<string, KitchenRouteValue>,
+  menuCodeByMenuId: Record<string, string>
+): Record<string, KitchenRouteValue> {
+  const out: Record<string, KitchenRouteValue> = {}
+  for (const [id, route] of Object.entries(kitchenRouteByMenu)) {
+    const code = String(menuCodeByMenuId[id] ?? '').trim().toLowerCase()
+    if (code) out[code] = route
+  }
+  return out
+}
+
+function clampRouteValue(v: KitchenRouteValue, mode: number): KitchenRouteValue {
+  if (v === 0) return 0
+  return clampPrinterIndex(v, mode)
+}
+
+/**
+ * 프린터 설정 오버레이(메뉴 id → 코드 → 소분류 → 대분류).
+ * 인쇄·관리자 UI 공통.
+ */
+export function resolveKitchenRouteOverlayForMenuId(
+  mid: string,
+  ctx: KitchenRouteOverlayContext
+): KitchenRouteValue | null {
+  const menuId = String(mid || '').trim()
+  if (!menuId) return null
+  const mode = Math.min(3, Math.max(1, Number(ctx.kitchenMode) || 1))
+  const menuMap = ctx.kitchenRouteByMenu || {}
+  if (menuMap[menuId] !== undefined) {
+    const v = menuMap[menuId]
+    if (v === 0 || v === 1 || v === 2 || v === 3) return clampRouteValue(v, mode)
+  }
+  const code = String(ctx.menuCodeByMenuId?.[menuId] ?? '').trim().toLowerCase()
+  const byCode = ctx.kitchenRouteByMenuCode || {}
+  if (code && byCode[code] !== undefined) {
+    const v = byCode[code]
+    if (v === 0 || v === 1 || v === 2 || v === 3) return clampRouteValue(v, mode)
+  }
+  const subRaw = String(ctx.categoryByMenuId?.[menuId] ?? '').trim()
+  const sub = subRaw ? normalizePromotionCategoryMain(subRaw) : ''
+  const catRoute = ctx.kitchenRouteByCategory || {}
+  for (const key of sub ? [sub, subRaw].filter(Boolean) : []) {
+    if (catRoute[key] === undefined) continue
+    const v = catRoute[key]
+    if (v === 0 || v === 1 || v === 2 || v === 3) return clampRouteValue(v, mode)
+  }
+  const mainRaw = String(ctx.categoryMainByMenuId?.[menuId] ?? '').trim()
+  const main = mainRaw ? normalizePromotionCategoryMain(mainRaw) : ''
+  const mainRoute = ctx.kitchenRouteByCategoryMain || {}
+  for (const key of main ? [main, mainRaw].filter(Boolean) : []) {
+    if (mainRoute[key] === undefined) continue
+    const v = mainRoute[key]
+    if (v === 0 || v === 1 || v === 2 || v === 3) return clampRouteValue(v, mode)
+  }
+  return null
+}
+
+/** pos_menus.kitchen_printer 포함 실제 주방 라우트(설정 화면 표시용) */
+export function resolveEffectiveKitchenRouteForMenu(
+  menu: MenuLike,
+  ctx: KitchenRouteOverlayContext
+): KitchenRouteValue {
+  const mid = String(menu.id ?? '').trim()
+  const overlay = resolveKitchenRouteOverlayForMenuId(mid, ctx)
+  if (overlay !== null) return overlay
+  const kp = menu.kitchenPrinter
+  if (kp === 0 || kp === 1 || kp === 2 || kp === 3) return kp
+  return 1
+}
+
+/**
+ * 동일 메뉴 코드가 여러 id 로 있을 때, 프린터 설정에 명시된 id 로 정규화.
+ * (주문 menuId ≠ 설정 화면 id 인 CHURRO·Dosirak 유형)
+ */
+export function canonicalizeKitchenRoutingMenuId(
+  mid: string,
+  ctx: {
+    kitchenRouteByMenu?: Record<string, KitchenRouteValue>
+    menuIdsByCode?: Record<string, string[]>
+    menuCodeByMenuId?: Record<string, string>
+  }
+): string {
+  const id = String(mid || '').trim()
+  if (!id) return id
+  const code = String(ctx.menuCodeByMenuId?.[id] ?? '').trim().toLowerCase()
+  if (!code) return id
+  const ids = ctx.menuIdsByCode?.[code]
+  if (!ids || ids.length <= 1) return id
+  const menuMap = ctx.kitchenRouteByMenu || {}
+  const explicit = ids.filter((x) => menuMap[x] !== undefined)
+  if (explicit.length === 1) return explicit[0]
+  return id
+}
+
 /** API·설정 객체와 메뉴 목록으로 buildKitchenSlipGroups 옵션 생성 */
 export function buildKitchenSlipGroupOpts(
   settings: {
@@ -141,13 +264,17 @@ export function buildKitchenSlipGroupOpts(
     if (kp === 0 || kp === 1 || kp === 2 || kp === 3) kitchenPrinterByMenuId[id] = kp
   }
 
+  const kitchenRouteByMenu = normRouteMap(settings.kitchenRouteByMenu as Record<string, number | undefined>)
+  const kitchenRouteByMenuCode = buildKitchenRouteByMenuCode(kitchenRouteByMenu, menuCodeByMenuId)
+
   return {
     kitchenMode: settings.kitchenMode ?? 1,
     kitchen2Categories: settings.kitchen2Categories ?? [],
     kitchen3Categories: settings.kitchen3Categories ?? [],
     categoryByMenuId,
     categoryMainByMenuId,
-    kitchenRouteByMenu: normRouteMap(settings.kitchenRouteByMenu as Record<string, number | undefined>),
+    kitchenRouteByMenu,
+    kitchenRouteByMenuCode,
     kitchenRouteByCategory: normRouteMap(settings.kitchenRouteByCategory as Record<string, number | undefined>),
     kitchenRouteByCategoryMain: normRouteMap(
       settings.kitchenRouteByCategoryMain as Record<string, number | undefined>
@@ -245,6 +372,24 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
    */
   const mode =
     configuredMode === 1 ? 1 : Math.min(3, Math.max(configuredMode, printerHintMax))
+  const menuIdsByCode = buildMenuIdsGroupedByCode(codeMap)
+  const routeOverlayCtx: KitchenRouteOverlayContext = {
+    kitchenMode: mode,
+    kitchenRouteByMenu: opts.kitchenRouteByMenu,
+    kitchenRouteByMenuCode: opts.kitchenRouteByMenuCode,
+    kitchenRouteByCategory: opts.kitchenRouteByCategory,
+    kitchenRouteByCategoryMain: opts.kitchenRouteByCategoryMain,
+    categoryByMenuId: opts.categoryByMenuId,
+    categoryMainByMenuId: opts.categoryMainByMenuId,
+    menuCodeByMenuId: codeMap,
+  }
+  const canonicalizeMid = (raw: string) =>
+    canonicalizeKitchenRoutingMenuId(raw, {
+      kitchenRouteByMenu: opts.kitchenRouteByMenu,
+      menuIdsByCode,
+      menuCodeByMenuId: codeMap,
+    })
+
   const menuIdByName: Record<string, string> = {}
   const ambiguousMenuNames = new Set<string>()
   const menuIdByCode: Record<string, string> = {}
@@ -298,7 +443,7 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
 
   const menuIdOf = (it: T) => {
     const kr = String((it as KitchenSlipRoutingItem).kitchenRouteMenuId ?? '').trim()
-    if (kr) return kr
+    if (kr) return canonicalizeMid(kr)
     const rawMenuId = String(
       (it as KitchenSlipRoutingItem).menuId ??
         (it as KitchenSlipRoutingItem).menuId1 ??
@@ -306,7 +451,7 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
         (it as KitchenSlipRoutingItem).menuId2 ??
         ''
     ).trim()
-    if (rawMenuId) return resolveMenuIdFromComposite(rawMenuId)
+    if (rawMenuId) return canonicalizeMid(resolveMenuIdFromComposite(rawMenuId))
 
     /**
      * items_json/menuId 미보유 줄: 표시명이 아닌 카트 줄 id 우선 해석 후에만 이름 매칭.
@@ -320,18 +465,20 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     }
 
     const fromCartId = resolveMenuIdFromComposite(idStr)
-    if (fromCartId && (fromCartId in kpMap || fromCartId in catMap)) return fromCartId
+    if (fromCartId && (fromCartId in kpMap || fromCartId in catMap)) {
+      return canonicalizeMid(fromCartId)
+    }
 
     const itemName = String((it as KitchenSlipRoutingItem).name ?? '').trim()
     const codeFromName = extractCodeFromName(itemName)
     if (codeFromName && !ambiguousMenuCodes.has(codeFromName) && menuIdByCode[codeFromName]) {
-      return resolveMenuIdFromComposite(menuIdByCode[codeFromName])
+      return canonicalizeMid(resolveMenuIdFromComposite(menuIdByCode[codeFromName]))
     }
     const itemNameKey = itemName.toLowerCase()
     if (itemNameKey && !ambiguousMenuNames.has(itemNameKey) && menuIdByName[itemNameKey]) {
-      return resolveMenuIdFromComposite(menuIdByName[itemNameKey])
+      return canonicalizeMid(resolveMenuIdFromComposite(menuIdByName[itemNameKey]))
     }
-    return fromCartId
+    return canonicalizeMid(fromCartId)
   }
 
   const withKitchenCodeName = (it: T, mid: string): T => {
@@ -344,53 +491,28 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     if (lower.startsWith(`[${codeLower}]`) || lower.endsWith(`(${codeLower})`)) return it
     return { ...it, name: `[${code}] ${currentName}` } as T
   }
-  /**
-   * 프린터 설정 라우트 맵 → pos_menus.kitchen_printer 순.
-   * (영수증 표시명은 `resolvePosOrderItemMenuDisplayName` 등으로 카탈로그와 맞출 수 있어,
-   *  DB `menuId`와 화면에서 본 메뉴 행이 다를 때 설정 맵으로 보정 가능)
-   */
-  const resolveRouteFromPrinterOverlay = (mid: string): KitchenRouteValue | null => {
-    if (!mid) return null
-    const menuMap = opts.kitchenRouteByMenu || {}
-    if (menuMap[mid] !== undefined) {
-      const v = menuMap[mid]
-      if (v === 0 || v === 1 || v === 2 || v === 3) {
-        return v === 0 ? 0 : clampPrinterIndex(v, mode)
-      }
-    }
-    const subRaw = String(opts.categoryByMenuId?.[mid] ?? "").trim()
-    const sub = subRaw ? normalizePromotionCategoryMain(subRaw) : ""
-    const catRoute = opts.kitchenRouteByCategory || {}
-    for (const key of sub ? [sub, subRaw].filter(Boolean) : []) {
-      if (catRoute[key] === undefined) continue
-      const v = catRoute[key]
-      if (v === 0 || v === 1 || v === 2 || v === 3) {
-        return v === 0 ? 0 : clampPrinterIndex(v, mode)
-      }
-    }
-    const mainRaw = String(opts.categoryMainByMenuId?.[mid] ?? "").trim()
-    const main = mainRaw ? normalizePromotionCategoryMain(mainRaw) : ""
-    const mainRoute = opts.kitchenRouteByCategoryMain || {}
-    for (const key of main ? [main, mainRaw].filter(Boolean) : []) {
-      if (mainRoute[key] === undefined) continue
-      const v = mainRoute[key]
-      if (v === 0 || v === 1 || v === 2 || v === 3) {
-        return v === 0 ? 0 : clampPrinterIndex(v, mode)
-      }
-    }
-    return null
-  }
-
   /** 0 = 스킵, 1~3 = 주방 번호 */
   const resolveRoute = (it: T): KitchenRouteValue => {
     const mid = menuIdOf(it)
-    const overlay = mid ? resolveRouteFromPrinterOverlay(mid) : null
+    const overlay = mid ? resolveKitchenRouteOverlayForMenuId(mid, routeOverlayCtx) : null
     if (overlay !== null) return overlay
 
     if (mid in kpMap) {
       const v = kpMap[mid]
       if (v === 0 || v === 1 || v === 2 || v === 3) {
         return v === 0 ? 0 : clampPrinterIndex(v, mode)
+      }
+    }
+
+    const code = String(codeMap[mid] || '').trim().toLowerCase()
+    if (code) {
+      const ids = menuIdsByCode[code] || []
+      for (const altId of ids) {
+        if (altId === mid) continue
+        const v = kpMap[altId]
+        if (v === 0 || v === 1 || v === 2 || v === 3) {
+          return v === 0 ? 0 : clampPrinterIndex(v, mode)
+        }
       }
     }
 

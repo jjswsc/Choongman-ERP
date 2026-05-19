@@ -54,6 +54,7 @@ import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
   normalizeKitchenRouteMapInput,
+  resolveEffectiveKitchenRouteForMenu,
   type KitchenRouteValue,
 } from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
@@ -1098,6 +1099,39 @@ export default function PosPrintersPage() {
     formatBangkokDateTime,
   ])
 
+  const kitchenRouteOverlayCtx = React.useMemo(() => {
+    const opts = buildKitchenSlipGroupOpts(
+      {
+        kitchenMode,
+        kitchen2Categories,
+        kitchen3Categories,
+        kitchenRouteByMenu,
+        kitchenRouteByCategory,
+        kitchenRouteByCategoryMain,
+      },
+      menusList,
+      { unified: "", kitchen1: "", kitchen2: "", kitchen3: "" }
+    )
+    return {
+      kitchenMode,
+      kitchenRouteByMenu: opts.kitchenRouteByMenu,
+      kitchenRouteByMenuCode: opts.kitchenRouteByMenuCode,
+      kitchenRouteByCategory: opts.kitchenRouteByCategory,
+      kitchenRouteByCategoryMain: opts.kitchenRouteByCategoryMain,
+      categoryByMenuId: opts.categoryByMenuId,
+      categoryMainByMenuId: opts.categoryMainByMenuId,
+      menuCodeByMenuId: opts.menuCodeByMenuId,
+    }
+  }, [
+    kitchenMode,
+    kitchen2Categories,
+    kitchen3Categories,
+    kitchenRouteByMenu,
+    kitchenRouteByCategory,
+    kitchenRouteByCategoryMain,
+    menusList,
+  ])
+
   const kitchenSlipsForPreview = React.useMemo(() => {
     const ki = kitchenSlipPrintI18n({ kitchenSlipPrintLang }, lang)
     const cats = categories.length > 0 ? categories : ["A", "B"]
@@ -1636,7 +1670,10 @@ export default function PosPrintersPage() {
                       <KitchenRouteSelectRow
                         key={m.id}
                         label={`${m.code ? `[${m.code}] ` : ''}${m.name}${m.code ? '' : ` (${m.id})`}`}
-                        value={kitchenRouteByMenu[String(m.id)]}
+                        value={
+                          kitchenRouteByMenu[String(m.id)] ??
+                          resolveEffectiveKitchenRouteForMenu(m, kitchenRouteOverlayCtx)
+                        }
                         maxK={kitchenMode}
                         t={t}
                         onChange={(v) =>

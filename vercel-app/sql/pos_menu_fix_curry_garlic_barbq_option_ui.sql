@@ -70,15 +70,15 @@ select
   100,
   v.sort_order,
   'substitution',
-  jsonb_build_object('size', 'M', 'part', v.part_key),
+  '{}'::jsonb,
   true,
   true,
   true
 from public.pos_menus m
 cross join (
   values
-    ('M - Boneless', 0, 'Boneless')
-) as v(name, sort_order, part_key)
+    ('M - Boneless', 0)
+) as v(name, sort_order)
 where m.code in ('C020', 'C021', 'C022', 'C023')
   and not exists (
     select 1 from public.pos_menu_options o
@@ -87,12 +87,10 @@ where m.code in ('C020', 'C021', 'C022', 'C023')
       and trim(coalesce(o.name, '')) = v.name
   );
 
--- 4) M - Boneless option_step_values 누락 보정 (null 방지)
+-- 4) M - Boneless option_step_values 정리:
+--    size/part 키가 있으면 POS 목록 필터에서 숨겨질 수 있어 빈 JSON으로 통일
 update public.pos_menu_options o
-set option_step_values = case trim(coalesce(o.name, ''))
-  when 'M - Boneless' then jsonb_build_object('size', 'M', 'part', 'Boneless')
-  else o.option_step_values
-end
+set option_step_values = '{}'::jsonb
 from public.pos_menus m
 where o.menu_id = m.id
   and m.code in ('C020', 'C021', 'C022', 'C023')
@@ -102,6 +100,8 @@ where o.menu_id = m.id
     o.option_step_values is null
     or o.option_step_values = 'null'::jsonb
     or trim(coalesce(o.option_step_values::text, '')) in ('', '{}')
+    or (o.option_step_values ? 'size')
+    or (o.option_step_values ? 'part')
   );
 
 -- 5) 적용 후

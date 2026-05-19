@@ -79,11 +79,12 @@ async function materializeKitchenPrintersToMenus(params: {
   routeByCategoryMain: Record<string, 0 | 1 | 2 | 3>
 }) {
   const rows = (await supabaseSelect('pos_menus', {
-    select: 'id,category,category_main,kitchen_printer',
+    select: 'id,code,category,category_main,kitchen_printer',
     limit: 10000,
   })) as
     | {
         id?: number | string
+        code?: string
         category?: string
         category_main?: string
         kitchen_printer?: number | null
@@ -93,6 +94,17 @@ async function materializeKitchenPrintersToMenus(params: {
   if (!menus.length) return
 
   const mapMenu = params.routeByMenu || {}
+  const routeByCode: Record<string, 0 | 1 | 2 | 3> = {}
+  const idByCode = new Map<string, string>()
+  for (const m of menus) {
+    const id = String(m.id ?? '').trim()
+    const code = String(m.code ?? '').trim().toLowerCase()
+    if (id && code) idByCode.set(id, code)
+  }
+  for (const [id, route] of Object.entries(mapMenu)) {
+    const code = idByCode.get(id)
+    if (code) routeByCode[code] = route
+  }
   const mapCatRaw = params.routeByCategory || {}
   const mapMainRaw = params.routeByCategoryMain || {}
   const mapCat: Record<string, 0 | 1 | 2 | 3> = {}
@@ -118,6 +130,8 @@ async function materializeKitchenPrintersToMenus(params: {
     let next: 0 | 1 | 2 | 3 = prev ?? 1
     if (main && mapMain[main] !== undefined) next = mapMain[main]
     if (cat && mapCat[cat] !== undefined) next = mapCat[cat]
+    const code = String(m.code ?? '').trim().toLowerCase()
+    if (code && routeByCode[code] !== undefined) next = routeByCode[code]
     if (mapMenu[id] !== undefined) next = mapMenu[id]
     if (prev === next) continue
     await supabaseUpdateByFilter('pos_menus', `id=eq.${encodeURIComponent(id)}`, {

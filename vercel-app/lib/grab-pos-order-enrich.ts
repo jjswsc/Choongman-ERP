@@ -27,9 +27,15 @@ function readFirstFinite(...values: unknown[]): number {
   return 0
 }
 
+/** POS `pos_menu_options.option_code` 형태 (예: C020-1, C009-5) */
+export function isLikelyPosOptionCode(raw: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9]*-\d+(?:-[A-Za-z0-9]+)*$/i.test(String(raw || '').trim())
+}
+
 export function isMachineLikeGrabToken(raw: string): boolean {
   const s = String(raw || '').trim()
   if (!s) return true
+  if (isLikelyPosOptionCode(s)) return false
   if (/^(mods?:|optc:)/i.test(s)) return true
   if (/^(mods?:)?[a-z]+-\d+(?:-[a-z0-9]+)*$/i.test(s)) return true
   if (/^THITE\d/i.test(s)) return true
@@ -175,6 +181,10 @@ export function resolveGrabItemNameAndMeta(
     if (menu?.name) {
       return { name: menu.name, menuId: menu.id }
     }
+    const menuByCode = menuRef.code ? catalog.menuByCode.get(menuRef.code.toLowerCase()) : undefined
+    if (menuByCode?.name) {
+      return { name: menuByCode.name, menuId: menuByCode.id }
+    }
   }
 
   if (rawName && !isMachineLikeGrabToken(rawName)) {
@@ -263,12 +273,32 @@ export function resolveOptionCodesToLabels(
   codes: string[],
   optionNameByCode: Map<string, string>
 ): string[] {
+  const resolveLabelByCode = (raw: string): string => {
+    const code = String(raw || '').trim().toUpperCase()
+    if (!code) return ''
+    const exact = optionNameByCode.get(code)
+    if (exact) return exact
+
+    // Grab note 코드가 C020-1-2 처럼 더 길 때, POS option_code 접두(C020-1 / C020)로 fallback
+    const parts = code.split('-').filter(Boolean)
+    while (parts.length > 1) {
+      parts.pop()
+      const prefix = parts.join('-')
+      const byPrefix = optionNameByCode.get(prefix)
+      if (byPrefix) return byPrefix
+    }
+
+    for (const [k, v] of optionNameByCode.entries()) {
+      if (k.startsWith(`${code}-`)) return v
+    }
+    return code
+  }
+
   const out: string[] = []
   const seen = new Set<string>()
   for (const raw of codes) {
-    const code = String(raw || '').trim().toUpperCase()
-    if (!code) continue
-    const label = optionNameByCode.get(code) || code
+    const label = resolveLabelByCode(raw)
+    if (!label) continue
     const nk = label.toLowerCase()
     if (seen.has(nk)) continue
     seen.add(nk)
@@ -308,7 +338,7 @@ export function resolveGrabDeliveryLineNote(
   const optionLabels: string[] = []
   const requests: string[] = []
   const seen = new Set<string>()
-  const pushOption = (label: string) => {
+  const pushHumanOption = (label: string) => {
     const s = String(label || '').trim()
     if (!s || isMachineLikeGrabToken(s)) return
     const nk = s.toLowerCase()
@@ -317,16 +347,28 @@ export function resolveGrabDeliveryLineNote(
     optionLabels.push(s)
   }
 
+  const pushOptionToken = (token: string) => {
+    const raw = String(token || '').trim()
+    if (!raw) return
+    if (isLikelyPosOptionCode(raw)) {
+      for (const label of resolveOptionCodesToLabels([raw], optionNameByCode)) {
+        pushHumanOption(label)
+      }
+      return
+    }
+    pushHumanOption(raw)
+  }
+
   for (const chunk of chunks) {
     const modMatch = /^mods:\s*(.+)$/i.exec(chunk)
     if (modMatch?.[1]) {
-      for (const part of modMatch[1].split(',')) pushOption(part.trim())
+      for (const part of modMatch[1].split(',')) pushOptionToken(part)
       continue
     }
     const optcMatch = /^optc:\s*(.+)$/i.exec(chunk)
     if (optcMatch?.[1]) {
       const codes = optcMatch[1].split(',').map((s) => s.trim()).filter(Boolean)
-      for (const label of resolveOptionCodesToLabels(codes, optionNameByCode)) pushOption(label)
+      for (const code of codes) pushOptionToken(code)
       continue
     }
     if (/^eco:/i.test(chunk)) {
@@ -403,8 +445,10 @@ export function deepReadGrabLineMinorTotal(item: Record<string, unknown>): numbe
 export function grabItemNameImpliesAllInPrice(name: string): boolean {
   const s = String(name || '').trim()
   if (!s) return false
+  if (s.includes('+')) return true
   if (/\b\+\s*[SML]\b/i.test(s)) return true
   if (/\s-\s*(boneless|drumette|wing|leg|mix)/i.test(s)) return true
+  if (/\b(part|size|sidedish|side dish)\b/i.test(s)) return true
   if (/\bpart\s*-/i.test(s)) return true
   return false
 }
@@ -419,13 +463,15 @@ export function resolveGrabLineUnitMinor(params: {
   unitBaseMinor: number
   modifierMinorPerLine: number
   itemName?: string
+  hasSelections?: boolean
 }): number {
-  const { lineMinor, qty, unitBaseMinor, modifierMinorPerLine, itemName } = params
+  const { lineMinor, qty, unitBaseMinor, modifierMinorPerLine, itemName, hasSelections } = params
   const q = Math.max(1, Math.trunc(qty) || 1)
   if (lineMinor > 0) return Math.max(0, Math.floor(lineMinor / q))
 
   const modifierPerUnit = Math.max(0, Math.floor(modifierMinorPerLine / q))
   if (modifierPerUnit <= 0) return Math.max(0, unitBaseMinor)
+  if (hasSelections && unitBaseMinor > 0) return Math.max(0, unitBaseMinor)
 
   const combined = unitBaseMinor + modifierPerUnit
   if (grabItemNameImpliesAllInPrice(String(itemName ?? ''))) {
