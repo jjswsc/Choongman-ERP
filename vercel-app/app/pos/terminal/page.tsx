@@ -2463,14 +2463,20 @@ export default function PosTerminalPage() {
   ) {
     if (posDemoRef.current) return
     const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
+    type ReceiptPrintItem = (typeof payload)['items'][number]
     const mergedForReceipt = (() => {
-      const base = (payload.items || []) as Record<string, unknown>[]
+      const base = payload.items ?? []
       const hasSetChild = base.some((it) => parseGrabSetChildLineName(String(it.name ?? '')))
-      return hasSetChild
-        ? mergeGrabSetChildLinesIntoPromoParents(base as Parameters<typeof mergeGrabSetChildLinesIntoPromoParents>[0], grabCatalogForPrint)
-        : base
+      if (!hasSetChild) return base
+      return mergeGrabSetChildLinesIntoPromoParents(
+        base as Parameters<typeof mergeGrabSetChildLinesIntoPromoParents>[0],
+        grabCatalogForPrint
+      ) as ReceiptPrintItem[]
     })()
-    const enrichedForReceipt = enrichPosOrderLikeItemsWithPromoSnapshot(mergedForReceipt, posReceiptLineOpts)
+    const enrichedForReceipt: ReceiptPrintItem[] = enrichPosOrderLikeItemsWithPromoSnapshot(
+      mergedForReceipt,
+      posReceiptLineOpts
+    )
       .filter((it) => !(it as { grabSetChild?: boolean }).grabSetChild)
       .map((it) => {
         const promoItems = Array.isArray(it.promoItems)
