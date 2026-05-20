@@ -151,6 +151,8 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         ? translatePosMenuLineForReceipt(lineSplit.optionLine, (k) => t(k))
         : ''
       const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+      const rawLineNoteLabel = tr('posLineNote', '메모')
+      const lineNoteLabel = /^item\s*note$/i.test(rawLineNoteLabel) ? 'Item' : rawLineNoteLabel
       const promoComposeLines =
         Array.isArray(it.promoItems) && it.promoItems.length > 0
           ? it.promoItems.slice(0, 8).map((p) => {
@@ -168,7 +170,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           ? '<div class="receipt-line-note">' + promoComposeLines.map((line) => '- ' + esc(line)).join('<br/>') + c('div')
           : ''
       const noteHtml = lineNote
-        ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + c('div')
+        ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
         : ''
       const optionHtml = lineOption
         ? '<div class="receipt-line-note">- ' + esc(lineOption) + c('div')

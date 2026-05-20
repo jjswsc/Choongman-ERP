@@ -2355,15 +2355,19 @@ export default function PosTerminalPage() {
   )
 
   const resolveOrderItemDisplayName = useCallback(
-    (item: { id?: string; name?: string; menuId?: string }) =>
-      resolvePosOrderItemMenuDisplayName(
+    (item: { id?: string; name?: string; menuId?: string }) => {
+      const rawName = String(item.name ?? '').trim()
+      // Grab 세트 자식 표식([[...]] child)은 영수증 병합 단계에서 필요하므로 원문 유지
+      if (parseGrabSetChildLineName(rawName)) return rawName
+      return resolvePosOrderItemMenuDisplayName(
         {
           id: String(item.id ?? ''),
-          name: String(item.name ?? ''),
+          name: rawName,
           ...(String(item.menuId ?? '').trim() ? { menuId: String(item.menuId).trim() } : {}),
         },
         menus
-      ),
+      )
+    },
     [menus]
   )
 

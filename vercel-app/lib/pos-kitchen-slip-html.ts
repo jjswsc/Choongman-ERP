@@ -110,6 +110,7 @@ const KITCHEN_SLIP_CHICKEN_PART_TRANSLATIONS: ReadonlyArray<[RegExp, string]> = 
 
 export function localizeKitchenSlipLineNote(rawNote: string): string {
   let note = String(rawNote ?? '')
+  note = note.replace(/\bitem\s*note\b\s*:/gi, 'Item:')
   for (const [pattern, english] of KITCHEN_SLIP_CHICKEN_PART_TRANSLATIONS) {
     note = note.replace(pattern, english)
   }

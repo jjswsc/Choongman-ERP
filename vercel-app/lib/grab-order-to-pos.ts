@@ -682,6 +682,15 @@ function resolveMenuCodeForGrabLine(params: {
       }
     }
   }
+  const itemNameKey = String(params.itemName || '').trim().toLowerCase()
+  if (itemNameKey) {
+    for (const menu of params.catalog.menuById.values()) {
+      if (String(menu.name || '').trim().toLowerCase() === itemNameKey) {
+        const code = String(menu.code || '').trim()
+        if (code) return code
+      }
+    }
+  }
   const fromName = String(params.itemName || '').trim().match(/\b([A-Za-z]\d{2,})\b/)?.[1]
   return String(fromName || '').trim()
 }
