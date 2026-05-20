@@ -78,7 +78,9 @@ import {
   isCompanyHybridDocCategoryGlobalStore,
   pickCompanyHybridDocCategoriesForPicker,
   sortCompanyHybridDocCategoriesTree,
-  toHtmlDateInputValue,
+  formatCompanyHybridDocDateForInput,
+  normalizeCompanyHybridDocDateTextInput,
+  parseCompanyHybridDocDate,
   type CompanyHybridDocVisibility,
   isCompanyHybridDocsListAllStoresParam,
 } from "@/lib/company-hybrid-documents"
@@ -141,35 +143,43 @@ function CompanyHybridDocumentsStoreField({
   )
 }
 
-/** 유효 시작일(valid_from)을 목록의「발급 날짜」로 표시 */
-function formatHybridDocumentIssueDate(raw: string | null | undefined, lang: LangCode): string {
-  if (raw == null || String(raw).trim() === "") return "—"
-  const s = String(raw).trim()
-  const day = s.length >= 10 ? s.slice(0, 10) : ""
-  const parse =
-    day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(`${day}T12:00:00`) : new Date(s)
-  if (Number.isNaN(parse.getTime())) return day || "—"
-  const locale =
-    lang === "ko"
-      ? "ko-KR"
-      : lang === "th"
-        ? "th-TH"
-        : lang === "mm"
-          ? "my-MM"
-          : lang === "la"
-            ? "lo-LA"
-            : lang === "kh"
-              ? "km-KH"
-              : lang === "vi"
-                ? "vi-VN"
-                : lang === "ms"
-                  ? "ms-MY"
-                  : "en-US"
-  try {
-    return parse.toLocaleDateString(locale)
-  } catch {
-    return day || "—"
-  }
+/** 유효 시작일(valid_from) — 목록 표시도 DD/MM/YYYY로 통일 */
+function formatHybridDocumentIssueDate(raw: string | null | undefined, _lang: LangCode): string {
+  const display = formatCompanyHybridDocDateForInput(raw)
+  return display || "—"
+}
+
+type CompanyHybridDocDateTextFieldProps = {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  hint?: string
+  className?: string
+}
+
+function CompanyHybridDocDateTextField({
+  value,
+  onChange,
+  placeholder,
+  hint,
+  className,
+}: CompanyHybridDocDateTextFieldProps) {
+  return (
+    <div className={cn("space-y-1", className)}>
+      <Input
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => onChange(normalizeCompanyHybridDocDateTextInput(value))}
+        className="max-w-[12rem] font-mono tabular-nums tracking-tight"
+      />
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
+  )
 }
 
 /**
@@ -679,8 +689,8 @@ export function CompanyHybridDocumentsPanel() {
     // Drive: external_url. 업로드(supabase): public_url만 채워지므로 수정 화면에서도 링크가 보이게 한다.
     setExternalUrl(String(row.external_url || row.public_url || "").trim())
     setFormVisibility(companyHybridDocVisibilityFromDocType(row.doc_type))
-    setValidFrom(toHtmlDateInputValue(row.valid_from))
-    setValidTo(toHtmlDateInputValue(row.valid_to))
+    setValidFrom(formatCompanyHybridDocDateForInput(row.valid_from))
+    setValidTo(formatCompanyHybridDocDateForInput(row.valid_to))
     setNote(row.note || "")
     const c = getCorrespondenceFromMetadata(row.metadata)
     setCorrDirection(c?.direction === "inbound" || c?.direction === "outbound" ? c.direction : "")
@@ -691,7 +701,7 @@ export function CompanyHybridDocumentsPanel() {
         ? c.status
         : ""
     )
-    setCorrReplyDue(toHtmlDateInputValue(c?.replyDue))
+    setCorrReplyDue(formatCompanyHybridDocDateForInput(c?.replyDue))
     setCorrChannel(
       c?.channel === "mail" || c?.channel === "email" || c?.channel === "visit" || c?.channel === "other"
         ? c.channel
@@ -733,8 +743,8 @@ export function CompanyHybridDocumentsPanel() {
       store: ws,
       title: driveTitle.trim(),
       visibility: formVisibility,
-      validFrom: toHtmlDateInputValue(validFrom) || undefined,
-      validTo: toHtmlDateInputValue(validTo) || undefined,
+      validFrom: parseCompanyHybridDocDate(validFrom) || undefined,
+      validTo: parseCompanyHybridDocDate(validTo) || undefined,
       note: note.trim() || undefined,
       categoryId: buildCategoryIdPayload(),
     }
@@ -770,8 +780,8 @@ export function CompanyHybridDocumentsPanel() {
       visibility: formVisibility,
       source: "drive",
       externalUrl: externalUrl.trim(),
-      validFrom: toHtmlDateInputValue(validFrom) || undefined,
-      validTo: toHtmlDateInputValue(validTo) || undefined,
+      validFrom: parseCompanyHybridDocDate(validFrom) || undefined,
+      validTo: parseCompanyHybridDocDate(validTo) || undefined,
       note: note.trim() || undefined,
       categoryId: buildCategoryIdPayload(),
     }
@@ -849,8 +859,8 @@ export function CompanyHybridDocumentsPanel() {
         title: driveTitle.trim(),
         visibility: formVisibility,
         note: note.trim() || undefined,
-        validFrom: toHtmlDateInputValue(validFrom) || undefined,
-        validTo: toHtmlDateInputValue(validTo) || undefined,
+        validFrom: parseCompanyHybridDocDate(validFrom) || undefined,
+        validTo: parseCompanyHybridDocDate(validTo) || undefined,
         fileName: f.name,
         fileSize: f.size,
         storagePath: p.storagePath,
@@ -1493,18 +1503,20 @@ export function CompanyHybridDocumentsPanel() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>{t("companyHybridDocValidFrom")}</Label>
-                  <Input
-                    type="date"
+                  <CompanyHybridDocDateTextField
                     value={validFrom}
-                    onChange={(e) => setValidFrom(e.target.value)}
+                    onChange={setValidFrom}
+                    placeholder={t("companyHybridDocDatePlaceholder")}
+                    hint={t("companyHybridDocDateFormatHint")}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("companyHybridDocValidTo")}</Label>
-                  <Input
-                    type="date"
+                  <CompanyHybridDocDateTextField
                     value={validTo}
-                    onChange={(e) => setValidTo(e.target.value)}
+                    onChange={setValidTo}
+                    placeholder={t("companyHybridDocDatePlaceholder")}
+                    hint={t("companyHybridDocDateFormatHint")}
                   />
                 </div>
               </div>
@@ -1599,10 +1611,10 @@ export function CompanyHybridDocumentsPanel() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">{t("companyHybridCorrReplyDue")}</Label>
-                    <Input
-                      type="date"
+                    <CompanyHybridDocDateTextField
                       value={corrReplyDue}
-                      onChange={(e) => setCorrReplyDue(e.target.value)}
+                      onChange={setCorrReplyDue}
+                      placeholder={t("companyHybridDocDatePlaceholder")}
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">

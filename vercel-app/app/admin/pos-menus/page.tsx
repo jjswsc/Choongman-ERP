@@ -3565,6 +3565,25 @@ export default function PosMenusPage() {
         const res = await uploadPosMenuImage({ file: toSend, menuId })
         if (res?.success && res?.url) {
           upsertDeliveryMenuPolicy(menuId, { imageUrl: res.url })
+          // DeliveryOps 오버라이드 이미지와 별개로 POS 대표 메뉴 이미지(pos_menus.image)도 동기화한다.
+          // 그래야 POS 터미널/주문 화면의 프로모 타일 썸네일에 즉시 반영된다.
+          try {
+            const syncRes = await savePosMenu({
+              id: menuId,
+              imageUrl: res.url,
+              imageOnly: true,
+            })
+            if (!syncRes?.success) {
+              await appAlert(
+                translateApiMessage(
+                  String(syncRes?.message || "save_failed"),
+                  t
+                )
+              )
+            }
+          } catch (syncErr) {
+            await appAlert(translateApiMessage(String(syncErr ?? "save_failed"), t))
+          }
           return
         }
         const msg =

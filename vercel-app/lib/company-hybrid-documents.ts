@@ -82,6 +82,7 @@ export function toHtmlDateInputValue(raw: string | null | undefined): string {
       mm = n1
       dd = n2
     } else {
+      // 태국·한국 현장 기본: DD/MM/YYYY (mm/dd 혼동 방지)
       dd = n1
       mm = n2
     }
@@ -95,6 +96,22 @@ export function toHtmlDateInputValue(raw: string | null | undefined): string {
     return normalizeHtmlYmd(formatBangkokYmd(parsed))
   }
   return ''
+}
+
+/** 화면 표시·직접 입력용 — 항상 DD/MM/YYYY (브라우저 locale 무관) */
+export function formatCompanyHybridDocDateForInput(raw: string | null | undefined): string {
+  const ymd = toHtmlDateInputValue(raw)
+  if (!ymd) return ''
+  const [y, m, d] = ymd.split('-')
+  return `${d}/${m}/${y}`
+}
+
+/** 입력란 blur 시 DD/MM/YYYY로 정리. 파싱 불가면 원문 유지 */
+export function normalizeCompanyHybridDocDateTextInput(text: string): string {
+  const trimmed = String(text || '').trim()
+  if (!trimmed) return ''
+  const ymd = toHtmlDateInputValue(trimmed)
+  return ymd ? formatCompanyHybridDocDateForInput(ymd) : trimmed
 }
 
 /** API·DB 저장용 date — YYYY-MM-DD 또는 null */
