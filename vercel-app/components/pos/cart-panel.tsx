@@ -87,7 +87,7 @@ import {
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
-import { collabDiscountAmountForCart } from '@/lib/pos-collab-discount'
+import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart } from '@/lib/pos-collab-discount'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
 import {
   computePosPricing,
@@ -2902,17 +2902,41 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           (sum, i) => sum + Number(i.price ?? 0) * Math.max(1, Number(i.quantity ?? 1) || 1),
           0
         )
-      const receiptItems = linesForReceipt.map((i) => ({
+      const discountTotal =
+        receiptOpts?.receiptDiscountTotal !== undefined
+          ? receiptOpts.receiptDiscountTotal
+          : discount + pointUsedNum
+      const lineDiscountAlloc =
+        discountTotal > 0.0001
+          ? buildMixedCartLineDiscountAllocations({
+              lines: linesForReceipt.map((i) => ({
+                id: String(i.id ?? ''),
+                name: String(i.name ?? ''),
+                price: Number(i.price ?? 0),
+                qty: Math.max(1, Number(i.quantity ?? 1) || 1),
+                ...(i.promoId ? { promoId: String(i.promoId) } : {}),
+                ...(i.menuId ? { menuId: String(i.menuId) } : {}),
+                ...(i.menuId1 != null
+                  ? {
+                      menuId1: i.menuId1,
+                      menuId2: i.menuId2,
+                    }
+                  : {}),
+              })),
+              menuById: menuByIdForCollab,
+              collabDetail: appliedCollab?.collabDetail ?? null,
+              collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
+              otherDiscountAmt: Math.max(0, discountTotal - (appliedCollab ? collabDiscountAmt : 0)),
+            })
+          : []
+      const receiptItems = linesForReceipt.map((i, idx) => ({
         id: String(i.id ?? ''),
         name: String(i.name ?? ''),
         price: Number(i.price ?? 0),
         qty: Math.max(1, Number(i.quantity ?? 1) || 1),
         ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
+        ...(lineDiscountAlloc[idx] > 0.0001 ? { lineDiscountAmt: lineDiscountAlloc[idx] } : {}),
       }))
-      const discountTotal =
-        receiptOpts?.receiptDiscountTotal !== undefined
-          ? receiptOpts.receiptDiscountTotal
-          : discount + pointUsedNum
       const pricingSnapshot = computePosPricing({
         subtotal: receiptSubtotal,
         discountAmt: discountTotal,

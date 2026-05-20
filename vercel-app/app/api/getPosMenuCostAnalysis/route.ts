@@ -27,6 +27,7 @@ type MenuRow = {
   category?: string
   category_main?: string
   promo_id?: number | null
+  is_active?: boolean | null
   price?: number
   price_delivery?: number | null
   vat_included?: boolean
@@ -133,7 +134,7 @@ async function loadPosMenusPaged(): Promise<MenuRow[]> {
   try {
     return (await supabaseSelectAllPages('pos_menus', {
       order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
-      select: 'id,code,name,category,category_main,promo_id,price,price_delivery,vat_included,cooking_time_min,delivery_app_fee_percent',
+      select: 'id,code,name,category,category_main,promo_id,is_active,price,price_delivery,vat_included,cooking_time_min,delivery_app_fee_percent',
     })) as MenuRow[]
   } catch {
     return (await supabaseSelectAllPages('pos_menus', {
@@ -164,7 +165,10 @@ async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  headers.set('Access-Control-Expose-Headers', 'X-CM-Pos-Cost-Analysis-Rows, X-CM-Pos-Cost-Analysis-Error')
+  headers.set(
+    'Access-Control-Expose-Headers',
+    'X-CM-Pos-Cost-Analysis-Rows, X-CM-Pos-Cost-Analysis-Error, X-CM-Pos-Cost-Analysis-Active-Menus, X-CM-Pos-Cost-Analysis-Inactive-Menus'
+  )
 
   const summaryOnly =
     request.nextUrl.searchParams.get('summary') === '1' ||
@@ -194,10 +198,16 @@ export async function GET(request: NextRequest) {
       }).catch(() => []),
     ])
     const [menuRows, ingRows, optRows, itemRows] = menuData as [MenuRow[], IngRow[], OptRow[], ItemRow[]]
+    const activeMenuRows = (menuRows || []).filter((m) => m?.is_active !== false)
+    headers.set('X-CM-Pos-Cost-Analysis-Active-Menus', String(activeMenuRows.length))
+    headers.set(
+      'X-CM-Pos-Cost-Analysis-Inactive-Menus',
+      String(Math.max(0, (menuRows || []).length - activeMenuRows.length))
+    )
     const promoItemsByPromoId: Record<number, PromoItemRow[]> = {}
     const promoIds = Array.from(
       new Set(
-        (menuRows || [])
+        (activeMenuRows || [])
           .map((m) => Number(m.promo_id ?? 0))
           .filter((n) => Number.isFinite(n) && n > 0)
       )
@@ -390,7 +400,7 @@ export async function GET(request: NextRequest) {
 
     const result: MenuCostRow[] = []
 
-    for (const menu of menuRows || []) {
+    for (const menu of activeMenuRows || []) {
       const mid = parseMenuIdNum(menu.id)
       if (!Number.isFinite(mid) || mid <= 0) continue
       const priceHall = Number(menu.price ?? 0)
@@ -819,6 +829,8 @@ export async function GET(request: NextRequest) {
     console.error('getPosMenuCostAnalysis:', e)
     headers.set('X-CM-Pos-Cost-Analysis-Rows', '0')
     headers.set('X-CM-Pos-Cost-Analysis-Error', '1')
+    headers.set('X-CM-Pos-Cost-Analysis-Active-Menus', '0')
+    headers.set('X-CM-Pos-Cost-Analysis-Inactive-Menus', '0')
     return NextResponse.json([], { headers })
   }
 }

@@ -4,8 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import Link from "next/link"
-import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy, Monitor, ExternalLink } from "lucide-react"
+import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy, Monitor } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -172,29 +171,15 @@ function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): KitchenSlipOptio
   return out
 }
 
-const POS_OPTION_GROUP_MANAGE_HREF = "/admin/pos-menus?tab=optionsConfig"
-
-function KitchenSlipOptionGroupEmptyHint({
-  tr,
-}: {
-  tr: (key: string, fallback: string) => string
-}) {
-  return (
-    <div className="rounded-md border border-dashed p-3 space-y-2">
-      <p className="text-xs text-muted-foreground">
-        {tr(
-          "posKitchenSlipOptionGroupFilterHiddenHint",
-          "등록된 옵션 그룹이 없어 해당 설정은 숨김 처리되었습니다. 옵션 그룹을 먼저 등록해 주세요."
-        )}
-      </p>
-      <Button variant="outline" size="sm" className="h-8 gap-1.5" asChild>
-        <Link href={POS_OPTION_GROUP_MANAGE_HREF}>
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-          {tr("posKitchenSlipOptionGroupGoToManage", "옵션 그룹 관리로 이동")}
-        </Link>
-      </Button>
-    </div>
-  )
+function buildKitchenSlipOptionGroupPrintForSave(
+  choices: KitchenSlipOptionGroupChoice[],
+  current: KitchenSlipOptionGroupPrintState
+): KitchenSlipOptionGroupPrintState {
+  const out: KitchenSlipOptionGroupPrintState = {}
+  for (const choice of choices) {
+    out[choice.key] = current[choice.key] !== false
+  }
+  return out
 }
 
 function KitchenSlipOptionGroupPrintSection({
@@ -203,16 +188,13 @@ function KitchenSlipOptionGroupPrintSection({
   onChange,
   tr,
   t,
-  hideWhenEmpty = false,
 }: {
   choices: KitchenSlipOptionGroupChoice[]
   value: KitchenSlipOptionGroupPrintState
   onChange: React.Dispatch<React.SetStateAction<KitchenSlipOptionGroupPrintState>>
   tr: (key: string, fallback: string) => string
   t: (k: string) => string
-  hideWhenEmpty?: boolean
 }) {
-  if (hideWhenEmpty && choices.length === 0) return null
   return (
     <div className="rounded-md border p-3 space-y-2">
       <div className="text-sm font-medium">
@@ -221,7 +203,7 @@ function KitchenSlipOptionGroupPrintSection({
       <p className="text-xs text-muted-foreground">
         {tr(
           "posKitchenSlipOptionGroupFilterHint",
-          "등록된 옵션 그룹별로 출력/숨김을 선택합니다."
+          "매장에 등록된 옵션 그룹이 모두 표시됩니다. 주방 주문서에 인쇄할 그룹만 켜 주세요."
         )}
       </p>
       {choices.length === 0 ? (
@@ -486,7 +468,6 @@ export default function PosPrintersPage() {
 
   const kitchenSlipOptionGroupChoices = React.useMemo<KitchenSlipOptionGroupChoice[]>(() => {
     return (optionGroups || [])
-      .filter((g) => g.isActive !== false)
       .map((g) => {
         const key = String(g.key || "").trim()
         const name = String(g.name || "").trim()
@@ -498,7 +479,21 @@ export default function PosPrintersPage() {
       .filter((row) => !!row.key)
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [optionGroups])
-  const hasKitchenSlipOptionGroupChoices = kitchenSlipOptionGroupChoices.length > 0
+
+  React.useEffect(() => {
+    if (kitchenSlipOptionGroupChoices.length === 0) return
+    setKitchenSlipOptionGroupPrint((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const choice of kitchenSlipOptionGroupChoices) {
+        if (!(choice.key in next)) {
+          next[choice.key] = true
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [kitchenSlipOptionGroupChoices])
 
   /** 저장 시에는 명시된 키만 보존(암묵 기본값 1 채우기 금지: 상위 규칙을 덮어쓰는 부작용 방지) */
   const routeMapForSave = React.useCallback(
@@ -861,7 +856,10 @@ export default function PosPrintersPage() {
         kitchenSlipFontScale,
         kitchenSlipShowLineNotes,
         kitchenSlipShowOrderMemo,
-        kitchenSlipOptionGroupPrint,
+        kitchenSlipOptionGroupPrint: buildKitchenSlipOptionGroupPrintForSave(
+          kitchenSlipOptionGroupChoices,
+          kitchenSlipOptionGroupPrint
+        ),
       }
       const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
       if (res.success) {
@@ -1853,6 +1851,13 @@ export default function PosPrintersPage() {
                     t={t}
                   />
                 </div>
+                <KitchenSlipOptionGroupPrintSection
+                  choices={kitchenSlipOptionGroupChoices}
+                  value={kitchenSlipOptionGroupPrint}
+                  onChange={setKitchenSlipOptionGroupPrint}
+                  tr={tr}
+                  t={t}
+                />
                 <div className="space-y-3 rounded-lg border p-4">
                   <p className="text-sm font-medium">{tr("posEscPosCutSection", "용지 절단 (Windows 설치형 POS)")}</p>
                   <p className="text-xs text-muted-foreground">
@@ -1928,15 +1933,6 @@ export default function PosPrintersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <KitchenSlipOptionGroupPrintSection
-                  choices={kitchenSlipOptionGroupChoices}
-                  value={kitchenSlipOptionGroupPrint}
-                  onChange={setKitchenSlipOptionGroupPrint}
-                  tr={tr}
-                  t={t}
-                  hideWhenEmpty
-                />
-                {!hasKitchenSlipOptionGroupChoices ? <KitchenSlipOptionGroupEmptyHint tr={tr} /> : null}
                 <ToggleRow label={tr("posLogoPrint", "로고 인쇄")} value={logoPrint} onChange={setLogoPrint} t={t} />
                 <ToggleRow label={tr("posSignatureLine", "서명란 출력")} value={signatureLine} onChange={setSignatureLine} t={t} />
                 <ToggleRow label={tr("posReceiptBarcode", "영수증 바코드")} value={receiptBarcode} onChange={setReceiptBarcode} t={t} />
@@ -2006,15 +2002,6 @@ export default function PosPrintersPage() {
                   onChange={setKitchenSlipShowOrderMemo}
                   t={t}
                 />
-                <KitchenSlipOptionGroupPrintSection
-                  choices={kitchenSlipOptionGroupChoices}
-                  value={kitchenSlipOptionGroupPrint}
-                  onChange={setKitchenSlipOptionGroupPrint}
-                  tr={tr}
-                  t={t}
-                  hideWhenEmpty
-                />
-                {!hasKitchenSlipOptionGroupChoices ? <KitchenSlipOptionGroupEmptyHint tr={tr} /> : null}
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />

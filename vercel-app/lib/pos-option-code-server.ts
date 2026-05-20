@@ -99,6 +99,8 @@ export async function createMenuOptionCodeAllocator(menuIdInput: number) {
       const optionId = normalizeId(params.optionId)
       if (!menuId || !optionId) return { optionCode: "", remapped: false }
       const existingCode = normalizeCode(codeById.get(optionId))
+      const existingSuffix = existingCode ? parseSuffix(existingCode, menuCode) : null
+      const existingCodeUsable = !!existingCode && existingSuffix != null
       if (existingCode) {
         takenLower.delete(existingCode.toLowerCase())
       }
@@ -112,7 +114,7 @@ export async function createMenuOptionCodeAllocator(menuIdInput: number) {
 
       if (preferred && !takenLower.has(preferred.toLowerCase())) {
         nextCode = preferred
-      } else if (existingCode && !takenLower.has(existingCode.toLowerCase())) {
+      } else if (existingCodeUsable && !takenLower.has(existingCode.toLowerCase())) {
         nextCode = existingCode
       } else {
         const preferredSuffix = parseSuffix(preferred, menuCode)

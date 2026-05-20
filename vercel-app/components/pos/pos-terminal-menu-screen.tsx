@@ -1569,6 +1569,53 @@ export function PosTerminalMenuScreen({
                 optionsWithSteps: optsWithStepsToShow,
                 isChickenMenu: isChickenBase,
               })
+              // 전매장 데이터 이슈(옵션 단계 키와 option_step_values 불일치) 시
+              // 다단계 값 버튼이 0개가 되어 모달이 빈 화면처럼 보일 수 있다.
+              // 이 경우 단일 옵션 목록으로 폴백해 주문이 막히지 않게 한다.
+              if (values.length === 0) {
+                return (
+                  <div className="flex flex-col gap-2 py-2">
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      {t('posOptionStepMismatchFallback') || '옵션 단계 설정이 맞지 않아 일반 옵션 목록으로 표시합니다.'}
+                    </p>
+                    {defaultBtn}
+                    {optsToShow.length > 0 ? (
+                      optsToShow.map((opt) => {
+                        const optDesc = showMenuDescriptions
+                          ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
+                          : ''
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, opt) })}
+                            className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                          >
+                            <span className="min-w-0 flex-1 text-slate-800">
+                              <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
+                              {optDesc ? (
+                                <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
+                                  {optDesc}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="shrink-0 font-bold text-emerald-600">
+                              {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
+                            </span>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null) })}
+                      >
+                        {t('posAddWithoutOption') || '옵션 없이 담기'}
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
               const handleStepSelect = (value: string) => {
                 const next = { ...optionPickerSelections, [groupKey]: value }
                 setOptionPickerSelections(next)

@@ -1,5 +1,10 @@
 import type { PosMenu } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
+import {
+  LEGACY_PROMOTION_MAIN_CATEGORY,
+  PROMOTION_MAIN_CATEGORY,
+  normalizePromotionCategoryMain,
+} from '@/lib/pos-promo-constants'
 
 export type PosCollabCampaignForStore = {
   id: string
@@ -7,6 +12,8 @@ export type PosCollabCampaignForStore = {
   campaignNo?: string
   collabDetail: MarketingCollabDetail
 }
+
+type CollabMenuPick = Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>
 
 function collabScopeAny(d: MarketingCollabDetail): boolean {
   return (
@@ -65,10 +72,7 @@ function blobMatchesCollabScope(blobRaw: string, detail: MarketingCollabDetail):
 }
 
 /** 협업 상세의 카테고리 체크와 pos_menus 대분류·소분류·이름을 대응 (영·한·태국어 일부 키워드) */
-export function menuMatchesCollabScope(
-  menu: Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>,
-  detail: MarketingCollabDetail
-): boolean {
+export function menuMatchesCollabScope(menu: CollabMenuPick, detail: MarketingCollabDetail): boolean {
   if (collabDynamicScopeAny(detail)) {
     const menuIds = scopeSet(detail.scopeMenuIds)
     const mains = scopeSet(detail.scopeMainCategories)
@@ -87,6 +91,7 @@ export function menuMatchesCollabScope(
 
 function menuIdFromCartLineId(id: string): string {
   const s = String(id ?? '')
+  if (s.toLowerCase().startsWith('promo-')) return ''
   const i = s.indexOf('-')
   return (i >= 0 ? s.slice(0, i) : s).trim()
 }
@@ -101,6 +106,90 @@ export type CollabCartLineLike = {
   menuId?: string
   menuId1?: string
   menuId2?: string
+  promoId?: string
+}
+
+export function isPromoCartLine(line: CollabCartLineLike): boolean {
+  if (String(line.promoId ?? '').trim()) return true
+  return String(line.id ?? '').trim().toLowerCase().startsWith('promo-')
+}
+
+function mainCategoryIsDrinks(mainRaw: string | undefined | null): boolean {
+  const main = normalizeScopeText(mainRaw)
+  if (!main) return false
+  if (main === 'drinks' || main === 'drink' || main === '음료') return true
+  return textHasAny(main, ['beverage', 'เครื่องดื่ม'])
+}
+
+export function isPromotionMenu(menu: CollabMenuPick): boolean {
+  return normalizePromotionCategoryMain(menu.categoryMain) === PROMOTION_MAIN_CATEGORY
+}
+
+export function isDrinkMenu(menu: CollabMenuPick): boolean {
+  if (mainCategoryIsDrinks(menu.categoryMain)) return true
+  const blob = normalizeScopeText(`${menu.categoryMain ?? ''} ${menu.category ?? ''} ${menu.name ?? ''} ${menu.code ?? ''}`)
+  return textHasAny(blob, [
+    'drink',
+    'beverage',
+    'coffee',
+    'tea',
+    'juice',
+    'smoothie',
+    'soda',
+    'beer',
+    'wine',
+    'soju',
+    'whisky',
+    'vodka',
+    'chang',
+    'jinro',
+    '음료',
+    'น้ำ',
+    'เบียร์',
+    'เหล้า',
+    'เครื่องดื่ม',
+  ])
+}
+
+function scopeAllowsPromotion(detail: MarketingCollabDetail): boolean {
+  if (!collabDynamicScopeAny(detail)) return false
+  const mains = scopeSet(detail.scopeMainCategories)
+  if (mains.has(PROMOTION_MAIN_CATEGORY) || mains.has(LEGACY_PROMOTION_MAIN_CATEGORY)) return true
+  return (detail.scopeCategoryKeys || []).some((key) => {
+    const main = String(key.split('::')[0] ?? '').trim()
+    return normalizePromotionCategoryMain(main) === PROMOTION_MAIN_CATEGORY
+  })
+}
+
+function scopeAllowsDrinks(detail: MarketingCollabDetail): boolean {
+  if (detail.scopeDrinksNonAlcohol || detail.scopeAlcohol) return true
+  if (!collabDynamicScopeAny(detail)) return false
+  for (const main of detail.scopeMainCategories || []) {
+    if (mainCategoryIsDrinks(main)) return true
+  }
+  return (detail.scopeCategoryKeys || []).some((key) => mainCategoryIsDrinks(String(key.split('::')[0] ?? '')))
+}
+
+function lineFailsDefaultPromoDrinkExclusion(
+  line: CollabCartLineLike,
+  menuById: Map<string, CollabMenuPick>,
+  detail: MarketingCollabDetail
+): boolean {
+  if (isPromoCartLine(line) && !scopeAllowsPromotion(detail)) return true
+  const ids = menuIdsForCollabLineWithCatalog(line, menuById)
+  for (const mid of ids) {
+    const menu = menuById.get(mid)
+    if (!menu) continue
+    if (isPromotionMenu(menu) && !scopeAllowsPromotion(detail)) return true
+    if (isDrinkMenu(menu) && !scopeAllowsDrinks(detail)) return true
+  }
+  if (ids.length === 0) {
+    const nameBlob = normalizeScopeText(line.name ?? '')
+    if (nameBlob && !scopeAllowsDrinks(detail) && textHasAny(nameBlob, ['chang', 'jinro', 'beer', 'soju', 'ml.', 'ml '])) {
+      return true
+    }
+  }
+  return false
 }
 
 /** 장바구니 한 줄에 연결된 메뉴 id (반반 등) */
@@ -121,13 +210,13 @@ export function menuIdsForCollabLine(line: CollabCartLineLike): string[] {
 
 function menuIdsForCollabLineWithCatalog(
   line: CollabCartLineLike,
-  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>
+  menuById: Map<string, CollabMenuPick>
 ): string[] {
   const explicit = menuIdsForCollabLine(line).filter((id) => menuById.has(id))
   if (explicit.length > 0) return explicit
 
   const rawId = String(line.id ?? '').trim()
-  if (!rawId) return []
+  if (!rawId || rawId.toLowerCase().startsWith('promo-')) return []
   if (menuById.has(rawId)) return [rawId]
 
   const cartPayloadId = rawId.startsWith('cart-') ? rawId.slice('cart-'.length) : rawId
@@ -138,11 +227,14 @@ function menuIdsForCollabLineWithCatalog(
   return matched
 }
 
-function lineEligibleForCollab(
+/** 협업 할인 대상 여부 (영수증 줄 배분·합계 계산 공통) */
+export function isCartLineEligibleForCollabDiscount(
   line: CollabCartLineLike,
-  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>,
+  menuById: Map<string, CollabMenuPick>,
   detail: MarketingCollabDetail
 ): boolean {
+  if (lineFailsDefaultPromoDrinkExclusion(line, menuById, detail)) return false
+
   const dynamicScope = collabDynamicScopeAny(detail)
   if (dynamicScope) {
     const selectedMenuIds = scopeSet(detail.scopeMenuIds)
@@ -160,16 +252,86 @@ function lineEligibleForCollab(
   return blobMatchesCollabScope(String(line.name ?? ''), detail)
 }
 
+export function collabLineTotal(line: CollabCartLineLike): number {
+  const q = Math.max(0, Number(line.quantity ?? line.qty) || 0)
+  return Math.max(0, Number(line.price) || 0) * q
+}
+
+/** 총 할인액을 줄별 금액 비율로 배분 (마지막 줄에 잔액) */
+export function allocateDiscountProportional(lineTotals: number[], totalDiscount: number): number[] {
+  const discount = Math.max(0, Number(totalDiscount) || 0)
+  if (lineTotals.length === 0 || discount <= 0.0001) return lineTotals.map(() => 0)
+  const gross = lineTotals.reduce((sum, v) => sum + v, 0)
+  if (gross <= 0.0001) return lineTotals.map(() => 0)
+
+  const out = lineTotals.map(() => 0)
+  let used = 0
+  const to2 = (n: number) => Math.round(n * 100) / 100
+  for (let i = 0; i < lineTotals.length; i += 1) {
+    if (i === lineTotals.length - 1) {
+      out[i] = to2(Math.max(0, discount - used))
+      break
+    }
+    const share = to2((discount * lineTotals[i]) / gross)
+    out[i] = share
+    used = to2(used + share)
+  }
+  return out
+}
+
+export function collabLineDiscountAllocations(
+  lines: CollabCartLineLike[],
+  menuById: Map<string, CollabMenuPick>,
+  detail: MarketingCollabDetail,
+  totalCollabDiscount: number
+): number[] {
+  const discount = Math.max(0, Number(totalCollabDiscount) || 0)
+  if (discount <= 0.0001) return lines.map(() => 0)
+  const weights = lines.map((line) =>
+    isCartLineEligibleForCollabDiscount(line, menuById, detail) ? collabLineTotal(line) : 0
+  )
+  return allocateDiscountProportional(weights, discount)
+}
+
+export function buildMixedCartLineDiscountAllocations(input: {
+  lines: CollabCartLineLike[]
+  menuById: Map<string, CollabMenuPick>
+  collabDetail?: MarketingCollabDetail | null
+  collabDiscountAmt: number
+  otherDiscountAmt: number
+  otherDiscountLineTotals?: number[]
+}): number[] {
+  const { lines, menuById, collabDetail, collabDiscountAmt, otherDiscountAmt } = input
+  const collabAlloc =
+    collabDetail && collabDiscountAmt > 0.0001
+      ? collabLineDiscountAllocations(lines, menuById, collabDetail, collabDiscountAmt)
+      : lines.map(() => 0)
+  const otherWeights =
+    input.otherDiscountLineTotals ??
+    lines.map((line) => collabLineTotal(line))
+  const otherAlloc =
+    otherDiscountAmt > 0.0001 ? allocateDiscountProportional(otherWeights, otherDiscountAmt) : lines.map(() => 0)
+  const to2 = (n: number) => Math.round(n * 100) / 100
+  return lines.map((_, i) => to2(collabAlloc[i] + otherAlloc[i]))
+}
+
+function lineEligibleForCollab(
+  line: CollabCartLineLike,
+  menuById: Map<string, CollabMenuPick>,
+  detail: MarketingCollabDetail
+): boolean {
+  return isCartLineEligibleForCollabDiscount(line, menuById, detail)
+}
+
 export function collabEligibleSubtotal(
   lines: CollabCartLineLike[],
-  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>,
+  menuById: Map<string, CollabMenuPick>,
   detail: MarketingCollabDetail
 ): number {
   let s = 0
   for (const line of lines) {
     if (lineEligibleForCollab(line, menuById, detail)) {
-      const q = Math.max(0, Number(line.quantity ?? line.qty) || 0)
-      s += Math.max(0, Number(line.price) || 0) * q
+      s += collabLineTotal(line)
     }
   }
   return Math.round(s * 100) / 100
@@ -191,7 +353,7 @@ export function computeCollabDiscountAmount(
 
 export function collabDiscountAmountForCart(
   lines: CollabCartLineLike[],
-  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>,
+  menuById: Map<string, CollabMenuPick>,
   detail: MarketingCollabDetail
 ): number {
   const eligible = collabEligibleSubtotal(lines, menuById, detail)

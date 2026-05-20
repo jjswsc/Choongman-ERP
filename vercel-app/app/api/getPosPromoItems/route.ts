@@ -18,29 +18,30 @@ export async function GET(request: NextRequest) {
       promo_id?: number
       menu_id?: number
       option_id?: number | null
+      option_code?: string | null
       quantity?: number
       sort_order?: number
       choice_group?: string | null
       choice_pick_count?: number | null
     }
+    const filter = `promo_id=eq.${encodeURIComponent(promoId)}`
+    const baseOpts = { order: 'sort_order.asc,id.asc' as const, limit: 100 }
+    const selectAttempts = [
+      'id,promo_id,menu_id,option_id,option_code,quantity,sort_order,choice_group,choice_pick_count',
+      'id,promo_id,menu_id,option_id,quantity,sort_order,choice_group,choice_pick_count',
+      'id,promo_id,menu_id,option_id,quantity,sort_order',
+    ]
     let rows: PromoItemRow[] | null = null
-    try {
-      rows = (await supabaseSelectFilter(
-        'pos_promo_items',
-        `promo_id=eq.${encodeURIComponent(promoId)}`,
-        {
-          order: 'sort_order.asc,id.asc',
-          limit: 100,
-          select:
-            'id,promo_id,menu_id,option_id,quantity,sort_order,choice_group,choice_pick_count',
-        }
-      )) as PromoItemRow[] | null
-    } catch {
-      rows = (await supabaseSelectFilter(
-        'pos_promo_items',
-        `promo_id=eq.${encodeURIComponent(promoId)}`,
-        { order: 'sort_order.asc,id.asc', limit: 100, select: 'id,promo_id,menu_id,option_id,quantity,sort_order' }
-      )) as PromoItemRow[] | null
+    for (const select of selectAttempts) {
+      try {
+        rows = (await supabaseSelectFilter('pos_promo_items', filter, {
+          ...baseOpts,
+          select,
+        })) as PromoItemRow[] | null
+        break
+      } catch {
+        /* 다음 select 조합 */
+      }
     }
 
     const list = (rows || []).map((row) => ({
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
       promoId: String(row.promo_id ?? ''),
       menuId: String(row.menu_id ?? ''),
       optionId: row.option_id != null ? String(row.option_id) : null,
+      optionCode: row.option_code != null ? String(row.option_code).trim() || null : null,
       quantity: Number(row.quantity) ?? 1,
       sortOrder: Number(row.sort_order) ?? 0,
       choiceGroup: row.choice_group != null ? String(row.choice_group).trim() || null : null,

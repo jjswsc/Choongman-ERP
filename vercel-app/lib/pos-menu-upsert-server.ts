@@ -235,6 +235,7 @@ export async function upsertPosMenuFromBody(
     partnerMerchantID?: string | null
   }
 }> {
+  const normalizeMenuCode = (raw: unknown): string => String(raw ?? '').trim().toLowerCase()
   const code = String(body.code ?? '').trim()
   const name = String(body.name ?? '').trim()
   let editingId = body.id ? String(body.id).trim() : null
@@ -258,6 +259,26 @@ export async function upsertPosMenuFromBody(
   const isImageOnlyEdit = body.imageOnly === true && !!editingId
   if (!isImageOnlyEdit && !isEdit && (!code || !name)) {
     return { success: false, message: '코드와 메뉴명이 필요합니다.' }
+  }
+  // 메뉴 코드는 생성 후 식별자처럼 사용된다.
+  // 수정 요청(id 포함)에서 code 변경을 허용하면 동일 코드/다른 id 불일치가 재발하므로 서버에서 차단한다.
+  if (isEdit && !isImageOnlyEdit && 'code' in body) {
+    const row = (await supabaseSelectFilter(
+      'pos_menus',
+      `id=eq.${encodeURIComponent(String(editingId || ''))}`,
+      { limit: 1, select: 'code' }
+    )) as { code?: string | null }[] | null
+    const currentCode = String(row?.[0]?.code ?? '').trim()
+    const incomingCode = String(body.code ?? '').trim()
+    if (!currentCode) {
+      return { success: false, message: '기존 메뉴 코드를 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.' }
+    }
+    if (normalizeMenuCode(currentCode) !== normalizeMenuCode(incomingCode)) {
+      return {
+        success: false,
+        message: `메뉴 코드는 생성 후 변경할 수 없습니다. 현재 코드(${currentCode})를 유지해 주세요.`,
+      }
+    }
   }
 
   if (!editingId && opts?.upsertByCode) {
@@ -673,10 +694,13 @@ export async function upsertPosMenuFromBody(
 
     const codeExists = (await supabaseSelectFilter(
       'pos_menus',
-      `code=eq.${encodeURIComponent(code)}`,
-      { limit: 1 }
-    )) as { id?: number }[] | null
-    if (codeExists && codeExists.length > 0 && !editingId) {
+      `code=ilike.${encodeURIComponent(code)}`,
+      { limit: 20, select: 'id,code' }
+    )) as { id?: number; code?: string | null }[] | null
+    const duplicated = (codeExists || []).some(
+      (r) => normalizeMenuCode(r.code) === normalizeMenuCode(code)
+    )
+    if (duplicated && !editingId) {
       return { success: false, message: '이미 존재하는 메뉴 코드입니다.' }
     }
 

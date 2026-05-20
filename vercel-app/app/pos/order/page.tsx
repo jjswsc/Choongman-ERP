@@ -24,7 +24,7 @@ import {
   type PosPromoWithItems,
 } from "@/lib/api-client"
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
-import { collabDiscountAmountForCart } from "@/lib/pos-collab-discount"
+import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart } from "@/lib/pos-collab-discount"
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
 import { getBangkokDateStr, getPosBusinessDateStr, setPosBusinessHoursClient } from "@/lib/pos-business-day"
@@ -1178,25 +1178,18 @@ export default function PosOrderPage() {
   const paymentInputMatch = Math.abs(paymentInputSum - paymentPreviewTotal) < 0.01
 
   const lineDiscountSnapshot = React.useMemo(() => {
-    const to2 = (n: number) => Math.round(n * 100) / 100
     const totalDiscount = Math.max(0, Number(discountAmt) || 0)
     if (!Array.isArray(cart) || cart.length === 0 || totalDiscount <= 0.0001) return cart.map(() => 0)
-    const lineTotals = cart.map((it) => Math.max(0, (Number(it.price) || 0) * (Number(it.qty) || 0)))
-    const gross = lineTotals.reduce((sum, v) => sum + v, 0)
-    if (gross <= 0.0001) return cart.map(() => 0)
-    const out = cart.map(() => 0)
-    let used = 0
-    for (let i = 0; i < cart.length; i += 1) {
-      if (i === cart.length - 1) {
-        out[i] = to2(Math.max(0, totalDiscount - used))
-        break
-      }
-      const share = to2((totalDiscount * lineTotals[i]) / gross)
-      out[i] = share
-      used = to2(used + share)
-    }
-    return out
-  }, [cart, discountAmt])
+    const collabPart = appliedCollab ? collabDiscountAmt : 0
+    const otherPart = Math.max(0, totalDiscount - collabPart)
+    return buildMixedCartLineDiscountAllocations({
+      lines: cart,
+      menuById: menuByIdForCollab,
+      collabDetail: appliedCollab?.collabDetail ?? null,
+      collabDiscountAmt: collabPart,
+      otherDiscountAmt: otherPart,
+    })
+  }, [appliedCollab, cart, collabDiscountAmt, discountAmt, menuByIdForCollab])
 
   const handleApplyCoupon = async () => {
     const code = couponCode.trim().toUpperCase()

@@ -73,6 +73,9 @@ export const i18n = {
     posMenuImageDecodeFail:
       '이미지를 열 수 없습니다. JPG·PNG·WebP로 저장한 뒤 다시 시도해 주세요. (일부 휴대폰 전용 형식은 지원되지 않을 수 있습니다)',
     posPromoGroupPickCount: '"{group}" 그룹에서 {count}개를 선택해야 합니다.',
+    posOptionStepMismatchFallback:
+      '옵션 단계 설정이 맞지 않아 일반 옵션 목록으로 표시합니다. 관리자에서 option_step_values를 확인해 주세요.',
+    posAddWithoutOption: '옵션 없이 담기',
     posCouponPleaseEnterCode: '쿠폰 코드를 입력해 주세요.',
     posCouponAppliedSuccess: '{code} 쿠폰이 적용되었습니다.',
     posCouponValidateError: '쿠폰 검증 중 오류가 발생했습니다.',
@@ -4499,7 +4502,7 @@ export const i18n = {
     posKitchenSlipShowOrderMemoLabel: '주문 메모 박스 표시',
     posKitchenSlipOptionGroupFilterLabel: '주방 주문서 옵션 그룹 출력',
     posKitchenSlipOptionGroupFilterHint:
-      '등록된 옵션 그룹별로 주방 주문서에 출력할 항목을 선택합니다.',
+      '매장에 등록된 옵션 그룹이 모두 표시됩니다. 주방 주문서에 인쇄할 그룹만 켜 주세요.',
     posKitchenSlipOptionGroupFilterEmpty: '등록된 옵션 그룹이 없습니다.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       '등록된 옵션 그룹이 없어 해당 설정은 숨김 처리되었습니다. 옵션 그룹을 먼저 등록해 주세요.',
@@ -8326,6 +8329,9 @@ export const i18n = {
     posMenuImageDecodeFail:
       'Could not read this image. Save as JPG, PNG, or WebP and try again. Some phone-only formats may not be supported.',
     posPromoGroupPickCount: 'Select {count} item(s) in the "{group}" group.',
+    posOptionStepMismatchFallback:
+      'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
+    posAddWithoutOption: 'Add without option',
     posCouponPleaseEnterCode: 'Please enter a coupon code.',
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
@@ -22217,7 +22223,7 @@ orderItemQty: 'จำนวน',
     posKitchenSlipShowOrderMemoLabel: 'แสดงกล่องหมายเหตุออเดอร์',
     posKitchenSlipOptionGroupFilterLabel: 'กลุ่มตัวเลือกบนใบส่งครัว',
     posKitchenSlipOptionGroupFilterHint:
-      'เลือกกลุ่มตัวเลือกที่ลงทะเบียนแล้วว่าจะพิมพ์บนใบส่งครัวหรือไม่',
+      'แสดงกลุ่มตัวเลือกที่ลงทะเบียนทั้งหมด เลือกเปิดเฉพาะกลุ่มที่ต้องการพิมพ์บนใบส่งครัว',
     posKitchenSlipOptionGroupFilterEmpty: 'ยังไม่มีกลุ่มตัวเลือกที่ลงทะเบียน',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'ซ่อนการตั้งค่านี้เพราะยังไม่มีกลุ่มตัวเลือก กรุณาลงทะเบียนกลุ่มตัวเลือกก่อน',
