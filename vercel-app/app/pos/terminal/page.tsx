@@ -132,6 +132,8 @@ import {
   receiptModalDataFromPosOrderForPayment,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
+import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
@@ -785,6 +787,18 @@ export default function PosTerminalPage() {
   const posReceiptLineOpts: PosOrderReceiptLineOptions = useMemo(
     () => ({ promoCatalogById, menus }),
     [promoCatalogById, menus]
+  )
+  const grabCatalogForPrint = useMemo(
+    () =>
+      buildGrabPosCatalog(
+        menus.map((m) => ({ id: m.id, name: m.name, code: m.code })),
+        (menuOptionsForCodeMap.length > 0 ? menuOptionsForCodeMap : menuOptions).map((o) => ({
+          name: o.name,
+          optionCode: o.optionCode,
+        })),
+        promosWithItems
+      ),
+    [menus, menuOptions, menuOptionsForCodeMap, promosWithItems]
   )
   const enrichPromoItemsWithOptionName = useCallback(
     (list: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]) =>
@@ -2449,12 +2463,35 @@ export default function PosTerminalPage() {
   ) {
     if (posDemoRef.current) return
     const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
+    const mergedForReceipt = (() => {
+      const base = (payload.items || []) as Record<string, unknown>[]
+      const hasSetChild = base.some((it) => parseGrabSetChildLineName(String(it.name ?? '')))
+      return hasSetChild
+        ? mergeGrabSetChildLinesIntoPromoParents(base as Parameters<typeof mergeGrabSetChildLinesIntoPromoParents>[0], grabCatalogForPrint)
+        : base
+    })()
+    const enrichedForReceipt = enrichPosOrderLikeItemsWithPromoSnapshot(mergedForReceipt, posReceiptLineOpts)
+      .filter((it) => !(it as { grabSetChild?: boolean }).grabSetChild)
+      .map((it) => {
+        const promoItems = Array.isArray(it.promoItems)
+          ? enrichPromoItemsWithOptionName(
+              it.promoItems as {
+                menuId: string
+                optionId: string | null
+                optionCode?: string | null
+                quantity: number
+              }[]
+            )
+          : undefined
+        return {
+          ...it,
+          note: formatLineNoteForPrint(String(it.note ?? '')),
+          ...(promoItems ? { promoItems } : {}),
+        }
+      })
     const payloadForPrint = {
       ...payload,
-      items: (payload.items || []).map((it) => ({
-        ...it,
-        note: formatLineNoteForPrint(it.note),
-      })),
+      items: enrichedForReceipt,
     }
     let receiptHtml = buildPosHallOrderReceiptDocumentHtml({
       payload: payloadForPrint,

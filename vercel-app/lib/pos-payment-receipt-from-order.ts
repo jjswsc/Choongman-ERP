@@ -114,7 +114,7 @@ function pickPromoIdFromLinkedMenu(it: Record<string, unknown>, menus: PosMenu[]
   return null
 }
 
-function normalizePromoLookupText(v: unknown): string {
+export function normalizePromoLookupText(v: unknown): string {
   return String(v ?? '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
@@ -146,7 +146,12 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
     if (pname && key === pname) score = Math.max(score, 100)
     if (pcode && key === pcode) score = Math.max(score, 95)
     if (pname && key.includes(pname)) score = Math.max(score, 80)
+    if (pname && pname.includes(key) && key.length >= 3) score = Math.max(score, 82)
     if (pcode && key.includes(pcode)) score = Math.max(score, 75)
+    if (pcode && pcode.includes(key) && key.length >= 3) score = Math.max(score, 77)
+    if (pname && key.split(' ').filter((t) => t.length >= 2).every((t) => pname.includes(t))) {
+      score = Math.max(score, 78)
+    }
     if (score > 0) candidates.push({ id: pid, score })
   }
   if (candidates.length === 0) return null

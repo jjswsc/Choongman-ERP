@@ -153,8 +153,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const promoComposeLines =
         Array.isArray(it.promoItems) && it.promoItems.length > 0
-          ? it.promoItems.slice(0, 4).map((p) => {
+          ? it.promoItems.slice(0, 8).map((p) => {
               const menuName =
+                String((p as { menuName?: unknown }).menuName ?? '').trim() ||
                 (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : '') ||
                 `#${String(p.menuId)}`
               const optName = String((p as { optionName?: unknown }).optionName ?? '').trim()

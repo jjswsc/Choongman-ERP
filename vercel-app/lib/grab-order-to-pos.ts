@@ -14,6 +14,11 @@ import {
   resolveOptionCodesToLabels,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
+import {
+  mergeGrabSetChildLinesIntoPromoParents,
+  parseGrabSetChildLineName,
+  type GrabSetPosLine,
+} from '@/lib/grab-set-pos-lines'
 
 type GrabOrderPersistResult =
   | {
@@ -544,6 +549,25 @@ function getCodeLabelCaseInsensitive(optionNameByCode: Map<string, string>, code
   return ''
 }
 
+function resolveSizeLetterOptionLabel(
+  menuCode: string,
+  letter: string,
+  optionNameByCode: Map<string, string>
+): string {
+  const mc = String(menuCode || '').trim().toUpperCase()
+  const L = String(letter || '').trim().toUpperCase()
+  if (!mc || !/^[SML]$/.test(L)) return ''
+  for (const [code, label] of optionNameByCode.entries()) {
+    const c = String(code || '').trim().toUpperCase()
+    if (!c.startsWith(`${mc}-`)) continue
+    const lab = String(label || '').trim()
+    if (!lab) continue
+    if (new RegExp(`(^|[\\s\\-–—])${L}([\\s\\-–—]|$)`, 'i').test(lab)) return lab
+    if (new RegExp(`^size\\s+${L}\\b`, 'i').test(lab)) return lab
+  }
+  return ''
+}
+
 function normalizeModifierNamesForDisplay(params: {
   names: string[]
   menuCode: string
@@ -577,9 +601,51 @@ function normalizeModifierNamesForDisplay(params: {
       }
       continue
     }
+    const sizeOnly = /^size\s+([sml])\b/i.exec(token)
+    if (sizeOnly && menuCode) {
+      const label = resolveSizeLetterOptionLabel(menuCode, sizeOnly[1], params.optionNameByCode)
+      if (label) {
+        push(label)
+        continue
+      }
+    }
+    if (/^[SML]$/i.test(token) && menuCode) {
+      const label = resolveSizeLetterOptionLabel(menuCode, token, params.optionNameByCode)
+      if (label) {
+        push(label)
+        continue
+      }
+    }
     push(token)
   }
   return out
+}
+
+function resolveMenuCodeForGrabLine(params: {
+  resolvedMenuId?: string
+  menuRef: ReturnType<typeof parseGrabPartnerItemMenuRef>
+  itemName: string
+  catalog: Awaited<ReturnType<typeof loadGrabPosCatalog>>
+}): string {
+  const byResolvedId = Number(params.resolvedMenuId || 0)
+  if (byResolvedId > 0) {
+    const hit = params.catalog.menuById.get(byResolvedId)
+    const code = String(hit?.code ?? '').trim()
+    if (code) return code
+  }
+  const refCode = String(params.menuRef?.code ?? '').trim()
+  if (refCode) return refCode
+  const bracket = parseGrabSetChildLineName(params.itemName)
+  if (bracket) {
+    const key = bracket.childName.toLowerCase()
+    for (const menu of params.catalog.menuById.values()) {
+      if (String(menu.name || '').trim().toLowerCase() === key) {
+        return String(menu.code || '').trim()
+      }
+    }
+  }
+  const fromName = String(params.itemName || '').trim().match(/\b([A-Za-z]\d{2,})\b/)?.[1]
+  return String(fromName || '').trim()
 }
 
 async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]> {
@@ -668,18 +734,12 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     const optionCodes = Array.from(optionCodeSet)
     const itemBaseId = String(item.id ?? item.grabItemID ?? idx)
     const menuRef = parseGrabPartnerItemMenuRef(itemBaseId)
-    const resolvedMenuCode = (() => {
-      const byResolvedId = Number(resolved.menuId || 0)
-      if (byResolvedId > 0) {
-        const hit = catalog.menuById.get(byResolvedId)
-        const code = String(hit?.code ?? '').trim()
-        if (code) return code
-      }
-      const refCode = String(menuRef?.code ?? '').trim()
-      if (refCode) return refCode
-      const fromName = String(itemName || '').trim().match(/\b([A-Za-z]\d{2,})\b/)?.[1]
-      return String(fromName || '').trim()
-    })()
+    const resolvedMenuCode = resolveMenuCodeForGrabLine({
+      resolvedMenuId: resolved.menuId,
+      menuRef,
+      itemName,
+      catalog,
+    })
     const modifierNamesForNote = normalizeModifierNamesForDisplay({
       names: modifierNames,
       menuCode: resolvedMenuCode,
@@ -736,7 +796,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     idx += 1
   }
 
-  return out
+  return mergeGrabSetChildLinesIntoPromoParents(out as GrabSetPosLine[], catalog)
 }
 
 export async function buildGrabPosOrderSnapshot(
