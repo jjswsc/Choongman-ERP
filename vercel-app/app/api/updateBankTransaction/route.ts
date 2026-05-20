@@ -6,6 +6,7 @@ import {
   upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
+import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   extractExpenseAccrualPrefix,
   extractWithdrawalCategoryFromNote,
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
     const storeName = body.storeName ?? body.store_name
     const refType = body.refType ?? body.ref_type
     const refId = body.refId ?? body.ref_id
+    const withholdingTaxAmount = body.withholdingTaxAmount ?? body.withholding_tax_amount
+    const withholdingTaxRate = body.withholdingTaxRate ?? body.withholding_tax_rate
 
     if (!bankTxId || isNaN(bankTxId)) {
       return NextResponse.json({ success: false, message: '통장 거래 ID가 필요합니다.' }, { status: 400, headers })
@@ -127,12 +130,29 @@ export async function POST(request: NextRequest) {
       const rid = refId != null && refId !== '' && !isNaN(Number(refId)) ? Number(refId) : null
       patch.ref_id = rid != null && rid > 0 ? rid : null
     }
+    if (transType === 'deposit' && withholdingTaxAmount !== undefined) {
+      const wht = Math.max(0, Number(withholdingTaxAmount) || 0)
+      patch.withholding_tax_amount = wht > 0 ? wht : null
+    }
+    if (transType === 'deposit' && withholdingTaxRate !== undefined) {
+      const rate = Number(withholdingTaxRate)
+      patch.withholding_tax_rate =
+        Number.isFinite(rate) && rate > 0 ? rate : null
+    }
 
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ success: true, message: '변경 사항 없음' }, { headers })
     }
 
     await supabaseUpdate('bank_transactions', bankTxId, patch)
+
+    if (transType === 'deposit') {
+      try {
+        await syncTaxWithholdingLedgerForBankTransaction(bankTxId)
+      } catch (whtErr) {
+        console.warn('updateBankTransaction WHT sync:', whtErr)
+      }
+    }
 
     // 매출 수령(미수금) 연동: receivable_transactions 생성/삭제
     if (transType === 'deposit') {

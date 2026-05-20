@@ -4987,6 +4987,8 @@ export async function updateBankTransaction(params: {
   expenseDate?: string
   vendorCode?: string
   storeName?: string
+  withholdingTaxAmount?: number | null
+  withholdingTaxRate?: number | null
 }) {
   const res = await apiFetchWithOffline('/api/updateBankTransaction', {
     method: 'POST',

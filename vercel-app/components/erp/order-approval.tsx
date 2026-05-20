@@ -2,6 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Search,
   CalendarIcon,
@@ -33,6 +34,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isManagerRole, isOfficeRole } from "@/lib/permissions"
 import { useStoreList, getAdminOrders, getAppData, processOrderDecision, updateOrderDeliveryDates, type AdminOrderItem } from "@/lib/api-client"
 import { sanitizeCartLineRemarks } from "@/lib/outbound-order-line-match"
+import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { OrderApprovalDetailPanel } from "@/components/erp/order-approval-detail-panel"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
@@ -140,6 +142,9 @@ export function OrderApproval() {
   const isOffice = isOfficeRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
   const { stores: storeList } = useStoreList()
+  const searchParams = useSearchParams()
+  const plDrillNavReadyRef = React.useRef(false)
+  const plDrillAutoFetchRef = React.useRef(false)
   const [orders, setOrders] = React.useState<Order[]>([])
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
@@ -232,6 +237,24 @@ export function OrderApproval() {
       setLoading(false)
     }
   }, [startDate, endDate, effectiveStore, statusFilter, isManager, userStore, searchTerm, auth?.role])
+
+  React.useEffect(() => {
+    const nav = parsePurchaseDrillNav(searchParams)
+    if (!nav.fromPlDrill) return
+    if (nav.startStr) setStartDate(nav.startStr)
+    if (nav.endStr) setEndDate(nav.endStr)
+    if (nav.store && !(isManager && userStore)) setStoreFilter(nav.store)
+    if (nav.orderStatus === "approved") setStatusFilter("approved")
+    else if (nav.orderStatus) setStatusFilter(nav.orderStatus)
+    plDrillNavReadyRef.current = true
+  }, [searchParams, isManager, userStore])
+
+  React.useEffect(() => {
+    if (!plDrillNavReadyRef.current || plDrillAutoFetchRef.current) return
+    if (!startDate || !endDate) return
+    plDrillAutoFetchRef.current = true
+    void fetchOrders()
+  }, [startDate, endDate, fetchOrders])
 
   React.useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)

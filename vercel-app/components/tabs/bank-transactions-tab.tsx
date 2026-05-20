@@ -76,6 +76,7 @@ import {
   resetBankQuickMemosStorage,
   saveBankQuickMemos,
 } from "@/lib/bank-quick-memos"
+import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -183,6 +184,8 @@ export function BankTransactionsTab() {
     purchaseOrderId?: number
     vendorCode?: string
     storeName?: string
+    withholdingTaxAmount?: number
+    withholdingTaxRate?: number
     isLinked?: boolean
   }[]>([])
   const [summary, setSummary] = React.useState<{
@@ -227,6 +230,7 @@ export function BankTransactionsTab() {
   const [editingMemoRuleId, setEditingMemoRuleId] = React.useState<number | null>(null)
   const [filterTransType, setFilterTransType] = React.useState<string>("")
   const [filterCategory, setFilterCategory] = React.useState<string>("")
+  const [filterVendorCode, setFilterVendorCode] = React.useState<string>("")
   const [filterAccountSubjectId, setFilterAccountSubjectId] = React.useState<string>("")
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = React.useState(false)
   const [filterInvoiceNotReceived, setFilterInvoiceNotReceived] = React.useState(false)
@@ -242,6 +246,8 @@ export function BankTransactionsTab() {
     expenseDate: string
     vendorCode: string
     storeName: string
+    withholdingTaxAmount: string
+    withholdingTaxRate: string
   }>
   const [queryRowEdits, setQueryRowEdits] = React.useState<Record<number, QueryRowEdit>>({})
   const [queryVendorSearch, setQueryVendorSearch] = React.useState("")
@@ -355,6 +361,14 @@ export function BankTransactionsTab() {
       if (edits.expenseDate !== undefined) payload.expenseDate = edits.expenseDate || undefined
       if (edits.vendorCode !== undefined) payload.vendorCode = edits.vendorCode || undefined
       if (edits.storeName !== undefined) payload.storeName = edits.storeName === "__none__" ? "" : edits.storeName || undefined
+      if (r.transType === "deposit" && edits.withholdingTaxAmount !== undefined) {
+        const w = Math.max(0, Number(String(edits.withholdingTaxAmount).replace(/,/g, "")) || 0)
+        payload.withholdingTaxAmount = w > 0 ? w : null
+      }
+      if (r.transType === "deposit" && edits.withholdingTaxRate !== undefined) {
+        const rate = Number(String(edits.withholdingTaxRate).replace(/,/g, ""))
+        payload.withholdingTaxRate = Number.isFinite(rate) && rate > 0 ? rate : null
+      }
       if (String(r.category || "").toLowerCase() === "fixed" && payload.category === undefined) {
         payload.category = "expense"
       }
@@ -393,6 +407,20 @@ export function BankTransactionsTab() {
                   expenseDate: edits.expenseDate ?? x.expenseDate,
                   vendorCode: edits.vendorCode ?? x.vendorCode,
                   storeName: edits.storeName !== undefined ? (edits.storeName === "__none__" ? "" : edits.storeName) : x.storeName,
+                  withholdingTaxAmount:
+                    edits.withholdingTaxAmount !== undefined
+                      ? (() => {
+                          const w = Math.max(0, Number(String(edits.withholdingTaxAmount).replace(/,/g, "")) || 0)
+                          return w > 0 ? w : undefined
+                        })()
+                      : x.withholdingTaxAmount,
+                  withholdingTaxRate:
+                    edits.withholdingTaxRate !== undefined
+                      ? (() => {
+                          const rate = Number(String(edits.withholdingTaxRate).replace(/,/g, ""))
+                          return Number.isFinite(rate) && rate > 0 ? rate : undefined
+                        })()
+                      : x.withholdingTaxRate,
                 }
               : x
           )
@@ -466,6 +494,9 @@ export function BankTransactionsTab() {
     tabParam === "input" ? "input" : tabParam === "query" ? "query" : "input"
   )
   const urlParamsApplied = React.useRef(false)
+  const plDrillNavReadyRef = React.useRef(false)
+  const plDrillAutoFetchRef = React.useRef(false)
+  const plDrillStoreRef = React.useRef<string | undefined>(undefined)
   const restoreOpenRegisterTxIdRef = React.useRef<number | null>(
     openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0 ? Number(openRegisterTxIdParam) : null
   )
@@ -482,9 +513,21 @@ export function BankTransactionsTab() {
   }, [tabParam, openRegisterTxIdParam, router])
   React.useEffect(() => {
     if (urlParamsApplied.current) return
+    const nav = parsePurchaseDrillNav(searchParams)
     const aid = searchParams.get("accountId")
-    const start = searchParams.get("startStr")
-    const end = searchParams.get("endStr")
+    const start = nav.startStr ?? searchParams.get("startStr")
+    const end = nav.endStr ?? searchParams.get("endStr")
+    if (nav.fromPlDrill) {
+      if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) setStartStr(start)
+      if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) setEndStr(end)
+      if (nav.filterTransType) setFilterTransType(nav.filterTransType)
+      if (nav.filterCategory) setFilterCategory(nav.filterCategory)
+      if (nav.filterVendorCode) setFilterVendorCode(nav.filterVendorCode)
+      if (nav.store) plDrillStoreRef.current = nav.store
+      plDrillNavReadyRef.current = true
+      urlParamsApplied.current = true
+      return
+    }
     if (aid) {
       setAccountId(aid)
       urlParamsApplied.current = true
@@ -528,6 +571,14 @@ export function BankTransactionsTab() {
     }
   }, [accounts, accountId])
 
+  React.useEffect(() => {
+    const storeWant = plDrillStoreRef.current
+    if (!storeWant || !accounts.length) return
+    const q = storeWant.trim().toLowerCase()
+    const match = accounts.find((a) => String(a.store || "").trim().toLowerCase() === q)
+    if (match?.id) setAccountId(String(match.id))
+  }, [accounts])
+
   const loadData = React.useCallback((): Promise<void> => {
     if (!accountId) return Promise.resolve()
     setLoading(true)
@@ -547,6 +598,12 @@ export function BankTransactionsTab() {
       })
       .finally(() => setLoading(false))
   }, [accountId, startStr, endStr])
+
+  React.useEffect(() => {
+    if (!plDrillNavReadyRef.current || plDrillAutoFetchRef.current || !accountId) return
+    plDrillAutoFetchRef.current = true
+    void loadData()
+  }, [accountId, loadData])
 
   React.useEffect(() => {
     if (!restoreOpenRegisterTxIdRef.current || !accountId || restoreListLoadedRef.current) return
@@ -932,6 +989,7 @@ export function BankTransactionsTab() {
     return list.filter((r) => {
       if (filterTransType && r.transType !== filterTransType) return false
       if (filterCategory && r.category !== filterCategory) return false
+      if (filterVendorCode && String(r.vendorCode || "").trim() !== filterVendorCode) return false
       if (filterAccountSubjectId) {
         const subId = r.accountSubjectId ?? 0
         if (String(subId) !== filterAccountSubjectId) return false
@@ -1524,6 +1582,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "130px" }} />
                           <col style={{ width: "95px" }} />
                           <col style={{ width: "108px" }} />
+                          <col style={{ width: "76px" }} />
                           <col style={{ width: "150px" }} />
                           <col style={{ width: "40px" }} />
                           <col style={{ width: "180px" }} />
@@ -1537,6 +1596,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             <th className="p-2 text-center whitespace-nowrap">{t("bankCategoryLabel") || "용도"}</th>
                             <th className="p-2 text-center whitespace-nowrap">{t("accountSubject") || "계정과목"}</th>
                             <th className="p-2 text-right whitespace-nowrap">{t("pettyColAmount") || "금액"}</th>
+                            <th
+                              className="p-2 text-center whitespace-nowrap text-xs"
+                              title={t("bankDepositWhtHint")}
+                            >
+                              {t("bankDepositWhtAmount")}
+                            </th>
                             <th className="p-2 text-center whitespace-nowrap">{t("bankAttributedDate") || "인식일"}</th>
                             <th className="p-2 text-center whitespace-nowrap">{t("bankRegisterLabel") || "지출 등록"}</th>
                             <th className="p-2 text-center whitespace-nowrap" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</th>
@@ -1697,6 +1762,33 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               </td>
                               <td className={`p-2 align-middle text-right whitespace-nowrap tabular-nums ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
                                 {(r.amount ?? 0).toLocaleString()}
+                              </td>
+                              <td className="p-2 align-middle">
+                                {r.transType === "deposit" ? (
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="0"
+                                    title={t("bankDepositWhtHint")}
+                                    value={
+                                      edits?.withholdingTaxAmount ??
+                                      (r.withholdingTaxAmount != null && r.withholdingTaxAmount > 0
+                                        ? String(r.withholdingTaxAmount)
+                                        : "")
+                                    }
+                                    onChange={(e) =>
+                                      r.id &&
+                                      setQueryRowEdit(
+                                        r.id,
+                                        "withholdingTaxAmount",
+                                        e.target.value.replace(/[^\d.,]/g, "")
+                                      )
+                                    }
+                                    className="h-8 w-[72px] text-xs tabular-nums mx-auto"
+                                  />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
                               </td>
                               <td className="p-2">
                                 {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (

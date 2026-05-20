@@ -176,12 +176,17 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     () => computePurchaseOrderMoneyTotals(cart),
     [cart]
   )
-  /** 로열티·회계 PO: 공급가액(과세 전) 기준 3% 원천징수(태국 관행에 맞춤 조정 가능) */
-  const [applyWithholding3Pct, setApplyWithholding3Pct] = React.useState(false)
+  /** 로열티·회계 PO: 공급가액(과세 전) 기준 원천징수(기본 3%) */
+  const [applyWithholding, setApplyWithholding] = React.useState(false)
+  const [poWhtRatePct, setPoWhtRatePct] = React.useState("3")
+  const poWhtRateNum = React.useMemo(() => {
+    const n = Number(String(poWhtRatePct).replace(/,/g, ""))
+    return Number.isFinite(n) && n > 0 && n <= 100 ? n : 0
+  }, [poWhtRatePct])
   const withholdingTaxAmount = React.useMemo(() => {
-    if (!allowManualLines || !applyWithholding3Pct) return 0
-    return Math.round(subtotal * 0.03 * 100) / 100
-  }, [allowManualLines, applyWithholding3Pct, subtotal])
+    if (!allowManualLines || !applyWithholding || poWhtRateNum <= 0 || subtotal <= 0) return 0
+    return Math.round(subtotal * (poWhtRateNum / 100) * 100) / 100
+  }, [allowManualLines, applyWithholding, poWhtRateNum, subtotal])
   /** 본사(회계) 발주일 — 방콕 달력 YYYY-MM-DD */
   const [poOrderDate, setPoOrderDate] = React.useState(todayStrBangkok)
   const [poReferenceNo, setPoReferenceNo] = React.useState("")
@@ -585,7 +590,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         if (!res.success || !res.lines?.length) continue
         const draftSub = res.lines.reduce((s, ln) => s + Number(ln.price || 0) * Number(ln.qty || 0), 0)
         const whtAmt =
-          applyWithholding3Pct && draftSub > 0 ? Math.round(draftSub * 0.03 * 100) / 100 : 0
+          applyWithholding && poWhtRateNum > 0 && draftSub > 0
+            ? Math.round(draftSub * (poWhtRateNum / 100) * 100) / 100
+            : 0
         const vendorForStore = vendorForSalesOutletStore(vendors, store) ?? vendorSelect
         const saveRes = await savePurchaseOrder({
           vendorCode: vendorForStore.code,
@@ -605,7 +612,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
           billingMonthYm: ym,
           billingKind: mode,
           orderDate: poOrderDate || undefined,
-          ...(whtAmt > 0 ? { withholdingTaxAmount: whtAmt, withholdingTaxRate: 3 } : {}),
+          ...(whtAmt > 0 ? { withholdingTaxAmount: whtAmt, withholdingTaxRate: poWhtRateNum } : {}),
         })
         if (saveRes.success) {
           if (saveRes.updated) updated += 1
@@ -705,7 +712,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         orderDate: allowManualLines && poOrderDate ? poOrderDate : undefined,
         referenceNo: poReferenceNo.trim() || undefined,
         ...(allowManualLines && withholdingTaxAmount > 0
-          ? { withholdingTaxAmount, withholdingTaxRate: 3 }
+          ? { withholdingTaxAmount, withholdingTaxRate: poWhtRateNum }
           : {}),
         ...(poQuotation
           ? { quotationFileUrl: poQuotation.url, quotationFileName: poQuotation.name }
@@ -1500,19 +1507,41 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 </div>
                 {allowManualLines ? (
                   <div className="space-y-2 border-t border-border/50 pt-2">
-                    <Button
-                      type="button"
-                      variant={applyWithholding3Pct ? "secondary" : "outline"}
-                      size="sm"
-                      className="h-8 w-full text-xs"
-                      onClick={() => setApplyWithholding3Pct((v) => !v)}
-                    >
-                      {applyWithholding3Pct ? t("poWht3Remove") : t("poWht3Apply")}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant={applyWithholding ? "secondary" : "outline"}
+                        size="sm"
+                        className="h-8 text-xs shrink-0"
+                        onClick={() => setApplyWithholding((v) => !v)}
+                      >
+                        {applyWithholding ? t("poWht3Remove") : t("poWht3Apply")}
+                      </Button>
+                      {applyWithholding ? (
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-muted-foreground">{t("poWhtRateLabel")}</span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="h-8 w-14 text-xs tabular-nums"
+                            value={poWhtRatePct}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^\d.]/g, "")
+                              setPoWhtRatePct(v)
+                            }}
+                          />
+                          <span className="text-muted-foreground">%</span>
+                        </div>
+                      ) : null}
+                    </div>
                     {withholdingTaxAmount > 0 ? (
                       <>
                         <div className="flex justify-between text-rose-700 dark:text-rose-400">
-                          <span>{t("poWht3LineLabel")}</span>
+                          <span>
+                            {poWhtRateNum > 0
+                              ? `${t("poWht3LineLabel")} (${poWhtRateNum}%)`
+                              : t("poWht3LineLabel")}
+                          </span>
                           <span className="tabular-nums">−{formatMoneyComma(withholdingTaxAmount)}</span>
                         </div>
                         <div className="flex justify-between text-xs text-muted-foreground">

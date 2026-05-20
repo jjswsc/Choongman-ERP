@@ -176,6 +176,8 @@ type WhtDraft = {
   submitted_by: string
   memo: string
   store_name: string
+  direction: "inbound" | "outbound"
+  source_type: string
 }
 
 type Pp36Draft = {
@@ -350,6 +352,8 @@ function emptyWht(taxMonth: string, defaultStoreName: string): WhtDraft {
     submitted_by: "",
     memo: "",
     store_name: defaultStoreName,
+    direction: "outbound",
+    source_type: "manual",
   }
 }
 
@@ -1377,6 +1381,8 @@ export function AdminAccountingCompliance({
         submitted_by: String(r.submitted_by || ""),
         memo: String(r.memo || ""),
         store_name: String(r.store_name || ""),
+        direction: String(r.direction || "").toLowerCase() === "inbound" ? "inbound" : "outbound",
+        source_type: String(r.source_type || ""),
       })),
     [taxMonth]
   )
@@ -2751,6 +2757,8 @@ export function AdminAccountingCompliance({
         submittedBy: row.submitted_by || null,
         memo: row.memo || null,
         storeName: row.store_name?.trim() ? row.store_name.trim() : null,
+        direction: row.direction,
+        sourceType: row.source_type || "manual",
         createdBy: auth?.user,
       })
       if (!res.success) {
@@ -6912,6 +6920,18 @@ export function AdminAccountingCompliance({
                               )
                             }
                           />
+                          <div className="flex flex-col gap-0.5 text-[10px] text-muted-foreground justify-center">
+                            <span>
+                              {row.direction === "inbound"
+                                ? t("whtDirectionInbound")
+                                : t("whtDirectionOutbound")}
+                            </span>
+                            {row.source_type ? (
+                              <span className="truncate" title={row.source_type}>
+                                {row.source_type}
+                              </span>
+                            ) : null}
+                          </div>
                           <Input
                             placeholder={t("accCompPhPayeeTin")}
                             value={row.payee_tax_id}

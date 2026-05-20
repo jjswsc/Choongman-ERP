@@ -4,6 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { ArrowUpFromLine, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +41,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import {
   getAdminItems,
   getAdminVendors,
@@ -259,6 +261,9 @@ export default function OutboundPage() {
   )
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice" | "summary">("hist")
+  const searchParams = useSearchParams()
+  const plDrillNavAppliedRef = React.useRef(false)
+  const plDrillAutoFetchRef = React.useRef(false)
 
   React.useEffect(() => {
     const today = getBangkokTodayDateString()
@@ -266,10 +271,27 @@ export default function OutboundPage() {
   }, [])
 
   React.useEffect(() => {
+    const nav = parsePurchaseDrillNav(searchParams)
+    if (nav.fromPlDrill) {
+      if (nav.startStr) setHistStart(nav.startStr)
+      if (nav.endStr) setHistEnd(nav.endStr)
+      if (nav.yearMonth) {
+        setHistMonth(nav.yearMonth)
+      } else if (nav.startStr && nav.endStr) {
+        setHistMonth("")
+      }
+      if (nav.store) {
+        setHistTargetType("store")
+        setHistStore(nav.store)
+      }
+      if (searchParams.get("tab") === "hist") setTabValue("hist")
+      plDrillNavAppliedRef.current = true
+      return
+    }
     const today = getBangkokTodayDateString()
     setHistStart(today)
     setHistEnd(today)
-  }, [])
+  }, [searchParams])
 
   React.useEffect(() => {
     const today = getBangkokTodayDateString()
@@ -807,6 +829,13 @@ export default function OutboundPage() {
       setHistoryLoading(false)
     }
   }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store])
+
+  React.useEffect(() => {
+    if (!plDrillNavAppliedRef.current || plDrillAutoFetchRef.current) return
+    if (!histStart || !histEnd) return
+    plDrillAutoFetchRef.current = true
+    void fetchHistory()
+  }, [histStart, histEnd, fetchHistory])
 
   const fetchSummaryHistory = React.useCallback(async () => {
     let s = histStart

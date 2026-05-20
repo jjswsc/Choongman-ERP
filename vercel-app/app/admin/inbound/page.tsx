@@ -5,6 +5,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
+import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { ArrowDownToLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -793,6 +794,20 @@ export default function InboundPage() {
   const [filtersHydrated, setFiltersHydrated] = React.useState(false)
 
   React.useEffect(() => {
+    const plNav = parsePurchaseDrillNav(searchParams)
+    if (plNav.fromPlDrill) {
+      if (plNav.startStr) setHistStart(plNav.startStr)
+      if (plNav.endStr) setHistEnd(plNav.endStr)
+      if (plNav.yearMonth) setHistMonth(plNav.yearMonth)
+      if (plNav.vendorLabel) {
+        setHistVendor(plNav.vendorLabel)
+        setHistVendorSearch(plNav.vendorLabel)
+      }
+      if (plNav.store) setHistStore(plNav.store)
+      if (searchParams.get("tab") === "hist") setTabValue("hist")
+      setFiltersHydrated(true)
+      return
+    }
     try {
       const histRaw = sessionStorage.getItem("inbound:hist-filters:v1")
       if (histRaw) {
@@ -852,7 +867,7 @@ export default function InboundPage() {
       }
     } catch {}
     setFiltersHydrated(true)
-  }, [])
+  }, [searchParams])
 
   React.useEffect(() => {
     if (!filtersHydrated) return

@@ -6,6 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -38,6 +46,7 @@ import {
   FileCheck,
   FileText,
   Paperclip,
+  Percent,
 } from "lucide-react"
 import {
   isPoApprovedStatus,
@@ -80,6 +89,10 @@ export function AdminPurchaseOrderHistory() {
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
   const [cancellingId, setCancellingId] = React.useState<number | null>(null)
   const [taxInvoiceToggleId, setTaxInvoiceToggleId] = React.useState<number | null>(null)
+  const [whtEditPo, setWhtEditPo] = React.useState<PurchaseOrderRow | null>(null)
+  const [whtEditAmount, setWhtEditAmount] = React.useState("")
+  const [whtEditRate, setWhtEditRate] = React.useState("")
+  const [whtEditSaving, setWhtEditSaving] = React.useState(false)
   const [vendors, setVendors] = React.useState<
     { code: string; name: string; address?: string; taxId?: string; phone?: string; salesOutlet?: string | null; gpsName?: string | null }[]
   >([])
@@ -220,6 +233,39 @@ export function AdminPurchaseOrderHistory() {
     },
     [load, t]
   )
+
+  const openWhtEdit = React.useCallback((po: PurchaseOrderRow) => {
+    setWhtEditPo(po)
+    const amt = Number(po.withholding_tax_amount) || 0
+    const rate = Number(po.withholding_tax_rate) || 0
+    setWhtEditAmount(amt > 0 ? String(amt) : "")
+    setWhtEditRate(rate > 0 ? String(rate) : "3")
+  }, [])
+
+  const handleSaveWhtEdit = React.useCallback(async () => {
+    const po = whtEditPo
+    if (!po?.id) return
+    const amt = Math.max(0, Number(String(whtEditAmount).replace(/,/g, "")) || 0)
+    const rate = Math.max(0, Number(String(whtEditRate).replace(/,/g, "")) || 0)
+    setWhtEditSaving(true)
+    try {
+      const res = await updatePurchaseOrderInvoice({
+        poId: po.id,
+        withholdingTaxAmount: amt,
+        withholdingTaxRate: rate > 0 ? rate : undefined,
+      })
+      if (res.success) {
+        setWhtEditPo(null)
+        load()
+      } else {
+        await appAlert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
+      }
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setWhtEditSaving(false)
+    }
+  }, [whtEditPo, whtEditAmount, whtEditRate, load, t])
 
   const handleToggleAccountingTaxInvoice = React.useCallback(
     async (po: PurchaseOrderRow) => {
@@ -474,6 +520,7 @@ ${allRows.map((row, ri) => {
   }
 
   return (
+    <>
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -651,19 +698,34 @@ ${allRows.map((row, ri) => {
                             </Link>
                           )}
                           {isAcct && isPoApprovedStatus(po.status) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={`h-8 w-8 hover:bg-primary/10 ${
-                                po.invoice_received ? "text-green-600" : "text-muted-foreground"
-                              }`}
-                              title={t("poAccountingTaxInvoiceToggleTitle")}
-                              aria-pressed={po.invoice_received === true}
-                              onClick={() => void handleToggleAccountingTaxInvoice(po)}
-                              disabled={taxInvoiceToggleId === po.id}
-                            >
-                              <FileCheck className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-8 w-8 hover:bg-primary/10 ${
+                                  Number(po.withholding_tax_amount) > 0
+                                    ? "text-rose-600"
+                                    : "text-muted-foreground"
+                                }`}
+                                title={t("poWhtEditTitle")}
+                                onClick={() => openWhtEdit(po)}
+                              >
+                                <Percent className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-8 w-8 hover:bg-primary/10 ${
+                                  po.invoice_received ? "text-green-600" : "text-muted-foreground"
+                                }`}
+                                title={t("poAccountingTaxInvoiceToggleTitle")}
+                                aria-pressed={po.invoice_received === true}
+                                onClick={() => void handleToggleAccountingTaxInvoice(po)}
+                                disabled={taxInvoiceToggleId === po.id}
+                              >
+                                <FileCheck className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                           {!isPoApprovedStatus(po.status) && (
                             <Button
@@ -718,6 +780,41 @@ ${allRows.map((row, ri) => {
         )}
       </CardContent>
     </Card>
+    <Dialog open={!!whtEditPo} onOpenChange={(open) => !open && setWhtEditPo(null)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("poWhtEditTitle")}</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">{t("poWhtEditHint")}</p>
+        <div className="grid gap-3 py-2">
+          <div className="space-y-1">
+            <Label className="text-xs">{t("poWhtAmountLabel")}</Label>
+            <Input
+              value={whtEditAmount}
+              onChange={(e) => setWhtEditAmount(e.target.value.replace(/[^\d.,]/g, ""))}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t("poWhtRateLabel")} (%)</Label>
+            <Input
+              value={whtEditRate}
+              onChange={(e) => setWhtEditRate(e.target.value.replace(/[^\d.]/g, ""))}
+              className="h-9 w-24"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setWhtEditPo(null)} disabled={whtEditSaving}>
+            {t("cancel")}
+          </Button>
+          <Button onClick={() => void handleSaveWhtEdit()} disabled={whtEditSaving}>
+            {whtEditSaving ? t("loading") : t("save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
 

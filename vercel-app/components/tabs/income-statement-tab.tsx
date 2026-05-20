@@ -58,6 +58,10 @@ import {
   type IncomeStatementXlsxRow,
 } from "@/lib/income-statement-export"
 import { formatBahtInteger as formatBath, roundFinancialAmount } from "@/lib/financial-amount-format"
+import {
+  buildPurchaseDrillAdminHref,
+  purchaseDrillNavContextFromDrill,
+} from "@/lib/income-statement-purchase-drill-nav"
 
 function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
   if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사 창고 출고(매입)'
@@ -264,6 +268,11 @@ function IncomePurchaseDrillDialog({
   purchaseDrillData: IncomeStatementPurchaseDrillDown | null
   t: (k: string) => string
 }) {
+  const drillNavCtx =
+    purchaseDrillData && !purchaseDrillData.error
+      ? purchaseDrillNavContextFromDrill(purchaseDrillData, purchaseDrillTitle)
+      : null
+
   return (
     <Dialog
       open={open}
@@ -308,7 +317,11 @@ function IncomePurchaseDrillDialog({
             )}
             <div className="flex flex-wrap gap-3 text-xs">
               <Link
-                href="/admin/outbound"
+                href={
+                  drillNavCtx
+                    ? buildPurchaseDrillAdminHref("/admin/outbound", drillNavCtx, "outbound")
+                    : "/admin/outbound"
+                }
                 className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
               >
                 <ExternalLink className="h-3 w-3" />
@@ -322,14 +335,22 @@ function IncomePurchaseDrillDialog({
                 {t("pL_purchaseDrillLinkOrders")}
               </Link>
               <Link
-                href="/admin/bank-transactions"
+                href={
+                  drillNavCtx
+                    ? buildPurchaseDrillAdminHref("/admin/bank-transactions", drillNavCtx, "bank")
+                    : "/admin/bank-transactions"
+                }
                 className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
               >
                 <ExternalLink className="h-3 w-3" />
                 {t("pL_purchaseDrillLinkBank")}
               </Link>
               <Link
-                href="/admin/inbound"
+                href={
+                  drillNavCtx
+                    ? buildPurchaseDrillAdminHref("/admin/inbound", drillNavCtx, "inbound")
+                    : "/admin/inbound"
+                }
                 className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
               >
                 <ExternalLink className="h-3 w-3" />

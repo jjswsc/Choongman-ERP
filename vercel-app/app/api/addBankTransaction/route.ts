@@ -10,6 +10,7 @@ import {
   upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
+import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -113,6 +114,8 @@ export async function POST(request: NextRequest) {
     }
     const refType = body.refType ?? body.ref_type
     const refId = body.refId ?? body.ref_id
+    const withholdingTaxAmount = body.withholdingTaxAmount ?? body.withholding_tax_amount
+    const withholdingTaxRate = body.withholdingTaxRate ?? body.withholding_tax_rate
 
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
@@ -170,6 +173,14 @@ export async function POST(request: NextRequest) {
     if (validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
     if (refType) row.ref_type = refType
     if (refId != null && !isNaN(Number(refId))) row.ref_id = Number(refId)
+    if (transType === 'deposit' && withholdingTaxAmount !== undefined) {
+      const wht = Math.max(0, Number(withholdingTaxAmount) || 0)
+      row.withholding_tax_amount = wht > 0 ? wht : null
+    }
+    if (transType === 'deposit' && withholdingTaxRate !== undefined) {
+      const rate = Number(withholdingTaxRate)
+      row.withholding_tax_rate = Number.isFinite(rate) && rate > 0 ? rate : null
+    }
 
     let inserted: { id?: number }[] = []
     try {
@@ -197,6 +208,14 @@ export async function POST(request: NextRequest) {
         transDate,
         memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
       })
+    }
+
+    if (bankId && transType === 'deposit') {
+      try {
+        await syncTaxWithholdingLedgerForBankTransaction(bankId)
+      } catch (whtErr) {
+        console.warn('addBankTransaction WHT sync:', whtErr)
+      }
     }
 
     const journalAccountSubjectId =

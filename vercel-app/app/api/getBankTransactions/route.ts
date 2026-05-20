@@ -69,6 +69,8 @@ export async function GET(request: NextRequest) {
       invoice_no?: string
       invoice_photo_url?: string
       purchase_order_id?: number
+      withholding_tax_amount?: number | null
+      withholding_tax_rate?: number | null
     }[]
 
     const linkedIds = new Set<number>()
@@ -103,6 +105,14 @@ export async function GET(request: NextRequest) {
       invoiceNo: r.invoice_no ? String(r.invoice_no).trim() : undefined,
       invoicePhotoUrl: r.invoice_photo_url ? String(r.invoice_photo_url).trim() : undefined,
       purchaseOrderId: r.purchase_order_id ?? undefined,
+      withholdingTaxAmount:
+        r.withholding_tax_amount != null && Number(r.withholding_tax_amount) > 0
+          ? Number(r.withholding_tax_amount)
+          : undefined,
+      withholdingTaxRate:
+        r.withholding_tax_rate != null && Number(r.withholding_tax_rate) > 0
+          ? Number(r.withholding_tax_rate)
+          : undefined,
       isLinked: linkedIds.has(Number(r.id || 0)),
     }))
 

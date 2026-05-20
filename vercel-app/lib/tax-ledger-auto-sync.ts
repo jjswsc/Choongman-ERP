@@ -13,7 +13,17 @@ import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
-import { parsePurchaseOrderCart, purchaseOrderMetaOrderDate } from '@/lib/purchase-order-cart'
+import {
+  isAccountingPurchaseOrderByCartJson,
+  parsePurchaseOrderCart,
+  purchaseOrderMetaOrderDate,
+} from '@/lib/purchase-order-cart'
+import {
+  deleteAutoWithholdingTaxLedgerEntries,
+  loadAutoWhtLedgerIndex,
+  upsertAutoWithholdingTaxLedgerEntry,
+  type WhtLedgerAutoSaveRow,
+} from '@/lib/withholding-tax-ledger-core'
 import {
   mergeEvidenceIntoVatLedgerRow,
   probeVatLedgerEvidenceColumns,
@@ -752,25 +762,12 @@ export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
     if (tin) vendorTinByCode.set(code, tin)
   }
 
-  const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
-  const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:PURCHASE_ORDER_WHT:%')}`
-  const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
-  const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
-    select: 'id,memo,filing_status',
-    order: 'id.asc',
-    pageSize: 3000,
-    maxRows: 30000,
-  })) as ExistingAutoRow[]
-  const existingByPoId = new Map<number, { id: number; filingStatus: string }>()
-  for (const row of existingAutoRows || []) {
-    const id = Math.floor(Number(row.id) || 0)
-    const poId = parsePurchaseOrderIdFromMemo(String(row.memo || ''))
-    if (id <= 0 || poId <= 0) continue
-    existingByPoId.set(poId, {
-      id,
-      filingStatus: String(row.filing_status || '').trim().toLowerCase(),
-    })
-  }
+  const existingByPoId = await loadAutoWhtLedgerIndex({
+    months: validMonths,
+    memoTagPrefix: 'PURCHASE_ORDER_WHT',
+    storeFilter,
+    appendStoreFilter: appendStoreNameFilter,
+  })
 
   let upserted = 0
   const seenPoIds = new Set<number>()
@@ -806,69 +803,53 @@ export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
           ? round2((whtAmount / grossBase) * 100)
           : null
 
+    const isAccountingPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const vendorCode = String(po.vendor_code || '').trim()
     const payeeTaxId = vendorCode ? vendorTinByCode.get(vendorCode) || null : null
     const payeeName = String(po.vendor_name || vendorCode || `PO-${poId}`).trim()
     const poNo = String(po.po_no || '').trim()
     const memoTag = `[AUTO:PURCHASE_ORDER_WHT:${poId}]`
-    const saveRow = {
+    const saveRow: WhtLedgerAutoSaveRow = {
       payment_date: docDate,
       tax_month: taxMonth,
       payee_name: payeeName.slice(0, 500),
       payee_tax_id: payeeTaxId,
-      income_type: '서비스',
+      income_type: isAccountingPo ? '로열티·용역 수입' : '서비스',
       gross_amount: grossBase > 0 ? grossBase : total,
       wht_rate: whtRate,
       wht_amount: whtAmount,
-      form_hint: resolveWhtFormHint({ incomeType: '서비스', payeeName }),
+      form_hint: resolveWhtFormHint({
+        incomeType: isAccountingPo ? '로열티' : '서비스',
+        payeeName,
+      }),
       certificate_no: (poNo ? `PO-${poNo}` : `PO-${poId}`).slice(0, 128),
-      memo: `${memoTag} 발주 원천세 자동`.slice(0, 2000),
+      memo: `${memoTag} ${isAccountingPo ? '발주(수입) 원천세 자동' : '발주(매입) 원천세 자동'}`.slice(
+        0,
+        2000
+      ),
       filing_status: 'draft',
       submitted_at: null,
       submitted_by: null,
       store_name: taxStoreName,
       updated_at: new Date().toISOString(),
+      direction: isAccountingPo ? 'inbound' : 'outbound',
+      source_type: 'purchase_order',
+      source_id: poId,
     }
 
-    const existing = existingByPoId.get(poId)
-    if (existing?.id && existing.filingStatus === 'submitted') {
-      seenPoIds.add(poId)
-      continue
-    }
-    if (existing?.id) {
-      try {
-        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, saveRow)
-      } catch (e) {
-        if (!isMissingSubmissionColumnError(e)) throw e
-        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, stripSubmissionAuditFields(saveRow))
-      }
-      upserted += 1
-      seenPoIds.add(poId)
-      continue
-    }
-
-    const insertRow = {
-      ...saveRow,
-      created_by: 'system',
-      created_at: new Date().toISOString(),
-    }
-    try {
-      await supabaseInsert('withholding_tax_ledger_entries', insertRow)
-    } catch (e) {
-      if (!isMissingSubmissionColumnError(e)) throw e
-      await supabaseInsert('withholding_tax_ledger_entries', stripSubmissionAuditFields(insertRow))
-    }
-    upserted += 1
+    const did = await upsertAutoWithholdingTaxLedgerEntry({
+      sourceKey: poId,
+      existingBySource: existingByPoId,
+      saveRow,
+    })
+    if (did) upserted += 1
     seenPoIds.add(poId)
   }
 
-  let deleted = 0
-  for (const [poId, ex] of existingByPoId.entries()) {
-    if (seenPoIds.has(poId)) continue
-    if (ex.filingStatus === 'submitted') continue
-    await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
-    deleted += 1
-  }
+  const deleted = await deleteAutoWithholdingTaxLedgerEntries({
+    existingBySource: existingByPoId,
+    seenSourceKeys: seenPoIds,
+  })
 
   return { upserted, deleted }
 }
@@ -1068,5 +1049,163 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
   }
 
   return { upserted, deleted }
+}
+
+type BankDepositWhtRow = {
+  id?: number
+  trans_type?: string | null
+  trans_date?: string | null
+  amount?: number | null
+  category?: string | null
+  store_name?: string | null
+  memo?: string | null
+  ref_type?: string | null
+  ref_id?: number | null
+  withholding_tax_amount?: number | null
+  withholding_tax_rate?: number | null
+}
+
+/** 통장 입금: 상대가 원천징수한 금액 → inbound 원장 (AccountingPO 연동 입금은 PO 원장 우선) */
+export async function syncTaxWithholdingLedgersFromBankDeposits(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ upserted: number; deleted: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
+
+  const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const startYmd = monthStartYmd(validMonths[0])
+  const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
+  const btFilter = [
+    `trans_type=eq.deposit`,
+    `trans_date=gte.${encodeURIComponent(startYmd)}`,
+    `trans_date=lte.${encodeURIComponent(endYmd)}`,
+    'withholding_tax_amount=gt.0',
+  ]
+  if (storeFilter) btFilter.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
+
+  let bankRows: BankDepositWhtRow[] = []
+  try {
+    bankRows = (await supabaseSelectFilterAllPages('bank_transactions', btFilter.join('&'), {
+      select:
+        'id,trans_type,trans_date,amount,category,store_name,memo,ref_type,ref_id,withholding_tax_amount,withholding_tax_rate',
+      order: 'id.asc',
+      pageSize: 3000,
+      maxRows: 50000,
+    })) as BankDepositWhtRow[]
+  } catch (e) {
+    const msg = String(e || '').toLowerCase()
+    if (!msg.includes('withholding_tax_amount')) return { upserted: 0, deleted: 0 }
+    throw e
+  }
+
+  const existingByBankId = await loadAutoWhtLedgerIndex({
+    months: validMonths,
+    memoTagPrefix: 'BANK_DEPOSIT_WHT',
+    storeFilter,
+    appendStoreFilter: appendStoreNameFilter,
+  })
+
+  let upserted = 0
+  const seenBankIds = new Set<number>()
+  for (const bt of bankRows || []) {
+    const bankId = Math.floor(Number(bt.id) || 0)
+    if (bankId <= 0) continue
+
+    const refType = String(bt.ref_type || '').trim()
+    const refId = Math.floor(Number(bt.ref_id) || 0)
+    if (refType === 'AccountingPO' && refId > 0) {
+      seenBankIds.add(bankId)
+      continue
+    }
+
+    const whtAmount = round2(Math.max(0, Math.abs(Number(bt.withholding_tax_amount) || 0)))
+    if (whtAmount <= 0) continue
+
+    const transDate = String(bt.trans_date || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) continue
+    const taxMonth = transDate.slice(0, 7)
+    if (!validMonths.includes(taxMonth)) continue
+
+    const netDeposit = round2(Math.max(0, Math.abs(Number(bt.amount) || 0)))
+    const gross = round2(netDeposit + whtAmount)
+    const rawRate = Number(bt.withholding_tax_rate)
+    const whtRate =
+      Number.isFinite(rawRate) && rawRate > 0
+        ? round2(rawRate)
+        : gross > 0
+          ? round2((whtAmount / gross) * 100)
+          : null
+
+    const storeName = String(bt.store_name || '').trim() || null
+    if (storeFilter && storeName && !storesMatchForGradeLookup(storeName, storeFilter)) continue
+
+    const payeeName = storeName || '입금'
+    const memoTag = `[AUTO:BANK_DEPOSIT_WHT:${bankId}]`
+    const saveRow: WhtLedgerAutoSaveRow = {
+      payment_date: transDate,
+      tax_month: taxMonth,
+      payee_name: payeeName.slice(0, 500),
+      payee_tax_id: null,
+      income_type: '서비스 수입',
+      gross_amount: gross > 0 ? gross : netDeposit,
+      wht_rate: whtRate,
+      wht_amount: whtAmount,
+      form_hint: resolveWhtFormHint({ incomeType: '서비스', payeeName }),
+      certificate_no: `BT-${bankId}`.slice(0, 128),
+      memo: `${memoTag} 통장 입금(수입) 원천세 자동`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: storeName,
+      updated_at: new Date().toISOString(),
+      direction: 'inbound',
+      source_type: 'bank_transaction',
+      source_id: bankId,
+    }
+
+    const did = await upsertAutoWithholdingTaxLedgerEntry({
+      sourceKey: bankId,
+      existingBySource: existingByBankId,
+      saveRow,
+    })
+    if (did) upserted += 1
+    seenBankIds.add(bankId)
+  }
+
+  const deleted = await deleteAutoWithholdingTaxLedgerEntries({
+    existingBySource: existingByBankId,
+    seenSourceKeys: seenBankIds,
+  })
+
+  return { upserted, deleted }
+}
+
+export async function syncTaxWithholdingLedgerForBankTransaction(bankTransactionId: number): Promise<void> {
+  const id = Math.floor(Number(bankTransactionId) || 0)
+  if (id <= 0) return
+  let rows: BankDepositWhtRow[] = []
+  try {
+    rows = (await supabaseSelectFilter('bank_transactions', `id=eq.${id}`, {
+      select: 'id,trans_type,trans_date,withholding_tax_amount',
+      limit: 1,
+    })) as BankDepositWhtRow[]
+  } catch {
+    return
+  }
+  const bt = rows?.[0]
+  if (!bt?.id) return
+  const transDate = String(bt.trans_date || '').slice(0, 10)
+  const month = /^\d{4}-\d{2}-\d{2}$/.test(transDate) ? transDate.slice(0, 7) : ''
+  if (!month) return
+  const wht = Math.max(0, Number(bt.withholding_tax_amount) || 0)
+  if (wht <= 0) {
+    const { deleteAutoWhtBySource } = await import('@/lib/withholding-tax-ledger-core')
+    await deleteAutoWhtBySource('bank_transaction', id)
+    return
+  }
+  await syncTaxWithholdingLedgersFromBankDeposits({ months: [month] })
 }
 

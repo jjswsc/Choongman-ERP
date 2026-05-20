@@ -23,37 +23,29 @@ export async function GET(request: NextRequest) {
     const linkedOptions: ReturnType<typeof buildMenuOptionsFromLinks> = []
     const linkedMenuIds = new Set<number>()
     const menuCodeById = new Map<number, string>()
+    const groupsById = new Map<number, PosOptionGroupRow>()
+    let itemsByGroupId: Awaited<ReturnType<typeof loadPosOptionGroupsWithItems>>['itemsByGroupId'] =
+      new Map()
+    const linksByMenuId = new Map<number, Awaited<ReturnType<typeof loadMenuGroupLinks>>>()
     try {
-      const [{ groups, itemsByGroupId }, links] = await Promise.all([
+      const [{ groups, itemsByGroupId: loadedItemsByGroupId }, links] = await Promise.all([
         loadPosOptionGroupsWithItems(),
         loadMenuGroupLinks(
           menuId && Number.isFinite(Number(menuId)) ? Number(menuId) : undefined
         ),
       ])
-      const groupsById = new Map<number, PosOptionGroupRow>()
+      itemsByGroupId = loadedItemsByGroupId
       for (const g of groups || []) {
         const id = Number(g.id || 0)
         if (!id) continue
         groupsById.set(id, g)
       }
-      const linksByMenuId = new Map<number, typeof links>()
       for (const link of links || []) {
         const mid = Number(link.menu_id || 0)
         if (!mid) continue
         linkedMenuIds.add(mid)
         if (!linksByMenuId.has(mid)) linksByMenuId.set(mid, [])
         linksByMenuId.get(mid)!.push(link)
-      }
-      for (const [mid, menuLinks] of linksByMenuId.entries()) {
-        linkedOptions.push(
-          ...buildMenuOptionsFromLinks(
-            mid,
-            menuLinks,
-            groupsById,
-            itemsByGroupId,
-            menuCodeById.get(mid)
-          )
-        )
       }
     } catch {
       // 신규 구조 미배포 환경 fallback
@@ -85,6 +77,18 @@ export async function GET(request: NextRequest) {
       }
     } catch {
       // fallback: option_code가 없으면 응답에서 빈 문자열 허용
+    }
+
+    for (const [mid, menuLinks] of linksByMenuId.entries()) {
+      linkedOptions.push(
+        ...buildMenuOptionsFromLinks(
+          mid,
+          menuLinks,
+          groupsById,
+          itemsByGroupId,
+          menuCodeById.get(mid)
+        )
+      )
     }
 
     const selectCols =

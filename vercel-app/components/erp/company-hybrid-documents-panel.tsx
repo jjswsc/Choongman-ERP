@@ -889,9 +889,11 @@ export function CompanyHybridDocumentsPanel() {
       return
     }
     const sortOrder = Math.floor(editingCategory.sort_order)
+    const categoryStore =
+      String(editingCategory.store || "").trim() || COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
     const res = await saveCompanyHybridDocumentCategory({
       id: editingCategory.id,
-      store: COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE,
+      store: categoryStore,
       name,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
       parentCategoryId: editingCategory.parent_category_id,

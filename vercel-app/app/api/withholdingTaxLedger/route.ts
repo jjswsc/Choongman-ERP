@@ -9,6 +9,7 @@ import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import {
+  syncTaxWithholdingLedgersFromBankDeposits,
   syncTaxWithholdingLedgersFromExpenses,
   syncTaxWithholdingLedgersFromPayroll,
   syncTaxWithholdingLedgersFromPurchaseOrders,
@@ -109,6 +110,10 @@ export async function GET(request: NextRequest) {
         months: period.months,
         storeFilter,
       })
+      await syncTaxWithholdingLedgersFromBankDeposits({
+        months: period.months,
+        storeFilter,
+      })
     } catch (e) {
       console.warn('withholdingTaxLedger GET auto-sync skipped:', e)
     }
@@ -184,7 +189,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'INVALID_BODY' }, { status: 400, headers })
     }
 
-    const row = {
+    const directionRaw = String(body.direction || '').trim().toLowerCase()
+    const sourceTypeRaw = String(body.sourceType ?? body.source_type ?? '').trim()
+    const sourceIdRaw = body.sourceId ?? body.source_id
+    const sourceId =
+      sourceIdRaw != null && sourceIdRaw !== '' && !isNaN(Number(sourceIdRaw))
+        ? Math.floor(Number(sourceIdRaw))
+        : 0
+
+    const row: Record<string, unknown> = {
       payment_date: paymentDate,
       tax_month: taxMonth,
       payee_name: body.payeeName != null ? String(body.payeeName).slice(0, 500) : null,
@@ -201,6 +214,16 @@ export async function POST(request: NextRequest) {
       submitted_by: filingStatus === 'submitted' ? submittedByRaw || null : null,
       store_name: effectiveStoreName ? String(effectiveStoreName).slice(0, 200) : null,
       updated_at: new Date().toISOString(),
+    }
+    if (directionRaw === 'inbound' || directionRaw === 'outbound') {
+      row.direction = directionRaw
+    }
+    if (sourceTypeRaw) {
+      row.source_type = sourceTypeRaw.slice(0, 64)
+      row.source_id = sourceId > 0 ? sourceId : null
+    } else if (id <= 0) {
+      row.direction = directionRaw === 'inbound' ? 'inbound' : row.direction || 'outbound'
+      row.source_type = 'manual'
     }
 
     if (id > 0) {
@@ -233,7 +256,8 @@ export async function POST(request: NextRequest) {
         reasonCode: filingStatus === 'submitted' ? 'UPDATED_SUBMITTED' : 'UPDATED_DRAFT',
         yearMonth: taxMonth,
         periodType: 'monthly',
-        storeScope: row.store_name,
+        storeScope:
+          row.store_name != null ? String(row.store_name).slice(0, 200) : null,
         filingType: 'wht_pnd',
         targetType: 'withholding_tax_ledger',
         targetId: String(id),
@@ -265,7 +289,8 @@ export async function POST(request: NextRequest) {
       reasonCode: filingStatus === 'submitted' ? 'CREATED_SUBMITTED' : 'CREATED_DRAFT',
       yearMonth: taxMonth,
       periodType: 'monthly',
-      storeScope: row.store_name,
+      storeScope:
+        row.store_name != null ? String(row.store_name).slice(0, 200) : null,
       filingType: 'wht_pnd',
       targetType: 'withholding_tax_ledger',
       targetId: String(newId),
