@@ -104,6 +104,59 @@ function pickPromoIdFromPromoCode(it: Record<string, unknown>, catalog: Map<stri
   return null
 }
 
+function buildPromoIdByCode(catalog: Map<string, PosPromoWithItems> | undefined): Map<string, string> {
+  const out = new Map<string, string>()
+  if (!catalog?.size) return out
+  for (const p of catalog.values()) {
+    const id = String(p.id ?? '').trim()
+    const code = String(p.code ?? '').trim().toUpperCase()
+    if (!id || !code) continue
+    if (!out.has(code)) out.set(code, id)
+  }
+  return out
+}
+
+function pickPromoIdFromCodeToken(
+  it: Record<string, unknown>,
+  catalog: Map<string, PosPromoWithItems> | undefined
+): string | null {
+  const promoIdByCode = buildPromoIdByCode(catalog)
+  if (promoIdByCode.size === 0) return null
+
+  const explicitCode = coerceNonEmptyId(it.promoCode) ?? coerceNonEmptyId(it.promo_code)
+  if (explicitCode) {
+    const pid = promoIdByCode.get(explicitCode.toUpperCase())
+    if (pid) return pid
+  }
+
+  const lineId = String(it.id ?? '').trim()
+  const lineName = String(it.name ?? '').trim()
+  const upperCandidates = [lineId.toUpperCase(), lineName.toUpperCase()].filter(Boolean)
+  for (const text of upperCandidates) {
+    const exact = promoIdByCode.get(text)
+    if (exact) return exact
+  }
+
+  const promoLikeContext =
+    lineId.toLowerCase().startsWith('promo-') ||
+    /\b(set|promo|bundle|campaign)\b/i.test(lineName) ||
+    lineName.includes('[[') ||
+    lineName.includes(']]')
+  if (!promoLikeContext) return null
+
+  const matched = new Set<string>()
+  for (const text of upperCandidates) {
+    for (const [code, pid] of promoIdByCode.entries()) {
+      const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`(^|[^A-Z0-9])${escaped}([^A-Z0-9]|$)`).test(text)) {
+        matched.add(pid)
+      }
+    }
+  }
+  if (matched.size !== 1) return null
+  return Array.from(matched)[0] || null
+}
+
 function pickPromoIdFromLinkedMenu(it: Record<string, unknown>, menus: PosMenu[] | undefined): string | null {
   if (!menus?.length) return null
   const lineName = String(it.name ?? '').trim().toLowerCase()
@@ -162,13 +215,7 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
     let score = 0
     if (pname && key === pname) score = Math.max(score, 100)
     if (pcode && key === pcode) score = Math.max(score, 95)
-    if (pname && key.includes(pname)) score = Math.max(score, 80)
-    if (pname && pname.includes(key) && key.length >= 3) score = Math.max(score, 82)
-    if (pcode && key.includes(pcode)) score = Math.max(score, 75)
-    if (pcode && pcode.includes(key) && key.length >= 3) score = Math.max(score, 77)
-    if (pname && key.split(' ').filter((t) => t.length >= 2).every((t) => pname.includes(t))) {
-      score = Math.max(score, 78)
-    }
+    // 이름 기반은 오인식 비용이 높아 exact 일치만 허용
     if (score > 0) candidates.push({ id: pid, score })
   }
   if (candidates.length === 0) return null
@@ -297,6 +344,7 @@ function resolvePromoItemsForReceiptLine(
     tryPid(pickPromoIdFromOrderLine(row)) ??
     tryPid(pickPromoIdFromCartLineId(String(row.id ?? ''), catalog)) ??
     tryPid(pickPromoIdFromPromoCode(row, catalog)) ??
+    tryPid(pickPromoIdFromCodeToken(row, catalog)) ??
     tryPid(pickPromoIdFromLinkedMenu(row, menus)) ??
     tryPid(pickPromoIdFromItemName(row, catalog))
   )

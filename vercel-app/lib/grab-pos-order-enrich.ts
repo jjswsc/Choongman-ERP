@@ -68,6 +68,27 @@ function normalizePromoLookupText(raw: string): string {
     .replace(/\s+/g, ' ')
 }
 
+function normalizePromoCode(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+}
+
+function extractPromoCodeCandidatesFromText(raw: string): string[] {
+  const text = String(raw || '').trim()
+  if (!text) return []
+  const out = new Set<string>()
+  const full = normalizePromoCode(text)
+  if (full && /[A-Z]/.test(full)) out.add(full)
+  const matches = text.match(/[A-Za-z][A-Za-z0-9_-]{1,31}/g) || []
+  for (const token of matches) {
+    const code = normalizePromoCode(token)
+    if (!code || !/[A-Z]/.test(code)) continue
+    out.add(code)
+  }
+  return Array.from(out)
+}
+
 export function buildGrabPosCatalog(
   menus: Array<{ id?: unknown; name?: unknown; code?: unknown }>,
   options: Array<{ optionCode?: unknown; option_code?: unknown; name?: unknown }>,
@@ -94,9 +115,9 @@ export function buildGrabPosCatalog(
   const promoByCode = new Map<string, GrabPosPromoCatalogRow>()
   const promoByNameKey = new Map<string, GrabPosPromoCatalogRow>()
   for (const p of promos) {
-    const code = String(p.code ?? '').trim()
+    const code = normalizePromoCode(String(p.code ?? '').trim())
     const nameKey = normalizePromoLookupText(p.name)
-    if (code) promoByCode.set(code.toLowerCase(), p)
+    if (code) promoByCode.set(code, p)
     if (nameKey) promoByNameKey.set(nameKey, p)
   }
   return { menuById, menuByCode, optionNameByCode, promoByCode, promoByNameKey }
@@ -145,20 +166,54 @@ function extractCampaignReadableName(item: Record<string, unknown>): string {
   return ''
 }
 
-function matchPromoFromCatalog(rawName: string, catalog: GrabPosCatalog): GrabPosPromoCatalogRow | null {
-  const key = normalizePromoLookupText(rawName)
-  if (!key) return null
-  const byCode = catalog.promoByCode.get(key)
-  if (byCode) return byCode
-  const byName = catalog.promoByNameKey.get(key)
-  if (byName) return byName
-  for (const [code, promo] of catalog.promoByCode.entries()) {
-    if (key.includes(code) || code.includes(key)) return promo
-  }
-  for (const [nameKey, promo] of catalog.promoByNameKey.entries()) {
-    if (key.includes(nameKey) || nameKey.includes(key)) return promo
+function findPromoByCodeCandidates(
+  candidates: string[],
+  catalog: GrabPosCatalog
+): GrabPosPromoCatalogRow | null {
+  for (const candidate of candidates) {
+    const hit = catalog.promoByCode.get(normalizePromoCode(candidate))
+    if (hit) return hit
   }
   return null
+}
+
+function matchPromoFromCatalog(
+  rawName: string,
+  catalog: GrabPosCatalog,
+  opts?: { allowExactNameFallback?: boolean }
+): GrabPosPromoCatalogRow | null {
+  const codeHit = findPromoByCodeCandidates(extractPromoCodeCandidatesFromText(rawName), catalog)
+  if (codeHit) return codeHit
+  if (!opts?.allowExactNameFallback) return null
+  const key = normalizePromoLookupText(rawName)
+  if (!key) return null
+  return catalog.promoByNameKey.get(key) || null
+}
+
+function collectPromoCodeCandidatesFromItem(item: Record<string, unknown>): string[] {
+  const candidates = new Set<string>()
+  const addFrom = (value: unknown) => {
+    const s = String(value ?? '').trim()
+    if (!s) return
+    for (const code of extractPromoCodeCandidatesFromText(s)) {
+      candidates.add(code)
+    }
+  }
+  addFrom(item.promoCode)
+  addFrom(item.promo_code)
+  addFrom(item.promotionCode)
+  addFrom(item.promotion_code)
+  addFrom(item.campaignCode)
+  addFrom(item.campaign_code)
+  addFrom(item.bundleCode)
+  addFrom(item.bundle_code)
+  addFrom(item.setCode)
+  addFrom(item.set_code)
+  const campaign = asRecord(item.campaignInfo)
+  addFrom(campaign.code)
+  addFrom(campaign.campaignCode)
+  addFrom(campaign.promotionCode)
+  return Array.from(candidates)
 }
 
 export function resolveGrabItemNameAndMeta(
@@ -185,6 +240,16 @@ export function resolveGrabItemNameAndMeta(
     const menuByCode = menuRef.code ? catalog.menuByCode.get(menuRef.code.toLowerCase()) : undefined
     if (menuByCode?.name) {
       return { name: menuByCode.name, menuId: menuByCode.id }
+    }
+  }
+
+  const promoByItemCodes = findPromoByCodeCandidates(collectPromoCodeCandidatesFromItem(item), catalog)
+  if (promoByItemCodes) {
+    return {
+      name: String(promoByItemCodes.name ?? rawName).trim() || rawName || 'Grab item',
+      promoId: String(promoByItemCodes.id ?? '').trim() || undefined,
+      promoCode: String(promoByItemCodes.code ?? '').trim() || undefined,
+      promoItems: Array.isArray(promoByItemCodes.items) ? promoByItemCodes.items : undefined,
     }
   }
 

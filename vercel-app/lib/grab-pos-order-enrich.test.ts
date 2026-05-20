@@ -51,6 +51,32 @@ describe('grab-pos-order-enrich', () => {
     expect(resolved.menuId).toBe('74')
   })
 
+  it('resolves promo by explicit promo code token first', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [],
+      [
+        { id: '1', name: 'Set 1', code: 'SET1', items: [{ menuId: '74', optionId: null, quantity: 1 }] },
+      ]
+    )
+    const resolved = resolveGrabItemNameAndMeta({ name: 'grab campaign', promoCode: 'set1' }, catalog)
+    expect(resolved.promoCode).toBe('SET1')
+    expect(resolved.promoId).toBe('1')
+  })
+
+  it('does not fuzzy-match promo by partial name', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [],
+      [
+        { id: '1', name: 'April Set 1', code: 'SET1', items: [{ menuId: '74', optionId: null, quantity: 1 }] },
+      ]
+    )
+    const resolved = resolveGrabItemNameAndMeta({ name: 'April' }, catalog)
+    expect(resolved.promoId).toBeUndefined()
+    expect(resolved.promoCode).toBeUndefined()
+  })
+
   it('converts optc note chunk to readable option chips', () => {
     const catalog = buildGrabPosCatalog([], [{ optionCode: 'C009-5', name: 'Pickled Radish' }])
     const meta = resolveGrabDeliveryLineNote('optc:C009-5', catalog.optionNameByCode)

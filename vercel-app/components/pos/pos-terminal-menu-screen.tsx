@@ -52,6 +52,7 @@ import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
 import { resolvePromoTileImageSrc } from '@/lib/pos-menu-display-image'
+import { loadPosDeliveryMenuImageByMenuId } from '@/lib/load-pos-delivery-menu-images'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from '@/lib/pos-promo-choice'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
@@ -157,6 +158,7 @@ export function PosTerminalMenuScreen({
     storeCode || null
   )
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
+  const [deliveryMenuImageByMenuId, setDeliveryMenuImageByMenuId] = React.useState<Record<string, string>>({})
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
   const [selectedMainCategory, setSelectedMainCategory] = React.useState('')
   const [selectedCategory, setSelectedCategory] = React.useState('')
@@ -270,6 +272,20 @@ export function PosTerminalMenuScreen({
           }) || ''
     setSelectedCategory(firstSub)
   }, [storeCode])
+
+  React.useEffect(() => {
+    if (!String(storeCode || '').trim()) {
+      setDeliveryMenuImageByMenuId({})
+      return
+    }
+    let cancelled = false
+    void loadPosDeliveryMenuImageByMenuId(String(storeCode).trim()).then((map) => {
+      if (!cancelled) setDeliveryMenuImageByMenuId(map)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [storeCode, configReloadNonce])
 
   React.useEffect(() => {
     setLoading(true)
@@ -1161,7 +1177,9 @@ export function PosTerminalMenuScreen({
             }}
           >
             {filteredPromos.map((p) => {
-              const promoImageSrc = resolvePromoTileImageSrc(p, menus)
+              const promoImageSrc = resolvePromoTileImageSrc(p, menus, {
+                deliveryImageByMenuId: deliveryMenuImageByMenuId,
+              })
               return (
               <button
                 key={`promo-${p.id}`}

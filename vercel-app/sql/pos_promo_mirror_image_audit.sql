@@ -97,7 +97,7 @@ where c.rn = 1
   and c.comp_haystack ~ '(side|drink|beverage|rice|치킨무|kimchi|pickled radish|무|사이드|음료|ข้าว|เครื่องดื่ม|กิมจิ|หัวไชเท้า)'
 order by c.mirror_code, c.mirror_menu_id;
 
--- C) 빠른 보정(선택): mirror.image가 비어있는 경우 첫 구성품 이미지 채움
--- 이미 파일 존재: vercel-app/sql/pos_menu_sync_mirror_image_from_promo_items.sql
--- 필요 시 해당 파일 실행.
+-- C) 보정: mirror.image가 구성품(밥·치킨)과 동일 URL이면 비우기 → Delivery Ops에서 세트 사진 재업로드
+-- vercel-app/sql/pos_promo_mirror_image_fix_side_copy.sql
+-- (구성품 이미지를 미러에 복사하는 pos_menu_sync_mirror_image_from_promo_items.sql 는 사용 중단)
 

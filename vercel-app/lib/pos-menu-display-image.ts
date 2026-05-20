@@ -5,48 +5,83 @@ export function pickMenuImageUrl(menu?: Pick<PosMenu, 'imageUrl'> | null): strin
   return String(menu?.imageUrl ?? '').trim()
 }
 
-function isLikelySideOrDrinkMenu(menu?: Pick<PosMenu, 'code' | 'name' | 'category' | 'categoryMain'> | null): boolean {
-  const hay = [
-    String(menu?.code ?? ''),
-    String(menu?.name ?? ''),
-    String(menu?.category ?? ''),
-    String(menu?.categoryMain ?? ''),
-  ]
-    .join(' ')
-    .toLowerCase()
-  if (!hay.trim()) return false
-  return /(side|drink|beverage|rice|무|치킨무|pickled radish|radish|kimchi|drink|음료|사이드|ข้าว|เครื่องดื่ม|กิมจิ|หัวไชเท้า)/i.test(
-    hay
-  )
+export type PromoTileImageResolveOpts = {
+  /** 매장·배달앱별 메뉴 이미지 오버라이드 (미러 메뉴 id → URL) */
+  deliveryImageByMenuId?: Readonly<Record<string, string>> | ReadonlyMap<string, string>
 }
 
-/** 미러 image가 세트 구성 중 사이드/밥 메뉴 사진과 같으면 잘못 복사된 것으로 본다 */
+const DELIVERY_APP_CODES_FOR_MENU_IMAGES = ['grab', 'lineman', 'shopee'] as const
+
+export function buildDeliveryMenuImageByMenuId(
+  bundles: ReadonlyArray<{ menuPolicies?: ReadonlyArray<{ menuId?: number | string; imageUrl?: string | null }> }>
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const bundle of bundles) {
+    for (const row of bundle.menuPolicies || []) {
+      const id = String(row.menuId ?? '').trim()
+      const url = String(row.imageUrl ?? '').trim()
+      if (id && url && !out[id]) out[id] = url
+    }
+  }
+  return out
+}
+
+export { DELIVERY_APP_CODES_FOR_MENU_IMAGES }
+
+function pickDeliveryImageForMenu(opts: PromoTileImageResolveOpts | undefined, menuId: string): string {
+  if (!menuId || !opts?.deliveryImageByMenuId) return ''
+  const map = opts.deliveryImageByMenuId
+  if (map instanceof Map) return String(map.get(menuId) ?? '').trim()
+  return String(map[menuId] ?? '').trim()
+}
+
+/** 미러 image가 세트 구성품(밥·치킨 등) 메뉴 사진과 동일 URL이면 세트 전용 사진이 아님 */
+export function isPromoMirrorImageCopiedFromComponent(
+  imageUrl: string,
+  promo: Pick<PosPromoWithItems, 'items'>,
+  menusById: Map<string, PosMenu>
+): boolean {
+  const url = String(imageUrl ?? '').trim()
+  if (!url) return false
+  for (const it of promo.items || []) {
+    const mid = String(it.menuId ?? '').trim()
+    if (!mid) continue
+    const comp = menusById.get(mid)
+    if (comp && pickMenuImageUrl(comp) === url) return true
+  }
+  return false
+}
+
+/** @deprecated 구성품 복사 여부는 isPromoMirrorImageCopiedFromComponent 사용 */
 export function isPromoMirrorImageStaleSideCopy(
   mirrorImageUrl: string,
   promo: Pick<PosPromoWithItems, 'items'>,
   menusById: Map<string, PosMenu>
 ): boolean {
-  const mirrorImg = String(mirrorImageUrl ?? '').trim()
-  if (!mirrorImg) return false
-  for (const it of promo.items || []) {
-    const mid = String(it.menuId ?? '').trim()
-    if (!mid) continue
-    const comp = menusById.get(mid)
-    if (!comp || !isLikelySideOrDrinkMenu(comp)) continue
-    if (pickMenuImageUrl(comp) === mirrorImg) return true
-  }
-  return false
+  return isPromoMirrorImageCopiedFromComponent(mirrorImageUrl, promo, menusById)
+}
+
+/** 프로모 타일: 미러/배달에 올린 세트 전용 URL만 허용 (구성품 메뉴 사진과 동일하면 제외) */
+export function shouldUsePromoTileImageUrl(
+  imageUrl: string,
+  promo: Pick<PosPromoWithItems, 'items'>,
+  menusById: Map<string, PosMenu>
+): boolean {
+  const url = String(imageUrl ?? '').trim()
+  if (!url) return false
+  return !isPromoMirrorImageCopiedFromComponent(url, promo, menusById)
 }
 
 /**
- * 프로모 타일 썸네일:
- * 1) promo_id 연동 미러 메뉴 image (단, 밥/사이드 구성품과 동일 URL이면 무시)
- * 2) 세트 구성 메뉴 중 사이드/음료가 아닌 메뉴 image 우선
- * 3) 없으면 구성 메뉴 중 첫 image
+ * 프로모 타일 썸네일 — 세트 미러 메뉴 전용만 사용한다.
+ * 1) Delivery Ops 오버라이드 (미러 menu id)
+ * 2) pos_menus 미러 image
+ * 구성품(밥·치킨 단품) image 로는 채우지 않는다.
  */
 export function resolvePromoTileImageSrc(
   promo: Pick<PosPromoWithItems, 'id' | 'items'>,
-  menus: PosMenu[]
+  menus: PosMenu[],
+  opts?: PromoTileImageResolveOpts
 ): string {
   const pid = String(promo.id ?? '').trim()
   if (!pid) return ''
@@ -58,27 +93,14 @@ export function resolvePromoTileImageSrc(
   }
 
   const mirror = menus.find((m) => String(m.promoId ?? '').trim() === pid)
-  const mirrorImg = pickMenuImageUrl(mirror)
-  if (mirrorImg && !isPromoMirrorImageStaleSideCopy(mirrorImg, promo, menusById)) {
-    return mirrorImg
+  const mirrorId = String(mirror?.id ?? '').trim()
+  const mirrorCandidates = [
+    pickDeliveryImageForMenu(opts, mirrorId),
+    pickMenuImageUrl(mirror),
+  ]
+  for (const img of mirrorCandidates) {
+    if (shouldUsePromoTileImageUrl(img, promo, menusById)) return img
   }
 
-  // fallback 1) 구성 메뉴 중 "사이드/음료"가 아닌 대표 이미지 우선
-  for (const it of promo.items || []) {
-    const mid = String(it.menuId ?? '').trim()
-    if (!mid) continue
-    const m = menusById.get(mid)
-    if (!m || isLikelySideOrDrinkMenu(m)) continue
-    const compImg = pickMenuImageUrl(m)
-    if (compImg) return compImg
-  }
-
-  // fallback 2) 없으면 기존 규칙대로 첫 이미지 사용
-  for (const it of promo.items || []) {
-    const mid = String(it.menuId ?? '').trim()
-    if (!mid) continue
-    const compImg = pickMenuImageUrl(menusById.get(mid))
-    if (compImg) return compImg
-  }
   return ''
 }

@@ -128,6 +128,7 @@ import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { resolvePromoTileImageSrc } from "@/lib/pos-menu-display-image"
+import { loadPosDeliveryMenuImageByMenuId } from "@/lib/load-pos-delivery-menu-images"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
 import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
 import { isChickenMenu } from "@/lib/pos-menu-categories"
@@ -189,6 +190,7 @@ export default function PosOrderPage() {
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
+  const [deliveryMenuImageByMenuId, setDeliveryMenuImageByMenuId] = React.useState<Record<string, string>>({})
   const [_categories, setCategories] = React.useState<string[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
   const [selectedMainCategory, setSelectedMainCategory] = React.useState<string>("")
@@ -494,6 +496,20 @@ export default function PosOrderPage() {
     posPrinterSettingsInFlightRef.current = request
     return request
   }, [])
+
+  React.useEffect(() => {
+    if (!storeCode.trim()) {
+      setDeliveryMenuImageByMenuId({})
+      return
+    }
+    let cancelled = false
+    void loadPosDeliveryMenuImageByMenuId(storeCode.trim()).then((map) => {
+      if (!cancelled) setDeliveryMenuImageByMenuId(map)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [storeCode])
 
   const loadMenusAndPromos = React.useCallback(() => {
     setLoading(true)
@@ -1662,7 +1678,9 @@ export default function PosOrderPage() {
         <div className="flex-1 overflow-y-auto p-2 sm:p-3">
           <div className="grid content-start auto-rows-max grid-cols-3 items-start gap-2 sm:gap-2.5 min-[1025px]:grid-cols-4 min-[1200px]:grid-cols-5">
             {filteredPromos.map((p) => {
-              const promoImageSrc = resolvePromoTileImageSrc(p, menus)
+              const promoImageSrc = resolvePromoTileImageSrc(p, menus, {
+                deliveryImageByMenuId: deliveryMenuImageByMenuId,
+              })
               return (
               <button
                 key={`promo-${p.id}`}

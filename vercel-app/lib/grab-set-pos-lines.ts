@@ -48,63 +48,68 @@ export function parseGrabSetChildLineName(name: string): { promoLabel: string; c
 function resolveMenuIdByDisplayName(childName: string, catalog: GrabPosCatalog): string | undefined {
   const key = normalizePromoLookupText(childName)
   if (!key) return undefined
-  let best: { id: string; score: number } | null = null
   for (const menu of catalog.menuById.values()) {
     const nameKey = normalizePromoLookupText(menu.name)
     if (!nameKey) continue
-    let score = 0
-    if (nameKey === key) score = 100
-    else if (nameKey.includes(key) || key.includes(nameKey)) score = 70
-    if (score > 0 && (!best || score > best.score)) best = { id: menu.id, score }
+    if (nameKey === key) return menu.id
   }
-  return best?.id
+  return undefined
 }
 
-function findParentLineIndex(
+function findPromoMetaByLabelExact(
   promoLabel: string,
-  items: GrabSetPosLine[],
-  catalog: GrabPosCatalog,
-  skipIndices: Set<number>
-): number {
+  catalog: GrabPosCatalog
+): { promoId?: string; promoCode?: string } {
   const labelKey = normalizePromoLookupText(promoLabel)
-  if (!labelKey) return -1
-
-  let bestIdx = -1
-  let bestScore = 0
-  for (let i = 0; i < items.length; i++) {
-    if (skipIndices.has(i)) continue
-    const it = items[i]
-    if (it.grabSetChild) continue
-    if (parseGrabSetChildLineName(String(it.name ?? ''))) continue
-    const nameKey = normalizePromoLookupText(it.name)
-    if (!nameKey) continue
-    let score = 0
-    if (nameKey === labelKey) score = 100
-    else if (nameKey.includes(labelKey) || labelKey.includes(nameKey)) score = 80
-    else {
-      const labelTokens = labelKey.split(' ').filter((t) => t.length >= 2)
-      if (labelTokens.length > 0 && labelTokens.every((t) => nameKey.includes(t))) score = 75
-    }
-    if (score > bestScore) {
-      bestScore = score
-      bestIdx = i
+  if (!labelKey) return {}
+  for (const promo of catalog.promoByCode.values()) {
+    const promoNameKey = normalizePromoLookupText(String(promo.name ?? ''))
+    if (promoNameKey !== labelKey) continue
+    const promoId = String(promo.id ?? '').trim()
+    const promoCode = String(promo.code ?? '').trim()
+    return {
+      ...(promoId ? { promoId } : {}),
+      ...(promoCode ? { promoCode } : {}),
     }
   }
-  if (bestIdx >= 0) return bestIdx
+  return {}
+}
 
-  for (const [, promo] of catalog.promoByNameKey.entries()) {
-    const pname = normalizePromoLookupText(promo.name)
-    if (!pname) continue
-    if (pname === labelKey || pname.includes(labelKey) || labelKey.includes(pname)) {
-      const codeKey = normalizePromoLookupText(promo.code)
-      for (let i = 0; i < items.length; i++) {
-        if (skipIndices.has(i)) continue
-        if (parseGrabSetChildLineName(String(items[i].name ?? ''))) continue
-        const nk = normalizePromoLookupText(items[i].name)
-        if (codeKey && nk === codeKey) return i
-        if (nk.includes(labelKey) || labelKey.includes(nk)) return i
-      }
+function findParentLineIndex(params: {
+  promoLabel: string
+  expectedPromoId?: string
+  expectedPromoCode?: string
+  items: GrabSetPosLine[],
+  skipIndices: Set<number>
+}): number {
+  const labelKey = normalizePromoLookupText(params.promoLabel)
+  if (!labelKey) return -1
+  const expectedPromoId = String(params.expectedPromoId ?? '').trim()
+  const expectedPromoCode = String(params.expectedPromoCode ?? '').trim().toUpperCase()
+
+  const candidateIndexes: number[] = []
+  for (let i = 0; i < params.items.length; i++) {
+    if (params.skipIndices.has(i)) continue
+    const it = params.items[i]
+    if (it.grabSetChild) continue
+    if (parseGrabSetChildLineName(String(it.name ?? ''))) continue
+    candidateIndexes.push(i)
+  }
+
+  if (expectedPromoId || expectedPromoCode) {
+    for (const i of candidateIndexes) {
+      const it = params.items[i]
+      const pid = String(it.promoId ?? '').trim()
+      const pcode = String(it.promoCode ?? '').trim().toUpperCase()
+      if (expectedPromoId && pid && pid === expectedPromoId) return i
+      if (expectedPromoCode && pcode && pcode === expectedPromoCode) return i
     }
+  }
+
+  for (const i of candidateIndexes) {
+    const it = params.items[i]
+    const nameKey = normalizePromoLookupText(it.name)
+    if (nameKey && nameKey === labelKey) return i
   }
   return -1
 }
@@ -152,7 +157,14 @@ export function mergeGrabSetChildLinesIntoPromoParents(
 
   for (const child of children) {
     const row = out[child.index]
-    const parentIdx = findParentLineIndex(child.promoLabel, out, catalog, childIndices)
+    const promoMeta = findPromoMetaByLabelExact(child.promoLabel, catalog)
+    const parentIdx = findParentLineIndex({
+      promoLabel: child.promoLabel,
+      expectedPromoId: promoMeta.promoId,
+      expectedPromoCode: promoMeta.promoCode,
+      items: out,
+      skipIndices: childIndices,
+    })
     const menuId =
       String(row.menuId1 ?? '').trim() || resolveMenuIdByDisplayName(child.childName, catalog) || ''
     const optionCode = String(row.optionCode1 ?? row.optionCode ?? '').trim() || undefined

@@ -72,4 +72,21 @@ describe('mergeGrabSetChildLinesIntoPromoParents', () => {
     expect(items[0].grabSetChild).toBeUndefined()
     expect(items[0].name).toBe('Rice')
   })
+
+  it('does not fuzzy-match parent promo by partial label', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 10, name: 'Rice', code: 'C100' }],
+      [{ name: 'Size S', optionCode: 'C100-1' }],
+      [{ id: '5', name: 'April Set 1', code: 'SET1', items: [] }]
+    )
+    const items = mergeGrabSetChildLinesIntoPromoParents(
+      [
+        { id: 'p1', name: 'SET1', price: 111, qty: 1, promoId: '5', promoCode: 'SET1' },
+        { id: 'c1', name: '[[April] Rice', price: 0, qty: 1, menuId1: '10' },
+      ],
+      catalog
+    )
+    expect(items[1].grabSetChild).toBeUndefined()
+    expect(items[1].name).toBe('Rice')
+  })
 })

@@ -2680,6 +2680,54 @@ export default function PosTerminalPage() {
           ...(promoItems ? { promoItems } : {}),
         }
       })
+    logPosPrintDebug('receipt_print_item_resolution', {
+      orderNo: payload.orderNo,
+      storeCode: payload.storeCode,
+      beforeCount: mergedForReceipt.length,
+      afterCount: enrichedForReceipt.length,
+      items: enrichedForReceipt.slice(0, 30).map((it) => {
+        const raw = it as {
+          id?: string
+          name?: string
+          menuId?: string
+          note?: string
+          promoId?: string
+          promoCode?: string
+          promoItems?: unknown[]
+        }
+        return {
+          id: String(raw.id ?? ''),
+          name: String(raw.name ?? ''),
+          menuId: String(raw.menuId ?? ''),
+          promoId: String(raw.promoId ?? ''),
+          promoCode: String(raw.promoCode ?? ''),
+          promoItemsCount: Array.isArray(raw.promoItems) ? raw.promoItems.length : 0,
+          note: String(raw.note ?? ''),
+        }
+      }),
+      mergedSource: mergedForReceipt.slice(0, 30).map((it) => {
+        const raw = it as {
+          id?: string
+          name?: string
+          menuId?: string
+          note?: string
+          promoId?: string
+          promoCode?: string
+          promoItems?: unknown[]
+          grabSetChild?: boolean
+        }
+        return {
+          id: String(raw.id ?? ''),
+          name: String(raw.name ?? ''),
+          menuId: String(raw.menuId ?? ''),
+          promoId: String(raw.promoId ?? ''),
+          promoCode: String(raw.promoCode ?? ''),
+          promoItemsCount: Array.isArray(raw.promoItems) ? raw.promoItems.length : 0,
+          note: String(raw.note ?? ''),
+          grabSetChild: Boolean(raw.grabSetChild),
+        }
+      }),
+    })
     const payloadForPrint = {
       ...payload,
       items: enrichedForReceipt,
