@@ -790,6 +790,11 @@ export default function PosTerminalPage() {
     }
     return m
   }, [menus])
+  const hasExplicitSizeToken = useCallback((rawText?: string | null): boolean => {
+    const text = String(rawText ?? '').trim()
+    if (!text) return false
+    return /(^|[\s(])(?:size\s*)?[sml](?=$|[\s)\-–—,])/i.test(text)
+  }, [])
   const inferDefaultSizeLabelForMenuId = useCallback(
     (menuIdRaw?: string | null): string => {
       const menuId = String(menuIdRaw ?? '').trim()
@@ -862,11 +867,6 @@ export default function PosTerminalPage() {
     },
     [hasExplicitSizeToken, inferDefaultSizeLabelForMenuId, menuCodeById, menuCodeByName]
   )
-  const hasExplicitSizeToken = useCallback((rawText?: string | null): boolean => {
-    const text = String(rawText ?? '').trim()
-    if (!text) return false
-    return /(^|[\s(])(?:size\s*)?[sml](?=$|[\s)\-–—,])/i.test(text)
-  }, [])
   const formatLineNoteForPrint = useCallback(
     (rawNote?: string | null): string => {
       const raw = String(rawNote ?? '').trim()
