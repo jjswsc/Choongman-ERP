@@ -69,6 +69,15 @@ describe('grab-pos-order-enrich', () => {
     expect(meta.optionChips).toEqual(['Boneless', 'Kimchi'])
   })
 
+  it('ignores numeric-only modifier tokens in mods chunk', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [{ optionCode: 'C015-4', name: 'Pickled Radish' }]
+    )
+    const meta = resolveGrabDeliveryLineNote('mods:1, 2, Pickled Radish · optc:C015-4', catalog.optionNameByCode)
+    expect(meta.optionChips).toEqual(['Pickled Radish'])
+  })
+
   it('maps extended optc codes by prefix fallback', () => {
     const catalog = buildGrabPosCatalog([], [{ optionCode: 'C020-1', name: 'Boneless' }])
     const meta = resolveGrabDeliveryLineNote('optc:C020-1-2', catalog.optionNameByCode)

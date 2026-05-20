@@ -52,6 +52,11 @@ import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import {
+  buildKitchenSlipOptionGroupChoices,
+  normalizeKitchenOptionGroupKey,
+  type KitchenSlipOptionGroupChoice,
+} from "@/lib/pos-kitchen-slip-option-group-choices"
+import {
   alignKitchenCategoryRouteKeyMap,
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -155,16 +160,11 @@ const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
 
 type KitchenSlipOptionGroupPrintState = Record<string, boolean>
 
-type KitchenSlipOptionGroupChoice = {
-  key: string
-  label: string
-}
-
 function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): KitchenSlipOptionGroupPrintState {
   if (!raw || typeof raw !== "object") return {}
   const out: KitchenSlipOptionGroupPrintState = {}
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const key = String(k ?? "").trim()
+    const key = normalizeKitchenOptionGroupKey(k)
     if (!key) continue
     out[key] = v !== false
   }
@@ -207,9 +207,17 @@ function KitchenSlipOptionGroupPrintSection({
         )}
       </p>
       {choices.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {tr("posKitchenSlipOptionGroupFilterEmpty", "등록된 옵션 그룹이 없습니다.")}
-        </p>
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            {tr("posKitchenSlipOptionGroupFilterEmpty", "등록된 옵션 그룹이 없습니다.")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {tr(
+              "posKitchenSlipOptionGroupFilterEmptyHint",
+              "옵션 그룹 마스터(메뉴 관리 → 옵션 그룹)에 그룹이 없고, 메뉴에도 옵션 단계가 없으면 목록이 비어 있습니다. 메뉴 관리에서 옵션 그룹을 등록하거나 메뉴에 옵션 단계를 설정한 뒤 새로고침해 주세요."
+            )}
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {choices.map((choice) => (
@@ -466,19 +474,10 @@ export default function PosPrintersPage() {
     [menusList]
   )
 
-  const kitchenSlipOptionGroupChoices = React.useMemo<KitchenSlipOptionGroupChoice[]>(() => {
-    return (optionGroups || [])
-      .map((g) => {
-        const key = String(g.key || "").trim()
-        const name = String(g.name || "").trim()
-        return {
-          key,
-          label: name || key,
-        }
-      })
-      .filter((row) => !!row.key)
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [optionGroups])
+  const kitchenSlipOptionGroupChoices = React.useMemo(
+    () => buildKitchenSlipOptionGroupChoices(optionGroups, menusList),
+    [optionGroups, menusList]
+  )
 
   React.useEffect(() => {
     if (kitchenSlipOptionGroupChoices.length === 0) return
@@ -659,14 +658,29 @@ export default function PosPrintersPage() {
     if (!effectiveStore) return
     const requestSeq = ++loadRequestSeqRef.current
     setLoading(true)
-    Promise.all([
+    Promise.allSettled([
       getPosPrinterSettings({ storeCode: effectiveStore }),
       getPosMenuCategories(),
       getPosMenus({ fresh: true }),
       getPosOptionGroups(),
     ])
-      .then(([settings, catRes, menus, groups]) => {
+      .then((results) => {
         if (requestSeq !== loadRequestSeqRef.current) return
+        const settingsRes = results[0]
+        const catRes = results[1].status === "fulfilled" ? results[1].value : { categories: [], mainCategories: [] }
+        const menusRes = results[2]
+        const groupsRes = results[3]
+        const menus = menusRes.status === "fulfilled" && Array.isArray(menusRes.value) ? menusRes.value : []
+        const groups =
+          groupsRes.status === "fulfilled" && Array.isArray(groupsRes.value) ? groupsRes.value : []
+        if (settingsRes.status !== "fulfilled") {
+          setCategories([])
+          setMainCategories([])
+          setMenusList(menus)
+          setOptionGroups(groups)
+          return
+        }
+        const settings = settingsRes.value
         const cats = catRes.categories
         let hydratedSettings = settings
         const serverRouteEmpty =
@@ -687,13 +701,8 @@ export default function PosPrintersPage() {
         applyFromPosSettings(hydratedSettings)
         setCategories(cats || [])
         setMainCategories(Array.isArray(catRes.mainCategories) ? catRes.mainCategories : [])
-        setMenusList(Array.isArray(menus) ? menus : [])
-        setOptionGroups(Array.isArray(groups) ? groups : [])
-      })
-      .catch(() => {
-        if (requestSeq !== loadRequestSeqRef.current) return
-        setCategories([])
-        setOptionGroups([])
+        setMenusList(menus)
+        setOptionGroups(groups)
       })
       .finally(() => {
         if (requestSeq === loadRequestSeqRef.current) setLoading(false)

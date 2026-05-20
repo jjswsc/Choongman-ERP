@@ -618,6 +618,7 @@ export default function PosTerminalPage() {
   const [menus, setMenus] = useState<PosMenu[]>([])
   const [promosWithItems, setPromosWithItems] = useState<PosPromoWithItems[]>([])
   const [menuOptions, setMenuOptions] = useState<PosMenuOption[]>([])
+  const [menuOptionsForCodeMap, setMenuOptionsForCodeMap] = useState<PosMenuOption[]>([])
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
   const receiptQueueRef = useRef<ReceiptModalData[]>([])
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
@@ -752,8 +753,12 @@ export default function PosTerminalPage() {
     return out
   }, [menuOptions])
   const optionNameByCode = useMemo(
-    () => buildOptionNameByCodeFromMenus(menus, menuOptions),
-    [menus, menuOptions]
+    () =>
+      buildOptionNameByCodeFromMenus(
+        menus,
+        menuOptionsForCodeMap.length > 0 ? menuOptionsForCodeMap : menuOptions
+      ),
+    [menus, menuOptions, menuOptionsForCodeMap]
   )
   const formatLineNoteForPrint = useCallback(
     (rawNote?: string | null): string => {
@@ -1204,6 +1209,15 @@ export default function PosTerminalPage() {
       .catch(() => {
         if (seq !== storeSettingsLoadSeqRef.current) return
         setMenuOptions([])
+      })
+    getPosMenuOptions({ fresh: true, forCodeMap: true })
+      .then((rows) => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
+        setMenuOptionsForCodeMap(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
+        setMenuOptionsForCodeMap([])
       })
     getPosPromosWithItems({ includeInactive: true })
       .then((rows) => {

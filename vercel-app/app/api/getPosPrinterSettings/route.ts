@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeKitchenOptionGroupKey } from '@/lib/pos-kitchen-slip-option-group-choices'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
@@ -17,7 +18,7 @@ function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, b
   if (!raw || typeof raw !== 'object') return {}
   const out: Record<string, boolean> = {}
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const key = String(k ?? '').trim()
+    const key = normalizeKitchenOptionGroupKey(k)
     if (!key) continue
     out[key] = v !== false
   }

@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const menuId = searchParams.get('menuId')?.trim()
+  const forCodeMap =
+    searchParams.get('forCodeMap') === '1' || searchParams.get('forCodeMap') === 'true'
 
   try {
     const linkedOptions: ReturnType<typeof buildMenuOptionsFromLinks> = []
@@ -150,6 +152,7 @@ export async function GET(request: NextRequest) {
 
     const list = (rows || [])
       .filter((row) => {
+        if (forCodeMap) return true
         const mid = Number(row.menu_id || 0)
         if (!linkedMenuIds.has(mid)) return true
         const stepValues = row.option_step_values

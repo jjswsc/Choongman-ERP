@@ -4502,8 +4502,10 @@ export const i18n = {
     posKitchenSlipShowOrderMemoLabel: '주문 메모 박스 표시',
     posKitchenSlipOptionGroupFilterLabel: '주방 주문서 옵션 그룹 출력',
     posKitchenSlipOptionGroupFilterHint:
-      '매장에 등록된 옵션 그룹이 모두 표시됩니다. 주방 주문서에 인쇄할 그룹만 켜 주세요.',
+      '옵션 그룹 마스터와 메뉴에 설정된 옵션 단계 키가 모두 표시됩니다. 주방 주문서에 인쇄할 그룹만 켜 주세요.',
     posKitchenSlipOptionGroupFilterEmpty: '등록된 옵션 그룹이 없습니다.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      '옵션 그룹 마스터(메뉴 관리 → 옵션 그룹)에 그룹이 없고, 메뉴에도 옵션 단계가 없으면 목록이 비어 있습니다. 메뉴 관리에서 옵션 그룹을 등록하거나 메뉴에 옵션 단계를 설정한 뒤 새로고침해 주세요.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       '등록된 옵션 그룹이 없어 해당 설정은 숨김 처리되었습니다. 옵션 그룹을 먼저 등록해 주세요.',
     posKitchenSlipOptionGroupGoToManage: '옵션 그룹 관리로 이동',
@@ -12806,8 +12808,10 @@ orderItemQty: 'Qty',
     posKitchenSlipShowOrderMemoLabel: 'Show order memo box',
     posKitchenSlipOptionGroupFilterLabel: 'Kitchen slip option groups',
     posKitchenSlipOptionGroupFilterHint:
-      'Choose which registered option groups appear on kitchen slips.',
+      'Shows option group master entries and option step keys used on menus. Turn on only the groups you want on kitchen slips.',
     posKitchenSlipOptionGroupFilterEmpty: 'No option groups are registered.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'The list is empty when there are no rows in option group master and no option steps on any menu. Register groups under Menu management → Option groups, or set option steps on menus, then refresh.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'This setting is hidden because no option groups exist. Register option groups first.',
     posKitchenSlipOptionGroupGoToManage: 'Go to option group setup',
@@ -22223,8 +22227,10 @@ orderItemQty: 'จำนวน',
     posKitchenSlipShowOrderMemoLabel: 'แสดงกล่องหมายเหตุออเดอร์',
     posKitchenSlipOptionGroupFilterLabel: 'กลุ่มตัวเลือกบนใบส่งครัว',
     posKitchenSlipOptionGroupFilterHint:
-      'แสดงกลุ่มตัวเลือกที่ลงทะเบียนทั้งหมด เลือกเปิดเฉพาะกลุ่มที่ต้องการพิมพ์บนใบส่งครัว',
+      'แสดงกลุ่มตัวเลือกหลักและคีย์ขั้นตอนตัวเลือกบนเมนูทั้งหมด เลือกเปิดเฉพาะกลุ่มที่ต้องการพิมพ์บนใบส่งครัว',
     posKitchenSlipOptionGroupFilterEmpty: 'ยังไม่มีกลุ่มตัวเลือกที่ลงทะเบียน',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'จะว่างเมื่อไม่มีกลุ่มในระบบหลักและไม่มีขั้นตอนตัวเลือกบนเมนูใดๆ ลงทะเบียนกลุ่มที่จัดการเมนู → กลุ่มตัวเลือก หรือตั้งขั้นตอนบนเมนู แล้วรีเฟรช',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'ซ่อนการตั้งค่านี้เพราะยังไม่มีกลุ่มตัวเลือก กรุณาลงทะเบียนกลุ่มตัวเลือกก่อน',
     posKitchenSlipOptionGroupGoToManage: 'ไปที่จัดการกลุ่มตัวเลือก',
@@ -28773,8 +28779,10 @@ orderItemQty: 'အရေအတွက်',
     posKitchenSlipShowOrderMemoLabel: 'Show order memo box',
     posKitchenSlipOptionGroupFilterLabel: 'Kitchen slip option groups',
     posKitchenSlipOptionGroupFilterHint:
-      'Choose which registered option groups appear on kitchen slips.',
+      'Shows option group master entries and option step keys used on menus. Turn on only the groups you want on kitchen slips.',
     posKitchenSlipOptionGroupFilterEmpty: 'No option groups are registered.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'The list is empty when there are no rows in option group master and no option steps on any menu. Register groups under Menu management → Option groups, or set option steps on menus, then refresh.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'This setting is hidden because no option groups exist. Register option groups first.',
     posKitchenSlipOptionGroupGoToManage: 'Go to option group setup',
@@ -35228,8 +35236,10 @@ orderItemQty: 'ຈຳນວນ',
     posKitchenSlipShowOrderMemoLabel: 'Show order memo box',
     posKitchenSlipOptionGroupFilterLabel: 'Kitchen slip option groups',
     posKitchenSlipOptionGroupFilterHint:
-      'Choose which registered option groups appear on kitchen slips.',
+      'Shows option group master entries and option step keys used on menus. Turn on only the groups you want on kitchen slips.',
     posKitchenSlipOptionGroupFilterEmpty: 'No option groups are registered.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'The list is empty when there are no rows in option group master and no option steps on any menu. Register groups under Menu management → Option groups, or set option steps on menus, then refresh.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'This setting is hidden because no option groups exist. Register option groups first.',
     posKitchenSlipOptionGroupGoToManage: 'Go to option group setup',
@@ -38744,8 +38754,10 @@ orderItemQty: 'ຈຳນວນ',
     posKitchenSlipShowOrderMemoLabel: 'Show order memo box',
     posKitchenSlipOptionGroupFilterLabel: 'Kitchen slip option groups',
     posKitchenSlipOptionGroupFilterHint:
-      'Choose which registered option groups appear on kitchen slips.',
+      'Shows option group master entries and option step keys used on menus. Turn on only the groups you want on kitchen slips.',
     posKitchenSlipOptionGroupFilterEmpty: 'No option groups are registered.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'The list is empty when there are no rows in option group master and no option steps on any menu. Register groups under Menu management → Option groups, or set option steps on menus, then refresh.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'This setting is hidden because no option groups exist. Register option groups first.',
     posKitchenSlipOptionGroupGoToManage: 'Go to option group setup',
@@ -42485,8 +42497,10 @@ orderItemQty: 'ຈຳນວນ',
     posKitchenSlipShowOrderMemoLabel: 'Show order memo box',
     posKitchenSlipOptionGroupFilterLabel: 'Kitchen slip option groups',
     posKitchenSlipOptionGroupFilterHint:
-      'Choose which registered option groups appear on kitchen slips.',
+      'Shows option group master entries and option step keys used on menus. Turn on only the groups you want on kitchen slips.',
     posKitchenSlipOptionGroupFilterEmpty: 'No option groups are registered.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'The list is empty when there are no rows in option group master and no option steps on any menu. Register groups under Menu management → Option groups, or set option steps on menus, then refresh.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'This setting is hidden because no option groups exist. Register option groups first.',
     posKitchenSlipOptionGroupGoToManage: 'Go to option group setup',
@@ -46216,8 +46230,10 @@ orderItemQty: 'ຈຳນວນ',
     posKitchenSlipShowOrderMemoLabel: 'Show order memo box',
     posKitchenSlipOptionGroupFilterLabel: 'Kitchen slip option groups',
     posKitchenSlipOptionGroupFilterHint:
-      'Choose which registered option groups appear on kitchen slips.',
+      'Shows option group master entries and option step keys used on menus. Turn on only the groups you want on kitchen slips.',
     posKitchenSlipOptionGroupFilterEmpty: 'No option groups are registered.',
+    posKitchenSlipOptionGroupFilterEmptyHint:
+      'The list is empty when there are no rows in option group master and no option steps on any menu. Register groups under Menu management → Option groups, or set option steps on menus, then refresh.',
     posKitchenSlipOptionGroupFilterHiddenHint:
       'This setting is hidden because no option groups exist. Register option groups first.',
     posKitchenSlipOptionGroupGoToManage: 'Go to option group setup',

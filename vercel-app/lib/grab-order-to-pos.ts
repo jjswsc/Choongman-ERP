@@ -534,6 +534,57 @@ function extractBanbanSlotNumbersFromItem(item: Record<string, unknown>): string
     .map((n) => String(n))
 }
 
+function getCodeLabelCaseInsensitive(optionNameByCode: Map<string, string>, code: string): string {
+  const key = String(code || '').trim().toUpperCase()
+  if (!key) return ''
+  const exact = optionNameByCode.get(key)
+  if (exact) return String(exact).trim()
+  const lower = optionNameByCode.get(key.toLowerCase())
+  if (lower) return String(lower).trim()
+  for (const [k, v] of optionNameByCode.entries()) {
+    if (String(k || '').trim().toUpperCase() === key) return String(v || '').trim()
+  }
+  return ''
+}
+
+function normalizeModifierNamesForDisplay(params: {
+  names: string[]
+  menuCode: string
+  optionNameByCode: Map<string, string>
+}): string[] {
+  const menuCode = String(params.menuCode || '').trim().toUpperCase()
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (raw: string) => {
+    const s = String(raw || '').trim()
+    if (!s) return
+    const nk = s.toLowerCase()
+    if (seen.has(nk)) return
+    seen.add(nk)
+    out.push(s)
+  }
+
+  for (const raw of params.names || []) {
+    const token = String(raw || '').trim()
+    if (!token) continue
+    if (/^\d+$/.test(token)) {
+      if (menuCode) {
+        const label = getCodeLabelCaseInsensitive(
+          params.optionNameByCode,
+          `${menuCode}-${token}`
+        )
+        if (label) {
+          push(label)
+          continue
+        }
+      }
+      continue
+    }
+    push(token)
+  }
+  return out
+}
+
 async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]> {
   const exponent = currencyExponent(order)
   const rawItems = Array.isArray(order.items) ? order.items : []
@@ -618,6 +669,25 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       hasSelections: modifierNames.length > 0 || optionCodeSet.size > 0,
     })
     const optionCodes = Array.from(optionCodeSet)
+    const itemBaseId = String(item.id ?? item.grabItemID ?? idx)
+    const menuRef = parseGrabPartnerItemMenuRef(itemBaseId)
+    const resolvedMenuCode = (() => {
+      const byResolvedId = Number(resolved.menuId || 0)
+      if (byResolvedId > 0) {
+        const hit = catalog.menuById.get(byResolvedId)
+        const code = String(hit?.code ?? '').trim()
+        if (code) return code
+      }
+      const refCode = String(menuRef?.code ?? '').trim()
+      if (refCode) return refCode
+      const fromName = String(itemName || '').trim().match(/\b([A-Za-z]\d{2,})\b/)?.[1]
+      return String(fromName || '').trim()
+    })()
+    const modifierNamesForNote = normalizeModifierNamesForDisplay({
+      names: modifierNames,
+      menuCode: resolvedMenuCode,
+      optionNameByCode: catalog.optionNameByCode,
+    })
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,
@@ -626,14 +696,12 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         item.customerNote,
         item.specifications
       ),
-      modifierNames.length ? `mods:${modifierNames.join(',')}` : '',
+      modifierNamesForNote.length ? `mods:${modifierNamesForNote.join(',')}` : '',
       optionCodes.length ? `optc:${optionCodes.join(',')}` : '',
       ecoSummary || '',
     ].filter(Boolean)
 
-    const itemBaseId = String(item.id ?? item.grabItemID ?? idx)
     const itemNote = noteParts.length ? noteParts.join(' · ') : undefined
-    const menuRef = parseGrabPartnerItemMenuRef(itemBaseId)
     const menuId1 = resolved.menuId || (menuRef ? String(menuRef.menuId) : undefined)
 
     const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {

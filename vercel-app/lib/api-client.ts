@@ -6482,9 +6482,14 @@ export async function savePosDeliveryAppPolicies(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function getPosMenuOptions(params?: { menuId?: string; fresh?: boolean }) {
+export async function getPosMenuOptions(params?: {
+  menuId?: string
+  fresh?: boolean
+  forCodeMap?: boolean
+}) {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)
+  if (params?.forCodeMap) q.set('forCodeMap', '1')
   const qs = q.toString()
   const url = '/api/getPosMenuOptions' + (qs ? `?${qs}` : '')
   if (params?.fresh) {
@@ -6492,7 +6497,7 @@ export async function getPosMenuOptions(params?: { menuId?: string; fresh?: bool
     const data = await res.json().catch(() => [])
     return Array.isArray(data) ? (data as PosMenuOption[]) : []
   }
-  const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}`
+  const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}:${params?.forCodeMap ? 'codemap' : 'default'}`
   return fetchPosCatalogCached<PosMenuOption[]>(cacheKey, url, [])
 }
 

@@ -1,11 +1,12 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
 import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
+import { normalizeKitchenOptionGroupKey } from "@/lib/pos-kitchen-slip-option-group-choices"
 
 function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, boolean> {
   if (!raw || typeof raw !== "object") return {}
   const out: Record<string, boolean> = {}
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    const key = String(k ?? "").trim()
+    const key = normalizeKitchenOptionGroupKey(k)
     if (!key) continue
     out[key] = v !== false
   }

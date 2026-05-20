@@ -362,6 +362,7 @@ export function resolveGrabDeliveryLineNote(
   const pushOptionToken = (token: string) => {
     const raw = String(token || '').trim()
     if (!raw) return
+    if (/^\d+$/.test(raw)) return
     if (isLikelyPosOptionCode(raw)) {
       for (const label of resolveOptionCodesToLabels([raw], optionNameByCode)) {
         pushHumanOption(label)
