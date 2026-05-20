@@ -7,7 +7,7 @@ export function pickMenuImageUrl(menu?: Pick<PosMenu, 'imageUrl'> | null): strin
 
 export type PromoTileImageResolveOpts = {
   /** 매장·배달앱별 메뉴 이미지 오버라이드 (미러 메뉴 id → URL) */
-  deliveryImageByMenuId?: Readonly<Record<string, string>> | ReadonlyMap<string, string>
+  deliveryImageByMenuId?: Readonly<Record<string, string>>
 }
 
 const DELIVERY_APP_CODES_FOR_MENU_IMAGES = ['grab', 'lineman', 'shopee'] as const
@@ -29,10 +29,9 @@ export function buildDeliveryMenuImageByMenuId(
 export { DELIVERY_APP_CODES_FOR_MENU_IMAGES }
 
 function pickDeliveryImageForMenu(opts: PromoTileImageResolveOpts | undefined, menuId: string): string {
-  if (!menuId || !opts?.deliveryImageByMenuId) return ''
-  const map = opts.deliveryImageByMenuId
-  if (map instanceof Map) return String(map.get(menuId) ?? '').trim()
-  return String(map[menuId] ?? '').trim()
+  const byMenuId = opts?.deliveryImageByMenuId
+  if (!menuId || !byMenuId) return ''
+  return String(byMenuId[menuId] ?? '').trim()
 }
 
 /** 미러 image가 세트 구성품(밥·치킨 등) 메뉴 사진과 동일 URL이면 세트 전용 사진이 아님 */
