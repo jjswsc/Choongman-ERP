@@ -2850,7 +2850,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     amount: number,
     /** 기존 주문에서 결제 모달을 열 때 setCartItems 직후라 cartItems가 아직 비어 있음 → 스냅샷을 넘겨야 함 */
     receiptOpts?: {
-      receiptLines?: Array<{ id?: string; name: string; price: number; quantity?: number; note?: string }>
+      receiptLines?: Array<
+        Pick<CartItem, 'id' | 'name' | 'price' | 'quantity' | 'note' | 'menuId' | 'promoId' | 'menuId1' | 'menuId2'>
+      >
       receiptSubtotal?: number
       /** 미입력 시 현재 할인+포인트(상태) */
       receiptDiscountTotal?: number

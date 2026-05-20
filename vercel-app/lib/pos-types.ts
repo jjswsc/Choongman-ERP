@@ -63,6 +63,13 @@ export interface OrderItem {
   name: string
   /** `items_json`의 menu_id1 등 — 있으면 표시명을 POS 메뉴 id로 복원 */
   menuId?: string
+  /** 반반 등 2메뉴 구성 — items_json menu_id1 / option_id1 */
+  menuId1?: string
+  optionId1?: string
+  optionCode1?: string
+  menuId2?: string
+  optionId2?: string
+  optionCode2?: string
   /** `items_json`의 option_id1 등 — 포장 체크리스트 옵션 매핑용 */
   optionId?: string
   /** `items_json`의 option_code1 등 — 메뉴별 고유 옵션 코드 */
