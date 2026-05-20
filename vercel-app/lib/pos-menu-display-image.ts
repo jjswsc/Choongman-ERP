@@ -20,10 +20,29 @@ function isLikelySideOrDrinkMenu(menu?: Pick<PosMenu, 'code' | 'name' | 'categor
   )
 }
 
+/** 미러 image가 세트 구성 중 사이드/밥 메뉴 사진과 같으면 잘못 복사된 것으로 본다 */
+export function isPromoMirrorImageStaleSideCopy(
+  mirrorImageUrl: string,
+  promo: Pick<PosPromoWithItems, 'items'>,
+  menusById: Map<string, PosMenu>
+): boolean {
+  const mirrorImg = String(mirrorImageUrl ?? '').trim()
+  if (!mirrorImg) return false
+  for (const it of promo.items || []) {
+    const mid = String(it.menuId ?? '').trim()
+    if (!mid) continue
+    const comp = menusById.get(mid)
+    if (!comp || !isLikelySideOrDrinkMenu(comp)) continue
+    if (pickMenuImageUrl(comp) === mirrorImg) return true
+  }
+  return false
+}
+
 /**
  * 프로모 타일 썸네일:
- * 1) promo_id 연동 미러 메뉴 image
- * 2) 세트 구성 메뉴 중 첫 번째로 image 가 있는 항목
+ * 1) promo_id 연동 미러 메뉴 image (단, 밥/사이드 구성품과 동일 URL이면 무시)
+ * 2) 세트 구성 메뉴 중 사이드/음료가 아닌 메뉴 image 우선
+ * 3) 없으면 구성 메뉴 중 첫 image
  */
 export function resolvePromoTileImageSrc(
   promo: Pick<PosPromoWithItems, 'id' | 'items'>,
@@ -32,14 +51,16 @@ export function resolvePromoTileImageSrc(
   const pid = String(promo.id ?? '').trim()
   if (!pid) return ''
 
-  const mirror = menus.find((m) => String(m.promoId ?? '').trim() === pid)
-  const mirrorImg = pickMenuImageUrl(mirror)
-  if (mirrorImg) return mirrorImg
-
   const menusById = new Map<string, PosMenu>()
   for (const m of menus) {
     const id = String(m.id ?? '').trim()
     if (id) menusById.set(id, m)
+  }
+
+  const mirror = menus.find((m) => String(m.promoId ?? '').trim() === pid)
+  const mirrorImg = pickMenuImageUrl(mirror)
+  if (mirrorImg && !isPromoMirrorImageStaleSideCopy(mirrorImg, promo, menusById)) {
+    return mirrorImg
   }
 
   // fallback 1) 구성 메뉴 중 "사이드/음료"가 아닌 대표 이미지 우선

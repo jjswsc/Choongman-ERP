@@ -775,6 +775,21 @@ export default function PosTerminalPage() {
     }
     return m
   }, [menus])
+  const menuCodeByName = useMemo(() => {
+    const m = new Map<string, string>()
+    const norm = (raw: string) =>
+      String(raw ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+    for (const menu of menus) {
+      const name = norm(String(menu.name ?? ''))
+      const code = String(menu.code ?? '').trim()
+      if (!name || !code) continue
+      if (!m.has(name)) m.set(name, code)
+    }
+    return m
+  }, [menus])
   const inferDefaultSizeLabelForMenuId = useCallback(
     (menuIdRaw?: string | null): string => {
       const menuId = String(menuIdRaw ?? '').trim()
@@ -799,6 +814,53 @@ export default function PosTerminalPage() {
       return sLabel
     },
     [menuCodeById, optionNameByCode]
+  )
+  const inferDefaultSizeLabelForLine = useCallback(
+    (line: { menuId?: string | null; id?: string | null; name?: string | null; note?: string | null }): string => {
+      const explicitNote = String(line.note ?? '').trim()
+      if (hasExplicitSizeToken(explicitNote)) return ''
+      if (hasExplicitSizeToken(String(line.name ?? ''))) return ''
+      const menuId = String(line.menuId ?? '').trim()
+      if (menuId) {
+        const byId = inferDefaultSizeLabelForMenuId(menuId)
+        if (byId) return byId
+      }
+      const idText = String(line.id ?? '').trim()
+      const codeFromId = /(?:^|[^A-Za-z0-9])([A-Za-z]\d{2,})\b/.exec(idText)?.[1]
+      if (codeFromId) {
+        const syntheticMenuId = (() => {
+          for (const [mid, code] of menuCodeById.entries()) {
+            if (String(code).trim().toUpperCase() === codeFromId.toUpperCase()) return mid
+          }
+          return ''
+        })()
+        if (syntheticMenuId) {
+          const byCode = inferDefaultSizeLabelForMenuId(syntheticMenuId)
+          if (byCode) return byCode
+        }
+      }
+      const nameKey = String(line.name ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+      if (nameKey) {
+        const code = String(menuCodeByName.get(nameKey) ?? '').trim()
+        if (code) {
+          const syntheticMenuId = (() => {
+            for (const [mid, c] of menuCodeById.entries()) {
+              if (String(c).trim().toUpperCase() === code.toUpperCase()) return mid
+            }
+            return ''
+          })()
+          if (syntheticMenuId) {
+            const byName = inferDefaultSizeLabelForMenuId(syntheticMenuId)
+            if (byName) return byName
+          }
+        }
+      }
+      return ''
+    },
+    [hasExplicitSizeToken, inferDefaultSizeLabelForMenuId, menuCodeById, menuCodeByName]
   )
   const hasExplicitSizeToken = useCallback((rawText?: string | null): boolean => {
     const text = String(rawText ?? '').trim()
@@ -968,8 +1030,13 @@ export default function PosTerminalPage() {
         ).trim()
         const note = String(line.note ?? '').trim()
         const inferredDefaultSize =
-          !note && !hasExplicitSizeToken(String((it as { name?: unknown }).name ?? ''))
-            ? inferDefaultSizeLabelForMenuId(menuId)
+          !note
+            ? inferDefaultSizeLabelForLine({
+                menuId,
+                id: String((it as { id?: unknown }).id ?? ''),
+                name: String((it as { name?: unknown }).name ?? ''),
+                note,
+              })
             : ''
         const enrichedPromo =
           Array.isArray(list) && list.length > 0
@@ -977,7 +1044,10 @@ export default function PosTerminalPage() {
                 const optionName = String((p as { optionName?: string }).optionName ?? '').trim()
                 const optionCode = String((p as { optionCode?: string | null }).optionCode ?? '').trim()
                 if (optionName || optionCode) return p
-                const inferred = inferDefaultSizeLabelForMenuId(p.menuId)
+                const inferred = inferDefaultSizeLabelForLine({
+                  menuId: p.menuId,
+                  name: String((p as { menuName?: unknown }).menuName ?? ''),
+                })
                 return inferred ? { ...p, optionName: inferred } : p
               })
             : undefined
@@ -991,8 +1061,7 @@ export default function PosTerminalPage() {
     [
       posReceiptLineOpts,
       enrichPromoItemsWithOptionName,
-      inferDefaultSizeLabelForMenuId,
-      hasExplicitSizeToken,
+      inferDefaultSizeLabelForLine,
       menus,
     ]
   )
@@ -2602,7 +2671,12 @@ export default function PosTerminalPage() {
           ...it,
           note:
             formatLineNoteForPrint(String(it.note ?? '')) ||
-            inferDefaultSizeLabelForMenuId(String((it as { menuId?: string }).menuId ?? '')),
+            inferDefaultSizeLabelForLine({
+              menuId: String((it as { menuId?: string }).menuId ?? ''),
+              id: String((it as { id?: string }).id ?? ''),
+              name: String((it as { name?: string }).name ?? ''),
+              note: String((it as { note?: string }).note ?? ''),
+            }),
           ...(promoItems ? { promoItems } : {}),
         }
       })

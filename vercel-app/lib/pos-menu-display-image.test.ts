@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolvePromoTileImageSrc } from '@/lib/pos-menu-display-image'
+import {
+  isPromoMirrorImageStaleSideCopy,
+  resolvePromoTileImageSrc,
+} from '@/lib/pos-menu-display-image'
 import type { PosMenu, PosPromoWithItems } from '@/lib/api-client'
 
 describe('resolvePromoTileImageSrc', () => {
@@ -22,6 +25,23 @@ describe('resolvePromoTileImageSrc', () => {
     expect(resolvePromoTileImageSrc(promo, menus)).toContain('b.jpg')
   })
 
+  it('ignores mirror when mirror image equals rice component copy', () => {
+    const riceUrl = 'https://x.supabase.co/storage/v1/object/public/pos-menu-images/rice.jpg'
+    const promo = {
+      id: '40',
+      items: [
+        { menuId: '11', optionId: null, quantity: 1 },
+        { menuId: '12', optionId: null, quantity: 1 },
+      ],
+    } as PosPromoWithItems
+    const menus = [
+      { id: '99', promoId: '40', imageUrl: riceUrl },
+      { id: '11', categoryMain: 'Side', category: 'Rice', imageUrl: riceUrl },
+      { id: '12', categoryMain: 'Chicken', category: 'Fried', imageUrl: 'https://x.supabase.co/storage/v1/object/public/pos-menu-images/chicken.jpg' },
+    ] as PosMenu[]
+    expect(resolvePromoTileImageSrc(promo, menus)).toContain('chicken.jpg')
+  })
+
   it('prefers non-side component image over rice/side', () => {
     const promo = {
       id: '30',
@@ -35,5 +55,17 @@ describe('resolvePromoTileImageSrc', () => {
       { id: '12', categoryMain: 'Chicken', category: 'Fried', imageUrl: 'https://x.supabase.co/storage/v1/object/public/pos-menu-images/chicken.jpg' },
     ] as PosMenu[]
     expect(resolvePromoTileImageSrc(promo, menus)).toContain('chicken.jpg')
+  })
+
+  it('detects stale side copy on mirror', () => {
+    const riceUrl = 'https://x.supabase.co/storage/v1/object/public/pos-menu-images/rice.jpg'
+    const promo = {
+      id: '50',
+      items: [{ menuId: '11', optionId: null, quantity: 1 }],
+    } as PosPromoWithItems
+    const menusById = new Map<string, PosMenu>([
+      ['11', { id: '11', category: 'Rice', imageUrl: riceUrl } as PosMenu],
+    ])
+    expect(isPromoMirrorImageStaleSideCopy(riceUrl, promo, menusById)).toBe(true)
   })
 })

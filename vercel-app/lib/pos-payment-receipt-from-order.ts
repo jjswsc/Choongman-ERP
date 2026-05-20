@@ -106,6 +106,14 @@ function pickPromoIdFromPromoCode(it: Record<string, unknown>, catalog: Map<stri
 
 function pickPromoIdFromLinkedMenu(it: Record<string, unknown>, menus: PosMenu[] | undefined): string | null {
   if (!menus?.length) return null
+  const lineName = String(it.name ?? '').trim().toLowerCase()
+  const lineIdRaw = String(it.id ?? '').trim().toLowerCase()
+  const hasExplicitPromoToken =
+    lineIdRaw.startsWith('promo-') ||
+    /\b(set|promo|bundle|campaign)\b/i.test(lineName) ||
+    lineName.includes('[[') ||
+    lineName.includes(']]')
+  if (!hasExplicitPromoToken) return null
   const lineId = coerceNonEmptyId(it.id)
   if (!lineId) return null
   const exact = menus.find((m) => String(m.id) === lineId)
@@ -139,6 +147,8 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
   if (!catalog?.size) return null
   const nameRaw = String(it.name ?? '').trim()
   if (!nameRaw) return null
+  const promoLikeName = /\b(set|promo|bundle|campaign)\b/i.test(nameRaw) || nameRaw.includes('[[')
+  if (!promoLikeName) return null
   const key = normalizePromoLookupText(nameRaw)
   if (!key) return null
 
