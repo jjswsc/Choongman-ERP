@@ -78,6 +78,7 @@ import {
   isCompanyHybridDocCategoryGlobalStore,
   pickCompanyHybridDocCategoriesForPicker,
   sortCompanyHybridDocCategoriesTree,
+  toHtmlDateInputValue,
   type CompanyHybridDocVisibility,
   isCompanyHybridDocsListAllStoresParam,
 } from "@/lib/company-hybrid-documents"
@@ -678,8 +679,8 @@ export function CompanyHybridDocumentsPanel() {
     // Drive: external_url. 업로드(supabase): public_url만 채워지므로 수정 화면에서도 링크가 보이게 한다.
     setExternalUrl(String(row.external_url || row.public_url || "").trim())
     setFormVisibility(companyHybridDocVisibilityFromDocType(row.doc_type))
-    setValidFrom(row.valid_from ? String(row.valid_from).slice(0, 10) : "")
-    setValidTo(row.valid_to ? String(row.valid_to).slice(0, 10) : "")
+    setValidFrom(toHtmlDateInputValue(row.valid_from))
+    setValidTo(toHtmlDateInputValue(row.valid_to))
     setNote(row.note || "")
     const c = getCorrespondenceFromMetadata(row.metadata)
     setCorrDirection(c?.direction === "inbound" || c?.direction === "outbound" ? c.direction : "")
@@ -690,7 +691,7 @@ export function CompanyHybridDocumentsPanel() {
         ? c.status
         : ""
     )
-    setCorrReplyDue(c?.replyDue ? String(c.replyDue).slice(0, 10) : "")
+    setCorrReplyDue(toHtmlDateInputValue(c?.replyDue))
     setCorrChannel(
       c?.channel === "mail" || c?.channel === "email" || c?.channel === "visit" || c?.channel === "other"
         ? c.channel
@@ -732,8 +733,8 @@ export function CompanyHybridDocumentsPanel() {
       store: ws,
       title: driveTitle.trim(),
       visibility: formVisibility,
-      validFrom: validFrom || undefined,
-      validTo: validTo || undefined,
+      validFrom: toHtmlDateInputValue(validFrom) || undefined,
+      validTo: toHtmlDateInputValue(validTo) || undefined,
       note: note.trim() || undefined,
       categoryId: buildCategoryIdPayload(),
     }
@@ -769,8 +770,8 @@ export function CompanyHybridDocumentsPanel() {
       visibility: formVisibility,
       source: "drive",
       externalUrl: externalUrl.trim(),
-      validFrom: validFrom || undefined,
-      validTo: validTo || undefined,
+      validFrom: toHtmlDateInputValue(validFrom) || undefined,
+      validTo: toHtmlDateInputValue(validTo) || undefined,
       note: note.trim() || undefined,
       categoryId: buildCategoryIdPayload(),
     }
@@ -848,8 +849,8 @@ export function CompanyHybridDocumentsPanel() {
         title: driveTitle.trim(),
         visibility: formVisibility,
         note: note.trim() || undefined,
-        validFrom: validFrom || undefined,
-        validTo: validTo || undefined,
+        validFrom: toHtmlDateInputValue(validFrom) || undefined,
+        validTo: toHtmlDateInputValue(validTo) || undefined,
         fileName: f.name,
         fileSize: f.size,
         storagePath: p.storagePath,
@@ -1492,11 +1493,19 @@ export function CompanyHybridDocumentsPanel() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>{t("companyHybridDocValidFrom")}</Label>
-                  <Input type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
+                  <Input
+                    type="date"
+                    value={toHtmlDateInputValue(validFrom)}
+                    onChange={(e) => setValidFrom(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("companyHybridDocValidTo")}</Label>
-                  <Input type="date" value={validTo} onChange={(e) => setValidTo(e.target.value)} />
+                  <Input
+                    type="date"
+                    value={toHtmlDateInputValue(validTo)}
+                    onChange={(e) => setValidTo(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -1590,7 +1599,11 @@ export function CompanyHybridDocumentsPanel() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">{t("companyHybridCorrReplyDue")}</Label>
-                    <Input type="date" value={corrReplyDue} onChange={(e) => setCorrReplyDue(e.target.value)} />
+                    <Input
+                      type="date"
+                      value={toHtmlDateInputValue(corrReplyDue)}
+                      onChange={(e) => setCorrReplyDue(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs">{t("companyHybridCorrChannel")}</Label>

@@ -82,8 +82,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = useState(false)
   const [filterAccountSubjectId, setFilterAccountSubjectId] = useState("")
   const [filterPettyTransType, setFilterPettyTransType] = useState("")
-  const plDrillNavReadyRef = useRef(false)
-  const plDrillAutoFetchRef = useRef(false)
+  const [plDrillFetchPending, setPlDrillFetchPending] = useState(false)
   const [listStart, setListStart] = useState(todayStr)
   const [listEnd, setListEnd] = useState(todayStr)
   const [listData, setListData] = useState<PettyCashItem[]>([])
@@ -149,15 +148,8 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     if (nav.filterAccountSubjectId) setFilterAccountSubjectId(nav.filterAccountSubjectId)
     if (nav.filterAccountSubjectUnclassified) setFilterAccountSubjectEmpty(true)
     if (nav.filterPettyTransType) setFilterPettyTransType(nav.filterPettyTransType)
-    plDrillNavReadyRef.current = true
+    setPlDrillFetchPending(true)
   }, [searchParams, canSearchAll])
-
-  useEffect(() => {
-    if (!plDrillNavReadyRef.current || plDrillAutoFetchRef.current || !auth?.store) return
-    plDrillAutoFetchRef.current = true
-    loadList(1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- plDrill 1회 자동 조회
-  }, [auth?.store, listStart, listEnd, listStore])
 
   useEffect(() => {
     if (!auth?.store) return
@@ -278,6 +270,12 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       })
       .finally(() => setListLoading(false))
   }
+
+  useEffect(() => {
+    if (!plDrillFetchPending || !auth?.store) return
+    setPlDrillFetchPending(false)
+    loadList(1)
+  }, [plDrillFetchPending, auth?.store, listStart, listEnd, listStore, listScope, listDepartment])
 
   const loadMonthly = () => {
     if (!auth?.store) return

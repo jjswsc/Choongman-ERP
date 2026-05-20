@@ -1,3 +1,5 @@
+import { parseCompanyHybridDocDate } from '@/lib/company-hybrid-documents'
+
 /**
  * 문서 관리(company_hybrid_documents.metadata.correspondence) — 공문 등 구조화 필드
  */
@@ -93,8 +95,7 @@ export function sanitizeCorrespondenceFromBody(body: unknown): CompanyHybridCorr
 
   const rdRaw = o.replyDue ?? o.reply_due
   if (rdRaw != null && String(rdRaw).trim() !== '') {
-    const rd = String(rdRaw).trim().slice(0, 10)
-    out.replyDue = /^\d{4}-\d{2}-\d{2}$/.test(rd) ? rd : null
+    out.replyDue = parseCompanyHybridDocDate(rdRaw)
   }
 
   const ch = String(o.channel ?? '').trim().toLowerCase()

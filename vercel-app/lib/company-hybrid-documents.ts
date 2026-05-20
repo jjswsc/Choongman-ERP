@@ -19,6 +19,66 @@ export function isCompanyHybridDocCategoryGlobalStore(v: string): boolean {
   return String(v || '').trim() === COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
 }
 
+const HTML_DATE_INPUT_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function isValidYmdDate(ymd: string): boolean {
+  if (!HTML_DATE_INPUT_RE.test(ymd)) return false
+  const [y, m, d] = ymd.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, m - 1, d))
+  return utc.getUTCFullYear() === y && utc.getUTCMonth() + 1 === m && utc.getUTCDate() === d
+}
+
+/**
+ * HTML `<input type="date">`용 YYYY-MM-DD.
+ * DB·레거시(D/M/Y, 타임스탬프 등) 값을 편집 가능한 형식으로 맞춘다.
+ */
+export function toHtmlDateInputValue(raw: string | null | undefined): string {
+  if (raw == null) return ''
+  const s = String(raw).trim()
+  if (!s) return ''
+  const head = s.slice(0, 10)
+  if (HTML_DATE_INPUT_RE.test(head)) return head
+  const iso = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (iso) return iso[1]
+
+  const slash = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
+  if (slash) {
+    const n1 = Number(slash[1])
+    const n2 = Number(slash[2])
+    const yyyy = slash[3]
+    let dd: number
+    let mm: number
+    if (n1 > 12) {
+      dd = n1
+      mm = n2
+    } else if (n2 > 12) {
+      mm = n1
+      dd = n2
+    } else {
+      dd = n1
+      mm = n2
+    }
+    if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return ''
+    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+  }
+
+  const parsed = new Date(s.includes('T') ? s : `${s}T12:00:00+07:00`)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+  }
+  return ''
+}
+
+/** API·DB 저장용 date — YYYY-MM-DD 또는 null */
+export function parseCompanyHybridDocDate(raw: unknown): string | null {
+  if (raw == null) return null
+  const trimmed = String(raw).trim()
+  if (!trimmed) return null
+  const v = toHtmlDateInputValue(trimmed)
+  if (!v || !isValidYmdDate(v)) return null
+  return v
+}
+
 /** 문서 등록·필터용 카테고리 목록 — 전사 공통 우선, 없으면 기존 매장별 데이터 폴백 */
 export function pickCompanyHybridDocCategoriesForPicker(
   items: CompanyHybridDocCategoryRow[]

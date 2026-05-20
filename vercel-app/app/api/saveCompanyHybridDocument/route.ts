@@ -6,6 +6,7 @@ import {
   companyHybridDocVisibilityToDocType,
   isReasonableExternalUrl,
   isCompanyHybridSource,
+  parseCompanyHybridDocDate,
 } from '@/lib/company-hybrid-documents'
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
@@ -39,8 +40,8 @@ export async function POST(request: NextRequest) {
     const sourceInput = norm(body.source)
     const externalUrl = norm(body.externalUrl || body.external_url)
     const note = norm(body.note)
-    const validFrom = body.validFrom != null && String(body.validFrom).trim() ? String(body.validFrom).slice(0, 10) : null
-    const validTo = body.validTo != null && String(body.validTo).trim() ? String(body.validTo).slice(0, 10) : null
+    const validFrom = parseCompanyHybridDocDate(body.validFrom)
+    const validTo = parseCompanyHybridDocDate(body.validTo)
     const hasCorrespondenceKey = Object.prototype.hasOwnProperty.call(body, 'correspondence')
 
     if (!store) {

@@ -7,6 +7,7 @@ import {
   companyHybridDocVisibilityToDocType,
   COMPANY_DOCUMENTS_BUCKET,
   slugifyStoreForCompanyDocPath,
+  parseCompanyHybridDocDate,
 } from '@/lib/company-hybrid-documents'
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
@@ -37,8 +38,8 @@ export async function POST(request: NextRequest) {
     const visibility = isCompanyHybridDocVisibility(visibilityRaw) ? visibilityRaw : 'all'
     const categoryIdIn = body.categoryId ?? body.category_id
     const note = norm(body.note)
-    const validFrom = body.validFrom != null && String(body.validFrom).trim() ? String(body.validFrom).slice(0, 10) : null
-    const validTo = body.validTo != null && String(body.validTo).trim() ? String(body.validTo).slice(0, 10) : null
+    const validFrom = parseCompanyHybridDocDate(body.validFrom)
+    const validTo = parseCompanyHybridDocDate(body.validTo)
     const hasCorrespondenceKey = Object.prototype.hasOwnProperty.call(body, 'correspondence')
     const fileName = norm(body.fileName)
     const storagePath = norm(body.storagePath)
