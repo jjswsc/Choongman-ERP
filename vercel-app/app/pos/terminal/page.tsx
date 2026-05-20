@@ -115,6 +115,7 @@ import {
   printPosHtmlDocument,
   POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS,
   resolveAfterReceiptToKitchenDelayMs,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
@@ -809,20 +810,29 @@ export default function PosTerminalPage() {
       })),
     [optionNameByCode, optionNameById]
   )
-  const pushReceiptQueue = useCallback((batch: ReceiptModalData[]) => {
+  /** 분할 결제 영수증 배치 시작 — 기존 큐·모달 상태를 비우고 첫 장부터 순서대로 인쇄 */
+  const startReceiptBatch = useCallback((batch: ReceiptModalData[]) => {
     if (!Array.isArray(batch) || batch.length === 0) return
-    if (!receiptData) {
-      const [first, ...rest] = batch
-      receiptQueueRef.current = rest
-      setReceiptData(first)
-      return
-    }
-    receiptQueueRef.current = [...receiptQueueRef.current, ...batch]
-  }, [receiptData])
+    const [first, ...rest] = batch
+    receiptQueueRef.current = rest
+    setReceiptData(first)
+  }, [])
+  const splitReceiptFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flushNextReceiptQueue = useCallback(() => {
+    if (splitReceiptFlushTimerRef.current != null) {
+      clearTimeout(splitReceiptFlushTimerRef.current)
+      splitReceiptFlushTimerRef.current = null
+    }
     const [next, ...rest] = receiptQueueRef.current
     receiptQueueRef.current = rest
-    setReceiptData(next ?? null)
+    if (!next) {
+      setReceiptData(null)
+      return
+    }
+    splitReceiptFlushTimerRef.current = setTimeout(() => {
+      splitReceiptFlushTimerRef.current = null
+      setReceiptData(next)
+    }, POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS)
   }, [])
   const clearReceiptQueue = useCallback(() => {
     receiptQueueRef.current = []
@@ -4821,7 +4831,7 @@ export default function PosTerminalPage() {
                   !isMainPosDevice
                 )
                 if (splitBatch.length > 0) {
-                  pushReceiptQueue(splitBatch)
+                  startReceiptBatch(splitBatch)
                 } else {
                   setReceiptData(receiptPayload)
                 }
@@ -4939,7 +4949,7 @@ export default function PosTerminalPage() {
                   !isMainPosDevice
                 )
                 if (splitBatch.length > 0) {
-                  pushReceiptQueue(splitBatch)
+                  startReceiptBatch(splitBatch)
                 } else {
                   setReceiptData(receiptPayload)
                 }
@@ -5673,7 +5683,7 @@ export default function PosTerminalPage() {
                   !isMainPosDevice
                 )
                 if (splitBatch.length > 0) {
-                  pushReceiptQueue(splitBatch)
+                  startReceiptBatch(splitBatch)
                 } else {
                   setReceiptData(receiptPayload)
                 }
@@ -5949,7 +5959,7 @@ export default function PosTerminalPage() {
                       suppressReceiptModalAutoPrint
                     )
                     if (splitBatch.length > 0) {
-                      pushReceiptQueue(splitBatch)
+                      startReceiptBatch(splitBatch)
                     } else {
                       setReceiptData({
                         ...receiptPayloadSubmit,
@@ -6948,8 +6958,13 @@ export default function PosTerminalPage() {
       <PosReceiptModal
         onOpenChange={(open) => {
           if (open) return
+          if (receiptData?.suppressReceiptModalAutoPrint) {
+            setReceiptData(null)
+            return
+          }
           flushNextReceiptQueue()
         }}
+        onSuppressDismiss={() => setReceiptData(null)}
         onAutoPrintComplete={flushNextReceiptQueue}
         receiptData={receiptData}
         menus={menus}

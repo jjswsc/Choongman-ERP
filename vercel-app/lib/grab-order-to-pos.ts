@@ -568,6 +568,44 @@ function resolveSizeLetterOptionLabel(
   return ''
 }
 
+function hasSizeProfileForMenu(menuCode: string, optionNameByCode: Map<string, string>): boolean {
+  const mc = String(menuCode || '').trim().toUpperCase()
+  if (!mc) return false
+  let seenMOrL = false
+  for (const [code, label] of optionNameByCode.entries()) {
+    const c = String(code || '').trim().toUpperCase()
+    if (!c.startsWith(`${mc}-`)) continue
+    const lab = String(label || '').trim()
+    if (!lab) continue
+    if (/(^|[\s\-–—])M([\s\-–—]|$)/i.test(lab) || /(^|[\s\-–—])L([\s\-–—]|$)/i.test(lab)) {
+      seenMOrL = true
+      break
+    }
+    if (/\bsize\s*(m|l)\b/i.test(lab)) {
+      seenMOrL = true
+      break
+    }
+  }
+  return seenMOrL
+}
+
+function inferDefaultSizeLabelForGrabLine(
+  menuCode: string,
+  currentLabels: string[],
+  optionCodes: string[],
+  optionNameByCode: Map<string, string>
+): string {
+  if (optionCodes.length > 0) return ''
+  const hasExplicitSize = currentLabels.some((token) =>
+    /(^|[\s\-–—])(size\s*)?[SML]([\s\-–—]|$)/i.test(String(token || '').trim())
+  )
+  if (hasExplicitSize) return ''
+  const mc = String(menuCode || '').trim()
+  if (!mc) return ''
+  if (!hasSizeProfileForMenu(mc, optionNameByCode)) return ''
+  return resolveSizeLetterOptionLabel(mc, 'S', optionNameByCode) || 'Size S'
+}
+
 function normalizeModifierNamesForDisplay(params: {
   names: string[]
   menuCode: string
@@ -745,6 +783,15 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       menuCode: resolvedMenuCode,
       optionNameByCode: catalog.optionNameByCode,
     })
+    const inferredDefaultSize = inferDefaultSizeLabelForGrabLine(
+      resolvedMenuCode,
+      modifierNamesForNote,
+      optionCodes,
+      catalog.optionNameByCode
+    )
+    if (inferredDefaultSize && !modifierNamesForNote.includes(inferredDefaultSize)) {
+      modifierNamesForNote.unshift(inferredDefaultSize)
+    }
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,

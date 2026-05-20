@@ -146,6 +146,8 @@ interface PosReceiptModalProps {
   kitchenPromoLineEnrich?: PosOrderReceiptLineOptions
   /** 자동 인쇄 완료 후 호출 (분할 큐 다음 장 처리) */
   onAutoPrintComplete?: () => void
+  /** 보조 POS 등 자동 인쇄 생략 시 — 큐를 비우지 않고 현재 장만 닫음 */
+  onSuppressDismiss?: () => void
 }
 
 export function PosReceiptModal({
@@ -185,6 +187,7 @@ export function PosReceiptModal({
   printerSettingsRef,
   kitchenPromoLineEnrich,
   onAutoPrintComplete,
+  onSuppressDismiss,
 }: PosReceiptModalProps) {
   const { lang } = useLang()
   const autoPrintedKeyRef = useRef<string>('')
@@ -401,12 +404,12 @@ export function PosReceiptModal({
     onAutoPrintComplete,
   ])
 
-  /** 보조 POS 등 suppress 시 즉시 닫기 (수동 인쇄 UI 없음) */
+  /** 보조 POS 등 suppress 시 표시만 생략 (분할 큐는 메인 POS에서 인쇄) */
   useEffect(() => {
     if (!receiptData?.suppressReceiptModalAutoPrint) return
-    const id = requestAnimationFrame(() => onOpenChange(false))
+    const id = requestAnimationFrame(() => onSuppressDismiss?.())
     return () => cancelAnimationFrame(id)
-  }, [receiptData?.suppressReceiptModalAutoPrint, receiptData, onOpenChange])
+  }, [receiptData?.suppressReceiptModalAutoPrint, receiptData, onSuppressDismiss])
 
   if (!receiptData) return null
   if (receiptData.suppressReceiptModalAutoPrint) return null

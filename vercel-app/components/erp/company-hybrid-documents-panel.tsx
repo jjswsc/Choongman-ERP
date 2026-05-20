@@ -1495,7 +1495,7 @@ export function CompanyHybridDocumentsPanel() {
                   <Label>{t("companyHybridDocValidFrom")}</Label>
                   <Input
                     type="date"
-                    value={toHtmlDateInputValue(validFrom)}
+                    value={validFrom}
                     onChange={(e) => setValidFrom(e.target.value)}
                   />
                 </div>
@@ -1503,7 +1503,7 @@ export function CompanyHybridDocumentsPanel() {
                   <Label>{t("companyHybridDocValidTo")}</Label>
                   <Input
                     type="date"
-                    value={toHtmlDateInputValue(validTo)}
+                    value={validTo}
                     onChange={(e) => setValidTo(e.target.value)}
                   />
                 </div>
@@ -1601,7 +1601,7 @@ export function CompanyHybridDocumentsPanel() {
                     <Label className="text-xs">{t("companyHybridCorrReplyDue")}</Label>
                     <Input
                       type="date"
-                      value={toHtmlDateInputValue(corrReplyDue)}
+                      value={corrReplyDue}
                       onChange={(e) => setCorrReplyDue(e.target.value)}
                     />
                   </div>

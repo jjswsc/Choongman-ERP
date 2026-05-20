@@ -21,6 +21,9 @@ export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID = 2000
  */
 export const POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS = 1200
 
+/** 더치페이·분할 결제 영수증이 연속으로 나갈 때 장·장 사이 간격(스풀 합침·다음 장 누락 완화) */
+export const POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS = 1200
+
 /**
  * 숨김 iframe 인쇄 가드(`onPrintUnavailable`)를 Promise로 감쌀 때 `reject`에 쓰는 고정 메시지.
  * 번역 문자열을 `Error.message`에 넣으면 locale마다 catch 분기가 깨짐.
