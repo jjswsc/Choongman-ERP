@@ -610,3 +610,29 @@ export function buildOptionNameByCodeFromMenus(
   const catalog = buildGrabPosCatalog(menus || [], menuOptions || [])
   return catalog.optionNameByCode
 }
+
+/** 메뉴에 S·M/L 옵션만 있을 때 기본 S 라벨 추론(Grab 세트 구성·주방 프로모 표기) */
+export function inferDefaultSizeLabelForMenuId(
+  menuIdRaw: string | null | undefined,
+  menuCodeById: Map<string, string>,
+  optionNameByCode: Map<string, string>
+): string {
+  const menuId = String(menuIdRaw ?? '').trim()
+  if (!menuId) return ''
+  const menuCode = String(menuCodeById.get(menuId) ?? '').trim().toUpperCase()
+  if (!menuCode) return ''
+  const labels: string[] = []
+  for (const [code, label] of optionNameByCode.entries()) {
+    const key = String(code ?? '').trim().toUpperCase()
+    if (!key.startsWith(`${menuCode}-`)) continue
+    const text = String(label ?? '').trim()
+    if (text) labels.push(text)
+  }
+  if (labels.length === 0) return ''
+  const hasMOrL = labels.some(
+    (lab) =>
+      /(^|[\s\-–—])(size\s*)?(m|l)([\s\-–—]|$)/i.test(lab) || /\bsize\s*(m|l)\b/i.test(lab)
+  )
+  if (!hasMOrL) return ''
+  return labels.find((lab) => /(^|[\s\-–—])(size\s*)?s([\s\-–—]|$)/i.test(lab)) || 'Size S'
+}

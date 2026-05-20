@@ -73,6 +73,7 @@ import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
 import {
   ShipmentFilterBar,
   ShipmentTable,
+  OutboundStoreMonthMatrixPanel,
   type ShipmentHistorySortKey,
   type ShipmentTableRow,
 } from "@/components/shipment"
@@ -260,7 +261,9 @@ export default function OutboundPage() {
     [auth?.role]
   )
 
-  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice" | "summary">("hist")
+  const [tabValue, setTabValue] = React.useState<
+    "new" | "hist" | "warehouse" | "invoice" | "summary" | "storeMonth"
+  >("hist")
   const searchParams = useSearchParams()
   const plDrillNavAppliedRef = React.useRef(false)
   const plDrillAutoFetchRef = React.useRef(false)
@@ -829,6 +832,18 @@ export default function OutboundPage() {
       setHistoryLoading(false)
     }
   }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store])
+
+  const handleStoreMonthDrill = React.useCallback(
+    (params: { store: string; yearMonth: string }) => {
+      setHistTargetType("store")
+      setHistStore(params.store)
+      handleHistMonthChange(params.yearMonth)
+      setTabValue("hist")
+      plDrillAutoFetchRef.current = false
+      void fetchHistory()
+    },
+    [handleHistMonthChange, fetchHistory]
+  )
 
   React.useEffect(() => {
     if (!plDrillNavAppliedRef.current || plDrillAutoFetchRef.current) return
@@ -1784,7 +1799,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             <p className="text-xs text-muted-foreground">{t("outPageSub")}</p>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice" | "summary")} className={adminTabsRootCn}>
+        <Tabs
+          value={tabValue}
+          onValueChange={(v) =>
+            setTabValue(v as "new" | "hist" | "warehouse" | "invoice" | "summary" | "storeMonth")
+          }
+          className={adminTabsRootCn}
+        >
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 {isOffice && (
@@ -1803,6 +1824,11 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 {isOffice && (
                   <TabsTrigger value="invoice" className={adminTabsTriggerCn}>
                     {t("outTabInvoice")}
+                  </TabsTrigger>
+                )}
+                {isOffice && (
+                  <TabsTrigger value="storeMonth" className={adminTabsTriggerCn}>
+                    {t("outTabStoreMonth")}
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="summary" className={adminTabsTriggerCn}>
@@ -2536,6 +2562,15 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 </div>
               </div>
             </TabsContent>
+
+          {isOffice && (
+            <TabsContent value="storeMonth" className={adminTabsContentCn}>
+              <OutboundStoreMonthMatrixPanel
+                storeTargets={storeTargets}
+                onDrillToHistory={handleStoreMonthDrill}
+              />
+            </TabsContent>
+          )}
 
           <TabsContent value="hist" className={adminTabsContentCn}>
             <ShipmentFilterBar

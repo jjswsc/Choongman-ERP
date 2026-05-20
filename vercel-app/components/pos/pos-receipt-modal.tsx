@@ -25,6 +25,7 @@ import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
 import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { enrichReceiptModalItemsForPromoDisplay } from '@/lib/pos-payment-receipt-from-order'
 import {
   printPosHtmlDocument,
   POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS,
@@ -220,8 +221,14 @@ export function PosReceiptModal({
 
   const handlePrintReceipt = async (preferSystemPrintDialog = false) => {
     if (!receiptData) return
+    const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
+    const itemsForReceipt = enrichReceiptModalItemsForPromoDisplay(receiptData.items, {
+      ...kitchenPromoLineEnrich,
+      menus,
+      optionNameByCode,
+    })
     const fullHtml = buildPosPaymentReceiptDocumentHtml({
-      receiptData,
+      receiptData: { ...receiptData, items: itemsForReceipt },
       menus,
       orderTypeLabels,
       t,

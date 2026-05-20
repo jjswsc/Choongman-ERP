@@ -21,4 +21,19 @@ describe('resolvePromoTileImageSrc', () => {
     ] as PosMenu[]
     expect(resolvePromoTileImageSrc(promo, menus)).toContain('b.jpg')
   })
+
+  it('prefers non-side component image over rice/side', () => {
+    const promo = {
+      id: '30',
+      items: [
+        { menuId: '11', optionId: null, quantity: 1 },
+        { menuId: '12', optionId: null, quantity: 1 },
+      ],
+    } as PosPromoWithItems
+    const menus = [
+      { id: '11', categoryMain: 'Side', category: 'Rice', imageUrl: 'https://x.supabase.co/storage/v1/object/public/pos-menu-images/rice.jpg' },
+      { id: '12', categoryMain: 'Chicken', category: 'Fried', imageUrl: 'https://x.supabase.co/storage/v1/object/public/pos-menu-images/chicken.jpg' },
+    ] as PosMenu[]
+    expect(resolvePromoTileImageSrc(promo, menus)).toContain('chicken.jpg')
+  })
 })

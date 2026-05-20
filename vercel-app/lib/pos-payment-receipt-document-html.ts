@@ -19,6 +19,12 @@ import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+import {
+  buildOptionNameByCodeFromMenus,
+  formatGrabOptionFragmentForPrint,
+  formatGrabOrderLineNoteForPrint,
+} from '@/lib/grab-pos-order-enrich'
+import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import {
@@ -589,7 +595,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ? `<div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>`
             : receiptPayLine(esc(tr('posMenuName', '품목')), esc(tr('amount', '금액')), 'receipt-pay-line--head')
         }
-        ${receiptData.items
+        ${mergeSetChildrenForReceipt(
+          receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0]
+        )
           .map((it, idx) => {
             const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
@@ -597,19 +605,27 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const banban = parseBanbanFlavorsFromName(it.name)
             const baseLineSplit = splitPosPrintItemLine(it.name)
             const displayName = banban ? banban.baseName : baseLineSplit.mainName || it.name
+            const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
             const promoComposeLines =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
-                ? it.promoItems.slice(0, 4).map((pi) => {
+                ? it.promoItems.slice(0, 8).map((pi) => {
                     const menuName =
+                      String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
                       `#${String(pi.menuId)}`
-                    const optName = String((pi as { optionName?: unknown }).optionName ?? '').trim()
-                    const optNameLabel = optName
-                      ? ` (${translatePosMenuLineForReceipt(optName, t)})`
-                      : ''
                     const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
-                    const optCodeLabel = optCode ? ` [${optCode}]` : ''
-                    return `${menuName}${optNameLabel}${optCodeLabel} x${Math.max(1, Number(pi.quantity) || 1)}`
+                    const optName =
+                      String((pi as { optionName?: unknown }).optionName ?? '').trim() ||
+                      (optCode
+                        ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
+                        : '')
+                    const optNameLabel = optName
+                      ? ` (${translatePosMenuLineForReceipt(
+                          formatGrabOptionFragmentForPrint(optName, optionNameByCode),
+                          t
+                        )})`
+                      : ''
+                    return `${translatePosMenuLineForReceipt(menuName, t)}${optNameLabel} x${Math.max(1, Number(pi.quantity) || 1)}`
                   })
                 : []
             const banbanFlavorLines = banban

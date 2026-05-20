@@ -9,6 +9,7 @@ import {
 } from "@/lib/pos-kitchen-menu-display-name"
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
+  enrichPromoSnapshotForPrint,
   type PosOrderReceiptLineOptions,
 } from "@/lib/pos-payment-receipt-from-order"
 import type { OrderItem } from "@/lib/pos-types"
@@ -316,8 +317,13 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
             String((p as { menuName?: string | null }).menuName ?? '').trim()
           )
         )
-        const optionName = String((p as { optionName?: string }).optionName ?? '').trim()
-        const optionLabel = optionName ? ` (${optionName})` : ''
+        const optionName = String((p as { optionName?: string | null }).optionName ?? '').trim()
+        const optionCode = String((p as { optionCode?: string | null }).optionCode ?? '').trim()
+        const optionLabel = optionName
+          ? ` (${optionName})`
+          : optionCode
+            ? ` (${optionCode})`
+            : ''
         const displayName = parentName ? `[${parentName}] ${childName}` : childName
         const baseNote = String(it.note ?? '').trim()
         const mergedNote = baseNote
@@ -719,7 +725,23 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
       },
       menus as Parameters<typeof resolvePosOrderItemMenuDisplayName>[1]
     )
-    const promoItems = enrichPromoItemsMenuNames(it.promoItems, lookup)
+    let promoItems = enrichPromoItemsMenuNames(it.promoItems, lookup)
+    const promoItemsForPrint = Array.isArray(promoItems)
+      ? promoItems.map((p) => {
+          const menuName = String((p as { menuName?: unknown }).menuName ?? '').trim()
+          const optionName = String((p as { optionName?: unknown }).optionName ?? '').trim()
+          const optionCode = String((p as { optionCode?: unknown }).optionCode ?? '').trim()
+          return {
+            menuId: String(p.menuId ?? '').trim(),
+            optionId: p.optionId != null && String(p.optionId).trim() ? String(p.optionId).trim() : null,
+            ...(optionCode ? { optionCode } : {}),
+            ...(optionName ? { optionName } : {}),
+            ...(menuName ? { menuName } : {}),
+            quantity: Math.max(1, Number(p.quantity ?? 1) || 1),
+          }
+        })
+      : undefined
+    promoItems = enrichPromoSnapshotForPrint(promoItemsForPrint, opts) ?? promoItemsForPrint
     return {
       ...it,
       name: resolvedName,

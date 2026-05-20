@@ -34,16 +34,32 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('- CHEESE TORNADO')
     })
 
-    it('주방 코드 접두 [C024]가 있어도 맛을 분리한다', () => {
+    it('주방 코드 접두 [C024]는 표시하지 않고 맛만 분리한다', () => {
       const html = formatKitchenSlipItemRowHtml(
         { name: '[C024] Banban Chicken (Flavor 1 / Flavor 2)', qty: 1 },
         noEsc,
         close
       )
-      expect(html).toContain('[C024] Banban Chicken')
+      expect(html).toContain('Banban Chicken')
+      expect(html).not.toContain('[C024]')
       expect(html).not.toContain('Banban Chicken (Flavor 1')
       expect(html).toContain('- Flavor 1')
       expect(html).toContain('- Flavor 2')
+    })
+
+    it('메뉴 코드만 이름에 있으면 note에서 본문을 복원한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'C024',
+          qty: 1,
+          note: 'Banban Chicken (CHEESE TORNADO, SWEET YANGNYEOM, Kimchi) x1',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('Banban Chicken')
+      expect(html).not.toContain('>C024<')
+      expect(html).not.toContain('×C024')
     })
 
     it('일반 옵션 메뉴는 영향을 받지 않는다', () => {

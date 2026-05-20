@@ -7,7 +7,12 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 import { formatGrabOptionFragmentForPrint } from '@/lib/grab-pos-order-enrich'
-import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
+import {
+  isLikelyPosMenuSkuCode,
+  normalizePosPrintOptionLabel,
+  splitPosPrintItemLine,
+  stripLeadingPrintCodeBrackets,
+} from '@/lib/pos-print-item-line'
 import { buildKitchenPrintTrackingId } from '@/lib/pos-kitchen-print-tracking'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
@@ -200,6 +205,28 @@ function filterKitchenLineNoteByGroupPolicy(
  * `withKitchenCodeName`이 `[CODE] Banban Chicken (Flavor1 / Flavor2)` 형태를 만들 수 있으므로
  * 앞쪽 `[CODE] ` 접두는 제거 후 시도한다.
  */
+/** 메뉴 SKU만 이름에 있을 때(Grab 등) note 본문으로 표시명 복원 */
+export function resolveKitchenSlipRowMainDisplay(input: {
+  name: string
+  note?: string | null | undefined
+}): { mainName: string; optionLine: string } {
+  const split = splitPosPrintItemLine(input.name)
+  let mainName = stripLeadingPrintCodeBrackets(split.mainName || String(input.name ?? ''))
+  let optionLine = split.optionLine
+  const noteRaw = String(input.note ?? '').trim().replace(/^-\s*/, '').trim()
+  if (isLikelyPosMenuSkuCode(mainName) && noteRaw) {
+    const paren = /^(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?\s*$/iu.exec(noteRaw)
+    if (paren) {
+      mainName = stripLeadingPrintCodeBrackets(paren[1].trim())
+      if (!optionLine) optionLine = normalizePosPrintOptionLabel(paren[2].trim())
+    } else {
+      const bare = noteRaw.replace(/\s*x\s*[\d.]+\s*$/iu, '').trim()
+      if (bare && !isLikelyPosMenuSkuCode(bare)) mainName = stripLeadingPrintCodeBrackets(bare)
+    }
+  }
+  return { mainName: mainName || stripLeadingPrintCodeBrackets(String(input.name ?? '')), optionLine }
+}
+
 function parseKitchenSlipBanbanFromName(rawName: string): {
   baseName: string
   flavor1: string
@@ -207,13 +234,11 @@ function parseKitchenSlipBanbanFromName(rawName: string): {
 } | null {
   const trimmed = String(rawName ?? '').trim()
   if (!trimmed) return null
-  const codeMatch = trimmed.match(/^(\[[^\]]+\]\s*)(.+)$/u)
-  const codePrefix = codeMatch ? codeMatch[1] : ''
-  const rest = codeMatch ? codeMatch[2] : trimmed
+  const rest = stripLeadingPrintCodeBrackets(trimmed)
   const parsed = parseBanbanFlavorsFromName(rest)
   if (!parsed) return null
   return {
-    baseName: `${codePrefix}${parsed.baseName}`.trim(),
+    baseName: parsed.baseName,
     flavor1: parsed.flavor1,
     flavor2: parsed.flavor2,
   }
@@ -239,7 +264,8 @@ export function formatKitchenSlipItemRowHtml(
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
   const cancelled = Boolean(it.cancelled)
-  const nameSplit = splitPosPrintItemLine(String(it.name ?? ''))
+  const simplify = (text: string) => text.replace(/[\s\-_:()]+/g, '').toLowerCase()
+  const rowDisplay = resolveKitchenSlipRowMainDisplay({ name: String(it.name ?? ''), note: it.note })
   const rawNormalizedNote = showLineNotes
     ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
     : ''
@@ -247,14 +273,25 @@ export function formatKitchenSlipItemRowHtml(
     rawNormalizedNote,
     opts?.optionGroupPrint ?? {}
   )
-  const note = showLineNotes ? localizeKitchenSlipLineNote(groupedFilteredNote) : ''
-  const banban = parseKitchenSlipBanbanFromName(it.name)
-  const baseDisplayName = banban ? banban.baseName : nameSplit.mainName || it.name
+  let note = showLineNotes ? localizeKitchenSlipLineNote(groupedFilteredNote) : ''
+  const banban =
+    parseKitchenSlipBanbanFromName(stripLeadingPrintCodeBrackets(String(it.name ?? ''))) ||
+    (rowDisplay.optionLine
+      ? parseKitchenSlipBanbanFromName(`${rowDisplay.mainName} (${rowDisplay.optionLine})`)
+      : null)
+  const baseDisplayName = banban ? banban.baseName : rowDisplay.mainName || it.name
   const optionLine = banban
     ? ''
     : localizeKitchenSlipLineNote(
-        formatGrabOptionFragmentForPrint(nameSplit.optionLine, opts?.optionNameByCode)
+        formatGrabOptionFragmentForPrint(
+          rowDisplay.optionLine || '',
+          opts?.optionNameByCode
+        )
       )
+  if (note && isLikelyPosMenuSkuCode(splitPosPrintItemLine(String(it.name ?? '')).mainName)) {
+    const noteMain = resolveKitchenSlipRowMainDisplay({ name: '', note })
+    if (noteMain.mainName && simplify(note).includes(simplify(noteMain.mainName))) note = ''
+  }
   const rowOpen = cancelled ? '<div class="k-row k-row-cancelled">' : '<div class="k-row">'
   const main =
     '<div class="k-row-main">' +
@@ -267,7 +304,6 @@ export function formatKitchenSlipItemRowHtml(
     escapeHtml(baseDisplayName) +
     close('span') +
     close('div')
-  const simplify = (text: string) => text.replace(/[\s\-_:()]+/g, '').toLowerCase()
   const optionDupWithNote = optionLine && note && simplify(optionLine) === simplify(note)
   const optionHtml =
     optionLine && !optionDupWithNote

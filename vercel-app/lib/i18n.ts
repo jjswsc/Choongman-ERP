@@ -1074,6 +1074,16 @@ export const i18n = {
     outTabByWarehouse: '창고별 출고 목록',
     outTabInvoice: '인보이스 설정',
     outTabSummary: '매입처/메뉴 집계',
+    outTabStoreMonth: '매장·월별',
+    outStoreMonthHint:
+      '본사 창고 실제 출고(stock_logs) 기준으로 매장별·월별 금액을 집계합니다. 출고 관리 「내역 조회」 기간 합계·손익 본사 출고와 동일한 공급가 규칙입니다.',
+    outStoreMonthYear: '연도',
+    outStoreMonthMonthSuffix: '월',
+    outStoreMonthAmountLegend: '셀: 위=공급가, 아래 괄호=VAT 포함 합계. 금액 클릭 시 해당 매장·해당 월 「내역 조회」로 이동합니다.',
+    outStoreMonthRowTotal: '행 합계',
+    outStoreMonthColTotal: '열 합계',
+    outStoreMonthHitRowCap:
+      '조회 건수가 상한에 도달했을 수 있습니다. 기간을 나누거나 회계·운영팀에 문의하세요.',
     outSummaryVendorSortBy: '매입처 정렬 기준',
     outSummaryMenuSortBy: '메뉴 정렬 기준',
     outSummarySortDir: '정렬 방향',
@@ -9353,6 +9363,16 @@ Only matters the employee must handle personally on a working day:
     outTabByWarehouse: 'Outbound by Warehouse',
     outTabInvoice: 'Invoice Settings',
     outTabSummary: 'Vendor/Menu Summary',
+    outTabStoreMonth: 'Store by Month',
+    outStoreMonthHint:
+      'Matrix of outbound amounts by franchise store and month (HQ warehouse stock_logs). Subtotal rules match Outbound History and P&L HQ outbound.',
+    outStoreMonthYear: 'Year',
+    outStoreMonthMonthSuffix: '',
+    outStoreMonthAmountLegend: 'Cell: top = subtotal, (bottom) = VAT-inclusive total. Click an amount to open History for that store and month.',
+    outStoreMonthRowTotal: 'Row total',
+    outStoreMonthColTotal: 'Column total',
+    outStoreMonthHitRowCap:
+      'Row limit may have been reached. Try a shorter period or contact ops/accounting.',
     outSummaryVendorSortBy: 'Vendor sort',
     outSummaryMenuSortBy: 'Menu sort',
     outSummarySortDir: 'Sort direction',

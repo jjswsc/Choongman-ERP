@@ -800,6 +800,11 @@ export default function PosTerminalPage() {
     },
     [menuCodeById, optionNameByCode]
   )
+  const hasExplicitSizeToken = useCallback((rawText?: string | null): boolean => {
+    const text = String(rawText ?? '').trim()
+    if (!text) return false
+    return /(^|[\s(])(?:size\s*)?[sml](?=$|[\s)\-–—,])/i.test(text)
+  }, [])
   const formatLineNoteForPrint = useCallback(
     (rawNote?: string | null): string => {
       const raw = String(rawNote ?? '').trim()
@@ -823,8 +828,8 @@ export default function PosTerminalPage() {
     return m
   }, [promosWithItems])
   const posReceiptLineOpts: PosOrderReceiptLineOptions = useMemo(
-    () => ({ promoCatalogById, menus }),
-    [promoCatalogById, menus]
+    () => ({ promoCatalogById, menus, optionNameByCode }),
+    [promoCatalogById, menus, optionNameByCode]
   )
   const grabCatalogForPrint = useMemo(
     () =>
@@ -962,9 +967,20 @@ export default function PosTerminalPage() {
           line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.kitchenRouteMenuId ?? ''
         ).trim()
         const note = String(line.note ?? '').trim()
-        const inferredDefaultSize = !note ? inferDefaultSizeLabelForMenuId(menuId) : ''
+        const inferredDefaultSize =
+          !note && !hasExplicitSizeToken(String((it as { name?: unknown }).name ?? ''))
+            ? inferDefaultSizeLabelForMenuId(menuId)
+            : ''
         const enrichedPromo =
-          Array.isArray(list) && list.length > 0 ? enrichPromoItemsWithOptionName(list) : undefined
+          Array.isArray(list) && list.length > 0
+            ? enrichPromoItemsWithOptionName(list).map((p) => {
+                const optionName = String((p as { optionName?: string }).optionName ?? '').trim()
+                const optionCode = String((p as { optionCode?: string | null }).optionCode ?? '').trim()
+                if (optionName || optionCode) return p
+                const inferred = inferDefaultSizeLabelForMenuId(p.menuId)
+                return inferred ? { ...p, optionName: inferred } : p
+              })
+            : undefined
         return {
           ...it,
           ...(enrichedPromo ? { promoItems: enrichedPromo } : {}),
@@ -972,7 +988,13 @@ export default function PosTerminalPage() {
         } as unknown as T
       })
     },
-    [posReceiptLineOpts, enrichPromoItemsWithOptionName, inferDefaultSizeLabelForMenuId, menus]
+    [
+      posReceiptLineOpts,
+      enrichPromoItemsWithOptionName,
+      inferDefaultSizeLabelForMenuId,
+      hasExplicitSizeToken,
+      menus,
+    ]
   )
   const kitchenSlipItemsForPrint = useCallback(
     (
@@ -982,6 +1004,9 @@ export default function PosTerminalPage() {
     ) =>
       mapKitchenSlipGroupItemsForPrint(slipItems, {
         orderItems: orderSource,
+        menuCodeByMenuId: Object.fromEntries(
+          menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+        ),
         optionNameByCode,
         translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
         formatNote: formatLineNoteForPrint,

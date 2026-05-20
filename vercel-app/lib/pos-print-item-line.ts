@@ -1,9 +1,21 @@
-const LEADING_CODE_PREFIX_RE = /^\[[^\]]+\]\s*/u
+export const LEADING_CODE_PREFIX_RE = /^\[[^\]]+\]\s*/u
+/** POS 메뉴 SKU (예: C024, CT005) — 주방·영수증에서 단독 코드 행 판별 */
+export const POS_MENU_SKU_RE = /^[A-Z]{1,3}\d{2,4}$/i
 const TRAILING_OPTION_RE = /^(.+?)\s*\(([^()]+)\)\s*$/u
 const SIZE_PREFIX_RE = /^(?:x?s|m|l|xl|xxl)\s*[-:/]\s*/iu
 
 function normalizeSpaces(value: string): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+export function stripLeadingPrintCodeBrackets(rawName: string): string {
+  return normalizeSpaces(String(rawName ?? '').replace(LEADING_CODE_PREFIX_RE, ''))
+}
+
+export function isLikelyPosMenuSkuCode(raw: string): boolean {
+  const t = stripLeadingPrintCodeBrackets(String(raw ?? ''))
+  if (!t || t.length > 10) return false
+  return POS_MENU_SKU_RE.test(t)
 }
 
 export function normalizePosPrintOptionLabel(rawOption: string): string {

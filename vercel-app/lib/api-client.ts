@@ -10941,6 +10941,41 @@ export async function getCombinedOutboundHistory(params: {
   return jsonAsArray<OutboundHistoryItem>(await res.json())
 }
 
+export type OutboundStoreMonthAmountCell = {
+  subtotal: number
+  vat: number
+  grandTotal: number
+}
+
+export type OutboundStoreMonthMatrixResult = {
+  year: number
+  months: string[]
+  stores: string[]
+  cells: Record<string, Record<string, OutboundStoreMonthAmountCell>>
+  rowTotals: Record<string, OutboundStoreMonthAmountCell>
+  colTotals: Record<string, OutboundStoreMonthAmountCell>
+  grandTotal: OutboundStoreMonthAmountCell
+  hitRowCap: boolean
+  lineCount: number
+}
+
+/** 출고 관리 — 매장×월별 금액 행렬 (공급가·VAT·합계, stock_logs 기준) */
+export async function getOutboundStoreMonthMatrix(params: {
+  year: number
+  storeFilter?: string
+  knownStores?: string[]
+}) {
+  const q = new URLSearchParams({ year: String(params.year) })
+  if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
+  if (params.knownStores?.length) q.set('knownStores', params.knownStores.join(','))
+  const res = await apiFetchWithOffline(`/api/getOutboundStoreMonthMatrix?${q}`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
+  }
+  return res.json() as Promise<OutboundStoreMonthMatrixResult>
+}
+
 /** 출고 로그(stock_logs) 확정 단가·수량 수정 — 본사 권한, orders 미변경 */
 export async function patchStockLogInvoiceUnitPrice(params: {
   stockLogId: number

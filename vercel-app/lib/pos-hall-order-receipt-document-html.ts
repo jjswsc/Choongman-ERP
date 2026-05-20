@@ -84,7 +84,8 @@ function normalizeReceiptTextKey(v: string): string {
     .trim()
 }
 
-function mergeSetChildrenForReceipt(items: HallOrderItem[]): HallOrderItem[] {
+/** Grab·주방 분할 `[세트] 구성` 줄을 부모 세트의 promoItems 로 합친다(캐셔·홀 주문서). */
+export function mergeSetChildrenForReceipt(items: HallOrderItem[]): HallOrderItem[] {
   if (!Array.isArray(items) || items.length === 0) return items
   const out = items.map((it) => ({ ...it }))
   const childRows: { index: number; promoLabel: string; childName: string }[] = []

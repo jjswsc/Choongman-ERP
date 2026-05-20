@@ -1,5 +1,10 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
 import {
+  formatGrabOrderLineNoteForPrint,
+  inferDefaultSizeLabelForMenuId,
+} from '@/lib/grab-pos-order-enrich'
+import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
+import {
   computePosPricing,
   receiptTaxDisplayFieldsFromPricing,
   type PosPricingAdjustments,
@@ -14,6 +19,8 @@ export type PosOrderReceiptLineOptions = {
   promoCatalogById?: Map<string, PosPromoWithItems>
   /** 미러 메뉴(id만 저장·promoId 누락) 등: pos_menus.promoId 로 프로모를 역추적 */
   menus?: PosMenu[]
+  /** 프로모 구성 optionCode → 표시명 (캐셔·주방) */
+  optionNameByCode?: Map<string, string>
 }
 
 type ReceiptPromoLine = {
@@ -162,6 +169,41 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
   return candidates[0].id
 }
 
+function buildMenuCodeById(menus: PosMenu[] | undefined): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const m of menus || []) {
+    const id = String(m.id ?? '').trim()
+    const code = String(m.code ?? '').trim()
+    if (id && code) map.set(id, code)
+  }
+  return map
+}
+
+/** 프로모 구성 줄 — optionCode·기본 사이즈(S) 보강 */
+export function enrichPromoSnapshotForPrint(
+  promoItems: ReceiptPromoLine[] | undefined,
+  opts?: Pick<PosOrderReceiptLineOptions, 'optionNameByCode' | 'menus'>
+): ReceiptPromoLine[] | undefined {
+  if (!Array.isArray(promoItems) || promoItems.length === 0) return promoItems
+  const optionNameByCode = opts?.optionNameByCode
+  const menuCodeById = buildMenuCodeById(opts?.menus)
+  return promoItems.map((p) => {
+    let optionName = String((p as { optionName?: unknown }).optionName ?? '').trim()
+    const optionCode = String(p.optionCode ?? '').trim()
+    if (!optionName && optionCode && optionNameByCode?.size) {
+      const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, optionNameByCode)
+      if (fromCode && !fromCode.split(',').every((x) => /^[A-Z0-9-]+$/i.test(x.trim()))) {
+        optionName = fromCode
+      }
+    }
+    if (!optionName && optionNameByCode?.size) {
+      const inferred = inferDefaultSizeLabelForMenuId(p.menuId, menuCodeById, optionNameByCode)
+      if (inferred) optionName = inferred
+    }
+    return optionName ? { ...p, optionName } : p
+  })
+}
+
 function normalizeReceiptPromoLines(raw: unknown[]): ReceiptPromoLine[] {
   return raw.map((x) => {
     const o = x as Record<string, unknown>
@@ -263,10 +305,14 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
   if (!items?.length || (!catalog?.size && !menus?.length)) return items
   return items.map((it) => {
     const direct = pickPromoItemsFromOrderLine(it)
-    if (direct && direct.length > 0) return it
+    if (direct && direct.length > 0) {
+      const enriched = enrichPromoSnapshotForPrint(normalizeReceiptPromoLines(direct), opts)
+      return { ...it, promoItems: enriched } as T
+    }
     const promo = resolvePromoItemsForReceiptLine(it, catalog, menus)
     if (!promo || promo.length === 0) return it
-    return { ...it, promoItems: promo } as T
+    const enriched = enrichPromoSnapshotForPrint(promo, opts) ?? promo
+    return { ...it, promoItems: enriched } as T
   })
 }
 
@@ -300,9 +346,12 @@ export function enrichReceiptModalItemsForPromoDisplay(
   items: ReceiptModalData['items'],
   opts?: PosOrderReceiptLineOptions
 ): ReceiptModalData['items'] {
-  return enrichPosOrderLikeItemsWithPromoSnapshot(
+  const enriched = enrichPosOrderLikeItemsWithPromoSnapshot(
     items as unknown as Record<string, unknown>[],
     opts
+  ) as ReceiptModalData['items']
+  return mergeSetChildrenForReceipt(
+    enriched as Parameters<typeof mergeSetChildrenForReceipt>[0]
   ) as ReceiptModalData['items']
 }
 

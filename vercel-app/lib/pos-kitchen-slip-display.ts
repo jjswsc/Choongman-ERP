@@ -1,9 +1,11 @@
 import {
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
+  inferDefaultSizeLabelForMenuId,
   isLikelyPosOptionCode,
 } from '@/lib/grab-pos-order-enrich'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { stripLeadingPrintCodeBrackets } from '@/lib/pos-print-item-line'
 import type { KitchenSlipRoutingItem } from '@/lib/pos-kitchen-slip-routing'
 
 export type KitchenSlipPrintLine = {
@@ -63,13 +65,22 @@ function resolvePromoOptionLabel(
 function formatPromoComposeLine(
   p: PromoSnapshot,
   menuNameByMenuId?: Record<string, string>,
-  optionNameByCode?: Map<string, string> | Record<string, string>
+  optionNameByCode?: Map<string, string> | Record<string, string>,
+  menuCodeById?: Map<string, string>
 ): string {
   const menuName =
     String((p as { menuName?: unknown }).menuName ?? '').trim() ||
     (menuNameByMenuId && p.menuId ? String(menuNameByMenuId[p.menuId] ?? '').trim() : '') ||
     (p.menuId ? `#${p.menuId}` : '')
-  const optName = resolvePromoOptionLabel(p, optionNameByCode)
+  let optName = resolvePromoOptionLabel(p, optionNameByCode)
+  if (!optName && menuCodeById && optionNameByCode && p.menuId) {
+    const inferred = inferDefaultSizeLabelForMenuId(
+      p.menuId,
+      menuCodeById,
+      optionNameByCode instanceof Map ? optionNameByCode : new Map(Object.entries(optionNameByCode))
+    )
+    if (inferred) optName = inferred
+  }
   const optLabel = optName ? ` (${optName})` : ''
   return `${menuName}${optLabel} x${Math.max(1, Number(p.quantity) || 1)}`
 }
@@ -77,11 +88,12 @@ function formatPromoComposeLine(
 function promoComposeFromOrderParent(
   parent: KitchenSlipRoutingItem,
   menuNameByMenuId?: Record<string, string>,
-  optionNameByCode?: Map<string, string> | Record<string, string>
+  optionNameByCode?: Map<string, string> | Record<string, string>,
+  menuCodeById?: Map<string, string>
 ): string[] {
   const pi = parent.promoItems
   if (!Array.isArray(pi) || pi.length === 0) return []
-  return pi.slice(0, 12).map((p) => formatPromoComposeLine(p, menuNameByMenuId, optionNameByCode))
+  return pi.slice(0, 12).map((p) => formatPromoComposeLine(p, menuNameByMenuId, optionNameByCode, menuCodeById))
 }
 
 function promoComposeFromSplitChildren(
@@ -176,11 +188,18 @@ export function buildKitchenHallStyleSlipLines(
   opts?: {
     orderItems?: KitchenSlipRoutingItem[]
     menuNameByMenuId?: Record<string, string>
+    menuCodeByMenuId?: Record<string, string>
     optionNameByCode?: Map<string, string> | Record<string, string>
   }
 ): KitchenSlipPrintLine[] {
   const orderItems = opts?.orderItems ?? []
   const menuNameByMenuId = opts?.menuNameByMenuId
+  const menuCodeMap = new Map<string, string>()
+  if (opts?.menuCodeByMenuId) {
+    for (const [id, code] of Object.entries(opts.menuCodeByMenuId)) {
+      if (id && code) menuCodeMap.set(id, String(code))
+    }
+  }
   const optionNameByCode = opts?.optionNameByCode
 
   const orderById = new Map<string, KitchenSlipRoutingItem>()
@@ -265,7 +284,7 @@ export function buildKitchenHallStyleSlipLines(
   for (const g of promoGroups.values()) {
     const parentOrder = resolveParentOrderItem(g.groupId, g.parentLabel, orderById, orderByParentKey)
     const parentName = String(parentOrder?.name ?? g.parentLabel).trim() || g.parentLabel
-    const displayParentName = `${g.codePrefix}${parentName}`.trim()
+    const displayParentName = String(parentName ?? g.parentLabel).trim() || g.parentLabel
     const parentQty = Math.max(
       1,
       Number(
@@ -277,7 +296,7 @@ export function buildKitchenHallStyleSlipLines(
       ) || 1
     )
     const fromOrder = parentOrder
-      ? promoComposeFromOrderParent(parentOrder, menuNameByMenuId, optionNameByCode)
+      ? promoComposeFromOrderParent(parentOrder, menuNameByMenuId, optionNameByCode, menuCodeMap)
       : []
     const fromChildren = promoComposeFromSplitChildren(g.children, menuNameByMenuId, optionNameByCode)
     const promoComposeLines = fromOrder.length > 0 ? fromOrder : fromChildren
@@ -297,9 +316,9 @@ export function buildKitchenHallStyleSlipLines(
   for (const it of regular) {
     const pi = it.promoItems
     if (Array.isArray(pi) && pi.length > 0) {
-      const promoComposeLines = promoComposeFromOrderParent(it, menuNameByMenuId, optionNameByCode)
+      const promoComposeLines = promoComposeFromOrderParent(it, menuNameByMenuId, optionNameByCode, menuCodeMap)
       out.push({
-        name: String(it.name ?? '').trim(),
+        name: stripLeadingPrintCodeBrackets(String(it.name ?? '')),
         qty: Math.max(1, resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown }) || 1),
         ...(() => {
           const note = formatGrabOrderLineNoteForPrint(String(it.note ?? '').trim(), optionNameByCode)
@@ -310,7 +329,7 @@ export function buildKitchenHallStyleSlipLines(
       continue
     }
     out.push({
-      name: String(it.name ?? '').trim(),
+      name: stripLeadingPrintCodeBrackets(String(it.name ?? '')),
       qty: Math.max(1, Number(it.qty ?? 1) || 1),
       ...(() => {
         const note = formatGrabOrderLineNoteForPrint(String(it.note ?? '').trim(), optionNameByCode)
@@ -330,6 +349,7 @@ export function mapKitchenSlipGroupItemsForPrint(
   opts: {
     orderItems?: KitchenSlipRoutingItem[]
     menuNameByMenuId?: Record<string, string>
+    menuCodeByMenuId?: Record<string, string>
     optionNameByCode?: Map<string, string> | Record<string, string>
     translateName: (name: string) => string
     formatNote?: (note?: string) => string | undefined
@@ -342,6 +362,7 @@ export function mapKitchenSlipGroupItemsForPrint(
   const hallLines = buildKitchenHallStyleSlipLines(slipItems, {
     orderItems: opts.orderItems,
     menuNameByMenuId: opts.menuNameByMenuId,
+    menuCodeByMenuId: opts.menuCodeByMenuId,
     optionNameByCode: opts.optionNameByCode,
   })
   return hallLines.map((row) => ({
