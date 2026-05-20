@@ -20,12 +20,39 @@ export function isCompanyHybridDocCategoryGlobalStore(v: string): boolean {
 }
 
 const HTML_DATE_INPUT_RE = /^\d{4}-\d{2}-\d{2}$/
+const MIN_DOC_YEAR = 1900
+const MAX_DOC_YEAR = 2100
 
 function isValidYmdDate(ymd: string): boolean {
   if (!HTML_DATE_INPUT_RE.test(ymd)) return false
   const [y, m, d] = ymd.split('-').map(Number)
   const utc = new Date(Date.UTC(y, m - 1, d))
   return utc.getUTCFullYear() === y && utc.getUTCMonth() + 1 === m && utc.getUTCDate() === d
+}
+
+function isReasonableDocYear(y: number): boolean {
+  return Number.isFinite(y) && y >= MIN_DOC_YEAR && y <= MAX_DOC_YEAR
+}
+
+function normalizeHtmlYmd(ymd: string): string {
+  if (!isValidYmdDate(ymd)) return ''
+  const [y] = ymd.split('-').map(Number)
+  if (!isReasonableDocYear(y)) return ''
+  return ymd
+}
+
+function formatBangkokYmd(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const y = parts.find((p) => p.type === 'year')?.value ?? ''
+  const m = parts.find((p) => p.type === 'month')?.value ?? ''
+  const d = parts.find((p) => p.type === 'day')?.value ?? ''
+  if (!y || !m || !d) return ''
+  return `${y}-${m}-${d}`
 }
 
 /**
@@ -37,15 +64,15 @@ export function toHtmlDateInputValue(raw: string | null | undefined): string {
   const s = String(raw).trim()
   if (!s) return ''
   const head = s.slice(0, 10)
-  if (HTML_DATE_INPUT_RE.test(head)) return head
+  if (HTML_DATE_INPUT_RE.test(head)) return normalizeHtmlYmd(head)
   const iso = s.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (iso) return iso[1]
+  if (iso) return normalizeHtmlYmd(iso[1])
 
   const slash = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
   if (slash) {
     const n1 = Number(slash[1])
     const n2 = Number(slash[2])
-    const yyyy = slash[3]
+    const yyyy = Number(slash[3])
     let dd: number
     let mm: number
     if (n1 > 12) {
@@ -59,12 +86,13 @@ export function toHtmlDateInputValue(raw: string | null | undefined): string {
       mm = n2
     }
     if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return ''
-    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+    if (!isReasonableDocYear(yyyy)) return ''
+    return normalizeHtmlYmd(`${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`)
   }
 
   const parsed = new Date(s.includes('T') ? s : `${s}T12:00:00+07:00`)
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+    return normalizeHtmlYmd(formatBangkokYmd(parsed))
   }
   return ''
 }

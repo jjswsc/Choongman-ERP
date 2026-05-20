@@ -6,6 +6,7 @@ import {
 } from '@/lib/pos-delivery-platform'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
+import { formatGrabOptionFragmentForPrint, formatGrabOrderLineNoteForPrint } from '@/lib/grab-pos-order-enrich'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum } from '@/lib/utils'
@@ -142,8 +143,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   lang: string
   resolveOrderItemDisplayName?: (item: HallOrderItem) => string
   menuNameById?: (menuId: string) => string
+  optionNameByCode?: Map<string, string> | Record<string, string>
 }): string {
-  const { payload, t, lang, resolveOrderItemDisplayName, menuNameById } = params
+  const { payload, t, lang, resolveOrderItemDisplayName, menuNameById, optionNameByCode } = params
   const esc = (value: string) =>
     String(value || '')
       .replace(/&/g, '&amp;')
@@ -231,9 +233,14 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       const lineSplit = splitPosPrintItemLine(lineName)
       const lineMain = translatePosMenuLineForReceipt(lineSplit.mainName || lineName, (k) => t(k))
       const lineOption = lineSplit.optionLine
-        ? translatePosMenuLineForReceipt(lineSplit.optionLine, (k) => t(k))
+        ? translatePosMenuLineForReceipt(
+            formatGrabOptionFragmentForPrint(lineSplit.optionLine, optionNameByCode),
+            (k) => t(k)
+          )
         : ''
-      const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+      const lineNote =
+        formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
+        normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
       const lineNoteLabel = /^item\s*note$/i.test(rawLineNoteLabel) ? 'Item' : rawLineNoteLabel
       const promoComposeLines =
@@ -243,7 +250,12 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
                 String((p as { menuName?: unknown }).menuName ?? '').trim() ||
                 (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : '') ||
                 `#${String(p.menuId)}`
-              const optName = String((p as { optionName?: unknown }).optionName ?? '').trim()
+              const optCode = String((p as { optionCode?: unknown }).optionCode ?? '').trim()
+              const optName =
+                String((p as { optionName?: unknown }).optionName ?? '').trim() ||
+                (optCode
+                  ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
+                  : '')
               const optNameLabel = optName ? ` (${translatePosMenuLineForReceipt(optName, (k) => t(k))})` : ''
               return `${menuName}${optNameLabel} x${Math.max(1, Number(p.quantity) || 1)}`
             })

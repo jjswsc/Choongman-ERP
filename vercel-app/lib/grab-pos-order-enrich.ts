@@ -1,4 +1,5 @@
 import type { PosMenu, PosMenuOption, PosPromoWithItems } from '@/lib/api-client'
+import { normalizePosLineNote } from '@/lib/pos-line-note'
 
 export type GrabPosPromoCatalogRow = Pick<PosPromoWithItems, 'id' | 'name' | 'code' | 'items'>
 
@@ -311,12 +312,62 @@ export function resolveOptionCodesToLabels(
   for (const raw of codes) {
     const label = resolveLabelByCode(raw)
     if (!label) continue
+    const codeKey = String(raw || '').trim().toUpperCase()
+    if (codeKey && label.toUpperCase() === codeKey) continue
     const nk = label.toLowerCase()
     if (seen.has(nk)) continue
     seen.add(nk)
     out.push(label)
   }
   return out
+}
+
+function toOptionNameByCodeMap(
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): Map<string, string> {
+  if (optionNameByCode instanceof Map) return optionNameByCode
+  const out = new Map<string, string>()
+  if (!optionNameByCode || typeof optionNameByCode !== 'object') return out
+  for (const [k, v] of Object.entries(optionNameByCode)) {
+    const code = String(k ?? '').trim()
+    const name = String(v ?? '').trim()
+    if (!code || !name) continue
+    out.set(code.toUpperCase(), name)
+  }
+  return out
+}
+
+/** 영수증·주방 인쇄: Grab 줄 note(optc/mods/코드 나열)를 사람이 읽는 옵션 문구로 */
+export function formatGrabOrderLineNoteForPrint(
+  rawNote: string | null | undefined,
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const raw = String(rawNote ?? '').trim()
+  if (!raw) return ''
+  const map = toOptionNameByCodeMap(optionNameByCode)
+  const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(raw)
+  const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(raw) || hasGrabOptionToken
+  if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
+  const grabMeta = resolveGrabDeliveryLineNote(raw, map)
+  const option = String(grabMeta.optionSummary || '').trim()
+  const request = String(grabMeta.requestSummary || '').trim()
+  if (option || request) return [option, request].filter(Boolean).join(' · ')
+  if (hasGrabOptionToken || /(?:^|\s)(mods?:|optc:)/i.test(raw)) return ''
+  return normalizePosLineNote(raw, { keepOptionSummary: false })
+}
+
+/** 메뉴명 괄호 옵션·콤마 나열 등 짧은 옵션 조각을 사람이 읽는 문구로 */
+export function formatGrabOptionFragmentForPrint(
+  raw: string | null | undefined,
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const text = String(raw ?? '').trim()
+  if (!text) return ''
+  const map = toOptionNameByCodeMap(optionNameByCode)
+  if (!/[A-Za-z][A-Za-z0-9]*-\d+/.test(text) && !/(?:^|\s)(mods?:|optc:)/i.test(text)) {
+    return text
+  }
+  return formatGrabOrderLineNoteForPrint(text, map) || text
 }
 
 export function parseOptcCodesFromNote(note: string): string[] {
@@ -364,8 +415,9 @@ export function resolveGrabDeliveryLineNote(
     if (!raw) return
     if (/^\d+$/.test(raw)) return
     if (isLikelyPosOptionCode(raw)) {
+      const codeKey = raw.toUpperCase()
       for (const label of resolveOptionCodesToLabels([raw], optionNameByCode)) {
-        pushHumanOption(label)
+        if (label && label.toUpperCase() !== codeKey) pushHumanOption(label)
       }
       return
     }

@@ -4,6 +4,7 @@ import {
   buildGrabPosCatalog,
   grabItemNameImpliesAllInPrice,
   parseGrabPartnerItemMenuRef,
+  formatGrabOrderLineNoteForPrint,
   resolveGrabDeliveryLineNote,
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
@@ -89,6 +90,12 @@ describe('grab-pos-order-enrich', () => {
     const meta = resolveGrabDeliveryLineNote('C008-1', catalog.optionNameByCode)
     expect(meta.optionChips).toEqual(['M - ชีส'])
     expect(meta.requestSummary).toBe('')
+  })
+
+  it('formatGrabOrderLineNoteForPrint omits unresolved option codes', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C011-1', name: 'S Boneless' }])
+    expect(formatGrabOrderLineNoteForPrint('C011-1, C011-5', catalog.optionNameByCode)).toBe('S Boneless')
+    expect(formatGrabOrderLineNoteForPrint('C011-9', catalog.optionNameByCode)).toBe('')
   })
 
   it('maps comma-separated plain note codes to readable option chips', () => {

@@ -21,6 +21,7 @@ import {
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
 } from '@/lib/pos-kitchen-slip-routing'
+import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
 import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
@@ -299,6 +300,7 @@ export function PosReceiptModal({
         tableName: receiptData.tableName,
         memo: receiptData.memo,
       })
+      const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
@@ -318,11 +320,13 @@ export function PosReceiptModal({
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
           items: mapKitchenSlipGroupItemsForPrint(slip.items, {
             orderItems: itemsForKitchen,
+            optionNameByCode,
             translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
           }),
           memoLine: memoLine || null,
           escapeHtml,
           design: slipDesign,
+          optionNameByCode,
           printColorAdjust: 'economy',
         })
         await printInIframe(html, slip.label, preferSystemPrintDialog, {

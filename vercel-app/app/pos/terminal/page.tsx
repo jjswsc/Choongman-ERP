@@ -982,10 +982,11 @@ export default function PosTerminalPage() {
     ) =>
       mapKitchenSlipGroupItemsForPrint(slipItems, {
         orderItems: orderSource,
+        optionNameByCode,
         translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
         formatNote: formatLineNoteForPrint,
       }),
-    [formatLineNoteForPrint]
+    [formatLineNoteForPrint, optionNameByCode]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
@@ -1824,6 +1825,7 @@ export default function PosTerminalPage() {
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
+                optionNameByCode,
                 printColorAdjust: 'exact',
                 ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
               })
@@ -2030,6 +2032,7 @@ export default function PosTerminalPage() {
                         memoLine: memoLine || null,
                         escapeHtml,
                         design: slipDesign,
+                        optionNameByCode,
                         printColorAdjust: 'exact',
                         ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
                       })
@@ -2594,6 +2597,7 @@ export default function PosTerminalPage() {
         }),
       menuNameById: (menuId: string) =>
         menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
+      optionNameByCode,
     })
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
       .replace(/&/g, '&amp;')
@@ -2707,6 +2711,7 @@ export default function PosTerminalPage() {
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
+              optionNameByCode,
               printColorAdjust: 'exact',
               prependItemsHtml: idx === 0 ? fullHead : '',
             })
@@ -2893,6 +2898,7 @@ export default function PosTerminalPage() {
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
+              optionNameByCode,
               printColorAdjust: 'exact',
               prependItemsHtml: idx === 0 ? partialHead : '',
               ...posKitchenGuestSpread(po.guestCount, ki.t('posOrderGuestCount')),
@@ -3050,6 +3056,7 @@ export default function PosTerminalPage() {
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
+                optionNameByCode,
                 printColorAdjust: 'exact',
                 ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
               })
@@ -3473,6 +3480,7 @@ export default function PosTerminalPage() {
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
+                optionNameByCode,
                 printColorAdjust: 'exact',
                 prependItemsHtml: idx === 0 ? addonKitchenHead : '',
                 ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
@@ -3780,6 +3788,7 @@ export default function PosTerminalPage() {
                     memoLine: memoLine || null,
                     escapeHtml,
                     design: slipDesign,
+                    optionNameByCode,
                     printColorAdjust: 'exact',
                     ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
                   })
@@ -5443,6 +5452,7 @@ export default function PosTerminalPage() {
                           memoLine: memoLine || null,
                           escapeHtml,
                           design: slipDesign,
+                          optionNameByCode,
                           printColorAdjust: 'exact',
                           prependItemsHtml: isAddOrder && idx === 0 ? addonKitchenHead : '',
                           ...posKitchenGuestSpread(payload.guestCount, ki.t('posOrderGuestCount')),
@@ -5973,6 +5983,7 @@ export default function PosTerminalPage() {
                           memoLine: memoLine || null,
                           escapeHtml,
                           design: slipDesign,
+                          optionNameByCode,
                           printColorAdjust: 'exact',
                         })
                         printPosHtmlDocument(html, {

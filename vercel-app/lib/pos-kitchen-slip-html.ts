@@ -6,6 +6,7 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
+import { formatGrabOptionFragmentForPrint } from '@/lib/grab-pos-order-enrich'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { buildKitchenPrintTrackingId } from '@/lib/pos-kitchen-print-tracking'
 
@@ -233,6 +234,7 @@ export function formatKitchenSlipItemRowHtml(
   opts?: {
     showLineNotes?: boolean
     optionGroupPrint?: KitchenSlipDesignResolved['optionGroupPrint']
+    optionNameByCode?: Map<string, string> | Record<string, string>
   }
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
@@ -248,7 +250,11 @@ export function formatKitchenSlipItemRowHtml(
   const note = showLineNotes ? localizeKitchenSlipLineNote(groupedFilteredNote) : ''
   const banban = parseKitchenSlipBanbanFromName(it.name)
   const baseDisplayName = banban ? banban.baseName : nameSplit.mainName || it.name
-  const optionLine = banban ? '' : localizeKitchenSlipLineNote(nameSplit.optionLine)
+  const optionLine = banban
+    ? ''
+    : localizeKitchenSlipLineNote(
+        formatGrabOptionFragmentForPrint(nameSplit.optionLine, opts?.optionNameByCode)
+      )
   const rowOpen = cancelled ? '<div class="k-row k-row-cancelled">' : '<div class="k-row">'
   const main =
     '<div class="k-row-main">' +
@@ -305,7 +311,8 @@ export function buildKitchenSlipItemsHtml(
   }[],
   escapeHtml: (s: string) => string,
   design: KitchenSlipDesignResolved,
-  prependHtml = ''
+  prependHtml = '',
+  optionNameByCode?: Map<string, string> | Record<string, string>
 ): string {
   const c = (tag: string) => '\u003c/' + tag + '>'
   return (
@@ -315,6 +322,7 @@ export function buildKitchenSlipItemsHtml(
         formatKitchenSlipItemRowHtml(it, escapeHtml, c, {
           showLineNotes: design.showLineNotes,
           optionGroupPrint: design.optionGroupPrint,
+          optionNameByCode,
         })
       )
       .join('')
@@ -455,6 +463,7 @@ export function buildKitchenSlipDocumentHtml(params: {
   prependItemsHtml?: string
   guestCount?: number
   guestCountLabel?: string
+  optionNameByCode?: Map<string, string> | Record<string, string>
 }): string {
   const {
     label,
@@ -472,8 +481,15 @@ export function buildKitchenSlipDocumentHtml(params: {
     prependItemsHtml,
     guestCount,
     guestCountLabel,
+    optionNameByCode,
   } = params
-  const itemsHtml = buildKitchenSlipItemsHtml(items, escapeHtml, design, prependItemsHtml ?? '')
+  const itemsHtml = buildKitchenSlipItemsHtml(
+    items,
+    escapeHtml,
+    design,
+    prependItemsHtml ?? '',
+    optionNameByCode
+  )
   const memoHtml = buildKitchenSlipMemoBlockHtml(String(memoLine ?? ''), escapeHtml, design)
   return buildKitchenSlipHtml({
     label,
