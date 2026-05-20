@@ -382,17 +382,14 @@ async function loadPosMenuNameById(): Promise<Map<number, string>> {
 
 async function loadGrabPosCatalog(): Promise<GrabPosCatalog> {
   try {
-    const [menus, options, promos] = await Promise.all([
+    const { loadPosOptionRowsForCodeMap } = await import('@/lib/pos-menu-options-code-catalog-server')
+    const [menus, optionCatalogRows, promos] = await Promise.all([
       supabaseSelectFilter('pos_menus', 'id=gt.0', {
         limit: 20000,
         select: 'id,name,code',
         order: 'id.asc',
       }) as Promise<{ id?: number; name?: string; code?: string }[] | null>,
-      supabaseSelectFilter('pos_menu_options', 'id=gt.0', {
-        limit: 50000,
-        select: 'id,name,option_code',
-        order: 'id.asc',
-      }) as Promise<{ id?: number; name?: string; option_code?: string }[] | null>,
+      loadPosOptionRowsForCodeMap(),
       supabaseSelect('pos_promos', {
         limit: 5000,
         select: 'id,name,code',
@@ -440,9 +437,9 @@ async function loadGrabPosCatalog(): Promise<GrabPosCatalog> {
     })
     return buildGrabPosCatalog(
       menus || [],
-      (options || []).map((o) => ({
+      optionCatalogRows.map((o) => ({
         name: o.name,
-        optionCode: o.option_code,
+        optionCode: o.optionCode,
       })),
       promosWithItems
     )
