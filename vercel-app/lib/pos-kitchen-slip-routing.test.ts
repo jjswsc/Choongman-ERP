@@ -120,5 +120,8 @@ describe('buildKitchenSlipGroups printer overlay', () => {
       ...baseOpts({ menuNameByMenuId: {} }),
     })
     expect(slips[0]?.items[0]?.name).toBe('[Festival Set] Crispy Chicken')
+    expect((slips[0]?.items[0] as { kitchenPromoGroupId?: string }).kitchenPromoGroupId).toBe(
+      'promo-1'
+    )
   })
 })

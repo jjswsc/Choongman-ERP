@@ -62,6 +62,7 @@ import {
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
 } from '@/lib/pos-kitchen-slip-routing'
+import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import {
   parsePosOrderMemo,
@@ -74,7 +75,6 @@ import { addDaysYmd, getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import {
-  enrichPosOrderLikeItemsWithPromoSnapshot,
   receiptModalDataFromPosOrderReprint,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
@@ -777,13 +777,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           tablePart,
           dateStr,
           printTrackingId,
-          items: slip.items.map((it) => {
-            const row = it as { name?: string; qty?: number; note?: string }
-            return {
-              name: translatePosMenuLineForReceipt(String(row.name ?? '-'), ki.t),
-              qty: Number(row.qty ?? 1),
-              note: row.note,
-            }
+          items: mapKitchenSlipGroupItemsForPrint(slip.items, {
+            orderItems: items,
+            translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
           }),
           memoLine: memoLine || null,
           escapeHtml,

@@ -76,6 +76,7 @@ import {
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
 } from "@/lib/pos-kitchen-slip-routing"
+import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import {
@@ -908,13 +909,9 @@ export default function PosOrdersPage() {
           tablePart,
           dateStr,
             printTrackingId,
-          items: slip.items.map((it) => {
-            const row = it as { name?: string; qty?: number; note?: string }
-            return {
-              name: translatePosMenuLineForReceipt(String(row.name ?? "-"), ki.t),
-              qty: Number(row.qty ?? 1),
-              note: row.note,
-            }
+          items: mapKitchenSlipGroupItemsForPrint(slip.items, {
+            orderItems: items,
+            translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
           }),
           memoLine: memoLine || null,
           escapeHtml,

@@ -64,6 +64,7 @@ import {
   resolveEffectiveKitchenRouteForMenu,
   type KitchenRouteValue,
 } from "@/lib/pos-kitchen-slip-routing"
+import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import {
   bangkokTodayYmdCompact,
@@ -1452,10 +1453,9 @@ export default function PosPrintersPage() {
         orderTypeLabel: previewData.orderType,
         tablePart: ` · ${ki.t("posTable") || "테이블"}: ${previewData.tableName}`,
         dateStr: previewData.now,
-        items: slip.items.map((it) => ({
-          ...it,
-          name: translatePosMenuLineForReceipt(it.name, ki.t),
-        })),
+        items: mapKitchenSlipGroupItemsForPrint(slip.items, {
+          translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
+        }),
         memoLine,
         escapeHtml,
         design,

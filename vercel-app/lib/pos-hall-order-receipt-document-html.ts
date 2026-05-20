@@ -26,6 +26,7 @@ type HallOrderItem = {
     quantity: number
   }[]
 }
+type HallOrderPromoItem = NonNullable<HallOrderItem['promoItems']>[number]
 
 type HallOrderPayload = {
   orderNo: string
@@ -52,6 +53,87 @@ type HallOrderPayload = {
   otherFeeMode?: 'included' | 'separate'
   /** 홀(dine-in) 인원. 0·미입력이면 영수증에 표시하지 않음 */
   guestCount?: number
+}
+
+function parseReceiptSetChildLineName(name: string): { promoLabel: string; childName: string } | null {
+  const trimmed = String(name ?? '').trim()
+  const lastBracket = trimmed.lastIndexOf(']')
+  if (lastBracket < 0 || lastBracket >= trimmed.length - 1) return null
+  const childName = trimmed.slice(lastBracket + 1).trim()
+  if (!childName) return null
+  const prefix = trimmed.slice(0, lastBracket + 1)
+  if (!prefix.includes('[')) return null
+  const promoLabel = prefix
+    .replace(/^\[+/, '')
+    .replace(/\]+$/, '')
+    .replace(/\]\s*\[/g, ' ')
+    .replace(/[\[\]]/g, '')
+    .trim()
+  if (!promoLabel) return null
+  return { promoLabel, childName }
+}
+
+function normalizeReceiptTextKey(v: string): string {
+  return String(v ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[\[\]()]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s\-_/]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function mergeSetChildrenForReceipt(items: HallOrderItem[]): HallOrderItem[] {
+  if (!Array.isArray(items) || items.length === 0) return items
+  const out = items.map((it) => ({ ...it }))
+  const childRows: { index: number; promoLabel: string; childName: string }[] = []
+  for (let i = 0; i < out.length; i++) {
+    const parsed = parseReceiptSetChildLineName(String(out[i].name ?? ''))
+    if (!parsed) continue
+    childRows.push({ index: i, ...parsed })
+  }
+  if (childRows.length === 0) return out
+  const childIndexSet = new Set(childRows.map((x) => x.index))
+  const hide = new Set<number>()
+
+  const findParentIndex = (promoLabel: string) => {
+    const key = normalizeReceiptTextKey(promoLabel)
+    if (!key) return -1
+    let best = -1
+    let score = 0
+    for (let i = 0; i < out.length; i++) {
+      if (childIndexSet.has(i)) continue
+      const nk = normalizeReceiptTextKey(String(out[i].name ?? ''))
+      if (!nk) continue
+      let s = 0
+      if (nk === key) s = 100
+      else if (nk.includes(key) || key.includes(nk)) s = 80
+      if (s > score) {
+        score = s
+        best = i
+      }
+    }
+    return best
+  }
+
+  for (const child of childRows) {
+    const parentIdx = findParentIndex(child.promoLabel)
+    if (parentIdx < 0 || parentIdx === child.index) continue
+    const parent = out[parentIdx]
+    const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
+    const opt = String(out[child.index].note ?? '').trim()
+    list.push({
+      menuId: '',
+      optionId: null,
+      ...(opt ? { optionName: opt } : {}),
+      menuName: child.childName,
+      quantity: Math.max(1, Number(out[child.index].qty ?? 1) || 1),
+    } as HallOrderPromoItem)
+    out[parentIdx] = { ...parent, promoItems: list }
+    hide.add(child.index)
+  }
+
+  return out.filter((_, idx) => !hide.has(idx))
 }
 
 export function buildPosHallOrderReceiptDocumentHtml(params: {
@@ -142,7 +224,8 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '<span class="receipt-order-type-chip receipt-order-type-chip--inline"> ' +
     esc(orderTypeLabelText) +
     '</span>'
-  const itemsRows = payload.items
+  const receiptItems = mergeSetChildrenForReceipt(payload.items || [])
+  const itemsRows = receiptItems
     .map((it) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
       const lineSplit = splitPosPrintItemLine(lineName)

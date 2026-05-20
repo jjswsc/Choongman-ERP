@@ -109,8 +109,10 @@ import {
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
   mergeKitchenSlipGroupsCancelledFirst,
+  type KitchenSlipRoutingItem,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
+import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
 import {
   printPosHtmlDocument,
   POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
@@ -763,6 +765,41 @@ export default function PosTerminalPage() {
       ),
     [menus, menuOptions, menuOptionsForCodeMap]
   )
+  const menuCodeById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const menu of menus) {
+      const id = String(menu.id ?? '').trim()
+      const code = String(menu.code ?? '').trim()
+      if (!id || !code) continue
+      m.set(id, code)
+    }
+    return m
+  }, [menus])
+  const inferDefaultSizeLabelForMenuId = useCallback(
+    (menuIdRaw?: string | null): string => {
+      const menuId = String(menuIdRaw ?? '').trim()
+      if (!menuId) return ''
+      const menuCode = String(menuCodeById.get(menuId) ?? '').trim().toUpperCase()
+      if (!menuCode) return ''
+      const labels: string[] = []
+      for (const [code, label] of optionNameByCode.entries()) {
+        const key = String(code ?? '').trim().toUpperCase()
+        if (!key.startsWith(`${menuCode}-`)) continue
+        const text = String(label ?? '').trim()
+        if (text) labels.push(text)
+      }
+      if (labels.length === 0) return ''
+      const hasMOrL = labels.some(
+        (lab) =>
+          /(^|[\s\-–—])(size\s*)?(m|l)([\s\-–—]|$)/i.test(lab) || /\bsize\s*(m|l)\b/i.test(lab)
+      )
+      if (!hasMOrL) return ''
+      const sLabel =
+        labels.find((lab) => /(^|[\s\-–—])(size\s*)?s([\s\-–—]|$)/i.test(lab)) || 'Size S'
+      return sLabel
+    },
+    [menuCodeById, optionNameByCode]
+  )
   const formatLineNoteForPrint = useCallback(
     (rawNote?: string | null): string => {
       const raw = String(rawNote ?? '').trim()
@@ -914,11 +951,41 @@ export default function PosTerminalPage() {
       return prepared.map((it) => {
         const list = (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] })
           .promoItems
-        if (!Array.isArray(list) || list.length === 0) return it as T
-        return { ...it, promoItems: enrichPromoItemsWithOptionName(list) } as unknown as T
+        const line = it as {
+          menuId?: string
+          menuId1?: string
+          menu_id1?: string
+          kitchenRouteMenuId?: string
+          note?: string
+        }
+        const menuId = String(
+          line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.kitchenRouteMenuId ?? ''
+        ).trim()
+        const note = String(line.note ?? '').trim()
+        const inferredDefaultSize = !note ? inferDefaultSizeLabelForMenuId(menuId) : ''
+        const enrichedPromo =
+          Array.isArray(list) && list.length > 0 ? enrichPromoItemsWithOptionName(list) : undefined
+        return {
+          ...it,
+          ...(enrichedPromo ? { promoItems: enrichedPromo } : {}),
+          ...(inferredDefaultSize ? { note: inferredDefaultSize } : {}),
+        } as unknown as T
       })
     },
-    [posReceiptLineOpts, enrichPromoItemsWithOptionName, menus]
+    [posReceiptLineOpts, enrichPromoItemsWithOptionName, inferDefaultSizeLabelForMenuId, menus]
+  )
+  const kitchenSlipItemsForPrint = useCallback(
+    (
+      slipItems: KitchenSlipRoutingItem[],
+      orderSource: KitchenSlipRoutingItem[],
+      ki: { t: (key: string) => string }
+    ) =>
+      mapKitchenSlipGroupItemsForPrint(slipItems, {
+        orderItems: orderSource,
+        translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
+        formatNote: formatLineNoteForPrint,
+      }),
+    [formatLineNoteForPrint]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
@@ -1749,11 +1816,11 @@ export default function PosTerminalPage() {
                 orderTypeLabel,
                 tablePart,
                 dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                items: slip.items.map((it) => ({
-                  name: translatePosMenuLineForReceipt(it.name, ki.t),
-                  qty: it.qty,
-                  note: formatLineNoteForPrint(it.note),
-                })),
+                items: kitchenSlipItemsForPrint(
+                  slip.items,
+                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                  ki
+                ),
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
@@ -1955,11 +2022,11 @@ export default function PosTerminalPage() {
                         orderTypeLabel,
                         tablePart,
                         dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                        items: slip.items.map((it) => ({
-                          name: translatePosMenuLineForReceipt(it.name, ki.t),
-                          qty: it.qty,
-                          note: formatLineNoteForPrint(it.note),
-                        })),
+                        items: kitchenSlipItemsForPrint(
+                          slip.items,
+                          kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                          ki
+                        ),
                         memoLine: memoLine || null,
                         escapeHtml,
                         design: slipDesign,
@@ -2505,7 +2572,9 @@ export default function PosTerminalPage() {
           : undefined
         return {
           ...it,
-          note: formatLineNoteForPrint(String(it.note ?? '')),
+          note:
+            formatLineNoteForPrint(String(it.note ?? '')) ||
+            inferDefaultSizeLabelForMenuId(String((it as { menuId?: string }).menuId ?? '')),
           ...(promoItems ? { promoItems } : {}),
         }
       })
@@ -2630,12 +2699,11 @@ export default function PosTerminalPage() {
               orderTypeLabel: orderTypeLabelSlip,
               tablePart: tablePartR,
               dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-              items: slip.items.map((kit) => ({
-                name: translatePosMenuLineForReceipt(String(kit.name ?? ''), ki.t),
-                qty: Math.max(1, Number(kit.qty ?? 1) || 1),
-                ...(String(kit.note ?? '').trim() ? { note: String(kit.note).trim() } : {}),
-                cancelled: true,
-              })),
+              items: kitchenSlipItemsForPrint(
+                slip.items,
+                kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                ki
+              ).map((row) => ({ ...row, cancelled: true })),
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
@@ -2815,14 +2883,13 @@ export default function PosTerminalPage() {
               orderTypeLabel: orderTypeLabelSlip,
               tablePart: tablePartR,
               dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-              items: slip.items.map((kit) => ({
-                name: translatePosMenuLineForReceipt(String(kit.name ?? ''), ki.t),
-                qty: Math.max(1, Number(kit.qty ?? 1) || 1),
-                ...(String(kit.note ?? '').trim() ? { note: String(kit.note).trim() } : {}),
-                cancelled: Boolean(
-                  (kit as { kitchenLineCancelled?: boolean }).kitchenLineCancelled
-                ),
-              })),
+              items: kitchenSlipItemsForPrint(
+                slip.items,
+                kitchenItemsWithResolvedPromo(
+                  itemsForKitchen as Record<string, unknown>[]
+                ) as KitchenSlipRoutingItem[],
+                ki
+              ),
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
@@ -2975,11 +3042,11 @@ export default function PosTerminalPage() {
                 orderTypeLabel: ki.orderTypeLabels[normalizePosOrderTypeKey(orderType)] || orderType,
                 tablePart: tablePartR,
                 dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                items: slip.items.map((it) => ({
-                  name: translatePosMenuLineForReceipt(it.name, ki.t),
-                  qty: it.qty,
-                  note: formatLineNoteForPrint(it.note),
-                })),
+                items: kitchenSlipItemsForPrint(
+                  slip.items,
+                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                  ki
+                ),
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
@@ -3398,11 +3465,11 @@ export default function PosTerminalPage() {
                 orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
                 tablePart: tablePartR,
                 dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                items: slip.items.map((it) => ({
-                  name: translatePosMenuLineForReceipt(it.name, ki.t),
-                  qty: it.qty,
-                  note: formatLineNoteForPrint(it.note),
-                })),
+                items: kitchenSlipItemsForPrint(
+                  slip.items,
+                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                  ki
+                ),
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
@@ -3705,11 +3772,11 @@ export default function PosTerminalPage() {
                     orderTypeLabel,
                     tablePart,
                     dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                    items: slip.items.map((it) => ({
-                      name: translatePosMenuLineForReceipt(it.name, ki.t),
-                      qty: it.qty,
-                      note: formatLineNoteForPrint(it.note),
-                    })),
+                    items: kitchenSlipItemsForPrint(
+                      slip.items,
+                      kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                      ki
+                    ),
                     memoLine: memoLine || null,
                     escapeHtml,
                     design: slipDesign,
@@ -5366,11 +5433,13 @@ export default function PosTerminalPage() {
                           orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
                           tablePart: tablePartR,
                           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                          items: slip.items.map((it) => ({
-                            name: translatePosMenuLineForReceipt(it.name, ki.t),
-                            qty: it.qty,
-                            note: formatLineNoteForPrint(it.note),
-                          })),
+                          items: kitchenSlipItemsForPrint(
+                            slip.items,
+                            kitchenItemsWithResolvedPromo(
+                              itemsForKitchen as Record<string, unknown>[]
+                            ) as KitchenSlipRoutingItem[],
+                            ki
+                          ),
                           memoLine: memoLine || null,
                           escapeHtml,
                           design: slipDesign,
@@ -5894,11 +5963,13 @@ export default function PosTerminalPage() {
                           orderTypeLabel,
                           tablePart: tablePartR,
                           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                          items: slip.items.map((it) => ({
-                            name: translatePosMenuLineForReceipt(it.name, ki.t),
-                            qty: it.qty,
-                            note: formatLineNoteForPrint(it.note),
-                          })),
+                          items: kitchenSlipItemsForPrint(
+                            slip.items,
+                            kitchenItemsWithResolvedPromo(
+                              itemsForKitchen as Record<string, unknown>[]
+                            ) as KitchenSlipRoutingItem[],
+                            ki
+                          ),
                           memoLine: memoLine || null,
                           escapeHtml,
                           design: slipDesign,

@@ -55,5 +55,21 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('Chicken')
       expect(html).toContain('- Boneless')
     })
+
+    it('세트 구성품은 홀 주문서처럼 들여쓴 줄로 표시한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: '[April] Set 1',
+          qty: 1,
+          promoComposeLines: ['Rice x1', 'GOLDEN FRIED CHICKEN (S Boneless) x1'],
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('Set 1')
+      expect(html).toContain('- Rice x1')
+      expect(html).toContain('- GOLDEN FRIED CHICKEN (S Boneless) x1')
+      expect(html).not.toContain('[Set 1] GOLDEN')
+    })
   })
 })

@@ -327,6 +327,9 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
           kitchenRouteMenuId: mid,
           name: `${displayName}${optionLabel}`,
           qty: q,
+          kitchenPromoGroupId: String(it.id ?? '').trim() || undefined,
+          kitchenPromoParentName: parentName || undefined,
+          kitchenPromoParentQty: parentQty,
           ...(mergedNote ? { note: mergedNote } : { note: undefined }),
           promoItems: undefined,
         } as T)

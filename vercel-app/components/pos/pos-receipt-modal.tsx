@@ -21,10 +21,8 @@ import {
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
 } from '@/lib/pos-kitchen-slip-routing'
-import {
-  enrichPosOrderLikeItemsWithPromoSnapshot,
-  type PosOrderReceiptLineOptions,
-} from '@/lib/pos-payment-receipt-from-order'
+import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
+import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import {
   printPosHtmlDocument,
@@ -318,11 +316,10 @@ export function PosReceiptModal({
             ki.orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType,
           tablePart,
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-          items: slip.items.map((it) => ({
-            name: translatePosMenuLineForReceipt(it.name, ki.t),
-            qty: it.qty,
-            note: it.note,
-          })),
+          items: mapKitchenSlipGroupItemsForPrint(slip.items, {
+            orderItems: itemsForKitchen,
+            translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
+          }),
           memoLine: memoLine || null,
           escapeHtml,
           design: slipDesign,

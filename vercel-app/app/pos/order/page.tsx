@@ -80,6 +80,7 @@ import {
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
 } from "@/lib/pos-kitchen-slip-routing"
+import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
@@ -1502,11 +1503,10 @@ export default function PosOrderPage() {
           tablePart,
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
           printTrackingId,
-          items: slip.items.map((it) => ({
-            name: translatePosMenuLineForReceipt(it.name, ki.t),
-            qty: it.qty,
-            note: (it as { note?: string }).note,
-          })),
+          items: mapKitchenSlipGroupItemsForPrint(slip.items, {
+            orderItems: itemsForKitchen,
+            translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
+          }),
           memoLine: memoLine || null,
           escapeHtml,
           design: slipDesign,
