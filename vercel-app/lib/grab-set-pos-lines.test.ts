@@ -49,4 +49,27 @@ describe('mergeGrabSetChildLinesIntoPromoParents', () => {
     expect(items[1].grabSetChild).toBe(true)
     expect(items[2].grabSetChild).toBe(true)
   })
+
+  it('does not mark child row as hidden when parent line does not exist', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 10, name: 'Rice', code: 'C100' }],
+      [{ name: 'Size S', optionCode: 'C100-1' }],
+      [{ id: '5', name: '[[April] Set 1]', code: 'SET1', items: [] }]
+    )
+    const items = mergeGrabSetChildLinesIntoPromoParents(
+      [
+        {
+          id: 'c1',
+          name: '[[April] Set 1] Rice',
+          price: 111,
+          qty: 1,
+          menuId1: '10',
+          optionCode1: 'C100-1',
+        },
+      ],
+      catalog
+    )
+    expect(items[0].grabSetChild).toBeUndefined()
+    expect(items[0].name).toBe('Rice')
+  })
 })

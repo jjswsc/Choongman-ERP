@@ -2472,6 +2472,83 @@ export async function getIncomeStatementPurchaseDrillDown(params: {
   return data
 }
 
+export type IncomeStatementExpenseDrillDown = {
+  accountSubjectKey: string
+  accountSubjectId: number | null
+  yearMonth: string
+  startStr: string
+  endStr: string
+  storeFilter: string
+  petty: {
+    kind: 'petty'
+    id: number
+    transDate: string
+    amount: number
+    store: string | null
+    memo: string | null
+    transType: string
+  }[]
+  bankWithdrawals: {
+    kind: 'bank'
+    id: number
+    transDate: string
+    expenseDate: string | null
+    amount: number
+    category: string | null
+    memo: string | null
+    store: string | null
+  }[]
+  fixedExpenses: {
+    kind: 'fixed'
+    id: number
+    name: string
+    store: string
+    monthlyAmount: number
+    startYearMonth: string | null
+    endYearMonth: string | null
+    memo: string | null
+  }[]
+  truncated: { petty: boolean; bank: boolean; fixed: boolean }
+  error?: string
+}
+
+export async function getIncomeStatementExpenseDrillDown(params: {
+  yearMonth: string
+  storeFilter?: string
+  userStore?: string
+  userRole?: string
+  accountSubjectId: number | null
+}): Promise<IncomeStatementExpenseDrillDown> {
+  const q = new URLSearchParams()
+  q.set('yearMonth', params.yearMonth)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  if (params.accountSubjectId == null) {
+    q.set('unclassified', '1')
+  } else {
+    q.set('accountSubjectKey', String(params.accountSubjectId))
+  }
+  const res = await apiFetchWithOffline(`/api/getIncomeStatementExpenseDrillDown?${q}`)
+  const data = (await res.json()) as IncomeStatementExpenseDrillDown & { error?: string }
+  if (!res.ok) {
+    return {
+      accountSubjectKey: params.accountSubjectId == null ? '__unclassified__' : String(params.accountSubjectId),
+      accountSubjectId: params.accountSubjectId,
+      yearMonth: params.yearMonth,
+      startStr: '',
+      endStr: '',
+      storeFilter: params.storeFilter || 'All',
+      petty: [],
+      bankWithdrawals: [],
+      fixedExpenses: [],
+      truncated: { petty: false, bank: false, fixed: false },
+      error: data.error || `HTTP ${res.status}`,
+    }
+  }
+  return data
+}
+
 export type IncomeStatementOverrideRow = {
   year_month: string
   store_key: string

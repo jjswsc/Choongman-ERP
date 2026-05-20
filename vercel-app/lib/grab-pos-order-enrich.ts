@@ -372,6 +372,29 @@ export function resolveGrabDeliveryLineNote(
     pushHumanOption(raw)
   }
 
+  const pushMixedCommaChunk = (chunk: string): boolean => {
+    const rawParts = String(chunk || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (rawParts.length <= 1) return false
+    let consumedAny = false
+    let allMachine = true
+    for (const part of rawParts) {
+      if (/^\d+$/.test(part)) continue
+      if (isLikelyPosOptionCode(part)) {
+        pushOptionToken(part)
+        consumedAny = true
+        continue
+      }
+      if (isMachineLikeGrabToken(part)) continue
+      allMachine = false
+      pushHumanOption(part)
+      consumedAny = true
+    }
+    return consumedAny || allMachine
+  }
+
   for (const chunk of chunks) {
     const modMatch = /^mods:\s*(.+)$/i.exec(chunk)
     if (modMatch?.[1]) {
@@ -393,13 +416,7 @@ export function resolveGrabDeliveryLineNote(
       .trim()
     if (!normalizedChunk) continue
 
-    if (normalizedChunk.includes(',')) {
-      const rawParts = normalizedChunk.split(',').map((s) => s.trim()).filter(Boolean)
-      if (rawParts.length > 1 && rawParts.every((p) => isLikelyPosOptionCode(p))) {
-        for (const p of rawParts) pushOptionToken(p)
-        continue
-      }
-    }
+    if (normalizedChunk.includes(',') && pushMixedCommaChunk(normalizedChunk)) continue
     if (isLikelyPosOptionCode(normalizedChunk)) {
       pushOptionToken(normalizedChunk)
       continue

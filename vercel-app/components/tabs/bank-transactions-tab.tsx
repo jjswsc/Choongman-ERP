@@ -233,6 +233,7 @@ export function BankTransactionsTab() {
   const [filterVendorCode, setFilterVendorCode] = React.useState<string>("")
   const [filterAccountSubjectId, setFilterAccountSubjectId] = React.useState<string>("")
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = React.useState(false)
+  const [filterPlExpenseOnly, setFilterPlExpenseOnly] = React.useState(false)
   const [filterInvoiceNotReceived, setFilterInvoiceNotReceived] = React.useState(false)
   const [importSaving, setImportSaving] = React.useState(false)
   const [applyCarryOverSaving, setApplyCarryOverSaving] = React.useState(false)
@@ -523,6 +524,16 @@ export function BankTransactionsTab() {
       if (nav.filterTransType) setFilterTransType(nav.filterTransType)
       if (nav.filterCategory) setFilterCategory(nav.filterCategory)
       if (nav.filterVendorCode) setFilterVendorCode(nav.filterVendorCode)
+      if (nav.filterAccountSubjectId) setFilterAccountSubjectId(nav.filterAccountSubjectId)
+      if (nav.filterAccountSubjectUnclassified) setFilterAccountSubjectEmpty(true)
+      if (nav.filterPlExpenseOnly) setFilterPlExpenseOnly(true)
+      if (
+        nav.filterAccountSubjectId ||
+        nav.filterAccountSubjectUnclassified ||
+        nav.filterPlExpenseOnly
+      ) {
+        setActiveBankTab("query")
+      }
       if (nav.store) plDrillStoreRef.current = nav.store
       plDrillNavReadyRef.current = true
       urlParamsApplied.current = true
@@ -1002,9 +1013,28 @@ export function BankTransactionsTab() {
         const hasInvoice = r.invoiceReceived === true || (r.invoiceNo && String(r.invoiceNo).trim() !== "") || (r.invoicePhotoUrl && String(r.invoicePhotoUrl).trim() !== "")
         if (hasInvoice) return false
       }
+      if (filterPlExpenseOnly) {
+        if (r.transType !== "withdraw") return false
+        const cat = String(r.category || "expense").toLowerCase()
+        if (
+          ["transfer", "correction", "loan", "advance", "unclassified", "purchase_payment"].includes(
+            cat
+          )
+        ) {
+          return false
+        }
+      }
       return true
     })
-  }, [list, filterTransType, filterCategory, filterAccountSubjectId, filterAccountSubjectEmpty, filterInvoiceNotReceived])
+  }, [
+    list,
+    filterTransType,
+    filterCategory,
+    filterAccountSubjectId,
+    filterAccountSubjectEmpty,
+    filterInvoiceNotReceived,
+    filterPlExpenseOnly,
+  ])
 
   const listForCategoryOptions = React.useMemo(() => {
     if (!filterTransType) return list

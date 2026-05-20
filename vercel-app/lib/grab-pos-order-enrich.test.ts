@@ -116,6 +116,16 @@ describe('grab-pos-order-enrich', () => {
     expect(meta.requestSummary).toBe('')
   })
 
+  it('maps mixed plain note tokens (name + code) into readable option chips', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C024-1', name: 'Pickled Radish' }])
+    const meta = resolveGrabDeliveryLineNote(
+      'CHEESE TORNADO, RED HOT CHICKEN, C024-1',
+      catalog.optionNameByCode
+    )
+    expect(meta.optionChips).toEqual(['CHEESE TORNADO', 'RED HOT CHICKEN', 'Pickled Radish'])
+    expect(meta.requestSummary).toBe('')
+  })
+
   it('avoids double-counting M-size surcharge when item name includes size', () => {
     expect(grabItemNameImpliesAllInPrice('GARLIC + M - Boneless')).toBe(true)
     const unit = resolveGrabLineUnitMinor({

@@ -26,6 +26,7 @@ import {
   getPurchaseOrders,
   getVendorsForPurchase,
   getVendorsForSalesFranchiseMaster,
+  getHeadOfficeInfo,
   processPurchaseOrderApproval,
   processPurchaseOrderCancel,
   updatePurchaseOrderInvoice,
@@ -60,6 +61,8 @@ import {
   poQuotationFromMeta,
 } from "@/lib/purchase-order-cart"
 import { todayStrBangkok } from "@/lib/attendance-utils"
+import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
+import { whtCertificateFromPurchaseOrder } from "@/lib/wht-certificate-data"
 
 /** 방콕 달력 YYYY-MM-DD에 달 수만큼 더함(일은 월 말에 맞춤) */
 function addCalendarMonthsBangkokYmd(ymd: string, deltaMonth: number): string {
@@ -241,6 +244,37 @@ export function AdminPurchaseOrderHistory() {
     setWhtEditAmount(amt > 0 ? String(amt) : "")
     setWhtEditRate(rate > 0 ? String(rate) : "3")
   }, [])
+
+  const printPoWhtCertificate = React.useCallback(
+    async (po: PurchaseOrderRow) => {
+      const wht = Math.max(0, Number(po.withholding_tax_amount) || 0)
+      if (wht <= 0) {
+        await appAlert(t("whtCertPrintNoWht"))
+        return
+      }
+      try {
+        const ho = await getHeadOfficeInfo()
+        const vendorCode = String(po.vendor_code || "").trim()
+        const vendorResolved = vendors.find((v) => v.code === vendorCode)
+        const cert = whtCertificateFromPurchaseOrder(
+          po,
+          {
+            companyName: ho.companyName || "",
+            taxId: ho.taxId || "",
+            address: ho.address || "",
+            phone: ho.phone,
+          },
+          vendorResolved?.taxId
+        )
+        if (!cert || !openWhtCertificatePrintWindow([cert], lang)) {
+          await appAlert(t("whtCertPrintBlocked"))
+        }
+      } catch (e) {
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      }
+    },
+    [vendors, lang, t]
+  )
 
   const handleSaveWhtEdit = React.useCallback(async () => {
     const po = whtEditPo
@@ -712,6 +746,17 @@ ${allRows.map((row, ri) => {
                               >
                                 <Percent className="h-4 w-4" />
                               </Button>
+                              {Number(po.withholding_tax_amount) > 0 ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-primary hover:bg-primary/10"
+                                  title={t("whtCertPrint")}
+                                  onClick={() => void printPoWhtCertificate(po)}
+                                >
+                                  <Printer className="h-4 w-4" />
+                                </Button>
+                              ) : null}
                               <Button
                                 variant="ghost"
                                 size="icon"

@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Landmark, ExternalLink, Save, Plus, Trash2, Download, CalendarClock, ChevronDown } from "lucide-react"
+import { Landmark, ExternalLink, Save, Plus, Trash2, Download, CalendarClock, ChevronDown, Printer } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -82,6 +82,7 @@ import {
   getPayrollWhtTinGaps,
   type ValidatePnd1RdPrepResult,
   type ValidatePnd3Pnd53Result,
+  getHeadOfficeInfo,
   type PayrollWhtTinGapResult,
   getKt20kSettings,
   saveKt20kSettings,
@@ -126,6 +127,8 @@ import {
 import { StoreVendorTaxLinkBanner } from "@/components/admin/tax-filing/store-vendor-tax-link-banner"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
+import { whtCertificateFromLedgerRow, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
 import {
   downloadThaiSsoSps110FromPayrollXlsx,
   type Sps110EmployerInfo,
@@ -3203,6 +3206,52 @@ export function AdminAccountingCompliance({
     () =>
       countWhtPayeeTinGaps(whtRowsFiltered, storeFilterForLedger, storeLabels, legacyToCanonical),
     [whtRowsFiltered, storeFilterForLedger, storeLabels, legacyToCanonical]
+  )
+  const headOfficeRef = React.useRef<HeadOfficeCompany | null>(null)
+  const loadHeadOfficeForWht = React.useCallback(async (): Promise<HeadOfficeCompany> => {
+    if (headOfficeRef.current?.companyName) return headOfficeRef.current
+    const ho = await getHeadOfficeInfo()
+    headOfficeRef.current = {
+      companyName: ho.companyName || "",
+      taxId: ho.taxId || "",
+      address: ho.address || "",
+      phone: ho.phone,
+    }
+    return headOfficeRef.current
+  }, [])
+  const printWhtCertificates = React.useCallback(
+    async (rows: WhtDraft[]) => {
+      const eligible = rows.filter((r) => Math.max(0, Number(r.wht_amount) || 0) > 0)
+      if (!eligible.length) {
+        appAlert(t("whtCertPrintNoWht"))
+        return
+      }
+      const ho = await loadHeadOfficeForWht()
+      const items = eligible.map((r) =>
+        whtCertificateFromLedgerRow(
+          {
+            payment_date: r.payment_date,
+            tax_month: r.tax_month,
+            payee_name: r.payee_name,
+            payee_tax_id: r.payee_tax_id,
+            income_type: r.income_type,
+            gross_amount: r.gross_amount,
+            wht_rate: r.wht_rate,
+            wht_amount: r.wht_amount,
+            form_hint: r.form_hint,
+            certificate_no: r.certificate_no,
+            memo: r.memo,
+            store_name: r.store_name,
+            direction: r.direction,
+          },
+          ho
+        )
+      )
+      if (!openWhtCertificatePrintWindow(items, lang)) {
+        appAlert(t("whtCertPrintBlocked"))
+      }
+    },
+    [loadHeadOfficeForWht, lang, t]
   )
   const citKt20kTinMissing = React.useMemo(
     () => isOffice && !isThaiTaxId13(kt20kEmployer.companyTaxId),
@@ -6557,6 +6606,16 @@ export function AdminAccountingCompliance({
                         {t("accCompWhtExportCsv")}
                       </a>
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void printWhtCertificates(whtRowsFiltered)}
+                      disabled={!whtRowsFiltered.some((r) => Number(r.wht_amount) > 0)}
+                    >
+                      <Printer className="h-4 w-4 mr-1" />
+                      {t("whtCertPrintBulk")}
+                    </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
                         href={pnd1RdPrepUrl}
@@ -7034,6 +7093,16 @@ export function AdminAccountingCompliance({
                             <Button type="button" size="sm" onClick={() => void saveWhtRow(row)}>
                               <Save className="h-3 w-3 mr-1" />
                               {t("accCompSave")}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={!(Number(row.wht_amount) > 0)}
+                              onClick={() => void printWhtCertificates([row])}
+                            >
+                              <Printer className="h-3 w-3 mr-1" />
+                              {t("whtCertPrint")}
                             </Button>
                             <Button type="button" size="sm" variant="destructive" onClick={() => void removeWht(row)}>
                               <Trash2 className="h-3 w-3 mr-1" />

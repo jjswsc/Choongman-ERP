@@ -473,6 +473,24 @@ export function CompanyHybridDocumentsPanel() {
     [categoriesForManageTab]
   )
 
+  const categoryStoreKey = React.useCallback((store: string | null | undefined) => {
+    const s = String(store ?? "").trim()
+    return s || COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
+  }, [])
+
+  const rootCategoriesForEditing = React.useMemo(() => {
+    if (!editingCategory) return rootCategoriesForManage
+    const key = categoryStoreKey(editingCategory.store)
+    return categories
+      .filter(
+        (c) =>
+          categoryStoreKey(c.store) === key &&
+          isCompanyHybridDocCategoryRoot(c) &&
+          c.id !== editingCategory.id
+      )
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+  }, [editingCategory, categories, rootCategoriesForManage, categoryStoreKey])
+
   const canMutateDocStore = React.useCallback(
     (rowStore: string) => {
       if (!auth) return false
@@ -889,11 +907,10 @@ export function CompanyHybridDocumentsPanel() {
       return
     }
     const sortOrder = Math.floor(editingCategory.sort_order)
-    const categoryStore =
-      String(editingCategory.store || "").trim() || COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
     const res = await saveCompanyHybridDocumentCategory({
       id: editingCategory.id,
-      store: categoryStore,
+      store:
+        String(editingCategory.store || "").trim() || COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE,
       name,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
       parentCategoryId: editingCategory.parent_category_id,
@@ -2010,13 +2027,7 @@ export function CompanyHybridDocumentsPanel() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={FORM_CAT_NONE}>{t("companyHybridCategoryParentNone")}</SelectItem>
-                        {categoriesForManageTab
-                          .filter(
-                            (c) =>
-                              c.id !== editingCategory.id &&
-                              isCompanyHybridDocCategoryRoot(c)
-                          )
-                          .map((c) => (
+                        {rootCategoriesForEditing.map((c) => (
                             <SelectItem key={`edit-parent-${c.id}`} value={String(c.id)}>
                               {c.name}
                             </SelectItem>

@@ -163,11 +163,12 @@ export async function loadAutoWhtLedgerIndex(params: {
   const autoFilter = params.storeFilter
     ? params.appendStoreFilter(autoBase, params.storeFilter)
     : autoBase
+  const extended = await probeWhtLedgerExtendedColumns()
   const existingAutoRows = (await supabaseSelectFilterAllPages(
     'withholding_tax_ledger_entries',
     autoFilter,
     {
-      select: 'id,memo,filing_status,source_type,source_id',
+      select: extended ? 'id,memo,filing_status,source_type,source_id' : 'id,memo,filing_status',
       order: 'id.asc',
       pageSize: 3000,
       maxRows: 30000,

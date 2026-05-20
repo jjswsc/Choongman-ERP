@@ -4,6 +4,8 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
+import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,6 +68,7 @@ const typeKeys: Record<string, string> = {
 }
 
 export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAccountSubjectEmptyFilter?: boolean } = {}) {
+  const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -77,6 +80,10 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [listStore, setListStore] = useState("All")
   const [listDepartment, setListDepartment] = useState("All")
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = useState(false)
+  const [filterAccountSubjectId, setFilterAccountSubjectId] = useState("")
+  const [filterPettyTransType, setFilterPettyTransType] = useState("")
+  const plDrillNavReadyRef = useRef(false)
+  const plDrillAutoFetchRef = useRef(false)
   const [listStart, setListStart] = useState(todayStr)
   const [listEnd, setListEnd] = useState(todayStr)
   const [listData, setListData] = useState<PettyCashItem[]>([])
@@ -132,6 +139,25 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const canSearchAll = isOfficeRole(auth?.role || "")
   /** petty_cash.user_name 은 로그인 시점 문자열이라 직원 마스터 name 과 1:1이 아닐 수 있음 — 스케줄과 동일한 매칭 사용 */
   const [staffForNickMatch, setStaffForNickMatch] = useState<StaffRowForScheduleMatch[]>([])
+
+  useEffect(() => {
+    const nav = parsePurchaseDrillNav(searchParams)
+    if (!nav.fromPlDrill) return
+    if (nav.startStr && /^\d{4}-\d{2}-\d{2}$/.test(nav.startStr)) setListStart(nav.startStr)
+    if (nav.endStr && /^\d{4}-\d{2}-\d{2}$/.test(nav.endStr)) setListEnd(nav.endStr)
+    if (nav.store && canSearchAll) setListStore(nav.store)
+    if (nav.filterAccountSubjectId) setFilterAccountSubjectId(nav.filterAccountSubjectId)
+    if (nav.filterAccountSubjectUnclassified) setFilterAccountSubjectEmpty(true)
+    if (nav.filterPettyTransType) setFilterPettyTransType(nav.filterPettyTransType)
+    plDrillNavReadyRef.current = true
+  }, [searchParams, canSearchAll])
+
+  useEffect(() => {
+    if (!plDrillNavReadyRef.current || plDrillAutoFetchRef.current || !auth?.store) return
+    plDrillAutoFetchRef.current = true
+    loadList(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- plDrill 1회 자동 조회
+  }, [auth?.store, listStart, listEnd, listStore])
 
   useEffect(() => {
     if (!auth?.store) return
@@ -203,12 +229,26 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
 
   /** 저장된 원문 그대로 표시(관리자·모바일 동일, 브라우저 검색·대사 가능) */
   const formatMemo = (memo: string) => String(memo || "").trim() || "-"
-  const filteredListData = filterAccountSubjectEmpty
-    ? listData.filter((r) => (r.accountSubjectId ?? r.account_subject_id) == null || (r.accountSubjectId ?? r.account_subject_id) === 0)
-    : listData
-  const filteredMonthlyData = filterAccountSubjectEmpty
-    ? monthlyData.filter((r) => (r.accountSubjectId ?? r.account_subject_id) == null || (r.accountSubjectId ?? r.account_subject_id) === 0)
-    : monthlyData
+  const filteredListData = listData.filter((r) => {
+    const sid = r.accountSubjectId ?? r.account_subject_id
+    if (filterAccountSubjectEmpty && sid != null && sid !== 0) return false
+    if (filterAccountSubjectId && String(sid ?? 0) !== filterAccountSubjectId) return false
+    if (filterPettyTransType) {
+      const ty = String(r.trans_type ?? "").toLowerCase()
+      if (ty !== filterPettyTransType.toLowerCase()) return false
+    }
+    return true
+  })
+  const filteredMonthlyData = monthlyData.filter((r) => {
+    const sid = r.accountSubjectId ?? r.account_subject_id
+    if (filterAccountSubjectEmpty && sid != null && sid !== 0) return false
+    if (filterAccountSubjectId && String(sid ?? 0) !== filterAccountSubjectId) return false
+    if (filterPettyTransType) {
+      const ty = String(r.trans_type ?? "").toLowerCase()
+      if (ty !== filterPettyTransType.toLowerCase()) return false
+    }
+    return true
+  })
   const formatStoreLabel = (store: string) =>
     store.startsWith("Office-") ? `${t("pettyScopeOffice") || "Office"} (${store.slice(7)})` : store
 

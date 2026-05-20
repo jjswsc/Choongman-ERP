@@ -1,5 +1,7 @@
 /** 원천징수 증명서(หนังสือรับรอง) 인쇄용 당사자·금액 */
 
+import { purchaseOrderMetaOrderDate } from '@/lib/purchase-order-cart'
+
 export type WhtCertificateParty = {
   name: string
   taxId: string
@@ -48,6 +50,53 @@ export function resolveWhtCertificateParties(params: {
     return { withholdingAgent: counterparty, incomeRecipient: hqParty }
   }
   return { withholdingAgent: hqParty, incomeRecipient: counterparty }
+}
+
+export function whtCertificateFromPurchaseOrder(
+  po: {
+    po_no?: string | null
+    vendor_name?: string | null
+    vendor_code?: string | null
+    total?: number | null
+    vat?: number | null
+    withholding_tax_amount?: number | null
+    withholding_tax_rate?: number | null
+    cart_json?: unknown
+    created_at?: string | null
+  },
+  headOffice: HeadOfficeCompany,
+  vendorTaxId?: string
+): WhtCertificateData | null {
+  const wht = Math.max(0, Number(po.withholding_tax_amount) || 0)
+  if (wht <= 0) return null
+  const total = Math.max(0, Number(po.total) || 0)
+  const vat = Math.max(0, Number(po.vat) || 0)
+  const gross = Math.round((total - vat) * 100) / 100
+  const rateRaw = Number(po.withholding_tax_rate)
+  const metaDate = purchaseOrderMetaOrderDate(po.cart_json)
+  const docDate =
+    metaDate && /^\d{4}-\d{2}-\d{2}$/.test(metaDate)
+      ? metaDate
+      : po.created_at && !isNaN(Date.parse(String(po.created_at)))
+        ? new Date(po.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+        : ''
+  if (!docDate) return null
+  return whtCertificateFromLedgerRow(
+    {
+      payment_date: docDate,
+      tax_month: docDate.slice(0, 7),
+      payee_name: String(po.vendor_name || po.vendor_code || ''),
+      payee_tax_id: vendorTaxId || '',
+      income_type: '로열티·용역 수입',
+      gross_amount: gross > 0 ? gross : total,
+      wht_rate: rateRaw,
+      wht_amount: wht,
+      form_hint: 'PND3',
+      certificate_no: po.po_no ? `PO-${po.po_no}` : undefined,
+      direction: 'inbound',
+    },
+    headOffice
+  )
 }
 
 export function whtCertificateFromLedgerRow(

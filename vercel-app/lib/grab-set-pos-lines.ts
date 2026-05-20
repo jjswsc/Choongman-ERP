@@ -63,7 +63,8 @@ function resolveMenuIdByDisplayName(childName: string, catalog: GrabPosCatalog):
 function findParentLineIndex(
   promoLabel: string,
   items: GrabSetPosLine[],
-  catalog: GrabPosCatalog
+  catalog: GrabPosCatalog,
+  skipIndices: Set<number>
 ): number {
   const labelKey = normalizePromoLookupText(promoLabel)
   if (!labelKey) return -1
@@ -71,8 +72,10 @@ function findParentLineIndex(
   let bestIdx = -1
   let bestScore = 0
   for (let i = 0; i < items.length; i++) {
+    if (skipIndices.has(i)) continue
     const it = items[i]
     if (it.grabSetChild) continue
+    if (parseGrabSetChildLineName(String(it.name ?? ''))) continue
     const nameKey = normalizePromoLookupText(it.name)
     if (!nameKey) continue
     let score = 0
@@ -95,6 +98,8 @@ function findParentLineIndex(
     if (pname === labelKey || pname.includes(labelKey) || labelKey.includes(pname)) {
       const codeKey = normalizePromoLookupText(promo.code)
       for (let i = 0; i < items.length; i++) {
+        if (skipIndices.has(i)) continue
+        if (parseGrabSetChildLineName(String(items[i].name ?? ''))) continue
         const nk = normalizePromoLookupText(items[i].name)
         if (codeKey && nk === codeKey) return i
         if (nk.includes(labelKey) || labelKey.includes(nk)) return i
@@ -112,6 +117,17 @@ function promoOptionSummaryFromChildNote(
   if (!raw) return ''
   const meta = resolveGrabDeliveryLineNote(raw, optionNameByCode)
   return [meta.optionSummary, meta.requestSummary].filter(Boolean).join(' · ').trim()
+}
+
+function findOptionLabelByCode(optionNameByCode: Map<string, string>, optionCode: string): string {
+  const key = String(optionCode ?? '').trim().toUpperCase()
+  if (!key) return ''
+  const direct = optionNameByCode.get(key)
+  if (direct) return String(direct).trim()
+  for (const [k, v] of optionNameByCode.entries()) {
+    if (String(k ?? '').trim().toUpperCase() === key) return String(v ?? '').trim()
+  }
+  return ''
 }
 
 /**
@@ -132,14 +148,17 @@ export function mergeGrabSetChildLinesIntoPromoParents(
     children.push({ index: i, ...parsed })
   }
   if (children.length === 0) return out
+  const childIndices = new Set(children.map((c) => c.index))
 
   for (const child of children) {
     const row = out[child.index]
-    const parentIdx = findParentLineIndex(child.promoLabel, out, catalog)
+    const parentIdx = findParentLineIndex(child.promoLabel, out, catalog, childIndices)
     const menuId =
       String(row.menuId1 ?? '').trim() || resolveMenuIdByDisplayName(child.childName, catalog) || ''
     const optionCode = String(row.optionCode1 ?? row.optionCode ?? '').trim() || undefined
-    const optionName = promoOptionSummaryFromChildNote(row.note, catalog.optionNameByCode)
+    const optionName =
+      promoOptionSummaryFromChildNote(row.note, catalog.optionNameByCode) ||
+      (optionCode ? findOptionLabelByCode(catalog.optionNameByCode, optionCode) : '')
     const promoLine = {
       menuId: menuId || '',
       optionId: null as string | null,
@@ -149,7 +168,7 @@ export function mergeGrabSetChildLinesIntoPromoParents(
       quantity: Math.max(1, Number(row.qty) || 1),
     }
 
-    if (parentIdx >= 0) {
+    if (parentIdx >= 0 && parentIdx !== child.index) {
       const parent = out[parentIdx]
       const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
       list.push(promoLine)

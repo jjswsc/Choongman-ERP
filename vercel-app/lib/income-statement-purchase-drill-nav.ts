@@ -28,7 +28,17 @@ export type ParsedPurchaseDrillNav = {
   filterTransType?: string
   filterCategory?: string
   filterVendorCode?: string
+  /** 손익 비용 드릴다운 — 계정과목 id (미지정은 unclassified) */
+  filterAccountSubjectId?: string
+  filterAccountSubjectUnclassified?: boolean
+  /** 손익 비용 드릴다운 — 통장 출금 중 이체·대출 등 제외(손익 집계와 동일) */
+  filterPlExpenseOnly?: boolean
+  /** 패티 목록 — trans_type (예: expense) */
+  filterPettyTransType?: string
 }
+
+/** 손익 비용 상세 API·드릴다운용 — 계정 미지정 행 */
+export const PL_EXPENSE_UNCLASSIFIED_SUBJECT = '__unclassified__'
 
 function readDate(sp: URLSearchParams, key: string): string | undefined {
   const v = sp.get(key)?.trim() ?? ''
@@ -51,6 +61,10 @@ export function parsePurchaseDrillNav(searchParams: URLSearchParams): ParsedPurc
   const filterTransType = searchParams.get('filterTransType')?.trim() || undefined
   const filterCategory = searchParams.get('filterCategory')?.trim() || undefined
   const filterVendorCode = searchParams.get('filterVendorCode')?.trim() || undefined
+  const filterAccountSubjectId = searchParams.get('filterAccountSubjectId')?.trim() || undefined
+  const filterAccountSubjectUnclassified = searchParams.get('filterAccountSubjectUnclassified') === '1'
+  const filterPlExpenseOnly = searchParams.get('filterPlExpenseOnly') === '1'
+  const filterPettyTransType = searchParams.get('filterPettyTransType')?.trim() || undefined
   return {
     fromPlDrill: true,
     startStr,
@@ -64,6 +78,10 @@ export function parsePurchaseDrillNav(searchParams: URLSearchParams): ParsedPurc
     filterTransType,
     filterCategory,
     filterVendorCode,
+    filterAccountSubjectId,
+    filterAccountSubjectUnclassified,
+    filterPlExpenseOnly,
+    filterPettyTransType,
   }
 }
 
@@ -127,4 +145,57 @@ export function purchaseDrillNavContextFromDrill(
     isHqOrders: drill.isHqOrders,
     vendorLabel,
   }
+}
+
+export type ExpenseDrillNavContext = {
+  startStr: string
+  endStr: string
+  yearMonth: string
+  storeFilter: string
+  accountSubjectKey: string
+  accountSubjectId: number | null
+}
+
+export function expenseDrillNavContextFromDrill(
+  drill: Pick<ExpenseDrillNavContext, 'startStr' | 'endStr' | 'yearMonth' | 'storeFilter' | 'accountSubjectKey' | 'accountSubjectId'>
+): ExpenseDrillNavContext {
+  return {
+    startStr: drill.startStr,
+    endStr: drill.endStr,
+    yearMonth: drill.yearMonth,
+    storeFilter: drill.storeFilter,
+    accountSubjectKey: drill.accountSubjectKey,
+    accountSubjectId: drill.accountSubjectId,
+  }
+}
+
+export function buildExpenseDrillAdminHref(
+  path: string,
+  ctx: ExpenseDrillNavContext,
+  target: 'bank' | 'petty'
+): string {
+  const q = new URLSearchParams()
+  q.set(PL_DRILL_QUERY_FLAG, '1')
+  if (DATE_RE.test(ctx.startStr)) q.set('startStr', ctx.startStr)
+  if (DATE_RE.test(ctx.endStr)) q.set('endStr', ctx.endStr)
+  if (/^\d{4}-\d{2}$/.test(ctx.yearMonth)) q.set('yearMonth', ctx.yearMonth)
+  const store = ctx.storeFilter && ctx.storeFilter !== 'All' ? ctx.storeFilter.trim() : ''
+  if (store) q.set('store', store)
+  if (ctx.accountSubjectId == null) {
+    q.set('filterAccountSubjectUnclassified', '1')
+  } else {
+    q.set('filterAccountSubjectId', String(ctx.accountSubjectId))
+  }
+  switch (target) {
+    case 'bank':
+      q.set('tab', 'query')
+      q.set('filterTransType', 'withdraw')
+      q.set('filterPlExpenseOnly', '1')
+      break
+    case 'petty':
+      q.set('filterPettyTransType', 'expense')
+      break
+  }
+  const qs = q.toString()
+  return qs ? `${path}?${qs}` : path
 }

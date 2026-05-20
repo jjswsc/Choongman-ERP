@@ -2,11 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
+import { COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE } from '@/lib/company-hybrid-documents'
 
 export const dynamic = 'force-dynamic'
 
 function norm(s: unknown): string {
   return String(s ?? '').trim()
+}
+
+/** DB store 컬럼 정규화 — 빈 값·레거시는 전사 공통 키로 취급 */
+function resolveCategoryStoreKey(raw: unknown): string {
+  const s = norm(raw)
+  return s || COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
+}
+
+type CategoryRow = {
+  id?: number
+  store?: string
+  deleted_at?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -22,7 +35,7 @@ export async function POST(request: NextRequest) {
     const auth = authResult.auth
     const body = (await request.json()) as Record<string, unknown>
     const id = body.id != null ? Number(body.id) : null
-    const store = norm(body.store)
+    const bodyStore = norm(body.store)
     const name = norm(body.name)
     const sortOrder = body.sortOrder != null ? Math.floor(Number(body.sortOrder)) : 0
     const parentCategoryIdRaw = body.parentCategoryId
@@ -30,15 +43,8 @@ export async function POST(request: NextRequest) {
       parentCategoryIdRaw == null || parentCategoryIdRaw === ''
         ? null
         : Math.floor(Number(parentCategoryIdRaw))
-    if (!store) {
-      return NextResponse.json({ success: false, message: 'store가 필요합니다.' }, { status: 400, headers })
-    }
-    if (!canAccessStoreForCompanyHybridDocs(auth, store)) {
-      return NextResponse.json(
-        { success: false, message: '이 매장에 대한 권한이 없습니다.' },
-        { status: 403, headers }
-      )
-    }
+    const isUpdate = id != null && Number.isFinite(id) && id > 0
+
     if (!name) {
       return NextResponse.json({ success: false, message: '카테고리 이름이 필요합니다.' }, { status: 400, headers })
     }
@@ -54,12 +60,41 @@ export async function POST(request: NextRequest) {
         { status: 400, headers }
       )
     }
+
+    let effectiveStore = bodyStore
+    let existingRow: CategoryRow | null = null
+
+    if (isUpdate) {
+      const ex = (await supabaseSelectFilter('company_hybrid_document_categories', `id=eq.${id}`, {
+        limit: 1,
+      })) as CategoryRow[] | null
+      existingRow = ex?.[0] ?? null
+      if (!existingRow || existingRow.deleted_at) {
+        return NextResponse.json({ success: false, message: '카테고리를 찾을 수 없습니다.' }, { status: 404, headers })
+      }
+      effectiveStore = resolveCategoryStoreKey(existingRow.store)
+    } else {
+      effectiveStore = resolveCategoryStoreKey(bodyStore)
+      if (!bodyStore && effectiveStore === COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE) {
+        // 신규: body.store 비어 있으면 전사 공통으로 등록
+      } else if (!bodyStore) {
+        return NextResponse.json({ success: false, message: 'store가 필요합니다.' }, { status: 400, headers })
+      }
+    }
+
+    if (!canAccessStoreForCompanyHybridDocs(auth, effectiveStore)) {
+      return NextResponse.json(
+        { success: false, message: '이 매장에 대한 권한이 없습니다.' },
+        { status: 403, headers }
+      )
+    }
+
     if (parentCategoryId != null) {
       const parentRows = (await supabaseSelectFilter(
         'company_hybrid_document_categories',
         `id=eq.${parentCategoryId}`,
         { limit: 1 }
-      )) as { id?: number; store?: string; deleted_at?: string | null }[] | null
+      )) as CategoryRow[] | null
       const parent = parentRows?.[0]
       if (!parent || parent.deleted_at) {
         return NextResponse.json(
@@ -67,41 +102,39 @@ export async function POST(request: NextRequest) {
           { status: 404, headers }
         )
       }
-      if (String(parent.store) !== store) {
+      // 신규 등록만 store 정합 검사 — 수정은 레거시(매장별 store 컬럼 혼재) 호환
+      if (!isUpdate && resolveCategoryStoreKey(parent.store) !== effectiveStore) {
         return NextResponse.json(
           { success: false, message: '상위 카테고리 매장이 일치하지 않습니다.' },
           { status: 400, headers }
         )
       }
-      if (id && Number.isFinite(id) && id > 0 && Number(id) === Number(parentCategoryId)) {
+      if (isUpdate && Number(id) === Number(parentCategoryId)) {
         return NextResponse.json(
           { success: false, message: '카테고리를 자기 자신의 하위로 지정할 수 없습니다.' },
           { status: 400, headers }
         )
       }
     }
+
     const now = new Date().toISOString()
-    if (id && Number.isFinite(id) && id > 0) {
-      const ex = (await supabaseSelectFilter('company_hybrid_document_categories', `id=eq.${id}`, { limit: 1 })) as
-        | { id?: number; store?: string; deleted_at?: string | null }[]
-        | null
-      const r = ex?.[0]
-      if (!r || r.deleted_at) {
-        return NextResponse.json({ success: false, message: '카테고리를 찾을 수 없습니다.' }, { status: 404, headers })
-      }
-      if (String(r.store) !== store) {
-        return NextResponse.json({ success: false, message: '매장이 일치하지 않습니다.' }, { status: 400, headers })
-      }
-      await supabaseUpdate('company_hybrid_document_categories', id, {
+
+    if (isUpdate) {
+      const patch: Record<string, unknown> = {
         name,
         sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
         parent_category_id: parentCategoryId,
         updated_at: now,
-      })
+      }
+      if (!norm(existingRow?.store)) {
+        patch.store = COMPANY_HYBRID_DOC_CATEGORY_GLOBAL_STORE
+      }
+      await supabaseUpdate('company_hybrid_document_categories', id!, patch)
       return NextResponse.json({ success: true, id, message: '저장되었습니다.' }, { headers })
     }
+
     const inserted = await supabaseInsert('company_hybrid_document_categories', {
-      store,
+      store: effectiveStore,
       name,
       sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
       parent_category_id: parentCategoryId,

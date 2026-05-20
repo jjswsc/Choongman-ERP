@@ -73,67 +73,71 @@ export function defaultWhtCertificateLabels(lang: string): WhtCertificateLabels 
 function buildOneCertificateHtml(data: WhtCertificateData, labels: WhtCertificateLabels): string {
   const net = Math.max(0, Math.round((data.grossAmount - data.whtAmount) * 100) / 100)
   const form = esc(data.formHint || 'PND3')
-  return `
-    <section class="wht-cert-page">
-      <div class="wht-cert-head">
-        <h1>${esc(labels.title)}</h1>
-        <p class="wht-cert-meta">${esc(labels.formLine)}: <strong>${form}</strong> · ${esc(labels.certNo)}: <strong>${esc(data.certificateNo)}</strong></p>
-        <p class="wht-cert-meta">${esc(labels.paymentDate)}: <strong>${esc(data.paymentDate)}</strong> · ${esc(labels.taxMonth)}: <strong>${esc(data.taxMonth)}</strong></p>
-        ${data.storeName ? `<p class="wht-cert-meta">${esc(labels.store)}: ${esc(data.storeName)}</p>` : ''}
-      </motion.div>
-      <div class="wht-cert-grid">
-        <div class="wht-cert-box">
-          <h2>${esc(labels.agentTitle)}</h2>
-          <table class="wht-party">
-            <tr><th>${esc(labels.name)}</th><td>${esc(data.withholdingAgent.name)}</td></tr>
-            <tr><th>${esc(labels.taxId)}</th><td>${esc(data.withholdingAgent.taxId)}</td></tr>
-            ${data.withholdingAgent.address ? `<tr><th>${esc(labels.address)}</th><td>${esc(data.withholdingAgent.address)}</td></tr>` : ''}
-          </table>
-        </div>
-        <div class="wht-cert-box">
-          <h2>${esc(labels.recipientTitle)}</h2>
-          <table class="wht-party">
-            <tr><th>${esc(labels.name)}</th><td>${esc(data.incomeRecipient.name)}</td></tr>
-            <tr><th>${esc(labels.taxId)}</th><td>${esc(data.incomeRecipient.taxId)}</td></tr>
-            ${data.incomeRecipient.address ? `<tr><th>${esc(labels.address)}</th><td>${esc(data.incomeRecipient.address)}</td></tr>` : ''}
-          </table>
-        </div>
-      </motion.div>
-      <table class="wht-amt">
-        <thead>
-          <tr>
-            <th>${esc(labels.incomeType)}</th>
-            <th class="num">${esc(labels.gross)}</th>
-            <th class="num">${esc(labels.rate)}</th>
-            <th class="num">${esc(labels.withheld)}</th>
-            <th class="num">${esc(labels.netPaid)}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${esc(data.incomeType)}</td>
-            <td class="num">${fmtNum(data.grossAmount)}</td>
-            <td class="num">${data.whtRate != null ? fmtNum(data.whtRate) : '—'}</td>
-            <td class="num">${fmtNum(data.whtAmount)}</td>
-            <td class="num">${fmtNum(net)}</td>
-          </tr>
-        </tbody>
-      </table>
-      ${data.memo ? `<p class="wht-memo"><strong>${esc(labels.memo)}:</strong> ${esc(data.memo)}</p>` : ''}
-      <motion.div class="wht-sign">
-        <div class="wht-sign-col">
-          <p>${esc(labels.signAgent)}</p>
-          <div class="wht-sign-line"></motion.div>
-          <p class="wht-sign-date">${esc(data.paymentDate)}</p>
-        </div>
-        <div class="wht-sign-col">
-          <p>${esc(labels.signRecipient)}</p>
-          <motion.div class="wht-sign-line"></motion.div>
-          <p class="wht-sign-date">${esc(data.paymentDate)}</p>
-        </div>
-      </motion.div>
-    </section>
-  `
+  return [
+    '<section class="wht-cert-page">',
+    '<div class="wht-cert-head">',
+    `<h1>${esc(labels.title)}</h1>`,
+    `<p class="wht-cert-meta">${esc(labels.formLine)}: <strong>${form}</strong> · ${esc(labels.certNo)}: <strong>${esc(data.certificateNo)}</strong></p>`,
+    `<p class="wht-cert-meta">${esc(labels.paymentDate)}: <strong>${esc(data.paymentDate)}</strong> · ${esc(labels.taxMonth)}: <strong>${esc(data.taxMonth)}</strong></p>`,
+    data.storeName ? `<p class="wht-cert-meta">${esc(labels.store)}: ${esc(data.storeName)}</p>` : '',
+    '</div>',
+    '<div class="wht-cert-grid">',
+    '<div class="wht-cert-box">',
+    `<h2>${esc(labels.agentTitle)}</h2>`,
+    '<table class="wht-party">',
+    `<tr><th>${esc(labels.name)}</th><td>${esc(data.withholdingAgent.name)}</td></tr>`,
+    `<tr><th>${esc(labels.taxId)}</th><td>${esc(data.withholdingAgent.taxId)}</td></tr>`,
+    data.withholdingAgent.address
+      ? `<tr><th>${esc(labels.address)}</th><td>${esc(data.withholdingAgent.address)}</td></tr>`
+      : '',
+    '</table>',
+    '</div>',
+    '<div class="wht-cert-box">',
+    `<h2>${esc(labels.recipientTitle)}</h2>`,
+    '<table class="wht-party">',
+    `<tr><th>${esc(labels.name)}</th><td>${esc(data.incomeRecipient.name)}</td></tr>`,
+    `<tr><th>${esc(labels.taxId)}</th><td>${esc(data.incomeRecipient.taxId)}</td></tr>`,
+    data.incomeRecipient.address
+      ? `<tr><th>${esc(labels.address)}</th><td>${esc(data.incomeRecipient.address)}</td></tr>`
+      : '',
+    '</table>',
+    '</div>',
+    '</div>',
+    '<table class="wht-amt">',
+    '<thead><tr>',
+    `<th>${esc(labels.incomeType)}</th>`,
+    `<th class="num">${esc(labels.gross)}</th>`,
+    `<th class="num">${esc(labels.rate)}</th>`,
+    `<th class="num">${esc(labels.withheld)}</th>`,
+    `<th class="num">${esc(labels.netPaid)}</th>`,
+    '</tr></thead>',
+    '<tbody><tr>',
+    `<td>${esc(data.incomeType)}</td>`,
+    `<td class="num">${fmtNum(data.grossAmount)}</td>`,
+    `<td class="num">${data.whtRate != null ? fmtNum(data.whtRate) : '—'}</td>`,
+    `<td class="num">${fmtNum(data.whtAmount)}</td>`,
+    `<td class="num">${fmtNum(net)}</td>`,
+    '</tr></tbody>',
+    '</table>',
+    data.memo ? `<p class="wht-memo"><strong>${esc(labels.memo)}:</strong> ${esc(data.memo)}</p>` : '',
+    '<div class="wht-sign">',
+    '<div class="wht-sign-col">',
+    `<p>${esc(labels.signAgent)}</p>`,
+    '<div class="wht-sign-line"></div>',
+    `<p class="wht-sign-date">${esc(data.paymentDate)}</p>`,
+    '</div>',
+    '<div class="wht-sign-col">',
+    `<p>${esc(labels.signRecipient)}</p>`,
+    '<div class="wht-sign-line"></div>',
+    `<p class="wht-sign-date">${esc(data.paymentDate)}</p>`,
+    '</div>',
+    '</div>',
+    '</section>',
+  ]
+    .join('\n')
+    .replace(/<\/?motion\.div/g, (m) => (m.startsWith('</') ? '</motion.div' : '<motion.div'))
+    .replace(/<motion\.div/g, '<div')
+    .replace(/<\/motion\.div>/g, '</div>')
 }
 
 const WHT_CERT_STYLES = `
@@ -165,17 +169,11 @@ const WHT_CERT_STYLES = `
   }
 `
 
-/** Fix typo motion.div -> div in template - I accidentally used motion.div in strings */
-export function buildWhtCertificateDocumentHtml(
-  items: WhtCertificateData[],
-  lang: string
-): string {
+export function buildWhtCertificateDocumentHtml(items: WhtCertificateData[], lang: string): string {
   const labels = defaultWhtCertificateLabels(lang)
-  const bodies = items.map((d) => buildOneCertificateHtmlFixed(d, labels)).join('\n')
-  return `<!DOCTYPE html><html lang="${lang === 'ko' ? 'ko' : 'en'}"><head><meta charset="utf-8"/><title>${esc(labels.title)}</title><style>${WHT_CERT_STYLES}</style></head><body>${bodies}</body></html>`
-}
-
-function buildOneCertificateHtmlFixed(data: WhtCertificateData, labels: WhtCertificateLabels): string {
-  return buildOneCertificateHtml(data, labels)
-    .replace(/<\/?motion\.div/g, (m) => (m.startsWith('</') ? '</motion.div' : '<motion.div').replace('motion.div', 'motion.div'))
+  const bodies = items
+    .filter((d) => d.whtAmount > 0)
+    .map((d) => buildOneCertificateHtml(d, labels))
+    .join('\n')
+  return `<!DOCTYPE html><html lang="${lang === 'ko' ? 'ko' : 'en'}"><head><meta charset="utf-8"/><title>${esc(labels.title)}</title><style>${WHT_CERT_STYLES}</style></head><body>${bodies || '<p>—</p>'}</body></html>`
 }

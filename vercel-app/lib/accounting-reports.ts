@@ -1569,3 +1569,285 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
   }
 }
 
+const BANK_PL_EXCLUDED_WITHDRAW_CATEGORIES = new Set([
+  'transfer',
+  'correction',
+  'loan',
+  'advance',
+  'unclassified',
+  'purchase_payment',
+])
+
+function bankWithdrawCountsTowardPlExpense(category: string | null | undefined): boolean {
+  return !BANK_PL_EXCLUDED_WITHDRAW_CATEGORIES.has(String(category || 'expense').toLowerCase())
+}
+
+function bankExpenseInPlPeriod(
+  transDate: string,
+  expenseDate: string | null | undefined,
+  startStr: string,
+  endStr: string
+): boolean {
+  const expDate = expenseDate ? String(expenseDate).slice(0, 10) : null
+  const td = String(transDate || '').slice(0, 10)
+  const inRange = (d: string) => d >= startStr && d <= endStr
+  return (expDate != null && inRange(expDate)) || (!expDate && inRange(td))
+}
+
+function expenseDrillMatchesSubject(
+  rowSubjectId: number | null | undefined,
+  wantSubjectId: number | null
+): boolean {
+  const sid =
+    rowSubjectId != null && !isNaN(Number(rowSubjectId)) ? Number(rowSubjectId) : null
+  if (wantSubjectId == null) return sid == null
+  return sid === wantSubjectId
+}
+
+async function resolveBankAccountIdsForIncomeScope(
+  isHQ: boolean,
+  storeFilter: string
+): Promise<number[]> {
+  try {
+    if (isHQ) {
+      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 2000 })) as
+        | { id?: number; store?: string }[]
+        | null
+      return (bankAccRows || [])
+        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .map((a) => Number(a.id))
+        .filter((id) => !isNaN(id) && id > 0)
+    }
+    if (storeFilter !== 'All') {
+      const bankAccRows = (await supabaseSelectFilter(
+        'bank_accounts',
+        buildStoreFieldOrIlikeFragment('store', storeFilter),
+        { select: 'id', limit: 2000 }
+      )) as { id?: number }[] | null
+      return (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
+    }
+    const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as
+      | { id?: number }[]
+      | null
+    return (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
+  } catch {
+    return []
+  }
+}
+
+const EXPENSE_DRILL_LIMIT = 500
+
+export type IncomeStatementExpenseDrillPettyRow = {
+  kind: 'petty'
+  id: number
+  transDate: string
+  amount: number
+  store: string | null
+  memo: string | null
+  transType: string
+}
+
+export type IncomeStatementExpenseDrillBankRow = {
+  kind: 'bank'
+  id: number
+  transDate: string
+  expenseDate: string | null
+  amount: number
+  category: string | null
+  memo: string | null
+  store: string | null
+}
+
+export type IncomeStatementExpenseDrillFixedRow = {
+  kind: 'fixed'
+  id: number
+  name: string
+  store: string
+  monthlyAmount: number
+  startYearMonth: string | null
+  endYearMonth: string | null
+  memo: string | null
+}
+
+export type IncomeStatementExpenseDrillDownResult = {
+  accountSubjectKey: string
+  accountSubjectId: number | null
+  yearMonth: string
+  startStr: string
+  endStr: string
+  storeFilter: string
+  petty: IncomeStatementExpenseDrillPettyRow[]
+  bankWithdrawals: IncomeStatementExpenseDrillBankRow[]
+  fixedExpenses: IncomeStatementExpenseDrillFixedRow[]
+  truncated: { petty: boolean; bank: boolean; fixed: boolean }
+}
+
+/** 손익 비용 계정 행 클릭 — 패티 지출·통장 출금(손익 반영분)·고정비 */
+export async function computeIncomeStatementExpenseDrillDown(
+  input: IncomeScopeInput & { accountSubjectKey: string }
+): Promise<IncomeStatementExpenseDrillDownResult> {
+  const accountSubjectKey = String(input.accountSubjectKey || '').trim()
+  const wantSubjectId =
+    accountSubjectKey === '__unclassified__' || accountSubjectKey === ''
+      ? null
+      : Number(accountSubjectKey)
+  const scope = normalizeIncomeScope(input)
+  const { yearMonth, startStr, endStr, storeFilter, isHQ } = scope
+  const empty: IncomeStatementExpenseDrillDownResult = {
+    accountSubjectKey,
+    accountSubjectId: wantSubjectId != null && !isNaN(wantSubjectId) ? wantSubjectId : null,
+    yearMonth,
+    startStr,
+    endStr,
+    storeFilter,
+    petty: [],
+    bankWithdrawals: [],
+    fixedExpenses: [],
+    truncated: { petty: false, bank: false, fixed: false },
+  }
+  if (wantSubjectId != null && isNaN(wantSubjectId)) return empty
+
+  let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
+  if (!isHQ && storeFilter !== 'All') {
+    pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
+  }
+  const pettyRaw = (await supabaseSelectFilter('petty_cash_transactions', pettyFilter, {
+    select: 'id,trans_date,amount,store,memo,trans_type,account_subject_id',
+    limit: BASE_LIMIT,
+    order: 'trans_date.desc',
+  })) as {
+    id?: number
+    trans_date?: string
+    amount?: number
+    store?: string
+    memo?: string | null
+    trans_type?: string
+    account_subject_id?: number | null
+  }[] | null
+
+  const petty: IncomeStatementExpenseDrillPettyRow[] = []
+  for (const r of pettyRaw || []) {
+    const st = String(r.store || '').trim()
+    if (isHQ) {
+      if (!isOfficeStore(st) && !st.startsWith('Office-')) continue
+    }
+    if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
+    const pid = Number(r.id)
+    if (!pid) continue
+    petty.push({
+      kind: 'petty',
+      id: pid,
+      transDate: String(r.trans_date || '').slice(0, 10),
+      amount: Math.abs(Number(r.amount) || 0),
+      store: r.store != null ? String(r.store) : null,
+      memo: r.memo != null ? String(r.memo) : null,
+      transType: String(r.trans_type || 'expense'),
+    })
+  }
+  const pettyTruncated = (pettyRaw?.length || 0) >= BASE_LIMIT || petty.length > EXPENSE_DRILL_LIMIT
+  const pettySlice = pettyTruncated ? petty.slice(0, EXPENSE_DRILL_LIMIT) : petty
+
+  const accountIds = await resolveBankAccountIdsForIncomeScope(isHQ, storeFilter)
+  const bankAcc: IncomeStatementExpenseDrillBankRow[] = []
+  let bankFetchTruncated = false
+  if (accountIds.length > 0) {
+    const idList = accountIds.join(',')
+    const btRows = (await supabaseSelectFilter(
+      'bank_transactions',
+      `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
+      {
+        select: 'id,amount,category,trans_date,expense_date,account_subject_id,memo,store',
+        limit: BASE_LIMIT,
+        order: 'trans_date.desc',
+      }
+    )) as {
+      id?: number
+      amount?: number
+      category?: string
+      trans_date?: string
+      expense_date?: string | null
+      account_subject_id?: number | null
+      memo?: string | null
+      store?: string | null
+    }[] | null
+    bankFetchTruncated = (btRows?.length || 0) >= BASE_LIMIT
+    for (const r of btRows || []) {
+      if (!bankWithdrawCountsTowardPlExpense(r.category)) continue
+      if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+      if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
+      const bid = Number(r.id)
+      if (!bid) continue
+      bankAcc.push({
+        kind: 'bank',
+        id: bid,
+        transDate: String(r.trans_date || '').slice(0, 10),
+        expenseDate: r.expense_date ? String(r.expense_date).slice(0, 10) : null,
+        amount: Math.abs(Number(r.amount) || 0),
+        category: r.category != null ? String(r.category) : null,
+        memo: r.memo != null ? String(r.memo) : null,
+        store: r.store != null ? String(r.store) : null,
+      })
+    }
+  }
+  const bankTruncated = bankFetchTruncated || bankAcc.length > EXPENSE_DRILL_LIMIT
+  const bankSlice = bankTruncated ? bankAcc.slice(0, EXPENSE_DRILL_LIMIT) : bankAcc
+
+  const fixedRows: IncomeStatementExpenseDrillFixedRow[] = []
+  try {
+    const fxAll = (await supabaseSelect('fixed_expenses', {
+      select: 'id,name,store,monthly_amount,start_year_month,end_year_month,memo,account_subject_id',
+      limit: 2000,
+    })) as {
+      id?: number
+      name?: string
+      store?: string
+      monthly_amount?: number
+      start_year_month?: string | null
+      end_year_month?: string | null
+      memo?: string | null
+      account_subject_id?: number | null
+    }[] | null
+    for (const r of fxAll || []) {
+      const start = r.start_year_month ? String(r.start_year_month) : null
+      const end = r.end_year_month ? String(r.end_year_month) : null
+      const active = (!start || yearMonth >= start) && (!end || yearMonth <= end)
+      if (!active) continue
+      const st = String(r.store || '').trim()
+      if (isHQ) {
+        if (!isOfficeStore(st) && !st.startsWith('Office-')) continue
+      } else if (storeFilter !== 'All') {
+        if (!storeMatchesIncomeFilter(st, storeFilter)) continue
+      }
+      if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
+      const fid = Number(r.id)
+      if (!fid) continue
+      fixedRows.push({
+        kind: 'fixed',
+        id: fid,
+        name: String(r.name || '').trim() || '—',
+        store: st,
+        monthlyAmount: Number(r.monthly_amount) || 0,
+        startYearMonth: start,
+        endYearMonth: end,
+        memo: r.memo != null ? String(r.memo).trim() || null : null,
+      })
+    }
+  } catch {
+    // fixed_expenses 미배포
+  }
+  const fixedTruncated = fixedRows.length > EXPENSE_DRILL_LIMIT
+  const fixedSlice = fixedTruncated ? fixedRows.slice(0, EXPENSE_DRILL_LIMIT) : fixedRows
+
+  return {
+    ...empty,
+    petty: pettySlice,
+    bankWithdrawals: bankSlice,
+    fixedExpenses: fixedSlice,
+    truncated: {
+      petty: pettyTruncated,
+      bank: bankTruncated,
+      fixed: fixedTruncated,
+    },
+  }
+}
+
