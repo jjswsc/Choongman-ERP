@@ -17,3 +17,13 @@ export function buildPosOptionGroupCodeFromKey(rawKey: string): string {
 export function isPosOptionGroupCodeLike(raw: string): boolean {
   return /^OG_[A-Z0-9_]{1,28}$/.test(String(raw ?? '').trim().toUpperCase())
 }
+
+/** API/DB `group_code` 우선, 없으면 `group_key`에서 파생 */
+export function resolvePosOptionGroupCode(input: {
+  code?: string | null
+  key?: string | null
+}): string {
+  const fromDb = String(input.code ?? '').trim().toUpperCase()
+  if (fromDb && isPosOptionGroupCodeLike(fromDb)) return fromDb
+  return buildPosOptionGroupCodeFromKey(String(input.key ?? ''))
+}

@@ -18,12 +18,23 @@ export {
 import type { PosMenuOptionGroupLinkRow, PosOptionGroupItemRow, PosOptionGroupRow } from "@/lib/pos-option-groups-build"
 
 export async function loadPosOptionGroupsWithItems() {
-  const groups = (await supabaseSelectAllPages("pos_option_groups", {
-    order: "sort_order.asc,id.asc",
-    select: "id,group_key,name,is_active,sort_order",
-    pageSize: 3000,
-    maxRows: 100000,
-  })) as PosOptionGroupRow[]
+  let groups: PosOptionGroupRow[] = []
+  for (const cols of [
+    "id,group_key,group_code,name,is_active,sort_order",
+    "id,group_key,name,is_active,sort_order",
+  ]) {
+    try {
+      groups = (await supabaseSelectAllPages("pos_option_groups", {
+        order: "sort_order.asc,id.asc",
+        select: cols,
+        pageSize: 3000,
+        maxRows: 100000,
+      })) as PosOptionGroupRow[]
+      break
+    } catch {
+      if (cols === "id,group_key,name,is_active,sort_order") throw new Error("pos_option_groups load failed")
+    }
+  }
   const items = (await supabaseSelectAllPages("pos_option_group_items", {
     order: "group_id.asc,sort_order.asc,id.asc",
     select:

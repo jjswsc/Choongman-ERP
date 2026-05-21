@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildPosOptionGroupCodeFromKey, isPosOptionGroupCodeLike } from '@/lib/pos-option-group-code'
+import {
+  buildPosOptionGroupCodeFromKey,
+  isPosOptionGroupCodeLike,
+  resolvePosOptionGroupCode,
+} from '@/lib/pos-option-group-code'
 
 describe('pos-option-group-code', () => {
   it('builds stable code from key', () => {
@@ -14,5 +18,10 @@ describe('pos-option-group-code', () => {
   it('validates code format', () => {
     expect(isPosOptionGroupCodeLike('OG_SIDE_DISH')).toBe(true)
     expect(isPosOptionGroupCodeLike('side')).toBe(false)
+  })
+
+  it('resolvePosOptionGroupCode prefers DB code', () => {
+    expect(resolvePosOptionGroupCode({ code: 'OG_PART', key: 'sidedish' })).toBe('OG_PART')
+    expect(resolvePosOptionGroupCode({ code: '', key: 'part' })).toBe('OG_PART')
   })
 })

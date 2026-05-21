@@ -104,6 +104,7 @@ import { OptionItemRowCard } from "@/components/erp/option-item-row-card"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+import { resolvePosOptionGroupCode } from "@/lib/pos-option-group-code"
 import {
   PROMOTION_MAIN_CATEGORY,
   normalizePromotionCategoryMain,
@@ -114,7 +115,9 @@ import {
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { translatePosMenuLineForReceipt, chickenPartDedupeKey, prettyChickenPartLibraryLabel } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
+import { isStrictBonelessBbqChickenCode } from "@/lib/pos-bbq-option-guard"
 import {
+  inferOptionSelectionGroupsFromOptions,
   normalizeOptionGroupsForMenu,
   syncOptionSelectionConfigToGroupKeys,
 } from "@/lib/pos-option-selection-groups"
@@ -997,6 +1000,27 @@ export default function PosMenusPage() {
     setOptionsConfigGroupRulesDraft(applyChickenDeliveryRulesToConfig(parsedGroups, normalizedRules, sel?.code, t))
   }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupsKey, t])
 
+  React.useEffect(() => {
+    if (!optionsConfigSelectedMenuId) return
+    const sel = menus.find((m) => m.id === optionsConfigSelectedMenuId)
+    const configured = Array.isArray(sel?.optionSelectionGroups)
+      ? sel.optionSelectionGroups.map((x) => String(x).trim()).filter(Boolean)
+      : []
+    if (configured.length > 0) return
+    if (optionsConfigGroupsDraft.trim() !== "") return
+    const inferred = inferOptionSelectionGroupsFromOptions(optionsConfigMenuOptions, sel?.code)
+    if (inferred.length === 0) return
+    setOptionsConfigGroupsDraft(inferred.join(", "))
+    const normalizedRules = normalizeOptionSelectionConfig(inferred, sel?.optionSelectionConfig)
+    setOptionsConfigGroupRulesDraft(applyChickenDeliveryRulesToConfig(inferred, normalizedRules, sel?.code, t))
+  }, [
+    menus,
+    optionsConfigGroupsDraft,
+    optionsConfigMenuOptions,
+    optionsConfigSelectedMenuId,
+    t,
+  ])
+
   const optionsConfigStepGroups = React.useMemo(() => {
     if (!optionsConfigSelectedMenuId) return [] as string[]
     const m = menus.find((x) => x.id === optionsConfigSelectedMenuId)
@@ -1691,6 +1715,7 @@ export default function PosMenusPage() {
     return {
       id: VIRTUAL_CHICKEN_PART_GROUP_ID,
       key: "part",
+      code: resolvePosOptionGroupCode({ key: "part" }),
       name: t("posOptionVirtualLibraryChickenPartName") || "부위 후보 (치킨 메뉴 DB)",
       isActive: true,
       sortOrder: -100,
@@ -1710,6 +1735,7 @@ export default function PosMenusPage() {
     const MAX_ITEM_LINES = 40
     type Row = {
       id: string
+      groupCode: string
       groupTitle: string
       groupKey: string
       itemLines: string[]
@@ -1728,9 +1754,11 @@ export default function PosMenusPage() {
       const hasItems = items.length > 0
       const groupKey = String(g.key ?? "").trim()
       const keyLower = groupKey.toLowerCase()
+      const groupCode = resolvePosOptionGroupCode({ code: g.code, key: groupKey })
+      const codeLower = groupCode.toLowerCase()
       const name = String(g.name ?? "").trim()
       const nameLower = name.toLowerCase()
-      if (q && !keyLower.includes(q) && !nameLower.includes(q)) {
+      if (q && !keyLower.includes(q) && !codeLower.includes(q) && !nameLower.includes(q)) {
         const inItem = items.some((it) => String(it.itemName ?? "").trim().toLowerCase().includes(q))
         if (!inItem) continue
       }
@@ -1763,10 +1791,11 @@ export default function PosMenusPage() {
               .replace("{shown}", String(itemLines.length))
               .replace("{more}", String(moreHidden))
           : ""
-      const sortLabel = `${groupKey} ${name} ${allNames.join(" ")}`.trim()
+      const sortLabel = `${groupCode} ${groupKey} ${name} ${allNames.join(" ")}`.trim()
       const numericId = String(g.id).startsWith("virtual:") ? 0 : Number(g.id) || 0
       rows.push({
         id: String(g.id),
+        groupCode,
         groupTitle,
         groupKey,
         itemLines,
@@ -2395,12 +2424,24 @@ export default function PosMenusPage() {
       return
     }
     const key = raw.toLowerCase()
+    if (isStrictBonelessBbqChickenCode(optionsConfigSelectedMenu.code) && (key === "size" || key === "part")) {
+      await appAlert(
+        "BBQ 메뉴(C020~C023)는 size/part 단계를 허용하지 않습니다. sidedish 같은 부가 단계를 사용해 주세요."
+      )
+      return
+    }
     const current = parseOptionGroupsFromText(optionsConfigGroupsDraft)
     if (current.some((x) => x.toLowerCase() === key)) {
       await appAlert(t("posOptionAddStepDuplicate") || "이미 있는 단계입니다.")
       return
     }
     const next = normalizeOptionGroupsForMenu([...current, key], optionsConfigSelectedMenu.code)
+    if (!next.some((x) => x.toLowerCase() === key)) {
+      await appAlert(
+        "이 단계 키는 현재 메뉴 정책에서 허용되지 않습니다. sidedish 같은 부가 단계 키를 사용해 주세요."
+      )
+      return
+    }
     setOptionsConfigGroupsDraft(next.join(", "))
     setOptionsConfigGroupRulesDraft((prev) => {
       const normalized = normalizeOptionSelectionConfig(next, prev)
@@ -5403,12 +5444,15 @@ export default function PosMenusPage() {
                                 className="flex flex-col gap-2 rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
                               >
                                 <div className="min-w-0 flex-1 space-y-1">
-                                  <p className="text-xs font-semibold leading-snug break-words text-foreground">
+                                  <p className="text-xs font-mono font-semibold leading-snug break-all text-foreground">
+                                    {row.groupCode}
+                                  </p>
+                                  <p className="text-[11px] leading-snug break-words text-foreground/90">
                                     {row.groupTitle}
                                   </p>
-                                  {row.groupKey && row.groupKey !== row.groupTitle && !String(row.id).startsWith("virtual:") ? (
+                                  {row.groupKey ? (
                                     <p className="text-[10px] text-muted-foreground font-mono">
-                                      key: {row.groupKey}
+                                      {(t("posOptionTemplateStepKeyLabel") || "단계 key").replace("{key}", row.groupKey)}
                                     </p>
                                   ) : null}
                                   {row.itemLines.length > 0 ? (

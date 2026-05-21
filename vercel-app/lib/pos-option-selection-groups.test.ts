@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   filterOptionSelectionGroupsForAudience,
   filterPosOptionsForVisibleGroups,
+  inferOptionSelectionGroupsFromOptions,
   isGroupVisibleForStepAudience,
   normalizeOptionGroupsForMenu,
   parseOptionSelectionConfigFromDb,
@@ -53,5 +54,16 @@ describe("pos-option-selection-groups audience", () => {
 
   it("BBQ menu codes keep sidedish without auto-injecting part", () => {
     expect(normalizeOptionGroupsForMenu(["sidedish", "part"], "C021")).toEqual(["sidedish"])
+  })
+
+  it("infers groups from option_step_values when menu groups missing", () => {
+    const groups = inferOptionSelectionGroupsFromOptions(
+      [
+        { optionStepValues: { part: "Boneless" } },
+        { optionStepValues: { sidedish: "Kimchi" } },
+      ],
+      "C020"
+    )
+    expect(groups).toEqual(["sidedish"])
   })
 })

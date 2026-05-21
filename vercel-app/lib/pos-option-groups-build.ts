@@ -1,6 +1,7 @@
 export type PosOptionGroupRow = {
   id: number
   group_key: string
+  group_code?: string | null
   name: string
   is_active: boolean
   sort_order: number

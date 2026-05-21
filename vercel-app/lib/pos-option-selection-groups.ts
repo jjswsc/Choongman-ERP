@@ -193,3 +193,24 @@ export function filterPosOptionsForVisibleGroups<T extends { optionStepValues?: 
     return keys.every((k) => visibleGroupKeys.has(k))
   })
 }
+
+/** option_step_values에서 단계 키를 추론(메뉴 저장 누락 복구용) */
+export function inferOptionSelectionGroupsFromOptions<T extends { optionStepValues?: Record<string, string> | null }>(
+  options: T[],
+  menuCode: string | undefined
+): string[] {
+  const keys: string[] = []
+  const seen = new Set<string>()
+  for (const row of options || []) {
+    const sv = row?.optionStepValues
+    if (!sv || typeof sv !== "object") continue
+    for (const rawKey of Object.keys(sv)) {
+      const key = String(rawKey ?? "").trim()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      keys.push(key)
+    }
+  }
+  if (keys.length === 0) return []
+  return normalizeOptionGroupsForMenu(keys, menuCode)
+}

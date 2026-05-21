@@ -55,10 +55,52 @@ group by lower(trim(code))
 having count(*) >= 1
 order by code_key;
 
--- ── 2) 복구 (진단 결과 확인 후, id 를 실제 값으로 바꿔 실행) ──
--- 대상 id 예: 활성 행 1개만 남기고 category 를 Korean/Dosirak 로 맞춤
-/*
+-- ── 1b) 6개 Dosirak 비교: 스코프·프로모·품절 (POS 미노출 원인) ──
+select
+  pm.id,
+  pm.code,
+  pm.name,
+  pm.promo_id,
+  pm.sold_out_date,
+  pm.sort_order,
+  coalesce(
+    (
+      select array_agg(distinct pms.store_code order by pms.store_code)
+      from pos_menu_store_scopes pms
+      where pms.menu_id = pm.id
+        and pms.enabled is distinct from false
+    ),
+    array[]::text[]
+  ) as store_scopes
+from pos_menus pm
+where pm.id in (69, 67, 311, 68, 385, 386)
+order by pm.id;
+
+-- POS 에 5개만 보일 때 흔한 패턴:
+--   • id 311 만 store_scopes = {} 이고 나머지는 매장 있음 → 스코프 복사(아래 2) 실행
+--   • id 311 만 promo_id 가 있음 → 프로모 기간/채널에 가려짐 → promo_id 제거(아래 2) 또는 프로모 활성화
+
+-- ── 2) 복구 — id 311 (K022 Snow Onion Chicken Dosirak), 기준 id 69 (K001) ──
 begin;
+
+-- Dakgalbi 와 동일 매장 스코프 부여
+insert into pos_menu_store_scopes (menu_id, store_code, enabled)
+select
+  311::bigint as menu_id,
+  s.store_code,
+  true
+from pos_menu_store_scopes s
+where s.menu_id = 69
+  and s.enabled is distinct from false
+  and trim(coalesce(s.store_code, '')) <> ''
+on conflict (store_code, menu_id)
+do update set enabled = true;
+
+-- 일반 단품인데 프로모 미러로 묶여 있으면 그리드에서 숨김 → 연결 해제
+update pos_menus
+set promo_id = null
+where id = 311
+  and promo_id is not null;
 
 update pos_menus
 set
@@ -66,23 +108,9 @@ set
   category_main = 'Korean',
   category = 'Dosirak',
   sold_out_date = null
-where id = /* SNOW_ONION_DOSIRAK_MENU_ID */ ;
-
--- 다른 Dosirak(예: Dakgalbi k001) 과 동일 매장 스코프 복사
-insert into pos_menu_store_scopes (menu_id, store_code, enabled)
-select
-  /* SNOW_ONION_DOSIRAK_MENU_ID */::bigint as menu_id,
-  s.store_code,
-  true
-from pos_menu_store_scopes s
-where s.menu_id = /* REFERENCE_DOSIRAK_MENU_ID e.g. k001 row */ 
-  and s.enabled is distinct from false
-  and trim(coalesce(s.store_code, '')) <> ''
-on conflict (store_code, menu_id)
-do update set enabled = true;
+where id = 311;
 
 commit;
-*/
 
 -- __dup_ 로 비활성화된 행이 정본인 경우: 코드 복구 후 활성화 (code 충돌 없을 때만)
 /*

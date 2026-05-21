@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { loadMenuGroupLinks, loadPosOptionGroupsWithItems } from "@/lib/pos-option-groups-server"
-import { buildPosOptionGroupCodeFromKey } from "@/lib/pos-option-group-code"
+import { resolvePosOptionGroupCode } from "@/lib/pos-option-group-code"
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -46,7 +46,10 @@ export async function GET(req: NextRequest) {
       const link = linksByGroupId.get(gid)
       return {
         id: String(group.id ?? ""),
-        code: buildPosOptionGroupCodeFromKey(String(group.group_key ?? "")),
+        code: resolvePosOptionGroupCode({
+          code: (group as { group_code?: string | null }).group_code,
+          key: group.group_key,
+        }),
         key: String(group.group_key ?? ""),
         name: String(group.name ?? ""),
         isActive: group.is_active !== false,

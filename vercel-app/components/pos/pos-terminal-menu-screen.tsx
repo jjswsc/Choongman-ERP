@@ -78,6 +78,7 @@ import {
 import {
   filterOptionSelectionGroupsForAudience,
   filterPosOptionsForVisibleGroups,
+  inferOptionSelectionGroupsFromOptions,
   resolveStepAudienceFromOrderType,
 } from '@/lib/pos-option-selection-groups'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
@@ -1568,8 +1569,13 @@ export function PosTerminalMenuScreen({
                 .filter(([k]) => !!k)
             )
             const stepAudience = resolveStepAudienceFromOrderType(orderType)
+            const fallbackGroups = inferOptionSelectionGroupsFromOptions(opts, optionPickerMenu.code)
+            const configuredGroups =
+              (optionPickerMenu.optionSelectionGroups || []).length > 0
+                ? optionPickerMenu.optionSelectionGroups || []
+                : fallbackGroups
             const groups = filterOptionSelectionGroupsForAudience(
-              optionPickerMenu.optionSelectionGroups || [],
+              configuredGroups,
               groupConfigMap,
               stepAudience
             )

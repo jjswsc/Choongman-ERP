@@ -5,7 +5,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
-import { buildPosOptionGroupCodeFromKey } from "@/lib/pos-option-group-code"
+import { resolvePosOptionGroupCode } from "@/lib/pos-option-group-code"
 
 type SaveItemInput = {
   id?: string
@@ -98,7 +98,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, id: String(groupId), code: buildPosOptionGroupCodeFromKey(groupKey) },
+      {
+        success: true,
+        id: String(groupId),
+        code: resolvePosOptionGroupCode({ key: groupKey }),
+      },
       { headers }
     )
   } catch (e) {
