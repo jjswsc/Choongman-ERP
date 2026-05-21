@@ -122,7 +122,7 @@ import {
   syncOptionSelectionConfigToGroupKeys,
 } from "@/lib/pos-option-selection-groups"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
-import { validatePosMenuImageUrlForMenu } from "@/lib/pos-menu-image-storage-path"
+import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-storage-path"
 
 /** 원가 분석 화면 이동 후 복귀 시 편집 중이던 메뉴·노출 매장 복원 */
 const POS_MENUS_EDIT_RESUME_KEY = "cm_pos_menus_edit_resume_v1"
@@ -139,17 +139,6 @@ function storeScopeCodesEqual(a: string[], b: string[]): boolean {
   const sa = norm(a)
   const sb = norm(b)
   return sa.every((v, i) => v === sb[i])
-}
-
-function normalizeScopeStoreCodes(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return []
-  const out: string[] = []
-  for (const v of raw) {
-    const code = String(v || "").trim()
-    if (!code) continue
-    if (!out.some((x) => x.toLowerCase() === code.toLowerCase())) out.push(code)
-  }
-  return out
 }
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
@@ -590,17 +579,13 @@ export default function PosMenusPage() {
   }, [canSearchAllStores, auth?.store, availableScopeStores])
   const [selectedStoreCodes, setSelectedStoreCodes] = React.useState<string[]>([])
   const [storeScopeDirty, setStoreScopeDirty] = React.useState(false)
-  const allScopeStoreCodes = React.useMemo(
-    () => normalizeScopeStoreCodes(availableScopeStores),
-    [availableScopeStores]
-  )
-  // 운영 완화: 편집 화면에서는 우선 전체 매장을 기본 체크로 고정해 메뉴별 편차를 제거한다.
+  // 편집 시에는 실제 메뉴에 저장된 노출 매장을 그대로 보여준다.
+  // (신규 메뉴 기본값은 defaultScopeStoreCodes가 담당)
   const getEditorScopeStoreCodes = React.useCallback(
     (menu?: PosMenu | null): string[] => {
-      if (allScopeStoreCodes.length > 0) return allScopeStoreCodes
       return menu ? menuScopeStoreCodes(menu) : []
     },
-    [allScopeStoreCodes]
+    []
   )
   const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
     const normalized = String(storeCode || "").trim()
@@ -1305,16 +1290,16 @@ export default function PosMenusPage() {
     if (!storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
       setSelectedStoreCodes(scopeForSave)
     }
-    if (editingId) {
-      const imageCheck = validatePosMenuImageUrlForMenu(formData.imageUrl.trim(), editingId)
-      if (!imageCheck.ok) {
-        await appAlert(
-          `${imageCheck.message}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드한 뒤 저장해 주세요."}`
-        )
-        return
-      }
+    const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
+      isEdit: !!editingId,
+    })
+    if (!editingId && imageSave.mismatchMessage) {
+      await appAlert(
+        `${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드한 뒤 저장해 주세요."}`
+      )
+      return
     }
-    const res = await savePosMenu({
+    const savePayload: Parameters<typeof savePosMenu>[0] = {
       id: editingId || undefined,
       code,
       name,
@@ -1322,7 +1307,6 @@ export default function PosMenusPage() {
       category: effectiveCategory,
       price: Number(formData.price) || 0,
       priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
-      imageUrl: formData.imageUrl.trim(),
       descriptionDefault: formData.descriptionDefault.trim(),
       descriptionDelivery: formData.descriptionDelivery.trim() || null,
       descriptionTable: formData.descriptionTable.trim() || null,
@@ -1330,7 +1314,11 @@ export default function PosMenusPage() {
       isActive: formData.isActive,
       isBanban: formData.isBanban,
       storeCodes: scopeForSave,
-    })
+    }
+    if (imageSave.includeImageUrl) {
+      savePayload.imageUrl = imageSave.imageUrl
+    }
+    const res = await savePosMenu(savePayload)
     if (!res.success) {
       await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
@@ -1363,7 +1351,13 @@ export default function PosMenusPage() {
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
-      await appAlert(t("itemsAlertUpdated"))
+      if (imageSave.mismatchMessage) {
+        await appAlert(
+          `${t("posMenuSavedWithoutImageMismatch") || "메뉴 정보는 저장했습니다. 다만 사진 URL이 다른 메뉴용이라 사진은 그대로 두었습니다."}\n\n${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드해 주세요."}`
+        )
+      } else {
+        await appAlert(t("itemsAlertUpdated"))
+      }
     } else {
       getPosMenus({ fresh: true }).then(setMenus)
       await appAlert(t("itemsAlertSaved"))

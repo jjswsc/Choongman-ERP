@@ -83,7 +83,7 @@ import {
 import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
-import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
+import { resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
 import {
@@ -130,6 +130,7 @@ import {
 } from "@/lib/pos-kitchen-print-tracking"
 import type { PosOrderReceiptLineOptions } from "@/lib/pos-payment-receipt-from-order"
 import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-receipt-document-html"
+import { PosHallOrderReceiptPreview } from "@/components/pos/pos-hall-order-receipt-preview"
 import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
@@ -293,13 +294,6 @@ export default function PosOrderPage() {
   const posPrinterSettingsStoreCodeRef = React.useRef("")
   const posPrinterSettingsInFlightStoreCodeRef = React.useRef("")
   const posPrinterSettingsInFlightRef = React.useRef<Promise<PosPrinterSettings> | null>(null)
-  const [receiptBizName, setReceiptBizName] = React.useState("")
-  const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
-  const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
-  const [receiptBizOwner, setReceiptBizOwner] = React.useState("")
-  const [receiptBizAddress, setReceiptBizAddress] = React.useState("")
-  const [receiptBizPhone, setReceiptBizPhone] = React.useState("")
-  const [receiptLogoSize, setReceiptLogoSize] = React.useState<'sm' | 'md' | 'lg'>('md')
   const [vatRate, setVatRate] = React.useState(7)
   const [vatMode, setVatMode] = React.useState<'included' | 'separate'>('included')
   const [serviceRate, setServiceRate] = React.useState(0)
@@ -413,19 +407,6 @@ export default function PosOrderPage() {
         setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 })
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
-        setReceiptBizName(String(s.receiptBizName || ""))
-        setReceiptBizTaxId(String(s.receiptBizTaxId || ""))
-        setReceiptBizAbn(String(s.receiptBizAbn || ""))
-        setReceiptBizOwner(String(s.receiptBizOwner || ""))
-        setReceiptBizAddress(String(s.receiptBizAddress || ""))
-        setReceiptBizPhone(String(s.receiptBizPhone || ""))
-        setReceiptLogoSize(
-          s.receiptLogoSize === 'sm'
-            ? 'sm'
-            : s.receiptLogoSize === 'lg'
-              ? 'lg'
-              : 'md'
-        )
         setVatRate(Math.max(0, Number(s.vatRate ?? 7)))
         setVatMode(s.vatMode === 'separate' ? 'separate' : 'included')
         setServiceRate(Math.max(0, Number(s.serviceRate ?? 0)))
@@ -448,13 +429,6 @@ export default function PosOrderPage() {
         setStoreFees({ deliveryFee: 0, packagingFee: 0 })
         setAutoPrintReceiptOnPayment(false)
         setAutoPrintKitchenSlipOnOrder(false)
-        setReceiptBizName("")
-        setReceiptBizTaxId("")
-        setReceiptBizAbn("")
-        setReceiptBizOwner("")
-        setReceiptBizAddress("")
-        setReceiptBizPhone("")
-        setReceiptLogoSize('md')
         setVatRate(7)
         setVatMode('included')
         setServiceRate(0)
@@ -1594,15 +1568,6 @@ export default function PosOrderPage() {
     takeout: t("posOrderTypeTakeout") ?? "포장",
     delivery: t("posOrderTypeDelivery") ?? "배달",
   }
-  const tr = (key: string, fallback: string) => {
-    const value = t(key)
-    return value && value !== key ? value : fallback
-  }
-  const parsedReceiptMemo = React.useMemo(
-    () => parsePosOrderMemo(receiptData?.memo),
-    [receiptData?.memo]
-  )
-
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -2772,138 +2737,28 @@ export default function PosOrderPage() {
           </DialogHeader>
           {receiptData && (
             <>
-              <div
-                ref={receiptRef}
-                className="receipt-content space-y-2 rounded border p-4 text-sm"
-              >
-                <div className="receipt-header">
-                  <img
-                    src="/company-stamp.png"
-                    alt="Company logo"
-                    className={`receipt-brand-logo inline-block ${receiptLogoSize}`}
-                  />
-                  <div className="receipt-store-name">{receiptData.storeCode}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatPosReceiptOrderNoDisplay({
-                      posOrderNo: receiptData.orderNo,
-                      tableName: receiptData.tableName,
-                      memo: receiptData.memo,
-                    })}
-                  </div>
-                  <div className="text-xs">
-                    {orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}
-                    {receiptData.tableName && ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}`}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatPosDateTimeMedium(new Date(), lang)}
-                  </div>
-                  <div className="text-xs">{parsedReceiptMemo.taxInvoice ? tr("posReceiptTaxInvoice", "세금계산서") : tr("posReceiptSimpleTaxInvoice", "간이 세금계산서")}</div>
-                </div>
-                {receiptBizName && <div className="receipt-biz">{receiptBizName}</div>}
-                {receiptBizTaxId && <div className="receipt-biz">{tr("posTaxIdLabel", "Tax ID")}: {receiptBizTaxId}</div>}
-                {receiptBizAbn && <div className="receipt-biz">ABN: {receiptBizAbn}</div>}
-                {receiptBizOwner && <div className="receipt-biz">{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
-                {receiptBizAddress && <div className="receipt-biz">{receiptBizAddress}</div>}
-                {receiptBizPhone && <div className="receipt-biz">{tr("posTelLabel", "TEL")}: {receiptBizPhone}</div>}
-                {parsedReceiptMemo.taxInvoice && (
-                  <div className="text-xs border border-black p-2">
-                    <div className="font-semibold mb-1">{tr("posReceiptTaxInvoice", "세금계산서")}</div>
-                    <div>{tr("posTaxCustomerTypeLabel", "구분")}: {parsedReceiptMemo.taxInvoice.customerType === "company" ? tr("posTaxCustomerCorporate", "법인") : tr("posTaxCustomerIndividual", "개인")}</div>
-                    <div>{tr("posName", "이름")}: {parsedReceiptMemo.taxInvoice.name}</div>
-                    <div>{tr("posTaxIdLabel", "Tax ID")}: {parsedReceiptMemo.taxInvoice.taxId}</div>
-                    <div>{tr("posBranchLabel", "지점")}: {parsedReceiptMemo.taxInvoice.branchNo || (parsedReceiptMemo.taxInvoice.customerType === "company" ? "00000" : tr("posHeadOffice", "본점"))}</div>
-                    <div>{tr("settings_address", "주소")}: {parsedReceiptMemo.taxInvoice.address}</div>
-                    <div>{tr("posPhone", "전화번호")}: {parsedReceiptMemo.taxInvoice.phone}</div>
-                    <div>{tr("posTaxEmailLabel", "E-mail")}: {parsedReceiptMemo.taxInvoice.email}</div>
-                  </div>
-                )}
-                <div className="space-y-1">
-                  {receiptData.items.map((it) => (
-                    <div key={it.id} className="receipt-row flex justify-between">
-                      <span>
-                        {it.name} × {it.qty}
-                      </span>
-                      <span className="tabular-nums">
-                        {formatBahtNum(it.price * it.qty)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="receipt-row flex justify-between text-xs border-t pt-2 mt-2">
-                  <span>{t("posSubtotal") || "소계"}</span>
-                  <span className="tabular-nums">
-                    {formatBahtNum(
-                      resolveReceiptSubtotalPrintAmount({
-                        subtotal: receiptData.subtotal,
-                        vatFeeMode: receiptData.vatFeeMode,
-                        receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
-                        receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
-                      })
-                    )}
-                  </span>
-                </div>
-                {receiptData.discountAmt > 0 && (
-                  <div className="receipt-row flex justify-between text-xs text-green-600">
-                    <span>{t("posDiscount") || "할인"}{receiptData.discountReason ? ` ${receiptData.discountReason}` : ""}</span>
-                    <span className="tabular-nums">-{formatBahtNum(receiptData.discountAmt)}</span>
-                  </div>
-                )}
-                {(receiptData.deliveryFee ?? 0) > 0 && (
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                    <span className="tabular-nums">+{formatBahtNum(receiptData.deliveryFee)}</span>
-                  </div>
-                )}
-                {(receiptData.packagingFee ?? 0) > 0 && (
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                    <span className="tabular-nums">+{formatBahtNum(receiptData.packagingFee)}</span>
-                  </div>
-                )}
-                {resolveReceiptVatPrintAmount({
-                  vatFeeAmt: receiptData.vatFeeAmt,
-                  receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
-                }) > 0 && (
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posVatLabel") || "부가세"}</span>
-                    <span className="tabular-nums">
-                      {receiptData.vatFeeMode === 'separate' ? '+' : ''}
-                      {formatBahtNum(
-                        resolveReceiptVatPrintAmount({
-                          vatFeeAmt: receiptData.vatFeeAmt,
-                          receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
-                        })
-                      )}
-                    </span>
-                  </div>
-                )}
-                {(receiptData.serviceFeeAmt ?? 0) > 0 && (
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posServiceFee") || "서비스비"}</span>
-                    <span className="tabular-nums">{receiptData.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.serviceFeeAmt)}</span>
-                  </div>
-                )}
-                {(receiptData.cardFeeAmt ?? 0) > 0 && (
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posCardFee") || "카드비"}</span>
-                    <span className="tabular-nums">{receiptData.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.cardFeeAmt)}</span>
-                  </div>
-                )}
-                {(receiptData.otherFeeAmt ?? 0) > 0 && (
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posOtherFee") || "기타"}</span>
-                    <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.otherFeeAmt)}</span>
-                  </div>
-                )}
-                {parsedReceiptMemo.plainMemo && (
-                  <div className="text-xs text-muted-foreground">
-                    {tr("posCustomerMemo", "메모")}: {parsedReceiptMemo.plainMemo}
-                  </div>
-                )}
-                <div className="receipt-total flex justify-between">
-                  <span>{t("posTotal") || "합계"}</span>
-                  <span className="tabular-nums">{formatBahtNum(receiptData.total)}</span>
-                </div>
+              <div ref={receiptRef} className="rounded border p-4">
+                <PosHallOrderReceiptPreview
+                  storeCode={receiptData.storeCode}
+                  orderNo={receiptData.orderNo}
+                  orderType={receiptData.orderType}
+                  orderTypeLabels={orderTypeLabels}
+                  tableName={receiptData.tableName || undefined}
+                  memo={receiptData.memo}
+                  items={receiptData.items.map((it) => ({
+                    id: it.id,
+                    name: it.name,
+                    price: it.price,
+                    qty: it.qty,
+                  }))}
+                  discountAmt={receiptData.discountAmt}
+                  discountReason={receiptData.discountReason}
+                  deliveryFee={receiptData.deliveryFee}
+                  packagingFee={receiptData.packagingFee}
+                  total={receiptData.total}
+                  t={t}
+                  lang={lang}
+                />
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
                 <Button

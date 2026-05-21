@@ -70,7 +70,7 @@ import {
   shouldUseFlatChickenMOptionPicker,
 } from '@/lib/pos-chicken-option-inference'
 import { shouldUseFlatBarBqChickenOptionPicker } from '@/lib/pos-barbq-option-picker-ui'
-import { validatePosMenuImageUrlForMenu } from '@/lib/pos-menu-image-storage-path'
+import { resolvePosMenuImageUrlPayloadForSave } from '@/lib/pos-menu-image-storage-path'
 import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
@@ -831,12 +831,12 @@ export function PosTerminalMenuScreen({
       if (normalizePromotionCategoryMain(cm) === PROMOTION_MAIN_CATEGORY) {
         cat = normalizePromotionSubcategory(cat)
       }
-      const imageCheck = validatePosMenuImageUrlForMenu(menuEditForm.imageUrl.trim(), menuEditTargetId)
-      if (!imageCheck.ok) {
-        await appAlert(imageCheck.message)
-        return
-      }
-      const res = await savePosMenu({
+      const imageSave = resolvePosMenuImageUrlPayloadForSave(
+        menuEditForm.imageUrl.trim(),
+        menuEditTargetId,
+        { isEdit: true }
+      )
+      const savePayload: Parameters<typeof savePosMenu>[0] = {
         id: menuEditTargetId,
         code,
         name,
@@ -844,7 +844,6 @@ export function PosTerminalMenuScreen({
         category: cat,
         price: Number(menuEditForm.price || 0),
         priceDelivery: menuEditForm.priceDelivery.trim() === '' ? null : Number(menuEditForm.priceDelivery),
-        imageUrl: menuEditForm.imageUrl.trim(),
         vatIncluded: menuEditForm.vatIncluded,
         isActive: menuEditForm.isActive,
         kitchenPrinter:
@@ -857,10 +856,19 @@ export function PosTerminalMenuScreen({
         optionSelectionGroups: dedupedGroups,
         optionSelectionConfig,
         isBanban: menuEditForm.isBanban,
-      })
+      }
+      if (imageSave.includeImageUrl) {
+        savePayload.imageUrl = imageSave.imageUrl
+      }
+      const res = await savePosMenu(savePayload)
       if (!res?.success) {
         await appAlert(localizeApiMessage(res?.message, t, t('posSaveFail') || '저장 실패', lang))
         return
+      }
+      if (imageSave.mismatchMessage) {
+        await appAlert(
+          `${t('posMenuSavedWithoutImageMismatch') || '메뉴 정보는 저장했습니다. 다만 사진 URL이 다른 메뉴용이라 사진은 그대로 두었습니다.'}\n\n${imageSave.mismatchMessage}\n\n${t('posMenuImageUploadHint') || '이 메뉴에서 사진을 다시 업로드해 주세요.'}`
+        )
       }
       await loadMenuData()
       setMenuEditOpen(false)

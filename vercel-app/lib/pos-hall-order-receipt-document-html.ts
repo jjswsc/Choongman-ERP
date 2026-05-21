@@ -194,6 +194,56 @@ export function mergeSetChildrenForReceipt(
     hide.add(child.index)
   }
 
+  const promoCodeGroups = new Map<string, number[]>()
+  for (let i = 0; i < out.length; i++) {
+    if (hide.has(i)) continue
+    const code = String((out[i] as { promoCode?: unknown }).promoCode ?? '')
+      .trim()
+      .toUpperCase()
+    if (!code || !/^[A-Z0-9]+-S\d+$/i.test(code)) continue
+    const list = promoCodeGroups.get(code) ?? []
+    list.push(i)
+    promoCodeGroups.set(code, list)
+  }
+  for (const indices of promoCodeGroups.values()) {
+    if (indices.length < 2) continue
+    const parentIdx =
+      indices.find((idx) => Array.isArray(out[idx].promoItems) && out[idx].promoItems!.length > 0) ??
+      indices.find((idx) => /\bset\b|\[[^\]]+\]/i.test(String(out[idx].name ?? ''))) ??
+      indices.find((idx) => String((out[idx] as { promoId?: unknown }).promoId ?? '').trim().length > 0) ??
+      indices[0]
+    const parent = out[parentIdx]
+    const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
+    for (const childIdx of indices) {
+      if (childIdx === parentIdx || hide.has(childIdx)) continue
+      const child = out[childIdx]
+      const childName = String(child.name ?? '').trim()
+      if (!childName) continue
+      const opt = String(child.note ?? '').trim()
+      let optionName = opt
+      if (opt && opts?.grabInbound) {
+        const chips = collectGrabPrintOptionLines({
+          note: opt,
+          optionNameByCode: opts.optionNameByCode,
+        })
+        if (chips.length) optionName = chips.join(', ')
+        else {
+          const parsed = formatGrabOrderLineNoteForPrint(opt, opts.optionNameByCode)
+          if (parsed) optionName = parsed
+        }
+      }
+      list.push({
+        menuId: '',
+        optionId: null,
+        ...(optionName ? { optionName } : {}),
+        menuName: childName,
+        quantity: Math.max(1, Number(child.qty ?? 1) || 1),
+      } as HallOrderPromoItem)
+      hide.add(childIdx)
+    }
+    out[parentIdx] = { ...parent, promoItems: list }
+  }
+
   return out.filter((_, idx) => !hide.has(idx))
 }
 

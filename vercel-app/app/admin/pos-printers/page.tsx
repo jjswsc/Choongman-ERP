@@ -65,6 +65,8 @@ import {
   type KitchenRouteValue,
 } from "@/lib/pos-kitchen-slip-routing"
 import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
+import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-receipt-document-html"
+import { PosHallOrderReceiptPreview } from "@/components/pos/pos-hall-order-receipt-preview"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import {
   bangkokTodayYmdCompact,
@@ -91,7 +93,7 @@ import {
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
-type PreviewKind = "receipt" | "kitchen"
+type PreviewKind = "receipt" | "hall_order" | "kitchen"
 
 const POS_PAPER_SIDE_PADDING_MM = 0
 const RECEIPT_ASSET_MAX_BYTES = 1024 * 700
@@ -975,8 +977,8 @@ export default function PosPrintersPage() {
         }
       }
 
-      const receiptHtml = buildReceiptHtml()
-      await runPrintTestHtml(receiptHtml, tr("posHallOrder", "홀 주문서"), {
+      const hallOrderHtml = buildHallOrderReceiptHtml()
+      await runPrintTestHtml(hallOrderHtml, tr("posHallOrder", "홀 주문서"), {
         printRole: "receipt",
         printReceiptKind: "hall_order",
         escPosCutOverride: resolveEscPosCutOverride(hwSettings, {
@@ -984,6 +986,7 @@ export default function PosPrintersPage() {
           printReceiptKind: "hall_order",
         }),
       })
+      const receiptHtml = buildReceiptHtml()
       await runPrintTestHtml(receiptHtml, tr("posReceipt", "영수증"), {
         printRole: "receipt",
         printReceiptKind: "payment",
@@ -1310,6 +1313,31 @@ export default function PosPrintersPage() {
     tr,
   ])
 
+  const buildHallOrderReceiptHtml = React.useCallback(() => {
+    return buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: previewData.orderNo,
+        storeCode: previewData.storeCode,
+        orderType: "dine_in",
+        tableName: previewData.tableName,
+        memo: previewData.memo,
+        items: previewData.items.map((it, i) => ({
+          id: `pv${i}`,
+          name: it.name,
+          price: it.price,
+          qty: it.qty,
+        })),
+        subtotal: previewData.subtotal,
+        discountAmt: previewData.discount,
+        total: previewData.total,
+        deliveryFee: previewData.delivery,
+        packagingFee: previewData.packaging,
+      },
+      t,
+      lang,
+    })
+  }, [previewData, t, lang])
+
   const buildReceiptHtml = React.useCallback(() => {
     const logoUrl = receiptLogoImageUrl || `${window.location.origin}/company-stamp.png`
     const previewIsTaxInvoice = false
@@ -1489,6 +1517,18 @@ export default function PosPrintersPage() {
         effectiveStore.length > 0
           ? await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
           : null
+      if (kind === "hall_order") {
+        const html = buildHallOrderReceiptHtml()
+        await runPrintTestHtml(html, tr("posHallOrder", "홀 주문서"), {
+          printRole: "receipt",
+          printReceiptKind: "hall_order",
+          escPosCutOverride: resolveEscPosCutOverride(hwSettings, {
+            printRole: "receipt",
+            printReceiptKind: "hall_order",
+          }),
+        })
+        return
+      }
       if (kind === "receipt") {
         const html = buildReceiptHtml()
         await runPrintTestHtml(html, tr("posReceipt", "영수증"), {
@@ -1827,7 +1867,11 @@ export default function PosPrintersPage() {
                 </p>
               </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Button variant="outline" onClick={() => handleOpenPreview("hall_order")}>
+                <Receipt className="mr-2 h-4 w-4" />
+                {tr("posHallOrder", "홀 주문서")} {tr("posPreview", "미리보기")}
+              </Button>
               <Button variant="outline" onClick={() => handleOpenPreview("receipt")}>
                 <Receipt className="mr-2 h-4 w-4" />
                 {tr("posReceipt", "영수증")} {tr("posPreview", "미리보기")}
@@ -1962,6 +2006,10 @@ export default function PosPrintersPage() {
                   <span>{tr("posPrinterKioskPrintingHintAfter", "를 참고하세요.")}</span>
                 </p>
                 <div className="flex flex-wrap gap-2 border-t pt-3">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("hall_order")}>
+                    <Receipt className="h-4 w-4" />
+                    {tr("posHallOrder", "홀 주문서")} {tr("posPreview", "미리보기")}
+                  </Button>
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />
                     {tr("posReceipt", "영수증")} {tr("posPreview", "미리보기")}
@@ -2429,7 +2477,7 @@ export default function PosPrintersPage() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className={cn("max-w-3xl", ADMIN_DIALOG_SCROLL_CN)}>
           <DialogHeader>
-            <DialogTitle>{tr("posPrintPreviewBothTitle", "영수증 · 주방 미리보기")}</DialogTitle>
+            <DialogTitle>{tr("posPrintPreviewAllTitle", "영수증 · 홀 주문서 · 주방 미리보기")}</DialogTitle>
             <DialogDescription className="text-left text-sm">
               {tr("posPrintPreviewSaveHint", "미리보기·테스트 인쇄는 DB에 저장하지 않습니다. 변경한 설정은 이 창을 닫은 뒤 아래 「설정 저장」 또는 페이지 맨 아래 「저장」으로 반영하세요.")}
             </DialogDescription>
@@ -2439,7 +2487,11 @@ export default function PosPrintersPage() {
             onValueChange={(v) => setPreviewKind(v as PreviewKind)}
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="hall_order" className="gap-1.5">
+                <Receipt className="h-3.5 w-3.5" />
+                {tr("posHallOrder", "홀 주문서")}
+              </TabsTrigger>
               <TabsTrigger value="receipt" className="gap-1.5">
                 <Receipt className="h-3.5 w-3.5" />
                 {tr("posReceipt", "영수증")}
@@ -2449,6 +2501,43 @@ export default function PosPrintersPage() {
                 {tr("posKitchenOrder", "주방 주문서")}
               </TabsTrigger>
             </TabsList>
+            <TabsContent value="hall_order" className="mt-3 outline-none">
+              <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/20 p-4">
+                <div
+                  className={cn(
+                    "mx-auto w-full rounded-md border bg-white p-3 text-black",
+                    "max-w-[320px]"
+                  )}
+                >
+                  <PosHallOrderReceiptPreview
+                    storeCode={previewData.storeCode}
+                    orderNo={previewData.orderNo}
+                    orderType="dine_in"
+                    orderTypeLabels={{
+                      dine_in: tr("posOrderTypeDineIn", "매장"),
+                      takeout: tr("posOrderTypeTakeout", "포장"),
+                      delivery: tr("posOrderTypeDelivery", "배달"),
+                    }}
+                    tableName={previewData.tableName}
+                    memo={previewData.memo}
+                    items={previewData.items.map((it, idx) => ({
+                      id: `pv${idx}`,
+                      name: it.name,
+                      price: it.price,
+                      qty: it.qty,
+                      promoLines: it.promoLines,
+                    }))}
+                    discountAmt={previewData.discount}
+                    deliveryFee={previewData.delivery}
+                    packagingFee={previewData.packaging}
+                    total={previewData.total}
+                    printedAt={new Date()}
+                    t={t}
+                    lang={lang}
+                  />
+                </div>
+              </div>
+            </TabsContent>
             <TabsContent value="receipt" className="mt-3 outline-none">
           <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/20 p-4">
             <div

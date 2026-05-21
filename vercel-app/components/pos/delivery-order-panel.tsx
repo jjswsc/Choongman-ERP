@@ -22,7 +22,6 @@ import {
   grabCancelOrderByStoreApi,
   grabMarkOrderReadyApi,
   markPosOrderItemServed,
-  updatePosOrder,
   updatePosOrderStatus,
 } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
@@ -43,17 +42,18 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
+import { canStartPosLinePartialCancel } from '@/lib/pos-order-line-update'
+import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
-  buildUpdatePosOrderParamsFromOrder,
-  canRemovePosOrderLine,
-  orderItemsToPosOrderItems,
-  orderPaymentsSum,
-} from '@/lib/pos-order-line-update'
+  alertPosLineCancelBlocked,
+  executePosOrderLineCancel,
+} from '@/lib/pos-order-line-cancel-execute'
 import {
   kitchenRoutingItemFromOrderItem,
   preparePosOrderItemsForKitchenSlip,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
+import { PosLineCancelQtyDialog } from '@/components/pos/pos-line-cancel-qty-dialog'
 import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
 import type { OrderItem } from '@/lib/pos-types'
 
@@ -394,6 +394,7 @@ export function DeliveryOrderPanel({
   const [deciding, setDeciding] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
+  const [cancelQtyDialogOpen, setCancelQtyDialogOpen] = useState(false)
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -402,6 +403,23 @@ export function DeliveryOrderPanel({
     }
     setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev && !i.cancelledAt) ? prev : null))
   }, [order?.id, order?.items])
+
+  const cancelQtyTargetItem = useMemo(
+    () => (selectedLineItemId && order ? order.items.find((it) => it.id === selectedLineItemId) ?? null : null),
+    [order, selectedLineItemId]
+  )
+
+  const lineCancelDisplayLabel = useCallback(
+    (it: OrderItem) => {
+      const raw = resolvePosOrderItemMenuDisplayName(
+        { id: it.id, name: it.name, menuId: it.menuId, promoId: it.promoId, promoCode: it.promoCode },
+        menusFromProps,
+        promosFromProps
+      )
+      return translatePosMenuLineForReceipt(raw, ti)
+    },
+    [menusFromProps, promosFromProps, ti]
+  )
 
   const grabOrderId = order ? extractGrabOrderIdFromMemo(String(order.memo ?? '')) : ''
 
@@ -463,47 +481,29 @@ export function DeliveryOrderPanel({
     }
   }
 
-  const handleRemoveOrderLine = async (itemId: string) => {
+  const applyLineCancel = async (itemId: string, cancelQty: number, confirmBeforeApply: boolean) => {
     if (!order) return
     const target = order.items.find((it) => it.id === itemId)
     if (!target) return
-    if (!canRemovePosOrderLine(order)) {
-      if (order.items.length <= 1) {
-        await appAlert(t('posLineItemCancelLastHint') || ti('posLineItemCancelLastHint'))
-      } else if (orderPaymentsSum(order) > 0.005) {
-        await appAlert(t('posLineItemCancelPaidBlocked') || ti('posLineItemCancelPaidBlocked'))
-      }
-      return
-    }
-    const labelRaw = resolvePosOrderItemMenuDisplayName(
-      { id: target.id, name: target.name, menuId: target.menuId, promoId: target.promoId, promoCode: target.promoCode },
-      menusFromProps,
-      promosFromProps
-    )
-    const label = translatePosMenuLineForReceipt(labelRaw, ti)
-    const ask = i18nTr(ti, 'posLineItemCancelConfirm', { name: label })
-    if (!await appConfirm(ask)) return
-    const id = Number(order.id)
-    if (Number.isNaN(id) || !posOrderHasServerId(order.id)) {
-      const msg = t('posServedNeedsOrderId')
-      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
-      return
-    }
-    const nextOrderItems = order.items.filter((it) => it.id !== itemId)
-    const nextPosItems = orderItemsToPosOrderItems(nextOrderItems)
+    const label = lineCancelDisplayLabel(target)
     setRemovingItemId(itemId)
     try {
-      const res = await updatePosOrder(buildUpdatePosOrderParamsFromOrder(order, nextPosItems))
-      if (!res.success) {
-        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
-        return
-      }
-      setSelectedLineItemId(null)
-      const removedLine = kitchenRoutingItemFromOrderItem(target, label)
-      await onAfterPartialLineRemoved?.(id, { removedKitchenLines: [removedLine] })
-      onPackaged?.()
-    } catch (e) {
-      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+      const result = await executePosOrderLineCancel({
+        order,
+        itemId,
+        cancelQty,
+        displayLabel: label,
+        t,
+        tDefault: ti,
+        lang,
+        confirmBeforeApply,
+        onAfterPartialLineRemoved,
+        onRefresh: () => {
+          setSelectedLineItemId(null)
+          onPackaged?.()
+        },
+      })
+      if (result === 'ok') setCancelQtyDialogOpen(false)
     } finally {
       setRemovingItemId(null)
     }
@@ -511,11 +511,20 @@ export function DeliveryOrderPanel({
 
   const handlePartialCancel = async () => {
     if (!order) return
-    if (!selectedLineItemId) {
+    if (!selectedLineItemId || !cancelQtyTargetItem) {
       await appAlert(t('posLineItemSelectFirst') || ti('posLineItemSelectFirst'))
       return
     }
-    await handleRemoveOrderLine(selectedLineItemId)
+    if (!canStartPosLinePartialCancel(order)) {
+      await alertPosLineCancelBlocked(order, t, ti)
+      return
+    }
+    const lineQty = orderItemLineQty(cancelQtyTargetItem)
+    if (lineQty > 1) {
+      setCancelQtyDialogOpen(true)
+      return
+    }
+    await applyLineCancel(selectedLineItemId, 1, true)
   }
 
   const handlePackComplete = async () => {
@@ -922,7 +931,7 @@ export function DeliveryOrderPanel({
               </Button>
               {canCancel && (
                 <div className="space-y-1.5">
-                  {canRemovePosOrderLine(order) && !selectedLineItemId ? (
+                  {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
                     <p className="text-center text-xs text-muted-foreground px-1">
                       {t('posLineItemSelectFirst') || ti('posLineItemSelectFirst')}
                     </p>
@@ -936,7 +945,7 @@ export function DeliveryOrderPanel({
                       disabled={
                         cancelling ||
                         removingItemId !== null ||
-                        !canRemovePosOrderLine(order) ||
+                        !canStartPosLinePartialCancel(order) ||
                         !selectedLineItemId
                       }
                       onClick={() => { void handlePartialCancel() }}
@@ -986,6 +995,19 @@ export function DeliveryOrderPanel({
           } finally {
             setChecklistSubmitting(false)
           }
+        }}
+      />
+
+      <PosLineCancelQtyDialog
+        open={cancelQtyDialogOpen}
+        onOpenChange={setCancelQtyDialogOpen}
+        item={cancelQtyTargetItem}
+        displayName={cancelQtyTargetItem ? lineCancelDisplayLabel(cancelQtyTargetItem) : ''}
+        allItems={order?.items ?? []}
+        submitting={removingItemId !== null}
+        onConfirm={(cq) => {
+          if (!selectedLineItemId) return
+          void applyLineCancel(selectedLineItemId, cq, false)
         }}
       />
     </>

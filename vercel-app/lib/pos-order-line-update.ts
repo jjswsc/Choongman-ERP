@@ -14,6 +14,39 @@ export function orderPaymentsSum(order: Order): number {
   )
 }
 
+function posOrderLineEditBlocked(order: Order, opts?: { allowGrabLinked?: boolean }): boolean {
+  if (!posOrderHasServerId(order.id)) return true
+  const st = String(order.status ?? '').toLowerCase()
+  if (st === 'completed' || st === 'cancelled' || st === 'paid') return true
+  if (orderPaymentsSum(order) > 0.005) return true
+  if (!opts?.allowGrabLinked) {
+    const grabId = extractGrabOrderIdFromMemo(String(order.memo ?? ''))
+    if (grabId) return true
+  }
+  return false
+}
+
+function activeOrderItems(order: Order): OrderItem[] {
+  return (order.items || []).filter((it) => !String(it.cancelledAt ?? '').trim())
+}
+
+/**
+ * 일부 취소(수량 선택 포함) 시작 가능 여부.
+ * 줄이 1개만 남아도 수량이 2 이상이면 수량만 줄이는 취소는 허용.
+ */
+export function canStartPosLinePartialCancel(
+  order: Order | null,
+  opts?: { allowGrabLinked?: boolean }
+): boolean {
+  if (!order?.items?.length) return false
+  if (posOrderLineEditBlocked(order, opts)) return false
+  const active = activeOrderItems(order)
+  if (!active.length) return false
+  if (active.length > 1) return true
+  const q = resolveCartLineQuantityForSave(active[0] as { quantity?: unknown; qty?: unknown })
+  return q > 1
+}
+
 /**
  * 결제 반영 전·Grab 연동 배달 제외 시, `updatePosOrder`로 줄을 빼 수정 가능한지.
  * 마지막 한 줄만 남은 경우는 API가 빈 items를 거절하므로 false (전체 주문 취소 유도).
@@ -21,14 +54,7 @@ export function orderPaymentsSum(order: Order): number {
 export function canRemovePosOrderLine(order: Order | null, opts?: { allowGrabLinked?: boolean }): boolean {
   if (!order?.items?.length) return false
   if (order.items.length <= 1) return false
-  if (!posOrderHasServerId(order.id)) return false
-  const st = String(order.status ?? '').toLowerCase()
-  if (st === 'completed' || st === 'cancelled' || st === 'paid') return false
-  if (orderPaymentsSum(order) > 0.005) return false
-  if (!opts?.allowGrabLinked) {
-    const grabId = extractGrabOrderIdFromMemo(String(order.memo ?? ''))
-    if (grabId) return false
-  }
+  if (posOrderLineEditBlocked(order, opts)) return false
   return true
 }
 
@@ -63,6 +89,11 @@ export function orderItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
     if (typeof it.cancelledAt === 'string' && it.cancelledAt) base.cancelledAt = it.cancelledAt
     if (typeof it.cancelledBy === 'string' && it.cancelledBy) base.cancelledBy = it.cancelledBy
     if (typeof it.cancelReason === 'string' && it.cancelReason) base.cancelReason = it.cancelReason
+    const lineDiscountAmt = Math.max(
+      0,
+      Number((it as { lineDiscountAmt?: unknown }).lineDiscountAmt ?? 0) || 0
+    )
+    if (lineDiscountAmt > 0.0001) base.lineDiscountAmt = lineDiscountAmt
     return base
   })
 }

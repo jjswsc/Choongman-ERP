@@ -24,6 +24,7 @@ import {
 import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
 import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
+import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import { enrichReceiptModalItemsForPromoDisplay } from '@/lib/pos-payment-receipt-from-order'
 import {
@@ -229,43 +230,87 @@ export function PosReceiptModal({
       menus,
       optionNameByCode,
     })
-    const fullHtml = buildPosPaymentReceiptDocumentHtml({
-      receiptData: { ...receiptData, items: itemsForReceipt },
-      menus,
-      orderTypeLabels,
-      t,
-      lang,
-      origin: typeof window !== 'undefined' ? window.location.origin : '',
-      printedAt: new Date(),
-      forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(receiptData.storeCode),
-      designOverride: {
-        receiptBizName,
-        receiptBizTaxId,
-        receiptBizAbn,
-        receiptBizOwner,
-        receiptBizAddress,
-        receiptBizPhone,
-        receiptLogoSize,
-        receiptShowTitle,
-        receiptShowPaidStamp,
-        receiptShowThankYou,
-        receiptShowCustomerCopy,
-        receiptFooterPrimaryText,
-        receiptFooterSecondaryText,
-        receiptLogoImageUrl,
-        receiptStampImageUrl,
-        receiptShowStamp,
-        receiptStampOnlyTaxInvoice,
-        receiptMembershipQrImageUrl,
-        receiptMembershipQrLinkUrl,
-        receiptMembershipQrText,
-        receiptShowMembershipQr,
-        signatureLine,
-        receiptBarcode,
-        itemBarcode,
-        receiptShowLogo: true,
-      },
-    })
+    const isHallOrderPrint =
+      receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'
+    const fullHtml = isHallOrderPrint
+      ? buildPosHallOrderReceiptDocumentHtml({
+          payload: {
+            orderNo: String(receiptData.orderNo ?? ''),
+            storeCode: String(receiptData.storeCode ?? ''),
+            orderType: String(receiptData.orderType ?? ''),
+            tableName: receiptData.tableName ? String(receiptData.tableName) : undefined,
+            memo: receiptData.memo ? String(receiptData.memo) : '',
+            items: itemsForReceipt.map((it) => ({
+              id: String(it.id ?? ''),
+              name: String(it.name ?? ''),
+              price: Number(it.price ?? 0) || 0,
+              qty: Number(it.qty ?? 0) || 0,
+              note: String(it.note ?? ''),
+              promoItems: Array.isArray(it.promoItems) ? it.promoItems : [],
+            })),
+            subtotal: Number(receiptData.subtotal ?? 0) || 0,
+            discountAmt: Number(receiptData.discountAmt ?? 0) || 0,
+            total: Number(receiptData.total ?? 0) || 0,
+            deliveryFee: Number(receiptData.deliveryFee ?? 0) || 0,
+            packagingFee: Number(receiptData.packagingFee ?? 0) || 0,
+            vatFeeAmt: Number(receiptData.vatFeeAmt ?? 0) || 0,
+            vatFeeMode: receiptData.vatFeeMode,
+            receiptExclusiveSubtotalDisplay: Number(receiptData.receiptExclusiveSubtotalDisplay ?? 0) || 0,
+            receiptVatDisplayAmt: Number(receiptData.receiptVatDisplayAmt ?? 0) || 0,
+            receiptTaxableGrossForDisplay: Number(receiptData.receiptTaxableGrossForDisplay ?? 0) || 0,
+            serviceFeeAmt: Number(receiptData.serviceFeeAmt ?? 0) || 0,
+            serviceFeeMode: receiptData.serviceFeeMode,
+            cardFeeAmt: Number(receiptData.cardFeeAmt ?? 0) || 0,
+            cardFeeMode: receiptData.cardFeeMode,
+            otherFeeAmt: Number(receiptData.otherFeeAmt ?? 0) || 0,
+            otherFeeMode: receiptData.otherFeeMode,
+          },
+          t,
+          lang,
+          menuNameById: (menuId: string) =>
+            menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
+          menuCodeByMenuId: Object.fromEntries(
+            menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+          ),
+          optionNameByCode,
+        })
+      : buildPosPaymentReceiptDocumentHtml({
+          receiptData: { ...receiptData, items: itemsForReceipt },
+          menus,
+          orderTypeLabels,
+          t,
+          lang,
+          origin: typeof window !== 'undefined' ? window.location.origin : '',
+          printedAt: new Date(),
+          forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(receiptData.storeCode),
+          designOverride: {
+            receiptBizName,
+            receiptBizTaxId,
+            receiptBizAbn,
+            receiptBizOwner,
+            receiptBizAddress,
+            receiptBizPhone,
+            receiptLogoSize,
+            receiptShowTitle,
+            receiptShowPaidStamp,
+            receiptShowThankYou,
+            receiptShowCustomerCopy,
+            receiptFooterPrimaryText,
+            receiptFooterSecondaryText,
+            receiptLogoImageUrl,
+            receiptStampImageUrl,
+            receiptShowStamp,
+            receiptStampOnlyTaxInvoice,
+            receiptMembershipQrImageUrl,
+            receiptMembershipQrLinkUrl,
+            receiptMembershipQrText,
+            receiptShowMembershipQr,
+            signatureLine,
+            receiptBarcode,
+            itemBarcode,
+            receiptShowLogo: true,
+          },
+        })
     try {
       const printReceiptKind =
         receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'

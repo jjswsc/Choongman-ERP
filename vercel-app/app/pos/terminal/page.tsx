@@ -126,7 +126,10 @@ import {
   translatePosMenuLineForReceipt,
   translateReceiptTableDisplayName,
 } from '@/lib/pos-print-translate'
-import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
+import {
+  buildPosHallOrderReceiptDocumentHtml,
+  mergeSetChildrenForReceipt,
+} from '@/lib/pos-hall-order-receipt-document-html'
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
   isPosOrderPaidLikeStatus,
@@ -1015,7 +1018,7 @@ export default function PosTerminalPage() {
         rows as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
         { ...posReceiptLineOpts, menus }
       )
-      return prepared.map((it) => {
+      const mapped = prepared.map((it) => {
         const list = (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] })
           .promoItems
         const line = it as {
@@ -1057,12 +1060,16 @@ export default function PosTerminalPage() {
           ...(inferredDefaultSize ? { note: inferredDefaultSize } : {}),
         } as unknown as T
       })
+      return mergeSetChildrenForReceipt(mapped as unknown as Parameters<typeof mergeSetChildrenForReceipt>[0], {
+        optionNameByCode,
+      }) as unknown as T[]
     },
     [
       posReceiptLineOpts,
       enrichPromoItemsWithOptionName,
       inferDefaultSizeLabelForLine,
       menus,
+      optionNameByCode,
     ]
   )
   const kitchenSlipItemsForPrint = useCallback(

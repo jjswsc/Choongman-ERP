@@ -61,3 +61,21 @@ export function validatePosMenuImageUrlForMenu(
   }
   return { ok: true }
 }
+
+/** 저장 시 imageUrl 필드 포함 여부. id 불일치면 수정 저장에서 imageUrl 을 빼고 나머지만 반영한다. */
+export function resolvePosMenuImageUrlPayloadForSave(
+  imageUrl: string,
+  menuId: number | string | null | undefined,
+  opts?: { isEdit?: boolean }
+): { includeImageUrl: boolean; imageUrl?: string; mismatchMessage?: string } {
+  const url = String(imageUrl ?? '').trim()
+  const isEdit = opts?.isEdit === true
+  if (!url) {
+    if (isEdit) return { includeImageUrl: false }
+    return { includeImageUrl: true, imageUrl: '' }
+  }
+  const check = validatePosMenuImageUrlForMenu(url, menuId)
+  if (check.ok) return { includeImageUrl: true, imageUrl: url }
+  if (isEdit) return { includeImageUrl: false, mismatchMessage: check.message }
+  return { includeImageUrl: false, mismatchMessage: check.message }
+}
