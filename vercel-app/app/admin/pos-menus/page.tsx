@@ -1292,6 +1292,7 @@ export default function PosMenusPage() {
     }
     const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
       isEdit: !!editingId,
+      existingImageUrl: editingMenu?.imageUrl,
     })
     if (!editingId && imageSave.mismatchMessage) {
       await appAlert(

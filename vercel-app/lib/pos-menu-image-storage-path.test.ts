@@ -43,4 +43,15 @@ describe('pos-menu-image-storage-path', () => {
       includeImageUrl: false,
     })
   })
+
+  it('skips mismatch check when edit save keeps the same image url', () => {
+    const url =
+      'https://x.supabase.co/storage/v1/object/public/pos-menu-images/1774343948409-41._G'
+    expect(
+      resolvePosMenuImageUrlPayloadForSave(url, 33, {
+        isEdit: true,
+        existingImageUrl: url,
+      })
+    ).toEqual({ includeImageUrl: false })
+  })
 })

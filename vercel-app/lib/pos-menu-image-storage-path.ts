@@ -62,17 +62,26 @@ export function validatePosMenuImageUrlForMenu(
   return { ok: true }
 }
 
+function normalizePosMenuImageUrlForCompare(url: string): string {
+  return String(url ?? '').trim()
+}
+
 /** 저장 시 imageUrl 필드 포함 여부. id 불일치면 수정 저장에서 imageUrl 을 빼고 나머지만 반영한다. */
 export function resolvePosMenuImageUrlPayloadForSave(
   imageUrl: string,
   menuId: number | string | null | undefined,
-  opts?: { isEdit?: boolean }
+  opts?: { isEdit?: boolean; existingImageUrl?: string }
 ): { includeImageUrl: boolean; imageUrl?: string; mismatchMessage?: string } {
   const url = String(imageUrl ?? '').trim()
   const isEdit = opts?.isEdit === true
+  const existingUrl = normalizePosMenuImageUrlForCompare(opts?.existingImageUrl ?? '')
   if (!url) {
     if (isEdit) return { includeImageUrl: false }
     return { includeImageUrl: true, imageUrl: '' }
+  }
+  // 수정 저장에서 사진 URL을 바꾸지 않았으면 검증·경고 없이 image 컬럼은 그대로 둔다.
+  if (isEdit && existingUrl && url === existingUrl) {
+    return { includeImageUrl: false }
   }
   const check = validatePosMenuImageUrlForMenu(url, menuId)
   if (check.ok) return { includeImageUrl: true, imageUrl: url }

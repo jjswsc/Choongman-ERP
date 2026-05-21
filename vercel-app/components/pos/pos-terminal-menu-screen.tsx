@@ -834,7 +834,7 @@ export function PosTerminalMenuScreen({
       const imageSave = resolvePosMenuImageUrlPayloadForSave(
         menuEditForm.imageUrl.trim(),
         menuEditTargetId,
-        { isEdit: true }
+        { isEdit: true, existingImageUrl: targetMenu?.imageUrl }
       )
       const savePayload: Parameters<typeof savePosMenu>[0] = {
         id: menuEditTargetId,
