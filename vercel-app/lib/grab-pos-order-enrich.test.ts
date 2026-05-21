@@ -193,6 +193,20 @@ describe('grab-pos-order-enrich', () => {
     ).toEqual(['Rice x1'])
   })
 
+  it('formatGrabPromoComposeLinesForPrint omits menu name when parent matches (banban)', () => {
+    expect(
+      formatGrabPromoComposeLinesForPrint(
+        {
+          menuName: 'Banban Chicken',
+          optionName: 'SOY SAUCE CHICKEN, SPICY YANGNYEOM',
+          quantity: 1,
+          parentItemName: 'Banban Chicken',
+        },
+        true
+      )
+    ).toEqual(['SOY SAUCE CHICKEN x1', 'SPICY YANGNYEOM x1'])
+  })
+
   it('avoids double-counting M-size surcharge when item name includes size', () => {
     expect(grabItemNameImpliesAllInPrice('GARLIC + M - Boneless')).toBe(true)
     const unit = resolveGrabLineUnitMinor({

@@ -109,6 +109,20 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).not.toContain('[Set 1] GOLDEN')
     })
 
+    it('옵션·세트가 아닌 일반 메뉴의 자기복제 구성줄은 숨긴다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'GOCHUJANG BULGOGI SET',
+          qty: 2,
+          promoComposeLines: ['GOCHUJANG BULGOGI SET x1', 'GOCHUJANG BULGOGI SET x1'],
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('GOCHUJANG BULGOGI SET')
+      expect(html).not.toContain('- GOCHUJANG BULGOGI SET x1')
+    })
+
     it('잘못 들어온 Size 라벨을 메뉴명으로 출력하지 않고 note의 메뉴명으로 복구한다', () => {
       const html = formatKitchenSlipItemRowHtml(
         {
@@ -153,6 +167,37 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('SOY SAUCE CHICKEN')
       expect(html).not.toContain('>C010<')
       expect(html).toContain('- S Boneless')
+    })
+
+    it('sidedish 끄면 Kimchi는 주방 줄에서 제외하고 part/size는 유지한다', () => {
+      const policy = {
+        option: true,
+        sidedish: false,
+        takeaway: true,
+        type: true,
+        ส่วน: true,
+      }
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'GARLIC Bar.B.Q FRIED CHICKEN',
+          qty: 1,
+          note: 'Kimchi · M - Boneless · Size S',
+          promoComposeLines: [
+            'GARLIC Bar.B.Q FRIED CHICKEN (Kimchi) x1',
+            'GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless) x1',
+            'Kimchi',
+            'M - Boneless',
+            'Size S',
+          ],
+        },
+        noEsc,
+        close,
+        { optionGroupPrint: policy }
+      )
+      expect(html).not.toContain('Kimchi')
+      expect(html).toContain('M - Boneless')
+      expect(html).toContain('Size S')
+      expect(html).toContain('GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless)')
     })
 
     it('Size 라벨 행은 note 선두 메뉴명으로 복구하고 잘못된 Size 본문 노출을 막는다', () => {

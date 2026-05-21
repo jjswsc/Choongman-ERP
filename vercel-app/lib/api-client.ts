@@ -6362,6 +6362,8 @@ export interface PosMenuOptionGroupLink {
 
 export interface PosOptionGroup {
   id: string
+  /** 그룹 내부 고유 코드(1차 호환: key 기반 파생) */
+  code?: string
   key: string
   name: string
   isActive: boolean

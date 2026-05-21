@@ -165,8 +165,15 @@ export function filterOptionSelectionGroupsForAudience(
   groupConfigByKey: Map<string, Pick<PosOptionSelectionGroupConfig, "audience"> | undefined>,
   stepAudience: "hall" | "delivery"
 ): string[] {
+  const normalizeAudienceKey = (raw: string) => String(raw ?? "").trim().toLowerCase()
+  const byNormalizedKey = new Map<string, Pick<PosOptionSelectionGroupConfig, "audience"> | undefined>()
+  for (const [key, cfg] of groupConfigByKey.entries()) {
+    const nk = normalizeAudienceKey(key)
+    if (!nk || byNormalizedKey.has(nk)) continue
+    byNormalizedKey.set(nk, cfg)
+  }
   return groups.filter((key) => {
-    const cfg = groupConfigByKey.get(key)
+    const cfg = groupConfigByKey.get(key) ?? byNormalizedKey.get(normalizeAudienceKey(key))
     return isGroupVisibleForStepAudience(cfg?.audience, stepAudience)
   })
 }

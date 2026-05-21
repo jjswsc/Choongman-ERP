@@ -22,6 +22,7 @@ import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receip
 import {
   buildOptionNameByCodeFromMenus,
   collectGrabPrintOptionLines,
+  enrichGrabPromoItemsForPrint,
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
@@ -619,9 +620,31 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const banban = parseBanbanFlavorsFromName(it.name)
             const displayName = banban ? banban.baseName : baseLineSplit.mainName || it.name
-            const promoComposeLines =
+            const menuCodeByMenuId = Object.fromEntries(
+              menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+            )
+            const promoRows =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
-                ? it.promoItems.slice(0, 8).flatMap((pi) => {
+                ? grabInbound
+                  ? enrichGrabPromoItemsForPrint(
+                      it.promoItems.slice(0, 8).map((pi) => ({
+                        menuId: String(pi.menuId || ''),
+                        optionId: pi.optionId,
+                        optionCode: (pi as { optionCode?: string | null }).optionCode ?? null,
+                        optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
+                        menuName:
+                          String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
+                          menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                          '',
+                        quantity: Math.max(1, Number(pi.quantity) || 1),
+                      })),
+                      { optionNameByCode, menuCodeByMenuId }
+                    )
+                  : it.promoItems.slice(0, 8)
+                : []
+            const promoComposeLines =
+              promoRows.length > 0
+                ? promoRows.flatMap((pi) => {
                     const menuName =
                       String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
@@ -629,7 +652,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
                     const optName =
                       String((pi as { optionName?: unknown }).optionName ?? '').trim() ||
-                      (optCode
+                      (optCode && !grabInbound
                         ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
                         : '')
                     return formatGrabPromoComposeLinesForPrint(
@@ -642,6 +665,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                             )
                           : '',
                         quantity: Math.max(1, Number(pi.quantity) || 1),
+                        parentItemName: grabInbound
+                          ? translatePosMenuLineForReceipt(displayName, t)
+                          : undefined,
                       },
                       grabInbound
                     )

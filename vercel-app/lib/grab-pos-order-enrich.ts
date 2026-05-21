@@ -463,19 +463,118 @@ export function resolveGrabPrintNoteRequest(
   return String(resolveGrabDeliveryLineNote(rawNote, map).requestSummary ?? '').trim()
 }
 
+function normalizeGrabPrintNameKey(raw: string): string {
+  return String(raw ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[\[\]()]/g, '')
+    .trim()
+}
+
+/** 부모 줄명과 구성 메뉴명이 같을 때(반반 등) 옵션만 줄로 — Grab 인쇄 전용 */
+export function shouldGrabPromoComposeOptionOnly(
+  parentItemName: string | undefined,
+  composeMenuName: string
+): boolean {
+  const parentKey = normalizeGrabPrintNameKey(parentItemName ?? '')
+  const menuKey = normalizeGrabPrintNameKey(composeMenuName)
+  if (!parentKey || !menuKey) return false
+  return parentKey === menuKey || parentKey.includes(menuKey) || menuKey.includes(parentKey)
+}
+
+/** Grab 세트 구성품: 메뉴에 S 사이즈만 있으면 기본 Size S (캐셔·주방 공통) */
+export function inferGrabPromoDefaultSizeLabel(
+  menuId: string | undefined,
+  menuCodeByMenuId: Record<string, string> | undefined,
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const map = toOptionNameByCodeMap(optionNameByCode)
+  const mid = String(menuId ?? '').trim()
+  const menuCode =
+    mid && menuCodeByMenuId ? String(menuCodeByMenuId[mid] ?? '').trim().toUpperCase() : ''
+  if (!menuCode) return ''
+  const labels: string[] = []
+  for (const [code, label] of map.entries()) {
+    const key = String(code).trim().toUpperCase()
+    if (!key.startsWith(`${menuCode}-`)) continue
+    const text = String(label ?? '').trim()
+    if (text) labels.push(text)
+  }
+  if (labels.length === 0) return ''
+  const hasMOrL = labels.some(
+    (lab) =>
+      /(^|[\s\-–—])(size\s*)?(m|l)([\s\-–—]|$)/i.test(lab) || /\bsize\s*(m|l)\b/i.test(lab)
+  )
+  if (!hasMOrL) return ''
+  return labels.find((lab) => /(^|[\s\-–—])(size\s*)?s([\s\-–—]|$)/i.test(lab)) || 'Size S'
+}
+
+export type GrabPromoPrintRow = {
+  menuId: string
+  optionId?: string | null
+  optionCode?: string | null
+  optionName?: string | null
+  menuName?: string
+  quantity: number
+}
+
+/** Grab 영수증·주방: promoItems 에 사이즈·옵션명 보강 */
+export function enrichGrabPromoItemsForPrint<T extends GrabPromoPrintRow>(
+  items: T[],
+  opts?: {
+    optionNameByCode?: Map<string, string> | Record<string, string>
+    menuCodeByMenuId?: Record<string, string>
+  }
+): T[] {
+  const map = toOptionNameByCodeMap(opts?.optionNameByCode)
+  return items.map((p) => {
+    let optionName = String(p.optionName ?? '').trim()
+    const optionCode = String(p.optionCode ?? '').trim()
+    if (!optionName && optionCode) {
+      const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, map)
+      if (fromCode && !fromCode.split(',').every((x) => isLikelyPosOptionCode(x.trim()))) {
+        optionName = fromCode
+      } else {
+        const direct = map.get(optionCode.toUpperCase())
+        if (direct) optionName = String(direct).trim()
+      }
+    }
+    if (!optionName) {
+      const inferred = inferGrabPromoDefaultSizeLabel(p.menuId, opts?.menuCodeByMenuId, map)
+      if (inferred) optionName = inferred
+    }
+    return optionName ? ({ ...p, optionName } as T) : p
+  })
+}
+
 /** 세트 구성 줄: Grab일 때 옵션(사이즈 등)을 항목별로 분리 */
 export function formatGrabPromoComposeLinesForPrint(
   p: {
     menuName: string
     optionName?: string
     quantity: number
+    /** 세트 헤더·반반 부모명 — 같으면 옵션만 출력 */
+    parentItemName?: string
   },
   grabSplit: boolean
 ): string[] {
   const menuName = String(p.menuName ?? '').trim()
   const qty = Math.max(1, Number(p.quantity) || 1)
   const optName = String(p.optionName ?? '').trim()
+  const optionOnly =
+    grabSplit && optName && shouldGrabPromoComposeOptionOnly(p.parentItemName, menuName)
+
   if (!optName) return [`${menuName} x${qty}`]
+
+  if (optionOnly) {
+    const parts = optName
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (parts.length <= 1) return [`${optName} x${qty}`]
+    return parts.map((part) => `${part} x${qty}`)
+  }
+
   if (!grabSplit) return [`${menuName} (${optName}) x${qty}`]
   const parts = optName
     .split(',')

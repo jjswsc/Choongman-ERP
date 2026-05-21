@@ -96,6 +96,7 @@ import {
   getBarBqAncillarySelectionGroups,
   isBarBqChickenMenu,
   mergeBarBqSizeAndAncillaryForCart,
+  pickBarBqSizePhaseOptions,
   shouldUseBarBqTwoPhaseOptionPicker,
   shouldUseFlatBarBqChickenOptionPicker,
 } from "@/lib/pos-barbq-option-picker-ui"
@@ -2437,10 +2438,16 @@ export default function PosOrderPage() {
               !useFlatBarBqLegacy &&
               !useFlatChickenMLegacy &&
               !(useBarBqTwoPhase && barBqPickerPhase === "size")
+            const barBqFlatSource = pickBarBqSizePhaseOptions({
+              useBarBqTwoPhase,
+              phase: barBqPickerPhase,
+              optionsRaw: (isChickenBasePrice ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts).filter(
+                (o) => o.optionType === "substitution"
+              ),
+              optionsFiltered: optsToShow.filter((o) => o.optionType === "substitution"),
+            })
             const flatBarBqOpts = isBarBqChickenMenu(optionPickerMenu)
-              ? filterPosOptionsForBarBqFlatMList(
-                  optsToShow.filter((o) => o.optionType === "substitution")
-                )
+              ? filterPosOptionsForBarBqFlatMList(barBqFlatSource)
               : optsToShow
             const flatChickenMOpts = useFlatChickenMLegacy
               ? filterFlatChickenMListOptions(

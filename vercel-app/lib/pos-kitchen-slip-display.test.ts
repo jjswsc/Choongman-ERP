@@ -116,6 +116,37 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('SNOW ONION')
   })
 
+  it('grab banban compose shows flavor only without repeating menu name', () => {
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'grab:banban',
+        name: 'Banban Chicken',
+        qty: 1,
+        promoItems: [
+          {
+            menuId: '24',
+            menuName: 'Banban Chicken',
+            optionId: null,
+            optionName: 'SOY SAUCE CHICKEN',
+            quantity: 1,
+          },
+          {
+            menuId: '24',
+            menuName: 'Banban Chicken',
+            optionId: null,
+            optionName: 'Kimchi',
+            quantity: 1,
+          },
+        ],
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(orderItems, {
+      orderItems,
+      grabInbound: true,
+    })
+    expect(lines[0].promoComposeLines).toEqual(['SOY SAUCE CHICKEN x1', 'Kimchi x1'])
+  })
+
   it('splits grab promo options onto separate compose lines', () => {
     const catalog = buildGrabPosCatalog(
       [],

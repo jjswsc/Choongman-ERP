@@ -214,44 +214,132 @@ function classifyKitchenOptionToken(token: string): string {
   return 'other'
 }
 
+/** classifyKitchenOptionToken 결과 ↔ 관리자 `kitchenSlipOptionGroupPrint` 키 (sidedish 등) */
+const KITCHEN_OPTION_POLICY_CLASS_ALIASES: Record<string, string[]> = {
+  side: ['side', 'sidedish', 'side_dish'],
+  part: ['part', 'ส่วน'],
+  size: ['size', 'type'],
+  flavor: ['flavor', 'option'],
+  other: ['other', 'option'],
+  takeaway: ['takeaway'],
+  option: ['option'],
+}
+
+function isKitchenOptionGroupPolicyWideOpen(policy: KitchenSlipDesignResolved['optionGroupPrint']): boolean {
+  const normalizedPolicy = normalizeKitchenSlipOptionGroupPrintMap(policy)
+  const policyEntries = Object.entries(normalizedPolicy)
+  return policyEntries.length === 0 || policyEntries.every(([, enabled]) => enabled !== false)
+}
+
+function isKitchenOptionGroupEnabledForClass(
+  classification: string,
+  policy: KitchenSlipDesignResolved['optionGroupPrint']
+): boolean {
+  if (isKitchenOptionGroupPolicyWideOpen(policy)) return true
+  const normalizedPolicy = normalizeKitchenSlipOptionGroupPrintMap(policy)
+  const classKey = normalizeKitchenOptionGroupKey(classification)
+  const aliases = [
+    ...(KITCHEN_OPTION_POLICY_CLASS_ALIASES[classKey] || []),
+    classKey,
+  ]
+  const seen = new Set<string>()
+  const uniqueAliases: string[] = []
+  for (const raw of aliases) {
+    const key = normalizeKitchenOptionGroupKey(raw)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    uniqueAliases.push(key)
+  }
+  const defined = uniqueAliases.filter((key) => key in normalizedPolicy)
+  if (defined.length === 0) return true
+  return defined.some((key) => normalizedPolicy[key] !== false)
+}
+
+function isKitchenOptionTokenAllowed(
+  token: string,
+  policy: KitchenSlipDesignResolved['optionGroupPrint']
+): boolean {
+  const trimmed = String(token ?? '').trim()
+  if (!trimmed) return false
+  const labelMatch = /^([^:]{1,40})\s*:\s*(.+)$/.exec(trimmed)
+  if (labelMatch) {
+    const key = normalizeKitchenOptionGroupKey(labelMatch[1])
+    if (!key) return true
+    if (isKitchenOptionGroupPolicyWideOpen(policy)) return true
+    const normalizedPolicy = normalizeKitchenSlipOptionGroupPrintMap(policy)
+    if (!(key in normalizedPolicy)) return true
+    return normalizedPolicy[key] !== false
+  }
+  if (/^\d+$/.test(trimmed)) return false
+  return isKitchenOptionGroupEnabledForClass(classifyKitchenOptionToken(trimmed), policy)
+}
+
+function filterKitchenOptionTokenList(
+  tokens: string[],
+  policy: KitchenSlipDesignResolved['optionGroupPrint']
+): string[] {
+  if (isKitchenOptionGroupPolicyWideOpen(policy)) return tokens
+  return tokens.filter((token) => isKitchenOptionTokenAllowed(token, policy))
+}
+
+function filterKitchenPromoComposeLine(
+  line: string,
+  policy: KitchenSlipDesignResolved['optionGroupPrint']
+): string[] {
+  const trimmed = String(line ?? '').trim()
+  if (!trimmed) return []
+  if (isKitchenOptionGroupPolicyWideOpen(policy)) return [trimmed]
+
+  const qtyMatch = /\s+x\s*([\d.]+)\s*$/iu.exec(trimmed)
+  const qtySuffix = qtyMatch ? ` x${qtyMatch[1]}` : ''
+  const core = trimmed.replace(/\s+x\s*[\d.]+\s*$/iu, '').trim()
+  const paren = /^(.+?)\s*\(([^)]+)\)\s*$/iu.exec(core)
+  if (paren) {
+    const menu = String(paren[1] ?? '').trim()
+    const optPart = String(paren[2] ?? '').trim()
+    const tokens = splitPrintOptionTokens(optPart)
+    const kept = filterKitchenOptionTokenList(tokens, policy)
+    if (kept.length === 0) return []
+    if (kept.length === tokens.length) return [trimmed]
+    if (kept.length === 1) return [`${menu} (${kept[0]})${qtySuffix}`]
+    return kept.map((part) => `${part}${qtySuffix}`)
+  }
+  if (!isKitchenOptionTokenAllowed(core, policy)) return []
+  return [trimmed]
+}
+
+function isKitchenPromoComposeMenuEcho(line: string, baseDisplayName: string): boolean {
+  const normalize = (v: string) =>
+    String(v ?? '')
+      .replace(/\s*x\s*[\d.]+\s*$/iu, '')
+      .replace(/[\s\-_:()]+/g, '')
+      .toLowerCase()
+      .trim()
+  const lineKey = normalize(line)
+  const baseKey = normalize(baseDisplayName)
+  if (!lineKey || !baseKey) return false
+  return lineKey === baseKey
+}
+
 function filterKitchenLineNoteByGroupPolicy(
   rawNote: string,
   policy: KitchenSlipDesignResolved['optionGroupPrint']
 ): string {
   const note = String(rawNote || '').trim()
   if (!note) return ''
-  const normalizedPolicy = normalizeKitchenSlipOptionGroupPrintMap(policy)
-  const policyEntries = Object.entries(normalizedPolicy)
-  if (policyEntries.length === 0 || policyEntries.every(([, enabled]) => enabled !== false)) return note
-
-  const isAllowed = (groupKey: string) => {
-    const key = normalizeKitchenOptionGroupKey(groupKey)
-    if (!key) return true
-    if (!(key in normalizedPolicy)) return true
-    return normalizedPolicy[key] !== false
-  }
+  if (isKitchenOptionGroupPolicyWideOpen(policy)) return note
 
   const chunks = note.split('·').map((x) => x.trim()).filter(Boolean)
   const out: string[] = []
   for (const chunk of chunks) {
     const labelMatch = /^([^:]{1,40})\s*:\s*(.+)$/.exec(chunk)
     if (labelMatch) {
-      const key = normalizeKitchenOptionGroupKey(labelMatch[1])
-      if (isAllowed(key)) out.push(chunk)
+      if (isKitchenOptionTokenAllowed(chunk, policy)) out.push(chunk)
       continue
     }
     const tokens = chunk.split(',').map((x) => x.trim()).filter(Boolean)
     if (tokens.length === 0) continue
-    if (tokens.length === 1) {
-      const g = classifyKitchenOptionToken(tokens[0])
-      if (isAllowed(g)) out.push(tokens[0])
-      continue
-    }
-    const kept = tokens.filter((token) => {
-      if (/^\d+$/.test(token)) return false
-      const g = classifyKitchenOptionToken(token)
-      return isAllowed(g)
-    })
+    const kept = filterKitchenOptionTokenList(tokens, policy)
     if (kept.length > 0) out.push(kept.join(', '))
   }
   return out.join(' · ')
@@ -361,17 +449,27 @@ export function formatKitchenSlipItemRowHtml(
           opts?.optionNameByCode
         )
       )
-  let optionLines = splitPrintOptionTokens(optionLine).map((x) => localizeKitchenSlipLineNote(x))
+  const optionGroupPrint = opts?.optionGroupPrint ?? {}
+  let optionLines = filterKitchenOptionTokenList(
+    splitPrintOptionTokens(optionLine).map((x) => localizeKitchenSlipLineNote(x)),
+    optionGroupPrint
+  )
   if (!banban && isLikelyPosMenuSkuCode(stripLeadingPrintCodeBrackets(baseDisplayName)) && note) {
     const parsed = parseMenuEchoFromNote(note)
     if (parsed) {
       baseDisplayName = parsed.menuName
       if (optionLines.length === 0) {
-        optionLines = splitPrintOptionTokens(parsed.optionLabel).map((x) => localizeKitchenSlipLineNote(x))
+        optionLines = filterKitchenOptionTokenList(
+          splitPrintOptionTokens(parsed.optionLabel).map((x) => localizeKitchenSlipLineNote(x)),
+          optionGroupPrint
+        )
       }
     }
   }
-  let noteLines = splitPrintOptionTokens(note).map((x) => localizeKitchenSlipLineNote(x))
+  let noteLines = filterKitchenOptionTokenList(
+    splitPrintOptionTokens(note).map((x) => localizeKitchenSlipLineNote(x)),
+    optionGroupPrint
+  )
   if (noteLines.length === 0 && note) noteLines = [note]
   noteLines = noteLines.filter((line) => {
     const compact = simplify(line)
@@ -426,7 +524,21 @@ export function formatKitchenSlipItemRowHtml(
       escapeHtml(banban.flavor2) +
       close('div')
     : ''
-  const promoLines = Array.isArray(it.promoComposeLines) ? it.promoComposeLines.filter(Boolean) : []
+  const promoLines = (() => {
+    const raw = (Array.isArray(it.promoComposeLines) ? it.promoComposeLines : [])
+      .filter(Boolean)
+      .flatMap((line) => filterKitchenPromoComposeLine(String(line), optionGroupPrint))
+    const deduped: string[] = []
+    const seen = new Set<string>()
+    for (const line of raw) {
+      if (isKitchenPromoComposeMenuEcho(line, baseDisplayName)) continue
+      const key = line.replace(/\s+/g, ' ').trim().toLowerCase()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      deduped.push(line)
+    }
+    return deduped
+  })()
   const promoHtml =
     promoLines.length > 0
       ? '<div class="k-line-note">' +

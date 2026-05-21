@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getBarBqAncillarySelectionGroups,
   isBarBqChickenMenu,
+  pickBarBqSizePhaseOptions,
   shouldUseBarBqTwoPhaseOptionPicker,
   shouldUseFlatBarBqChickenOptionPicker,
 } from '@/lib/pos-barbq-option-picker-ui'
@@ -77,5 +78,34 @@ describe('pos-barbq-option-picker-ui', () => {
         ],
       })
     ).toBe(false)
+  })
+
+  it('keeps M list source on size phase in two-phase mode', () => {
+    const raw = [
+      { id: 'm', menuId: '9', name: 'M - Boneless', priceModifier: 90, optionType: 'substitution' },
+      { id: 's', menuId: '9', name: 'Kimchi', priceModifier: 0, optionType: 'substitution' },
+    ]
+    const filtered = [
+      { id: 's', menuId: '9', name: 'Kimchi', priceModifier: 0, optionType: 'substitution' },
+    ]
+    const out = pickBarBqSizePhaseOptions({
+      useBarBqTwoPhase: true,
+      phase: 'size',
+      optionsRaw: raw,
+      optionsFiltered: filtered,
+    })
+    expect(out.map((x) => x.id)).toEqual(['m', 's'])
+  })
+
+  it('uses filtered source outside BBQ size phase', () => {
+    const raw = [{ id: 'm', menuId: '9', name: 'M - Boneless', priceModifier: 90, optionType: 'substitution' }]
+    const filtered = [{ id: 's', menuId: '9', name: 'Kimchi', priceModifier: 0, optionType: 'substitution' }]
+    const out = pickBarBqSizePhaseOptions({
+      useBarBqTwoPhase: true,
+      phase: 'ancillary',
+      optionsRaw: raw,
+      optionsFiltered: filtered,
+    })
+    expect(out.map((x) => x.id)).toEqual(['s'])
   })
 })

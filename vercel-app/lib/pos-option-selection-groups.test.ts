@@ -36,6 +36,16 @@ describe("pos-option-selection-groups audience", () => {
     expect(options[0]?.optionStepValues?.part).toBe("Wing")
   })
 
+  it("filters by audience even when config key casing differs", () => {
+    const config = new Map([
+      ["SideDish", { audience: "delivery" as const }],
+    ])
+    const hallGroups = filterOptionSelectionGroupsForAudience(["sidedish"], config, "hall")
+    const deliveryGroups = filterOptionSelectionGroupsForAudience(["sidedish"], config, "delivery")
+    expect(hallGroups).toEqual([])
+    expect(deliveryGroups).toEqual(["sidedish"])
+  })
+
   it("isGroupVisibleForStepAudience treats missing as all", () => {
     expect(isGroupVisibleForStepAudience(undefined, "hall")).toBe(true)
     expect(isGroupVisibleForStepAudience("delivery", "hall")).toBe(false)

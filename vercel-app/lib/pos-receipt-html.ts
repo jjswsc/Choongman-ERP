@@ -42,7 +42,7 @@ export function buildReceiptDocumentHtml(params: {
     String(RECEIPT_INNER_INSET_RIGHT_MM) +
     'mm; padding-bottom: ' +
     String(RECEIPT_TRAILING_BOTTOM_MM) +
-    'mm; color: #000; -webkit-print-color-adjust: economy; print-color-adjust: economy; } @media print { body { zoom:' +
+    'mm; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; } @media print { body { zoom:' +
     String(printOverscale) +
     '; } } .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -' +
     String(RECEIPT_CONTENT_NUDGE_LEFT_MM) +

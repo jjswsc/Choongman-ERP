@@ -2744,6 +2744,9 @@ export default function PosTerminalPage() {
         }),
       menuNameById: (menuId: string) =>
         menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
+      menuCodeByMenuId: Object.fromEntries(
+        menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+      ),
       optionNameByCode,
     })
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')

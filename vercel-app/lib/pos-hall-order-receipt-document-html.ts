@@ -8,6 +8,7 @@ import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
   collectGrabPrintOptionLines,
+  enrichGrabPromoItemsForPrint,
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
@@ -200,9 +201,11 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   lang: string
   resolveOrderItemDisplayName?: (item: HallOrderItem) => string
   menuNameById?: (menuId: string) => string
+  menuCodeByMenuId?: Record<string, string>
   optionNameByCode?: Map<string, string> | Record<string, string>
 }): string {
-  const { payload, t, lang, resolveOrderItemDisplayName, menuNameById, optionNameByCode } = params
+  const { payload, t, lang, resolveOrderItemDisplayName, menuNameById, menuCodeByMenuId, optionNameByCode } =
+    params
   const esc = (value: string) =>
     String(value || '')
       .replace(/&/g, '&amp;')
@@ -315,9 +318,28 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
       const lineNoteLabel = /^item\s*note$/i.test(rawLineNoteLabel) ? 'Item' : rawLineNoteLabel
-      const promoComposeLines =
+      const lineMainForPromo = lineSplit.mainName || lineName
+      const promoRows =
         Array.isArray(it.promoItems) && it.promoItems.length > 0
-          ? it.promoItems.slice(0, 8).flatMap((p) => {
+          ? grabInbound
+            ? enrichGrabPromoItemsForPrint(
+                it.promoItems.slice(0, 8).map((p) => ({
+                  menuId: String(p.menuId || ''),
+                  optionId: p.optionId,
+                  optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
+                  optionName: (p as { optionName?: string | null }).optionName ?? null,
+                  menuName:
+                    String((p as { menuName?: unknown }).menuName ?? '').trim() ||
+                    (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : ''),
+                  quantity: Math.max(1, Number(p.quantity) || 1),
+                })),
+                { optionNameByCode, menuCodeByMenuId }
+              )
+            : it.promoItems.slice(0, 8)
+          : []
+      const promoComposeLines =
+        promoRows.length > 0
+          ? promoRows.flatMap((p) => {
               const menuName =
                 String((p as { menuName?: unknown }).menuName ?? '').trim() ||
                 (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : '') ||
@@ -325,7 +347,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
               const optCode = String((p as { optionCode?: unknown }).optionCode ?? '').trim()
               const optName =
                 String((p as { optionName?: unknown }).optionName ?? '').trim() ||
-                (optCode
+                (optCode && !grabInbound
                   ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
                   : '')
               return formatGrabPromoComposeLinesForPrint(
@@ -335,6 +357,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
                     ? translatePosMenuLineForReceipt(optName, (k) => t(k))
                     : '',
                   quantity: Math.max(1, Number(p.quantity) || 1),
+                  parentItemName: grabInbound
+                    ? translatePosMenuLineForReceipt(lineMainForPromo, (k) => t(k))
+                    : undefined,
                 },
                 grabInbound
               )

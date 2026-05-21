@@ -75,6 +75,22 @@ export function filterPosOptionsForBarBqFlatMList<T extends Pick<PosMenuOption, 
   return options.filter((o) => isBarBqFlatMListOption(o))
 }
 
+/**
+ * 2단계 BBQ 선택기(size → sidedish)에서 size 단계는 그룹 필터를 우회해
+ * M 옵션 목록이 sidedish 그룹 추가로 사라지지 않게 한다.
+ */
+export function pickBarBqSizePhaseOptions<T extends PosMenuOption>(params: {
+  useBarBqTwoPhase: boolean
+  phase: 'size' | 'ancillary' | null
+  optionsRaw: T[]
+  optionsFiltered: T[]
+}): T[] {
+  if (params.useBarBqTwoPhase && params.phase === 'size') {
+    return params.optionsRaw
+  }
+  return params.optionsFiltered
+}
+
 /** 1단계 M(또는 S) + 2단계 사이드 선택 후 장바구니용 합성 옵션 */
 export function mergeBarBqSizeAndAncillaryForCart(
   sizeOpt: PosMenuOption | null,
