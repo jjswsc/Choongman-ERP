@@ -2519,7 +2519,7 @@ export default function PosTerminalPage() {
   )
 
   const resolveOrderItemDisplayName = useCallback(
-    (item: { id?: string; name?: string; menuId?: string }) => {
+    (item: { id?: string; name?: string; menuId?: string; promoId?: string; promoCode?: string }) => {
       const rawName = String(item.name ?? '').trim()
       // Grab 세트 자식 표식([[...]] child)은 영수증 병합 단계에서 필요하므로 원문 유지
       if (parseGrabSetChildLineName(rawName)) return rawName
@@ -2528,11 +2528,14 @@ export default function PosTerminalPage() {
           id: String(item.id ?? ''),
           name: rawName,
           ...(String(item.menuId ?? '').trim() ? { menuId: String(item.menuId).trim() } : {}),
+          ...(String(item.promoId ?? '').trim() ? { promoId: String(item.promoId).trim() } : {}),
+          ...(String(item.promoCode ?? '').trim() ? { promoCode: String(item.promoCode).trim() } : {}),
         },
-        menus
+        menus,
+        promosWithItems
       )
     },
-    [menus]
+    [menus, promosWithItems]
   )
 
   type RealtimeParsedPosOrderItem = {
@@ -2741,6 +2744,8 @@ export default function PosTerminalPage() {
           id: String(it.id ?? ''),
           name: String(it.name ?? ''),
           menuId: String((it as { menuId?: string }).menuId ?? ''),
+          promoId: String((it as { promoId?: string }).promoId ?? ''),
+          promoCode: String((it as { promoCode?: string }).promoCode ?? ''),
         }),
       menuNameById: (menuId: string) =>
         menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',

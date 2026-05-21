@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { emptyMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import {
+  allocateDiscountExcludingDrinksAndPromos,
   collabDiscountAmountForCart,
   collabLineDiscountAllocations,
   isCartLineEligibleForCollabDiscount,
+  isCollabDiscountReasonText,
   isDrinkMenu,
   isPromotionMenu,
 } from './pos-collab-discount'
@@ -117,5 +119,29 @@ describe('pos-collab-discount exclusions', () => {
     expect(alloc[1]).toBe(0)
     expect(alloc[2]).toBe(0)
     expect(alloc.reduce((s, v) => s + v, 0)).toBeCloseTo(total, 2)
+  })
+
+  it('저장된 줄 할인 합이 총액과 다르면(구 비율 배분) 음료 제외로 다시 배분한다', () => {
+    const lines = [
+      { name: 'Banban Chicken', price: 239, qty: 1, menuId: '10' },
+      { name: 'CHANG 630 ML.', price: 140, qty: 1, menuId: '20' },
+    ]
+    const wrongSaved = [75.04, 43.96]
+    const wrongSum = wrongSaved.reduce((s, v) => s + v, 0)
+    expect(wrongSum).toBeCloseTo(119, 2)
+    const fixed = allocateDiscountExcludingDrinksAndPromos(lines, 119, menuById)
+    expect(fixed[0]).toBe(119)
+    expect(fixed[1]).toBe(0)
+  })
+
+  it('영수증 폴백: 협업 할인 119는 치킨 줄에만 표시하고 음료는 0', () => {
+    const lines = [
+      { name: 'Banban Chicken', price: 239, qty: 1, menuId: '10' },
+      { name: 'CHANG 630 ML.', price: 140, qty: 1, menuId: '20' },
+    ]
+    const alloc = allocateDiscountExcludingDrinksAndPromos(lines, 119, menuById)
+    expect(alloc[0]).toBe(119)
+    expect(alloc[1]).toBe(0)
+    expect(isCollabDiscountReasonText('ส่วนลดความร่วมมือ: CM x Chang')).toBe(true)
   })
 })

@@ -43,6 +43,8 @@ export type KitchenSlipRoutingItem = {
     menuName?: string | null
     quantity: number
   }[]
+  promoId?: string
+  promoCode?: string
 }
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */
@@ -722,8 +724,11 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
         id: String(it.id ?? ''),
         name: String(it.name ?? ''),
         menuId,
+        promoId: String((it as { promoId?: unknown }).promoId ?? '').trim() || undefined,
+        promoCode: String((it as { promoCode?: unknown }).promoCode ?? '').trim() || undefined,
       },
-      menus as Parameters<typeof resolvePosOrderItemMenuDisplayName>[1]
+      menus as Parameters<typeof resolvePosOrderItemMenuDisplayName>[1],
+      opts.promoCatalogById ? Array.from(opts.promoCatalogById.values()) : undefined
     )
     let promoItems = enrichPromoItemsMenuNames(it.promoItems, lookup)
     const promoItemsForPrint = Array.isArray(promoItems)

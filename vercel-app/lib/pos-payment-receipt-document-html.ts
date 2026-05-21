@@ -33,6 +33,10 @@ import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-documen
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import {
+  allocateDiscountExcludingDrinksAndPromos,
+  isCollabDiscountReasonText,
+} from '@/lib/pos-collab-discount'
+import {
   shouldForceSimplePaymentReceiptForStore,
   shouldForcePaymentReceiptLogoForStore,
   shouldUseLegacyAlignedPaymentReceiptForStore,
@@ -161,12 +165,31 @@ function allocateDiscountByItem(
 function resolveLineDiscountsForReceipt(
   items: ReceiptModalData['items'],
   totalDiscount: number,
-  enabled: boolean
+  enabled: boolean,
+  discountReason?: string
 ): number[] {
   if (!enabled || !Array.isArray(items) || items.length === 0) return []
+  const total = Math.max(0, Number(totalDiscount) || 0)
+  const collabReason = isCollabDiscountReasonText(String(discountReason ?? ''))
+  const toReceiptAllocLines = (list: ReceiptModalData['items']) =>
+    (list || []).map((it) => ({
+      name: it.name,
+      price: Number(it.price) || 0,
+      qty: Number(it.qty) || 1,
+      menuId: it.menuId,
+      promoId: it.promoId,
+    }))
   const hasSavedLineDiscount = items.some((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001)
   if (hasSavedLineDiscount) {
-    return items.map((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0))
+    const saved = items.map((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0))
+    const savedSum = saved.reduce((sum, v) => sum + v, 0)
+    if (collabReason && total > 0.0001 && Math.abs(savedSum - total) > 0.02) {
+      return allocateDiscountExcludingDrinksAndPromos(toReceiptAllocLines(items), total)
+    }
+    return saved
+  }
+  if (collabReason) {
+    return allocateDiscountExcludingDrinksAndPromos(toReceiptAllocLines(items), total)
   }
   return allocateDiscountByItem(items, totalDiscount)
 }
@@ -328,7 +351,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const lineDiscountAlloc = resolveLineDiscountsForReceipt(
     receiptData.items || [],
     receiptData.discountAmt,
-    isPaymentReceipt
+    isPaymentReceipt,
+    receiptData.discountReason
   )
   const payMethodLabels = isPaymentReceipt ? collectReceiptPaymentMethodLabels(receiptData, tr) : []
   const payMethodsInline =
@@ -399,7 +423,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
       receiptData.items || [],
       receiptData.discountAmt,
-      isPaymentReceipt
+      isPaymentReceipt,
+      receiptData.discountReason
     )
     const orderTypeLabel = orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType
     const itemRows = (receiptData.items || [])

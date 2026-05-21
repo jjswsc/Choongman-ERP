@@ -368,12 +368,25 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
     const row = it as unknown as Record<string, unknown>
     const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
     const rowDelivery = String(row.deliveryAppCode ?? row.delivery_app_code ?? '').trim()
+    const menuId = String(
+      row.menuId1 ?? row.menuId ?? row.menu_id ?? (it as { menuId?: unknown }).menuId ?? ''
+    ).trim()
+    const promoId = pickPromoIdFromOrderLine(row)
     return {
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
       price: Number(it.price ?? 0),
       qty: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
-      lineDiscountAmt: Math.max(0, Number((it as { lineDiscountAmt?: unknown }).lineDiscountAmt ?? 0) || 0),
+      lineDiscountAmt: Math.max(
+        0,
+        Number(
+          (it as { lineDiscountAmt?: unknown }).lineDiscountAmt ??
+            (it as { line_discount_amt?: unknown }).line_discount_amt ??
+            0
+        ) || 0
+      ),
+      ...(menuId ? { menuId } : {}),
+      ...(promoId ? { promoId } : {}),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
       ...(rowDelivery ? { deliveryAppCode: rowDelivery } : {}),
       ...(promo && promo.length > 0 ? { promoItems: promo } : {}),

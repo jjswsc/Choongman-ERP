@@ -365,3 +365,74 @@ export function collabHasPosDiscount(detail: MarketingCollabDetail): boolean {
   const v = detail.posDiscountValue || 0
   return (t === 'percent' || t === 'amount') && v > 0
 }
+
+/** 결제 영수증 `discountReason` — 협업 할인 문구 여부(재인쇄·스냅샷 없을 때 줄 배분용) */
+export function isCollabDiscountReasonText(reason: string): boolean {
+  const r = String(reason ?? '').trim().toLowerCase()
+  if (!r) return false
+  const needles = ['collab', 'collaboration', '협업', 'ความร่วมมือ', 'ส่วนลดความร่วมมือ']
+  return needles.some((needle) => r.includes(needle))
+}
+
+export type ReceiptLineDiscountLike = {
+  name?: string
+  price: number
+  qty?: number
+  quantity?: number
+  menuId?: string
+  promoId?: string
+}
+
+/** 영수증 폴백: 프로모·음료 줄에는 0, 나머지 줄에만 할인 배분 */
+export function receiptLineWeightForNonDrinkDiscount(
+  line: ReceiptLineDiscountLike,
+  menuById?: Map<string, CollabMenuPick>
+): number {
+  const q = Math.max(0, Number(line.quantity ?? line.qty) || 0)
+  const collabLine: CollabCartLineLike = {
+    id: String(line.menuId ?? line.name ?? ''),
+    name: line.name,
+    price: line.price,
+    qty: q > 0 ? q : 1,
+    ...(line.menuId ? { menuId: String(line.menuId) } : {}),
+    ...(line.promoId ? { promoId: String(line.promoId) } : {}),
+  }
+  if (isPromoCartLine(collabLine)) return 0
+  const mid = String(line.menuId ?? '').trim()
+  if (mid && menuById?.has(mid)) {
+    const menu = menuById.get(mid)!
+    if (isDrinkMenu(menu) || isPromotionMenu(menu)) return 0
+    return collabLineTotal(collabLine)
+  }
+  const nameBlob = normalizeScopeText(line.name ?? '')
+  if (
+    nameBlob &&
+    textHasAny(nameBlob, ['chang', 'jinro', 'beer', 'soju', 'ml.', 'ml ', 'เบียร์', 'เหล้า', 'น้ำ'])
+  ) {
+    return 0
+  }
+  if (isDrinkMenu({ id: mid || 'line', name: line.name ?? '', categoryMain: '', category: '', code: '' })) {
+    return 0
+  }
+  return collabLineTotal(collabLine)
+}
+
+/** 협업·음료 제외형 영수증: 대상 줄이 없으면 전체 비율 배분으로 폴백 */
+export function allocateDiscountExcludingDrinksAndPromos(
+  lines: ReceiptLineDiscountLike[],
+  totalDiscount: number,
+  menuById?: Map<string, CollabMenuPick>
+): number[] {
+  const discount = Math.max(0, Number(totalDiscount) || 0)
+  if (!lines.length || discount <= 0.0001) return lines.map(() => 0)
+  const weights = lines.map((line) => receiptLineWeightForNonDrinkDiscount(line, menuById))
+  const eligibleGross = weights.reduce((sum, w) => sum + w, 0)
+  if (eligibleGross <= 0.0001) {
+    const lineTotals = lines.map((line) => {
+      const q = Math.max(1, Number(line.quantity ?? line.qty) || 1)
+      return Math.max(0, (Number(line.price) || 0) * q)
+    })
+    return allocateDiscountProportional(lineTotals, discount)
+  }
+  return allocateDiscountProportional(weights, discount)
+}

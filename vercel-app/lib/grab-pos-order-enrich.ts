@@ -58,7 +58,7 @@ export function parseGrabPartnerItemMenuRef(raw: string): { menuId: number; code
 
 export function looksLikeGrabCampaignSku(raw: string): boolean {
   const s = String(raw || '').trim()
-  return /^THITE\d/i.test(s)
+  return /^THITE\d/i.test(s) || /^\d{5,}-S\d+$/i.test(s)
 }
 
 function normalizePromoLookupText(raw: string): string {

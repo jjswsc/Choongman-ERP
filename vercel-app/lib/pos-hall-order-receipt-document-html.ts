@@ -27,6 +27,8 @@ type HallOrderItem = {
   price: number
   qty: number
   note?: string
+  promoId?: string
+  promoCode?: string
   promoItems?: {
     menuId: string
     optionId: string | null

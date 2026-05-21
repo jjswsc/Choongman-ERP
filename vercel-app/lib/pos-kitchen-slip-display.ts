@@ -271,6 +271,35 @@ function deriveParentNameFromPromoComposeLines(lines: string[]): string {
   return stripLeadingPrintCodeBrackets(String(menuOnly ?? '').trim())
 }
 
+function isLikelyCodeLikeMenuName(raw: string): boolean {
+  const name = String(raw ?? '').trim()
+  if (!name) return false
+  return (
+    isLikelyPosOptionCode(name) ||
+    /^[A-Z]{1,3}\d{2,4}$/i.test(name) ||
+    /^\d{5,}-S\d+$/i.test(name)
+  )
+}
+
+/** Grab 코드형 줄(예: 260457-S01)에서 note(`PEPSI MEGA 1 x1`)로 메뉴명을 보정 */
+function deriveGrabMenuNameFromCodeLikeNote(note: string): string {
+  const raw = String(note ?? '').trim()
+  if (!raw) return ''
+  const head = raw
+    .split(/\r?\n|·/u)
+    .map((x) => String(x ?? '').trim())
+    .find(Boolean)
+  if (!head) return ''
+  const clean = head
+    .replace(/^-\s*/u, '')
+    .replace(/^item\s*:\s*/iu, '')
+    .replace(/\s*x\s*[\d.]+\s*$/iu, '')
+    .trim()
+  if (!clean || isLikelyCodeLikeMenuName(clean)) return ''
+  if (/^(optc:|mods?:)/i.test(clean)) return ''
+  return clean
+}
+
 export function buildKitchenHallStyleSlipLines(
   slipItems: KitchenSlipRoutingItem[],
   opts?: {
@@ -296,12 +325,21 @@ export function buildKitchenHallStyleSlipLines(
       codeToMenuName.set(codeKey, menuName)
     }
   }
+  const promoCodeToName = new Map<string, string>()
+  for (const row of [...orderItems, ...slipItems]) {
+    const promoCode = String((row as { promoCode?: unknown }).promoCode ?? '').trim().toUpperCase()
+    const lineName = stripLeadingPrintCodeBrackets(String(row.name ?? '').trim())
+    if (!promoCode || !lineName || isLikelyCodeLikeMenuName(lineName) || promoCodeToName.has(promoCode)) continue
+    promoCodeToName.set(promoCode, lineName)
+  }
   const resolveCodeLikeLineName = (rawName: string): string => {
     const plain = stripLeadingPrintCodeBrackets(String(rawName ?? '').trim())
     if (!plain) return plain
     const upper = plain.toUpperCase()
     const mapped = codeToMenuName.get(upper)
     if (mapped) return mapped
+    const promoMapped = promoCodeToName.get(upper)
+    if (promoMapped) return promoMapped
     const grabBundle = /^(\d{5,})-S\d+$/i.exec(plain)
     if (grabBundle) {
       const baseMapped = codeToMenuName.get(grabBundle[1].toUpperCase())
@@ -447,9 +485,9 @@ export function buildKitchenHallStyleSlipLines(
       menuCodeByMenuId
     )
     const promoComposeLines = fromOrder.length > 0 ? fromOrder : fromChildren
-    if (isLikelyPosOptionCode(displayParentName) || /^[A-Z]{1,3}\d{2,4}$/i.test(displayParentName)) {
+    if (isLikelyCodeLikeMenuName(displayParentName)) {
       const derived = deriveParentNameFromPromoComposeLines(promoComposeLines)
-      if (derived && !/^[A-Z]{1,3}\d{2,4}$/i.test(derived)) displayParentName = derived
+      if (derived && !isLikelyCodeLikeMenuName(derived)) displayParentName = derived
     }
     const note = noteForGroupedPromoParent(g.children, promoComposeLines, optionNameByCode)
     const cancelled =
@@ -488,13 +526,26 @@ export function buildKitchenHallStyleSlipLines(
       continue
     }
     const lineSplit = splitPosPrintItemLine(String(it.name ?? ''))
+    const fallbackNameFromNote =
+      grabInbound && isLikelyCodeLikeMenuName(lineSplit.mainName || String(it.name ?? ''))
+        ? deriveGrabMenuNameFromCodeLikeNote(String(it.note ?? ''))
+        : ''
+    const resolvedMainName = fallbackNameFromNote
+      ? fallbackNameFromNote
+      : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
+    const formattedNote = formatItemNoteForPrint(String(it.note ?? '').trim(), lineSplit.optionLine)
+    const dedupedNote =
+      fallbackNameFromNote &&
+      formattedNote &&
+      normalizePromoParentKey(
+        formattedNote.replace(/\s*x\s*[\d.]+\s*$/iu, '')
+      ) === normalizePromoParentKey(fallbackNameFromNote)
+        ? undefined
+        : formattedNote
     out.push({
-      name: resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? '')),
+      name: resolvedMainName,
       qty: Math.max(1, Number(it.qty ?? 1) || 1),
-      ...(() => {
-        const note = formatItemNoteForPrint(String(it.note ?? '').trim(), lineSplit.optionLine)
-        return note ? { note } : {}
-      })(),
+      ...(dedupedNote ? { note: dedupedNote } : {}),
       ...((it as { kitchenLineCancelled?: boolean }).kitchenLineCancelled
         ? { cancelled: true }
         : {}),

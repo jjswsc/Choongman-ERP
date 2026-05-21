@@ -185,6 +185,36 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('PEPSI MEGA 1')
   })
 
+  it('falls back to grab note label when long code has no menu code mapping', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      { id: 'grab:line-3', name: '260457-S01', qty: 1, note: 'PEPSI MEGA 1 x1' },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      grabInbound: true,
+    })
+    expect(lines[0].name).toBe('PEPSI MEGA 1')
+    expect(lines[0].note).toBeUndefined()
+  })
+
+  it('treats grab promo code as menu code mapping source', () => {
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'promo-1',
+        name: 'PEPSI MEGA 2',
+        qty: 1,
+        promoCode: '260457-S02',
+      },
+    ]
+    const slipItems: KitchenSlipRoutingItem[] = [
+      { id: 'grab:line-4', name: '260457-S02', qty: 1 },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems,
+      grabInbound: true,
+    })
+    expect(lines[0].name).toBe('PEPSI MEGA 2')
+  })
+
   it('maps code-like grouped parent names to menu names from compose lines', () => {
     const slipItems: KitchenSlipRoutingItem[] = [
       {

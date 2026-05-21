@@ -798,37 +798,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
   const trMenuLine = (s: string) => translatePosMenuLineForReceipt(s, t)
 
-  const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number) => {
-    const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
-    const lineNote = String(i.note ?? '').trim()
-    const quantity =
-      quantityOverride != null
-        ? resolveCartLineQuantityForSave({ quantity: quantityOverride })
-        : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
-    const menuIdLine = String(i.menuId ?? '').trim()
-    const optionIdLine = String(i.optionId ?? '').trim()
-    const optionCodeLine = String(i.optionCode ?? '').trim()
-    return {
-      id: i.id,
-      name: i.name,
-      price: i.price,
-      quantity,
-      orderType: orderTypeNorm,
-      ...(lineNote ? { note: lineNote } : {}),
-      ...(menuIdLine ? { menuId: menuIdLine } : {}),
-      ...(optionIdLine ? { optionId: optionIdLine } : {}),
-      ...(optionCodeLine ? { optionCode: optionCodeLine } : {}),
-      ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
-      ...(i.promoId
-        ? {
-            promoId: i.promoId,
-            ...(i.promoCode ? { promoCode: i.promoCode } : {}),
-            ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
-          }
-        : {}),
-    }
-  }
-
   const [orderTypeInternal, setOrderTypeInternal] = useState<CartOrderType>('dine-in')
   const orderType = lockOrderType && orderTypeProp != null ? orderTypeProp : orderTypeInternal
   const canSubmit =
@@ -1192,6 +1161,64 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt
   const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
   const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + collabDiscountAmt)
+  const lineDiscountSnapshot = useMemo(() => {
+    const totalDiscount = Math.max(0, Number(discount) || 0)
+    if (!Array.isArray(cartItems) || cartItems.length === 0 || totalDiscount <= 0.0001) {
+      return cartItems.map(() => 0)
+    }
+    const collabPart = appliedCollab ? collabDiscountAmt : 0
+    const otherPart = Math.max(0, totalDiscount - collabPart)
+    return buildMixedCartLineDiscountAllocations({
+      lines: cartItems.map((i) => ({
+        id: String(i.id ?? ''),
+        name: String(i.name ?? ''),
+        price: Number(i.price ?? 0),
+        qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
+        ...(i.promoId ? { promoId: String(i.promoId) } : {}),
+        ...(i.menuId ? { menuId: String(i.menuId) } : {}),
+        ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
+      })),
+      menuById: menuByIdForCollab,
+      collabDetail: appliedCollab?.collabDetail ?? null,
+      collabDiscountAmt: collabPart,
+      otherDiscountAmt: otherPart,
+    })
+  }, [appliedCollab, cartItems, collabDiscountAmt, discount, menuByIdForCollab])
+
+  const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number, lineIdx?: number) => {
+    const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
+    const lineNote = String(i.note ?? '').trim()
+    const quantity =
+      quantityOverride != null
+        ? resolveCartLineQuantityForSave({ quantity: quantityOverride })
+        : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
+    const menuIdLine = String(i.menuId ?? '').trim()
+    const optionIdLine = String(i.optionId ?? '').trim()
+    const optionCodeLine = String(i.optionCode ?? '').trim()
+    const lineDiscountAmt =
+      lineIdx != null && lineIdx >= 0 ? Math.max(0, Number(lineDiscountSnapshot[lineIdx] ?? 0) || 0) : 0
+    return {
+      id: i.id,
+      name: i.name,
+      price: i.price,
+      quantity,
+      orderType: orderTypeNorm,
+      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
+      ...(lineNote ? { note: lineNote } : {}),
+      ...(menuIdLine ? { menuId: menuIdLine } : {}),
+      ...(optionIdLine ? { optionId: optionIdLine } : {}),
+      ...(optionCodeLine ? { optionCode: optionCodeLine } : {}),
+      ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
+      ...(i.promoId
+        ? {
+            promoId: i.promoId,
+            ...(i.promoCode ? { promoCode: i.promoCode } : {}),
+            ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+          }
+        : {}),
+    }
+  }
+
   const paymentDiscountReason = useMemo(() => {
     const base = discountReason.trim()
     const collabPart = appliedCollab ? `${t('posCollabDiscount')}: ${appliedCollab.topic}` : ''
@@ -1845,7 +1872,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
           const qty = Math.max(0, Number(row[personIdx] || 0))
           if (qty <= 0) continue
-          lines.push(mapCartItemToOrderPayload(item, qty))
+          {
+            const cartIdx = cartItems.findIndex((c) => c.id === item.id)
+            lines.push(mapCartItemToOrderPayload(item, qty, cartIdx >= 0 ? cartIdx : undefined))
+          }
           subtotalByPerson += (Number(item.price) || 0) * qty
         }
         const subtotalRounded = round2Local(subtotalByPerson)
@@ -1877,7 +1907,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         accum = round2Local(accum + rounded)
       }
     }
-    const fullMenuLines = cartItems.map((item) => mapCartItemToOrderPayload(item))
+    const fullMenuLines = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx))
     const entries: CartPanelSplitReceiptPayload[] = dueByPerson
       .map((due, idx) => ({
         key: `amount-${idx + 1}`,
@@ -2908,28 +2938,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         receiptOpts?.receiptDiscountTotal !== undefined
           ? receiptOpts.receiptDiscountTotal
           : discount + pointUsedNum
+      const receiptLinesMatchCart =
+        linesForReceipt.length === cartItems.length &&
+        linesForReceipt.every((l, i) => String(l.id ?? '') === String(cartItems[i]?.id ?? ''))
       const lineDiscountAlloc =
         discountTotal > 0.0001
-          ? buildMixedCartLineDiscountAllocations({
-              lines: linesForReceipt.map((i) => ({
-                id: String(i.id ?? ''),
-                name: String(i.name ?? ''),
-                price: Number(i.price ?? 0),
-                qty: Math.max(1, Number(i.quantity ?? 1) || 1),
-                ...(i.promoId ? { promoId: String(i.promoId) } : {}),
-                ...(i.menuId ? { menuId: String(i.menuId) } : {}),
-                ...(i.menuId1 != null
-                  ? {
-                      menuId1: i.menuId1,
-                      menuId2: i.menuId2,
-                    }
-                  : {}),
-              })),
-              menuById: menuByIdForCollab,
-              collabDetail: appliedCollab?.collabDetail ?? null,
-              collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
-              otherDiscountAmt: Math.max(0, discountTotal - (appliedCollab ? collabDiscountAmt : 0)),
-            })
+          ? receiptLinesMatchCart && Math.abs(discountTotal - discount) < 0.02
+            ? lineDiscountSnapshot
+            : buildMixedCartLineDiscountAllocations({
+                lines: linesForReceipt.map((i) => ({
+                  id: String(i.id ?? ''),
+                  name: String(i.name ?? ''),
+                  price: Number(i.price ?? 0),
+                  qty: Math.max(1, Number(i.quantity ?? 1) || 1),
+                  ...(i.promoId ? { promoId: String(i.promoId) } : {}),
+                  ...(i.menuId ? { menuId: String(i.menuId) } : {}),
+                  ...(i.menuId1 != null
+                    ? {
+                        menuId1: i.menuId1,
+                        menuId2: i.menuId2,
+                      }
+                    : {}),
+                })),
+                menuById: menuByIdForCollab,
+                collabDetail: appliedCollab?.collabDetail ?? null,
+                collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
+                otherDiscountAmt: Math.max(0, discountTotal - (appliedCollab ? collabDiscountAmt : 0)),
+              })
           : []
       const receiptItems = linesForReceipt.map((i, idx) => ({
         id: String(i.id ?? ''),
@@ -3010,7 +3045,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       orderLabel: orderType === 'delivery'
         ? (deliveryLabel || t('posOrderTypeDelivery') || '배달')
         : (takeoutLabelProp?.trim() || (t('posOrderTypeTakeout') || '포장')),
-      items: cartItems.map(mapCartItemToOrderPayload),
+      items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
       memo: buildOrderMemo(customerMemo),
       discountAmt: discount,
       discountReason: paymentDiscountReason,
@@ -3095,7 +3130,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
       onDineInOrderComplete(
         {
-          items: cartItems.map(mapCartItemToOrderPayload),
+          items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           tableName: dineInTableName,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -3129,7 +3164,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     ) {
       onDeliveryOrderComplete(
         {
-          items: cartItems.map(mapCartItemToOrderPayload),
+          items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -3161,7 +3196,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     ) {
       onTakeoutOrderComplete(
         {
-          items: cartItems.map(mapCartItemToOrderPayload),
+          items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -3338,7 +3373,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : null
     onDeliveryOrderComplete(
       {
-        items: cartItems.map(mapCartItemToOrderPayload),
+        items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
         orderLabel: (paymentTableNameOverride ?? '').trim() || '',
         memo: buildOrderMemo(customerMemo),
         discountAmt: discount,
@@ -4190,7 +4225,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               disabled={cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight}
               onClick={() => {
                 if (!selectedTable || cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight) return
-                const submitItems = cartItems.map(mapCartItemToOrderPayload)
+                const submitItems = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx))
                 onOrderSubmit?.({
                   items: submitItems,
                   tableName: selectedTable.name,

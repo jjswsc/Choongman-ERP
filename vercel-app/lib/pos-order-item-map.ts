@@ -32,6 +32,8 @@ export type CartLineForPosOrder = {
     menuName?: string
     optionName?: string | null
   }[]
+  /** 결제 시점 줄별 할인 스냅샷(영수증·재인쇄) */
+  lineDiscountAmt?: number
 }
 
 /** items_json / API 줄 단위 — qty·quantity 외 레거시/연동 키 보강 */
@@ -72,12 +74,14 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
     const menuId2 = String(i.menuId2 ?? '').trim()
     const optionId2 = String(i.optionId2 ?? '').trim()
     const optionCode2 = String(i.optionCode2 ?? '').trim()
+    const lineDiscountAmt = Math.max(0, Number(i.lineDiscountAmt ?? 0) || 0)
     return {
       id: i.id,
       name: i.name,
       price: i.price,
       qty: q,
       quantity: q,
+      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
       ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
       ...(menuIdPrimary ? { menuId1: menuIdPrimary } : {}),
       ...(optionIdPrimary ? { optionId1: optionIdPrimary } : {}),
@@ -109,12 +113,17 @@ export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] 
     const menuIdPrimary = String(i.menuId ?? '').trim()
     const optionIdPrimary = String(i.optionId ?? '').trim()
     const optionCodePrimary = String(i.optionCode ?? '').trim()
+    const lineDiscountAmt = Math.max(
+      0,
+      Number((i as { lineDiscountAmt?: unknown }).lineDiscountAmt ?? 0) || 0
+    )
     return {
       id: String(i.id ?? ''),
       name: String(i.name ?? ''),
       price: Number(i.price ?? 0) || 0,
       qty: q,
       quantity: q,
+      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
       ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
       ...(menuIdPrimary ? { menuId1: menuIdPrimary } : {}),
       ...(optionIdPrimary ? { optionId1: optionIdPrimary } : {}),
