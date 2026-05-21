@@ -72,6 +72,27 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('- Boneless')
     })
 
+    it('옵션 문자열이 하이픈으로 연결돼도 옵션별 한 줄로 출력한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        { name: 'SOY SAUCE CHICKEN (Boneless - Pickled Radish)', qty: 1 },
+        noEsc,
+        close
+      )
+      expect(html).toContain('- Boneless')
+      expect(html).toContain('- Pickled Radish')
+      expect(html).not.toContain('- Boneless - Pickled Radish')
+    })
+
+    it('사이즈 접두 옵션은 한 줄로 유지한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        { name: 'SPICY YANGNYEOM (M - Drumette)', qty: 1 },
+        noEsc,
+        close
+      )
+      expect(html).toContain('- M - Drumette')
+      expect(html).not.toContain('<br/>- Drumette')
+    })
+
     it('세트 구성품은 홀 주문서처럼 들여쓴 줄로 표시한다', () => {
       const html = formatKitchenSlipItemRowHtml(
         {
@@ -86,6 +107,68 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('- Rice x1')
       expect(html).toContain('- GOLDEN FRIED CHICKEN (S Boneless) x1')
       expect(html).not.toContain('[Set 1] GOLDEN')
+    })
+
+    it('잘못 들어온 Size 라벨을 메뉴명으로 출력하지 않고 note의 메뉴명으로 복구한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Size S',
+          qty: 1,
+          note: 'SOY SAUCE CHICKEN (Boneless - Pickled Radish) x1',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('SOY SAUCE CHICKEN')
+      expect(html).not.toContain('>Size S<')
+      expect(html).not.toContain('- SOY SAUCE CHICKEN (Boneless - Pickled Radish) x1')
+    })
+
+    it('코드만 찍힌 메뉴는 note의 메뉴명으로 복구해 코드 본문을 숨긴다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: '[C006] C006',
+          qty: 1,
+          note: '- CURRYCANE (S Boneless) x1',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('CURRYCANE')
+      expect(html).not.toContain('>C006<')
+      expect(html).toContain('- S Boneless')
+      expect(html).not.toContain('- CURRYCANE (S Boneless) x1')
+    })
+
+    it('브래킷 없는 코드 메뉴명도 note에서 복구한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'C010',
+          qty: 1,
+          note: '- SOY SAUCE CHICKEN (S Boneless) x1',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('SOY SAUCE CHICKEN')
+      expect(html).not.toContain('>C010<')
+      expect(html).toContain('- S Boneless')
+    })
+
+    it('Size 라벨 행은 note 선두 메뉴명으로 복구하고 잘못된 Size 본문 노출을 막는다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Size S',
+          qty: 1,
+          note: 'SOY SAUCE CHICKEN (Boneless - Pickled Radish) x1 · Size M',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('SOY SAUCE CHICKEN')
+      expect(html).toContain('- Boneless')
+      expect(html).toContain('- Pickled Radish')
+      expect(html).not.toContain('>Size S<')
     })
   })
 })

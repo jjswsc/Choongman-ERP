@@ -23563,6 +23563,8 @@ orderItemQty: 'จำนวน',
     posTraceIdJumpOrder: 'Go to order by Trace ID',
     posMenuSaveBeforeImageUpload:
       'กรุณาบันทึกเมนูก่อน แล้วค่อยอัปโหลดรูปภาพ (ชื่อไฟล์ต้องมีรหัสเมนู)',
+    posAddWithoutOption: 'Add without option',
+    posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
   },
   mm: {
     all: 'အားလုံး',
@@ -30169,6 +30171,8 @@ orderItemQty: 'အရေအတွက်',
     posOptionConfigNoGroupChanges: 'No step settings were changed.',
     posOptionSaveIncludesStepsHint: 'Top [Save] also writes step channel settings (hall/delivery) from the left panel. Use [Save steps] when you only changed step order or added a step.',
     posGrabCustomerCancelledAlert: 'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
+    posAddWithoutOption: 'Add without option',
+    posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -36674,6 +36678,8 @@ orderItemQty: 'ຈຳນວນ',
     posOptionConfigNoGroupChanges: 'No step settings were changed.',
     posOptionSaveIncludesStepsHint: 'Top [Save] also writes step channel settings (hall/delivery) from the left panel. Use [Save steps] when you only changed step order or added a step.',
     posGrabCustomerCancelledAlert: 'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
+    posAddWithoutOption: 'Add without option',
+    posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -40449,6 +40455,8 @@ orderItemQty: 'ຈຳນວນ',
     posOptionConfigNoGroupChanges: 'No step settings were changed.',
     posOptionSaveIncludesStepsHint: 'Top [Save] also writes step channel settings (hall/delivery) from the left panel. Use [Save steps] when you only changed step order or added a step.',
     posGrabCustomerCancelledAlert: 'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
+    posAddWithoutOption: 'Add without option',
+    posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -44201,6 +44209,8 @@ orderItemQty: 'ຈຳນວນ',
     posOptionConfigNoGroupChanges: 'No step settings were changed.',
     posOptionSaveIncludesStepsHint: 'Top [Save] also writes step channel settings (hall/delivery) from the left panel. Use [Save steps] when you only changed step order or added a step.',
     posGrabCustomerCancelledAlert: 'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
+    posAddWithoutOption: 'Add without option',
+    posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -47974,6 +47984,8 @@ orderItemQty: 'ຈຳນວນ',
     posOptionConfigNoGroupChanges: 'No step settings were changed.',
     posOptionSaveIncludesStepsHint: 'Top [Save] also writes step channel settings (hall/delivery) from the left panel. Use [Save steps] when you only changed step order or added a step.',
     posGrabCustomerCancelledAlert: 'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
+    posAddWithoutOption: 'Add without option',
+    posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
   } as Record<string, string>,
 } as const
 

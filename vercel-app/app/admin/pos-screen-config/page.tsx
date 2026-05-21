@@ -67,6 +67,7 @@ export default function PosScreenConfigPage() {
     ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "dual-monitor"].includes(tabParam) ? tabParam : "tables"
   )
   const [menusSubTab, setMenusSubTab] = React.useState<"menu-screen" | "menu-board">("menu-screen")
+  const [menuScreenOrderType, setMenuScreenOrderType] = React.useState<"dine-in" | "delivery" | "takeout">("dine-in")
   const [menuConfigReloadNonce, setMenuConfigReloadNonce] = React.useState(0)
   const customerDisplayRef = React.useRef<PosCustomerDisplayContentSettingsHandle>(null)
   const [customerToolbarSaving, setCustomerToolbarSaving] = React.useState(false)
@@ -163,6 +164,44 @@ export default function PosScreenConfigPage() {
                     tr={tr}
                     onRefresh={() => setMenuConfigReloadNonce((n) => n + 1)}
                   />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t("posOrderType") || "유형"}:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMenuScreenOrderType("dine-in")}
+                      className={`rounded-md border px-3 py-1.5 text-xs ${
+                        menuScreenOrderType === "dine-in"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background text-foreground"
+                      }`}
+                    >
+                      {t("posOrderTypeDineIn") || "홀"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMenuScreenOrderType("delivery")}
+                      className={`rounded-md border px-3 py-1.5 text-xs ${
+                        menuScreenOrderType === "delivery"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background text-foreground"
+                      }`}
+                    >
+                      {t("posOrderTypeDelivery") || "배달"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMenuScreenOrderType("takeout")}
+                      className={`rounded-md border px-3 py-1.5 text-xs ${
+                        menuScreenOrderType === "takeout"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background text-foreground"
+                      }`}
+                    >
+                      {t("posOrderTypeTakeout") || "포장"}
+                    </button>
+                  </div>
                   <div
                     className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-lg border border-border"
                     style={{ height: "calc(100vh - 16rem)" }}
@@ -171,6 +210,7 @@ export default function PosScreenConfigPage() {
                       mode="admin-config"
                       storeCode={effectiveStoreForMenuAndDisplay || null}
                       configReloadNonce={menuConfigReloadNonce}
+                      orderType={menuScreenOrderType}
                       selectedTableName={t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
                       onBack={() => setActiveTab("tables")}
                       backButtonLabel={t("posScreenConfigTabTables") || "테이블 구성"}

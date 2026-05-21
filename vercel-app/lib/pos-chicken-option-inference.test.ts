@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { PosMenuOption } from "@/lib/api-client"
-import { collectPosOptionPickerStepValues } from "@/lib/pos-chicken-option-inference"
+import {
+  collectPosOptionPickerStepValues,
+  filterFlatChickenMListOptions,
+  shouldUseFlatChickenMOptionPicker,
+} from "@/lib/pos-chicken-option-inference"
 
 describe("collectPosOptionPickerStepValues", () => {
   it("infers chicken part values when sidedish step exists but legacy rows lack part key", () => {
@@ -45,5 +49,113 @@ describe("collectPosOptionPickerStepValues", () => {
       isChickenMenu: true,
     })
     expect(values).toContain("Wing")
+  })
+})
+
+describe("shouldUseFlatChickenMOptionPicker", () => {
+  it("uses flat picker when chicken has M-named rows without size group", () => {
+    const rows: PosMenuOption[] = [
+      {
+        id: "1",
+        menuId: "c013",
+        name: "M - Boneless",
+        priceModifier: 90,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 0,
+        optionType: "substitution",
+        optionStepValues: { part: "Boneless" },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+      {
+        id: "2",
+        menuId: "c013",
+        name: "M - Drumette",
+        priceModifier: 90,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 1,
+        optionType: "substitution",
+        optionStepValues: { part: "Drumette" },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+    ]
+    const withSteps = rows.filter((o) => o.optionStepValues && Object.keys(o.optionStepValues).length > 0)
+    expect(
+      shouldUseFlatChickenMOptionPicker({
+        menuCode: "C013",
+        groups: ["part"],
+        options: rows,
+        optionsWithSteps: withSteps,
+      })
+    ).toBe(true)
+  })
+
+  it("does not force flat picker when size group is explicit", () => {
+    const rows: PosMenuOption[] = [
+      {
+        id: "1",
+        menuId: "c020",
+        name: "M - Boneless",
+        priceModifier: 90,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 0,
+        optionType: "substitution",
+        optionStepValues: { size: "M", part: "Boneless" },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+    ]
+    expect(
+      shouldUseFlatChickenMOptionPicker({
+        menuCode: "C020",
+        groups: ["size", "part"],
+        options: rows,
+        optionsWithSteps: rows,
+      })
+    ).toBe(false)
+  })
+})
+
+describe("filterFlatChickenMListOptions", () => {
+  it("keeps only M-prefixed chicken substitutions", () => {
+    const rows: PosMenuOption[] = [
+      {
+        id: "1",
+        menuId: "c010",
+        name: "M - Boneless",
+        priceModifier: 90,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 0,
+        optionType: "substitution",
+        optionStepValues: null,
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+      {
+        id: "2",
+        menuId: "c010",
+        name: "Kimchi 30g.",
+        priceModifier: 0,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 1,
+        optionType: "substitution",
+        optionStepValues: { sidedish: "Kimchi" },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+    ]
+    const filtered = filterFlatChickenMListOptions(rows)
+    expect(filtered.map((x) => x.name)).toEqual(["M - Boneless"])
   })
 })

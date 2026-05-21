@@ -86,7 +86,11 @@ import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
-import { isChickenDefaultOptionName } from "@/lib/pos-chicken-option-inference"
+import {
+  filterFlatChickenMListOptions,
+  isChickenDefaultOptionName,
+  shouldUseFlatChickenMOptionPicker,
+} from "@/lib/pos-chicken-option-inference"
 import {
   filterPosOptionsForBarBqFlatMList,
   getBarBqAncillarySelectionGroups,
@@ -2419,13 +2423,27 @@ export default function PosOrderPage() {
               menu: optionPickerMenu,
               options: opts,
             })
+            const useFlatChickenMLegacy =
+              isChickenBasePrice &&
+              shouldUseFlatChickenMOptionPicker({
+                menuCode: optionPickerMenu.code,
+                groups: activeStepGroups,
+                options: opts,
+                optionsWithSteps: optsWithStepsToShow,
+              })
             const useMultiStep =
               activeStepGroups.length > 0 &&
               optsWithStepsToShow.length > 0 &&
               !useFlatBarBqLegacy &&
+              !useFlatChickenMLegacy &&
               !(useBarBqTwoPhase && barBqPickerPhase === "size")
             const flatBarBqOpts = isBarBqChickenMenu(optionPickerMenu)
               ? filterPosOptionsForBarBqFlatMList(
+                  optsToShow.filter((o) => o.optionType === "substitution")
+                )
+              : optsToShow
+            const flatChickenMOpts = useFlatChickenMLegacy
+              ? filterFlatChickenMListOptions(
                   optsToShow.filter((o) => o.optionType === "substitution")
                 )
               : optsToShow
@@ -2642,7 +2660,7 @@ export default function PosOrderPage() {
             return (
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
-                {(useFlatBarBqLegacy ? flatBarBqOpts : optsToShow).map((opt) => {
+                {(useFlatBarBqLegacy ? flatBarBqOpts : useFlatChickenMLegacy ? flatChickenMOpts : optsToShow).map((opt) => {
                   const optDesc = showMenuDescriptions
                     ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
                     : ""

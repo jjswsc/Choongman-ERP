@@ -1,7 +1,6 @@
 import {
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
-  inferDefaultSizeLabelForMenuId,
   isLikelyPosOptionCode,
 } from '@/lib/grab-pos-order-enrich'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
@@ -23,7 +22,15 @@ function normalizePromoParentKey(raw: string): string {
   return String(raw ?? '')
     .trim()
     .toLowerCase()
+    .replace(/[\[\]]/g, ' ')
     .replace(/\s+/g, ' ')
+}
+
+function stripOneLeadingBracketTag(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .replace(/^\[[^\]]+\]\s*/u, '')
+    .trim()
 }
 
 /** `[CODE] [세트명] 구성메뉴` 또는 `[세트명] 구성메뉴` 분리 */
@@ -66,21 +73,13 @@ function formatPromoComposeLine(
   p: PromoSnapshot,
   menuNameByMenuId?: Record<string, string>,
   optionNameByCode?: Map<string, string> | Record<string, string>,
-  menuCodeById?: Map<string, string>
+  _menuCodeById?: Map<string, string>
 ): string {
   const menuName =
     String((p as { menuName?: unknown }).menuName ?? '').trim() ||
     (menuNameByMenuId && p.menuId ? String(menuNameByMenuId[p.menuId] ?? '').trim() : '') ||
     (p.menuId ? `#${p.menuId}` : '')
-  let optName = resolvePromoOptionLabel(p, optionNameByCode)
-  if (!optName && menuCodeById && optionNameByCode && p.menuId) {
-    const inferred = inferDefaultSizeLabelForMenuId(
-      p.menuId,
-      menuCodeById,
-      optionNameByCode instanceof Map ? optionNameByCode : new Map(Object.entries(optionNameByCode))
-    )
-    if (inferred) optName = inferred
-  }
+  const optName = resolvePromoOptionLabel(p, optionNameByCode)
   const optLabel = optName ? ` (${optName})` : ''
   return `${menuName}${optLabel} x${Math.max(1, Number(p.quantity) || 1)}`
 }
@@ -142,6 +141,8 @@ function resolveParentOrderItem(
   if (groupId && orderById.has(groupId)) return orderById.get(groupId)
   const key = normalizePromoParentKey(parentLabel)
   if (key && orderByParentKey.has(key)) return orderByParentKey.get(key)
+  const strippedKey = normalizePromoParentKey(stripOneLeadingBracketTag(parentLabel))
+  if (strippedKey && orderByParentKey.has(strippedKey)) return orderByParentKey.get(strippedKey)
   return undefined
 }
 
@@ -183,6 +184,14 @@ function noteForGroupedPromoParent(
   return note
 }
 
+function deriveParentNameFromPromoComposeLines(lines: string[]): string {
+  const first = String(lines[0] ?? '').trim()
+  if (!first) return ''
+  const plain = first.replace(/\s*x\s*[\d.]+\s*$/iu, '').trim()
+  const menuOnly = /^(.+?)\s*\(([^)]+)\)\s*$/u.exec(plain)?.[1] ?? plain
+  return stripLeadingPrintCodeBrackets(String(menuOnly ?? '').trim())
+}
+
 export function buildKitchenHallStyleSlipLines(
   slipItems: KitchenSlipRoutingItem[],
   opts?: {
@@ -194,6 +203,21 @@ export function buildKitchenHallStyleSlipLines(
 ): KitchenSlipPrintLine[] {
   const orderItems = opts?.orderItems ?? []
   const menuNameByMenuId = opts?.menuNameByMenuId
+  const codeToMenuName = new Map<string, string>()
+  if (opts?.menuCodeByMenuId && menuNameByMenuId) {
+    for (const [mid, code] of Object.entries(opts.menuCodeByMenuId)) {
+      const codeKey = String(code ?? '').trim().toUpperCase()
+      const menuName = String(menuNameByMenuId[mid] ?? '').trim()
+      if (!codeKey || !menuName || codeToMenuName.has(codeKey)) continue
+      codeToMenuName.set(codeKey, menuName)
+    }
+  }
+  const resolveCodeLikeLineName = (rawName: string): string => {
+    const plain = stripLeadingPrintCodeBrackets(String(rawName ?? '').trim())
+    if (!plain) return plain
+    if (!/^[A-Z]{1,3}\d{2,4}$/i.test(plain)) return plain
+    return String(codeToMenuName.get(plain.toUpperCase()) ?? plain).trim() || plain
+  }
   const menuCodeMap = new Map<string, string>()
   if (opts?.menuCodeByMenuId) {
     for (const [id, code] of Object.entries(opts.menuCodeByMenuId)) {
@@ -211,6 +235,8 @@ export function buildKitchenHallStyleSlipLines(
     if (Array.isArray(pi) && pi.length > 0) {
       const key = normalizePromoParentKey(String(it.name ?? ''))
       if (key) orderByParentKey.set(key, it)
+      const stripped = normalizePromoParentKey(stripOneLeadingBracketTag(String(it.name ?? '')))
+      if (stripped && !orderByParentKey.has(stripped)) orderByParentKey.set(stripped, it)
     }
   }
 
@@ -284,7 +310,6 @@ export function buildKitchenHallStyleSlipLines(
   for (const g of promoGroups.values()) {
     const parentOrder = resolveParentOrderItem(g.groupId, g.parentLabel, orderById, orderByParentKey)
     const parentName = String(parentOrder?.name ?? g.parentLabel).trim() || g.parentLabel
-    const displayParentName = String(parentName ?? g.parentLabel).trim() || g.parentLabel
     const parentQty = Math.max(
       1,
       Number(
@@ -300,6 +325,11 @@ export function buildKitchenHallStyleSlipLines(
       : []
     const fromChildren = promoComposeFromSplitChildren(g.children, menuNameByMenuId, optionNameByCode)
     const promoComposeLines = fromOrder.length > 0 ? fromOrder : fromChildren
+    let displayParentName = resolveCodeLikeLineName(String(parentName ?? g.parentLabel).trim() || g.parentLabel)
+    if (isLikelyPosOptionCode(displayParentName) || /^[A-Z]{1,3}\d{2,4}$/i.test(displayParentName)) {
+      const derived = deriveParentNameFromPromoComposeLines(promoComposeLines)
+      if (derived && !/^[A-Z]{1,3}\d{2,4}$/i.test(derived)) displayParentName = derived
+    }
     const note = noteForGroupedPromoParent(g.children, promoComposeLines, optionNameByCode)
     const cancelled =
       g.children.length > 0 &&
@@ -329,7 +359,7 @@ export function buildKitchenHallStyleSlipLines(
       continue
     }
     out.push({
-      name: stripLeadingPrintCodeBrackets(String(it.name ?? '')),
+      name: resolveCodeLikeLineName(String(it.name ?? '')),
       qty: Math.max(1, Number(it.qty ?? 1) || 1),
       ...(() => {
         const note = formatGrabOrderLineNoteForPrint(String(it.note ?? '').trim(), optionNameByCode)

@@ -4,7 +4,11 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
-import { normalizePosMenuScreenConfig } from '@/lib/pos-menu-screen-config'
+import {
+  buildPosMenuScreenConfigStoreKey,
+  normalizePosMenuScreenConfig,
+  normalizePosMenuScreenConfigScope,
+} from '@/lib/pos-menu-screen-config'
 
 /** POS 메뉴화면 구성값 저장 */
 export async function POST(request: NextRequest) {
@@ -14,9 +18,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const storeCode = String(body?.storeCode ?? '').trim() || null
+    const scope = normalizePosMenuScreenConfigScope(body?.scope)
+    const rowStoreKey = buildPosMenuScreenConfigStoreKey(storeCode, scope)
     const normalized = normalizePosMenuScreenConfig(body || null, storeCode)
     const row = {
-      store_code: normalized.storeCode,
+      store_code: rowStoreKey,
       main_category_font_size: normalized.mainCategoryFontSize,
       category_font_size: normalized.categoryFontSize,
       menu_tile_font_size: normalized.menuTileFontSize,
@@ -27,9 +33,7 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
-    const filter = storeCode
-      ? `store_code=eq.${encodeURIComponent(storeCode)}`
-      : 'store_code=is.null'
+    const filter = `store_code=eq.${encodeURIComponent(rowStoreKey)}`
     const existing = (await supabaseSelectFilter('pos_menu_screen_configs', filter, {
       limit: 1,
       select: 'id',
@@ -41,7 +45,7 @@ export async function POST(request: NextRequest) {
       await supabaseInsert('pos_menu_screen_configs', row)
     }
 
-    return NextResponse.json({ success: true, config: normalized }, { headers })
+    return NextResponse.json({ success: true, config: { ...normalized, scope } }, { headers })
   } catch (e) {
     console.error('savePosMenuScreenConfig:', e)
     return NextResponse.json(

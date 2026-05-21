@@ -63,7 +63,11 @@ import {
 } from '@/lib/pos-menu-display-description'
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
-import { isChickenDefaultOptionName } from '@/lib/pos-chicken-option-inference'
+import {
+  filterFlatChickenMListOptions,
+  isChickenDefaultOptionName,
+  shouldUseFlatChickenMOptionPicker,
+} from '@/lib/pos-chicken-option-inference'
 import { shouldUseFlatBarBqChickenOptionPicker } from '@/lib/pos-barbq-option-picker-ui'
 import { validatePosMenuImageUrlForMenu } from '@/lib/pos-menu-image-storage-path'
 import {
@@ -293,12 +297,13 @@ export function PosTerminalMenuScreen({
   }, [loadMenuData, configReloadNonce])
 
   React.useEffect(() => {
+    const scope = orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'dine-in'
     setConfigLoading(true)
-    getPosMenuScreenConfig({ storeCode: storeCode || undefined })
+    getPosMenuScreenConfig({ storeCode: storeCode || undefined, scope })
       .then((cfg) => setScreenConfig(normalizePosMenuScreenConfig(cfg, storeCode || null)))
       .catch(() => setScreenConfig(normalizePosMenuScreenConfig(null, storeCode || null)))
       .finally(() => setConfigLoading(false))
-  }, [storeCode, configReloadNonce])
+  }, [storeCode, configReloadNonce, orderType])
 
   const optionsByMenuId = React.useMemo(() => {
     const sellKey = orderType === 'dine-in' ? 'sellHall' : orderType === 'delivery' ? 'sellDelivery' : 'sellPackaging'
@@ -729,9 +734,11 @@ export function PosTerminalMenuScreen({
     setConfigSaving(true)
     setConfigMessage('')
     try {
+      const scope = orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'dine-in'
       const res = await savePosMenuScreenConfig({
         ...screenConfig,
         storeCode: storeCode || null,
+        scope,
       })
       if (!res?.success) {
         setConfigMessage(res?.message || (t('posSaveFail') || '저장 실패'))
@@ -1563,8 +1570,24 @@ export function PosTerminalMenuScreen({
               menu: optionPickerMenu,
               options: opts,
             })
+            const useFlatChickenMList =
+              isChickenBase &&
+              shouldUseFlatChickenMOptionPicker({
+                menuCode: optionPickerMenu.code,
+                groups,
+                options: opts,
+                optionsWithSteps: optsWithStepsToShow,
+              })
             const useMultiStep =
-              groups.length > 0 && optsWithStepsToShow.length > 0 && !useFlatBarBqList
+              groups.length > 0 &&
+              optsWithStepsToShow.length > 0 &&
+              !useFlatBarBqList &&
+              !useFlatChickenMList
+            const flatChickenMOpts = useFlatChickenMList
+              ? filterFlatChickenMListOptions(
+                  optsToShow.filter((o) => o.optionType === 'substitution')
+                )
+              : optsToShow
             const defaultBtn = isChickenBase && (
               <button
                 type="button"
@@ -1597,8 +1620,8 @@ export function PosTerminalMenuScreen({
                       {t('posOptionStepMismatchFallback') || '옵션 단계 설정이 맞지 않아 일반 옵션 목록으로 표시합니다.'}
                     </p>
                     {defaultBtn}
-                    {optsToShow.length > 0 ? (
-                      optsToShow.map((opt) => {
+                    {(useFlatChickenMList ? flatChickenMOpts : optsToShow).length > 0 ? (
+                      (useFlatChickenMList ? flatChickenMOpts : optsToShow).map((opt) => {
                         const optDesc = showMenuDescriptions
                           ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
                           : ''
@@ -1726,7 +1749,7 @@ export function PosTerminalMenuScreen({
             return (
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
-                {optsToShow.map((opt) => {
+                {(useFlatChickenMList ? flatChickenMOpts : optsToShow).map((opt) => {
                   const optDesc = showMenuDescriptions
                     ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
                     : ''

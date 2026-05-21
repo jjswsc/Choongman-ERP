@@ -9,6 +9,23 @@ export interface PosMenuScreenConfig {
   kioskGroupFontSize: number
 }
 
+export type PosMenuScreenConfigScope = 'dine-in' | 'delivery' | 'takeout'
+
+export function normalizePosMenuScreenConfigScope(raw: unknown): PosMenuScreenConfigScope {
+  const v = String(raw ?? '').trim().toLowerCase()
+  if (v === 'delivery') return 'delivery'
+  if (v === 'takeout' || v === 'packaging') return 'takeout'
+  return 'dine-in'
+}
+
+export function buildPosMenuScreenConfigStoreKey(
+  storeCode: string | null | undefined,
+  scope: PosMenuScreenConfigScope
+): string {
+  const sc = String(storeCode ?? '').trim()
+  return sc ? `${sc}::${scope}` : `__global__::${scope}`
+}
+
 export const DEFAULT_POS_MENU_SCREEN_CONFIG: PosMenuScreenConfig = {
   storeCode: null,
   mainCategoryFontSize: 14,

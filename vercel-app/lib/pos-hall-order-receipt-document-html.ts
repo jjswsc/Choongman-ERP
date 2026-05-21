@@ -29,6 +29,37 @@ type HallOrderItem = {
 }
 type HallOrderPromoItem = NonNullable<HallOrderItem['promoItems']>[number]
 
+function splitReceiptOptionTokens(raw: string): string[] {
+  const text = String(raw ?? '').trim()
+  if (!text) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  const isSizePrefixed = (value: string) =>
+    /^(?:size|ไซส์)?\s*(?:xxl|xl|l|m|s)\s*[-–—]\s*\S+/i.test(String(value ?? '').trim())
+  const chunks = text
+    .split(/\r?\n|·|,/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  for (const chunk of chunks) {
+    const parts = isSizePrefixed(chunk)
+      ? [chunk]
+      : chunk
+          .split(/\s+-\s+/)
+          .map((x) => x.trim())
+          .filter(Boolean)
+    const tokens = parts.length > 1 ? parts : [chunk]
+    for (const token of tokens) {
+      const t = String(token).trim()
+      if (!t) continue
+      const key = t.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(t)
+    }
+  }
+  return out
+}
+
 type HallOrderPayload = {
   orderNo: string
   storeCode: string
@@ -239,6 +270,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
             (k) => t(k)
           )
         : ''
+      const lineOptionTokens = splitReceiptOptionTokens(lineOption)
       const lineNote =
         formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
         normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
@@ -269,7 +301,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
         : ''
       const optionHtml = lineOption
-        ? '<div class="receipt-line-note">- ' + esc(lineOption) + c('div')
+        ? '<div class="receipt-line-note">' + lineOptionTokens.map((opt) => '- ' + esc(opt)).join('<br/>') + c('div')
         : ''
       return (
         '<div class="receipt-row"><span>' +

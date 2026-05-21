@@ -81,4 +81,56 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].promoComposeLines).toEqual(['GOLDEN FRIED CHICKEN (S Boneless) x1'])
     expect(lines[0].note).toBeUndefined()
   })
+
+  it('matches promo parent by stripped bracket tag and keeps decorated set name', () => {
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'promo-order-1',
+        name: '[April] Set 2',
+        qty: 1,
+        promoItems: [{ menuId: '8', menuName: 'SNOW ONION', optionId: null, quantity: 1 }],
+      },
+    ]
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'promo-order-1-k1',
+        name: '[Set 2] SNOW ONION (M - Joint Wing)',
+        qty: 1,
+        kitchenPromoGroupId: '',
+        kitchenPromoParentName: 'Set 2',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, { orderItems })
+    expect(lines[0].name).toBe('[April] Set 2')
+  })
+
+  it('maps code-like regular line names to menu names', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      { id: 'line-1', name: 'C008', qty: 1, note: 'SNOW ONION (M - Joint Wing) x1' },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      menuNameByMenuId: { '8': 'SNOW ONION' },
+      menuCodeByMenuId: { '8': 'C008' },
+    })
+    expect(lines[0].name).toBe('SNOW ONION')
+  })
+
+  it('maps code-like grouped parent names to menu names from compose lines', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'grp-1-k1',
+        name: '[C008] [C008] SNOW ONION (M - Joint Wing)',
+        qty: 1,
+        kitchenPromoGroupId: 'grp-1',
+        kitchenPromoParentName: 'C008',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      menuNameByMenuId: { '8': 'SNOW ONION' },
+      menuCodeByMenuId: { '8': 'C008' },
+    })
+    expect(lines[0].name).toBe('SNOW ONION')
+  })
 })

@@ -1,8 +1,8 @@
-export const LEADING_CODE_PREFIX_RE = /^\[[^\]]+\]\s*/u
+/** 인쇄용 선행 코드 토큰: `[C010]`, `[CH001]` 등 메뉴 코드 형태만 제거 */
+export const LEADING_CODE_PREFIX_RE = /^\[[A-Za-z]{1,4}\d{1,6}\]\s*/u
 /** POS 메뉴 SKU (예: C024, CT005) — 주방·영수증에서 단독 코드 행 판별 */
 export const POS_MENU_SKU_RE = /^[A-Z]{1,3}\d{2,4}$/i
 const TRAILING_OPTION_RE = /^(.+?)\s*\(([^()]+)\)\s*$/u
-const SIZE_PREFIX_RE = /^(?:x?s|m|l|xl|xxl)\s*[-:/]\s*/iu
 
 function normalizeSpaces(value: string): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -21,8 +21,7 @@ export function isLikelyPosMenuSkuCode(raw: string): boolean {
 export function normalizePosPrintOptionLabel(rawOption: string): string {
   const compact = normalizeSpaces(rawOption).replace(/^\[|\]$/g, '').trim()
   if (!compact) return ''
-  const withoutSizePrefix = compact.replace(SIZE_PREFIX_RE, '').trim()
-  return withoutSizePrefix || compact
+  return compact
 }
 
 /**

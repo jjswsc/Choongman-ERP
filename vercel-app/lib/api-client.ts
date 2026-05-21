@@ -9062,6 +9062,7 @@ export async function getGrabStoreIntegrations(params?: {
 
 export interface PosMenuScreenConfig {
   storeCode: string | null
+  scope?: 'dine-in' | 'delivery' | 'takeout'
   mainCategoryFontSize: number
   categoryFontSize: number
   menuTileFontSize: number
@@ -9072,14 +9073,19 @@ export interface PosMenuScreenConfig {
   updatedAt?: string | null
 }
 
-export async function getPosMenuScreenConfig(params?: { storeCode?: string }) {
+export async function getPosMenuScreenConfig(params?: {
+  storeCode?: string
+  scope?: 'dine-in' | 'delivery' | 'takeout'
+}) {
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.scope) q.set('scope', params.scope)
   const qs = q.toString()
   const url = '/api/getPosMenuScreenConfig' + (qs ? `?${qs}` : '')
-  const cacheKey = `erp:posMenuScreenConfig:${params?.storeCode?.trim() || 'default'}`
+  const cacheKey = `erp:posMenuScreenConfig:${params?.storeCode?.trim() || 'default'}:${params?.scope || 'dine-in'}`
   const fallback: PosMenuScreenConfig = {
     storeCode: params?.storeCode?.trim() || null,
+    scope: params?.scope || 'dine-in',
     mainCategoryFontSize: 18,
     categoryFontSize: 15,
     menuTileFontSize: 13,
@@ -9093,6 +9099,7 @@ export async function getPosMenuScreenConfig(params?: { storeCode?: string }) {
 
 export async function savePosMenuScreenConfig(params: {
   storeCode?: string | null
+  scope?: 'dine-in' | 'delivery' | 'takeout'
   mainCategoryFontSize: number
   categoryFontSize: number
   menuTileFontSize: number

@@ -141,6 +141,63 @@ function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, b
   return out
 }
 
+function isLikelyStandaloneSizeLabel(raw: string): boolean {
+  const s = String(raw ?? '').trim()
+  if (!s) return false
+  if (/^(?:size|ไซส์)\s*(?:xxl|xl|l|m|s)\b/i.test(s)) return true
+  return /^(?:xxl|xl|l|m|s)\b/i.test(s)
+}
+
+function splitPrintOptionTokens(raw: string): string[] {
+  const text = String(raw ?? '').trim()
+  if (!text) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  const isSizePrefixed = (value: string) =>
+    /^(?:size|ไซส์)?\s*(?:xxl|xl|l|m|s)\s*[-–—]\s*\S+/i.test(String(value ?? '').trim())
+  const primaryChunks = text
+    .split(/\r?\n|·|,/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  for (const chunk of primaryChunks) {
+    const parts = isSizePrefixed(chunk)
+      ? [chunk]
+      : chunk
+          .split(/\s+-\s+/)
+          .map((x) => x.trim())
+          .filter(Boolean)
+    const tokens = parts.length > 1 ? parts : [chunk]
+    for (const token of tokens) {
+      const normalized = normalizePosPrintOptionLabel(token).trim()
+      if (!normalized) continue
+      const key = normalized.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(normalized)
+    }
+  }
+  return out
+}
+
+function parseMenuEchoFromNote(raw: string): { menuName: string; optionLabel: string } | null {
+  const text = String(raw ?? '').trim()
+  if (!text) return null
+  const chunks = text
+    .split(/[\r\n·]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  for (const chunk of chunks) {
+    const normalized = chunk.replace(/^-+\s*/, '').trim()
+    const m = /^(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?\s*$/iu.exec(normalized)
+    if (!m?.[1] || !m?.[2]) continue
+    const menuName = stripLeadingPrintCodeBrackets(String(m[1] ?? '').trim())
+    const optionLabel = normalizePosPrintOptionLabel(String(m[2] ?? '').trim())
+    if (!menuName || isLikelyPosMenuSkuCode(menuName) || isLikelyStandaloneSizeLabel(menuName)) continue
+    return { menuName, optionLabel }
+  }
+  return null
+}
+
 function classifyKitchenOptionToken(token: string): string {
   const s = String(token || '').trim()
   const low = s.toLowerCase()
@@ -215,13 +272,29 @@ export function resolveKitchenSlipRowMainDisplay(input: {
   let optionLine = split.optionLine
   const noteRaw = String(input.note ?? '').trim().replace(/^-\s*/, '').trim()
   if (isLikelyPosMenuSkuCode(mainName) && noteRaw) {
-    const paren = /^(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?\s*$/iu.exec(noteRaw)
+    const noteNormalized = noteRaw.replace(/^(?:item\s*note|line\s*note|note|item)\s*:\s*/i, '').trim()
+    const paren =
+      /^(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?\s*$/iu.exec(noteNormalized) ||
+      /(?:^|[\r\n·])\s*-?\s*(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?(?:\s*$|[\r\n·])/iu.exec(noteNormalized)
     if (paren) {
       mainName = stripLeadingPrintCodeBrackets(paren[1].trim())
       if (!optionLine) optionLine = normalizePosPrintOptionLabel(paren[2].trim())
     } else {
-      const bare = noteRaw.replace(/\s*x\s*[\d.]+\s*$/iu, '').trim()
+      const bare = noteNormalized.replace(/\s*x\s*[\d.]+\s*$/iu, '').trim()
       if (bare && !isLikelyPosMenuSkuCode(bare)) mainName = stripLeadingPrintCodeBrackets(bare)
+    }
+  }
+  if (isLikelyStandaloneSizeLabel(mainName) && noteRaw) {
+    const leadChunk = noteRaw.split(/[·\r\n]/)[0]?.trim() || noteRaw
+    const noteMenuLike =
+      /^(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?\s*$/iu.exec(leadChunk) ||
+      /^(.+?)\s*\(([^)]+)\)\s*(?:x\s*[\d.]+)?\s*$/iu.exec(noteRaw)
+    if (noteMenuLike) {
+      const recoveredMain = stripLeadingPrintCodeBrackets(noteMenuLike[1].trim())
+      if (recoveredMain && !isLikelyPosMenuSkuCode(recoveredMain) && !isLikelyStandaloneSizeLabel(recoveredMain)) {
+        mainName = recoveredMain
+        if (!optionLine) optionLine = normalizePosPrintOptionLabel(noteMenuLike[2].trim())
+      }
     }
   }
   return { mainName: mainName || stripLeadingPrintCodeBrackets(String(input.name ?? '')), optionLine }
@@ -279,7 +352,7 @@ export function formatKitchenSlipItemRowHtml(
     (rowDisplay.optionLine
       ? parseKitchenSlipBanbanFromName(`${rowDisplay.mainName} (${rowDisplay.optionLine})`)
       : null)
-  const baseDisplayName = banban ? banban.baseName : rowDisplay.mainName || it.name
+  let baseDisplayName = banban ? banban.baseName : rowDisplay.mainName || it.name
   const optionLine = banban
     ? ''
     : localizeKitchenSlipLineNote(
@@ -288,6 +361,40 @@ export function formatKitchenSlipItemRowHtml(
           opts?.optionNameByCode
         )
       )
+  let optionLines = splitPrintOptionTokens(optionLine).map((x) => localizeKitchenSlipLineNote(x))
+  if (!banban && isLikelyPosMenuSkuCode(stripLeadingPrintCodeBrackets(baseDisplayName)) && note) {
+    const parsed = parseMenuEchoFromNote(note)
+    if (parsed) {
+      baseDisplayName = parsed.menuName
+      if (optionLines.length === 0) {
+        optionLines = splitPrintOptionTokens(parsed.optionLabel).map((x) => localizeKitchenSlipLineNote(x))
+      }
+    }
+  }
+  let noteLines = splitPrintOptionTokens(note).map((x) => localizeKitchenSlipLineNote(x))
+  if (noteLines.length === 0 && note) noteLines = [note]
+  noteLines = noteLines.filter((line) => {
+    const compact = simplify(line)
+    if (!compact) return false
+    const mainCompact = simplify(baseDisplayName)
+    if (!mainCompact || !compact.includes(mainCompact)) return true
+    if (!optionLines.length) return false
+    return !optionLines.every((opt) => compact.includes(simplify(opt)))
+  })
+  note = noteLines.join(' · ')
+  const isDuplicatedMenuEchoNote = (() => {
+    if (!note) return false
+    const compact = String(note ?? '')
+      .replace(/\s*x\s*[\d.]+\s*$/iu, '')
+      .trim()
+    if (!compact) return false
+    const compactBase = simplify(baseDisplayName)
+    if (!compactBase || !simplify(compact).includes(compactBase)) return false
+    if (!optionLines.length) return true
+    return optionLines.every((line) => simplify(compact).includes(simplify(line)))
+  })()
+  if (isDuplicatedMenuEchoNote) note = ''
+  if (isDuplicatedMenuEchoNote) noteLines = []
   if (note && isLikelyPosMenuSkuCode(splitPosPrintItemLine(String(it.name ?? '')).mainName)) {
     const noteMain = resolveKitchenSlipRowMainDisplay({ name: '', note })
     if (noteMain.mainName && simplify(note).includes(simplify(noteMain.mainName))) note = ''
@@ -304,10 +411,13 @@ export function formatKitchenSlipItemRowHtml(
     escapeHtml(baseDisplayName) +
     close('span') +
     close('div')
-  const optionDupWithNote = optionLine && note && simplify(optionLine) === simplify(note)
+  const optionDupWithNote =
+    optionLines.length > 0 &&
+    noteLines.length > 0 &&
+    optionLines.every((line) => noteLines.some((n) => simplify(n) === simplify(line)))
   const optionHtml =
-    optionLine && !optionDupWithNote
-      ? '<div class="k-line-note">- ' + escapeHtml(optionLine) + close('div')
+    optionLines.length > 0 && !optionDupWithNote
+      ? '<div class="k-line-note">' + optionLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') + close('div')
       : ''
   const banbanHtml = banban
     ? '<div class="k-line-note">- ' +
@@ -323,7 +433,7 @@ export function formatKitchenSlipItemRowHtml(
         promoLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') +
         close('div')
       : ''
-  if (!note) return rowOpen + main + optionHtml + banbanHtml + promoHtml + close('div')
+  if (noteLines.length === 0) return rowOpen + main + optionHtml + banbanHtml + promoHtml + close('div')
   return (
     rowOpen +
     main +
@@ -331,7 +441,7 @@ export function formatKitchenSlipItemRowHtml(
     banbanHtml +
     promoHtml +
     '<div class="k-line-note">' +
-    escapeHtml(note) +
+    noteLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') +
     close('div') +
     close('div')
   )

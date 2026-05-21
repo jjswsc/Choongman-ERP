@@ -68,20 +68,24 @@ export async function runPosScreenConfigCopyMenu(
     await appAlert(tr("posScreenConfigCopyPickOtherStore", "다른 매장을 원본으로 선택하세요."))
     return false
   }
-  const cfg = await getPosMenuScreenConfig({ storeCode: s })
-  const res = await savePosMenuScreenConfig({
-    storeCode: t,
-    mainCategoryFontSize: cfg.mainCategoryFontSize,
-    categoryFontSize: cfg.categoryFontSize,
-    menuTileFontSize: cfg.menuTileFontSize,
-    menuTileCols: cfg.menuTileCols,
-    menuListFontSize: cfg.menuListFontSize,
-    menuListPageSize: cfg.menuListPageSize,
-    kioskGroupFontSize: cfg.kioskGroupFontSize,
-  })
-  if (!res?.success) {
-    await appAlert(translateApiMessage(res?.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
-    return false
+  const scopes: Array<'dine-in' | 'delivery' | 'takeout'> = ['dine-in', 'delivery', 'takeout']
+  for (const scope of scopes) {
+    const cfg = await getPosMenuScreenConfig({ storeCode: s, scope })
+    const res = await savePosMenuScreenConfig({
+      storeCode: t,
+      scope,
+      mainCategoryFontSize: cfg.mainCategoryFontSize,
+      categoryFontSize: cfg.categoryFontSize,
+      menuTileFontSize: cfg.menuTileFontSize,
+      menuTileCols: cfg.menuTileCols,
+      menuListFontSize: cfg.menuListFontSize,
+      menuListPageSize: cfg.menuListPageSize,
+      kioskGroupFontSize: cfg.kioskGroupFontSize,
+    })
+    if (!res?.success) {
+      await appAlert(translateApiMessage(res?.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+      return false
+    }
   }
   await appAlert(tr("posScreenConfigMenuCopyDone", "메뉴 화면 구성을 복사했습니다. 미리보기 탭을 새로고침하세요."))
   return true
