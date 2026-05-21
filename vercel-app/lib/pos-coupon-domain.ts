@@ -334,3 +334,38 @@ export function resolvePosSalesDiscountAmount(discountAmt: number, couponDiscoun
   if (discount + 0.0001 >= coupon) return discount
   return round2(discount + coupon)
 }
+
+/** API·영수증 공통 — 적용 쿠폰 JSON 파싱 (server-only 무관) */
+export function parseAppliedCouponsFromBody(body: unknown): PosAppliedCouponLine[] {
+  if (!Array.isArray(body)) return []
+  const out: PosAppliedCouponLine[] = []
+  for (const raw of body) {
+    if (!raw || typeof raw !== 'object') continue
+    const row = raw as Record<string, unknown>
+    const code = normalizeCode(String(row.code ?? ''))
+    if (!code) continue
+    out.push({
+      code,
+      name: String(row.name ?? code).trim() || code,
+      discountAmt: Math.max(0, Number(row.discountAmt ?? row.discount_amt ?? 0) || 0),
+      quantity: Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1)),
+      couponId: Number(row.couponId ?? row.coupon_id ?? 0) || undefined,
+      serialId: Number(row.serialId ?? row.serial_id ?? 0) || undefined,
+      memberCouponIssueId:
+        Number(row.memberCouponIssueId ?? row.member_coupon_issue_id ?? 0) || undefined,
+    })
+  }
+  return out
+}
+
+export function parseAppliedCouponsFromOrderRow(raw: unknown): PosAppliedCouponLine[] {
+  if (Array.isArray(raw)) return parseAppliedCouponsFromBody(raw)
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      return parseAppliedCouponsFromBody(JSON.parse(raw))
+    } catch {
+      return []
+    }
+  }
+  return []
+}

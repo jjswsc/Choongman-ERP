@@ -10,7 +10,7 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
-import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
+import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-domain'
 
 export type PosOrderReceiptLineOptions = {
   /**
