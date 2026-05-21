@@ -21,8 +21,12 @@ import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import {
   buildOptionNameByCodeFromMenus,
+  collectGrabPrintOptionLines,
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
+  formatGrabPromoComposeLinesForPrint,
+  isGrabInboundPosOrder,
+  resolveGrabPrintNoteRequest,
 } from '@/lib/grab-pos-order-enrich'
 import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
@@ -595,20 +599,29 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ? `<div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>`
             : receiptPayLine(esc(tr('posMenuName', '품목')), esc(tr('amount', '금액')), 'receipt-pay-line--head')
         }
-        ${mergeSetChildrenForReceipt(
-          receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0]
-        )
-          .map((it, idx) => {
-            const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+        ${(() => {
+          const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
+          const grabInbound = isGrabInboundPosOrder({
+            memo: receiptData.memo,
+            deliveryAppCode: receiptData.deliveryAppCode,
+            items: receiptData.items,
+          })
+          return mergeSetChildrenForReceipt(
+            receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0],
+            { grabInbound, optionNameByCode }
+          )
+            .map((it, idx) => {
+            const baseLineSplit = splitPosPrintItemLine(it.name)
+            const lineNote = grabInbound
+              ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
+              : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const banban = parseBanbanFlavorsFromName(it.name)
-            const baseLineSplit = splitPosPrintItemLine(it.name)
             const displayName = banban ? banban.baseName : baseLineSplit.mainName || it.name
-            const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
             const promoComposeLines =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
-                ? it.promoItems.slice(0, 8).map((pi) => {
+                ? it.promoItems.slice(0, 8).flatMap((pi) => {
                     const menuName =
                       String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
@@ -619,13 +632,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                       (optCode
                         ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
                         : '')
-                    const optNameLabel = optName
-                      ? ` (${translatePosMenuLineForReceipt(
-                          formatGrabOptionFragmentForPrint(optName, optionNameByCode),
-                          t
-                        )})`
-                      : ''
-                    return `${translatePosMenuLineForReceipt(menuName, t)}${optNameLabel} x${Math.max(1, Number(pi.quantity) || 1)}`
+                    return formatGrabPromoComposeLinesForPrint(
+                      {
+                        menuName: translatePosMenuLineForReceipt(menuName, t),
+                        optionName: optName
+                          ? translatePosMenuLineForReceipt(
+                              formatGrabOptionFragmentForPrint(optName, optionNameByCode),
+                              t
+                            )
+                          : '',
+                        quantity: Math.max(1, Number(pi.quantity) || 1),
+                      },
+                      grabInbound
+                    )
                   })
                 : []
             const banbanFlavorLines = banban
@@ -634,10 +653,24 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                   translatePosMenuLineForReceipt(banban.flavor2, t),
                 ]
               : []
+            const grabOptionLines = grabInbound
+              ? collectGrabPrintOptionLines({
+                  note: it.note,
+                  optionFragment: baseLineSplit.optionLine,
+                  optionNameByCode,
+                }).map((line) => translatePosMenuLineForReceipt(line, t))
+              : []
             const baseOptionLine =
-              !banban && baseLineSplit.optionLine
-                ? [translatePosMenuLineForReceipt(baseLineSplit.optionLine, t)]
-                : []
+              grabOptionLines.length > 0
+                ? grabOptionLines
+                : !banban && baseLineSplit.optionLine
+                  ? [
+                      translatePosMenuLineForReceipt(
+                        formatGrabOptionFragmentForPrint(baseLineSplit.optionLine, optionNameByCode),
+                        t
+                      ),
+                    ]
+                  : []
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
@@ -666,7 +699,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
               formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
             )}${lineDiscountHtml}${banbanComposeHtml}${promoComposeHtml}${noteHtml}${barcodeHtml}`
           })
-          .join('')}
+            .join('')
+        })()}
         <div class="receipt-divider"></div>
         ${paymentRowHtml(`<span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span>`, formatBahtNum(subtotalPrint))}
         ${receiptData.discountAmt > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(receiptData.discountAmt)}`) : ''}

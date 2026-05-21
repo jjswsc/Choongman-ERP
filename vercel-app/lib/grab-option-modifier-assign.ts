@@ -94,6 +94,27 @@ export function resolveGrabModifierAssignments(
   return [{ groupName: split.groupName, optionName: split.optionName }]
 }
 
+/**
+ * Grab 손님 앱 modifier 이름 — 그룹 제목(sidedish, M 등)과 중복되지 않게 옵션값만.
+ * (그룹 헤더는 Grab이 modifierGroup.name 으로 이미 표시)
+ */
+export function formatGrabModifierOptionDisplayName(groupName: string, optionName: string): string {
+  const g = String(groupName || "").trim()
+  let o = String(optionName || "").trim()
+  if (!o) return o
+  if (!g || g.toLowerCase() === "options") return o
+  const gl = g.toLowerCase()
+  const ol = o.toLowerCase()
+  if (ol === gl) return o
+  for (const prefix of [`${gl} - `, `${gl}: `, `${gl} `, `${gl}/`, `${gl}|`]) {
+    if (ol.startsWith(prefix)) {
+      o = o.slice(prefix.length).trim()
+      break
+    }
+  }
+  return o
+}
+
 /** 링크 그룹으로 덮인 메뉴에, DB 단독 옵션을 추가로 포함할지 (POS getPosMenuOptions 와 동일 규칙) */
 export function shouldIncludeStandaloneOptionForLinkedMenu(
   optionStepValues: Record<string, string> | null | undefined,

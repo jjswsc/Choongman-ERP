@@ -6,7 +6,14 @@ import {
 } from '@/lib/pos-delivery-platform'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
-import { formatGrabOptionFragmentForPrint, formatGrabOrderLineNoteForPrint } from '@/lib/grab-pos-order-enrich'
+import {
+  collectGrabPrintOptionLines,
+  formatGrabOptionFragmentForPrint,
+  formatGrabOrderLineNoteForPrint,
+  formatGrabPromoComposeLinesForPrint,
+  isGrabInboundPosOrder,
+  resolveGrabPrintNoteRequest,
+} from '@/lib/grab-pos-order-enrich'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum } from '@/lib/utils'
@@ -116,7 +123,13 @@ function normalizeReceiptTextKey(v: string): string {
 }
 
 /** Grab·주방 분할 `[세트] 구성` 줄을 부모 세트의 promoItems 로 합친다(캐셔·홀 주문서). */
-export function mergeSetChildrenForReceipt(items: HallOrderItem[]): HallOrderItem[] {
+export function mergeSetChildrenForReceipt(
+  items: HallOrderItem[],
+  opts?: {
+    grabInbound?: boolean
+    optionNameByCode?: Map<string, string> | Record<string, string>
+  }
+): HallOrderItem[] {
   if (!Array.isArray(items) || items.length === 0) return items
   const out = items.map((it) => ({ ...it }))
   const childRows: { index: number; promoLabel: string; childName: string }[] = []
@@ -155,10 +168,22 @@ export function mergeSetChildrenForReceipt(items: HallOrderItem[]): HallOrderIte
     const parent = out[parentIdx]
     const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
     const opt = String(out[child.index].note ?? '').trim()
+    let optionName = opt
+    if (opt && opts?.grabInbound) {
+      const chips = collectGrabPrintOptionLines({
+        note: opt,
+        optionNameByCode: opts.optionNameByCode,
+      })
+      if (chips.length) optionName = chips.join(', ')
+      else {
+        const parsed = formatGrabOrderLineNoteForPrint(opt, opts.optionNameByCode)
+        if (parsed) optionName = parsed
+      }
+    }
     list.push({
       menuId: '',
       optionId: null,
-      ...(opt ? { optionName: opt } : {}),
+      ...(optionName ? { optionName } : {}),
       menuName: child.childName,
       quantity: Math.max(1, Number(out[child.index].qty ?? 1) || 1),
     } as HallOrderPromoItem)
@@ -258,7 +283,11 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '<span class="receipt-order-type-chip receipt-order-type-chip--inline"> ' +
     esc(orderTypeLabelText) +
     '</span>'
-  const receiptItems = mergeSetChildrenForReceipt(payload.items || [])
+  const grabInbound = isGrabInboundPosOrder({ memo: payload.memo, items: payload.items })
+  const receiptItems = mergeSetChildrenForReceipt(payload.items || [], {
+    grabInbound,
+    optionNameByCode,
+  })
   const itemsRows = receiptItems
     .map((it) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
@@ -270,15 +299,25 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
             (k) => t(k)
           )
         : ''
-      const lineOptionTokens = splitReceiptOptionTokens(lineOption)
-      const lineNote =
-        formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
-        normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+      const grabOptionLines = grabInbound
+        ? collectGrabPrintOptionLines({
+            note: it.note,
+            optionFragment: lineSplit.optionLine,
+            optionNameByCode,
+          }).map((opt) => translatePosMenuLineForReceipt(opt, (k) => t(k)))
+        : []
+      const lineOptionTokens = grabInbound
+        ? grabOptionLines
+        : splitReceiptOptionTokens(lineOption)
+      const lineNote = grabInbound
+        ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
+        : formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
+          normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
       const lineNoteLabel = /^item\s*note$/i.test(rawLineNoteLabel) ? 'Item' : rawLineNoteLabel
       const promoComposeLines =
         Array.isArray(it.promoItems) && it.promoItems.length > 0
-          ? it.promoItems.slice(0, 8).map((p) => {
+          ? it.promoItems.slice(0, 8).flatMap((p) => {
               const menuName =
                 String((p as { menuName?: unknown }).menuName ?? '').trim() ||
                 (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : '') ||
@@ -289,19 +328,28 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
                 (optCode
                   ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
                   : '')
-              const optNameLabel = optName ? ` (${translatePosMenuLineForReceipt(optName, (k) => t(k))})` : ''
-              return `${menuName}${optNameLabel} x${Math.max(1, Number(p.quantity) || 1)}`
+              return formatGrabPromoComposeLinesForPrint(
+                {
+                  menuName: translatePosMenuLineForReceipt(menuName, (k) => t(k)),
+                  optionName: optName
+                    ? translatePosMenuLineForReceipt(optName, (k) => t(k))
+                    : '',
+                  quantity: Math.max(1, Number(p.quantity) || 1),
+                },
+                grabInbound
+              )
             })
           : []
       const promoComposeHtml =
         promoComposeLines.length > 0
           ? '<div class="receipt-line-note">' + promoComposeLines.map((line) => '- ' + esc(line)).join('<br/>') + c('div')
           : ''
+      const optionHtml =
+        lineOptionTokens.length > 0
+          ? '<div class="receipt-line-note">' + lineOptionTokens.map((opt) => '- ' + esc(opt)).join('<br/>') + c('div')
+          : ''
       const noteHtml = lineNote
         ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
-        : ''
-      const optionHtml = lineOption
-        ? '<div class="receipt-line-note">' + lineOptionTokens.map((opt) => '- ' + esc(opt)).join('<br/>') + c('div')
         : ''
       return (
         '<div class="receipt-row"><span>' +

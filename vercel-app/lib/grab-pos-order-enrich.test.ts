@@ -4,7 +4,9 @@ import {
   buildGrabPosCatalog,
   grabItemNameImpliesAllInPrice,
   parseGrabPartnerItemMenuRef,
+  collectGrabPrintOptionLines,
   formatGrabOrderLineNoteForPrint,
+  formatGrabPromoComposeLinesForPrint,
   resolveGrabDeliveryLineNote,
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
@@ -157,6 +159,38 @@ describe('grab-pos-order-enrich', () => {
     )
     expect(meta.optionChips).toEqual(['CHEESE TORNADO', 'RED HOT CHICKEN', 'Pickled Radish'])
     expect(meta.requestSummary).toBe('')
+  })
+
+  it('collectGrabPrintOptionLines returns one chip per option', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [
+        { optionCode: 'C011-3', name: 'SOY SAUCE AND SPRING ONION CHICKEN' },
+        { optionCode: 'C011-4', name: 'CURRYCANE' },
+        { optionCode: 'C011-5', name: 'Kimchi' },
+      ]
+    )
+    expect(
+      collectGrabPrintOptionLines({
+        note: 'optc:C011-3, C011-4, C011-5',
+        optionNameByCode: catalog.optionNameByCode,
+      })
+    ).toEqual(['SOY SAUCE AND SPRING ONION CHICKEN', 'CURRYCANE', 'Kimchi'])
+  })
+
+  it('formatGrabPromoComposeLinesForPrint splits multi-option compose when grab', () => {
+    expect(
+      formatGrabPromoComposeLinesForPrint(
+        { menuName: 'GOLDEN FRIED CHICKEN', optionName: 'M - Boneless, Pickled Radish 30g.', quantity: 1 },
+        true
+      )
+    ).toEqual(['GOLDEN FRIED CHICKEN (M - Boneless) x1', 'GOLDEN FRIED CHICKEN (Pickled Radish 30g.) x1'])
+    expect(
+      formatGrabPromoComposeLinesForPrint(
+        { menuName: 'Rice', optionName: '', quantity: 1 },
+        true
+      )
+    ).toEqual(['Rice x1'])
   })
 
   it('avoids double-counting M-size surcharge when item name includes size', () => {

@@ -116,6 +116,44 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('SNOW ONION')
   })
 
+  it('splits grab promo options onto separate compose lines', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [
+        { optionCode: 'C011-3', name: 'SOY SAUCE AND SPRING ONION CHICKEN' },
+        { optionCode: 'C011-4', name: 'CURRYCANE' },
+        { optionCode: 'C011-5', name: 'Kimchi' },
+      ]
+    )
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'grab:line-1',
+        name: 'Banban Chicken',
+        qty: 1,
+        note: 'optc:C011-3, C011-4, C011-5',
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(orderItems, {
+      orderItems,
+      optionNameByCode: catalog.optionNameByCode,
+      grabInbound: true,
+    })
+    expect(lines[0].note).toContain('SOY SAUCE')
+    expect(lines[0].note?.split('\n')).toHaveLength(3)
+  })
+
+  it('resolves long grab menu codes to menu names', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      { id: 'grab:line-2', name: '260485-S01', qty: 1, note: 'PEPSI MEGA 1 x1' },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      menuNameByMenuId: { '99': 'PEPSI MEGA 1' },
+      menuCodeByMenuId: { '99': '260485-S01' },
+      grabInbound: true,
+    })
+    expect(lines[0].name).toBe('PEPSI MEGA 1')
+  })
+
   it('maps code-like grouped parent names to menu names from compose lines', () => {
     const slipItems: KitchenSlipRoutingItem[] = [
       {

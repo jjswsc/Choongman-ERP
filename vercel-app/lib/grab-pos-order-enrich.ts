@@ -402,6 +402,89 @@ function toOptionNameByCodeMap(
   return out
 }
 
+/** Grab 웹훅/API 유입 주문(수동 배달·홀과 구분) */
+export function isGrabInboundPosOrder(params: {
+  memo?: string | null
+  deliveryAppCode?: string | null
+  items?: Array<{ id?: string; deliveryAppCode?: string }>
+}): boolean {
+  if (String(params.deliveryAppCode ?? '').trim().toLowerCase() === 'grab') return true
+  if (/grab_order:/i.test(String(params.memo ?? ''))) return true
+  for (const it of params.items ?? []) {
+    if (/^grab:/i.test(String(it.id ?? ''))) return true
+    if (String(it.deliveryAppCode ?? '').trim().toLowerCase() === 'grab') return true
+  }
+  return false
+}
+
+/**
+ * Grab 인쇄 전용: 옵션을 한 줄씩(캐셔 Item / 주방 - 줄).
+ * 홀·수동 배달은 이 함수를 쓰지 않는다.
+ */
+export function collectGrabPrintOptionLines(input: {
+  note?: string | null
+  optionFragment?: string | null
+  optionNameByCode?: Map<string, string> | Record<string, string>
+}): string[] {
+  const map = toOptionNameByCodeMap(input.optionNameByCode)
+  const seen = new Set<string>()
+  const out: string[] = []
+  const push = (label: string) => {
+    const s = String(label ?? '').trim()
+    if (!s || isMachineLikeGrabToken(s)) return
+    const key = s.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(s)
+  }
+  const frag = String(input.optionFragment ?? '').trim()
+  if (frag) {
+    const parsedFrag = formatGrabOptionFragmentForPrint(frag, map)
+    if (parsedFrag) {
+      const fragMeta = resolveGrabDeliveryLineNote(
+        /(?:^|\s)(mods?:|optc:)/i.test(parsedFrag) ? parsedFrag : `mods:${parsedFrag}`,
+        map
+      )
+      for (const chip of fragMeta.optionChips) push(chip)
+      if (fragMeta.optionChips.length === 0) push(parsedFrag)
+    }
+  }
+  const noteMeta = resolveGrabDeliveryLineNote(input.note, map)
+  for (const chip of noteMeta.optionChips) push(chip)
+  return out
+}
+
+/** Grab 인쇄: 고객 요청문만(Item: 한 줄). 옵션 칩은 collectGrabPrintOptionLines 사용 */
+export function resolveGrabPrintNoteRequest(
+  rawNote: string | null | undefined,
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const map = toOptionNameByCodeMap(optionNameByCode)
+  return String(resolveGrabDeliveryLineNote(rawNote, map).requestSummary ?? '').trim()
+}
+
+/** 세트 구성 줄: Grab일 때 옵션(사이즈 등)을 항목별로 분리 */
+export function formatGrabPromoComposeLinesForPrint(
+  p: {
+    menuName: string
+    optionName?: string
+    quantity: number
+  },
+  grabSplit: boolean
+): string[] {
+  const menuName = String(p.menuName ?? '').trim()
+  const qty = Math.max(1, Number(p.quantity) || 1)
+  const optName = String(p.optionName ?? '').trim()
+  if (!optName) return [`${menuName} x${qty}`]
+  if (!grabSplit) return [`${menuName} (${optName}) x${qty}`]
+  const parts = optName
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length <= 1) return [`${menuName} (${optName}) x${qty}`]
+  return parts.map((part) => `${menuName} (${part}) x${qty}`)
+}
+
 /** 영수증·주방 인쇄: Grab 줄 note(optc/mods/코드 나열)를 사람이 읽는 옵션 문구로 */
 export function formatGrabOrderLineNoteForPrint(
   rawNote: string | null | undefined,

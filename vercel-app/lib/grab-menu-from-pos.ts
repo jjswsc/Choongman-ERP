@@ -11,6 +11,7 @@ import {
   loadPosOptionGroupsWithItems,
 } from '@/lib/pos-option-groups-server'
 import {
+  formatGrabModifierOptionDisplayName,
   resolveGrabModifierAssignments,
   shouldIncludeStandaloneOptionForLinkedMenu,
 } from '@/lib/grab-option-modifier-assign'
@@ -749,10 +750,10 @@ export async function buildGrabMenuFromPos(params: {
           }
           const bucket = modifierGroupBuckets.get(key)!
           if (sort < bucket.firstSort) bucket.firstSort = sort
-          const normalizedOptionName =
-            assign.groupName && assign.groupName.toLowerCase() !== 'options'
-              ? `${assign.groupName} - ${assign.optionName}`
-              : assign.optionName
+          const normalizedOptionName = formatGrabModifierOptionDisplayName(
+            assign.groupName,
+            assign.optionName
+          )
           bucket.rows.push({
             ...opt,
             name: localizeGrabOptionLabel(normalizedOptionName),

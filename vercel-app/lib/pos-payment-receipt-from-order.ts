@@ -1,6 +1,7 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
 import {
   formatGrabOrderLineNoteForPrint,
+  isGrabInboundPosOrder,
 } from '@/lib/grab-pos-order-enrich'
 import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
 import {
@@ -393,7 +394,11 @@ export function enrichReceiptModalItemsForPromoDisplay(
     opts
   ) as ReceiptModalData['items']
   return mergeSetChildrenForReceipt(
-    enriched as Parameters<typeof mergeSetChildrenForReceipt>[0]
+    enriched as Parameters<typeof mergeSetChildrenForReceipt>[0],
+    {
+      grabInbound: isGrabInboundPosOrder({ items: enriched }),
+      optionNameByCode: opts?.optionNameByCode,
+    }
   ) as ReceiptModalData['items']
 }
 

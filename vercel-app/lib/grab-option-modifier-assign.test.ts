@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  formatGrabModifierOptionDisplayName,
   resolveGrabModifierAssignments,
   shouldIncludeStandaloneOptionForLinkedMenu,
 } from "@/lib/grab-option-modifier-assign"
@@ -29,6 +30,20 @@ describe("resolveGrabModifierAssignments", () => {
       ["size", "part"]
     )
     expect(out).toEqual([{ groupName: "part", optionName: "Wing" }])
+  })
+})
+
+describe("formatGrabModifierOptionDisplayName", () => {
+  it("does not prefix group name (Grab shows group header separately)", () => {
+    expect(formatGrabModifierOptionDisplayName("sidedish", "Kimchi")).toBe("Kimchi")
+    expect(formatGrabModifierOptionDisplayName("M", "Boneless")).toBe("Boneless")
+  })
+
+  it("strips redundant group prefix already stored in option label", () => {
+    expect(formatGrabModifierOptionDisplayName("sidedish", "sidedish Kimchi")).toBe("Kimchi")
+    expect(formatGrabModifierOptionDisplayName("sidedish", "sidedish - Pickled Radish")).toBe(
+      "Pickled Radish"
+    )
   })
 })
 
