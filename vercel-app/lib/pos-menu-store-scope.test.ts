@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   menuScopeIncludesStore,
+  menuHasPersistedStoreScope,
   normalizeMenuScopeStoreCodes,
+  resolveEffectiveMenuScopeStoreCodes,
   shouldMenuBeVisibleForStore,
 } from '@/lib/pos-menu-store-scope'
 import { posMenusCatalogCacheKey } from '@/lib/offline/pos-catalog-offline'
@@ -17,6 +19,14 @@ describe('pos-menu-store-scope', () => {
     expect(menuScopeIncludesStore(['CM-MBK'], 'CM MBK')).toBe(true)
     expect(menuScopeIncludesStore(['cm_mbk'], 'CM MBK')).toBe(true)
     expect(menuScopeIncludesStore(['Ekkamai'], 'Asoke')).toBe(false)
+  })
+
+  it('resolves effective scope for admin display in compatibility mode', () => {
+    expect(menuHasPersistedStoreScope([])).toBe(false)
+    expect(menuHasPersistedStoreScope(['A'])).toBe(true)
+    expect(resolveEffectiveMenuScopeStoreCodes([], ['A', 'B'], true)).toEqual(['A', 'B'])
+    expect(resolveEffectiveMenuScopeStoreCodes([], ['A', 'B'], false)).toEqual([])
+    expect(resolveEffectiveMenuScopeStoreCodes(['A'], ['B'], true)).toEqual(['A'])
   })
 
   it('keeps unscoped menu visible only in compatibility mode', () => {

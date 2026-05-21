@@ -88,6 +88,7 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
   const deliveryFee = Math.max(0, Number(body.deliveryFee ?? 0))
   const packagingFee = Math.max(0, Number(body.packagingFee ?? 0))
   const paymentCash = Math.max(0, Number(body.paymentCash ?? 0))
+  const paymentCashTendered = Math.max(0, Number(body.paymentCashTendered ?? body.payment_cash_tendered ?? 0))
   const paymentCard = Math.max(0, Number(body.paymentCard ?? 0))
   const paymentQr = Math.max(0, Number(body.paymentQr ?? 0))
   const paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
@@ -142,6 +143,7 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
     deliveryFee: deliveryFee || undefined,
     packagingFee: packagingFee || undefined,
     paymentCash: paymentCash || undefined,
+    ...(paymentCashTendered > 0.005 ? { paymentCashTendered } : {}),
     paymentCard: paymentCard || undefined,
     paymentQr: paymentQr || undefined,
     paymentOther: paymentOther || undefined,

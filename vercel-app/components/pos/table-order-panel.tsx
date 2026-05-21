@@ -82,6 +82,8 @@ export interface TableOrderPanelProps {
   onAfterPartialLineRemoved?: (orderId: number, detail?: PosKitchenReprintPayload) => void | Promise<void>
   /** 전체 취소 직후 — 터미널에서 주방 취소 전표(줄 앞 `-`) */
   onAfterFullOrderKitchenReprint?: (orderId: number, detail: PosKitchenReprintPayload) => void | Promise<void>
+  /** 테이블 이동·합석 직후 — 터미널에서 갱신된 테이블 번호로 홀 주문서 재인쇄 */
+  onAfterTableTransfer?: (keepOrderId: number) => void | Promise<void>
   onClose?: () => void
   t?: (key: string) => string
   /** 데모: 서빙 API 없이 부모 state만 갱신 */
@@ -102,6 +104,7 @@ export function TableOrderPanel({
   onCancel,
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
+  onAfterTableTransfer,
   onClose,
   t: tProp,
   isDemo,
@@ -512,6 +515,7 @@ export function TableOrderPanel({
         return
       }
       setMoveOpen(false)
+      await onAfterTableTransfer?.(Number(order.id))
       onServed?.()
       onClose?.()
     } catch (e) {
@@ -553,6 +557,7 @@ export function TableOrderPanel({
         return
       }
       setMergeOpen(false)
+      await onAfterTableTransfer?.(keepId)
       onServed?.()
       if (mergeDirection === 'into_selected') onClose?.()
     } catch (e) {

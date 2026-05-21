@@ -35,6 +35,12 @@ export default function PosCouponsPage() {
     validFrom: "",
     validTo: "",
     marketingCampaignId: "" as string,
+    minOrderAmt: "",
+    maxPerOrder: "10",
+    redemptionMode: "reusable_code" as "reusable_code" | "single_use_serial" | "member_issue",
+    allowQuantityEntry: true,
+    stackMode: "fixed_only" as "fixed_only" | "percent_only" | "any",
+    maxUses: "",
   })
 
   const loadData = React.useCallback(() => {
@@ -58,6 +64,12 @@ export default function PosCouponsPage() {
       validFrom: "",
       validTo: "",
       marketingCampaignId: "",
+      minOrderAmt: "",
+      maxPerOrder: "10",
+      redemptionMode: "reusable_code",
+      allowQuantityEntry: true,
+      stackMode: "fixed_only",
+      maxUses: "",
     })
   }
 
@@ -71,6 +83,18 @@ export default function PosCouponsPage() {
       validFrom: c.validFrom ?? c.startDate ?? "",
       validTo: c.validTo ?? c.endDate ?? "",
       marketingCampaignId: (c as { marketingCampaignId?: string | null }).marketingCampaignId ?? "",
+      minOrderAmt: String((c as { minOrderAmt?: number }).minOrderAmt ?? 0),
+      maxPerOrder: String((c as { maxPerOrder?: number }).maxPerOrder ?? 10),
+      redemptionMode: ((c as { redemptionMode?: string }).redemptionMode ?? "reusable_code") as
+        | "reusable_code"
+        | "single_use_serial"
+        | "member_issue",
+      allowQuantityEntry: (c as { allowQuantityEntry?: boolean }).allowQuantityEntry !== false,
+      stackMode: ((c as { stackMode?: string }).stackMode ?? "fixed_only") as
+        | "fixed_only"
+        | "percent_only"
+        | "any",
+      maxUses: (c as { maxUses?: number | null }).maxUses != null ? String((c as { maxUses?: number }).maxUses) : "",
     })
   }
 
@@ -96,6 +120,12 @@ export default function PosCouponsPage() {
         validFrom: form.validFrom.trim() || null,
         validTo: form.validTo.trim() || null,
         marketingCampaignId: form.marketingCampaignId || null,
+        minOrderAmt: Math.max(0, Number(form.minOrderAmt || 0)),
+        maxPerOrder: Math.max(1, Math.trunc(Number(form.maxPerOrder || 10))),
+        redemptionMode: form.redemptionMode,
+        allowQuantityEntry: form.allowQuantityEntry,
+        stackMode: form.stackMode,
+        maxUses: form.maxUses.trim() ? Math.max(1, Math.trunc(Number(form.maxUses))) : null,
       })
       if (res.success) {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -259,6 +289,89 @@ export default function PosCouponsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posCouponMinOrder") || "최소 주문(฿)"}</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.minOrderAmt}
+                    onChange={(e) => setForm((f) => ({ ...f, minOrderAmt: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posCouponMaxPerOrder") || "주문당 최대 장수"}</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.maxPerOrder}
+                    onChange={(e) => setForm((f) => ({ ...f, maxPerOrder: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posCouponRedemptionMode") || "사용 방식"}</label>
+                  <Select
+                    value={form.redemptionMode}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        redemptionMode: v as "reusable_code" | "single_use_serial" | "member_issue",
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reusable_code">{t("posCouponModeReusable") || "재사용 코드"}</SelectItem>
+                      <SelectItem value="single_use_serial">{t("posCouponModeSerial") || "1회용 시리얼"}</SelectItem>
+                      <SelectItem value="member_issue">{t("posCouponModeMember") || "회원 발급"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posCouponStackMode") || "중복 규칙"}</label>
+                  <Select
+                    value={form.stackMode}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        stackMode: v as "fixed_only" | "percent_only" | "any",
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed_only">{t("posCouponStackFixed") || "고정액만 중복"}</SelectItem>
+                      <SelectItem value="percent_only">{t("posCouponStackPercent") || "퍼센트만 중복"}</SelectItem>
+                      <SelectItem value="any">{t("posCouponStackAny") || "혼합 허용"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end gap-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.allowQuantityEntry}
+                      onChange={(e) => setForm((f) => ({ ...f, allowQuantityEntry: e.target.checked }))}
+                    />
+                    {t("posCouponAllowQuantity") || "수량 입력 허용"}
+                  </label>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posCouponMaxUses") || "전체 사용 한도"}</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.maxUses}
+                    onChange={(e) => setForm((f) => ({ ...f, maxUses: e.target.value }))}
+                    className="mt-1"
+                    placeholder={t("posOptional") || "선택"}
+                  />
+                </div>
               </div>
               <div className="mt-3 flex gap-2">
                 <Button onClick={handleSave} disabled={saving}>
@@ -303,6 +416,12 @@ export default function PosCouponsPage() {
                         {c.validFrom || "~"} ~ {c.validTo || "~"}
                       </span>
                     )}
+                    {(c as { maxPerOrder?: number }).maxPerOrder != null &&
+                      Number((c as { maxPerOrder?: number }).maxPerOrder) > 1 && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          max {(c as { maxPerOrder?: number }).maxPerOrder}
+                        </span>
+                      )}
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(c)}>

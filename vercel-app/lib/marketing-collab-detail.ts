@@ -30,6 +30,10 @@ export type MarketingCollabDetail = {
    */
   posDiscountType: '' | 'percent' | 'amount'
   posDiscountValue: number
+  /** 정액 협업 할인 — POS에서 동일 캠페인 N회(수량) 적용. 퍼센트는 항상 1회 */
+  posMaxPerOrder: number
+  /** 정액일 때 POS 수량 입력(예: 100바트×4장) */
+  posAllowQuantityEntry: boolean
   /** @deprecated 구 자유 입력 — posDiscountType/Value 사용 권장 */
   discountPercentStore: string
   /** 타 할인·쿠폰과 중복 규칙 */
@@ -63,6 +67,8 @@ export function emptyMarketingCollabDetail(): MarketingCollabDetail {
     scopeNote: '',
     posDiscountType: '',
     posDiscountValue: 0,
+    posMaxPerOrder: 1,
+    posAllowQuantityEntry: false,
     discountPercentStore: '',
     discountStackingNote: '',
     rulesNote: '',
@@ -126,6 +132,16 @@ export function normalizeMarketingCollabDetail(raw: unknown): MarketingCollabDet
   const pdt = asStr(o.posDiscountType)
   e.posDiscountType = POS_DISCOUNT_TYPES.has(pdt) ? (pdt as MarketingCollabDetail['posDiscountType']) : ''
   e.posDiscountValue = Math.max(0, asNum(o.posDiscountValue))
+  e.posMaxPerOrder = Math.max(1, Math.trunc(asNum(o.posMaxPerOrder ?? 1) || 1))
+  e.posAllowQuantityEntry = asBool(o.posAllowQuantityEntry)
+  if (e.posDiscountType === 'amount' && o.posMaxPerOrder == null && o.posAllowQuantityEntry == null) {
+    e.posMaxPerOrder = Math.max(e.posMaxPerOrder, 10)
+    e.posAllowQuantityEntry = true
+  }
+  if (e.posDiscountType === 'percent') {
+    e.posMaxPerOrder = 1
+    e.posAllowQuantityEntry = false
+  }
   e.discountPercentStore = asStr(o.discountPercentStore)
   if (!e.posDiscountType && e.posDiscountValue <= 0 && e.discountPercentStore) {
     const m = e.discountPercentStore.match(/(\d+(?:\.\d+)?)/)
@@ -174,6 +190,8 @@ export function collabDetailToJson(d: MarketingCollabDetail): Record<string, unk
     scopeNote: d.scopeNote,
     posDiscountType: d.posDiscountType,
     posDiscountValue: d.posDiscountValue,
+    posMaxPerOrder: d.posMaxPerOrder,
+    posAllowQuantityEntry: d.posAllowQuantityEntry,
     discountPercentStore: d.discountPercentStore,
     discountStackingNote: d.discountStackingNote,
     rulesNote: d.rulesNote,

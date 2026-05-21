@@ -7541,6 +7541,8 @@ export async function savePosPromoItem(params: {
   promoId: number
   menuId: number
   optionId?: number | null
+  /** 저장 시점 option_code 스냅샷 — option_id 재매핑·복구용 */
+  optionCode?: string | null
   quantity?: number
   sortOrder?: number
   choiceGroup?: string | null
@@ -8536,6 +8538,14 @@ export async function getMarketingMaterialLookup(ids: string[]) {
   return jsonAsArray<{ id: string; name: string; campaignId: string | null }>(await res.json())
 }
 
+export interface PosAppliedCoupon {
+  code: string
+  name?: string
+  discountAmt: number
+  quantity?: number
+  couponId?: number
+}
+
 export interface PosCoupon {
   id?: number
   code: string
@@ -8550,6 +8560,12 @@ export interface PosCoupon {
   usedCount?: number
   isActive?: boolean
   marketingCampaignId?: string | null
+  minOrderAmt?: number
+  maxPerOrder?: number
+  redemptionMode?: 'reusable_code' | 'single_use_serial' | 'member_issue'
+  allowQuantityEntry?: boolean
+  stackMode?: 'fixed_only' | 'percent_only' | 'any'
+  maxDiscountAmt?: number | null
 }
 
 export async function getPosCoupons() {
@@ -8570,6 +8586,12 @@ export async function savePosCoupon(params: {
   maxUses?: number | null
   isActive?: boolean
   marketingCampaignId?: string | null
+  minOrderAmt?: number
+  maxPerOrder?: number
+  redemptionMode?: 'reusable_code' | 'single_use_serial' | 'member_issue'
+  allowQuantityEntry?: boolean
+  stackMode?: 'fixed_only' | 'percent_only' | 'any'
+  maxDiscountAmt?: number | null
 }) {
   const res = await apiFetchWithOffline('/api/savePosCoupon', {
     method: 'POST',
@@ -8590,6 +8612,37 @@ export async function validatePosCoupon(params: { code: string; subtotal: number
     couponName?: string
     discountAmt?: number
     discountReason?: string
+    quantity?: number
+    couponId?: number
+  }>
+}
+
+export async function validatePosCoupons(params: {
+  subtotal: number
+  manualDiscountAmt?: number
+  collabDiscountAmt?: number
+  applied?: PosAppliedCoupon[]
+  appliedCoupons?: PosAppliedCoupon[]
+  candidate?: { code: string; quantity?: number }
+  memberId?: number
+}) {
+  const res = await apiFetchWithOffline('/api/validatePosCoupons', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    valid: boolean
+    message?: string
+    couponName?: string
+    discountAmt?: number
+    discountReason?: string
+    quantity?: number
+    couponId?: number
+    appliedCoupons?: PosAppliedCoupon[]
+    couponDiscountTotal?: number
+    couponCode?: string
+    couponDiscountAmt?: number
   }>
 }
 
@@ -9338,6 +9391,8 @@ export interface PosOrder {
   deliveryFee?: number
   packagingFee?: number
   paymentCash?: number
+  /** 현금 받은 금액(손님 영수증 거스름 표시) */
+  paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
@@ -9353,6 +9408,7 @@ export interface PosOrder {
   memberNo?: string
   couponCode?: string
   couponDiscountAmt?: number
+  appliedCoupons?: PosAppliedCoupon[]
   pointUsed?: number
   pointEarned?: number
   /** 홀 주문 인원(포장/배달 등은 0) */
@@ -9811,6 +9867,7 @@ export async function updatePosOrder(params: {
   serviceAmt?: number
   serviceReason?: string
   paymentCash?: number
+  paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
@@ -9821,6 +9878,7 @@ export async function updatePosOrder(params: {
   memberNo?: string
   couponCode?: string
   couponDiscountAmt?: number
+  appliedCoupons?: PosAppliedCoupon[]
   pointUsed?: number
   pointEarned?: number
   guestCount?: number
@@ -10217,6 +10275,7 @@ export async function savePosOrder(params: {
   deliveryFee?: number
   packagingFee?: number
   paymentCash?: number
+  paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
@@ -10227,6 +10286,7 @@ export async function savePosOrder(params: {
   memberNo?: string
   couponCode?: string
   couponDiscountAmt?: number
+  appliedCoupons?: PosAppliedCoupon[]
   pointUsed?: number
   pointEarned?: number
   /** 홀 dine_in 시 권장. 미입력 시 0 */

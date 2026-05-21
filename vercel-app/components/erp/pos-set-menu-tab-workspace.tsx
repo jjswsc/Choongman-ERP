@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { AlertTriangle, ExternalLink, Plus, Save, Search, Trash2, X, Layers, Sparkles } from "lucide-react"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -52,6 +52,11 @@ import {
 } from "@/lib/promo-economics"
 import { getPromoChoiceSlotLabel } from "@/lib/pos-promo-choice"
 import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
+import {
+  findNonPreferredChickenComposeLines,
+  resolvePreferredChickenSetOptionId,
+  resolvePromoItemOptionBinding,
+} from "@/lib/pos-promo-chicken-compose-guard"
 
 const CHICKEN_CODE_PREFIX = "c"
 function isChickenMenu(code: string | undefined): boolean {
@@ -162,6 +167,7 @@ type ComposerLine = {
   key: string
   menuId: string
   optionId: string | null
+  optionCode?: string | null
   qty: number
   choiceGroup?: string
   choicePickCount?: number
@@ -739,11 +745,19 @@ export function PosSetMenuTabWorkspace({
         setPriceAnalysisChannel(basis)
         const nextLines: ComposerLine[] = (items || []).map((it) => {
           const menu = menus.find((m) => String(m.id) === String(it.menuId))
-          const opt = it.optionId ? allOptions.find((o) => String(o.id) === String(it.optionId)) : null
+          const bound = resolvePromoItemOptionBinding({
+            menuId: String(it.menuId),
+            menuCode: menu?.code,
+            optionId: it.optionId,
+            optionCode: it.optionCode,
+            allOptions,
+          })
+          const opt = bound.optionId ? allOptions.find((o) => String(o.id) === String(bound.optionId)) : null
           return {
             key: `db-${it.id}`,
             menuId: String(it.menuId),
-            optionId: it.optionId ? String(it.optionId) : null,
+            optionId: bound.optionId,
+            optionCode: opt?.optionCode?.trim() || it.optionCode?.trim() || null,
             qty: Number(it.quantity) || 1,
             choiceGroup: String(it.choiceGroup ?? "").trim(),
             choicePickCount:
@@ -751,7 +765,7 @@ export function PosSetMenuTabWorkspace({
                 ? Math.max(1, Math.floor(Number(it.choicePickCount)))
                 : 1,
             menuName: menu?.name ?? `menu ${it.menuId}`,
-            optionLabel: opt?.name,
+            optionLabel: bound.optionLabel ?? opt?.name,
             lineDiscountPct: "",
             lineSalePrice: "",
           }
@@ -1066,7 +1080,7 @@ export function PosSetMenuTabWorkspace({
   }
 
   const appendPickLine = React.useCallback(
-    (menuId: string, optionId: string | null, qtyStr: string) => {
+    (menuId: string, optionId: string | null, qtyStr: string, optionCode?: string | null) => {
       const menu = menuById[menuId]
       if (!menu) return
       const optsRaw = optionsByMenuId[menuId] || []
@@ -1078,6 +1092,7 @@ export function PosSetMenuTabWorkspace({
           key: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           menuId,
           optionId,
+          optionCode: optionCode?.trim() || opt?.optionCode?.trim() || null,
           qty,
           choiceGroup: "",
           choicePickCount: 1,
@@ -1099,12 +1114,16 @@ export function PosSetMenuTabWorkspace({
     [optionsByMenuId]
   )
 
-  /** 옵션 0·1개는 즉시 조합 반영, 2개 이상만 옵션 선택 패널 */
+  /** 치킨은 M-Boneless 자동, 그 외는 옵션 2개 이상일 때만 선택 패널 */
   const handlePickMenuFromList = (m: PosMenu) => {
     const mid = String(m.id)
     const opts = pickOptionsForMenu(mid, m.code)
     if (opts.length === 0) {
       appendPickLine(mid, null, pickQty)
+      return
+    }
+    if (isChickenMenu(m.code)) {
+      appendPickLine(mid, resolvePreferredChickenSetOptionId(opts), pickQty)
       return
     }
     if (opts.length === 1) {
@@ -1113,6 +1132,33 @@ export function PosSetMenuTabWorkspace({
     }
     setPickMenuId(mid)
   }
+
+  const updateLineChickenOption = React.useCallback(
+    (lineKey: string, nextOptionId: string) => {
+      setLines((prev) =>
+        prev.map((ln) => {
+          if (ln.key !== lineKey) return ln
+          const optsRaw = optionsByMenuId[ln.menuId] || []
+          if (nextOptionId === CHICKEN_BASE_SELECT_VALUE) {
+            return {
+              ...ln,
+              optionId: null,
+              optionCode: null,
+              optionLabel: CHICKEN_IMPLICIT_BASE_OPTION_NAME,
+            }
+          }
+          const opt = optsRaw.find((o) => String(o.id) === nextOptionId)
+          return {
+            ...ln,
+            optionId: nextOptionId,
+            optionCode: opt?.optionCode?.trim() || null,
+            optionLabel: opt?.name,
+          }
+        })
+      )
+    },
+    [menuById, optionsByMenuId]
+  )
 
   const finishPickMultiOption = (optionId: string) => {
     if (!pickMenuId.trim()) return
@@ -1294,17 +1340,38 @@ export function PosSetMenuTabWorkspace({
     resolvedDiscountSaleDeliveryThb,
   ])
 
+  const confirmNonPreferredChickenLines = React.useCallback(async (): Promise<boolean> => {
+    const optionById = new Map(allOptions.map((o) => [String(o.id), o]))
+    const warnings = findNonPreferredChickenComposeLines(
+      lines.map((ln) => ({
+        menuId: ln.menuId,
+        menuCode: menuById[ln.menuId]?.code,
+        menuName: ln.menuName,
+        optionId: ln.optionId,
+        optionCode: ln.optionCode,
+      })),
+      optionById
+    )
+    if (warnings.length === 0) return true
+    const detail = warnings.map((w) => `· ${w.menuName} (${w.optionLabel})`).join("\n")
+    return appConfirm(`${t("posSetTabConfirmNonBonelessChicken")}\n\n${detail}`)
+  }, [allOptions, lines, menuById, t])
+
   const replacePromoItems = async (promoId: string) => {
+    if (!(await confirmNonPreferredChickenLines())) return false
     const existing = await getPosPromoItems({ promoId }).catch(() => [])
     for (const row of existing || []) {
       await deletePosPromoItem({ id: row.id })
     }
     for (let i = 0; i < lines.length; i++) {
       const ln = lines[i]
+      const optsRaw = optionsByMenuId[ln.menuId] || []
+      const opt = ln.optionId ? optsRaw.find((o) => String(o.id) === String(ln.optionId)) : null
       const res = await savePosPromoItem({
         promoId: Number(promoId),
         menuId: Number(ln.menuId),
         optionId: ln.optionId ? Number(ln.optionId) : null,
+        optionCode: ln.optionCode?.trim() || opt?.optionCode?.trim() || null,
         quantity: ln.qty,
         sortOrder: i,
         choiceGroup: String(ln.choiceGroup ?? "").trim() || null,
@@ -1985,6 +2052,34 @@ export function PosSetMenuTabWorkspace({
                             <span className="text-sm font-medium">{ln.menuName}</span>
                             {(() => {
                               const menuRow = menuById[ln.menuId]
+                              const chickenOpts = menuRow
+                                ? pickOptionsForMenu(ln.menuId, menuRow.code)
+                                : []
+                              if (isChickenMenu(menuRow?.code) && chickenOpts.length > 0) {
+                                const selectValue = ln.optionId
+                                  ? String(ln.optionId)
+                                  : CHICKEN_BASE_SELECT_VALUE
+                                return (
+                                  <Select
+                                    value={selectValue}
+                                    onValueChange={(v) => updateLineChickenOption(ln.key, v)}
+                                  >
+                                    <SelectTrigger className="mt-1 h-8 max-w-[14rem] text-xs">
+                                      <SelectValue placeholder={t("posPromoSelectOption")} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value={CHICKEN_BASE_SELECT_VALUE}>
+                                        {t("posIngredientScopeBaseChicken") || t("posOptionDefault")}
+                                      </SelectItem>
+                                      {chickenOpts.map((o) => (
+                                        <SelectItem key={o.id} value={String(o.id)}>
+                                          {optionPartLabel(o.name)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )
+                              }
                               const disp = chickenLineOptionDisplayName(menuRow?.code, ln.optionId, ln.optionLabel)
                               return disp ? (
                                 <span className="text-sm text-muted-foreground"> ({optionPartLabel(disp)})</span>

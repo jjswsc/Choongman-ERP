@@ -10,6 +10,7 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
+import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
 
 export type PosOrderReceiptLineOptions = {
   /**
@@ -431,7 +432,14 @@ export function receiptModalDataFromPosOrderReprint(order: PosOrder, opts?: PosO
     tableName: order.tableName,
     memo: order.memo,
     discountReason: order.discountReason,
+    appliedCoupons: parseAppliedCouponsFromOrderRow(
+      (order as { appliedCoupons?: unknown; applied_coupons?: unknown }).appliedCoupons ??
+        (order as { applied_coupons?: unknown }).applied_coupons
+    ),
     paymentCash: order.paymentCash,
+    ...(Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) > 0.005
+      ? { paymentCashTendered: Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) }
+      : {}),
     paymentCard: order.paymentCard,
     paymentQr: order.paymentQr,
     paymentOther: order.paymentOther,
@@ -474,7 +482,14 @@ export function receiptModalDataFromPosOrderForPayment(
     tableName: order.tableName,
     memo: order.memo,
     discountReason: order.discountReason,
+    appliedCoupons: parseAppliedCouponsFromOrderRow(
+      (order as { appliedCoupons?: unknown; applied_coupons?: unknown }).appliedCoupons ??
+        (order as { applied_coupons?: unknown }).applied_coupons
+    ),
     paymentCash: order.paymentCash,
+    ...(Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) > 0.005
+      ? { paymentCashTendered: Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) }
+      : {}),
     paymentCard: order.paymentCard,
     paymentQr: order.paymentQr,
     paymentOther: order.paymentOther,

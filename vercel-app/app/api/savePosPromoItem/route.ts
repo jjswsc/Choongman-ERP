@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       promoId: number
       menuId: number
       optionId?: number | null
+      optionCode?: string | null
       quantity?: number
       sortOrder?: number
       choiceGroup?: string | null
@@ -27,12 +28,14 @@ export async function POST(req: NextRequest) {
     }
 
     const optionId = body.optionId != null ? Number(body.optionId) : null
+    const optionCodeInput = String(body.optionCode ?? '').trim()
+    let optionCodeSnapshot: string | null = optionCodeInput || null
     if (optionId != null && Number.isFinite(optionId) && optionId > 0) {
       const optRows = (await supabaseSelectFilter(
         'pos_menu_options',
         `id=eq.${encodeURIComponent(String(optionId))}`,
-        { limit: 1, select: 'id,menu_id' }
-      )) as { id?: number; menu_id?: number }[] | null
+        { limit: 1, select: 'id,menu_id,option_code' }
+      )) as { id?: number; menu_id?: number; option_code?: string | null }[] | null
       const opt = optRows?.[0]
       const optMenuId = Number(opt?.menu_id ?? 0)
       if (!opt?.id || !optMenuId) {
@@ -47,6 +50,8 @@ export async function POST(req: NextRequest) {
           { headers }
         )
       }
+      const codeFromRow = String(opt.option_code ?? '').trim()
+      if (codeFromRow) optionCodeSnapshot = codeFromRow
     }
     const choiceGroup = String(body.choiceGroup ?? '').trim() || null
     const choicePickCountRaw = body.choicePickCount
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
       choicePickCountRaw == null || String(choicePickCountRaw).trim() === ''
         ? null
         : Math.max(1, Math.floor(Number(choicePickCountRaw) || 1))
-    const rowWithChoice = {
+    const rowWithChoice: Record<string, unknown> = {
       promo_id: promoId,
       menu_id: menuId,
       option_id: optionId,
@@ -63,12 +68,22 @@ export async function POST(req: NextRequest) {
       choice_group: choiceGroup,
       choice_pick_count: choiceGroup ? choicePickCount ?? 1 : null,
     }
-    const rowBase = {
+    const rowBase: Record<string, unknown> = {
       promo_id: promoId,
       menu_id: menuId,
       option_id: optionId,
       quantity: Number(body.quantity) ?? 1,
       sort_order: Number(body.sortOrder) ?? 0,
+    }
+    if (optionCodeSnapshot) {
+      rowWithChoice.option_code = optionCodeSnapshot
+      rowBase.option_code = optionCodeSnapshot
+    }
+
+    const stripOptionCode = (row: Record<string, unknown>) => {
+      const next = { ...row }
+      delete next.option_code
+      return next
     }
 
     const writeRow = async (idFilter: string, withChoice: boolean) => {
@@ -76,8 +91,19 @@ export async function POST(req: NextRequest) {
       try {
         await supabaseUpdateByFilter('pos_promo_items', idFilter, payload)
       } catch (e) {
-        if (!withChoice) throw e
-        await supabaseUpdateByFilter('pos_promo_items', idFilter, rowBase)
+        if (!withChoice) {
+          try {
+            await supabaseUpdateByFilter('pos_promo_items', idFilter, stripOptionCode(rowBase))
+          } catch {
+            throw e
+          }
+          return
+        }
+        try {
+          await supabaseUpdateByFilter('pos_promo_items', idFilter, rowBase)
+        } catch {
+          await supabaseUpdateByFilter('pos_promo_items', idFilter, stripOptionCode(rowBase))
+        }
       }
     }
 
@@ -115,7 +141,11 @@ export async function POST(req: NextRequest) {
     try {
       await supabaseInsert('pos_promo_items', rowWithChoice)
     } catch {
-      await supabaseInsert('pos_promo_items', rowBase)
+      try {
+        await supabaseInsert('pos_promo_items', rowBase)
+      } catch {
+        await supabaseInsert('pos_promo_items', stripOptionCode(rowBase))
+      }
     }
     return NextResponse.json({ success: true, message: '추가되었습니다.' }, { headers })
   } catch (e) {

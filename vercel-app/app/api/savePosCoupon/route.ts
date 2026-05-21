@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 
+function normalizeRedemptionMode(raw: unknown): string {
+  const s = String(raw ?? 'reusable_code').trim()
+  if (s === 'single_use_serial' || s === 'member_issue') return s
+  return 'reusable_code'
+}
+
+function normalizeStackMode(raw: unknown): string {
+  const s = String(raw ?? 'fixed_only').trim()
+  if (s === 'percent_only' || s === 'any') return s
+  return 'fixed_only'
+}
+
 /** POS 쿠폰 저장 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -16,6 +28,19 @@ export async function POST(req: NextRequest) {
     const validTo = body.validTo?.trim() || null
     const isActive = Boolean(body.isActive !== false)
     const marketingCampaignId = body.marketingCampaignId && body.marketingCampaignId !== 'null' ? Number(body.marketingCampaignId) : null
+    const minOrderAmt = Math.max(0, Number(body.minOrderAmt ?? 0))
+    const maxPerOrder = Math.max(1, Math.trunc(Number(body.maxPerOrder ?? 1) || 1))
+    const redemptionMode = normalizeRedemptionMode(body.redemptionMode)
+    const allowQuantityEntry = Boolean(body.allowQuantityEntry)
+    const stackMode = normalizeStackMode(body.stackMode)
+    const maxDiscountAmt =
+      body.maxDiscountAmt != null && String(body.maxDiscountAmt).trim() !== ''
+        ? Math.max(0, Number(body.maxDiscountAmt))
+        : null
+    const maxUses =
+      body.maxUses != null && String(body.maxUses).trim() !== ''
+        ? Math.max(1, Math.trunc(Number(body.maxUses)))
+        : null
 
     if (!code) {
       return NextResponse.json({ success: false, message: '쿠폰 코드를 입력하세요.' }, { headers })
@@ -39,6 +64,13 @@ export async function POST(req: NextRequest) {
       valid_to: validTo,
       is_active: isActive,
       marketing_campaign_id: marketingCampaignId,
+      min_order_amt: minOrderAmt,
+      max_per_order: maxPerOrder,
+      redemption_mode: redemptionMode,
+      allow_quantity_entry: allowQuantityEntry,
+      stack_mode: stackMode,
+      max_discount_amt: maxDiscountAmt,
+      max_uses: maxUses,
       updated_at: new Date().toISOString(),
     }
 

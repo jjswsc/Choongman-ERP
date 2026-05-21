@@ -41,6 +41,7 @@ import {
   shouldForcePaymentReceiptLogoForStore,
   shouldUseLegacyAlignedPaymentReceiptForStore,
 } from '@/lib/pos-receipt-store-flags'
+import { resolveCashTenderReceiptLines } from '@/lib/pos-receipt-cash-tender'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -116,6 +117,59 @@ function collectReceiptPaymentMethodLabels(
     )
   }
   return labels
+}
+
+function buildCashTenderReceiptRowsHtml(
+  receiptData: ReceiptModalData,
+  tr: (key: string, fallback: string) => string,
+  paymentRowHtml: (label: string, value: string, extraClass?: string) => string
+): string {
+  const lines = resolveCashTenderReceiptLines({
+    paymentCash: receiptData.paymentCash,
+    paymentCashTendered: receiptData.paymentCashTendered,
+  })
+  if (!lines) return ''
+  return [
+    paymentRowHtml(escapeHtml(tr('posReceiptCashCharge', 'Charge')), formatBahtNum(lines.charge)),
+    paymentRowHtml(
+      escapeHtml(tr('posReceiptCashPaidAmount', 'Paid Amount(Cash)')),
+      formatBahtNum(lines.paidCash)
+    ),
+    paymentRowHtml(escapeHtml(tr('posReceiptCashChange', 'Change')), formatBahtNum(lines.change)),
+  ].join('')
+}
+
+function buildCashTenderReceiptSimpleLinesHtml(
+  receiptData: ReceiptModalData,
+  tr: (key: string, fallback: string) => string,
+  esc: (value: string) => string
+): string {
+  const lines = resolveCashTenderReceiptLines({
+    paymentCash: receiptData.paymentCash,
+    paymentCashTendered: receiptData.paymentCashTendered,
+  })
+  if (!lines) return ''
+  return [
+    `<div class="simple-line"><b>${esc(tr('posReceiptCashCharge', 'Charge'))}</b>: ${formatBahtNum(lines.charge)}</div>`,
+    `<div class="simple-line"><b>${esc(tr('posReceiptCashPaidAmount', 'Paid Amount(Cash)'))}</b>: ${formatBahtNum(lines.paidCash)}</div>`,
+    `<div class="simple-line"><b>${esc(tr('posReceiptCashChange', 'Change'))}</b>: ${formatBahtNum(lines.change)}</div>`,
+  ].join('')
+}
+
+function buildAppliedCouponDiscountRowsHtml(
+  receiptData: ReceiptModalData,
+  tr: (key: string, fallback: string) => string,
+  paymentRowHtml: (label: string, value: string, extraClass?: string) => string
+): string {
+  const coupons = receiptData.appliedCoupons ?? []
+  if (!coupons.length) return ''
+  return coupons
+    .map((row) => {
+      const qty = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
+      const label = `${tr('posPaymentSectionCoupon', '쿠폰')} ${row.code}${qty > 1 ? `×${qty}` : ''}`
+      return paymentRowHtml(escapeHtml(label), `-${formatBahtNum(Math.max(0, Number(row.discountAmt ?? 0) || 0))}`)
+    })
+    .join('')
 }
 
 function resolveDiscountReceiptLabel(
@@ -324,6 +378,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   }
   const esc = (value: string) => escapeHtml(String(value || ''))
   const discountReceiptLabel = resolveDiscountReceiptLabel(receiptData, tr)
+  const couponDiscountTotal = (receiptData.appliedCoupons ?? []).reduce(
+    (sum, row) => sum + Math.max(0, Number(row.discountAmt ?? 0) || 0),
+    0
+  )
+  const showCouponDiscountRows =
+    printerSettings?.discountSeparatePrint !== false && (receiptData.appliedCoupons?.length ?? 0) > 0
+  const nonCouponDiscountAmt = Math.max(0, Number(receiptData.discountAmt ?? 0) - couponDiscountTotal)
   const tableForPrint = receiptData.tableName
     ? translateReceiptTableDisplayName(receiptData.tableName, t)
     : ''
@@ -380,6 +441,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const paymentSimpleLine = payMethodsInline
     ? `<div class="simple-line"><b>${esc(tr('posReceiptPaymentMethods', 'Payment'))}</b>: ${payMethodsInline}</div>`
     : ''
+  const cashTenderReceiptRowsHtml = isPaymentReceipt
+    ? buildCashTenderReceiptRowsHtml(receiptData, tr, paymentRowHtml)
+    : ''
   const showLogo = isPaymentReceipt && (d.receiptShowLogo || forceReceiptLogo)
   const footerPrimaryText =
     String(d.receiptFooterPrimaryText || '').trim() ||
@@ -427,7 +491,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       receiptData.discountReason
     )
     const orderTypeLabel = orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType
-    const itemRows = (receiptData.items || [])
+    const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
+    const menuCodeByMenuId = Object.fromEntries(
+      menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+    )
+    const grabInbound = isGrabInboundPosOrder({
+      memo: receiptData.memo,
+      deliveryAppCode: receiptData.deliveryAppCode,
+      items: receiptData.items,
+    })
+    const mergedItems = mergeSetChildrenForReceipt(
+      receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0],
+      { grabInbound, optionNameByCode }
+    )
+    const itemRows = (mergedItems || [])
       .map((it, idx) => {
         const banban = parseBanbanFlavorsFromName(it.name)
         const baseLineSplit = splitPosPrintItemLine(it.name)
@@ -441,21 +518,110 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           lineDiscount > 0.0001
             ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(lineDiscount)}</td></tr>`
             : ''
-        if (!banban) {
-          if (!baseLineSplit.optionLine) return main + lineDiscountRow
-          const opt = translatePosMenuLineForReceipt(baseLineSplit.optionLine, t)
-          return `${main}${lineDiscountRow}<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(opt)}</td></tr>`
-        }
-        const subF1 = translatePosMenuLineForReceipt(banban.flavor1, t)
-        const subF2 = translatePosMenuLineForReceipt(banban.flavor2, t)
-        const sub = `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(subF1)}<br/>- ${esc(subF2)}</td></tr>`
-        return main + lineDiscountRow + sub
+        const promoRows =
+          Array.isArray(it.promoItems) && it.promoItems.length > 0
+            ? grabInbound
+              ? enrichGrabPromoItemsForPrint(
+                  it.promoItems.slice(0, 8).map((pi) => ({
+                    menuId: String(pi.menuId || ''),
+                    optionId: pi.optionId,
+                    optionCode: (pi as { optionCode?: string | null }).optionCode ?? null,
+                    optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
+                    menuName:
+                      String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
+                      menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                      '',
+                    quantity: Math.max(1, Number(pi.quantity) || 1),
+                  })),
+                  { optionNameByCode, menuCodeByMenuId }
+                )
+              : it.promoItems.slice(0, 8)
+            : []
+        const promoComposeLines =
+          promoRows.length > 0
+            ? promoRows.flatMap((pi) => {
+                const menuName =
+                  String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
+                  menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                  `#${String(pi.menuId)}`
+                const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
+                const optName =
+                  String((pi as { optionName?: unknown }).optionName ?? '').trim() ||
+                  (optCode && !grabInbound
+                    ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
+                    : '')
+                return formatGrabPromoComposeLinesForPrint(
+                  {
+                    menuName: translatePosMenuLineForReceipt(menuName, t),
+                    optionName: optName
+                      ? translatePosMenuLineForReceipt(
+                          formatGrabOptionFragmentForPrint(optName, optionNameByCode),
+                          t
+                        )
+                      : '',
+                    quantity: Math.max(1, Number(pi.quantity) || 1),
+                    parentItemName: grabInbound
+                      ? translatePosMenuLineForReceipt(displayName, t)
+                      : undefined,
+                  },
+                  grabInbound
+                )
+              })
+            : []
+        const grabOptionLines = grabInbound
+          ? collectGrabPrintOptionLines({
+              note: it.note,
+              optionFragment: baseLineSplit.optionLine,
+              optionNameByCode,
+            }).map((line) => translatePosMenuLineForReceipt(line, t))
+          : []
+        const baseOptionLine =
+          grabOptionLines.length > 0
+            ? grabOptionLines
+            : !banban && baseLineSplit.optionLine
+              ? [
+                  translatePosMenuLineForReceipt(
+                    formatGrabOptionFragmentForPrint(baseLineSplit.optionLine, optionNameByCode),
+                    t
+                  ),
+                ]
+              : []
+        const banbanFlavorLines = banban
+          ? [
+              translatePosMenuLineForReceipt(banban.flavor1, t),
+              translatePosMenuLineForReceipt(banban.flavor2, t),
+            ]
+          : []
+        const lineNote = grabInbound
+          ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
+          : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+        const detailLines = [...baseOptionLine, ...banbanFlavorLines, ...promoComposeLines]
+        const detailRows = detailLines
+          .map(
+            (line) =>
+              `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(line)}</td></tr>`
+          )
+          .join('')
+        const noteRow = lineNote
+          ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</td></tr>`
+          : ''
+        return main + lineDiscountRow + detailRows + noteRow
       })
       .join('')
     const summaryRows = [
       `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(subtotalPrint)}</td></tr>`,
       receiptData.discountAmt > 0
-        ? `<tr><td class="simple-k">${esc(discountReceiptLabel)}</td><td class="simple-v">-${formatBahtNum(receiptData.discountAmt)}</td></tr>`
+        ? `${
+            showCouponDiscountRows
+              ? buildAppliedCouponDiscountRowsHtml(receiptData, tr, (label, value) =>
+                  `<tr><td class="simple-k">${label}</td><td class="simple-v">${value}</td></tr>`
+                )
+              : ''
+          }${
+            (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0
+              ? `<tr><td class="simple-k">${esc(discountReceiptLabel)}</td><td class="simple-v">-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}</td></tr>`
+              : ''
+          }`
         : '',
       (receiptData.deliveryFee ?? 0) > 0
         ? `<tr><td class="simple-k">${esc(t('posDeliveryFee') || '배달 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.deliveryFee)}</td></tr>`
@@ -496,6 +662,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
+        ${
+          isPaymentReceipt
+            ? buildCashTenderReceiptSimpleLinesHtml(receiptData, tr, esc)
+            : ''
+        }
         ${
           paymentSimpleLine
             ? `<div class="simple-divider"></div>${paymentSimpleLine}`
@@ -764,7 +935,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         })()}
         <div class="receipt-divider"></div>
         ${paymentRowHtml(`<span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span>`, formatBahtNum(subtotalPrint))}
-        ${receiptData.discountAmt > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(receiptData.discountAmt)}`) : ''}
+        ${showCouponDiscountRows ? buildAppliedCouponDiscountRowsHtml(receiptData, tr, paymentRowHtml) : ''}
+        ${(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}`) : ''}
         ${(receiptData.deliveryFee ?? 0) > 0 ? paymentRowHtml(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`) : ''}
         ${(receiptData.packagingFee ?? 0) > 0 ? paymentRowHtml(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`) : ''}
         ${showVatRow ? paymentRowHtml(vatPrintLabelEscaped, formatBahtNum(vatPrint)) : ''}
@@ -777,6 +949,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           formatBahtNum(receiptData.total),
           useLegacyAligned ? 'receipt-total' : 'receipt-pay-line--total'
         )}
+        ${cashTenderReceiptRowsHtml ? '<div class="receipt-divider"></div>' : ''}${cashTenderReceiptRowsHtml}
         ${paymentRowsHtml}${paymentChannelFallbackHtml}
         <div class="receipt-divider"></div>
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}

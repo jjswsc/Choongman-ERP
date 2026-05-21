@@ -203,7 +203,11 @@ export function CollabManagementDetailForm(props: {
               <span className="text-[10px] text-muted-foreground">{t("marketingCollabDetailBasicsPosDiscount")}</span>
               <p>
                 {draft.posDiscountType === "amount"
-                  ? `฿${Number(draft.posDiscountValue).toLocaleString()}`
+                  ? `฿${Number(draft.posDiscountValue).toLocaleString()}${
+                      draft.posAllowQuantityEntry !== false && (draft.posMaxPerOrder ?? 1) > 1
+                        ? ` · ${t("marketingCollabDetailPosMaxPerOrder")} ${draft.posMaxPerOrder ?? 10}`
+                        : ""
+                    }`
                   : `${draft.posDiscountValue}%`}
               </p>
             </div>
@@ -329,11 +333,24 @@ export function CollabManagementDetailForm(props: {
                 <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailPosDiscountTypeLabel")}</Label>
                 <select
                   value={draft.posDiscountType}
-                  onChange={(e) =>
-                    set({
-                      posDiscountType: e.target.value as MarketingCollabDetail["posDiscountType"],
-                    })
-                  }
+                  onChange={(e) => {
+                    const nextType = e.target.value as MarketingCollabDetail["posDiscountType"]
+                    if (nextType === "amount") {
+                      set({
+                        posDiscountType: nextType,
+                        posMaxPerOrder: Math.max(1, draft.posMaxPerOrder || 10),
+                        posAllowQuantityEntry: true,
+                      })
+                    } else if (nextType === "percent") {
+                      set({
+                        posDiscountType: nextType,
+                        posMaxPerOrder: 1,
+                        posAllowQuantityEntry: false,
+                      })
+                    } else {
+                      set({ posDiscountType: nextType })
+                    }
+                  }}
                   className="flex h-9 w-full max-w-md rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                 >
                   <option value="">{t("marketingCollabDetailPosDiscountTypeUnset")}</option>
@@ -362,6 +379,36 @@ export function CollabManagementDetailForm(props: {
                 />
               </div>
             </div>
+            {draft.posDiscountType === "amount" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    {t("marketingCollabDetailPosMaxPerOrder")}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={draft.posMaxPerOrder || ""}
+                    onChange={(e) =>
+                      set({ posMaxPerOrder: Math.max(1, Math.trunc(Number(e.target.value) || 1)) })
+                    }
+                    className="h-9"
+                  />
+                  <p className="text-[11px] text-muted-foreground">{t("marketingCollabDetailPosMaxPerOrderHint")}</p>
+                </div>
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.posAllowQuantityEntry !== false}
+                      onChange={(e) => set({ posAllowQuantityEntry: e.target.checked })}
+                    />
+                    {t("marketingCollabDetailPosAllowQuantityEntry")}
+                  </label>
+                </div>
+              </div>
+            ) : null}
             <p className="text-[11px] font-medium text-foreground/90">{t("marketingCollabDetailSectionScope")}</p>
             <p className="text-[11px] text-muted-foreground">{t("marketingCollabDetailScopeHint")}</p>
             <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-3">

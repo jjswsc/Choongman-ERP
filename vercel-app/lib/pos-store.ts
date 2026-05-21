@@ -13,6 +13,7 @@ import {
   type PosOrder,
   type PosOrderItem,
 } from '@/lib/api-client'
+import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
@@ -193,6 +194,9 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     discountAmt: Math.max(0, Number(po.discountAmt ?? 0) || 0),
     discountReason: String(po.discountReason ?? '').trim() || undefined,
     paymentCash: Math.max(0, Number(po.paymentCash ?? 0) || 0),
+    ...(Math.max(0, Number(po.paymentCashTendered ?? 0) || 0) > 0.005
+      ? { paymentCashTendered: Math.max(0, Number(po.paymentCashTendered ?? 0) || 0) }
+      : {}),
     paymentCard: Math.max(0, Number(po.paymentCard ?? 0) || 0),
     paymentQr: Math.max(0, Number(po.paymentQr ?? 0) || 0),
     paymentOther: Math.max(0, Number(po.paymentOther ?? 0) || 0),
@@ -202,6 +206,9 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     memberNo: String(po.memberNo ?? '').trim() || undefined,
     couponCode: String(po.couponCode ?? '').trim().toUpperCase() || undefined,
     couponDiscountAmt: Math.max(0, Number(po.couponDiscountAmt ?? 0) || 0),
+    appliedCoupons: Array.isArray((po as { appliedCoupons?: unknown }).appliedCoupons)
+      ? ((po as { appliedCoupons: PosAppliedCouponLine[] }).appliedCoupons)
+      : undefined,
     pointUsed: Math.max(0, Math.trunc(Number(po.pointUsed ?? 0) || 0)) || undefined,
     pointEarned: Math.max(0, Math.trunc(Number(po.pointEarned ?? 0) || 0)) || undefined,
   }

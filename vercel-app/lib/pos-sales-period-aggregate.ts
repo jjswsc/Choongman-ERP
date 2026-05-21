@@ -18,6 +18,7 @@ import {
   rowMatchesOrderFilter,
   type PosOrderTypeValue,
 } from '@/lib/pos-sales-order-type-filter'
+import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
@@ -123,7 +124,7 @@ export function aggregatePosSalesByPeriod(
     b.count += 1
     b.subtotal += Number(r.subtotal) || 0
     b.vat += Number(r.vat) || 0
-    b.discount += (Number(r.discount_amt) || 0) + (Number(r.coupon_discount_amt) || 0)
+    b.discount += resolvePosSalesDiscountAmount(Number(r.discount_amt) || 0, Number(r.coupon_discount_amt) || 0)
     b.service += Number(r.service_amt) || 0
     b.total += Number(r.total) || 0
     const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))

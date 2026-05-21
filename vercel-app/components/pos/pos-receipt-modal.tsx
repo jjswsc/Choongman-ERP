@@ -74,6 +74,7 @@ export type ReceiptModalData = {
   tableName?: string
   memo?: string
   discountReason?: string
+  appliedCoupons?: import('@/lib/pos-coupon-domain').PosAppliedCouponLine[]
   vatFeeAmt?: number
   vatFeeMode?: 'included' | 'separate'
   /** VAT 포함 시 영수증 소계 행(공급가액). `subtotal`≈`receiptTaxableGrossForDisplay`일 때만 인쇄에 사용 */
@@ -89,6 +90,8 @@ export type ReceiptModalData = {
   otherFeeMode?: 'included' | 'separate'
   /** 결제 완료·재인쇄 영수증에 수단 종류 표시 (주문 접수용 slip에는 생략) */
   paymentCash?: number
+  /** 현금 결제 시 손님이 건넨 금액(영수증 Paid Amount·Change) */
+  paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number

@@ -15,6 +15,7 @@ import { buildLegacyToCanonicalMap, fetchErpStoresMaster, type ErpStoreMasterRow
 import { normStoreKey } from '@/lib/store-list-keys'
 import { expandGrabStoreMapLinkedCodes, parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
+import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
 
 async function resolveBearerCaller(
   request: NextRequest
@@ -31,7 +32,7 @@ async function resolveBearerCaller(
 }
 
 const POS_ORDER_SELECT =
-  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
+  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
 
 function addStoreVariants(set: Set<string>, raw: string) {
   const v = String(raw || '').trim()
@@ -517,6 +518,14 @@ export async function GET(request: NextRequest) {
           deliveryFee: Number(r.delivery_fee) ?? 0,
           packagingFee: Number(r.packaging_fee) ?? 0,
           paymentCash: Number(r.payment_cash) ?? 0,
+          ...(Math.max(0, Number((r as { payment_cash_tendered?: number }).payment_cash_tendered) || 0) > 0.005
+            ? {
+                paymentCashTendered: Math.max(
+                  0,
+                  Number((r as { payment_cash_tendered?: number }).payment_cash_tendered) || 0
+                ),
+              }
+            : {}),
           paymentCard: Number(r.payment_card) ?? 0,
           paymentQr: Number(r.payment_qr) ?? 0,
           paymentOther: Math.max(0, Number(r.payment_other) || 0),
@@ -534,6 +543,9 @@ export async function GET(request: NextRequest) {
           memberNo: String(r.member_no ?? ''),
           couponCode: String(r.coupon_code ?? ''),
           couponDiscountAmt: Number(r.coupon_discount_amt) ?? 0,
+          appliedCoupons: parseAppliedCouponsFromOrderRow(
+            (r as { applied_coupons?: unknown }).applied_coupons
+          ),
           pointUsed: Number(r.point_used) ?? 0,
           pointEarned: Number(r.point_earned) ?? 0,
           guestCount: Math.max(0, Math.trunc(Number(r.guest_count) || 0)),

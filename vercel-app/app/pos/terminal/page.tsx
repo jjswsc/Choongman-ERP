@@ -138,6 +138,10 @@ import {
   receiptModalDataFromPosOrderForPayment,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import {
+  posOrderPaymentFieldsFromSnapshot,
+  receiptPaymentFieldsFromSnapshot,
+} from '@/lib/pos-receipt-cash-tender'
 import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
@@ -988,19 +992,7 @@ export default function PosTerminalPage() {
           discountAmt: Math.max(0, Number(split.discountAmt ?? 0) || 0),
           total: total > 0 ? total : subtotal,
           vatFeeMode: base.vatFeeMode,
-          ...(split.payment
-            ? {
-                paymentCash: split.payment.paymentCash,
-                paymentCard: split.payment.paymentCard,
-                paymentQr: split.payment.paymentQr,
-                paymentOther: split.payment.paymentOther,
-                ...(split.payment.paymentOtherBreakdown
-                  ? { paymentOtherBreakdown: split.payment.paymentOtherBreakdown }
-                  : {}),
-                paymentDeliveryApp: split.payment.paymentDeliveryApp ?? 0,
-                deliveryPaymentChannel: split.payment.deliveryPaymentChannel ?? null,
-              }
-            : {}),
+          ...(split.payment ? receiptPaymentFieldsFromSnapshot(split.payment) : {}),
           receiptAutoPrintContext: 'payment',
           suppressReceiptModalAutoPrint,
           printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
@@ -2904,7 +2896,8 @@ export default function PosTerminalPage() {
   async function runAfterPartialLineCancelPrints(
     orderId: number,
     channel: 'dine_in' | 'takeout' | 'delivery',
-    kitchenDetail?: PosKitchenReprintPayload
+    kitchenDetail?: PosKitchenReprintPayload,
+    opts?: { skipKitchen?: boolean }
   ) {
     if (posDemoRef.current) return
     if (!isMainPosDevice) return
@@ -3087,16 +3080,22 @@ export default function PosTerminalPage() {
     }
 
     try {
-      if (printHallOrderSheet && autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
+      const skipKitchen = opts?.skipKitchen === true
+      if (printHallOrderSheet && !skipKitchen && autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
         await printReceiptNow(receiptPayload, null, false, undefined, true, runKitchenPartialReprint)
       } else if (printHallOrderSheet) {
         await printReceiptNow(receiptPayload, null, false, undefined, true)
-      } else if (autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
+      } else if (!skipKitchen && autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
         setTimeout(runKitchenPartialReprint, 180)
       }
     } catch (e) {
       console.error('runAfterPartialLineCancelPrints:', e)
     }
+  }
+
+  /** 테이블 이동·합석 직후: 갱신된 테이블 번호·품목으로 홀 주문서만 재인쇄 */
+  async function runAfterTableTransferHallReprint(keepOrderId: number) {
+    await runAfterPartialLineCancelPrints(keepOrderId, 'dine_in', undefined, { skipKitchen: true })
   }
 
   useEffect(() => {
@@ -4997,13 +4996,7 @@ export default function PosTerminalPage() {
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
-                    paymentCash: payload.payment.paymentCash,
-                    paymentCard: payload.payment.paymentCard,
-                    paymentQr: payload.payment.paymentQr,
-                    paymentOther: payload.payment.paymentOther,
-                    paymentOtherBreakdown: payload.payment.paymentOtherBreakdown ?? null,
-                    paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
-                    deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                    ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
@@ -5043,19 +5036,7 @@ export default function PosTerminalPage() {
                   ...(String(deliveryApp ?? '').trim()
                     ? { deliveryAppCode: String(deliveryApp).trim().toLowerCase() }
                     : {}),
-                  ...(payload.payment
-                    ? {
-                        paymentCash: payload.payment.paymentCash,
-                        paymentCard: payload.payment.paymentCard,
-                        paymentQr: payload.payment.paymentQr,
-                        paymentOther: payload.payment.paymentOther,
-                        ...(payload.payment.paymentOtherBreakdown
-                          ? { paymentOtherBreakdown: payload.payment.paymentOtherBreakdown }
-                          : {}),
-                        paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
-                        deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
-                      }
-                    : {}),
+                  ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
                 }
@@ -5118,13 +5099,7 @@ export default function PosTerminalPage() {
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
-                    paymentCash: payload.payment.paymentCash,
-                    paymentCard: payload.payment.paymentCard,
-                    paymentQr: payload.payment.paymentQr,
-                    paymentOther: payload.payment.paymentOther,
-                    paymentOtherBreakdown: payload.payment.paymentOtherBreakdown ?? null,
-                    paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
-                    deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                    ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
@@ -5161,19 +5136,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
-                  ...(payload.payment
-                    ? {
-                        paymentCash: payload.payment.paymentCash,
-                        paymentCard: payload.payment.paymentCard,
-                        paymentQr: payload.payment.paymentQr,
-                        paymentOther: payload.payment.paymentOther,
-                        ...(payload.payment.paymentOtherBreakdown
-                          ? { paymentOtherBreakdown: payload.payment.paymentOtherBreakdown }
-                          : {}),
-                        paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
-                        deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
-                      }
-                    : {}),
+                  ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
                 }
@@ -5767,13 +5730,7 @@ export default function PosTerminalPage() {
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
-                    paymentCash: pay.paymentCash,
-                    paymentCard: pay.paymentCard,
-                    paymentQr: pay.paymentQr,
-                    paymentOther: pay.paymentOther,
-                    paymentOtherBreakdown: pay.paymentOtherBreakdown ?? null,
-                    paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
-                    deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                    ...posOrderPaymentFieldsFromSnapshot(pay),
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
@@ -5805,13 +5762,7 @@ export default function PosTerminalPage() {
                       couponDiscountAmt: payload.couponDiscountAmt,
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
-                      paymentCash: pay.paymentCash,
-                      paymentCard: pay.paymentCard,
-                      paymentQr: pay.paymentQr,
-                      paymentOther: pay.paymentOther,
-                      paymentOtherBreakdown: pay.paymentOtherBreakdown ?? null,
-                      paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
-                      deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      ...posOrderPaymentFieldsFromSnapshot(pay),
                       linkposPayment: linkpos.linkposPayment,
                       pricingAdjustments,
                       closeStatus: targetClose,
@@ -5840,13 +5791,7 @@ export default function PosTerminalPage() {
                       guestCount: payload.guestCount,
                       localOrderNo: posSaveClientKey,
                       items: cartLinesToPosOrderItems(payloadItemsNormalized),
-                      paymentCash: pay.paymentCash,
-                      paymentCard: pay.paymentCard,
-                      paymentQr: pay.paymentQr,
-                      paymentOther: pay.paymentOther,
-                      paymentOtherBreakdown: pay.paymentOtherBreakdown ?? null,
-                      paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
-                      deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      ...posOrderPaymentFieldsFromSnapshot(pay),
                       linkposPayment: linkpos.linkposPayment,
                       pricingAdjustments,
                       closeStatus: targetClose,
@@ -5898,19 +5843,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
-                  ...(pay
-                    ? {
-                        paymentCash: pay.paymentCash,
-                        paymentCard: pay.paymentCard,
-                        paymentQr: pay.paymentQr,
-                        paymentOther: pay.paymentOther,
-                        ...(pay.paymentOtherBreakdown
-                          ? { paymentOtherBreakdown: pay.paymentOtherBreakdown }
-                          : {}),
-                        paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
-                        deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
-                      }
-                    : {}),
+                  ...(pay ? receiptPaymentFieldsFromSnapshot(pay) : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
                 }
@@ -5990,13 +5923,7 @@ export default function PosTerminalPage() {
                   ...(payload.orderType === 'delivery' && deliveryApp
                     ? { deliveryAppCode: String(deliveryApp) }
                     : {}),
-                  paymentCash: payload.payment?.paymentCash ?? 0,
-                  paymentCard: payload.payment?.paymentCard ?? 0,
-                  paymentQr: payload.payment?.paymentQr ?? 0,
-                  paymentOther: payload.payment?.paymentOther ?? 0,
-                  paymentOtherBreakdown: payload.payment?.paymentOtherBreakdown ?? null,
-                  paymentDeliveryApp: payload.payment?.paymentDeliveryApp ?? 0,
-                  deliveryPaymentChannel: payload.payment?.deliveryPaymentChannel ?? null,
+                  ...posOrderPaymentFieldsFromSnapshot(payload.payment ?? null),
                   linkposPayment: linkpos.linkposPayment,
                   pricingAdjustments,
                   closeStatus: 'paid',
@@ -6058,17 +5985,7 @@ export default function PosTerminalPage() {
                     ? { deliveryAppCode: String(deliveryApp).trim().toLowerCase() }
                     : {}),
                   ...(hasPayment && payload.payment
-                    ? {
-                        paymentCash: payload.payment.paymentCash,
-                        paymentCard: payload.payment.paymentCard,
-                        paymentQr: payload.payment.paymentQr,
-                        paymentOther: payload.payment.paymentOther,
-                        ...(payload.payment.paymentOtherBreakdown
-                          ? { paymentOtherBreakdown: payload.payment.paymentOtherBreakdown }
-                          : {}),
-                        paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
-                        deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
-                      }
+                    ? receiptPaymentFieldsFromSnapshot(payload.payment)
                     : {}),
                 }
                 const runKitchenAfterNonDineSubmit = () => {
@@ -6923,6 +6840,13 @@ export default function PosTerminalPage() {
                   ? undefined
                   : async (orderId, detail) => {
                       await runAfterFullOrderCancelKitchenPrints(orderId, 'dine_in', detail)
+                    }
+              }
+              onAfterTableTransfer={
+                isPosDemo
+                  ? undefined
+                  : async (keepOrderId) => {
+                      await runAfterTableTransferHallReprint(keepOrderId)
                     }
               }
               onAddOrder={() => {

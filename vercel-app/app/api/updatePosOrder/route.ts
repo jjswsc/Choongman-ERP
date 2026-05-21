@@ -17,6 +17,11 @@ import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import {
+  parseAppliedCouponsFromBody,
+  persistPosOrderCouponRedemptions,
+  resolvePosOrderCouponsForSave,
+} from '@/lib/pos-coupon-server'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -62,6 +67,7 @@ export async function POST(req: NextRequest) {
     const serviceReason = String(body?.serviceReason ?? body?.service_reason ?? '').trim()
     const discountAmtNet = Math.max(0, discountAmt - serviceAmt)
     const paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
+    const paymentCashTendered = Math.max(0, Number(body?.paymentCashTendered ?? body?.payment_cash_tendered ?? 0))
     const paymentCard = Math.max(0, Number(body?.paymentCard ?? 0))
     const paymentQr = Math.max(0, Number(body?.paymentQr ?? 0))
     const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
@@ -72,8 +78,6 @@ export async function POST(req: NextRequest) {
     )
     const memberId = Math.max(0, Number(body?.memberId ?? 0))
     const memberNo = String(body?.memberNo ?? '').trim()
-    const couponCode = String(body?.couponCode ?? '').trim().toUpperCase()
-    const couponDiscountAmt = Math.max(0, Number(body?.couponDiscountAmt ?? 0))
     const pointUsed = Math.max(0, Math.trunc(Number(body?.pointUsed ?? 0)))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
     const guestCountBody = body?.guestCount ?? body?.guest_count
@@ -169,9 +173,35 @@ export async function POST(req: NextRequest) {
       const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
       subtotal += price * qty
     }
+
+    let appliedPre = parseAppliedCouponsFromBody(body?.appliedCoupons ?? body?.applied_coupons)
+    const legacyCouponCode = String(body?.couponCode ?? body?.coupon_code ?? '').trim().toUpperCase()
+    const legacyCouponAmt = Math.max(0, Number(body?.couponDiscountAmt ?? body?.coupon_discount_amt ?? 0))
+    if (!appliedPre.length && legacyCouponCode) {
+      appliedPre = [{ code: legacyCouponCode, name: legacyCouponCode, discountAmt: legacyCouponAmt, quantity: 1 }]
+    }
+    const preCouponSum = appliedPre.reduce((s, row) => s + Math.max(0, Number(row.discountAmt ?? 0) || 0), 0)
+    const manualDiscountForCoupons = Math.max(0, discountAmtNet - preCouponSum)
+    const collabDiscountAmt = Math.max(0, Number(body?.collabDiscountAmt ?? body?.collab_discount_amt ?? 0))
+    const couponResolved = await resolvePosOrderCouponsForSave({
+      body: body ?? {},
+      subtotal,
+      manualDiscountAmt: Math.max(0, manualDiscountForCoupons - collabDiscountAmt),
+      collabDiscountAmt,
+      memberId: memberId || undefined,
+    })
+    const couponCode = couponResolved.couponCode
+    const couponDiscountAmt = couponResolved.couponDiscountAmt
+    const appliedCoupons = couponResolved.appliedCoupons
+    const discountAmtForPricing = Math.min(
+      subtotal,
+      Math.max(0, manualDiscountForCoupons + couponDiscountAmt)
+    )
+    const discountAmtNetFinal = Math.max(0, discountAmtForPricing - serviceAmt)
+
     const pricing = computePosPricing({
       subtotal,
-      discountAmt,
+      discountAmt: discountAmtForPricing,
       deliveryFee: 0,
       packagingFee: 0,
       cardPaymentAmount: paymentCard,
@@ -189,11 +219,14 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, unknown> = {
       table_name: tableName,
       memo,
-      discount_amt: discountAmtNet,
+      discount_amt: discountAmtNetFinal,
       discount_reason: discountReason,
       service_amt: serviceAmt,
       service_reason: serviceReason || null,
       payment_cash: paymentCash,
+      ...(paymentCashTendered > 0.005
+        ? { payment_cash_tendered: paymentCashTendered }
+        : { payment_cash_tendered: 0 }),
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
@@ -208,6 +241,7 @@ export async function POST(req: NextRequest) {
       member_no: memberNo || null,
       coupon_code: couponCode || null,
       coupon_discount_amt: couponDiscountAmt,
+      applied_coupons: couponResolved.appliedCouponsJson,
       point_used: pointUsed,
       point_earned: pointEarnedReq,
       items_json: JSON.stringify(items),
@@ -248,7 +282,7 @@ export async function POST(req: NextRequest) {
         const legacyPatch = { ...patch }
         delete legacyPatch.service_amt
         delete legacyPatch.service_reason
-        legacyPatch.discount_amt = discountAmt
+        legacyPatch.discount_amt = discountAmtForPricing
         if (serviceAmt > 0) {
           const baseReason = String(legacyPatch.discount_reason ?? '').trim()
           const svcReason = serviceReason || `service:${serviceAmt}`
@@ -261,7 +295,7 @@ export async function POST(req: NextRequest) {
       const legacyPatch = { ...patch }
       delete legacyPatch.service_amt
       delete legacyPatch.service_reason
-      legacyPatch.discount_amt = discountAmt
+      legacyPatch.discount_amt = discountAmtForPricing
       if (serviceAmt > 0) {
         const baseReason = String(legacyPatch.discount_reason ?? '').trim()
         const svcReason = serviceReason || `service:${serviceAmt}`
@@ -304,12 +338,25 @@ export async function POST(req: NextRequest) {
         totalAmount: total,
         pointUsed,
         pointEarned: pointEarnedReq,
-        couponCode,
+        couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
       })
       pointEarned = loyalty.pointEarned
       await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
         point_earned: pointEarned,
       })
+    }
+
+    if (appliedCoupons.length > 0 && paymentSum > 0) {
+      try {
+        await persistPosOrderCouponRedemptions({
+          orderId: id,
+          storeCode: String(current?.store_code ?? '').trim(),
+          appliedCoupons,
+          memberId: memberId || undefined,
+        })
+      } catch (redeemErr) {
+        console.error('updatePosOrder coupon redemptions:', redeemErr)
+      }
     }
 
     const auditBefore: Record<string, unknown> = {
@@ -339,7 +386,7 @@ export async function POST(req: NextRequest) {
     const auditAfter: Record<string, unknown> = {
       table_name: tableName ?? null,
       memo,
-      discount_amt: discountAmtNet,
+      discount_amt: discountAmtNetFinal,
       discount_reason: discountReason || null,
       service_amt: serviceAmt,
       service_reason: serviceReason || null,

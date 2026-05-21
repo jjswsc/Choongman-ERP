@@ -16,7 +16,8 @@ import {
   getPosPrinterSettings,
   type PosPrinterSettings,
   getPosCollabCampaigns,
-  validatePosCoupon,
+  validatePosCoupons,
+  type PosAppliedCoupon,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
@@ -24,7 +25,8 @@ import {
   type PosPromoWithItems,
 } from "@/lib/api-client"
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
-import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart } from "@/lib/pos-collab-discount"
+import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart, collabSupportsQuantityEntry } from "@/lib/pos-collab-discount"
+import { summarizeLegacyCouponFields } from "@/lib/pos-coupon-domain"
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
 import { getBangkokDateStr, getPosBusinessDateStr, setPosBusinessHoursClient } from "@/lib/pos-business-day"
@@ -272,12 +274,14 @@ export default function PosOrderPage() {
   const [discountValue, setDiscountValue] = React.useState("")
   const [discountReason, setDiscountReason] = React.useState("")
   const [couponCode, setCouponCode] = React.useState("")
-  const [appliedCoupon, setAppliedCoupon] = React.useState<{ name: string; discountAmt: number; discountReason: string } | null>(null)
+  const [couponQuantity, setCouponQuantity] = React.useState(1)
+  const [appliedCoupons, setAppliedCoupons] = React.useState<PosAppliedCoupon[]>([])
   const [couponLoading, setCouponLoading] = React.useState(false)
   const [collabOptions, setCollabOptions] = React.useState<
     { id: string; topic: string; campaignNo?: string; collabDetail: MarketingCollabDetail }[]
   >([])
   const [appliedCollabId, setAppliedCollabId] = React.useState<string | null>(null)
+  const [collabQuantity, setCollabQuantity] = React.useState(1)
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -674,8 +678,8 @@ export default function PosOrderPage() {
 
   const collabDiscountAmt = React.useMemo(() => {
     if (!appliedCollab || menuByIdForCollab.size === 0) return 0
-    return collabDiscountAmountForCart(cart, menuByIdForCollab, appliedCollab.collabDetail)
-  }, [appliedCollab, cart, menuByIdForCollab])
+    return collabDiscountAmountForCart(cart, menuByIdForCollab, appliedCollab.collabDetail, collabQuantity)
+  }, [appliedCollab, cart, collabQuantity, menuByIdForCollab])
 
   const filteredPromos = React.useMemo(() => {
     return promos.filter((p) => {
@@ -1118,11 +1122,21 @@ export default function PosOrderPage() {
     discountType === "pct"
       ? Math.round(subtotal * (Number(discountValue) || 0) / 100)
       : Math.min(subtotal, Math.max(0, Number(discountValue) || 0))
-  const baseDiscountAmt = appliedCoupon ? appliedCoupon.discountAmt : manualDiscount
-  const discountAmt = Math.min(subtotal, baseDiscountAmt + collabDiscountAmt)
-  const collabReasonPart = appliedCollab ? `${t("posCollabDiscount")}: ${appliedCollab.topic}` : ""
+  const couponDiscountTotal = appliedCoupons.reduce(
+    (sum, row) => sum + Math.max(0, Number(row.discountAmt ?? 0) || 0),
+    0
+  )
+  const couponPayloadFields = summarizeLegacyCouponFields(appliedCoupons)
+  const discountAmt = Math.min(subtotal, manualDiscount + couponDiscountTotal + collabDiscountAmt)
+  const collabReasonPart = appliedCollab
+    ? `${t("posCollabDiscount")}: ${appliedCollab.topic}${
+        collabSupportsQuantityEntry(appliedCollab.collabDetail) && collabQuantity > 1
+          ? ` × ${collabQuantity}`
+          : ""
+      }`
+    : ""
   const effectiveDiscountReason = (() => {
-    const base = appliedCoupon ? appliedCoupon.discountReason : discountReason.trim()
+    const base = discountReason.trim()
     if (base && collabReasonPart) return `${base} · ${collabReasonPart}`
     return base || collabReasonPart
   })()
@@ -1193,15 +1207,17 @@ export default function PosOrderPage() {
     if (!code) return
     setCouponLoading(true)
     try {
-      const res = await validatePosCoupon({ code, subtotal })
-      if (res.valid && res.discountAmt != null) {
-        setAppliedCoupon({
-          name: res.couponName ?? code,
-          discountAmt: res.discountAmt,
-          discountReason: res.discountReason ?? i18nTr(t, "posCouponDiscountReason", { code }),
-        })
-        setDiscountValue("")
-        setDiscountReason("")
+      const res = await validatePosCoupons({
+        subtotal,
+        manualDiscountAmt: manualDiscount,
+        collabDiscountAmt,
+        applied: appliedCoupons,
+        candidate: { code, quantity: couponQuantity },
+      })
+      if (res.valid && res.appliedCoupons?.length) {
+        setAppliedCoupons(res.appliedCoupons)
+        setCouponCode("")
+        setCouponQuantity(1)
       } else {
         await appAlert(localizeApiMessage(res.message, t, t("posCouponInvalid") || "유효하지 않은 쿠폰입니다.", lang))
       }
@@ -1212,14 +1228,26 @@ export default function PosOrderPage() {
     }
   }
 
-  const handleClearCoupon = () => {
-    setAppliedCoupon(null)
-    setCouponCode("")
+  const handleRemoveCoupon = (index: number) => {
+    setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
   }
 
   React.useEffect(() => {
-    if (appliedCoupon) setAppliedCoupon(null)
-  }, [cart])
+    if (!appliedCoupons.length) return
+    let cancelled = false
+    void validatePosCoupons({
+      subtotal,
+      manualDiscountAmt: manualDiscount,
+      collabDiscountAmt,
+      applied: appliedCoupons,
+    }).then((res) => {
+      if (cancelled || !res.appliedCoupons) return
+      setAppliedCoupons(res.appliedCoupons)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [subtotal, manualDiscount, collabDiscountAmt, cart.length])
 
   const handleCheckout = async (payment: {
     cash: number
@@ -1259,6 +1287,9 @@ export default function PosOrderPage() {
         memo: memo.trim() || undefined,
         discountAmt: discountAmt || undefined,
         discountReason: effectiveDiscountReason || undefined,
+        couponCode: couponPayloadFields.couponCode || undefined,
+        couponDiscountAmt: couponPayloadFields.couponDiscountAmt || undefined,
+        appliedCoupons: appliedCoupons.length ? appliedCoupons : undefined,
         deliveryFee: deliveryFeeAmt || undefined,
         packagingFee: packagingFeeAmt || undefined,
         paymentCash: payment.cash || undefined,
@@ -1331,7 +1362,9 @@ export default function PosOrderPage() {
         setMemo("")
         setDiscountValue("")
         setDiscountReason("")
-        handleClearCoupon()
+        setAppliedCoupons([])
+        setCouponCode("")
+        setCouponQuantity(1)
         loadTodaySales()
       } else {
         await appAlert(localizeApiMessage(res.message, t, t("msg_save_fail"), lang))
@@ -1939,7 +1972,10 @@ export default function PosOrderPage() {
             </div>
             <Select
               value={appliedCollabId ?? "__none__"}
-              onValueChange={(v) => setAppliedCollabId(v === "__none__" ? null : v)}
+              onValueChange={(v) => {
+                setAppliedCollabId(v === "__none__" ? null : v)
+                setCollabQuantity(1)
+              }}
             >
               <SelectTrigger className="h-9 border-slate-200 bg-white text-sm text-slate-800">
                 <SelectValue />
@@ -1949,10 +1985,48 @@ export default function PosOrderPage() {
                 {collabOptions.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {(c.campaignNo ? `[${c.campaignNo}] ` : "") + c.topic}
+                    {c.collabDetail.posDiscountType === "amount"
+                      ? ` (${formatBahtNum(c.collabDetail.posDiscountValue)} ฿)`
+                      : c.collabDetail.posDiscountType === "percent"
+                        ? ` (${c.collabDetail.posDiscountValue}%)`
+                        : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {appliedCollab && collabSupportsQuantityEntry(appliedCollab.collabDetail) ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-slate-500">{t("posCollabQuantity")}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10)}
+                  step={1}
+                  value={collabQuantity}
+                  onChange={(e) =>
+                    setCollabQuantity(
+                      Math.max(
+                        1,
+                        Math.min(
+                          Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10),
+                          Math.trunc(Number(e.target.value || 1))
+                        )
+                      )
+                    )
+                  }
+                  className="h-8 w-20 border-slate-200 bg-white text-sm text-slate-800"
+                />
+                <span className="text-[11px] text-slate-500">
+                  {t("posCollabMaxPerOrder")} {appliedCollab.collabDetail.posMaxPerOrder ?? 10}
+                  {t("posMenuLineUnit")}
+                </span>
+              </div>
+            ) : null}
+            {appliedCollab && collabDiscountAmt > 0 ? (
+              <p className="mt-1.5 text-[11px] font-medium text-violet-800">
+                {t("posCollabDiscountExpected")}: -{formatBahtNum(collabDiscountAmt)} ฿
+              </p>
+            ) : null}
             {!menus.length ? (
               <p className="mt-1.5 text-[11px] text-amber-800">{t("posCollabMenusNotLoaded")}</p>
             ) : null}
@@ -1962,12 +2036,11 @@ export default function PosOrderPage() {
           </div>
           <div className="rounded-lg border border-amber-200/80 bg-amber-50/35 px-3 py-2.5">
             <label className="text-xs font-semibold text-slate-800">{t("posPaymentSectionManualDiscount")}</label>
-            <div className={cn("mt-1 flex gap-2", appliedCoupon && "opacity-50")}>
+            <div className="mt-1 flex gap-2">
               <div className="flex rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => !appliedCoupon && setDiscountType("amt")}
-                  disabled={!!appliedCoupon}
+                  onClick={() => setDiscountType("amt")}
                   className={cn(
                     "px-2 py-1.5 text-xs",
                     discountType === "amt" ? "bg-emerald-100 text-emerald-700" : "text-slate-500"
@@ -1977,8 +2050,7 @@ export default function PosOrderPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => !appliedCoupon && setDiscountType("pct")}
-                  disabled={!!appliedCoupon}
+                  onClick={() => setDiscountType("pct")}
                   className={cn(
                     "px-2 py-1.5 text-xs",
                     discountType === "pct" ? "bg-emerald-100 text-emerald-700" : "text-slate-500"
@@ -1994,14 +2066,12 @@ export default function PosOrderPage() {
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
                 className="h-9 w-20 border-slate-200 bg-slate-50 text-sm text-right text-slate-800"
-                disabled={!!appliedCoupon}
               />
               <Input
                 placeholder={t("posDiscountReasonPh") || "사유"}
                 value={discountReason}
                 onChange={(e) => setDiscountReason(e.target.value)}
                 className="h-9 flex-1 border-slate-200 bg-slate-50 text-sm text-slate-800"
-                disabled={!!appliedCoupon}
               />
             </div>
           </div>
@@ -2011,41 +2081,56 @@ export default function PosOrderPage() {
                 <Tag className="h-3.5 w-3.5 shrink-0 text-sky-700" />
                 <span className="text-xs font-semibold text-slate-800">{t("posPaymentSectionCoupon")}</span>
               </div>
-              <div className="min-w-0 flex-1">
-                {appliedCoupon ? (
-                  <div className="flex items-center justify-between rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-sm">
-                    <span className="text-emerald-700 truncate">{appliedCoupon.name}</span>
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex gap-1">
+                  <Input
+                    placeholder={t("posCouponCodePh") || "쿠폰 코드"}
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
+                    className="h-9 min-w-0 flex-1 border-slate-200 bg-white text-sm uppercase text-slate-800"
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={couponQuantity}
+                    onChange={(e) =>
+                      setCouponQuantity(Math.max(1, Math.min(99, Math.trunc(Number(e.target.value || 1)))))
+                    }
+                    className="h-9 w-14 border-slate-200 bg-white text-sm text-slate-800"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 shrink-0 border-slate-200 bg-white px-3 text-slate-700"
+                    onClick={handleApplyCoupon}
+                    disabled={!couponCode.trim() || couponLoading}
+                  >
+                    {couponLoading ? "..." : t("posCouponAdd") || "추가"}
+                  </Button>
+                </div>
+                {appliedCoupons.map((row, idx) => (
+                  <div
+                    key={`${row.code}-${idx}`}
+                    className="flex items-center justify-between rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-sm"
+                  >
+                    <span className="truncate text-emerald-700">
+                      {row.name || row.code}
+                      {(row.quantity ?? 1) > 1 ? ` × ${row.quantity}` : ""} (-{row.discountAmt})
+                    </span>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="h-6 w-6 shrink-0 p-0 text-slate-600 hover:text-slate-900"
-                      onClick={handleClearCoupon}
+                      onClick={() => handleRemoveCoupon(idx)}
                     >
                       <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                ) : (
-                  <div className="flex gap-1">
-                    <Input
-                      placeholder={t("posCouponCodePh") || "쿠폰 코드"}
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
-                      className="h-9 min-w-0 flex-1 border-slate-200 bg-white text-sm uppercase text-slate-800"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 shrink-0 border-slate-200 bg-white px-3 text-slate-700"
-                      onClick={handleApplyCoupon}
-                      disabled={!couponCode.trim() || couponLoading}
-                    >
-                      {couponLoading ? "..." : t("posCouponApply") || "적용"}
-                    </Button>
-                  </div>
-                )}
+                ))}
               </div>
             </div>
           </div>

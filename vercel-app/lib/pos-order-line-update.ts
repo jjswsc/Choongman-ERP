@@ -117,6 +117,7 @@ export function buildUpdatePosOrderParamsFromOrder(order: Order, nextItems: PosO
     memberNo: string
     couponCode: string
     couponDiscountAmt: number
+    appliedCoupons?: Order['appliedCoupons']
     pointUsed: number
     pointEarned: number
     guestCount?: number
@@ -139,6 +140,9 @@ export function buildUpdatePosOrderParamsFromOrder(order: Order, nextItems: PosO
     memberNo: String(order.memberNo ?? '').trim(),
     couponCode: String(order.couponCode ?? '').trim().toUpperCase(),
     couponDiscountAmt: Math.max(0, Number(order.couponDiscountAmt ?? 0) || 0),
+    ...(Array.isArray(order.appliedCoupons) && order.appliedCoupons.length > 0
+      ? { appliedCoupons: order.appliedCoupons }
+      : {}),
     pointUsed: Math.max(0, Math.trunc(Number(order.pointUsed ?? 0) || 0)),
     pointEarned: Math.max(0, Math.trunc(Number(order.pointEarned ?? 0) || 0)),
   }

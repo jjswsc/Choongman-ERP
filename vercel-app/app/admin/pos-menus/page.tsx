@@ -123,6 +123,10 @@ import {
 } from "@/lib/pos-option-selection-groups"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-storage-path"
+import {
+  menuHasPersistedStoreScope,
+  resolveEffectiveMenuScopeStoreCodes,
+} from "@/lib/pos-menu-store-scope"
 
 /** 원가 분석 화면 이동 후 복귀 시 편집 중이던 메뉴·노출 매장 복원 */
 const POS_MENUS_EDIT_RESUME_KEY = "cm_pos_menus_edit_resume_v1"
@@ -583,10 +587,15 @@ export default function PosMenusPage() {
   // (신규 메뉴 기본값은 defaultScopeStoreCodes가 담당)
   const getEditorScopeStoreCodes = React.useCallback(
     (menu?: PosMenu | null): string[] => {
-      return menu ? menuScopeStoreCodes(menu) : []
+      const persisted = menu ? menuScopeStoreCodes(menu) : []
+      return resolveEffectiveMenuScopeStoreCodes(persisted, availableScopeStores)
     },
-    []
+    [availableScopeStores]
   )
+  const editingMenuForScope = editingId ? menus.find((m) => m.id === editingId) : null
+  const showStoreScopeCompatHint =
+    !!editingMenuForScope &&
+    !menuHasPersistedStoreScope(menuScopeStoreCodes(editingMenuForScope))
   const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
     const normalized = String(storeCode || "").trim()
     if (!normalized) return
@@ -597,6 +606,60 @@ export default function PosMenusPage() {
       return prev.filter((x) => x.toLowerCase() !== normalized.toLowerCase())
     })
   }, [])
+  const allStoreScopeSelected =
+    availableScopeStores.length > 0 &&
+    availableScopeStores.every((sc) => selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase()))
+  const someStoreScopeSelected =
+    !allStoreScopeSelected &&
+    availableScopeStores.some((sc) => selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase()))
+  const toggleAllStoreScope = React.useCallback(
+    (checked: boolean) => {
+      setStoreScopeDirty(true)
+      setSelectedStoreCodes(checked ? [...availableScopeStores] : [])
+    },
+    [availableScopeStores]
+  )
+  const renderMenuStoreScopePicker = (hintKey: string, keyPrefix: string) => (
+    <div className="rounded-md border border-dashed p-3">
+      <label className="text-xs font-semibold">{t("store") || "매장"}</label>
+      <p className="mt-1 text-[11px] text-muted-foreground">{t(hintKey)}</p>
+      {showStoreScopeCompatHint && (
+        <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+          {t("posMenuVisibleStoresCompatHint")}
+        </p>
+      )}
+      <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
+        {availableScopeStores.length > 1 && (
+          <label
+            className={`col-span-2 flex items-center gap-2 border-b border-dashed pb-2 text-xs font-medium ${someStoreScopeSelected ? "text-muted-foreground" : ""}`}
+          >
+            <input
+              type="checkbox"
+              checked={allStoreScopeSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someStoreScopeSelected
+              }}
+              onChange={(e) => toggleAllStoreScope(e.target.checked)}
+            />
+            <span>{t("store_all_stores") || "전체 매장"}</span>
+          </label>
+        )}
+        {availableScopeStores.map((sc) => {
+          const checked = selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
+          return (
+            <label key={`${keyPrefix}-${sc}`} className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => toggleStoreScopeCode(sc, e.target.checked)}
+              />
+              <span>{sc}</span>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
   const effectivePricingStore = canSearchAllStores && pricingStoreCode ? pricingStoreCode : auth?.store || ""
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
@@ -1277,17 +1340,21 @@ export default function PosMenusPage() {
       effectiveCategory = normalizePromotionSubcategory(effectiveCategory)
     }
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
-    const scopeForSave = (() => {
-      if (!editingMenu || storeScopeDirty) return selectedStoreCodes
-      if (selectedStoreCodes.length > 0) return selectedStoreCodes
-      const stableScope = menuScopeStoreCodes(editingMenu)
-      return stableScope.length > 0 ? stableScope : selectedStoreCodes
-    })()
-    if (scopeForSave.length === 0) {
+    const persistedScope = editingMenu ? menuScopeStoreCodes(editingMenu) : []
+    const shouldPersistStoreScope =
+      !editingId || storeScopeDirty || menuHasPersistedStoreScope(persistedScope)
+    const scopeForSave = shouldPersistStoreScope
+      ? (() => {
+          if (!editingMenu || storeScopeDirty) return selectedStoreCodes
+          if (selectedStoreCodes.length > 0) return selectedStoreCodes
+          return persistedScope.length > 0 ? persistedScope : selectedStoreCodes
+        })()
+      : []
+    if (shouldPersistStoreScope && scopeForSave.length === 0) {
       await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
       return
     }
-    if (!storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
+    if (shouldPersistStoreScope && !storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
       setSelectedStoreCodes(scopeForSave)
     }
     const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
@@ -1314,7 +1381,9 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
-      storeCodes: scopeForSave,
+    }
+    if (shouldPersistStoreScope) {
+      savePayload.storeCodes = scopeForSave
     }
     if (imageSave.includeImageUrl) {
       savePayload.imageUrl = imageSave.imageUrl
@@ -4130,27 +4199,7 @@ export default function PosMenusPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                    <div className="rounded-md border border-dashed p-3">
-                      <label className="text-xs font-semibold">{t("store") || "매장"}</label>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {t("posMenuVisibleStoresScopeHint")}
-                      </p>
-                      <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
-                        {availableScopeStores.map((sc) => {
-                          const checked = selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
-                          return (
-                            <label key={`scope-edit-${sc}`} className="flex items-center gap-2 text-xs">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) => toggleStoreScopeCode(sc, e.target.checked)}
-                              />
-                              <span>{sc}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    {renderMenuStoreScopePicker("posMenuVisibleStoresScopeHint", "scope-edit")}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
@@ -4766,27 +4815,7 @@ export default function PosMenusPage() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                  <div className="rounded-md border border-dashed p-3">
-                    <label className="text-xs font-semibold">{t("store") || "매장"}</label>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {t("posMenuVisibleStoresRequiredToSave")}
-                    </p>
-                    <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
-                      {availableScopeStores.map((sc) => {
-                        const checked = selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
-                        return (
-                          <label key={`scope-new-${sc}`} className="flex items-center gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => toggleStoreScopeCode(sc, e.target.checked)}
-                            />
-                            <span>{sc}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
+                  {renderMenuStoreScopePicker("posMenuVisibleStoresRequiredToSave", "scope-new")}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>

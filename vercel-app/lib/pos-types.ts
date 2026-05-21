@@ -4,6 +4,8 @@
  * - API(api-client)의 PosTableItem, PosOrder 등과 변환 시 width/height↔w/h 등 매핑 사용
  */
 
+import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
+
 export interface Table {
   id: string
   name: string
@@ -45,6 +47,7 @@ export interface Order {
   serviceAmt?: number
   serviceReason?: string
   paymentCash?: number
+  paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
@@ -54,6 +57,7 @@ export interface Order {
   memberNo?: string
   couponCode?: string
   couponDiscountAmt?: number
+  appliedCoupons?: PosAppliedCouponLine[]
   pointUsed?: number
   pointEarned?: number
 }

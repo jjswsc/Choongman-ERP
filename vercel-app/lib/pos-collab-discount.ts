@@ -339,7 +339,8 @@ export function collabEligibleSubtotal(
 
 export function computeCollabDiscountAmount(
   eligibleSubtotal: number,
-  detail: MarketingCollabDetail
+  detail: MarketingCollabDetail,
+  quantity = 1
 ): number {
   const t = detail.posDiscountType
   const v = Math.max(0, detail.posDiscountValue || 0)
@@ -348,16 +349,39 @@ export function computeCollabDiscountAmount(
     const pct = Math.min(100, v)
     return Math.min(eligibleSubtotal, Math.floor((eligibleSubtotal * pct) / 100))
   }
-  return Math.min(eligibleSubtotal, Math.round(v * 100) / 100)
+  const qty = normalizeCollabApplyQuantity(detail, quantity)
+  const unit = Math.round(v * 100) / 100
+  let remaining = eligibleSubtotal
+  let total = 0
+  for (let i = 0; i < qty; i += 1) {
+    const part = Math.min(remaining, unit)
+    if (part <= 0.0001) break
+    total += part
+    remaining = Math.round((remaining - part) * 100) / 100
+  }
+  return Math.round(total * 100) / 100
+}
+
+export function normalizeCollabApplyQuantity(detail: MarketingCollabDetail, raw: unknown): number {
+  if (detail.posDiscountType !== 'amount') return 1
+  if (!detail.posAllowQuantityEntry) return 1
+  const max = Math.max(1, Math.trunc(Number(detail.posMaxPerOrder ?? 10) || 10))
+  const n = Math.trunc(Number(raw ?? 1))
+  return Math.max(1, Math.min(max, Number.isFinite(n) && n > 0 ? n : 1))
+}
+
+export function collabSupportsQuantityEntry(detail: MarketingCollabDetail): boolean {
+  return detail.posDiscountType === 'amount' && detail.posAllowQuantityEntry !== false
 }
 
 export function collabDiscountAmountForCart(
   lines: CollabCartLineLike[],
   menuById: Map<string, CollabMenuPick>,
-  detail: MarketingCollabDetail
+  detail: MarketingCollabDetail,
+  quantity = 1
 ): number {
   const eligible = collabEligibleSubtotal(lines, menuById, detail)
-  return computeCollabDiscountAmount(eligible, detail)
+  return computeCollabDiscountAmount(eligible, detail, quantity)
 }
 
 export function collabHasPosDiscount(detail: MarketingCollabDetail): boolean {

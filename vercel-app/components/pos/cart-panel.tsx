@@ -80,14 +80,16 @@ import {
   getPosPaymentMethodItems,
   getPosTaxInvoiceRecipients,
   upsertPosTaxInvoiceRecipient,
-  validatePosCoupon,
+  validatePosCoupons,
+  type PosAppliedCoupon,
   type PosMenu,
   type PosMenuOption,
   type PosPaymentMethodItem,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
-import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart } from '@/lib/pos-collab-discount'
+import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart, collabSupportsQuantityEntry } from '@/lib/pos-collab-discount'
+import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
 import {
   computePosPricing,
@@ -216,6 +218,8 @@ export type CartPanelPaymentPayload = {
   paymentOtherBreakdown?: PosPaymentOtherBreakdown
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
+  /** 현금 받은 금액(영수증·재인쇄용) */
+  paymentCashTendered?: number
 }
 
 function sumCartPanelPaymentSnapshot(snap: CartPanelPaymentPayload) {
@@ -236,6 +240,7 @@ function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[]): CartP
     paymentOther: 0,
     paymentDeliveryApp: 0,
     deliveryPaymentChannel: null,
+    paymentCashTendered: 0,
   }
   for (const snap of snaps) {
     merged.paymentCash += snap.paymentCash || 0
@@ -244,6 +249,7 @@ function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[]): CartP
     merged.paymentOther += snap.paymentOther || 0
     merged.paymentDeliveryApp = (merged.paymentDeliveryApp || 0) + (snap.paymentDeliveryApp ?? 0)
     if (snap.deliveryPaymentChannel) merged.deliveryPaymentChannel = snap.deliveryPaymentChannel
+    merged.paymentCashTendered = (merged.paymentCashTendered || 0) + (snap.paymentCashTendered || 0)
   }
   return merged
 }
@@ -399,6 +405,7 @@ interface CartPanelProps {
     memberNo?: string
     couponCode?: string
     couponDiscountAmt?: number
+    appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
     /** 홀 주문 인원 (매출 분석용) */
     guestCount?: number
@@ -418,6 +425,7 @@ interface CartPanelProps {
     memberNo?: string
     couponCode?: string
     couponDiscountAmt?: number
+    appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
   }, existingOrderId?: number) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
@@ -435,6 +443,7 @@ interface CartPanelProps {
     memberNo?: string
     couponCode?: string
     couponDiscountAmt?: number
+    appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
   }, existingOrderId?: number) => void
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
@@ -452,6 +461,7 @@ interface CartPanelProps {
     memberNo?: string
     couponCode?: string
     couponDiscountAmt?: number
+    appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
     /** 선불: 결제 후 테이블 유지. 후불: 결제 시 테이블 초기화 */
     isPrepaid?: boolean
@@ -473,6 +483,7 @@ interface CartPanelProps {
     memberNo?: string
     couponCode?: string
     couponDiscountAmt?: number
+    appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
   }) => void
   /** 주문 버튼으로 이미 전송된 주문 ID (결제 시 해당 주문에 결제 반영용) */
@@ -843,8 +854,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [customerMemo, setCustomerMemo] = useState('')
   const [couponCode, setCouponCode] = useState('')
-  const [couponAppliedCode, setCouponAppliedCode] = useState('')
-  const [couponAppliedAmt, setCouponAppliedAmt] = useState(0)
+  const [couponQuantity, setCouponQuantity] = useState(1)
+  const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
   const [pointUsed, setPointUsed] = useState('0')
   const [couponMessage, setCouponMessage] = useState('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
@@ -861,6 +872,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     { id: string; topic: string; campaignNo?: string; collabDetail: MarketingCollabDetail }[]
   >([])
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
+  const [collabQuantity, setCollabQuantity] = useState(1)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   /** 결제 확정 직후: 현금 거스름 안내(확인 버튼으로만 닫음) */
   const [postPaymentCashChangeBaht, setPostPaymentCashChangeBaht] = useState<number | null>(null)
@@ -1153,14 +1165,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ? cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount')
       : cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') !== 'cancel')
     if (!collabScopeItems.length) return 0
-    return collabDiscountAmountForCart(collabScopeItems, menuByIdForCollab, appliedCollab.collabDetail)
-  }, [appliedCollab, cartItems, hasSelectedDiscountScope, lineDiscountModeByItemId, menuByIdForCollab])
+    return collabDiscountAmountForCart(
+      collabScopeItems,
+      menuByIdForCollab,
+      appliedCollab.collabDetail,
+      collabQuantity
+    )
+  }, [appliedCollab, cartItems, collabQuantity, hasSelectedDiscountScope, lineDiscountModeByItemId, menuByIdForCollab])
   const manualDiscountInputAmt =
     discountType === 'percent' ? Math.floor((discountScopeSubtotal * discountValue) / 100) : discountValue
   const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
-  const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt
+  const couponDiscountTotal = useMemo(
+    () =>
+      Math.round(
+        appliedCoupons.reduce((sum, row) => sum + Math.max(0, Number(row.discountAmt ?? 0) || 0), 0) * 100
+      ) / 100,
+    [appliedCoupons]
+  )
+  const couponPayloadFields = useMemo(() => {
+    const legacy = summarizeLegacyCouponFields(appliedCoupons)
+    return {
+      appliedCoupons: appliedCoupons.length ? appliedCoupons : undefined,
+      couponCode: legacy.couponCode || undefined,
+      couponDiscountAmt: legacy.couponDiscountAmt || undefined,
+    }
+  }, [appliedCoupons])
+  const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal
   const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
-  const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + collabDiscountAmt)
+  const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + collabDiscountAmt)
   const lineDiscountSnapshot = useMemo(() => {
     const totalDiscount = Math.max(0, Number(discount) || 0)
     if (!Array.isArray(cartItems) || cartItems.length === 0 || totalDiscount <= 0.0001) {
@@ -1221,7 +1253,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const paymentDiscountReason = useMemo(() => {
     const base = discountReason.trim()
-    const collabPart = appliedCollab ? `${t('posCollabDiscount')}: ${appliedCollab.topic}` : ''
+    const collabPart = appliedCollab
+      ? `${t('posCollabDiscount')}: ${appliedCollab.topic}${
+          collabSupportsQuantityEntry(appliedCollab.collabDetail) && collabQuantity > 1
+            ? ` × ${collabQuantity}`
+            : ''
+        }`
+      : ''
     const lineDiscountCount = cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
     const linePart = [
       lineDiscountCount > 0 ? `${tr('posDiscount', '할인')} ${lineDiscountCount}${tr('posMenuLineUnit', '건')}` : '',
@@ -1234,7 +1272,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : ''
     const parts = [base, collabPart, linePart, cancelPart].filter(Boolean)
     return parts.join(' · ')
-  }, [appliedCollab, cartItems, discountReason, lineDiscountModeByItemId, selectedCancelledLineCount, t])
+  }, [appliedCollab, cartItems, collabQuantity, discountReason, lineDiscountModeByItemId, selectedCancelledLineCount, t])
   const paymentServiceReason = useMemo(() => {
     if (selectedServiceLineCount <= 0) return ''
     return `${tr('posServiceHandled', '서비스처리')} ${selectedServiceLineCount}${tr('posMenuLineUnit', '건')}`
@@ -1412,6 +1450,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
     const ob = buildPaymentOtherBreakdownSnapshot()
+    const tendered = parseFloat(cashTendered) || 0
     return {
       paymentCash: parseFloat(payCash) || 0,
       paymentCard: parseFloat(payCard) || 0,
@@ -1419,6 +1458,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
+      ...(tendered > 0.005 ? { paymentCashTendered: tendered } : {}),
     }
   }, [
     payCash,
@@ -1430,6 +1470,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     adminConfiguredWalletSum,
     legacyWalletPaymentSum,
     buildPaymentOtherBreakdownSnapshot,
+    cashTendered,
   ])
 
   const paymentSnapshotHasAmount = (snap: CartPanelPaymentPayload) => {
@@ -3053,8 +3094,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       serviceReason: paymentServiceReason || undefined,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
       memberNo: selectedMemberNo || undefined,
-      couponCode: couponAppliedCode || undefined,
-      couponDiscountAmt: couponAppliedAmt || undefined,
+      couponCode: couponPayloadFields.couponCode,
+      couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
+      appliedCoupons: couponPayloadFields.appliedCoupons,
       pointUsed: pointUsedNum || undefined,
       payment: withPayment
         ? {
@@ -3148,8 +3190,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
-          couponCode: couponAppliedCode || undefined,
-          couponDiscountAmt: couponAppliedAmt || undefined,
+          couponCode: couponPayloadFields.couponCode,
+          couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
+          appliedCoupons: couponPayloadFields.appliedCoupons,
           pointUsed: pointUsedNum || undefined,
           isPrepaid,
           guestCount: guestCount > 0 ? guestCount : undefined,
@@ -3182,8 +3225,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
-          couponCode: couponAppliedCode || undefined,
-          couponDiscountAmt: couponAppliedAmt || undefined,
+          couponCode: couponPayloadFields.couponCode,
+          couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
+          appliedCoupons: couponPayloadFields.appliedCoupons,
           pointUsed: pointUsedNum || undefined,
         },
         resolvedExistingCheckoutId
@@ -3214,8 +3258,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
-          couponCode: couponAppliedCode || undefined,
-          couponDiscountAmt: couponAppliedAmt || undefined,
+          couponCode: couponPayloadFields.couponCode,
+          couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
+          appliedCoupons: couponPayloadFields.appliedCoupons,
           pointUsed: pointUsedNum || undefined,
         },
         resolvedExistingCheckoutId
@@ -3246,27 +3291,58 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       return
     }
     try {
-      const res = await validatePosCoupon({ code, subtotal })
-      if (!res.valid) {
-        setCouponAppliedCode('')
-        setCouponAppliedAmt(0)
+      const res = await validatePosCoupons({
+        subtotal,
+        manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
+        collabDiscountAmt,
+        applied: appliedCoupons,
+        candidate: { code, quantity: couponQuantity },
+        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+      })
+      if (!res.valid || !res.appliedCoupons?.length) {
         setCouponMessage(res.message || t('posCouponInvalid'))
         return
       }
-      const amount = Math.max(0, Number(res.discountAmt || 0))
-      setDiscountType('fixed')
-      setDiscountValue(amount)
-      setDiscountReason(
-        String(res.discountReason || i18nTr(t, 'posCouponDiscountReason', { code: code.toUpperCase() }))
-      )
-      setCouponAppliedCode(code.toUpperCase())
-      setCouponAppliedAmt(amount)
+      setAppliedCoupons(res.appliedCoupons)
+      setCouponCode('')
+      setCouponQuantity(1)
       setCouponMessage(i18nTr(t, 'posCouponAppliedSuccess', { code: code.toUpperCase() }))
     } catch (e) {
-      console.error('validatePosCoupon:', e)
+      console.error('validatePosCoupons:', e)
       setCouponMessage(t('posCouponValidateError'))
     }
   }
+
+  const removeAppliedCoupon = (index: number) => {
+    setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
+    setCouponMessage('')
+  }
+
+  useEffect(() => {
+    if (!appliedCoupons.length) return
+    let cancelled = false
+    void validatePosCoupons({
+      subtotal,
+      manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
+      collabDiscountAmt,
+      applied: appliedCoupons,
+      memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+    }).then((res) => {
+      if (cancelled || !res.appliedCoupons) return
+      setAppliedCoupons(res.appliedCoupons)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    subtotal,
+    cancelledLineAmt,
+    serviceDiscountAmt,
+    manualDiscountAmt,
+    collabDiscountAmt,
+    cartItems.length,
+    selectedMemberId,
+  ])
 
   const openDineInPaymentFromOrder = (payload: {
     tableName: string
@@ -3348,8 +3424,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setDiscountReason('')
     setAppliedCollabId(null)
     setCouponCode('')
-    setCouponAppliedCode('')
-    setCouponAppliedAmt(0)
+    setAppliedCoupons([])
+    setCouponQuantity(1)
     setCouponMessage('')
     setPointUsed('0')
     setPaymentTableNameOverride(payload.orderLabel)
@@ -3388,8 +3464,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         },
         memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
         memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
-        couponCode: couponAppliedCode || undefined,
-        couponDiscountAmt: couponAppliedAmt || undefined,
+        couponCode: couponPayloadFields.couponCode,
+        couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
+        appliedCoupons: couponPayloadFields.appliedCoupons,
         pointUsed: pointUsedNum || undefined,
       },
       existingId
@@ -3406,8 +3483,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setGuestCount(0)
     setCustomerMemo('')
     setCouponCode('')
-    setCouponAppliedCode('')
-    setCouponAppliedAmt(0)
+    setAppliedCoupons([])
+    setCouponQuantity(1)
     setPointUsed('0')
     setCouponMessage('')
     setDiscountValue(0)
@@ -4236,8 +4313,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   serviceReason: paymentServiceReason || undefined,
                   memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
                   memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
-                  couponCode: couponAppliedCode || undefined,
-                  couponDiscountAmt: couponAppliedAmt || undefined,
+                  couponCode: couponPayloadFields.couponCode,
+                  couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
+                  appliedCoupons: couponPayloadFields.appliedCoupons,
                   pointUsed: pointUsedNum || undefined,
                   guestCount,
                 })
@@ -4546,7 +4624,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
                 <Select
                   value={appliedCollabId ?? '__none__'}
-                  onValueChange={(v) => setAppliedCollabId(v === '__none__' ? null : v)}
+                  onValueChange={(v) => {
+                    setAppliedCollabId(v === '__none__' ? null : v)
+                    setCollabQuantity(1)
+                  }}
                 >
                   <SelectTrigger className="h-10 w-full rounded-xl bg-background">
                     <SelectValue />
@@ -4556,10 +4637,48 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     {collabOptions.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {(c.campaignNo ? `[${c.campaignNo}] ` : '') + c.topic}
+                        {c.collabDetail.posDiscountType === 'amount'
+                          ? ` (${formatBahtNum(c.collabDetail.posDiscountValue)} ฿)`
+                          : c.collabDetail.posDiscountType === 'percent'
+                            ? ` (${c.collabDetail.posDiscountValue}%)`
+                            : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {appliedCollab && collabSupportsQuantityEntry(appliedCollab.collabDetail) ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{tr('posCollabQuantity', '적용 장수')}</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10)}
+                      step={1}
+                      value={collabQuantity}
+                      onChange={(e) =>
+                        setCollabQuantity(
+                          Math.max(
+                            1,
+                            Math.min(
+                              Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10),
+                              Math.trunc(Number(e.target.value || 1))
+                            )
+                          )
+                        )
+                      }
+                      className="h-9 w-20 rounded-xl text-sm"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {tr('posCollabMaxPerOrder', '최대')} {appliedCollab.collabDetail.posMaxPerOrder ?? 10}
+                      {tr('posMenuLineUnit', '건')}
+                    </span>
+                  </div>
+                ) : null}
+                {appliedCollab && collabDiscountAmt > 0 ? (
+                  <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
+                    {tr('posCollabDiscountExpected', '협업 할인 예상')}: -{formatBahtNum(collabDiscountAmt)} ฿
+                  </p>
+                ) : null}
                 {!posMenus?.length ? (
                   <p className="mt-2 text-[11px] text-muted-foreground">{t('posCollabMenusNotLoaded')}</p>
                 ) : null}
@@ -4693,6 +4812,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       onChange={(e) => setCouponCode(e.target.value)}
                       className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs"
                     />
+                    <Input
+                      type="number"
+                      min={1}
+                      max={99}
+                      step={1}
+                      value={couponQuantity}
+                      onChange={(e) =>
+                        setCouponQuantity(Math.max(1, Math.min(99, Math.trunc(Number(e.target.value || 1)))))
+                      }
+                      className="h-10 w-16 shrink-0 text-sm rounded-xl"
+                      title={tr('posCouponQuantity', '수량')}
+                    />
                     <Button
                       type="button"
                       variant="secondary"
@@ -4700,10 +4831,45 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       className="h-10 shrink-0 rounded-xl px-4"
                       onClick={applyCouponCode}
                     >
-                      {t('posCouponApply')}
+                      {tr('posCouponAdd', '추가')}
                     </Button>
                   </div>
                 </div>
+                {appliedCoupons.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {appliedCoupons.map((row, idx) => (
+                      <div
+                        key={`${row.code}-${idx}`}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-sky-500/20 bg-background/80 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{row.name || row.code}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {row.code}
+                            {(row.quantity ?? 1) > 1 ? ` × ${row.quantity}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                            -{formatBahtNum(row.discountAmt)}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 rounded-lg p-0"
+                            onClick={() => removeAppliedCoupon(idx)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      {tr('posCouponTotal', '쿠폰 합계')}: -{formatBahtNum(couponDiscountTotal)}
+                    </p>
+                  </div>
+                )}
                 {!!couponMessage && <p className="mt-2 text-xs text-muted-foreground">{couponMessage}</p>}
               </div>
 
