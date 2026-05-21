@@ -142,8 +142,10 @@ interface EmployeeFormProps {
   saving?: boolean
   /** 매장 매니저일 때 true — 권한(role) 수정 불가 */
   roleDisabled?: boolean
-  /** false면 Officer·Director는 선택 불가(단, 이미 해당 역할인 직원은 유지·하향만 가능) */
-  canAssignOfficerDirectorRoles?: boolean
+  /** false면 Officer 선택 불가(단, 이미 Officer인 직원은 유지·하향만 가능) */
+  canAssignOfficerRole?: boolean
+  /** false면 Director 선택 불가(단, 이미 Director인 직원은 유지·하향만 가능) */
+  canAssignDirectorRole?: boolean
   /** 시스템 설정: 가맹점주 복수 매장 사용 */
   franchiseeMultiEnabled?: boolean
   /** 본사 등 추가 매장 편집 가능 */
@@ -166,7 +168,8 @@ export function EmployeeForm({
   onNew,
   saving = false,
   roleDisabled = false,
-  canAssignOfficerDirectorRoles = false,
+  canAssignOfficerRole = false,
+  canAssignDirectorRole = false,
   franchiseeMultiEnabled = false,
   canEditFranchiseeExtraStores = false,
   allStoresForFranchiseePick = [],
@@ -187,19 +190,19 @@ export function EmployeeForm({
   }, [form.role])
 
   const roleOptionsForSelect = React.useMemo(() => {
-    if (canAssignOfficerDirectorRoles) return [...ROLE_OPTIONS]
-    const cur = String(form.role || "Staff").trim()
-    const curLo = cur.toLowerCase()
-    const elevated = curLo === "officer" || curLo === "director"
     const base = ROLE_OPTIONS.filter((r) => {
       const lo = r.toLowerCase()
-      return lo !== "officer" && lo !== "director"
+      if (lo === "officer" && !canAssignOfficerRole) return false
+      if (lo === "director" && !canAssignDirectorRole) return false
+      return true
     })
-    if (!elevated) return base
+    const cur = String(form.role || "Staff").trim()
+    const curLo = cur.toLowerCase()
     const canonical = ROLE_OPTIONS.find((r) => r.toLowerCase() === curLo) || cur
     if (base.some((r) => r.toLowerCase() === curLo)) return base
-    return [...base, canonical]
-  }, [canAssignOfficerDirectorRoles, form.role])
+    if (curLo === "officer" || curLo === "director") return [...base, canonical]
+    return base
+  }, [canAssignOfficerRole, canAssignDirectorRole, form.role])
   const showFranchiseeExtras =
     canEditFranchiseeExtraStores &&
     franchiseeMultiEnabled &&

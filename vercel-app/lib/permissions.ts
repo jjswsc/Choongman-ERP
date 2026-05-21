@@ -3,6 +3,7 @@
  *
  * 역할 구분:
  * - Director급: director, ceo, hr → 전체 권한, Office 검색 가능
+ * - Secretary: secretary → 본사 권한, 직원 Officer 지정 가능(Director 지정 불가)
  * - Officer: officer → Office 제외한 전체 권한 (급여/직원 관리)
  * - Manager: manager → 매장 매니저, 자기 매장 한정
  * - Franchisee: franchisee → 매장 소유자, 기본은 매니저와 동일(자기 매장). 시스템 설정+extra_stores로 복수 매장 허용 시 JWT·ERP 매장 전환
@@ -25,7 +26,8 @@ export function isOfficeStore(store: string): boolean {
 export const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "CM Office"]
 
 const DIRECTOR_ROLES = ["director", "ceo", "hr"]
-const OFFICE_ROLES = ["director", "ceo", "hr", "officer"]
+const OFFICE_ROLES = ["director", "ceo", "hr", "officer", "secretary"]
+const SECRETARY_ROLE = "secretary"
 const MANAGER_ROLE = "manager"
 const FRANCHISEE_ROLE = "franchisee"
 
@@ -35,21 +37,64 @@ export function isDirectorRole(role: string): boolean {
   return DIRECTOR_ROLES.some((x) => r.includes(x))
 }
 
-/** 본사 권한인지 (Director + Officer) */
+/** 본사 권한인지 (Director + Officer + Secretary) */
 export function isOfficeRole(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()
   return OFFICE_ROLES.some((x) => r.includes(x))
 }
 
-/** 직원 등록 폼의 role 값이 Officer / Director(로그인 권한 등급)인지 */
-export function isEmployeeAuthRoleOfficerOrDirector(formRole: string): boolean {
-  const r = String(formRole || "").trim().toLowerCase()
-  return r === "officer" || r === "director"
+/** Secretary(본사 실무) 역할인지 */
+export function isSecretaryRole(role: string): boolean {
+  const r = String(role || "").toLowerCase().trim()
+  return r.includes(SECRETARY_ROLE)
 }
 
-/** Officer·Director 역할을 새로 지정하거나 바꿀 수 있는지 — Director급(director/ceo/hr)만 */
-export function canAssignEmployeeOfficerDirectorRoles(actorRole: string): boolean {
+/** 직원 등록 폼의 role 값이 Officer(로그인 권한)인지 */
+export function isEmployeeAuthRoleOfficer(formRole: string): boolean {
+  return String(formRole || "").trim().toLowerCase() === "officer"
+}
+
+/** 직원 등록 폼의 role 값이 Director(로그인 권한)인지 */
+export function isEmployeeAuthRoleDirector(formRole: string): boolean {
+  return String(formRole || "").trim().toLowerCase() === "director"
+}
+
+/** 직원 등록 폼의 role 값이 Officer / Director(로그인 권한 등급)인지 */
+export function isEmployeeAuthRoleOfficerOrDirector(formRole: string): boolean {
+  return isEmployeeAuthRoleOfficer(formRole) || isEmployeeAuthRoleDirector(formRole)
+}
+
+/** Officer 역할을 새로 지정·변경할 수 있는지 — Director급 또는 Secretary */
+export function canAssignEmployeeOfficerRole(actorRole: string): boolean {
+  return isDirectorRole(actorRole) || isSecretaryRole(actorRole)
+}
+
+/** Director 역할을 새로 지정·변경할 수 있는지 — Director급만 */
+export function canAssignEmployeeDirectorRole(actorRole: string): boolean {
   return isDirectorRole(actorRole)
+}
+
+/** @deprecated Officer·Director 모두 — Director급만. Officer만은 `canAssignEmployeeOfficerRole` 사용 */
+export function canAssignEmployeeOfficerDirectorRoles(actorRole: string): boolean {
+  return canAssignEmployeeDirectorRole(actorRole)
+}
+
+/** 직원 role 변경 시 Director 지정·해제가 필요한지 */
+export function employeeRoleChangeTouchesDirector(prevRole: string, nextRole: string): boolean {
+  const norm = (s: string) => String(s || "").trim().toLowerCase()
+  const p = norm(prevRole)
+  const n = norm(nextRole)
+  if (p === n) return false
+  return isEmployeeAuthRoleDirector(p) || isEmployeeAuthRoleDirector(n)
+}
+
+/** 직원 role 변경 시 Officer 지정·해제가 필요한지 */
+export function employeeRoleChangeTouchesOfficer(prevRole: string, nextRole: string): boolean {
+  const norm = (s: string) => String(s || "").trim().toLowerCase()
+  const p = norm(prevRole)
+  const n = norm(nextRole)
+  if (p === n) return false
+  return isEmployeeAuthRoleOfficer(p) || isEmployeeAuthRoleOfficer(n)
 }
 
 const EMPLOYEE_FORM_ROLES = ["Staff", "Manager", "Franchisee", "Officer", "Director"] as const

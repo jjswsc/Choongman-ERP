@@ -1304,6 +1304,13 @@ export const i18n = {
     hrPolicyListFilterIndividuals: '개인 지정',
     hrPolicyViewContent: '등록 내용 보기',
     hrPolicyViewNoBody: '(본문 없음 — 첨부만 등록됨)',
+    hrPolicyListSearchPlaceholder: '제목·본문·대상(매장·직무·권한) 검색',
+    hrPolicyListFilterStore: '매장별 보기',
+    hrPolicyListFilterPermission: '권한 그룹',
+    hrPolicyListFilterPermissionAll: '권한 전체',
+    hrPolicyListPermPrefix: '권한',
+    hrPolicyListScopedHint:
+      '본사 권한이 아니면, 허용된 매장·대상과 겹치는 규정만 목록에 표시됩니다.',
     helpSum_admin_hr_policies:
       '인사 규정을 등록하고 오피스·매장·개인별 수신 대상을 지정합니다. 목록에서 등록 내용·열람 현황을 확인하고, 배포 시 공지로 안내할 수 있습니다.',
     helpHow_admin_hr_policies:
@@ -9615,6 +9622,13 @@ Only matters the employee must handle personally on a working day:
     hrPolicyListFilterIndividuals: 'Named individuals',
     hrPolicyViewContent: 'View registered content',
     hrPolicyViewNoBody: '(No body text — attachment only)',
+    hrPolicyListSearchPlaceholder: 'Search title, body, or audience (store, job, permission)',
+    hrPolicyListFilterStore: 'Filter by store',
+    hrPolicyListFilterPermission: 'Permission group',
+    hrPolicyListFilterPermissionAll: 'All permissions',
+    hrPolicyListPermPrefix: 'Perm.',
+    hrPolicyListScopedHint:
+      'Without head-office access, only policies that overlap your allowed stores and audience are listed.',
     helpSum_admin_hr_policies:
       'Register HR policies and set audiences (head office, stores, or individuals). Review content and read status in the list; deploy via notice when ready.',
     helpHow_admin_hr_policies:

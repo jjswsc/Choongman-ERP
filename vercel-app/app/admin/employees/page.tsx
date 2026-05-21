@@ -28,6 +28,8 @@ import {
   isOfficeStore,
   isAccountingRole,
   isDirectorRole,
+  canAssignEmployeeOfficerRole,
+  canAssignEmployeeDirectorRole,
   canonicalEmployeeFormRole,
 } from "@/lib/permissions"
 import {
@@ -609,7 +611,8 @@ export default function EmployeesPage() {
                   onNew={handleNew}
                   saving={saving}
                   roleDisabled={isManager || isFranchiseeRole(userRole)}
-                  canAssignOfficerDirectorRoles={isDirectorRole(userRole)}
+                  canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
+                  canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
                   franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
                   canEditFranchiseeExtraStores={isOffice}
                   allStoresForFranchiseePick={storesForFilter}

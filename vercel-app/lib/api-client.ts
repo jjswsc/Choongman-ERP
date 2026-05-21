@@ -1038,15 +1038,33 @@ export type HrPolicyRow = {
   sender?: string
 }
 
-export async function getHrPolicies(params?: { activeOnly?: boolean }): Promise<{
+export async function getHrPolicies(params?: {
+  activeOnly?: boolean
+  q?: string
+  store?: string
+  permissionGroup?: string
+  audience?: 'all' | 'office' | 'store' | 'individual'
+}): Promise<{
   success: boolean
-  items: HrPolicyRow[]
+  items: (HrPolicyRow & { targetSummary?: string })[]
+  total?: number
+  scoped?: boolean
   message?: string
 }> {
   const q = new URLSearchParams()
   if (params?.activeOnly) q.set('activeOnly', '1')
+  if (params?.q?.trim()) q.set('q', params.q.trim())
+  if (params?.store?.trim()) q.set('store', params.store.trim())
+  if (params?.permissionGroup?.trim()) q.set('permissionGroup', params.permissionGroup.trim())
+  if (params?.audience && params.audience !== 'all') q.set('audience', params.audience)
   const res = await apiFetchWithOffline(`/api/getHrPolicies?${q}`)
-  return (await res.json()) as { success: boolean; items: HrPolicyRow[]; message?: string }
+  return (await res.json()) as {
+    success: boolean
+    items: (HrPolicyRow & { targetSummary?: string })[]
+    total?: number
+    scoped?: boolean
+    message?: string
+  }
 }
 
 export async function saveHrPolicy(body: {

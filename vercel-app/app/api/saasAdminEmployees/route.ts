@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
   canAccessSaasAdmin,
-  canAssignEmployeeOfficerDirectorRoles,
-  isEmployeeAuthRoleOfficerOrDirector,
+  canAssignEmployeeDirectorRole,
+  canAssignEmployeeOfficerRole,
+  employeeRoleChangeTouchesDirector,
+  employeeRoleChangeTouchesOfficer,
 } from "@/lib/permissions"
 import { requireAuth } from "@/lib/verify-auth"
 import { hashPassword } from "@/lib/password"
@@ -243,10 +245,16 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: false, message: "role은 비워둘 수 없습니다." }, { status: 400, headers })
       }
       const prevRole = String(prev.role || "").trim()
-      const canAssignPrivileged = canAssignEmployeeOfficerDirectorRoles(authResult.auth.role || "")
-      if (!canAssignPrivileged && isEmployeeAuthRoleOfficerOrDirector(role) && role.toLowerCase() !== prevRole.toLowerCase()) {
+      const actorRole = authResult.auth.role || ""
+      if (employeeRoleChangeTouchesDirector(prevRole, role) && !canAssignEmployeeDirectorRole(actorRole)) {
         return NextResponse.json(
-          { success: false, message: "Officer/Director 권한 변경은 Director급만 가능합니다." },
+          { success: false, message: "Director 권한 변경은 Director급만 가능합니다." },
+          { status: 403, headers }
+        )
+      }
+      if (employeeRoleChangeTouchesOfficer(prevRole, role) && !canAssignEmployeeOfficerRole(actorRole)) {
+        return NextResponse.json(
+          { success: false, message: "Officer 권한 변경은 Director급 또는 Secretary만 가능합니다." },
           { status: 403, headers }
         )
       }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hrPolicyVisibleToAuth } from '@/lib/hr-policy-access'
 
 const TZ = 'Asia/Bangkok'
 
@@ -26,6 +29,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Invalid policyId' }, { status: 400, headers })
   }
 
+  const authRes = await requireAuth(request, 'manager')
+  if (authRes.errorResponse) {
+    const er = authRes.errorResponse
+    er.headers.set('Access-Control-Allow-Origin', '*')
+    return er
+  }
+  const auth = authRes.auth
+  const userRole = String(auth.role || '').toLowerCase()
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+
   try {
     const prows = (await supabaseSelectFilter('hr_policies', `id=eq.${policyId}`, {
       limit: 1,
@@ -42,6 +55,12 @@ export async function GET(request: NextRequest) {
     const pol = prows?.[0]
     if (!pol) {
       return NextResponse.json({ success: false, message: 'Not found' }, { status: 404, headers })
+    }
+    if (!hrPolicyVisibleToAuth(pol, auth, isOfficeLevel)) {
+      return NextResponse.json(
+        { success: false, message: '이 규정을 조회할 권한이 없습니다.' },
+        { status: 403, headers }
+      )
     }
     const cv = Math.max(1, Math.floor(Number(pol.content_version ?? 1)) || 1)
 

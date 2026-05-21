@@ -89,6 +89,8 @@ export type BroadcastTargetSummaryLabels = {
   stores: string
   individuals: string
   countSuffix: string
+  /** 예: 권한 / Permission */
+  permissionPrefix?: string
 }
 
 /** 목록·미리보기용 한 줄 요약 */
@@ -109,53 +111,69 @@ export function formatBroadcastTargetSummary(
     }
   }
   if (recCount > 0) {
-    return `${labels.individuals} ${recCount}${labels.countSuffix}`
-  }
-
-  const ts = String(row.target_store || '전체').trim()
-  const tr = String(row.target_role || '전체').trim()
-  const tp = String(row.target_permission_group || '').trim()
-
-  if ((!ts || ts === '전체' || ts === 'All') && (!tr || tr === '전체' || tr === 'All') && !tp) {
-    return labels.all
-  }
-
-  const storeList =
-    ts && ts !== '전체' && ts !== 'All'
-      ? ts.split(',').map((s) => s.trim()).filter(Boolean)
-      : []
-
-  if (storeList.length > 0 && knownStoreNames && knownStoreNames.length > 0) {
-    const officeOnly = storeList.every((s) => isOfficeStore(s))
-    const franchiseOnly = storeList.every((s) => !isOfficeStore(s))
-    const allOfficeInSystem = knownStoreNames.filter((s) => isOfficeStore(s))
-    const allFranchiseInSystem = knownStoreNames.filter((s) => !isOfficeStore(s))
-    if (officeOnly && storeList.length >= allOfficeInSystem.length && allOfficeInSystem.length > 0) {
-      const parts = [labels.office]
-      if (tr && tr !== '전체' && tr !== 'All') parts.push(tr)
-      if (tp) parts.push(tp)
-      return parts.join(' · ')
-    }
-    if (
-      franchiseOnly &&
-      storeList.length >= allFranchiseInSystem.length &&
-      allFranchiseInSystem.length > 0
-    ) {
-      const parts = [labels.stores]
-      if (tr && tr !== '전체' && tr !== 'All') parts.push(tr)
-      if (tp) parts.push(tp)
-      return parts.join(' · ')
-    }
+    const storePart = formatStorePart(row, labels, knownStoreNames)
+    const extra = [storePart, formatRolePart(row), formatPermPart(row, labels)].filter(Boolean)
+    const base = `${labels.individuals} ${recCount}${labels.countSuffix}`
+    return extra.length > 0 ? `${base} (${extra.join(' · ')})` : base
   }
 
   const parts: string[] = []
-  if (!ts || ts === '전체' || ts === 'All') parts.push(labels.all)
-  else if (storeList.length <= 2) parts.push(storeList.join(', '))
-  else parts.push(`${storeList[0]} 외 ${storeList.length - 1}`)
-
-  if (tr && tr !== '전체' && tr !== 'All') parts.push(tr)
-  if (tp) parts.push(tp)
+  const storePart = formatStorePart(row, labels, knownStoreNames)
+  if (storePart) parts.push(storePart)
+  const rolePart = formatRolePart(row)
+  if (rolePart) parts.push(rolePart)
+  const permPart = formatPermPart(row, labels)
+  if (permPart) parts.push(permPart)
+  if (parts.length === 0) return labels.all
   return parts.join(' · ')
+}
+
+function formatStorePart(
+  row: BroadcastTargetRow,
+  labels: BroadcastTargetSummaryLabels,
+  knownStoreNames?: string[]
+): string {
+  const ts = String(row.target_store || '전체').trim()
+  if (!ts || ts === '전체' || ts === 'All') return labels.all
+  const storeList = ts.split(',').map((s) => s.trim()).filter(Boolean)
+  if (storeList.length === 0) return labels.all
+  if (knownStoreNames && knownStoreNames.length > 0) {
+    const allOfficeInSystem = knownStoreNames.filter((s) => isOfficeStore(s))
+    const allFranchiseInSystem = knownStoreNames.filter((s) => !isOfficeStore(s))
+    if (
+      storeList.every((s) => isOfficeStore(s)) &&
+      allOfficeInSystem.length > 0 &&
+      storeList.length >= allOfficeInSystem.length
+    ) {
+      return labels.office
+    }
+    if (
+      storeList.every((s) => !isOfficeStore(s)) &&
+      allFranchiseInSystem.length > 0 &&
+      storeList.length >= allFranchiseInSystem.length
+    ) {
+      return labels.stores
+    }
+  }
+  if (storeList.length <= 3) return storeList.join(', ')
+  return `${storeList[0]} 외 ${storeList.length - 1}`
+}
+
+function formatRolePart(row: BroadcastTargetRow): string {
+  const tr = String(row.target_role || '전체').trim()
+  if (!tr || tr === '전체' || tr === 'All') return ''
+  const jobs = tr.split(',').map((s) => s.trim()).filter(Boolean)
+  if (jobs.length <= 2) return jobs.join(', ')
+  return `${jobs[0]} 외 ${jobs.length - 1}`
+}
+
+function formatPermPart(row: BroadcastTargetRow, labels: BroadcastTargetSummaryLabels): string {
+  const tp = String(row.target_permission_group || '').trim()
+  if (!tp) return ''
+  const perms = tp.split(',').map((s) => s.trim()).filter(Boolean)
+  const prefix = labels.permissionPrefix || '권한'
+  if (perms.length <= 3) return `${prefix}: ${perms.join(', ')}`
+  return `${prefix}: ${perms[0]} 외 ${perms.length - 1}`
 }
 
 export type BroadcastTargetAudienceFilter = 'all' | 'office' | 'store' | 'individual'

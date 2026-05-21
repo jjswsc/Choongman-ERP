@@ -36,11 +36,12 @@ import {
   broadcastTargetStateFromRow,
   buildBroadcastTargetPayload,
   formatBroadcastTargetSummary,
-  hrPolicyMatchesAudienceFilter,
   emptyBroadcastTargetSelection,
   type BroadcastTargetSelectionState,
   type BroadcastTargetAudienceFilter,
 } from "@/lib/broadcast-target-selection"
+import { resolveHrPolicyAllowedStores } from "@/lib/hr-policy-access"
+import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
 import {
   BroadcastTargetPicker,
   type BroadcastTargetOptionCounts,
@@ -98,8 +99,13 @@ export function HrPolicyAdminWorkspace() {
     permissionOptionCount: 0,
   })
   const [knownStoreNames, setKnownStoreNames] = React.useState<string[]>([])
+  const [permissionGroupOptions, setPermissionGroupOptions] = React.useState<string[]>([])
+  const [listSearchQ, setListSearchQ] = React.useState("")
+  const [listStoreFilter, setListStoreFilter] = React.useState("")
+  const [listPermFilter, setListPermFilter] = React.useState("")
   const [listAudienceFilter, setListAudienceFilter] =
     React.useState<BroadcastTargetAudienceFilter>("all")
+  const [listScoped, setListScoped] = React.useState(false)
   const [viewOpen, setViewOpen] = React.useState(false)
   const [viewPolicy, setViewPolicy] = React.useState<HrPolicyRow | null>(null)
   const [files, setFiles] = React.useState<NoticeAttachedFile[]>([])
@@ -109,24 +115,38 @@ export function HrPolicyAdminWorkspace() {
 
   const loadPolicyList = React.useCallback(() => {
     setListLoading(true)
-    getHrPolicies()
+    getHrPolicies({
+      q: listSearchQ.trim() || undefined,
+      store: listStoreFilter.trim() || undefined,
+      permissionGroup: listPermFilter.trim() || undefined,
+      audience: listAudienceFilter,
+    })
       .then((r) => {
-        if (r.success) setPolicies(r.items || [])
-        else setPolicies([])
+        if (r.success) {
+          setPolicies(r.items || [])
+          setListScoped(Boolean(r.scoped))
+        } else setPolicies([])
       })
       .catch(() => setPolicies([]))
       .finally(() => setListLoading(false))
-  }, [])
+  }, [listSearchQ, listStoreFilter, listPermFilter, listAudienceFilter])
 
   React.useEffect(() => {
     loadPolicyList()
-  }, [loadPolicyList])
+  }, [listStoreFilter, listPermFilter, listAudienceFilter, loadPolicyList])
 
   React.useEffect(() => {
-    getNoticeOptions()
-      .then((r) => setKnownStoreNames(r.stores || []))
-      .catch(() => setKnownStoreNames([]))
-  }, [])
+    if (!auth?.store) return
+    const isOffice =
+      isOfficeRole(auth.role || "") ||
+      isAccountingRole(auth.role || "") ||
+      (auth.role || "").toLowerCase().includes("hr")
+    getNoticeOptions().then((r) => {
+      const allStores = r.stores || []
+      setKnownStoreNames(isOffice ? allStores : resolveHrPolicyAllowedStores(auth))
+      setPermissionGroupOptions(r.permissionGroups || [])
+    })
+  }, [auth?.store, auth?.role, auth?.allowedStores])
 
   const targetSummaryLabels = React.useMemo(
     () => ({
@@ -135,16 +155,9 @@ export function HrPolicyAdminWorkspace() {
       stores: t("hrPolicyTargetPresetStores"),
       individuals: t("hrPolicyTargetPresetIndividuals"),
       countSuffix: t("adminRecipientsCountSuffix"),
+      permissionPrefix: t("hrPolicyListPermPrefix"),
     }),
     [t]
-  )
-
-  const filteredPolicies = React.useMemo(
-    () =>
-      policies.filter((p) =>
-        hrPolicyMatchesAudienceFilter(p, listAudienceFilter, knownStoreNames)
-      ),
-    [policies, listAudienceFilter, knownStoreNames]
   )
 
   const removeFile = (id: string) => {
@@ -579,9 +592,61 @@ export function HrPolicyAdminWorkspace() {
     </div>
 
     <div className="rounded-xl border bg-card shadow-sm flex flex-col min-h-[320px]">
-      <div className="flex items-center justify-between border-b px-4 py-3 flex-wrap gap-2">
-        <h3 className="text-sm font-bold">{t("hrPolicyListTitle")}</h3>
+      <div className="border-b px-4 py-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-bold">{t("hrPolicyListTitle")}</h3>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setStatsOpen(true)}
+          >
+            <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
+            {t("hrPolicyReadStatsOpen")}
+          </Button>
+        </div>
+        {listScoped ? (
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            {t("hrPolicyListScopedHint")}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={listSearchQ}
+            onChange={(e) => setListSearchQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") loadPolicyList()
+            }}
+            placeholder={t("hrPolicyListSearchPlaceholder")}
+            className="h-8 min-w-[8rem] flex-1 text-xs"
+          />
+          <select
+            className="h-8 max-w-[9rem] rounded-md border bg-background px-2 text-xs truncate"
+            value={listStoreFilter}
+            onChange={(e) => setListStoreFilter(e.target.value)}
+            aria-label={t("hrPolicyListFilterStore")}
+          >
+            <option value="">{t("noticeFilterAll")}</option>
+            {knownStoreNames.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-8 max-w-[8rem] rounded-md border bg-background px-2 text-xs"
+            value={listPermFilter || "all"}
+            onChange={(e) => setListPermFilter(e.target.value === "all" ? "" : e.target.value)}
+            aria-label={t("hrPolicyListFilterPermission")}
+          >
+            <option value="all">{t("hrPolicyListFilterPermissionAll")}</option>
+            {permissionGroupOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
           <select
             className="h-8 rounded-md border bg-background px-2 text-xs"
             value={listAudienceFilter}
@@ -597,7 +662,7 @@ export function HrPolicyAdminWorkspace() {
           </select>
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             size="sm"
             className="h-8 text-xs"
             onClick={() => loadPolicyList()}
@@ -605,34 +670,22 @@ export function HrPolicyAdminWorkspace() {
           >
             {t("search")}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setStatsOpen(true)}
-          >
-            <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
-            {t("hrPolicyReadStatsOpen")}
-          </Button>
         </div>
       </div>
       <div className="flex-1 p-3 overflow-auto max-h-[70vh] text-xs">
         {listLoading ? (
           <div className="py-8 text-center text-muted-foreground">{t("loading")}</div>
-        ) : filteredPolicies.length === 0 ? (
+        ) : policies.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">{t("noNotices")}</div>
         ) : (
           <ul className="space-y-1">
-            {filteredPolicies.map((p) => {
+            {policies.map((p) => {
               const ca = p.created_at ? String(p.created_at).slice(0, 10) : ""
               const v = p.content_version ?? 1
               const attN = hrPolicyAttachmentCount(p.attachments)
-              const targetLabel = formatBroadcastTargetSummary(
-                p,
-                targetSummaryLabels,
-                knownStoreNames
-              )
+              const targetLabel =
+                (p as HrPolicyRow & { targetSummary?: string }).targetSummary ||
+                formatBroadcastTargetSummary(p, targetSummaryLabels, knownStoreNames)
               return (
                 <li
                   key={p.id}
