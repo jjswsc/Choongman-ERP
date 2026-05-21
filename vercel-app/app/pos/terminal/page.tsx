@@ -5297,10 +5297,8 @@ export default function PosTerminalPage() {
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
                 let queuedLocalOrderNo: string | null = null
-                if (Number.isFinite(existingOrderId) && existingOrderId > 0 && !existingOrder) {
-                  await appAlert(t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
-                  return
-                }
+                // 기존 주문 id만 남고 본문 스냅샷이 비는 레이스(리패치/동기화 직후)에서는
+                // 저장을 막지 않고 신규 저장 경로로 폴백해 주문 유실을 방지한다.
                 if (isAddOrder && existingOrder) {
                   /**
                    * 추가 주문: 카트가 기존+신규 전체일 수도 있고, 신규 줄만 있을 수도 있다.

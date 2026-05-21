@@ -52,12 +52,18 @@ export function translateReceiptTableDisplayName(tableName: string, _t?: (key: s
 }
 
 /**
- * 배치 테이블명 `4` vs 주문 `table_name` `4번` 등 매칭용 (소문자·trim·끝 `번` 제거).
+ * 배치 테이블명 매칭 키 정규화.
+ * - `4` ↔ `4번`
+ * - `1F-4번`, `1층 4번`, `Table 4` ↔ `4`
  */
 export function normalizePosTableNameForMatch(raw: string | undefined | null): string {
   let s = String(raw ?? '').trim().toLowerCase()
   if (!s) return ''
   s = s.replace(/\s*번\s*$/u, '').trimEnd()
+  s = s.replace(/^table\s*/u, '').trimStart()
+  s = s.replace(/^(?:\d+\s*f(?:loor)?|f\s*\d+|\d+\s*층|b\d+)\s*[-_/]?\s*/u, '').trimStart()
+  s = s.replace(/\s+/gu, ' ').trim()
+  if (/^\d+$/u.test(s)) return String(Number(s))
   return s
 }
 
