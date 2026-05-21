@@ -241,7 +241,10 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     (opts?: { silent?: boolean; reload?: boolean; todayOnly?: boolean }) => {
       const task = runPersistWorkLogProgress(opts)
       const chained = persistChainRef.current.then(() => task, () => task)
-      persistChainRef.current = chained.catch(() => {})
+      persistChainRef.current = chained.then(
+        () => undefined,
+        () => undefined
+      )
       return chained
     },
     [runPersistWorkLogProgress]

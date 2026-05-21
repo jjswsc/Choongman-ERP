@@ -58,17 +58,24 @@ export function isEphemeralWorkLogId(id: string | undefined | null): boolean {
   return !s || s.startsWith("_temp_")
 }
 
+/** 업무 검토·리포트 행(관리자 리포트 API 등) */
+export type WorkLogReportRowLike = {
+  id: string
+  date: string
+  name: string
+  content: string
+  progress: number
+  status: string
+  dept?: string
+  priority?: string
+  managerCheck?: string
+  managerComment?: string
+}
+
 /** 업무 검토·리포트: 같은 날·같은 직원·같은 내용은 한 행만 */
-export function dedupeWorkLogReportByDateNameContent<
-  T extends {
-    id: string
-    date: string
-    name: string
-    content: string
-    progress: number
-    status: string
-  },
->(rows: T[]): T[] {
+export function dedupeWorkLogReportByDateNameContent<T extends WorkLogReportRowLike>(
+  rows: T[]
+): T[] {
   const groups = new Map<string, T[]>()
   for (const r of rows) {
     const key = `${r.date}\0${r.name}\0${workLogContentKey(r.content)}`
