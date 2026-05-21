@@ -37,6 +37,7 @@ import {
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
+import { normalizeWorkLogContent, workLogContentKey } from "@/lib/work-log-dedupe"
 
 const PRIORITIES = [
   { value: "긴급", key: "workLogPriorityUrgent" },
@@ -76,6 +77,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const localTodayRef = React.useRef(localToday)
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveGenRef = React.useRef(0)
+  const persistChainRef = React.useRef(Promise.resolve())
   const unfinishedCount = React.useMemo(() => {
     const continueCount = localContinue.filter((it) => {
       const hasContent = Boolean((it.content || "").trim())
@@ -127,10 +129,10 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     if (userName) setSelectedStaff(userName)
   }, [userName])
 
-  const loadData = React.useCallback(async () => {
+  const loadData = React.useCallback(async (opts?: { quiet?: boolean }) => {
     if (!selectedStaff) return
     cancelPendingAutoSave()
-    setLoading(true)
+    if (!opts?.quiet) setLoading(true)
     try {
       const res = await getWorkLogData({
         dateStr: endStr,
@@ -147,9 +149,18 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       setLocalContinue([])
       setLocalToday([])
     } finally {
-      setLoading(false)
+      if (!opts?.quiet) setLoading(false)
     }
   }, [endStr, selectedStaff, employeeId, cancelPendingAutoSave])
+
+  const buildTodayLogsForSave = React.useCallback((): WorkLogItem[] => {
+    return localTodayRef.current
+      .filter((it) => Boolean(normalizeWorkLogContent(it.content)))
+      .map((it) => ({
+        ...it,
+        progress: Number(it.progress) || 0,
+      }))
+  }, [])
 
   const buildAllLogs = React.useCallback((): WorkLogItem[] => {
     const finish = localFinishRef.current
@@ -166,10 +177,11 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     ].filter((it) => it.content || it.id)
   }, [])
 
-  const persistWorkLogProgress = React.useCallback(
-    async (opts?: { silent?: boolean; reload?: boolean }) => {
+  const runPersistWorkLogProgress = React.useCallback(
+    async (opts?: { silent?: boolean; reload?: boolean; todayOnly?: boolean }) => {
       const silent = opts?.silent ?? false
       const reload = opts?.reload ?? !silent
+      const todayOnly = opts?.todayOnly ?? false
       if (!selectedStaff || !hasSearched) return false
       if (!silent && unfinishedCount > 0) {
         const proceed = await appConfirm(
@@ -183,14 +195,17 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       if (silent) setAutoSaveStatus("saving")
       else setSaving(true)
       try {
+        const logs = todayOnly ? buildTodayLogsForSave() : buildAllLogs()
+        if (todayOnly && logs.length === 0) return true
+
         const res = await saveWorkLogData({
           date: endStr,
           name: selectedStaff,
-          logs: buildAllLogs(),
+          logs,
           ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
         })
         if (res.success) {
-          if (reload) await loadData()
+          if (reload) await loadData({ quiet: silent })
           return true
         }
         if (!silent) {
@@ -206,11 +221,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         if (!silent) await appAlert(t("workLogSaveError"))
         return false
       } finally {
-        if (silent) {
-          /* status set by caller */
-        } else {
-          setSaving(false)
-        }
+        if (!silent) setSaving(false)
       }
     },
     [
@@ -220,9 +231,20 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       endStr,
       employeeId,
       buildAllLogs,
+      buildTodayLogsForSave,
       loadData,
       t,
     ]
+  )
+
+  const persistWorkLogProgress = React.useCallback(
+    (opts?: { silent?: boolean; reload?: boolean; todayOnly?: boolean }) => {
+      const task = runPersistWorkLogProgress(opts)
+      const chained = persistChainRef.current.then(() => task, () => task)
+      persistChainRef.current = chained.catch(() => {})
+      return chained
+    },
+    [runPersistWorkLogProgress]
   )
 
   const scheduleAutoSaveProgress = React.useCallback(() => {
@@ -233,7 +255,11 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       const gen = ++autoSaveGenRef.current
       void (async () => {
         setAutoSaveStatus("saving")
-        const ok = await persistWorkLogProgress({ silent: true, reload: false })
+        const ok = await persistWorkLogProgress({
+          silent: true,
+          reload: true,
+          todayOnly: true,
+        })
         if (gen !== autoSaveGenRef.current) return
         setAutoSaveStatus(ok ? "saved" : "error")
         if (ok) {
@@ -322,14 +348,19 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     const toMove = localContinue.filter((it) => selectedContinueIds.has(it.id || ""))
     const toKeep = localContinue.filter((it) => !selectedContinueIds.has(it.id || ""))
     setLocalContinue(toKeep)
-    setLocalToday((prev) => [
-      ...prev,
-      ...toMove.map((it) => ({
-        ...it,
-        status: "Today",
-        progress: Number(it.progress) || 0,
-      })),
-    ])
+    setLocalToday((prev) => {
+      const existingKeys = new Set(prev.map((it) => workLogContentKey(it.content)))
+      const added = toMove
+        .filter((it) => !existingKeys.has(workLogContentKey(it.content)))
+        .map((it) => ({
+          ...it,
+          status: "Today",
+          progress: Number(it.progress) || 0,
+        }))
+      const next = [...prev, ...added]
+      localTodayRef.current = next
+      return next
+    })
     setSelectedContinueIds(new Set())
   }
 

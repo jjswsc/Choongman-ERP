@@ -7,6 +7,46 @@ import {
 } from '@/lib/supabase-server'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
+import { isEphemeralWorkLogId, normalizeWorkLogContent } from '@/lib/work-log-dedupe'
+
+async function findExistingWorkLogRowId(
+  date: string,
+  savedName: string,
+  savedEmployeeId: number | null,
+  content: string,
+  explicitId?: string
+): Promise<string | null> {
+  const idStr = String(explicitId || '').trim()
+  if (idStr && !isEphemeralWorkLogId(idStr)) {
+    const ex = ((await supabaseSelectFilter(
+      'work_logs',
+      `id=eq.${encodeURIComponent(idStr)}`,
+      { limit: 1 }
+    )) || []) as { id?: string }[]
+    if (ex.length > 0) return idStr
+  }
+
+  const nc = normalizeWorkLogContent(content)
+  if (!nc) return null
+
+  const parts = [
+    `log_date=eq.${encodeURIComponent(date)}`,
+    `content=eq.${encodeURIComponent(nc)}`,
+  ]
+  if (savedEmployeeId != null) {
+    parts.push(`employee_id=eq.${savedEmployeeId}`)
+  } else {
+    parts.push(`name=eq.${encodeURIComponent(savedName)}`)
+  }
+
+  const rows = ((await supabaseSelectFilter('work_logs', parts.join('&'), {
+    limit: 1,
+    order: 'progress.desc',
+  })) || []) as { id?: string }[]
+
+  const found = rows[0]?.id
+  return found != null ? String(found) : null
+}
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -16,7 +56,9 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) || {}
     const date = String(body.date || '').trim()
     const name = String(body.name || '').trim()
-    const rawEmployeeId = (body as { employeeId?: unknown; employee_id?: unknown }).employeeId ?? (body as { employee_id?: unknown }).employee_id
+    const rawEmployeeId =
+      (body as { employeeId?: unknown; employee_id?: unknown }).employeeId ??
+      (body as { employee_id?: unknown }).employee_id
     const logs = Array.isArray(body.logs)
       ? body.logs
       : body.jsonStr
@@ -54,43 +96,53 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const savedIds: { id: string; content: string }[] = []
+
     for (let idx = 0; idx < logs.length; idx++) {
       const item = logs[idx]
+      const content = String(item.content || '')
+      if (!normalizeWorkLogContent(content) && isEphemeralWorkLogId(item.id)) continue
+
       const pv = Number(item.progress)
       const status =
         pv >= 100 ? 'Finish' : item.type === 'continue' ? 'Continue' : 'Today'
-      const ex = item.id
-        ? ((await supabaseSelectFilter(
-            'work_logs',
-            `id=eq.${encodeURIComponent(String(item.id))}`,
-            { limit: 1 }
-          )) || []) as unknown[]
-        : []
       const patch = {
         dept: savedDept,
         name: savedName,
-        content: item.content || '',
+        content,
         progress: pv,
         status,
         priority: item.priority || '',
+        log_date: date,
         ...(savedEmployeeId != null ? { employee_id: savedEmployeeId } : {}),
       }
-      if (ex.length > 0) {
-        await supabaseUpdate('work_logs', String(item.id), patch)
+
+      const existingId = await findExistingWorkLogRowId(
+        date,
+        savedName,
+        savedEmployeeId,
+        content,
+        item.id
+      )
+
+      if (existingId) {
+        await supabaseUpdate('work_logs', existingId, patch)
+        savedIds.push({ id: existingId, content })
       } else {
+        const newId =
+          date +
+          '_' +
+          savedName +
+          '_' +
+          Date.now() +
+          '_' +
+          Math.floor(Math.random() * 100)
         await supabaseInsert('work_logs', {
-          id:
-            date +
-            '_' +
-            savedName +
-            '_' +
-            Date.now() +
-            '_' +
-            Math.floor(Math.random() * 100),
+          id: newId,
           log_date: date,
           dept: savedDept,
           name: savedName,
-          content: item.content || '',
+          content,
           progress: pv,
           status,
           priority: item.priority || '',
@@ -98,11 +150,12 @@ export async function POST(req: NextRequest) {
           manager_comment: '',
           ...(savedEmployeeId != null ? { employee_id: savedEmployeeId } : {}),
         })
+        savedIds.push({ id: newId, content })
       }
     }
 
     return NextResponse.json(
-      { success: true, messageKey: 'workLogSaveDone' },
+      { success: true, messageKey: 'workLogSaveDone', savedIds },
       { headers }
     )
   } catch (e) {

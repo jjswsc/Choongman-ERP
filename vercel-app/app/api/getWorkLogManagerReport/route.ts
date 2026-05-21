@@ -4,6 +4,7 @@ import {
   resolveWorkLogFilterNameFromEmployeeIdParam,
   workLogsOrEmployeeIdOrNameFilter,
 } from '@/lib/work-log-name-server'
+import { dedupeWorkLogReportByDateNameContent } from '@/lib/work-log-dedupe'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -45,17 +46,30 @@ export async function GET(req: NextRequest) {
         select: 'id,log_date,dept,name,employee_id,content,progress,status,priority,manager_check,manager_comment',
       })) || []
 
-    const result = rows.map((r: Record<string, unknown>) => ({
+    const result = dedupeWorkLogReportByDateNameContent(
+      rows.map((r: Record<string, unknown>) => ({
+        id: String(r.id ?? ''),
+        date: r.log_date ? String(r.log_date).slice(0, 10) : '',
+        dept: String(r.dept || ''),
+        name: String(r.name || ''),
+        content: String(r.content || ''),
+        progress: Number(r.progress) || 0,
+        status: String(r.status || ''),
+        priority: String(r.priority || ''),
+        managerCheck: String(r.manager_check || ''),
+        managerComment: String(r.manager_comment || ''),
+      }))
+    ).map((r) => ({
       id: r.id,
-      date: r.log_date ? String(r.log_date).slice(0, 10) : '',
-      dept: r.dept || '',
-      name: r.name || '',
-      content: r.content || '',
-      progress: Number(r.progress) || 0,
-      status: r.status || '',
-      priority: r.priority || '',
-      managerCheck: r.manager_check || '',
-      managerComment: r.manager_comment || '',
+      date: r.date,
+      dept: r.dept,
+      name: r.name,
+      content: r.content,
+      progress: r.progress,
+      status: r.status,
+      priority: r.priority,
+      managerCheck: r.managerCheck,
+      managerComment: r.managerComment,
     }))
 
     return NextResponse.json(result, { headers })

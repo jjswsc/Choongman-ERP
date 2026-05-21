@@ -7,6 +7,7 @@ import {
   resolveWorkLogFilterNameFromEmployeeIdParam,
   workLogsOrEmployeeIdOrNameFilter,
 } from '@/lib/work-log-name-server'
+import { dedupeWorkLogReportByDateNameContent } from '@/lib/work-log-dedupe'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -55,13 +56,25 @@ export async function GET(req: NextRequest) {
       { total: number; completed: number; carried: number; inProgress: number; progressSum: number; count: number }
     > = {}
 
-    for (const r of rows as {
-      name: string
-      dept?: string
-      content?: string
-      progress?: number
-      status?: string
-    }[]) {
+    const dedupedRows = dedupeWorkLogReportByDateNameContent(
+      (rows as {
+        id?: string
+        log_date?: string | Date
+        name: string
+        content?: string
+        progress?: number
+        status?: string
+      }[]).map((r) => ({
+        id: String(r.id ?? ''),
+        date: r.log_date ? String(r.log_date).slice(0, 10) : '',
+        name: r.name || '',
+        content: String(r.content || ''),
+        progress: Number(r.progress) || 0,
+        status: String(r.status || ''),
+      }))
+    )
+
+    for (const r of dedupedRows) {
       const name = r.name || ''
       if (!name) continue
       if (!byEmployee[name]) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
+import { dedupeWorkLogItemsByContent } from '@/lib/work-log-dedupe'
 
 function toDateStr(v: string | Date | null): string {
   if (!v) return ''
@@ -179,7 +180,14 @@ export async function GET(req: NextRequest) {
       if (continueItems.length >= 20) break
     }
 
-    return NextResponse.json({ finish, continueItems, todayItems }, { headers })
+    return NextResponse.json(
+      {
+        finish: dedupeWorkLogItemsByContent(finish),
+        continueItems: dedupeWorkLogItemsByContent(continueItems),
+        todayItems: dedupeWorkLogItemsByContent(todayItems),
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('getWorkLogData:', e)
     return NextResponse.json({ finish: [], continueItems: [], todayItems: [] }, { headers })
