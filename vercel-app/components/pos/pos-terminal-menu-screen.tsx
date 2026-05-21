@@ -12,6 +12,7 @@ import {
   savePosMenuScreenConfig,
   savePosMenu,
   savePosMenuOption,
+  syncPosMenuImageCrossChannels,
   uploadPosMenuImage,
   POS_MENU_UPLOAD_TOO_LARGE,
   type PosMenu,
@@ -934,6 +935,26 @@ export function PosTerminalMenuScreen({
               imageOnly: true,
             })
             if (saveRes?.success) {
+              const scopedStore = String(storeCode || '').trim()
+              if (scopedStore) {
+                const syncRes = await syncPosMenuImageCrossChannels({
+                  storeCode: scopedStore,
+                  menuId: targetMenu.id,
+                  menuCode: targetMenu.code || '',
+                  imageUrl: newUrl,
+                  source: 'menu-screen',
+                })
+                if (!syncRes?.success) {
+                  await appAlert(
+                    localizeApiMessage(
+                      syncRes?.message,
+                      t,
+                      t('posSaveFail') || '저장 실패',
+                      lang
+                    )
+                  )
+                }
+              }
               await loadMenuData()
             } else {
               await appAlert(localizeApiMessage(saveRes?.message, t, t('posSaveFail') || '저장 실패', lang))

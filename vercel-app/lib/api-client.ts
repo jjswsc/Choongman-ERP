@@ -7181,6 +7181,27 @@ export async function savePosMenu(
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function syncPosMenuImageCrossChannels(params: {
+  storeCode: string
+  menuId?: string | number
+  menuCode?: string
+  imageUrl: string
+  source?: 'menu-screen' | 'delivery-ops' | 'unknown'
+}) {
+  const res = await apiFetchWithOffline('/api/syncPosMenuImageCrossChannels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    normalizedMenuCode?: string
+    touchedMenuCount?: number
+    touchedDeliveryImageCount?: number
+  }>
+}
+
 export type ImportPosMenusResult = {
   success: boolean
   message?: string
