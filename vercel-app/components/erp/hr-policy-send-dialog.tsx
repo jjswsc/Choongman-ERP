@@ -1,23 +1,24 @@
 "use client"
 
 import * as React from "react"
-import { Store, Briefcase, Shield, Users, Megaphone } from "lucide-react"
+import { Megaphone } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { appAlert } from "@/lib/app-message"
+import { saveHrPolicy, sendNotice, type HrPolicyRow } from "@/lib/api-client"
 import {
-  getNoticeOptions,
-  useStoreList,
-  saveHrPolicy,
-  sendNotice,
-  type HrPolicyRow,
-} from "@/lib/api-client"
+  broadcastTargetStateFromRow,
+  buildBroadcastTargetPayload,
+  emptyBroadcastTargetSelection,
+  type BroadcastTargetSelectionState,
+} from "@/lib/broadcast-target-selection"
+import {
+  BroadcastTargetPicker,
+  type BroadcastTargetOptionCounts,
+} from "@/components/erp/broadcast-target-picker"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -55,196 +56,30 @@ export function HrPolicySendDialog({ open, onOpenChange, policy, onDeployed }: P
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { staffByStore } = useStoreList()
+  const allLabel = t("noticeFilterAll")
 
-  const [stores, setStores] = React.useState<string[]>([])
-  const [positions, setPositions] = React.useState<string[]>([])
-  const [permissionGroups, setPermissionGroups] = React.useState<string[]>([])
-  const [selectedStores, setSelectedStores] = React.useState<string[]>([])
-  const [selectedPositions, setSelectedPositions] = React.useState<string[]>([])
-  const [selectedPermissionGroups, setSelectedPermissionGroups] = React.useState<string[]>([])
-  const [selectedRecipients, setSelectedRecipients] = React.useState<string[]>([])
+  const [targetSelection, setTargetSelection] = React.useState<BroadcastTargetSelectionState>(
+    emptyBroadcastTargetSelection()
+  )
+  const [optionCounts, setOptionCounts] = React.useState<BroadcastTargetOptionCounts>({
+    storeOptionCount: 0,
+    positionOptionCount: 0,
+    permissionOptionCount: 0,
+  })
   const [deploying, setDeploying] = React.useState(false)
 
   React.useEffect(() => {
-    if (!auth?.store) return
-    const isOffice =
-      auth.role === "director" ||
-      auth.role === "officer" ||
-      auth.role === "accounting" ||
-      (auth.role || "").toLowerCase().includes("hr")
-    getNoticeOptions().then((r) => {
-      const allLabel = t("noticeFilterAll")
-      const storeList = isOffice ? (r.stores || []) : [auth.store!]
-      setStores([allLabel, ...storeList])
-      setPositions([allLabel, ...(r.roles || [])])
-      setPermissionGroups([allLabel, ...(r.permissionGroups || [])])
-    })
-  }, [auth?.store, auth?.role, lang, t])
-
-  const fillFromPolicy = React.useCallback(
-    (p: HrPolicyRow) => {
-      const allLabel = t("noticeFilterAll")
-      const ts = String(p.target_store || "전체").trim()
-      if (ts === "전체" || ts === "All" || !ts) {
-        setSelectedStores([])
-      } else {
-        setSelectedStores(ts.split(",").map((s) => s.trim()).filter(Boolean))
-      }
-      const tr = String(p.target_role || "전체").trim()
-      if (tr === "전체" || tr === "All" || !tr) {
-        setSelectedPositions([])
-      } else {
-        setSelectedPositions(tr.split(",").map((s) => s.trim()).filter(Boolean))
-      }
-      const tp = String(p.target_permission_group || "").trim()
-      if (!tp) {
-        setSelectedPermissionGroups([])
-      } else {
-        setSelectedPermissionGroups(tp.split(",").map((s) => s.trim()).filter(Boolean))
-      }
-      let rec: string[] = []
-      if (p.target_recipients) {
-        try {
-          const j = JSON.parse(String(p.target_recipients)) as unknown
-          if (Array.isArray(j)) rec = j.filter((x): x is string => typeof x === "string")
-        } catch {
-          rec = []
-        }
-      }
-      setSelectedRecipients(rec)
-    },
-    [t]
-  )
-
-  React.useEffect(() => {
     if (!open || !policy) return
-    fillFromPolicy(policy)
-  }, [open, policy, fillFromPolicy])
-
-  const toggleStore = (store: string) => {
-    const allLabel = t("noticeFilterAll")
-    if (store === allLabel) {
-      setSelectedStores(
-        selectedStores.length === stores.length - 1
-          ? []
-          : stores.filter((s) => s !== allLabel)
-      )
-      return
-    }
-    setSelectedStores((prev) =>
-      prev.includes(store) ? prev.filter((s) => s !== store) : [...prev, store]
-    )
-  }
-
-  const togglePosition = (position: string) => {
-    const allLabel = t("noticeFilterAll")
-    if (position === allLabel) {
-      setSelectedPositions(
-        selectedPositions.length === positions.length - 1
-          ? []
-          : positions.filter((p) => p !== allLabel)
-      )
-      return
-    }
-    setSelectedPositions((prev) =>
-      prev.includes(position)
-        ? prev.filter((p) => p !== position)
-        : [...prev, position]
-    )
-  }
-
-  const togglePermissionGroup = (perm: string) => {
-    const allLabel = t("noticeFilterAll")
-    if (perm === allLabel) {
-      setSelectedPermissionGroups(
-        selectedPermissionGroups.length === permissionGroups.length - 1
-          ? []
-          : permissionGroups.filter((p) => p !== allLabel)
-      )
-      return
-    }
-    setSelectedPermissionGroups((prev) =>
-      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
-    )
-  }
-
-  const toggleRecipient = (store: string, name: string) => {
-    const key = `${store}|${name}`
-    setSelectedRecipients((prev) =>
-      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
-    )
-  }
-
-  const allLabel = t("noticeFilterAll")
-  const allStoresForStaff = selectedStores.length === 0 || selectedStores.length === stores.length - 1
-  const storeNamesForStaff = allStoresForStaff
-    ? stores.filter((s) => s !== allLabel)
-    : selectedStores
-  const allPositionsForStaff =
-    selectedPositions.length === 0 || selectedPositions.length === positions.length - 1
-  const positionsToMatch = allPositionsForStaff
-    ? null
-    : new Set(
-        selectedPositions
-          .filter((p) => p !== allLabel)
-          .map((r) => r.trim().toLowerCase())
-          .filter(Boolean)
-      )
-  const allPermissionGroupsForStaff =
-    selectedPermissionGroups.length === 0 ||
-    selectedPermissionGroups.length === permissionGroups.length - 1
-  const permissionGroupsToMatch = allPermissionGroupsForStaff
-    ? null
-    : new Set(
-        selectedPermissionGroups
-          .filter((p) => p !== allLabel)
-          .map((r) => r.trim().toLowerCase())
-          .filter(Boolean)
-      )
-
-  const employeeList: { store: string; name: string; nick: string }[] = React.useMemo(() => {
-    const list: { store: string; name: string; nick: string }[] = []
-    for (const store of storeNamesForStaff) {
-      const staff = staffByStore[store] || []
-      for (const s of staff) {
-        if (!s.name) continue
-        if (positionsToMatch && positionsToMatch.size > 0) {
-          const empJob = String(s.job || "").trim().toLowerCase()
-          if (!empJob || !positionsToMatch.has(empJob)) continue
-        }
-        if (permissionGroupsToMatch && permissionGroupsToMatch.size > 0) {
-          const empRole = String(s.role || "").trim().toLowerCase()
-          if (!empRole || !permissionGroupsToMatch.has(empRole)) continue
-        }
-        list.push({ store, name: s.name, nick: s.nick || s.name })
-      }
-    }
-    return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))
-  }, [storeNamesForStaff, staffByStore, positionsToMatch, permissionGroupsToMatch])
+    setTargetSelection(broadcastTargetStateFromRow(policy, allLabel))
+  }, [open, policy, allLabel])
 
   const handleDeploy = async () => {
     if (!policy || !auth?.user) return
-    const allStores = selectedStores.length === stores.length - 1
-    const allPos = selectedPositions.length === positions.length - 1
-    const allPerm = selectedPermissionGroups.length === permissionGroups.length - 1
-    const targetStore =
-      selectedStores.length === 0 || allStores ? "전체" : selectedStores.join(",")
-    const targetRole =
-      selectedPositions.length === 0 || allPos ? "전체" : selectedPositions.join(",")
-    const targetPermissionGroup =
-      selectedPermissionGroups.length === 0 || allPerm ? "" : selectedPermissionGroups.join(",")
-    let recKeys = selectedRecipients
-    if (recKeys.length === 0 && employeeList.length > 0) {
-      recKeys = employeeList.map((e) => `${e.store}|${e.name}`)
-    }
-    const targetRecipientsList =
-      recKeys.length > 0
-        ? recKeys.map((k) => {
-            const [s, n] = k.split("|")
-            return { store: s || "", name: n || "" }
-          })
-        : undefined
+    const payload = buildBroadcastTargetPayload(targetSelection, {
+      storeOptions: optionCounts.storeOptionCount,
+      positionOptions: optionCounts.positionOptionCount,
+      permissionOptions: optionCounts.permissionOptionCount,
+    })
 
     setDeploying(true)
     try {
@@ -252,10 +87,10 @@ export function HrPolicySendDialog({ open, onOpenChange, policy, onDeployed }: P
         id: policy.id,
         title: String(policy.title || ""),
         content: String(policy.content || ""),
-        targetStore,
-        targetRole,
-        targetPermissionGroup: targetPermissionGroup || undefined,
-        targetRecipients: targetRecipientsList,
+        targetStore: payload.targetStore,
+        targetRole: payload.targetRole,
+        targetPermissionGroup: payload.targetPermissionGroup || undefined,
+        targetRecipients: payload.targetRecipients,
         effectiveAt: policy.effective_at ? String(policy.effective_at).slice(0, 10) : null,
         is_active: true,
         attachments: policyAttachments(policy),
@@ -269,10 +104,10 @@ export function HrPolicySendDialog({ open, onOpenChange, policy, onDeployed }: P
       const nRes = await sendNotice({
         title: noticeTitle,
         content: noticeContent,
-        targetStore,
-        targetRole: targetRole || "전체",
-        targetPermissionGroup: targetPermissionGroup || null,
-        targetRecipients: targetRecipientsList,
+        targetStore: payload.targetStore,
+        targetRole: payload.targetRole || "전체",
+        targetPermissionGroup: payload.targetPermissionGroup || null,
+        targetRecipients: payload.targetRecipients,
         sender: auth.user,
         userStore: auth.store,
         userRole: auth.role,
@@ -301,141 +136,13 @@ export function HrPolicySendDialog({ open, onOpenChange, policy, onDeployed }: P
           )}
         </DialogHeader>
         <p className="px-4 pt-2 text-xs text-muted-foreground">{t("hrPolicyDeployDialogHint")}</p>
-        <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-3">
-          <div className="flex flex-col gap-2 min-h-0">
-            <label className="flex items-center gap-2 text-xs font-semibold">
-              <Store className="h-3.5 w-3.5" />
-              {t("store")}
-            </label>
-            <ScrollArea className="h-[140px] rounded-md border p-1">
-              <div className="flex flex-col gap-0.5 pr-2">
-                {stores.map((store) => {
-                  const isAll = store === t("noticeFilterAll")
-                  const checked = isAll
-                    ? selectedStores.length === stores.length - 1
-                    : selectedStores.includes(store)
-                  return (
-                    <label
-                      key={store}
-                      className={cn(
-                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-pointer",
-                        checked ? "bg-primary/10" : "hover:bg-muted/50"
-                      )}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => toggleStore(store)}
-                        className="h-3.5 w-3.5"
-                      />
-                      {store}
-                    </label>
-                  )
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-          <div className="flex flex-col gap-2 min-h-0">
-            <label className="flex items-center gap-2 text-xs font-semibold">
-              <Shield className="h-3.5 w-3.5" />
-              {t("adminTargetPermissionGroups")}
-            </label>
-            <ScrollArea className="h-[140px] rounded-md border p-1">
-              <div className="flex flex-col gap-0.5 pr-2">
-                {permissionGroups.map((perm) => {
-                  const isAll = perm === t("noticeFilterAll")
-                  const checked = isAll
-                    ? selectedPermissionGroups.length === permissionGroups.length - 1
-                    : selectedPermissionGroups.includes(perm)
-                  return (
-                    <label
-                      key={perm}
-                      className={cn(
-                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-pointer",
-                        checked ? "bg-amber-500/10" : "hover:bg-muted/50"
-                      )}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => togglePermissionGroup(perm)}
-                        className="h-3.5 w-3.5"
-                      />
-                      {perm}
-                    </label>
-                  )
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-          <div className="flex flex-col gap-2 min-h-0">
-            <label className="flex items-center gap-2 text-xs font-semibold">
-              <Briefcase className="h-3.5 w-3.5" />
-              {t("noticeTargetDept")}
-            </label>
-            <ScrollArea className="h-[140px] rounded-md border p-1">
-              <div className="flex flex-col gap-0.5 pr-2">
-                {positions.map((pos) => {
-                  const isAll = pos === t("noticeFilterAll")
-                  const checked = isAll
-                    ? selectedPositions.length === positions.length - 1
-                    : selectedPositions.includes(pos)
-                  return (
-                    <label
-                      key={pos}
-                      className={cn(
-                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-pointer",
-                        checked ? "bg-emerald-500/10" : "hover:bg-muted/50"
-                      )}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => togglePosition(pos)}
-                        className="h-3.5 w-3.5"
-                      />
-                      {pos}
-                    </label>
-                  )
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-        <div className="px-4 pb-2">
-          <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
-            <Users className="h-3.5 w-3.5" />
-            {t("adminTargetIndividuals")}
-            <span className="text-muted-foreground">
-              {selectedRecipients.length}
-              {t("adminRecipientsCountSuffix")}
-            </span>
-          </label>
-          <ScrollArea className="mt-1.5 h-[100px] rounded-md border p-2">
-            <div className="flex flex-wrap gap-1.5 pr-2">
-              {employeeList.length === 0 ? (
-                <span className="text-xs text-muted-foreground">—</span>
-              ) : (
-                employeeList.map((emp) => {
-                  const key = `${emp.store}|${emp.name}`
-                  const checked = selectedRecipients.includes(key)
-                  return (
-                    <label
-                      key={key}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs cursor-pointer",
-                        checked ? "bg-amber-500/15" : "opacity-80"
-                      )}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => toggleRecipient(emp.store, emp.name)}
-                        className="h-3 w-3"
-                      />
-                      {emp.nick}
-                    </label>
-                  )
-                })
-              )}
-            </div>
-          </ScrollArea>
+        <div className="p-4">
+          <BroadcastTargetPicker
+            value={targetSelection}
+            onChange={setTargetSelection}
+            onOptionCountsChange={setOptionCounts}
+            employeeListHeight={120}
+          />
         </div>
         <div className="flex justify-end gap-2 border-t bg-muted/30 px-4 py-3">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

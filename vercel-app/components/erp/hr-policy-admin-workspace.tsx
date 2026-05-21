@@ -15,6 +15,7 @@ import {
   BarChart2,
   Megaphone,
   FileInput,
+  BookOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,8 +24,27 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { saveHrPolicy, getHrPolicies, getHrPolicyReadDetail, type HrPolicyRow } from "@/lib/api-client"
+import {
+  saveHrPolicy,
+  getHrPolicies,
+  getHrPolicyReadDetail,
+  getNoticeOptions,
+  type HrPolicyRow,
+} from "@/lib/api-client"
 import { buildHrPolicyContent, parseHrPolicyContent } from "@/lib/hr-policy-doc-format"
+import {
+  broadcastTargetStateFromRow,
+  buildBroadcastTargetPayload,
+  formatBroadcastTargetSummary,
+  hrPolicyMatchesAudienceFilter,
+  emptyBroadcastTargetSelection,
+  type BroadcastTargetSelectionState,
+  type BroadcastTargetAudienceFilter,
+} from "@/lib/broadcast-target-selection"
+import {
+  BroadcastTargetPicker,
+  type BroadcastTargetOptionCounts,
+} from "@/components/erp/broadcast-target-picker"
 import {
   Dialog,
   DialogContent,
@@ -69,6 +89,19 @@ export function HrPolicyAdminWorkspace() {
   const [statsOpen, setStatsOpen] = React.useState(false)
   const [sendOpen, setSendOpen] = React.useState(false)
   const [sendPolicy, setSendPolicy] = React.useState<HrPolicyRow | null>(null)
+  const [targetSelection, setTargetSelection] = React.useState<BroadcastTargetSelectionState>(
+    emptyBroadcastTargetSelection()
+  )
+  const [targetOptionCounts, setTargetOptionCounts] = React.useState<BroadcastTargetOptionCounts>({
+    storeOptionCount: 0,
+    positionOptionCount: 0,
+    permissionOptionCount: 0,
+  })
+  const [knownStoreNames, setKnownStoreNames] = React.useState<string[]>([])
+  const [listAudienceFilter, setListAudienceFilter] =
+    React.useState<BroadcastTargetAudienceFilter>("all")
+  const [viewOpen, setViewOpen] = React.useState(false)
+  const [viewPolicy, setViewPolicy] = React.useState<HrPolicyRow | null>(null)
   const [files, setFiles] = React.useState<NoticeAttachedFile[]>([])
   const [saving, setSaving] = React.useState(false)
   const [fileUploading, setFileUploading] = React.useState(false)
@@ -88,6 +121,31 @@ export function HrPolicyAdminWorkspace() {
   React.useEffect(() => {
     loadPolicyList()
   }, [loadPolicyList])
+
+  React.useEffect(() => {
+    getNoticeOptions()
+      .then((r) => setKnownStoreNames(r.stores || []))
+      .catch(() => setKnownStoreNames([]))
+  }, [])
+
+  const targetSummaryLabels = React.useMemo(
+    () => ({
+      all: t("noticeFilterAll"),
+      office: t("hrPolicyTargetPresetOffice"),
+      stores: t("hrPolicyTargetPresetStores"),
+      individuals: t("hrPolicyTargetPresetIndividuals"),
+      countSuffix: t("adminRecipientsCountSuffix"),
+    }),
+    [t]
+  )
+
+  const filteredPolicies = React.useMemo(
+    () =>
+      policies.filter((p) =>
+        hrPolicyMatchesAudienceFilter(p, listAudienceFilter, knownStoreNames)
+      ),
+    [policies, listAudienceFilter, knownStoreNames]
+  )
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id))
@@ -170,6 +228,7 @@ export function HrPolicyAdminWorkspace() {
       }
     }
     setFiles(att)
+    setTargetSelection(broadcastTargetStateFromRow(row, t("noticeFilterAll")))
   }
 
   const clearForm = () => {
@@ -181,6 +240,7 @@ export function HrPolicyAdminWorkspace() {
     setEditingIsActive(false)
     setEffectiveAt("")
     setFiles([])
+    setTargetSelection(emptyBroadcastTargetSelection())
   }
 
   const handleSave = async () => {
@@ -202,6 +262,11 @@ export function HrPolicyAdminWorkspace() {
       body: bodyText,
     })
     const isNew = editingId === 0
+    const targetPayload = buildBroadcastTargetPayload(targetSelection, {
+      storeOptions: targetOptionCounts.storeOptionCount,
+      positionOptions: targetOptionCounts.positionOptionCount,
+      permissionOptions: targetOptionCounts.permissionOptionCount,
+    })
     setSaving(true)
     try {
       const attachments = files.map((f) => ({ name: f.name, mime: f.mime, url: f.url }))
@@ -209,8 +274,10 @@ export function HrPolicyAdminWorkspace() {
         id: isNew ? undefined : editingId,
         title: title.trim(),
         content: fullContent,
-        targetStore: "전체",
-        targetRole: "전체",
+        targetStore: targetPayload.targetStore,
+        targetRole: targetPayload.targetRole,
+        targetPermissionGroup: targetPayload.targetPermissionGroup || undefined,
+        targetRecipients: targetPayload.targetRecipients,
         effectiveAt: effectiveAt.trim() || null,
         is_active: isNew ? false : editingIsActive,
         attachments,
@@ -226,6 +293,11 @@ export function HrPolicyAdminWorkspace() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const openViewPolicy = (row: HrPolicyRow) => {
+    setViewPolicy(row)
+    setViewOpen(true)
   }
 
   const openReadDetail = (row: HrPolicyRow) => {
@@ -334,6 +406,19 @@ export function HrPolicyAdminWorkspace() {
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t("noticeTitlePlaceholder")}
             className="h-10 text-sm"
+          />
+        </div>
+
+        <div className="rounded-lg border border-border/70 bg-muted/15 p-4">
+          <h4 className="text-xs font-bold text-foreground mb-1">{t("hrPolicyTargetSectionTitle")}</h4>
+          <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+            {t("hrPolicyTargetSectionHint")}
+          </p>
+          <BroadcastTargetPicker
+            value={targetSelection}
+            onChange={setTargetSelection}
+            onOptionCountsChange={setTargetOptionCounts}
+            employeeListHeight={110}
           />
         </div>
 
@@ -496,7 +581,20 @@ export function HrPolicyAdminWorkspace() {
     <div className="rounded-xl border bg-card shadow-sm flex flex-col min-h-[320px]">
       <div className="flex items-center justify-between border-b px-4 py-3 flex-wrap gap-2">
         <h3 className="text-sm font-bold">{t("hrPolicyListTitle")}</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-xs"
+            value={listAudienceFilter}
+            onChange={(e) =>
+              setListAudienceFilter(e.target.value as BroadcastTargetAudienceFilter)
+            }
+            aria-label={t("hrPolicyListFilterAudience")}
+          >
+            <option value="all">{t("hrPolicyListFilterAll")}</option>
+            <option value="office">{t("hrPolicyListFilterOffice")}</option>
+            <option value="store">{t("hrPolicyListFilterStores")}</option>
+            <option value="individual">{t("hrPolicyListFilterIndividuals")}</option>
+          </select>
           <Button
             type="button"
             variant="outline"
@@ -522,14 +620,19 @@ export function HrPolicyAdminWorkspace() {
       <div className="flex-1 p-3 overflow-auto max-h-[70vh] text-xs">
         {listLoading ? (
           <div className="py-8 text-center text-muted-foreground">{t("loading")}</div>
-        ) : policies.length === 0 ? (
+        ) : filteredPolicies.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">{t("noNotices")}</div>
         ) : (
           <ul className="space-y-1">
-            {policies.map((p) => {
+            {filteredPolicies.map((p) => {
               const ca = p.created_at ? String(p.created_at).slice(0, 10) : ""
               const v = p.content_version ?? 1
               const attN = hrPolicyAttachmentCount(p.attachments)
+              const targetLabel = formatBroadcastTargetSummary(
+                p,
+                targetSummaryLabels,
+                knownStoreNames
+              )
               return (
                 <li
                   key={p.id}
@@ -550,8 +653,21 @@ export function HrPolicyAdminWorkspace() {
                         </span>
                       )}
                     </span>
+                    <span className="text-[10px] text-primary/90 block truncate" title={targetLabel}>
+                      {t("hrPolicyListTargetLabel")}: {targetLabel}
+                    </span>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2"
+                      title={t("hrPolicyViewContent")}
+                      onClick={() => openViewPolicy(p)}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -605,6 +721,80 @@ export function HrPolicyAdminWorkspace() {
         )}
       </div>
     </div>
+
+    <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-sm pr-6">
+            {viewPolicy?.title || t("hrPolicyViewContent")}
+          </DialogTitle>
+        </DialogHeader>
+        {viewPolicy ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-muted-foreground">
+              {t("hrPolicyListTargetLabel")}:{" "}
+              {formatBroadcastTargetSummary(viewPolicy, targetSummaryLabels, knownStoreNames)}
+              {viewPolicy.effective_at
+                ? ` · ${t("hrPolicyEffectiveAt")}: ${String(viewPolicy.effective_at).slice(0, 10)}`
+                : ""}
+            </p>
+            {(() => {
+              const parts = parseHrPolicyContent(String(viewPolicy.content || ""))
+              return (
+                <>
+                  {parts.docRef ? (
+                    <p className="text-xs font-mono text-muted-foreground">
+                      {t("hrPolicyDocRef")}: {parts.docRef}
+                    </p>
+                  ) : null}
+                  {parts.recipientTo ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("hrPolicyDocRecipientLine")}: {parts.recipientTo}
+                    </p>
+                  ) : null}
+                  {parts.body.trim() ? (
+                    <pre className="whitespace-pre-wrap rounded-lg border bg-muted/20 p-3 text-xs leading-relaxed font-serif">
+                      {parts.body}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">{t("hrPolicyViewNoBody")}</p>
+                  )}
+                </>
+              )
+            })()}
+            {hrPolicyAttachmentCount(viewPolicy.attachments) > 0 ? (
+              <ul className="space-y-1 text-xs">
+                {(() => {
+                  try {
+                    const raw = JSON.parse(String(viewPolicy.attachments)) as {
+                      name?: string
+                      url?: string
+                    }[]
+                    if (!Array.isArray(raw)) return null
+                    return raw.map((a, i) =>
+                      a?.url ? (
+                        <li key={i}>
+                          <a
+                            href={a.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline"
+                          >
+                            {a.name || "file"}
+                          </a>
+                        </li>
+                      ) : null
+                    )
+                  } catch {
+                    return null
+                  }
+                })()}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={readOpen} onOpenChange={setReadOpen}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">

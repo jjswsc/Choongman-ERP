@@ -45,6 +45,9 @@ const PRIORITIES = [
   { value: "하", key: "workLogPriorityLow" },
 ] as const
 
+/** 슬라이더 조정 후 자동 저장 대기(ms) */
+const PROGRESS_AUTO_SAVE_MS = 700
+
 interface WorklogMyProps {
   userName: string
   /** 로그인 세션의 employees.id — 저장·조회 시 이름 오매칭 방지 */
@@ -67,6 +70,12 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const [selectedContinueIds, setSelectedContinueIds] = React.useState<Set<string>>(new Set())
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
+  const localFinishRef = React.useRef(localFinish)
+  const localContinueRef = React.useRef(localContinue)
+  const localTodayRef = React.useRef(localToday)
+  const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSaveGenRef = React.useRef(0)
   const unfinishedCount = React.useMemo(() => {
     const continueCount = localContinue.filter((it) => {
       const hasContent = Boolean((it.content || "").trim())
@@ -80,6 +89,23 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     }).length
     return continueCount + todayCount
   }, [localContinue, localToday])
+
+  React.useEffect(() => {
+    localFinishRef.current = localFinish
+    localContinueRef.current = localContinue
+    localTodayRef.current = localToday
+  }, [localFinish, localContinue, localToday])
+
+  const cancelPendingAutoSave = React.useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
+    autoSaveGenRef.current += 1
+    setAutoSaveStatus("idle")
+  }, [])
+
+  React.useEffect(() => () => cancelPendingAutoSave(), [cancelPendingAutoSave])
 
   React.useEffect(() => {
     if (userName) setSelectedStaff(userName)
@@ -103,6 +129,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
 
   const loadData = React.useCallback(async () => {
     if (!selectedStaff) return
+    cancelPendingAutoSave()
     setLoading(true)
     try {
       const res = await getWorkLogData({
@@ -112,7 +139,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       })
       setData(res)
       setLocalFinish(res.finish || [])
-      setLocalContinue((res.continueItems || []).map((it) => ({ ...it, progress: 0 })))
+      setLocalContinue(res.continueItems || [])
       setLocalToday(res.todayItems || [])
     } catch {
       setData(null)
@@ -122,7 +149,101 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     } finally {
       setLoading(false)
     }
-  }, [endStr, selectedStaff, employeeId])
+  }, [endStr, selectedStaff, employeeId, cancelPendingAutoSave])
+
+  const buildAllLogs = React.useCallback((): WorkLogItem[] => {
+    const finish = localFinishRef.current
+    const cont = localContinueRef.current
+    const today = localTodayRef.current
+    return [
+      ...finish.map((it) => ({ ...it, type: undefined })),
+      ...cont.map((it) => ({
+        ...it,
+        type: "continue" as const,
+        progress: Number(it.progress) || 0,
+      })),
+      ...today.map((it) => ({ ...it, type: undefined })),
+    ].filter((it) => it.content || it.id)
+  }, [])
+
+  const persistWorkLogProgress = React.useCallback(
+    async (opts?: { silent?: boolean; reload?: boolean }) => {
+      const silent = opts?.silent ?? false
+      const reload = opts?.reload ?? !silent
+      if (!selectedStaff || !hasSearched) return false
+      if (!silent && unfinishedCount > 0) {
+        const proceed = await appConfirm(
+          `미완료 업무가 ${unfinishedCount}건 있습니다.\n` +
+            `Save Progress만 하면 Continue가 생성되지 않습니다.\n` +
+            `익일 Continue 생성을 원하면 Daily Close를 눌러주세요.\n\n` +
+            `그래도 Save Progress를 진행할까요?`
+        )
+        if (!proceed) return false
+      }
+      if (silent) setAutoSaveStatus("saving")
+      else setSaving(true)
+      try {
+        const res = await saveWorkLogData({
+          date: endStr,
+          name: selectedStaff,
+          logs: buildAllLogs(),
+          ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
+        })
+        if (res.success) {
+          if (reload) await loadData()
+          return true
+        }
+        if (!silent) {
+          const r = res as { messageKey?: string; message?: string }
+          await appAlert(
+            r.messageKey
+              ? t(r.messageKey)
+              : translateApiMessage(r.message, t) || t("workLogSaveFail")
+          )
+        }
+        return false
+      } catch {
+        if (!silent) await appAlert(t("workLogSaveError"))
+        return false
+      } finally {
+        if (silent) {
+          /* status set by caller */
+        } else {
+          setSaving(false)
+        }
+      }
+    },
+    [
+      selectedStaff,
+      hasSearched,
+      unfinishedCount,
+      endStr,
+      employeeId,
+      buildAllLogs,
+      loadData,
+      t,
+    ]
+  )
+
+  const scheduleAutoSaveProgress = React.useCallback(() => {
+    if (!hasSearched || !selectedStaff) return
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null
+      const gen = ++autoSaveGenRef.current
+      void (async () => {
+        setAutoSaveStatus("saving")
+        const ok = await persistWorkLogProgress({ silent: true, reload: false })
+        if (gen !== autoSaveGenRef.current) return
+        setAutoSaveStatus(ok ? "saved" : "error")
+        if (ok) {
+          setTimeout(() => {
+            setAutoSaveStatus((s) => (s === "saved" ? "idle" : s))
+          }, 2000)
+        }
+      })()
+    }, PROGRESS_AUTO_SAVE_MS)
+  }, [hasSearched, selectedStaff, persistWorkLogProgress])
 
   const handleSearch = () => {
     setHasSearched(true)
@@ -203,7 +324,11 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     setLocalContinue(toKeep)
     setLocalToday((prev) => [
       ...prev,
-      ...toMove.map((it) => ({ ...it, status: "Today", progress: 0 })),
+      ...toMove.map((it) => ({
+        ...it,
+        status: "Today",
+        progress: Number(it.progress) || 0,
+      })),
     ])
     setSelectedContinueIds(new Set())
   }
@@ -271,58 +396,29 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     )
   }
 
-  const updateProgressByIndex = (
-    setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
-    index: number,
-    progress: number
-  ) => {
-    setList((prev) =>
-      prev.map((it, i) =>
-        i === index ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status } : it
+  const handleTodayProgressChange = (index: number, progress: number) => {
+    setLocalToday((prev) => {
+      const next = prev.map((it, i) =>
+        i === index
+          ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status }
+          : it
       )
-    )
+      localTodayRef.current = next
+      return next
+    })
+    scheduleAutoSaveProgress()
   }
 
   const handleSaveProgress = async () => {
     if (!selectedStaff) return
-    if (unfinishedCount > 0) {
-      const proceed = await appConfirm(
-        `미완료 업무가 ${unfinishedCount}건 있습니다.\n` +
-        `Save Progress만 하면 Continue가 생성되지 않습니다.\n` +
-        `익일 Continue 생성을 원하면 Daily Close를 눌러주세요.\n\n` +
-        `그래도 Save Progress를 진행할까요?`
-      )
-      if (!proceed) return
-    }
-    setSaving(true)
-    try {
-      const allLogs: WorkLogItem[] = [
-        ...localFinish.map((it) => ({ ...it, type: undefined })),
-        ...localContinue.map((it) => ({ ...it, type: "continue" as const, progress: 0 })),
-        ...localToday.map((it) => ({ ...it, type: undefined })),
-      ].filter((it) => it.content || it.id)
-      const res = await saveWorkLogData({
-        date: endStr,
-        name: selectedStaff,
-        logs: allLogs,
-        ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
-      })
-      if (res.success) {
-        loadData()
-      } else {
-        const r = res as { messageKey?: string; message?: string }
-        await appAlert(r.messageKey ? t(r.messageKey) : (translateApiMessage(r.message, t) || t("workLogSaveFail")))
-      }
-    } catch (_e) {
-      await appAlert(t("workLogSaveError"))
-    } finally {
-      setSaving(false)
-    }
+    cancelPendingAutoSave()
+    await persistWorkLogProgress({ silent: false, reload: true })
   }
 
   const handleDailyClose = async () => {
     if (!selectedStaff) return
-        if (!await appConfirm(t("workLogDailyCloseConfirm"))) return
+    cancelPendingAutoSave()
+    if (!await appConfirm(t("workLogDailyCloseConfirm"))) return
     setSaving(true)
     try {
       const toClose = [...localContinue, ...localToday].filter((it) => it.content || it.id)
@@ -360,14 +456,22 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
               <Input
                 type="date"
                 value={startStr}
-                onChange={(e) => { setStartStr(e.target.value); setHasSearched(false) }}
+                onChange={(e) => {
+                  cancelPendingAutoSave()
+                  setStartStr(e.target.value)
+                  setHasSearched(false)
+                }}
                 className="h-9 w-32 text-xs shrink-0"
               />
               <span className="text-xs text-muted-foreground shrink-0">~</span>
               <Input
                 type="date"
                 value={endStr}
-                onChange={(e) => { setEndStr(e.target.value); setHasSearched(false) }}
+                onChange={(e) => {
+                  cancelPendingAutoSave()
+                  setEndStr(e.target.value)
+                  setHasSearched(false)
+                }}
                 className="h-9 w-32 text-xs shrink-0"
               />
             </div>
@@ -486,7 +590,9 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         </SelectContent>
                       </Select>
                     </div>
-                    <p className="text-xs font-bold text-muted-foreground">{t("workLogProgressHint")}</p>
+                    <p className="text-xs font-bold text-muted-foreground">
+                      {Number(it.progress) || 0}% · {t("workLogProgressHint")}
+                    </p>
                     {it.managerComment?.startsWith("⚡") && (
                       <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment)}</p>
                     )}
@@ -502,6 +608,19 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
             <div className="flex items-center gap-2.5 border-b bg-primary/5 px-5 py-3">
               <Play className="h-4 w-4 text-primary" />
               <h3 className="text-sm font-bold text-foreground">{t("workLogTodayWork")}</h3>
+              {autoSaveStatus !== "idle" && (
+                <span
+                  className={`ml-auto text-[10px] font-medium tabular-nums ${
+                    autoSaveStatus === "error" ? "text-destructive" : "text-muted-foreground"
+                  }`}
+                >
+                  {autoSaveStatus === "saving"
+                    ? t("loading")
+                    : autoSaveStatus === "saved"
+                      ? t("workLogSaveDone")
+                      : t("workLogSaveFail")}
+                </span>
+              )}
             </div>
             <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localToday.length === 0 ? (
@@ -539,7 +658,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         min={0}
                         max={100}
                         value={it.progress}
-                        onChange={(e) => updateProgressByIndex(setLocalToday, idx, Number(e.target.value))}
+                        onChange={(e) => handleTodayProgressChange(idx, Number(e.target.value))}
                         className="h-2 flex-1"
                       />
                       <span className="text-xs font-bold w-8">{it.progress}%</span>

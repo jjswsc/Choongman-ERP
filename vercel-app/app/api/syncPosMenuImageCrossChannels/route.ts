@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import {
   supabaseSelectFilter,
-  supabaseUpdateByFilter,
   supabaseUpsert,
 } from '@/lib/supabase-server'
 
@@ -81,13 +81,15 @@ export async function POST(request: NextRequest) {
 
     const nowIso = new Date().toISOString()
     for (const menuId of targetMenuIds) {
-      await supabaseUpdateByFilter(
+      // pos_menus.updated_at 은 일부 DB에만 있음 — 없으면 image 만 갱신(PGRST204 폴백)
+      await supabaseUpdateByFilterWithPgrst204Fallback(
         'pos_menus',
         `id=eq.${menuId}`,
         {
           image: imageUrl,
           updated_at: nowIso,
-        }
+        },
+        'syncPosMenuImageCrossChannels'
       )
     }
 
