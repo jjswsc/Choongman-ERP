@@ -253,6 +253,21 @@ function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[]): CartP
   }
   return merged
 }
+
+function buildPaymentPayloadForOrderSubmit(params: {
+  base: CartPanelPaymentPayload
+  paymentOther: number
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown
+  deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'>
+}): CartPanelPaymentPayload {
+  return {
+    ...params.base,
+    paymentOther: params.paymentOther,
+    ...(params.paymentOtherBreakdown ? { paymentOtherBreakdown: params.paymentOtherBreakdown } : {}),
+    ...params.deliveryPayPart,
+  }
+}
+
 export type CartPanelOrderLinePayload = {
   id: string
   name: string
@@ -1450,15 +1465,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
     const ob = buildPaymentOtherBreakdownSnapshot()
-    const tendered = parseFloat(cashTendered) || 0
+    const cashPay = parseFloat(payCash) || 0
+    const tenderedRaw = parseFloat(cashTendered) || 0
+    const nonCashPay =
+      (parseFloat(payCard) || 0) +
+      (parseFloat(payPromptPay) || 0) +
+      (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
+      (parseFloat(payDeliveryApp) || 0)
+    const cashOnlyPay = nonCashPay <= 0.005 && cashPay > 0.005
+    const effectiveTendered = tenderedRaw > 0.005 ? tenderedRaw : cashOnlyPay ? cashPay : 0
     return {
-      paymentCash: parseFloat(payCash) || 0,
+      paymentCash: cashPay,
       paymentCard: parseFloat(payCard) || 0,
       paymentQr: parseFloat(payPromptPay) || 0,
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
-      ...(tendered > 0.005 ? { paymentCashTendered: tendered } : {}),
+      ...(effectiveTendered > 0.005 ? { paymentCashTendered: effectiveTendered } : {}),
     }
   }, [
     payCash,
@@ -3099,14 +3122,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       appliedCoupons: couponPayloadFields.appliedCoupons,
       pointUsed: pointUsedNum || undefined,
       payment: withPayment
-        ? {
-            paymentCash: parseFloat(payCash) || 0,
-            paymentCard: parseFloat(payCard) || 0,
-            paymentQr: parseFloat(payPromptPay) || 0,
+        ? buildPaymentPayloadForOrderSubmit({
+            base: buildPaymentSnapshot(),
             paymentOther: paymentOtherSum,
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
-            ...deliveryPayPart,
-          }
+            deliveryPayPart,
+          })
         : {
             paymentCash: 0,
             paymentCard: 0,
@@ -3179,14 +3200,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           discountReason: paymentDiscountReason,
           serviceAmt: serviceDiscountAmt,
           serviceReason: paymentServiceReason || undefined,
-          payment: {
-            paymentCash: resolvedPayment.paymentCash || 0,
-            paymentCard: resolvedPayment.paymentCard || 0,
-            paymentQr: resolvedPayment.paymentQr || 0,
+          payment: buildPaymentPayloadForOrderSubmit({
+            base: resolvedPayment,
             paymentOther: paymentOtherSum,
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
-            ...deliveryPayPart,
-          },
+            deliveryPayPart,
+          }),
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
@@ -3214,14 +3233,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           discountReason: paymentDiscountReason,
           serviceAmt: serviceDiscountAmt,
           serviceReason: paymentServiceReason || undefined,
-          payment: {
-            paymentCash: resolvedPayment.paymentCash || 0,
-            paymentCard: resolvedPayment.paymentCard || 0,
-            paymentQr: resolvedPayment.paymentQr || 0,
+          payment: buildPaymentPayloadForOrderSubmit({
+            base: resolvedPayment,
             paymentOther: paymentOtherSum,
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
-            ...deliveryPayPart,
-          },
+            deliveryPayPart,
+          }),
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
@@ -3247,14 +3264,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           discountReason: paymentDiscountReason,
           serviceAmt: serviceDiscountAmt,
           serviceReason: paymentServiceReason || undefined,
-          payment: {
-            paymentCash: resolvedPayment.paymentCash || 0,
-            paymentCard: resolvedPayment.paymentCard || 0,
-            paymentQr: resolvedPayment.paymentQr || 0,
+          payment: buildPaymentPayloadForOrderSubmit({
+            base: resolvedPayment,
             paymentOther: paymentOtherSum,
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
-            ...deliveryPayPart,
-          },
+            deliveryPayPart,
+          }),
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,

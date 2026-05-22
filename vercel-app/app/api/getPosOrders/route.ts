@@ -242,10 +242,22 @@ export async function GET(request: NextRequest) {
   let effectiveStoreCode = requestedStore
   if (caller && !isOfficeRole(caller.role)) {
     const own = caller.store.trim()
-    if (!own) {
-      return NextResponse.json([], { headers })
+    if (own) {
+      effectiveStoreCode = own
+    } else {
+      // 일부 단말에서 JWT payload.store 누락 시 조회 전체가 0건이 되는 장애를 막기 위해
+      // 요청 storeCode가 있으면 해당 매장으로 제한 조회를 허용한다.
+      effectiveStoreCode = requestedStore
+      if (!effectiveStoreCode) {
+        return NextResponse.json([], { headers })
+      }
+      if (process.env.NODE_ENV === 'development' || debugPosOrders) {
+        console.log('[getPosOrders] caller store missing, fallback to requestedStore', {
+          role: caller.role,
+          requestedStore: requestedStore || '(none)',
+        })
+      }
     }
-    effectiveStoreCode = own
   }
   const status = String(searchParams.get('status') || '').trim()
   const sinceIdRaw = searchParams.get('sinceId')?.trim()
@@ -409,32 +421,53 @@ export async function GET(request: NextRequest) {
             rows = Array.from(mergedById.values())
           }
         }
-        const hasNonNumericStoreLabel =
-          Boolean(primaryStoreFilter) &&
-          /[a-zA-Z\u3131-\uD79D]/.test(primaryStoreFilter) &&
-          !/^\d+$/.test(primaryStoreFilter.replace(/^CM\s+/i, '').trim())
-        if (!strictStore && !rows?.length && hasNonNumericStoreLabel) {
+        if (!strictStore && !rows?.length && primaryStoreFilter) {
           const fallbackFilterNoStore = buildListFilter('')
           const fallbackRows = (await supabaseSelectFilter('pos_orders', fallbackFilterNoStore, {
             order: listOrder,
             limit: listLimit,
             select: POS_ORDER_SELECT,
           })) as typeof rows
+          const candidateKeys = new Set<string>()
+          addStoreVariants(candidateKeys, primaryStoreFilter)
+          for (const c of storeFilterCandidates) addStoreVariants(candidateKeys, c)
+          const normCandidateKeys = new Set(
+            Array.from(candidateKeys)
+              .map((v) => normStoreKey(v))
+              .filter(Boolean)
+          )
+          const normalizedMatchedRows = (fallbackRows || []).filter((r) => {
+            const code = String(r.store_code || '').trim()
+            if (!code) return false
+            const nk = normStoreKey(code)
+            return Boolean(nk && normCandidateKeys.has(nk))
+          })
           const distinctStoreCodes = Array.from(
             new Set((fallbackRows || []).map((r) => String(r.store_code || '').trim()).filter(Boolean))
           )
-          if (distinctStoreCodes.length === 1) {
+          if (normalizedMatchedRows.length > 0) {
+            rows = normalizedMatchedRows
+            if (process.env.NODE_ENV === 'development' || debugPosOrders) {
+              console.log('[getPosOrders] normalized store fallback applied', {
+                requestedStore: primaryStoreFilter,
+                storeFilterCandidates,
+                matchedCount: normalizedMatchedRows.length,
+              })
+            }
+          } else if (distinctStoreCodes.length === 1) {
             rows = fallbackRows || []
             if (process.env.NODE_ENV === 'development' || debugPosOrders) {
-              console.log('[getPosOrders] non-numeric store fallback applied', {
+              console.log('[getPosOrders] single-store fallback applied', {
                 requestedStore: primaryStoreFilter,
                 resolvedStoreCode: distinctStoreCodes[0],
                 fallbackRowCount: rows.length,
               })
             }
           } else if (process.env.NODE_ENV === 'development' || debugPosOrders) {
-            console.log('[getPosOrders] non-numeric store fallback skipped', {
+            console.log('[getPosOrders] normalized store fallback skipped', {
               requestedStore: primaryStoreFilter,
+              storeFilterCandidates,
+              normCandidateKeys: Array.from(normCandidateKeys),
               distinctStoreCodes,
             })
           }

@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { resolveCashTenderReceiptLines } from './pos-receipt-cash-tender'
 
 describe('resolveCashTenderReceiptLines', () => {
-  it('returns null without tendered', () => {
-    expect(resolveCashTenderReceiptLines({ paymentCash: 40 })).toBeNull()
+  it('falls back to exact cash when tendered missing', () => {
+    expect(resolveCashTenderReceiptLines({ paymentCash: 40 })).toEqual({
+      charge: 40,
+      paidCash: 40,
+      change: 0,
+    })
   })
 
   it('returns charge, paid, change', () => {

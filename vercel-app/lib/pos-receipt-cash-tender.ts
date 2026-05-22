@@ -18,7 +18,9 @@ export function resolveCashTenderReceiptLines(params: {
   paymentCashTendered?: number
 }): CashTenderReceiptLines | null {
   const cash = Math.max(0, Number(params.paymentCash ?? 0) || 0)
-  const tendered = Math.max(0, Number(params.paymentCashTendered ?? 0) || 0)
+  let tendered = Math.max(0, Number(params.paymentCashTendered ?? 0) || 0)
+  /** 받은 금액 미저장·정확히 맞춘 현금만 있을 때: Paid=Charge, Change=0 */
+  if (tendered <= EPS && cash > EPS) tendered = cash
   if (cash <= EPS || tendered <= EPS) return null
   if (tendered + EPS < cash) return null
   return {

@@ -444,6 +444,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const cashTenderReceiptRowsHtml = isPaymentReceipt
     ? buildCashTenderReceiptRowsHtml(receiptData, tr, paymentRowHtml)
     : ''
+  const cashTenderReceiptSimpleHtml = isPaymentReceipt
+    ? buildCashTenderReceiptSimpleLinesHtml(receiptData, tr, esc)
+    : ''
   const showLogo = isPaymentReceipt && (d.receiptShowLogo || forceReceiptLogo)
   const footerPrimaryText =
     String(d.receiptFooterPrimaryText || '').trim() ||
@@ -662,11 +665,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
-        ${
-          isPaymentReceipt
-            ? buildCashTenderReceiptSimpleLinesHtml(receiptData, tr, esc)
-            : ''
-        }
+        ${cashTenderReceiptSimpleHtml ? `<div class="simple-divider"></div>${cashTenderReceiptSimpleHtml}` : ''}
         ${
           paymentSimpleLine
             ? `<div class="simple-divider"></div>${paymentSimpleLine}`
