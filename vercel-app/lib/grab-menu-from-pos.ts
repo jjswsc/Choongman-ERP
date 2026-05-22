@@ -1,4 +1,4 @@
-import { supabaseSelect, supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectAllPages } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
@@ -557,9 +557,9 @@ async function loadOptions(): Promise<OptionRow[]> {
   ]
   for (const c of projections) {
     try {
-      const rows = (await supabaseSelect('pos_menu_options', {
+      const rows = (await supabaseSelectAllPages('pos_menu_options', {
         order: 'menu_id.asc,sort_order.asc,name.asc',
-        limit: 20000,
+        pageSize: 3000,
         select: c,
       })) as OptionRow[]
       return Array.isArray(rows) ? rows : []

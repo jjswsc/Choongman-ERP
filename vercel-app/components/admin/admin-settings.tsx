@@ -47,6 +47,7 @@ import {
   saveFranchiseeMultiStoreSettings,
   type AdminEmployeeItem,
 } from "@/lib/api-client"
+import { FranchiseeMultiStoreRoster } from "@/components/admin/franchisee-multi-store-roster"
 
 function dataLimitKindLabel(kind: string, t: (key: string) => string): string {
   const key = `settings_data_limits_kind_${kind}`
@@ -135,6 +136,7 @@ export function AdminSettings() {
   const [franchiseeMultiMax, setFranchiseeMultiMax] = useState(5)
   const [franchiseeMultiLoading, setFranchiseeMultiLoading] = useState(false)
   const [franchiseeMultiSaving, setFranchiseeMultiSaving] = useState(false)
+  const [franchiseeRosterReloadKey, setFranchiseeRosterReloadKey] = useState(0)
 
   const loadHeadOffice = useCallback(async () => {
     try {
@@ -153,7 +155,8 @@ export function AdminSettings() {
     }
   }, [])
 
-  const { stores: storeKeys } = useStoreList()
+  const { stores: storeKeys, storeLabels: erpStoreLabels } = useStoreList()
+  const canEditFranchiseeSettings = canAccessSettings(auth?.role || "")
   const loadPermOptions = useCallback(async () => {
     setPermStores(storeKeys)
     const empRes = await getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" })
@@ -368,7 +371,10 @@ export function AdminSettings() {
       await appAlert(
         res.success ? (t("settings_saved") || "저장되었습니다.") : (t("msg_save_fail") || "저장에 실패했습니다.")
       )
-      if (res.success) void loadFranchiseeMulti()
+      if (res.success) {
+        void loadFranchiseeMulti()
+        setFranchiseeRosterReloadKey((k) => k + 1)
+      }
     } catch (e) {
       await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -760,7 +766,7 @@ export function AdminSettings() {
                         id="franchisee_multi_enabled"
                         checked={franchiseeMultiEnabled}
                         onCheckedChange={(c) => setFranchiseeMultiEnabled(c === true)}
-                        disabled={!canAccessSettings(auth?.role || "")}
+                        disabled={!canEditFranchiseeSettings}
                       />
                       <label htmlFor="franchisee_multi_enabled" className="text-sm cursor-pointer">
                         {t("settings_franchisee_multi_enabled")}
@@ -778,16 +784,24 @@ export function AdminSettings() {
                           const n = Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1))
                           setFranchiseeMultiMax(n)
                         }}
-                        disabled={!franchiseeMultiEnabled || !canAccessSettings(auth?.role || "")}
+                        disabled={!franchiseeMultiEnabled || !canEditFranchiseeSettings}
                       />
                     </div>
                     <Button
                       className="h-9"
                       onClick={() => void handleSaveFranchiseeMulti()}
-                      disabled={franchiseeMultiSaving || !canAccessSettings(auth?.role || "")}
+                      disabled={franchiseeMultiSaving || !canEditFranchiseeSettings}
                     >
                       {franchiseeMultiSaving ? t("loading") : t("settings_franchisee_multi_save")}
                     </Button>
+                    <FranchiseeMultiStoreRoster
+                      enabled={franchiseeMultiEnabled}
+                      maxStores={franchiseeMultiMax}
+                      canEdit={canEditFranchiseeSettings}
+                      allStores={storeKeys}
+                      storeLabels={erpStoreLabels}
+                      reloadKey={franchiseeRosterReloadKey}
+                    />
                   </div>
                 )}
               </CardContent>

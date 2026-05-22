@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
-import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { releaseGrabWebhookEvent, reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 import { syncGrabOrderStateToPos } from '@/lib/grab-order-to-pos'
 
 export const dynamic = 'force-dynamic'
@@ -22,13 +22,14 @@ export async function PUT(req: NextRequest) {
   }
   const orderID = String(body.orderID ?? '')
   const state = String(body.state ?? '')
+  const dedupeKey = `${orderID}:${state}`
   if (!orderID || !state) {
     logGrabWebhook('push_order_state', req, { error: 'missing_orderID_or_state' })
     return new NextResponse(null, { status: 400 })
   }
   const duplicate = await reserveGrabWebhookEvent({
     eventKind: 'push_order_state',
-    uniqueKey: `${orderID}:${state}`,
+    uniqueKey: dedupeKey,
     requestId: String(body.requestID ?? ''),
     orderId: orderID,
     merchantId: String(body.merchantID ?? ''),
@@ -45,6 +46,10 @@ export async function PUT(req: NextRequest) {
     orderPayload: body.order,
   })
   if (!synced.ok) {
+    await releaseGrabWebhookEvent({
+      eventKind: 'push_order_state',
+      uniqueKey: dedupeKey,
+    }).catch(() => {})
     logGrabWebhook('push_order_state', req, {
       orderID,
       merchantID: String(body.merchantID ?? ''),

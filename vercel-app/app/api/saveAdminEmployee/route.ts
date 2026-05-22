@@ -15,6 +15,7 @@ import {
   franchiseeQueryStoreAllowed,
   normalizedAllowedStoresFromJwt,
   rowRoleLooksFranchisee,
+  normalizeFranchiseeExtraStores,
 } from '@/lib/franchisee-multi-store'
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameFields } from '@/lib/employee-display-name'
@@ -447,17 +448,7 @@ export async function POST(req: NextRequest) {
           : Array.isArray(fromD)
             ? (fromD as unknown[])
             : []
-        const seen = new Set<string>()
-        const extras: string[] = []
-        const maxExtra = Math.max(0, multiSettings.maxStores - 1)
-        for (const x of rawExtra) {
-          const s = String(x || '').trim()
-          if (!s || s === primary || seen.has(s)) continue
-          seen.add(s)
-          extras.push(s)
-          if (extras.length >= maxExtra) break
-        }
-        payload.extra_stores = extras
+        payload.extra_stores = normalizeFranchiseeExtraStores(primary, rawExtra, multiSettings.maxStores)
       } else {
         payload.extra_stores = []
       }

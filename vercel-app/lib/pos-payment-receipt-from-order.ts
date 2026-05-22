@@ -140,6 +140,8 @@ function pickPromoIdFromCodeToken(
 
   const promoLikeContext =
     lineId.toLowerCase().startsWith('promo-') ||
+    /\d{5,}-S\d+/i.test(lineId) ||
+    /\d{5,}-S\d+/i.test(lineName) ||
     /\b(set|promo|bundle|campaign)\b/i.test(lineName) ||
     lineName.includes('[[') ||
     lineName.includes(']]')
@@ -164,6 +166,8 @@ function pickPromoIdFromLinkedMenu(it: Record<string, unknown>, menus: PosMenu[]
   const lineIdRaw = String(it.id ?? '').trim().toLowerCase()
   const hasExplicitPromoToken =
     lineIdRaw.startsWith('promo-') ||
+    /\d{5,}-s\d+/i.test(lineIdRaw) ||
+    /\d{5,}-s\d+/i.test(lineName) ||
     /\b(set|promo|bundle|campaign)\b/i.test(lineName) ||
     lineName.includes('[[') ||
     lineName.includes(']]')
@@ -201,7 +205,10 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
   if (!catalog?.size) return null
   const nameRaw = String(it.name ?? '').trim()
   if (!nameRaw) return null
-  const promoLikeName = /\b(set|promo|bundle|campaign)\b/i.test(nameRaw) || nameRaw.includes('[[')
+  const promoLikeName =
+    /\b(set|promo|bundle|campaign)\b/i.test(nameRaw) ||
+    /\d{5,}-S\d+/i.test(nameRaw) ||
+    nameRaw.includes('[[')
   if (!promoLikeName) return null
   const key = normalizePromoLookupText(nameRaw)
   if (!key) return null

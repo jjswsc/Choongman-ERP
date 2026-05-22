@@ -39,4 +39,24 @@ describe('enrichPosOrderLikeItemsWithPromoSnapshot promo detection', () => {
     expect(Array.isArray(rows[0].promoItems)).toBe(true)
     expect(rows[0].promoItems?.[0]).toMatchObject({ menuId: '74' })
   })
+
+  it('resolves promo by numeric bundle code token', () => {
+    const numericCatalog = new Map<string, PosPromoWithItems>([
+      [
+        '91',
+        {
+          id: '91',
+          code: '260457-S01',
+          name: 'PEPSI MEGA 1',
+          items: [{ menuId: '74', optionId: null, quantity: 1 }],
+        } as PosPromoWithItems,
+      ],
+    ])
+    const rows = enrichPosOrderLikeItemsWithPromoSnapshot<OrderLikeRow>(
+      [{ id: 'grab:260457-S01', name: 'PEPSI MEGA 1', qty: 1, price: 306 }],
+      { promoCatalogById: numericCatalog, menus: [] }
+    )
+    expect(Array.isArray(rows[0].promoItems)).toBe(true)
+    expect(rows[0].promoItems?.[0]).toMatchObject({ menuId: '74' })
+  })
 })

@@ -27,12 +27,15 @@ export async function GET(req: NextRequest) {
     const menu = await buildGrabMenuFromPos({ merchantID, partnerMerchantID })
     return NextResponse.json(menu)
   } catch (e) {
+    const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
     logGrabWebhook('get_menu', req, {
       merchantID,
       partnerMerchantID,
-      fallback: 'stub',
       error: String(e ?? 'unknown'),
     })
+    if (isProd) {
+      return NextResponse.json({ reason: 'get_menu_failed' }, { status: 503 })
+    }
     return NextResponse.json(grabStubMenuJson(merchantID, partnerMerchantID))
   }
 }

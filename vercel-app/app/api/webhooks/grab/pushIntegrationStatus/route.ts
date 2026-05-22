@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
-import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { releaseGrabWebhookEvent, reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 import { upsertGrabStoreIntegration } from '@/lib/grab-store-integration'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const denied = await grabWebhookUnauthorized(req, 'push_integration_status')
   if (denied) return denied
 
+  let reservedEvent: { eventKind: string; uniqueKey: string } | null = null
   try {
     const body = (await req.json()) as Record<string, unknown>
     const partnerMerchantID = String(body.partnerMerchantID ?? '')
@@ -22,9 +23,10 @@ export async function POST(req: NextRequest) {
       logGrabWebhook('push_integration_status', req, { error: 'missing_required_fields' })
       return new NextResponse(null, { status: 400 })
     }
+    const dedupeKey = `${grabMerchantID}:${integrationStatus}`
     const duplicate = await reserveGrabWebhookEvent({
       eventKind: 'push_integration_status',
-      uniqueKey: `${grabMerchantID}:${integrationStatus}`,
+      uniqueKey: dedupeKey,
       requestId: String(body.requestID ?? ''),
       merchantId: grabMerchantID,
       partnerMerchantId: partnerMerchantID,
@@ -39,6 +41,7 @@ export async function POST(req: NextRequest) {
       })
       return new NextResponse(null, { status: 204 })
     }
+    reservedEvent = { eventKind: 'push_integration_status', uniqueKey: dedupeKey }
 
     const persisted = await upsertGrabStoreIntegration({
       grabMerchantID,
@@ -56,6 +59,9 @@ export async function POST(req: NextRequest) {
       created: persisted.created,
     })
   } catch (e) {
+    if (reservedEvent) {
+      await releaseGrabWebhookEvent(reservedEvent).catch(() => {})
+    }
     const msg = String(e ?? '')
     if (/unexpected token|invalid json|json/i.test(msg)) {
       logGrabWebhook('push_integration_status', req, { error: 'invalid_json' })

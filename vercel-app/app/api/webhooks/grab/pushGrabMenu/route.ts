@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
-import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { releaseGrabWebhookEvent, reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 import { importGrabMenuToPos } from '@/lib/grab-menu-import-to-pos'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   const denied = await grabWebhookUnauthorized(req, 'push_grab_menu')
   if (denied) return denied
 
+  let reservedEvent: { eventKind: string; uniqueKey: string } | null = null
   try {
     const raw = await req.text()
     const body = (() => {
@@ -41,9 +42,17 @@ export async function POST(req: NextRequest) {
       logGrabWebhook('push_grab_menu', req, { bodyBytes: raw.length, duplicate: true })
       return new NextResponse(null, { status: 204 })
     }
+    reservedEvent = { eventKind: 'push_grab_menu', uniqueKey: dedupeKey }
     let imported: { menusUpserted: number; optionsUpserted: number; skipped: number } | null = null
     if (body) {
       imported = await importGrabMenuToPos(body)
+    }
+    if (!body) {
+      if (reservedEvent) {
+        await releaseGrabWebhookEvent(reservedEvent).catch(() => {})
+      }
+      logGrabWebhook('push_grab_menu', req, { bodyBytes: raw.length, error: 'invalid_json' })
+      return NextResponse.json({ reason: 'invalid_json' }, { status: 400 })
     }
     logGrabWebhook('push_grab_menu', req, {
       bodyBytes: raw.length,
@@ -53,10 +62,10 @@ export async function POST(req: NextRequest) {
       optionsUpserted: imported?.optionsUpserted ?? 0,
       skipped: imported?.skipped ?? 0,
     })
-    if (!body) {
-      return NextResponse.json({ reason: 'invalid_json' }, { status: 400 })
-    }
   } catch (e) {
+    if (reservedEvent) {
+      await releaseGrabWebhookEvent(reservedEvent).catch(() => {})
+    }
     logGrabWebhook('push_grab_menu', req, { error: 'import_failed', message: String(e ?? 'unknown') })
     return NextResponse.json({ reason: 'import_failed' }, { status: 500 })
   }

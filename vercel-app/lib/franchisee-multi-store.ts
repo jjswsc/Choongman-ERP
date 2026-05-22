@@ -82,3 +82,24 @@ export function rowRoleLooksFranchisee(roleRaw: string): boolean {
   const r = String(roleRaw || '').toLowerCase()
   return r.includes('franchisee') || r.includes('가맹') || r.includes('점주')
 }
+
+/** employees.extra_stores 저장용 (대표 매장 제외, maxStores는 대표 포함 상한) */
+export function normalizeFranchiseeExtraStores(
+  primaryStore: string,
+  rawExtra: unknown,
+  maxStoresInclPrimary: number
+): string[] {
+  const primary = String(primaryStore || '').trim()
+  const arr = Array.isArray(rawExtra) ? rawExtra : []
+  const seen = new Set<string>()
+  const extras: string[] = []
+  const maxExtra = Math.max(0, maxStoresInclPrimary - 1)
+  for (const x of arr) {
+    const s = String(x || '').trim()
+    if (!s || s === primary || seen.has(s)) continue
+    seen.add(s)
+    extras.push(s)
+    if (extras.length >= maxExtra) break
+  }
+  return extras
+}

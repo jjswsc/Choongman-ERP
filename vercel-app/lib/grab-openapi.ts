@@ -11,6 +11,7 @@ const DEFAULT_MAX_ATTEMPTS = 4
 const RETRY_BASE_DELAY_MS = 500
 const RETRY_MAX_DELAY_MS = 5000
 const TOKEN_EXPIRY_SKEW_MS = 60_000
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 
 type GrabTokenCache = {
   accessToken: string
@@ -41,6 +42,12 @@ function computeRetryDelayMs(attempt: number): number {
   const exp = Math.max(0, attempt - 1)
   const base = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** exp)
   return base + jitterMs(250)
+}
+
+function resolveRequestTimeoutMs(): number {
+  const raw = Number(process.env.GRAB_API_REQUEST_TIMEOUT_MS ?? DEFAULT_REQUEST_TIMEOUT_MS)
+  if (!Number.isFinite(raw)) return DEFAULT_REQUEST_TIMEOUT_MS
+  return Math.min(60_000, Math.max(3_000, Math.floor(raw)))
 }
 
 function normalizePath(path: string): string {
@@ -180,6 +187,7 @@ export async function grabRequest(opts: GrabRequestOptions): Promise<Response> {
   const method = opts.method || 'GET'
   const url = buildUrl(opts)
   const extraHeaders = opts.headers || {}
+  const timeoutMs = resolveRequestTimeoutMs()
 
   let token = await getGrabAccessToken(false)
   let refreshedOn401 = false
@@ -199,7 +207,11 @@ export async function grabRequest(opts: GrabRequestOptions): Promise<Response> {
     }
 
     try {
-      const res = await fetch(url, { method, headers, body })
+      const ctrl = new AbortController()
+      const timeout = setTimeout(() => ctrl.abort(), timeoutMs)
+      const res = await fetch(url, { method, headers, body, signal: ctrl.signal }).finally(() => {
+        clearTimeout(timeout)
+      })
       lastResponse = res
 
       // 401 -> 토큰 강제 재발급 후 1회 재시도

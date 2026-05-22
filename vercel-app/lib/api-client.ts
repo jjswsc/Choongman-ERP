@@ -11359,6 +11359,58 @@ export async function getFranchiseeMultiStoreSettings(): Promise<FranchiseeMulti
   }
 }
 
+export type FranchiseeMultiStoreRosterItem = {
+  row: number
+  store: string
+  name: string
+  nick: string
+  role: string
+  extraStores: string[]
+}
+
+export type FranchiseeMultiStoreRosterResponse = {
+  success?: boolean
+  settings?: FranchiseeMultiStoreSettings
+  roster?: FranchiseeMultiStoreRosterItem[]
+  stores?: string[]
+  saved?: number
+  message?: string
+}
+
+export async function getFranchiseeMultiStoreRoster(): Promise<FranchiseeMultiStoreRosterResponse> {
+  try {
+    const res = await apiFetch('/api/franchiseeMultiStoreRoster')
+    const data = (await res.json().catch(() => ({}))) as FranchiseeMultiStoreRosterResponse
+    const out = data && typeof data === 'object' ? data : {}
+    if (!res.ok && out.success !== false) {
+      return { success: false, message: out.message || `HTTP ${res.status}` }
+    }
+    return out
+  } catch {
+    return { success: false, message: 'network_unavailable' }
+  }
+}
+
+export async function saveFranchiseeMultiStoreRoster(
+  assignments: { employeeId: number; extraStores: string[] }[]
+): Promise<FranchiseeMultiStoreRosterResponse> {
+  try {
+    const res = await apiFetch('/api/franchiseeMultiStoreRoster', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments }),
+    })
+    const data = (await res.json().catch(() => ({}))) as FranchiseeMultiStoreRosterResponse
+    const out = data && typeof data === 'object' ? data : {}
+    if (!res.ok && out.success !== false) {
+      return { success: false, message: out.message || `HTTP ${res.status}` }
+    }
+    return out
+  } catch {
+    return { success: false, message: 'network_unavailable' }
+  }
+}
+
 export async function saveFranchiseeMultiStoreSettings(
   settings: FranchiseeMultiStoreSettings
 ): Promise<FranchiseeMultiStoreSettingsResponse> {

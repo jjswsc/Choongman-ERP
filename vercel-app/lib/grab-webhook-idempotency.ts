@@ -1,4 +1,4 @@
-import { supabaseInsert } from '@/lib/supabase-server'
+import { supabaseDeleteByFilter, supabaseInsert } from '@/lib/supabase-server'
 
 type ReserveGrabWebhookEventInput = {
   eventKind: string
@@ -55,6 +55,28 @@ export async function reserveGrabWebhookEvent(
       console.warn('[grab-webhook-idempotency] table not ready, skip dedupe')
       return false
     }
+    throw e
+  }
+}
+
+/**
+ * 선점한 idempotency 키를 처리 실패 시 해제한다.
+ * - 테이블 미배포(42P01) 환경에서는 무시
+ * - 존재하지 않는 키 삭제도 성공으로 본다
+ */
+export async function releaseGrabWebhookEvent(input: {
+  eventKind: string
+  uniqueKey: string
+}): Promise<void> {
+  const eventKind = truncate(input.eventKind.trim(), 80)
+  const uniqueKey = truncate(input.uniqueKey.trim(), 300)
+  if (!eventKind || !uniqueKey) return
+  const filter = `event_kind=eq.${encodeURIComponent(eventKind)}&unique_key=eq.${encodeURIComponent(uniqueKey)}`
+  try {
+    await supabaseDeleteByFilter('pos_grab_webhook_events', filter)
+  } catch (e) {
+    const msg = String(e || '')
+    if (isMissingTableError(msg)) return
     throw e
   }
 }
