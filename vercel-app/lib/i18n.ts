@@ -2948,6 +2948,8 @@ export const i18n = {
     adminDashboardChartsTitle: '당일 매출 차트',
     adminDashboardChartsSub: 'POS 영업일 기준 — 매장·홀/포장/배달·배달앱별 매출을 도표로 확인합니다.',
     adminDashboardChartsRefreshHint: '차트는 60초마다 자동 갱신됩니다. 기간·상세 분석은「매출 관리」를 이용하세요.',
+    adminDashboardOfficeAllStores: '전체 매장 · 당일 매출·운영 지표',
+    adminDashboardBranchFocus: '지점 상세',
     adminRealtimeSalesCashMix: '실매출 구성 (현금/기타)',
     adminRealtimeSalesNonCash: '현금 외',
     adminRealtimeSalesOrderCounts: '주문 건수 (실시간)',
@@ -7198,9 +7200,9 @@ export const i18n = {
     helpHow_admin_pos_cost_analysis:
       '① 목록: 대분류·카테고리·검색어를 정한 뒤「조회」로 불러옵니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다. 행을 누르면「원가 계산기」탭으로 이동해 그 메뉴(옵션)가 열립니다.\n② 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다. 상단 요약의 평균 원가율은 원가율이 0%인 메뉴는 홀/배달 각각 평균에서 제외될 수 있습니다.\n③ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 관리하고, 재계산으로 메뉴 원가에 쓰이는 배합비를 갱신합니다.\n④ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 수량·로스를 수정하고 저장하면 POS 메뉴 원가에 반영됩니다. 편집은 본사(오피스) 등 권한이 있는 역할만 가능할 수 있습니다.\n⑤ 자세한 단계는「도움말」본문을 참고하고, 끝나면「화면으로 돌아가기」로 목록으로 돌아오세요.',
     helpSum_admin_live_store_sales:
-      'POS 영업일 기준 당일 매출 차트(매장·홀/포장/배달·배달앱), 실시간 운영 지표, 테이블/주문 현황을 본사·매장에서 같은 기준으로 확인하는 대시보드입니다.',
+      '본사는 기본「전체 매장」당일 매출·운영 차트 대시보드입니다. 지점 선택 시 해당 매장만 집계합니다.',
     helpHow_admin_live_store_sales:
-      '① 본사(오피스) 계정은 상단 매장 선택으로 조회 매장을 바꿉니다.「전체 매장」이면 매장별 막대·원형 차트로 당일·실시간 매출을 비교합니다.\n② 상단 실시간 합계·매장·테이블·운영 지표도 숫자 카드 대신 막대·원형 그래프로 표시됩니다(60초 자동 갱신).\n③ 「당일 매출 차트」에서 시간대별·홀/포장/배달·배달앱 매출을 봅니다. 상세 분석은「매출 관리」로 이동하세요.\n④ 본사는 실매출·대기·지연 누적 막대, 품절·취소율 막대, 피크타임 표로 매장을 비교합니다.\n⑤ 테이블 좌석 현황은 막대 차트(매장 1곳) 또는 매장 비교 차트(전체)로 표시됩니다.\n⑥ 모바일은「모바일 매출 화면」(`/store-sales`) 링크를 이용하세요.',
+      '① 본사(오피스) 로그인 시 기본이「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 당일 매출 차트: 시간대·매장별·홀/포장/배달·배달앱(60초 갱신). 상세는「매출 관리」.\n③ 운영 대시보드: 실매출·대기·지연·품절·취소율을 매장별 그래프로 비교합니다.\n④ 가맹/매장 계정은 자기 매장 차트와 하단 테이블·주문 현황이 추가로 보입니다.\n⑤ 테이블·좌석 실시간 화면은 `/store-sales`(모바일)를 이용하세요.',
     helpSum_admin_ops_center:
       '주문·결제·인쇄·일마감 지표를 한 화면에서 모니터링하고, 임계치 경보를 빠르게 확인하는 운영 관제 화면입니다.',
     helpHow_admin_ops_center:
@@ -11439,6 +11441,8 @@ Only matters the employee must handle personally on a working day:
     adminDashboardChartsTitle: 'Today sales charts',
     adminDashboardChartsSub: 'POS business day — store, hall/takeout/delivery, and delivery-app breakdown.',
     adminDashboardChartsRefreshHint: 'Charts refresh every 60 seconds. Use Sales management for period analytics.',
+    adminDashboardOfficeAllStores: 'All stores · today sales & ops KPIs',
+    adminDashboardBranchFocus: 'Branch detail',
     adminRealtimeSalesCashMix: 'Completed sales mix (cash / other)',
     adminRealtimeSalesNonCash: 'Non-cash',
     adminRealtimeSalesOrderCounts: 'Order counts (live)',

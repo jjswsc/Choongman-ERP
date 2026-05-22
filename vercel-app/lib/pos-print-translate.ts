@@ -75,6 +75,24 @@ function tryTranslateTakeoutTableLabel(s: string, t: (key: string) => string): s
   return null
 }
 
+/**
+ * 포장 주문·슬롯 표시명: DB/저장 시점 언어(예: ko `포장 1`)을 현재 UI 언어로 변환.
+ * `customerName`·`tableName`·카트 라벨 등에 공통 사용.
+ */
+export function translateTakeoutOrderDisplayLabel(
+  raw: string | undefined | null,
+  t: (key: string) => string,
+  options?: { fallbackOrderId?: number | string }
+): string {
+  const s = String(raw ?? '').trim()
+  if (s) return translateReceiptTableDisplayName(s, t)
+  const id = options?.fallbackOrderId
+  if (id != null && String(id).trim() !== '') {
+    return `${t('posOrderTypeTakeout') || '포장'} #${id}`
+  }
+  return t('posOrderTypeTakeout') || '포장'
+}
+
 /** 테이블명 끝 한글 접미사 `번` 제거 (1F-2번 → 1F-2). 포장 슬롯명은 `t`가 있으면 현재 언어로 표시. */
 export function translateReceiptTableDisplayName(tableName: string, t?: (key: string) => string): string {
   let s = String(tableName || '').trim()

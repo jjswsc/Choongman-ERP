@@ -40,19 +40,19 @@ export function MobileStoreSelectorBar() {
 
   const storeOptions = React.useMemo(() => {
     const branches = filterNonOfficeStores(stores)
-    const loggedStore = (auth?.store || "").trim()
-    const isOfficeStoreLogged = loggedStore && (loggedStore === "CM Office" || loggedStore === "Office" || loggedStore === "본사" || loggedStore.toLowerCase().includes("office"))
-    if (isOfficeStoreLogged && loggedStore && !branches.includes(loggedStore)) {
-      return [ALL_STORE_VALUE, loggedStore, ...branches]
-    }
     return [ALL_STORE_VALUE, ...branches]
-  }, [stores, auth?.store])
+  }, [stores])
 
-  /** 오피스 직원: 기본 본사(Office). 지점만 있으면 첫 실매장. 목록 비면 미설정(「전체」는 사용자가 직접 선택). */
+  /** 오피스 직원: 기본「전체 매장」— 본사(Office) 단일 조회는 대시보드에서 쓰지 않음 */
   React.useEffect(() => {
-    if (viewStore || !isOfficeStaff) return
-    const next = resolveDefaultViewStoreForOffice(stores, auth?.store)
-    if (next) setViewStore(next)
+    if (!isOfficeStaff) return
+    const v = String(viewStore || "").trim()
+    if (!v || isOfficeStore(v)) {
+      setViewStore(ALL_STORE_VALUE)
+      return
+    }
+    if (viewStore) return
+    setViewStore(resolveDefaultViewStoreForOffice(stores, auth?.store) ?? ALL_STORE_VALUE)
   }, [stores, viewStore, setViewStore, auth?.store, isOfficeStaff])
 
   if (!isOfficeStaff) return null

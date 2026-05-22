@@ -125,6 +125,7 @@ import {
   normalizePosTableNameForMatch,
   translatePosMenuLineForReceipt,
   translateReceiptTableDisplayName,
+  translateTakeoutOrderDisplayLabel,
 } from '@/lib/pos-print-translate'
 import {
   buildPosHallOrderReceiptDocumentHtml,
@@ -4472,7 +4473,16 @@ export default function PosTerminalPage() {
   const baseTakeoutLabel = takeoutMode === 'member'
     ? (takeoutMemberName.trim() || (t('posTakeoutMemberName') || '회원 이름'))
     : formatTakeoutSlotLabel(takeoutSlot)
-  const takeoutLabel = selectedTakeoutTargetLabel || baseTakeoutLabel
+  const takeoutLabel = translateTakeoutOrderDisplayLabel(
+    selectedTakeoutTargetLabel || baseTakeoutLabel,
+    t
+  )
+  const resolveTakeoutOrderBarLabel = (order: Order) => {
+    const raw =
+      String(order.customerName ?? '').trim() ||
+      String(order.tableName ?? '').trim()
+    return translateTakeoutOrderDisplayLabel(raw, t, { fallbackOrderId: order.id })
+  }
 
   const takeoutMergePeerTables = useMemo((): Table[] => {
     const takeoutFallback = t('posOrderTypeTakeout') || 'Takeout'
@@ -4491,7 +4501,7 @@ export default function PosTerminalPage() {
           `${takeoutFallback} #${o.id}`
         return {
           id: `merge-takeout-${o.id}`,
-          name: nameRaw,
+          name: translateTakeoutOrderDisplayLabel(nameRaw, t, { fallbackOrderId: o.id }),
           seats: 0,
           x: 0,
           y: 0,
@@ -4805,7 +4815,7 @@ export default function PosTerminalPage() {
     const orders = [...takeoutOrders]
     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return orders.map((order) => {
-      const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
+      const label = resolveTakeoutOrderBarLabel(order)
       const visual = getOrderVisual(order)
       return {
         id: `takeout-order-${order.id}`,
@@ -4826,7 +4836,7 @@ export default function PosTerminalPage() {
     const filtered = [...packagedTakeoutOrders]
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
-      const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
+      const label = resolveTakeoutOrderBarLabel(order)
       return {
         id: `takeout-order-${order.id}`,
         label,
@@ -4843,7 +4853,7 @@ export default function PosTerminalPage() {
     const filtered = [...completedTakeoutOrders]
     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return filtered.map((order) => {
-      const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
+      const label = resolveTakeoutOrderBarLabel(order)
       return {
         id: `takeout-order-${order.id}`,
         label,
@@ -4889,7 +4899,7 @@ export default function PosTerminalPage() {
     const filtered = Array.from(byId.values())
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
-      const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
+      const label = resolveTakeoutOrderBarLabel(order)
       const listType = (order as Tagged)._listType
       const visual = getOrderVisual(order)
       const barStatus = listType === 'completed' ? 'completed' as const : listType === 'packaged' ? 'packaged' as const : visual.status
@@ -6765,7 +6775,7 @@ export default function PosTerminalPage() {
                 <PosTerminalMenuScreen
                   mode="pos-order"
                   storeCode={currentStoreId}
-                  selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${selectedTakeoutTargetLabel || takeoutLabel}`}
+                  selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${takeoutLabel}`}
                   onBack={() => setSelectedTakeoutTargetId(null)}
                   backButtonLabel={t('posBack') || '뒤로가기'}
                   onAddItem={handleAddItemToCart}
@@ -6952,7 +6962,7 @@ export default function PosTerminalPage() {
             />
           ) : activeTab === 'takeout' && selectedTakeoutOrder ? (
             <TakeoutOrderPanel
-              orderLabel={selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id)}
+              orderLabel={resolveTakeoutOrderBarLabel(selectedTakeoutOrder)}
               order={selectedTakeoutOrder}
               menus={menus}
               onPackaged={() => refetchStores({ scope: 'all' })}
@@ -6976,7 +6986,7 @@ export default function PosTerminalPage() {
                 setPendingTakeoutOrderId(Number(selectedTakeoutOrder.id))
                 setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
                 setPendingTakeoutPayRequest({
-                  tableName: selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id),
+                  tableName: resolveTakeoutOrderBarLabel(selectedTakeoutOrder),
                   items: selectedTakeoutOrder.items.map((item) => ({
                     id: item.id,
                     name: item.name,

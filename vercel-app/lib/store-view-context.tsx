@@ -36,16 +36,10 @@ export function filterNonOfficeStores(stores: string[]): string[] {
   })
 }
 
-/** 오피스 직원 기본 조회 매장: 본사(Office) 우선, 없으면 첫 실매장 */
+/** 오피스 직원 기본 조회: 전체 매장(All). 본사(Office) 코드는 집계 대상이 아님 */
 export function resolveDefaultViewStoreForOffice(
-  stores: string[],
-  authStore?: string
+  _stores: string[],
+  _authStore?: string
 ): string | null {
-  const list = stores.map((s) => String(s || '').trim()).filter(Boolean)
-  const officeFromList = list.find((s) => isOfficeStore(s))
-  if (officeFromList) return officeFromList
-  const logged = String(authStore || '').trim()
-  if (logged && isOfficeStore(logged)) return logged
-  const branches = filterNonOfficeStores(list)
-  return branches[0] ?? null
+  return 'All'
 }

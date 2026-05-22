@@ -21,7 +21,10 @@ import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
+import {
+  translatePosMenuLineForReceipt,
+  translateTakeoutOrderDisplayLabel,
+} from '@/lib/pos-print-translate'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import { canStartPosLinePartialCancel } from '@/lib/pos-order-line-update'
@@ -323,7 +326,7 @@ export function TakeoutOrderPanel({
       <div className="h-full flex flex-col border-l border-border bg-card">
       <div className="px-3 py-3 border-b flex items-center justify-between">
         <h3 className="text-sm font-semibold truncate">
-          {orderLabel} {t('posOrderTypeTakeout') || '포장'}
+          {translateTakeoutOrderDisplayLabel(orderLabel, t)}
         </h3>
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onClose}>
           {t('posBack') || '뒤로가기'}

@@ -100,7 +100,10 @@ import {
   type PosPricingResult,
 } from '@/lib/pos-pricing'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
-import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
+import {
+  translateReceiptTableDisplayName,
+  translateTakeoutOrderDisplayLabel,
+} from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
@@ -4122,7 +4125,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <Label className="text-sm flex-shrink-0">{t('posTakeoutSlot') || '포장'}</Label>
               {lockOrderType ? (
                 <Badge variant="secondary" className="h-7 px-3">
-                  {takeoutLabelProp?.trim() || (t('posTakeoutSlotN') || '포장 {{n}}').replace('{{n}}', '1')}
+                  {takeoutLabelProp?.trim()
+                    ? translateTakeoutOrderDisplayLabel(takeoutLabelProp.trim(), t)
+                    : (t('posTakeoutSlotN') || '포장 {{n}}').replace('{{n}}', '1')}
                 </Badge>
               ) : (
                 <>
