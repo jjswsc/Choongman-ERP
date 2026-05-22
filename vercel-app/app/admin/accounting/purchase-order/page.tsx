@@ -4,6 +4,7 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { FileText } from "lucide-react"
 import { AdminPurchaseOrder } from "@/components/erp/admin-purchase-order"
 import { AdminPurchaseOrderHistory } from "@/components/erp/admin-purchase-order-history"
@@ -28,6 +29,11 @@ export default function AccountingPurchaseOrderPage() {
   const t = useT(lang)
   const { auth } = useAuth()
   const [tab, setTab] = React.useState("hq")
+  const searchParams = useSearchParams()
+  React.useEffect(() => {
+    const q = String(searchParams.get("tab") || "").trim()
+    if (q === "billing_settings") setTab("billing_settings")
+  }, [searchParams])
   const isManager = isManagerRole(auth?.role || "")
 
   if (isManager) {

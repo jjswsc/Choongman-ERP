@@ -281,6 +281,8 @@ export async function POST(req: NextRequest) {
     })
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
+    const adj = pricingAdjustments as { cardRate?: number } | undefined
+    const cardRateSnapshot = Math.max(0, Number(adj?.cardRate ?? 0) || 0)
 
     const paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
     const closeStatusRaw = String(body.closeStatus ?? body.close_status ?? '').trim().toLowerCase()
@@ -333,6 +335,9 @@ export async function POST(req: NextRequest) {
       service_reason: serviceReason || null,
       delivery_fee: deliveryFee,
       packaging_fee: packagingFee,
+      card_fee_amt: pricing.cardFeeAmt,
+      card_fee_mode: pricing.cardFeeMode,
+      card_rate: cardRateSnapshot,
       items_json: JSON.stringify(items),
       subtotal,
       vat,

@@ -1,10 +1,26 @@
 "use client"
 
 import * as React from "react"
-import { AlertTriangle, Building2, Clock3, RefreshCw, Store, Wallet } from "lucide-react"
+import { Building2, RefreshCw } from "lucide-react"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
+import { ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
+
+const CHART_COLORS = ["#3b82f6", "#f59e0b", "#ef4444", "#22c55e", "#8b5cf6", "#ec4899"]
 
 type StoreRow = {
   storeCode: string
@@ -51,10 +67,6 @@ function formatBaht(value: number): string {
   return Math.round(Number(value || 0)).toLocaleString()
 }
 
-function formatRate(value: number): string {
-  return `${(Math.max(0, Number(value || 0)) * 100).toFixed(1)}%`
-}
-
 function formatPeakHour(hour: number): string {
   const h = Number(hour)
   if (!Number.isFinite(h) || h < 0 || h > 23) return "-"
@@ -62,27 +74,9 @@ function formatPeakHour(hour: number): string {
   return `${String(h).padStart(2, "0")}:00-${String(next).padStart(2, "0")}:00`
 }
 
-function MetricCard({
-  title,
-  value,
-  hint,
-  icon,
-}: {
-  title: string
-  value: string
-  hint: string
-  icon: React.ReactNode
-}) {
-  return (
-    <article className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        <span className="text-muted-foreground">{icon}</span>
-      </div>
-      <p className="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-    </article>
-  )
+const revenueYAxis = {
+  tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK },
+  tickFormatter: (v: number) => `${(Number(v) / 1000).toFixed(0)}k`,
 }
 
 export function PosRevenueRealtimeDashboard({
@@ -91,6 +85,7 @@ export function PosRevenueRealtimeDashboard({
 }: PosRevenueRealtimeDashboardProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
   const [data, setData] = React.useState<DashboardResponse | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string>("")
@@ -109,11 +104,11 @@ export function PosRevenueRealtimeDashboard({
       }
       setData(json)
     } catch {
-      setError(tOr(t, "errorOccurred", "오류가 발생했습니다."))
+      setError(tr("errorOccurred", "오류가 발생했습니다."))
     } finally {
       setLoading(false)
     }
-  }, [storeCode, t])
+  }, [storeCode, tr])
 
   React.useEffect(() => {
     void loadDashboard()
@@ -129,16 +124,95 @@ export function PosRevenueRealtimeDashboard({
   const store = data?.store
   const officeRows = data?.office?.stores || []
 
+  const storeRevenueBarRows = React.useMemo(() => {
+    if (!store) return []
+    return [
+      {
+        key: "completed",
+        label: tr("salesManagementTabSalesStatus", "실매출"),
+        value: Number(store.completedRevenue ?? 0),
+      },
+      {
+        key: "waiting",
+        label: tr("adminLiveStoreSalesWaitingRevenue", "대기매출"),
+        value: Number(store.waitingRevenue ?? 0),
+      },
+      {
+        key: "delayed",
+        label: tr("adminLiveStoreSalesDelayedRevenue", "지연매출"),
+        value: Number(store.delayedRevenue ?? 0),
+      },
+    ]
+  }, [store, tr])
+
+  const storeOpsCountRows = React.useMemo(() => {
+    if (!store) return []
+    return [
+      {
+        key: "waitingOrders",
+        label: tr("adminLiveStoreSalesWaitingRevenue", "대기"),
+        count: Number(store.waitingOrders ?? 0),
+      },
+      {
+        key: "delayedOrders",
+        label: tr("adminLiveStoreSalesDelayedOrders", "지연"),
+        count: Number(store.delayedOrders ?? 0),
+      },
+      {
+        key: "completedOrders",
+        label: tr("mobileStoreSalesCompletedOrders", "완료"),
+        count: Number(store.completedCount ?? 0),
+      },
+    ]
+  }, [store, tr])
+
+  const storeRevenuePieRows = React.useMemo(() => {
+    return storeRevenueBarRows.filter((r) => r.value > 0)
+  }, [storeRevenueBarRows])
+
+  const officeRevenueChartRows = React.useMemo(
+    () =>
+      officeRows.map((r) => ({
+        storeCode: r.storeCode,
+        completed: Number(r.completedRevenue ?? 0),
+        waiting: Number(r.waitingRevenue ?? 0),
+        delayed: Number(r.delayedRevenue ?? 0),
+      })),
+    [officeRows]
+  )
+
+  const officeCompletedPieRows = React.useMemo(
+    () =>
+      officeRows
+        .map((r) => ({
+          storeCode: r.storeCode,
+          value: Number(r.completedRevenue ?? 0),
+        }))
+        .filter((r) => r.value > 0),
+    [officeRows]
+  )
+
+  const officeRateBarRows = React.useMemo(
+    () =>
+      officeRows.map((r) => ({
+        storeCode: r.storeCode,
+        cancelPct: Math.round(Number(r.cancelRate ?? 0) * 1000) / 10,
+        stockoutPct: Math.round(Number(r.stockoutRate ?? 0) * 1000) / 10,
+        peakLabel: formatPeakHour(r.peakHour),
+        peakRevenue: Number(r.peakHourRevenue ?? 0),
+      })),
+    [officeRows]
+  )
+
   return (
-    <section className="space-y-3 rounded-xl border border-border/70 bg-background p-4">
+    <section className="space-y-4 rounded-xl border border-border/70 bg-background p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="space-y-1">
           <h2 className="text-sm font-semibold text-foreground">
-            {tOr(t, "adminLiveStoreSalesRevenueOpsDashTitle", "매출 중심 실시간 운영 대시보드")}
+            {tr("adminLiveStoreSalesRevenueOpsDashTitle", "매출 중심 실시간 운영 대시보드")}
           </h2>
           <p className="text-xs text-muted-foreground">
-            {tOr(
-              t,
+            {tr(
               "adminLiveStoreSalesRevenueOpsDashSub",
               "매장 즉시 대응 지표와 본사 비교 지표를 같은 기준으로 확인합니다."
             )}
@@ -146,7 +220,7 @@ export function PosRevenueRealtimeDashboard({
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => void loadDashboard()} disabled={loading}>
           <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          {tOr(t, "search", "검색")}
+          {tr("search", "검색")}
         </Button>
       </div>
 
@@ -156,97 +230,207 @@ export function PosRevenueRealtimeDashboard({
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title={tOr(t, "adminLiveStoreSalesWaitingRevenue", "현재 대기 주문 매출액")}
-          value={store ? formatBaht(store.waitingRevenue) : "-"}
-          hint={
-            store
-              ? `${tOr(t, "orders", "주문")} ${store.waitingOrders}${tOr(t, "countUnitSuffix", "건")}`
-              : "-"
-          }
-          icon={<Wallet className="h-4 w-4" />}
-        />
-        <MetricCard
-          title={tOr(t, "adminLiveStoreSalesAvgCookingMins", "평균 조리시간(분)")}
-          value={store ? `${store.revenueWeightedCookingMinutes.toFixed(1)}m` : "-"}
-          hint={
-            store
-              ? `${tOr(t, "adminLiveStoreSalesAvgCookingRaw", "단순 평균")} ${store.avgCookingMinutes.toFixed(1)}m`
-              : "-"
-          }
-          icon={<Clock3 className="h-4 w-4" />}
-        />
-        <MetricCard
-          title={tOr(t, "adminLiveStoreSalesDelayedOrders", "지연 주문 카운트")}
-          value={store ? String(store.delayedOrders) : "-"}
-          hint={
-            data
-              ? `${data.delayThresholdMin}${tOr(t, "minute", "분")} ${tOr(t, "adminLiveStoreSalesDelayedRule", "초과 기준")}`
-              : "-"
-          }
-          icon={<AlertTriangle className="h-4 w-4" />}
-        />
-        <MetricCard
-          title={tOr(t, "adminLiveStoreSalesDelayedRevenue", "지연 주문 매출액")}
-          value={store ? formatBaht(store.delayedRevenue) : "-"}
-          hint={
-            store
-              ? `${tOr(t, "salesManagementTabSalesStatus", "실매출")} ${formatBaht(store.completedRevenue)}`
-              : "-"
-          }
-          icon={<Store className="h-4 w-4" />}
-        />
-      </div>
+      {store ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border/60 bg-card p-3">
+            <p className="mb-2 text-xs font-semibold text-muted-foreground">
+              {tr("adminRealtimeOpsRevenueBars", "실시간 매출액 (막대)")}
+            </p>
+            <div className="h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={storeRevenueBarRows}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis {...revenueYAxis} />
+                  <Tooltip formatter={(v: number) => formatBaht(v)} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {storeRevenueBarRows.map((r, i) => (
+                      <Cell key={r.key} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-2 text-center text-lg font-bold tabular-nums text-foreground">
+              {formatBaht(store.completedRevenue)}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                ({tr("salesManagementTabSalesStatus", "실매출")})
+              </span>
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {storeRevenuePieRows.length > 0 ? (
+              <div className="rounded-lg border border-border/60 bg-card p-3">
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                  {tr("adminRealtimeOpsRevenuePie", "매출 구성 (원형)")}
+                </p>
+                <div className="h-[180px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={storeRevenuePieRows}
+                        dataKey="value"
+                        nameKey="label"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={64}
+                        label={({ name, percent }) =>
+                          `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
+                        }
+                      >
+                        {storeRevenuePieRows.map((r, i) => (
+                          <Cell key={r.key} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatBaht(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : null}
+            <div className="rounded-lg border border-border/60 bg-card p-3 sm:col-span-2 lg:col-span-1">
+              <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                {tr("adminRealtimeOpsOrderBars", "주문·조리 (건수/분)")}
+              </p>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={storeOpsCountRows}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10, ...ERP_NUMERIC_CHART_TICK }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                {tr("adminLiveStoreSalesAvgCookingMins", "평균 조리시간(분)")}{" "}
+                <span className="font-semibold text-foreground">
+                  {store.revenueWeightedCookingMinutes.toFixed(1)}m
+                </span>
+                <span className="mx-1">·</span>
+                {tr("adminLiveStoreSalesAvgCookingRaw", "단순")} {store.avgCookingMinutes.toFixed(1)}m
+                {data ? (
+                  <>
+                    <span className="mx-1">·</span>
+                    {data.delayThresholdMin}
+                    {tr("minute", "분")} {tr("adminLiveStoreSalesDelayedRule", "초과 기준")}
+                  </>
+                ) : null}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isOfficeSelector ? (
-        <div className="space-y-2 rounded-lg border border-border/60 bg-card p-3">
+        <div className="space-y-4 rounded-lg border border-border/60 bg-card p-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
             <p className="text-xs font-semibold text-foreground">
-              {tOr(t, "adminLiveStoreSalesOfficeCompareTitle", "본사 매장 비교 (매출 중심)")}
+              {tr("adminLiveStoreSalesOfficeCompareTitle", "본사 매장 비교 (매출 중심)")}
             </p>
           </div>
           {officeRows.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              {tOr(t, "mobileStoreSalesByStoreEmpty", "표시할 매장 데이터가 없습니다.")}
+              {tr("mobileStoreSalesByStoreEmpty", "표시할 매장 데이터가 없습니다.")}
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-[820px] w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border/60 text-muted-foreground">
-                    <th className="px-2 py-2 text-left">{tOr(t, "store", "매장")}</th>
-                    <th className="px-2 py-2 text-right">{tOr(t, "salesManagementTabSalesStatus", "실매출")}</th>
-                    <th className="px-2 py-2 text-right">{tOr(t, "adminLiveStoreSalesWaitingRevenue", "대기매출")}</th>
-                    <th className="px-2 py-2 text-right">{tOr(t, "adminLiveStoreSalesDelayedRevenue", "지연매출")}</th>
-                    <th className="px-2 py-2 text-right">{tOr(t, "adminLiveStoreSalesPeakHour", "피크타임")}</th>
-                    <th className="px-2 py-2 text-right">{tOr(t, "adminLiveStoreSalesStockoutRate", "품절률(금액)")}</th>
-                    <th className="px-2 py-2 text-right">{tOr(t, "adminLiveStoreSalesCancelRate", "취소율(금액)")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {officeRows.map((row) => (
-                    <tr key={row.storeCode} className="border-b border-border/50">
-                      <td className="px-2 py-2 font-medium">{row.storeCode}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{formatBaht(row.completedRevenue)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{formatBaht(row.waitingRevenue)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{formatBaht(row.delayedRevenue)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">
-                        {formatPeakHour(row.peakHour)} ({formatBaht(row.peakHourRevenue)})
-                      </td>
-                      <td className="px-2 py-2 text-right tabular-nums">{formatRate(row.stockoutRate)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{formatRate(row.cancelRate)}</td>
+            <>
+              <div className="h-[min(340px,45vh)]">
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  {tr("adminRealtimeOfficeRevenueStack", "매장별 실매출·대기·지연 (누적 막대)")}
+                </p>
+                <ResponsiveContainer width="100%" height="92%">
+                  <BarChart data={officeRevenueChartRows} margin={{ bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="storeCode" tick={{ fontSize: 9 }} interval={0} angle={-28} textAnchor="end" height={56} />
+                    <YAxis {...revenueYAxis} />
+                    <Tooltip formatter={(v: number) => formatBaht(v)} />
+                    <Legend />
+                    <Bar dataKey="completed" stackId="rev" fill="#3b82f6" name={tr("salesManagementTabSalesStatus", "실매출")} />
+                    <Bar dataKey="waiting" stackId="rev" fill="#f59e0b" name={tr("adminLiveStoreSalesWaitingRevenue", "대기매출")} />
+                    <Bar dataKey="delayed" stackId="rev" fill="#ef4444" name={tr("adminLiveStoreSalesDelayedRevenue", "지연매출")} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                {officeCompletedPieRows.length > 0 ? (
+                  <div className="h-[260px]">
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      {tr("adminRealtimeOfficeCompletedShare", "매장별 실매출 비중")}
+                    </p>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <PieChart>
+                        <Pie
+                          data={officeCompletedPieRows}
+                          dataKey="value"
+                          nameKey="storeCode"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={88}
+                          label={({ name, percent }) =>
+                            `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
+                          }
+                        >
+                          {officeCompletedPieRows.map((r, i) => (
+                            <Cell key={r.storeCode} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(v: number) => formatBaht(v)} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : null}
+
+                <div className="h-[260px]">
+                  <p className="mb-2 text-[11px] text-muted-foreground">
+                    {tr("adminRealtimeOfficeCancelStockout", "품절·취소율 (%)")}
+                  </p>
+                  <ResponsiveContainer width="100%" height="88%">
+                    <BarChart data={officeRateBarRows}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="storeCode" tick={{ fontSize: 9 }} interval={0} angle={-28} textAnchor="end" height={56} />
+                      <YAxis tick={{ fontSize: 10 }} unit="%" />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="stockoutPct" fill="#f59e0b" name={tr("adminLiveStoreSalesStockoutRate", "품절률")} />
+                      <Bar dataKey="cancelPct" fill="#ef4444" name={tr("adminLiveStoreSalesCancelRate", "취소율")} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-md border">
+                <table className="min-w-[640px] w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border/60 bg-muted/40 text-muted-foreground">
+                      <th className="px-2 py-2 text-left">{tr("store", "매장")}</th>
+                      <th className="px-2 py-2 text-right">{tr("adminLiveStoreSalesPeakHour", "피크타임")}</th>
+                      <th className="px-2 py-2 text-right">{tr("salesManagementTabSalesStatus", "실매출")}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {officeRows.map((row) => (
+                      <tr key={row.storeCode} className="border-b border-border/50">
+                        <td className="px-2 py-2 font-medium">{row.storeCode}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">
+                          {formatPeakHour(row.peakHour)} ({formatBaht(row.peakHourRevenue)})
+                        </td>
+                        <td className="px-2 py-2 text-right tabular-nums">{formatBaht(row.completedRevenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
           <p className="text-[11px] text-muted-foreground">
             {data?.truncated
-              ? tOr(t, "adminLiveStoreSalesDataTruncated", "집계 행 제한으로 일부 데이터가 생략될 수 있습니다.")
-              : tOr(t, "adminLiveStoreSalesDataRealtimeHint", "집계는 60초마다 자동 갱신됩니다.")}
+              ? tr("adminLiveStoreSalesDataTruncated", "집계 행 제한으로 일부 데이터가 생략될 수 있습니다.")
+              : tr("adminLiveStoreSalesDataRealtimeHint", "집계는 60초마다 자동 갱신됩니다.")}
           </p>
         </div>
       ) : null}

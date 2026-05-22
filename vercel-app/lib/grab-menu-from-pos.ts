@@ -40,6 +40,7 @@ type MenuRow = {
   description_default?: string
   description_delivery?: string | null
   description_table?: string | null
+  sell_delivery?: boolean
   /** POS 옵션 그룹 규칙 (Grab modifierGroups selectionRange에 반영) */
   option_selection_config?: unknown
 }
@@ -438,12 +439,12 @@ function flattenSectionsToSingle(
 
 async function loadMenus(): Promise<MenuRow[]> {
   const colsAll =
-    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,option_selection_config'
+    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery,option_selection_config'
   const colsAllNoConfig =
-    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table'
+    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery'
   const colsWithoutDelivery =
-    'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table'
-  const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order,is_banban'
+    'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery'
+  const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order,is_banban,sell_delivery'
   for (const cols of [colsAll, colsAllNoConfig, colsWithoutDelivery, colsBase]) {
     try {
       const rows = (await supabaseSelectAllPages('pos_menus', {
@@ -672,8 +673,10 @@ export async function buildGrabMenuFromPos(params: {
 
   const groups = new Map<string, MenuRow[]>()
   for (const menu of menus) {
-    /** 메뉴 `is_active` 꺼짐 = 품목 비활성 → 배달 앱 메뉴에도 포함하지 않음(홀·포장과 동일 바닥). 배달 ON/OFF는 그다음 `pos_delivery_menu_policies`로만 조정. */
+    /** 메뉴 `is_active` 꺼짐 또는 `sell_delivery=false` 이면 Grab 메뉴에서 제외. 그다음 `pos_delivery_menu_policies`로 앱별 ON/OFF를 추가 조정한다. */
     if (menu.is_active === false) continue
+    // 메뉴 채널 체크박스에서 배달을 끈 메뉴는 Grab 메뉴에서 제외한다.
+    if (menu.sell_delivery === false) continue
     const menuId = Number(menu.id ?? 0)
     const policy = menuPolicyMap.get(menuId)
     if (policy && !policy.enabled) continue

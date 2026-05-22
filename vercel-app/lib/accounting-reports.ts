@@ -10,6 +10,7 @@ import {
   sumPayablesBalance,
   sumReceivablesBalance,
 } from '@/lib/accounting-balance-summaries'
+import { getGlBalancesAsOf, glBalanceForCode } from '@/lib/gl-balance-as-of'
 import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
 import { fetchStockLogPurchaseAgg, resolvePurchaseLocationPatterns } from '@/lib/accounting-stock-purchase-agg'
 import {
@@ -124,6 +125,20 @@ export type UnpostedBankTransaction = {
   store: string | null
 }
 
+export type BalanceSheetLedgerBreakdown = {
+  /** 분개 1130 잔액 (POS·정산·B2B 수금) */
+  glAccount1130: number
+  /** receivable_transactions 보조원장 합 */
+  subledgerReceivables: number
+  /** 분개 2110 잔액 */
+  glAccount2110: number
+  /** payable_transactions 보조원장 합 */
+  subledgerPayables: number
+  /** 분개 1010 (교차 검증용) */
+  glAccount1010: number
+  glSource: 'rpc' | 'select'
+}
+
 export type BalanceSheetReport = {
   yearMonth: string
   startStr: string
@@ -133,13 +148,16 @@ export type BalanceSheetReport = {
   assets: {
     cashAndBanks: number
     inventory: number
+    /** 재무상태표 표시용 — 분개 1130 기준 */
     receivables: number
     total: number
   }
   liabilities: {
+    /** 재무상태표 표시용 — 분개 2110 기준 */
     payables: number
     total: number
   }
+  ledgerBreakdown?: BalanceSheetLedgerBreakdown
   equity: {
     openingCapital: number
     retainedEarningsYtd: number
@@ -1474,20 +1492,37 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
       ? await getInventoryValue(storeFilter, endStr, false, itemUnitCostMap, false)
       : await getInventoryValue(null, endStr, false, itemUnitCostMap, true)
 
-  let receivables = 0
+  let subledgerReceivables = 0
+  let subledgerPayables = 0
   try {
     const recv = await sumReceivablesBalance({ endStr, storeFilter, isHQ })
-    receivables = recv.total
+    subledgerReceivables = recv.total
   } catch {
-    receivables = 0
+    subledgerReceivables = 0
   }
-
-  let payables = 0
   try {
     const pay = await sumPayablesBalance({ endStr, storeFilter, isHQ })
-    payables = pay.total
+    subledgerPayables = pay.total
   } catch {
-    payables = 0
+    subledgerPayables = 0
+  }
+
+  let receivables = subledgerReceivables
+  let payables = subledgerPayables
+  let glSource: 'rpc' | 'select' = 'select'
+  let glAccount1130 = 0
+  let glAccount2110 = 0
+  let glAccount1010 = 0
+  try {
+    const gl = await getGlBalancesAsOf({ endStr, storeFilter, accountCodes: ['1010', '1130', '2110'] })
+    glSource = gl.source
+    glAccount1130 = glBalanceForCode(gl.rows, '1130')
+    glAccount2110 = glBalanceForCode(gl.rows, '2110')
+    glAccount1010 = glBalanceForCode(gl.rows, '1010')
+    receivables = glAccount1130
+    payables = glAccount2110
+  } catch {
+    /* RPC·select 폴백 실패 시 보조원장 유지 */
   }
 
   const currentIncome = await computeIncomeStatementReport({
@@ -1568,6 +1603,14 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
     },
     balanceCheckDiff,
     unpostedBankWithdrawals,
+    ledgerBreakdown: {
+      glAccount1130,
+      subledgerReceivables,
+      glAccount2110,
+      subledgerPayables,
+      glAccount1010,
+      glSource,
+    },
   }
 }
 

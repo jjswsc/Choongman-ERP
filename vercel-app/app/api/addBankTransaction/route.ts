@@ -11,6 +11,10 @@ import {
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
+import {
+  assertPosRevenueDepositCategorySafe,
+  BankSettlementGuardError,
+} from '@/lib/bank-settlement-guards'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -137,6 +141,21 @@ export async function POST(request: NextRequest) {
       ? (depositCategories.includes(category) ? category : depositCategories[0])
       : (withdrawCategories.includes(category) ? category : 'expense')
     if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
+
+    if (transType === 'deposit' && validCategory !== 'receivable_receive') {
+      try {
+        const posStore = storeNameForReceivable || store || userStore
+        await assertPosRevenueDepositCategorySafe({
+          storeName: posStore,
+          category: validCategory,
+        })
+      } catch (e) {
+        if (e instanceof BankSettlementGuardError) {
+          return NextResponse.json({ success: false, message: e.message, code: e.code }, { status: 409, headers })
+        }
+        throw e
+      }
+    }
 
     const row: Record<string, unknown> = {
       account_id: accountId,

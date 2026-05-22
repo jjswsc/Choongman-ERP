@@ -512,6 +512,22 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       <div className="font-mono text-right">{formatBaht(data.assets.inventory)}</div>
                       <div className="text-xs text-muted-foreground mt-1">{t("bs_receivables")}</div>
                       <div className="font-mono text-right">{formatBaht(data.assets.receivables)}</div>
+                      {data.ledgerBreakdown ? (
+                        <>
+                          <div className="text-[11px] text-muted-foreground mt-1 pl-2">
+                            {t("bs_receivablesGl1130")}
+                          </div>
+                          <div className="font-mono text-right text-sm">
+                            {formatBaht(data.ledgerBreakdown.glAccount1130)}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5 pl-2">
+                            {t("bs_receivablesSubledger")}
+                          </div>
+                          <div className="font-mono text-right text-sm text-muted-foreground">
+                            {formatBaht(data.ledgerBreakdown.subledgerReceivables)}
+                          </div>
+                        </>
+                      ) : null}
                       <div className="border-t mt-2 pt-2 text-sm font-semibold flex justify-between">
                         <span>{t("bs_total")}</span>
                         <span className="font-mono">{formatBaht(data.assets.total)}</span>
@@ -522,6 +538,22 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       <div className="text-sm font-semibold mb-2">{t("bs_liabilities")}</div>
                       <div className="text-xs text-muted-foreground">{t("bs_payables")}</div>
                       <div className="font-mono text-right">{formatBaht(data.liabilities.payables)}</div>
+                      {data.ledgerBreakdown ? (
+                        <>
+                          <div className="text-[11px] text-muted-foreground mt-1 pl-2">
+                            {t("bs_payablesGl2110")}
+                          </div>
+                          <div className="font-mono text-right text-sm">
+                            {formatBaht(data.ledgerBreakdown.glAccount2110)}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5 pl-2">
+                            {t("bs_payablesSubledger")}
+                          </div>
+                          <div className="font-mono text-right text-sm text-muted-foreground">
+                            {formatBaht(data.ledgerBreakdown.subledgerPayables)}
+                          </div>
+                        </>
+                      ) : null}
                       <div className="border-t mt-2 pt-2 text-sm font-semibold flex justify-between">
                         <span>{t("bs_total")}</span>
                         <span className="font-mono">{formatBaht(data.liabilities.total)}</span>
@@ -542,6 +574,10 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       </div>
                     </div>
                   </div>
+
+                  {data.ledgerBreakdown ? (
+                    <p className="text-[11px] text-muted-foreground leading-snug">{t("bs_ledgerBreakdownHint")}</p>
+                  ) : null}
 
                   <div
                     className={`rounded-lg border px-3 py-2 text-sm ${

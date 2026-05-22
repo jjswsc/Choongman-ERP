@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       })
       await saveFranchiseeMultiStoreSettings(toSave)
     }
-    let settings: FranchiseeMultiStoreSettings = await getFranchiseeMultiStoreSettings()
+    const settings: FranchiseeMultiStoreSettings = await getFranchiseeMultiStoreSettings()
     if (!settings.enabled) {
       return NextResponse.json(
         {

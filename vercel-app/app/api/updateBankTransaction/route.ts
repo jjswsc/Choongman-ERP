@@ -17,6 +17,11 @@ import {
   deleteJournalEntriesBySource,
   postBankTransactionJournal,
 } from '@/lib/accounting-posting'
+import {
+  assertBankNotUsedByChannelSettlement,
+  assertPosRevenueDepositCategorySafe,
+  BankSettlementGuardError,
+} from '@/lib/bank-settlement-guards'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
 export async function POST(request: NextRequest) {
@@ -142,6 +147,26 @@ export async function POST(request: NextRequest) {
 
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ success: true, message: '변경 사항 없음' }, { headers })
+    }
+
+    if (transType === 'deposit') {
+      const nextCat = String(finalCategory || '').toLowerCase()
+      try {
+        if (nextCat === 'receivable_receive') {
+          await assertBankNotUsedByChannelSettlement(bankTxId)
+        } else {
+          const posStore =
+            finalStoreName ||
+            String(existing[0].store_name || '').trim() ||
+            String(existing[0].store || '').trim()
+          await assertPosRevenueDepositCategorySafe({ storeName: posStore, category: nextCat })
+        }
+      } catch (e) {
+        if (e instanceof BankSettlementGuardError) {
+          return NextResponse.json({ success: false, message: e.message, code: e.code }, { status: 409, headers })
+        }
+        throw e
+      }
     }
 
     await supabaseUpdate('bank_transactions', bankTxId, patch)

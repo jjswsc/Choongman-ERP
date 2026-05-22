@@ -1,8 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback } from 'react'
-
-const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
+import { isOfficeStore } from '@/lib/permissions'
 
 export interface StoreViewContextValue {
   /** 모바일에서 오피스 직원이 선택한 "조회 기준 매장" (없으면 null) */
@@ -33,6 +32,20 @@ export function useStoreView() {
 export function filterNonOfficeStores(stores: string[]): string[] {
   return stores.filter((s) => {
     const x = String(s || '').trim()
-    return x && !OFFICE_STORES.some((o) => x === o || x.toLowerCase().includes('office'))
+    return x && !isOfficeStore(x)
   })
+}
+
+/** 오피스 직원 기본 조회 매장: 본사(Office) 우선, 없으면 첫 실매장 */
+export function resolveDefaultViewStoreForOffice(
+  stores: string[],
+  authStore?: string
+): string | null {
+  const list = stores.map((s) => String(s || '').trim()).filter(Boolean)
+  const officeFromList = list.find((s) => isOfficeStore(s))
+  if (officeFromList) return officeFromList
+  const logged = String(authStore || '').trim()
+  if (logged && isOfficeStore(logged)) return logged
+  const branches = filterNonOfficeStores(list)
+  return branches[0] ?? null
 }

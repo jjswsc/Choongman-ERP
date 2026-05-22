@@ -622,17 +622,24 @@ export default function PosOrderPage() {
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
+    const visibleByOrderType = notSoldOut.filter((m) =>
+      orderType === "delivery"
+        ? m.sellDelivery !== false
+        : orderType === "takeout"
+          ? m.sellPackaging !== false
+          : m.sellHall !== false
+    )
     if (!selectedMainCategory || !selectedCategory) return []
     const subOk = (cat: string | undefined) =>
       selectedMainCategory === PROMOTION_MAIN_CATEGORY
         ? promotionSubcategoriesEqual(cat, selectedCategory)
         : (cat ?? "").trim() === selectedCategory
-    const byMainAndSub = notSoldOut.filter(
+    const byMainAndSub = visibleByOrderType.filter(
       (m) => (m.categoryMain ?? "") === selectedMainCategory && subOk(m.category)
     )
     if (byMainAndSub.length > 0) return byMainAndSub
-    return notSoldOut.filter((m) => subOk(m.category))
-  }, [menus, selectedCategory, selectedMainCategory, todayStr])
+    return visibleByOrderType.filter((m) => subOk(m.category))
+  }, [menus, orderType, selectedCategory, selectedMainCategory, todayStr])
 
   const linkedPromoIds = React.useMemo(() => {
     const s = new Set<string>()

@@ -39,6 +39,15 @@
 3. 드라이버 특이 매장만 `printHtmlSettleMs`/`postHtmlPrintSpoolFlushMs` 미세 조정
 4. 전체 매장 확대
 
+## Android 태블릿(예: MBK) — 「Save as PDF」·로딩 화면 인쇄
+
+- **증상**: 주문·인쇄 시 OS 인쇄 UI에 POS 본화면(「กำลังโหลด…」·빈 장바구니)이 보이고 5초 이상 지연.
+- **원인**: Capacitor WebView에서 숨김 iframe `print()`가 본 문서를 캡처하는 경우 + `refetch` 시 테이블 영역 전체 로딩 오버레이.
+- **코드 반영**:
+  - `lib/print-html-iframe.ts`: Android는 영수증 HTML만 담은 **보조 창**에서 `print()` (`printHtmlInDedicatedPrintWindow`).
+  - `lib/pos-store.ts`: `refetchStores({ scope: 'current' })`는 이미 데이터가 있으면 **로딩 오버레이 생략**.
+- **매장 확인**: MBK 태블릿 APK 최신 + Vercel 배포 후, 인쇄 미리보기에 **영수증/주방 본문**만 보이는지·Letter가 아닌 80mm(또는 프린터 기본)에 가깝게 나오는지.
+
 ## 장애 대응(즉시 되돌림)
 - 인쇄 실패 급증 시 임시 조치
   - `printHtmlSettleMs`를 320~400으로 상향

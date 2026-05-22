@@ -11,7 +11,11 @@ import {
 } from "@/components/ui/select"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList } from "@/lib/api-client"
-import { useStoreView, filterNonOfficeStores } from "@/lib/store-view-context"
+import {
+  useStoreView,
+  filterNonOfficeStores,
+  resolveDefaultViewStoreForOffice,
+} from "@/lib/store-view-context"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
@@ -44,14 +48,12 @@ export function MobileStoreSelectorBar() {
     return [ALL_STORE_VALUE, ...branches]
   }, [stores, auth?.store])
 
-  /** 기본「전체」대신 첫 실매장 — DB 부하 완화. 지점 목록이 비면 선택은 두지 않음(「전체」는 사용자가 명시 선택). */
+  /** 오피스 직원: 기본 본사(Office). 지점만 있으면 첫 실매장. 목록 비면 미설정(「전체」는 사용자가 직접 선택). */
   React.useEffect(() => {
-    if (viewStore) return
-    const branches = filterNonOfficeStores(stores)
-    if (branches.length > 0) {
-      setViewStore(branches[0])
-    }
-  }, [stores, viewStore, setViewStore])
+    if (viewStore || !isOfficeStaff) return
+    const next = resolveDefaultViewStoreForOffice(stores, auth?.store)
+    if (next) setViewStore(next)
+  }, [stores, viewStore, setViewStore, auth?.store, isOfficeStaff])
 
   if (!isOfficeStaff) return null
   if (storeOptions.length === 0) return null

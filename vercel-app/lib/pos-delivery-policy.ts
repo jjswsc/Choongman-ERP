@@ -1,3 +1,4 @@
+import { normalizeDeliveryAppFeePercent } from '@/lib/cost-data'
 import {
   supabaseDeleteByFilter,
   supabaseSelect,
@@ -15,6 +16,8 @@ export type PosDeliveryAppPolicy = {
   enabled: boolean
   orderAcceptanceMode: DeliveryAcceptanceMode
   autoAcceptEnabled: boolean
+  /** 플랫폼 정산 수수료(%) — 익일 NET 입금 대사. 본사 PO와 별도 */
+  settlementFeePct?: number | null
   updatedAt?: string
 }
 
@@ -143,12 +146,17 @@ export async function getPosDeliveryPolicyBundle(params: {
   ])
 
   const app = (appRows as Record<string, unknown>[] | null)?.[0] || {}
+  const rawPct = app.settlement_fee_pct
   const appPolicy: PosDeliveryAppPolicy = {
     storeCode,
     appCode,
     enabled: Boolean(app.enabled ?? true),
     orderAcceptanceMode: normalizeAcceptanceMode(app.order_acceptance_mode),
     autoAcceptEnabled: Boolean(app.auto_accept_enabled ?? false),
+    settlementFeePct:
+      rawPct != null && rawPct !== '' && Number.isFinite(Number(rawPct))
+        ? normalizeDeliveryAppFeePercent(rawPct)
+        : null,
     updatedAt: String(app.updated_at ?? '') || undefined,
   }
 
@@ -194,20 +202,29 @@ export async function savePosDeliveryPolicyBundle(input: SavePolicyInput): Promi
   if (!storeCode) throw new Error('storeCode_required')
 
   const appPolicy = input.appPolicy || {}
-  await supabaseUpsert(
-    'pos_delivery_app_policies',
-    [
-      {
-        store_code: storeCode,
-        app_code: appCode,
-        enabled: Boolean(appPolicy.enabled ?? true),
-        order_acceptance_mode: normalizeAcceptanceMode(appPolicy.orderAcceptanceMode),
-        auto_accept_enabled: Boolean(appPolicy.autoAcceptEnabled ?? false),
-        updated_at: new Date().toISOString(),
-      },
-    ],
-    'store_code,app_code'
-  )
+  const row: Record<string, unknown> = {
+    store_code: storeCode,
+    app_code: appCode,
+    enabled: Boolean(appPolicy.enabled ?? true),
+    order_acceptance_mode: normalizeAcceptanceMode(appPolicy.orderAcceptanceMode),
+    auto_accept_enabled: Boolean(appPolicy.autoAcceptEnabled ?? false),
+    updated_at: new Date().toISOString(),
+  }
+  if (appPolicy.settlementFeePct !== undefined) {
+    const p = appPolicy.settlementFeePct
+    row.settlement_fee_pct = p == null ? null : normalizeDeliveryAppFeePercent(p)
+  }
+  try {
+    await supabaseUpsert('pos_delivery_app_policies', [row], 'store_code,app_code')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (row.settlement_fee_pct !== undefined && /settlement_fee_pct/i.test(msg)) {
+      delete row.settlement_fee_pct
+      await supabaseUpsert('pos_delivery_app_policies', [row], 'store_code,app_code')
+    } else {
+      throw e
+    }
+  }
 
   if (Array.isArray(input.menuPolicies)) {
     await supabaseDeleteByFilter(

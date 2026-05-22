@@ -48,6 +48,7 @@ import { useAuth } from '@/lib/auth-context'
 import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
 import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
+import { PosChannelSettlementPanel } from '@/components/erp/pos-channel-settlement-panel'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings, isAccountingRole } from '@/lib/permissions'
 import { filterNonOfficeStores } from '@/lib/store-view-context'
@@ -1792,6 +1793,14 @@ ${footerStamp}
                   </CollapsibleContent>
                 </Collapsible>
               </div>
+
+              {!openMode && effectiveStore && settleDate && !offlineAware ? (
+                <PosChannelSettlementPanel
+                  t={t}
+                  storeCode={effectiveStore}
+                  settleDate={settleDate}
+                />
+              ) : null}
 
               <div className="space-y-1 rounded-lg border px-4 py-2 text-sm" data-tour="pos-tour-close-input-totals">
                 <p className="text-[11px] leading-snug text-muted-foreground pb-1">

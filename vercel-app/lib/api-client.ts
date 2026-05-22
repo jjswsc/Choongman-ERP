@@ -2643,6 +2643,15 @@ export interface UnpostedBankTransaction {
   store: string | null
 }
 
+export interface BalanceSheetLedgerBreakdown {
+  glAccount1130: number
+  subledgerReceivables: number
+  glAccount2110: number
+  subledgerPayables: number
+  glAccount1010: number
+  glSource: 'rpc' | 'select'
+}
+
 export interface BalanceSheetData {
   yearMonth: string
   startStr?: string
@@ -2654,6 +2663,55 @@ export interface BalanceSheetData {
   equity: { openingCapital: number; retainedEarningsYtd: number; currentPeriodProfit: number; total: number }
   balanceCheckDiff: number
   unpostedBankWithdrawals?: UnpostedBankTransaction[]
+  ledgerBreakdown?: BalanceSheetLedgerBreakdown
+}
+
+export interface SubledgerGlReconciliationData {
+  yearMonth: string
+  endStr: string
+  storeFilter: string
+  timezone: string
+  receivables: {
+    glAccount1130: number
+    subledgerTotal: number
+    difference: number
+    glSource: 'rpc' | 'select'
+    subledgerSource: 'rpc' | 'select'
+  }
+  payables: {
+    glAccount2110: number
+    subledgerTotal: number
+    difference: number
+    glSource: 'rpc' | 'select'
+    subledgerSource: 'rpc' | 'select'
+  }
+  cashGl1010: number
+  riskyRevenueDeposits: {
+    id: number
+    transDate: string
+    amount: number
+    category: string
+    store: string | null
+    memo: string | null
+  }[]
+  pendingChannelSettlements: {
+    id: number
+    storeCode: string
+    settleDate: string
+    channel: string
+    gross: number
+    net: number
+    fee: number
+    bankTransactionId: number | null
+    journalEntryId: number | null
+  }[]
+  receivableReceiveWithSettlementLink: {
+    bankId: number
+    transDate: string
+    amount: number
+    storeName: string | null
+    settlementIds: number[]
+  }[]
 }
 
 /** API 응답이 재무상태표 본문인지 검사 (오류 JSON·빈 객체 방지) */
@@ -2702,6 +2760,21 @@ export async function getBalanceSheet(params: {
   if (!isBalanceSheetData(payload)) {
     const errBody = payload as { error?: string }
     throw new Error(errBody.error || 'Invalid balance sheet response')
+  }
+  return payload
+}
+
+export async function getSubledgerGlReconciliation(params: {
+  yearMonth: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams()
+  q.set('yearMonth', params.yearMonth)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getSubledgerGlReconciliation?${q}`)
+  const payload = (await res.json()) as SubledgerGlReconciliationData & { error?: string }
+  if (!res.ok) {
+    throw new Error(payload.error || `HTTP ${res.status}`)
   }
   return payload
 }
@@ -6292,6 +6365,12 @@ export interface PosMenu {
   descriptionTable?: string | null
   /** 메뉴 노출 대상 매장 목록(비어 있으면 호환모드에서 전체 노출 가능) */
   storeCodes?: string[]
+  /** 홀(매장 주문) 메뉴 노출 여부 */
+  sellHall?: boolean
+  /** 배달 주문 메뉴 노출 여부 */
+  sellDelivery?: boolean
+  /** 포장 주문 메뉴 노출 여부 */
+  sellPackaging?: boolean
 }
 
 export interface PosOptionSelectionGroupConfig {
@@ -6492,6 +6571,8 @@ export interface PosDeliveryAppPolicy {
   enabled: boolean
   orderAcceptanceMode: DeliveryAcceptanceMode
   autoAcceptEnabled: boolean
+  /** 플랫폼 정산 수수료(%) — Grab/LINE 등 익일 NET 입금 대사 (본사 PO 배달 GP와 별도) */
+  settlementFeePct?: number | null
   updatedAt?: string
 }
 
@@ -7179,6 +7260,9 @@ export async function savePosMenu(
     descriptionDelivery?: string | null
     descriptionTable?: string | null
     storeCodes?: string[]
+    sellHall?: boolean
+    sellDelivery?: boolean
+    sellPackaging?: boolean
     /**
      * true 이면 image 컬럼만 갱신한다(프로모 연동 메뉴의 사진 단독 변경 등).
      * 서버는 다른 필드 비교를 건너뛴다.
@@ -9392,6 +9476,9 @@ export interface PosOrder {
   serviceReason?: string
   deliveryFee?: number
   packagingFee?: number
+  cardFeeAmt?: number
+  cardFeeMode?: 'included' | 'separate'
+  cardRate?: number
   paymentCash?: number
   /** 현금 받은 금액(손님 영수증 거스름 표시) */
   paymentCashTendered?: number
@@ -9782,6 +9869,112 @@ export async function deletePosLinkposTenderRule(params: { id: number }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export type PosChannelSettlementChannel = 'card' | 'grab' | 'lineman' | 'shopee' | 'delivery_all'
+
+export interface PosChannelSettlementRow {
+  id: number
+  storeCode: string
+  settleDate: string
+  channel: PosChannelSettlementChannel
+  gross: number
+  fee: number
+  net: number
+  feeSource?: string | null
+  memo?: string | null
+  bankTransactionId?: number | null
+  journalEntryId?: number | null
+}
+
+export async function getPosChannelSettlementGross(params: {
+  storeCode: string
+  settleDate: string
+  channel: PosChannelSettlementChannel
+}) {
+  const q = new URLSearchParams({
+    storeCode: params.storeCode,
+    settleDate: params.settleDate,
+    channel: params.channel,
+  })
+  const res = await apiFetchWithOffline(`/api/getPosChannelSettlementGross?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    gross?: number
+    orderCount?: number
+    cardFeeTotal?: number
+    suggestedFee?: number | null
+    suggestedFeeSource?: string | null
+    platformFeePct?: number | null
+    platformAppCode?: string | null
+    message?: string
+  }>
+}
+
+export async function getPosChannelSettlements(params: { storeCode: string; settleDate: string }) {
+  const q = new URLSearchParams({
+    storeCode: params.storeCode,
+    settleDate: params.settleDate,
+  })
+  const res = await apiFetchWithOffline(`/api/getPosChannelSettlements?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    settlements?: PosChannelSettlementRow[]
+    message?: string
+  }>
+}
+
+export async function savePosChannelSettlement(params: {
+  storeCode: string
+  settleDate: string
+  channel: PosChannelSettlementChannel
+  gross: number
+  net: number
+  fee?: number
+  feeSource?: string
+  memo?: string
+  bankTransactionId?: number
+  repost?: boolean
+}) {
+  const res = await apiFetchWithOffline('/api/savePosChannelSettlement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    settlementId?: number
+    journalEntryId?: number | null
+    alreadyPosted?: boolean
+    message?: string
+  }>
+}
+
+export async function importPosChannelSettlements(params: {
+  rows: {
+    storeCode: string
+    settleDate: string
+    channel: PosChannelSettlementChannel
+    gross: number
+    net: number
+    fee?: number
+    memo?: string
+    feeSource?: string
+  }[]
+  repost?: boolean
+}) {
+  const res = await apiFetchWithOffline('/api/importPosChannelSettlements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    processed?: number
+    failed?: number
+    results?: { index: number; ok: boolean; code?: string; channel?: string; settleDate?: string }[]
+    message?: string
+  }>
 }
 
 export async function savePosSettlement(params: {

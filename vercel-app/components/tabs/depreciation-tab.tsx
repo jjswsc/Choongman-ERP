@@ -40,6 +40,7 @@ import {
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import { CHART_OF_ACCOUNTS_BY_CODE } from "@/lib/chart-of-accounts-mapping"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -79,6 +80,10 @@ export function DepreciationTab() {
     if (!v || v === key) return fallback
     return v
   }, [t])
+  const storeOptionLabel = React.useCallback(
+    (s: string) => (s === "All" ? t("all") : s),
+    [t],
+  )
   const { stores: storeList } = useStoreList()
   const isOffice = isOfficeRole(auth?.role || "")
 
@@ -128,16 +133,41 @@ export function DepreciationTab() {
   }, [isOffice, auth?.store, storeList])
 
   const yearMonthOptions = getBangkokRecentYearMonths(24)
+
+  const accountSubjectDisplayName = React.useCallback(
+    (s: AccountSubjectItem) => {
+      const code = String(s.code || "").trim().toUpperCase()
+      const meta = code ? CHART_OF_ACCOUNTS_BY_CODE[code] : undefined
+      if (lang === "en") {
+        return (s.nameEn || meta?.nameEn || s.name || meta?.nameKo || code).trim()
+      }
+      if (lang === "th") {
+        return (s.nameTh || s.nameEn || meta?.nameEn || s.name || meta?.nameKo || code).trim()
+      }
+      return (meta?.nameKo || s.name || s.nameEn || meta?.nameEn || code).trim()
+    },
+    [lang]
+  )
+
   const accountOptions = React.useMemo(() => {
     const uniq = new Map<string, AccountSubjectItem>()
-    const defaults: AccountSubjectItem[] = [
-      { code: "1460", name: tt("dep_defaultAccountFixedAsset", "Fixed Assets"), type: "asset", sortOrder: 0 },
-      { code: "1470", name: tt("dep_defaultAccountAccumDep", "Accumulated Depreciation"), type: "asset", sortOrder: 0 },
-      { code: "5500", name: tt("dep_defaultAccountDepExpense", "Depreciation Expense"), type: "expense", sortOrder: 0 },
-      { code: "4110", name: tt("dep_defaultAccountRevenue", "Revenue"), type: "revenue", sortOrder: 0 },
-      { code: "5520", name: tt("dep_defaultAccountGeneralAdmin", "General Administrative Expense"), type: "expense", sortOrder: 0 },
+    const defaultCodes: { code: string; type: string }[] = [
+      { code: "1460", type: "asset" },
+      { code: "1470", type: "asset" },
+      { code: "5500", type: "expense" },
+      { code: "4110", type: "revenue" },
+      { code: "5520", type: "expense" },
     ]
-    for (const d of defaults) uniq.set(d.code, d)
+    for (const { code, type } of defaultCodes) {
+      const meta = CHART_OF_ACCOUNTS_BY_CODE[code]
+      uniq.set(code, {
+        code,
+        name: meta?.nameKo ?? code,
+        nameEn: meta?.nameEn ?? null,
+        type,
+        sortOrder: 0,
+      })
+    }
     for (const s of accountSubjects || []) {
       const code = String(s.code || "").trim().toUpperCase()
       if (!code) continue
@@ -151,9 +181,9 @@ export function DepreciationTab() {
       const c = String(code || "").trim().toUpperCase()
       if (!c) return fallback
       const hit = accountOptions.find((x) => String(x.code || "").trim().toUpperCase() === c)
-      return hit ? `${c} · ${hit.name}` : c
+      return hit ? `${c} · ${accountSubjectDisplayName(hit)}` : c
     },
-    [accountOptions]
+    [accountOptions, accountSubjectDisplayName]
   )
 
   const loadAssets = React.useCallback(() => {
@@ -369,7 +399,7 @@ export function DepreciationTab() {
                   </SelectTrigger>
                   <SelectContent>
                     {storeOptions.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>{storeOptionLabel(s)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -399,7 +429,7 @@ export function DepreciationTab() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {storeOptions.map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                        <SelectItem key={s} value={s}>{storeOptionLabel(s)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -434,7 +464,7 @@ export function DepreciationTab() {
                     <SelectContent>
                       {accountOptions.map((a) => (
                         <SelectItem key={`asset-${a.code}`} value={String(a.code)}>
-                          {String(a.code)} · {a.name}
+                          {String(a.code)} · {accountSubjectDisplayName(a)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -449,7 +479,7 @@ export function DepreciationTab() {
                     <SelectContent>
                       {accountOptions.map((a) => (
                         <SelectItem key={`accum-${a.code}`} value={String(a.code)}>
-                          {String(a.code)} · {a.name}
+                          {String(a.code)} · {accountSubjectDisplayName(a)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -464,7 +494,7 @@ export function DepreciationTab() {
                     <SelectContent>
                       {accountOptions.map((a) => (
                         <SelectItem key={`exp-${a.code}`} value={String(a.code)}>
-                          {String(a.code)} · {a.name}
+                          {String(a.code)} · {accountSubjectDisplayName(a)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -562,7 +592,7 @@ export function DepreciationTab() {
                   </SelectTrigger>
                   <SelectContent>
                     {storeOptions.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>{storeOptionLabel(s)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -630,7 +660,7 @@ export function DepreciationTab() {
                   <SelectContent>
                     {storeOptions.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {storeOptionLabel(s)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -657,7 +687,7 @@ export function DepreciationTab() {
                     <SelectContent>
                       {accountOptions.map((a) => (
                         <SelectItem key={`gain-${a.code}`} value={String(a.code)}>
-                          {String(a.code)} · {a.name}
+                          {String(a.code)} · {accountSubjectDisplayName(a)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -672,7 +702,7 @@ export function DepreciationTab() {
                     <SelectContent>
                       {accountOptions.map((a) => (
                         <SelectItem key={`loss-${a.code}`} value={String(a.code)}>
-                          {String(a.code)} · {a.name}
+                          {String(a.code)} · {accountSubjectDisplayName(a)}
                         </SelectItem>
                       ))}
                     </SelectContent>

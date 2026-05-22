@@ -1,0 +1,81 @@
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+
+const POS_REVENUE_DEPOSIT_CATEGORIES = new Set([
+  'revenue_delivery',
+  'revenue_card',
+  'revenue_qr',
+  'revenue_cash',
+])
+
+export class BankSettlementGuardError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string
+  ) {
+    super(message)
+    this.name = 'BankSettlementGuardError'
+  }
+}
+
+/** 동일 통장 입금에 채널 정산이 이미 연결된 경우 receivable_receive 등 금지 */
+export async function assertBankNotUsedByChannelSettlement(bankTransactionId: number): Promise<void> {
+  if (!bankTransactionId || bankTransactionId <= 0) return
+  const rows = (await supabaseSelectFilter(
+    'pos_channel_settlements',
+    `bank_transaction_id=eq.${bankTransactionId}`,
+    { select: 'id,store_code,settle_date,channel', limit: 5 }
+  )) as { id?: number; store_code?: string; settle_date?: string; channel?: string }[] | null
+  if (rows?.length) {
+    const s = rows[0]
+    throw new BankSettlementGuardError(
+      `이 통장 입금은 이미 POS 채널 정산(#${s.id}, ${s.store_code} ${s.settle_date} ${s.channel})에 연결되어 있습니다. 매출 수령(receivable_receive)과 채널 정산을 동시에 쓸 수 없습니다.`,
+      'BANK_LINKED_TO_CHANNEL_SETTLEMENT'
+    )
+  }
+}
+
+/** 채널 정산에 통장 연결 시 매출 수령 분류인지 검사 */
+export async function assertBankDepositAllowedForChannelSettlement(
+  bankTransactionId: number
+): Promise<void> {
+  if (!bankTransactionId || bankTransactionId <= 0) return
+  const rows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
+    select: 'id,category,trans_type',
+    limit: 1,
+  })) as { id?: number; category?: string; trans_type?: string }[] | null
+  const row = rows?.[0]
+  if (!row?.id) return
+  if (String(row.trans_type || '').toLowerCase() !== 'deposit') {
+    throw new BankSettlementGuardError('채널 정산에는 입금 거래만 연결할 수 있습니다.', 'BANK_NOT_DEPOSIT')
+  }
+  const cat = String(row.category || '').toLowerCase()
+  if (cat === 'receivable_receive') {
+    throw new BankSettlementGuardError(
+      '매출 수령(receivable_receive)으로 분류된 통장 입금에는 채널 정산을 연결할 수 없습니다. 용도를 변경하거나 채널 정산만 사용하세요.',
+      'BANK_RECEIVABLE_RECEIVE_CONFLICT'
+    )
+  }
+}
+
+/** POS 매출 이중 위험: 해당 매장에 완료 POS 주문이 있으면 revenue_* 입금 분류 차단 */
+export async function assertPosRevenueDepositCategorySafe(params: {
+  storeName: string
+  category: string
+}): Promise<void> {
+  const cat = String(params.category || '').toLowerCase()
+  if (!POS_REVENUE_DEPOSIT_CATEGORIES.has(cat)) return
+  const store = String(params.storeName || '').trim()
+  if (!store) return
+
+  const orders = (await supabaseSelectFilter(
+    'pos_orders',
+    `store_code=eq.${encodeURIComponent(store)}&status=in.(completed,paid,ready)`,
+    { select: 'id', limit: 1 }
+  )) as { id?: number }[] | null
+  if (orders?.length) {
+    throw new BankSettlementGuardError(
+      `매장「${store}」에 POS 완료 주문이 있어 입금 분류「${cat}」은 매출(4110) 이중 인식 위험이 있습니다. 카드·배달 입금은 채널 정산을, 가맹 수금은 매출 수령(receivable_receive)을 사용하세요.`,
+      'POS_REVENUE_DEPOSIT_DOUBLE_RISK'
+    )
+  }
+}

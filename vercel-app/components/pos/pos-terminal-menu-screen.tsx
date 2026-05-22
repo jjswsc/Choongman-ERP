@@ -225,6 +225,9 @@ export function PosTerminalMenuScreen({
     isActive: boolean
     vatIncluded: boolean
     isBanban: boolean
+    sellHall: boolean
+    sellDelivery: boolean
+    sellPackaging: boolean
   }>({
     code: '',
     name: '',
@@ -239,6 +242,9 @@ export function PosTerminalMenuScreen({
     isActive: true,
     vatIncluded: true,
     isBanban: false,
+    sellHall: true,
+    sellDelivery: true,
+    sellPackaging: true,
   })
 
   const loadMenuData = React.useCallback(async () => {
@@ -385,7 +391,14 @@ export function PosTerminalMenuScreen({
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
-    const visibleByPromoChannel = notSoldOut.filter((m) => {
+    const visibleByOrderType = notSoldOut.filter((m) =>
+      orderType === 'delivery'
+        ? m.sellDelivery !== false
+        : orderType === 'takeout'
+          ? m.sellPackaging !== false
+          : m.sellHall !== false
+    )
+    const visibleByPromoChannel = visibleByOrderType.filter((m) => {
       const pid = m.promoId?.trim()
       if (!pid) return true
       // 미러 세트 메뉴는 원본 프로모 채널/기간 가시성과 동일하게 노출한다.
@@ -402,7 +415,7 @@ export function PosTerminalMenuScreen({
     )
     if (byMainAndSub.length > 0) return byMainAndSub
     return visibleByPromoChannel.filter((m) => subOk(m.category))
-  }, [menus, selectedCategory, selectedMainCategory, todayStr, promoVisibilityById])
+  }, [menus, orderType, selectedCategory, selectedMainCategory, todayStr, promoVisibilityById])
 
   const filteredPromos = React.useMemo(() => {
     return promos.filter((p) => {
@@ -790,6 +803,9 @@ export function PosTerminalMenuScreen({
       isActive: menu.isActive !== false,
       vatIncluded: menu.vatIncluded !== false,
       isBanban: menu.isBanban === true,
+      sellHall: menu.sellHall !== false,
+      sellDelivery: menu.sellDelivery !== false,
+      sellPackaging: menu.sellPackaging !== false,
     })
     setMenuEditOpen(true)
   }
@@ -856,6 +872,9 @@ export function PosTerminalMenuScreen({
         optionSelectionGroups: dedupedGroups,
         optionSelectionConfig,
         isBanban: menuEditForm.isBanban,
+        sellHall: menuEditForm.sellHall,
+        sellDelivery: menuEditForm.sellDelivery,
+        sellPackaging: menuEditForm.sellPackaging,
       }
       if (imageSave.includeImageUrl) {
         savePayload.imageUrl = imageSave.imageUrl
@@ -2070,6 +2089,35 @@ export function PosTerminalMenuScreen({
                   </div>
                 </div>
                 <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">{t('posOrderType') || '유형'}</label>
+                    <div className="flex items-center gap-3 text-sm">
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={menuEditForm.sellHall}
+                          onChange={(e) => setMenuEditForm((p) => ({ ...p, sellHall: e.target.checked }))}
+                        />
+                        {t('posOptionSellHall') || '홀'}
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={menuEditForm.sellDelivery}
+                          onChange={(e) => setMenuEditForm((p) => ({ ...p, sellDelivery: e.target.checked }))}
+                        />
+                        {t('posOptionSellDelivery') || '배달'}
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={menuEditForm.sellPackaging}
+                          onChange={(e) => setMenuEditForm((p) => ({ ...p, sellPackaging: e.target.checked }))}
+                        />
+                        {t('posOptionSellPackaging') || '포장'}
+                      </label>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
                     <label className="text-sm font-semibold">{t('posMenuKitchenPrinter') || '주방 프린터'}</label>
                     <select

@@ -9,6 +9,10 @@ import {
   upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
+import {
+  assertPosRevenueDepositCategorySafe,
+  BankSettlementGuardError,
+} from '@/lib/bank-settlement-guards'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -198,6 +202,19 @@ export async function POST(request: NextRequest) {
         ? (depositCategories.includes(category) ? category : 'revenue_delivery')
         : (withdrawCategories.includes(category) ? category : 'unclassified')
       if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
+
+      if (transType === 'deposit' && validCategory !== 'receivable_receive') {
+        try {
+          const posStore = storeNameForReceivable || store || userStore
+          await assertPosRevenueDepositCategorySafe({ storeName: posStore, category: validCategory })
+        } catch (e) {
+          if (e instanceof BankSettlementGuardError) {
+            skipped++
+            continue
+          }
+          throw e
+        }
+      }
 
       const persistDepositSubject =
         transType === 'deposit' &&

@@ -2,15 +2,35 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Radio, Search } from "lucide-react"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tOr } from "@/lib/i18n"
 import { getPosTodaySales } from "@/lib/api-client"
 import type { Store } from "@/lib/pos-types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 
 const ALL_STORE_VALUE = "All"
+const CHART_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
+
+const chartYAxisProps = {
+  tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK },
+  tickFormatter: (v: number) => `${(Number(v) / 1000).toFixed(0)}k`,
+}
 
 type TodaySalesSummary = {
   completedCount: number
@@ -47,6 +67,8 @@ export type StoreSalesRealtimeViewProps = {
   showHeaderBadge?: boolean
   /** 모바일 등 외부 헤더 버튼에서 같은 갱신을 호출할 때 */
   onRegisterRefresh?: (refresh: () => void) => void
+  /** 관리자 대시보드: 실시간 합계·매장·테이블을 차트로 표시 */
+  showSalesCharts?: boolean
   className?: string
 }
 
@@ -62,10 +84,12 @@ export function StoreSalesRealtimeView({
   showInlineRefresh = false,
   showHeaderBadge = false,
   onRegisterRefresh,
+  showSalesCharts = false,
   className,
 }: StoreSalesRealtimeViewProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const tr = (key: string, fallback: string) => tOr(t, key, fallback)
   const isAllStoresSelected = effectiveStoreCode === ALL_STORE_VALUE
 
   const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
@@ -144,6 +168,12 @@ export function StoreSalesRealtimeView({
     loadTodaySales()
   }, [effectiveStoreCode, loadTodaySales])
 
+  useEffect(() => {
+    if (!showSalesCharts || !effectiveStoreCode) return
+    const timer = setInterval(() => loadTodaySales({ forceNetwork: true }), 60000)
+    return () => clearInterval(timer)
+  }, [showSalesCharts, effectiveStoreCode, loadTodaySales])
+
   const sortedTables = useMemo(() => {
     const tables = currentStore?.tables || []
     return [...tables].sort((a, b) => {
@@ -191,6 +221,57 @@ export function StoreSalesRealtimeView({
         { paid: 0, tableTotal: 0 }
       ),
     [byStoreRows]
+  )
+
+  const cashMixPieRows = useMemo(() => {
+    if (!todaySales) return []
+    const cash = Math.max(0, Number(todaySales.completedCash ?? 0))
+    const total = Math.max(0, Number(todaySales.completedTotal ?? 0))
+    const other = Math.max(0, total - cash)
+    if (cash <= 0 && other <= 0) return []
+    return [
+      { key: "cash", label: tr("mobileStoreSalesCashTotal", "현금"), value: cash },
+      { key: "other", label: tr("adminRealtimeSalesNonCash", "현금 외"), value: other },
+    ].filter((r) => r.value > 0)
+  }, [todaySales, tr])
+
+  const orderCountBarRows = useMemo(() => {
+    if (!todaySales) return []
+    return [
+      {
+        key: "completed",
+        label: tr("mobileStoreSalesCompletedOrders", "완료 주문"),
+        count: Number(todaySales.completedCount ?? 0),
+      },
+      {
+        key: "pending",
+        label: tr("mobileStoreSalesPendingOrders", "진행 주문"),
+        count: Number(todaySales.pendingCount ?? 0),
+      },
+    ]
+  }, [todaySales, tr])
+
+  const byStoreChartRows = useMemo(
+    () =>
+      byStoreRows.map((r) => ({
+        storeId: r.storeId,
+        paid: r.paid,
+        tableTotal: r.tableTotal,
+      })),
+    [byStoreRows]
+  )
+
+  const tableAmountBarRows = useMemo(
+    () =>
+      sortedTables
+        .map((tbl) => ({
+          name: String(tbl.name || "—"),
+          amount: Number(tbl.order?.total ?? 0),
+          guests: Number(tbl.order?.guestCount ?? 0),
+        }))
+        .filter((r) => r.amount > 0)
+        .slice(0, 24),
+    [sortedTables]
   )
 
   const handleManualRefresh = useCallback(() => {
@@ -257,22 +338,73 @@ export function StoreSalesRealtimeView({
         <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
           {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
         </p>
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-lg bg-background/60 px-2 py-2">
-            <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
-            <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
+        {showSalesCharts ? (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {cashMixPieRows.length > 0 ? (
+              <div>
+                <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+                  {tr("adminRealtimeSalesCashMix", "실매출 구성 (현금/기타)")}
+                </p>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={cashMixPieRows}
+                        dataKey="value"
+                        nameKey="label"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={72}
+                        label={({ name, percent }) =>
+                          `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
+                        }
+                      >
+                        {cashMixPieRows.map((r, i) => (
+                          <Cell key={r.key} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatBahtInt(v)} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : null}
+            <div>
+              <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+                {tr("adminRealtimeSalesOrderCounts", "주문 건수 (실시간)")}
+              </p>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={orderCountBarRows}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10, ...ERP_NUMERIC_CHART_TICK }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#22c55e" name={tr("salesOccupancy", "주문건수")} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
-          <div className="rounded-lg bg-background/60 px-2 py-2">
-            <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
-            <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
+        ) : (
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg bg-background/60 px-2 py-2">
+              <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
+              <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
+            </div>
+            <div className="rounded-lg bg-background/60 px-2 py-2">
+              <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
+              <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
+            </div>
+            <div className="rounded-lg bg-background/60 px-2 py-2">
+              <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCashTotal")}</p>
+              <p className="text-sm font-semibold tabular-nums leading-snug">
+                {todaySales != null ? formatBahtInt(todaySales.completedCash) : "—"}
+              </p>
+            </div>
           </div>
-          <div className="rounded-lg bg-background/60 px-2 py-2">
-            <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCashTotal")}</p>
-            <p className="text-sm font-semibold tabular-nums leading-snug">
-              {todaySales != null ? formatBahtInt(todaySales.completedCash) : "—"}
-            </p>
-          </div>
-        </div>
+        )}
       </section>
 
       {isAllStoresSelected ? (
@@ -289,6 +421,62 @@ export function StoreSalesRealtimeView({
             <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
               {t("mobileStoreSalesByStoreEmpty")}
             </p>
+          ) : showSalesCharts ? (
+            <div className="space-y-4">
+              <div className="h-[min(320px,45vh)] rounded-xl border border-border/70 bg-card p-3">
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                  {tr("adminRealtimeSalesByStorePaid", "매장별 실매출 (막대)")}
+                </p>
+                <ResponsiveContainer width="100%" height="90%">
+                  <BarChart data={byStoreChartRows} layout="vertical" margin={{ left: 4, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" {...chartYAxisProps} />
+                    <YAxis dataKey="storeId" type="category" width={88} tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={(v: number) => formatBahtInt(v)} />
+                    <Legend />
+                    <Bar
+                      dataKey="paid"
+                      fill="#f97316"
+                      name={t("mobileStoreSalesPaidAmount")}
+                      radius={[0, 4, 4, 0]}
+                    />
+                    <Bar
+                      dataKey="tableTotal"
+                      fill="#3b82f6"
+                      name={t("mobileStoreSalesTableTotalAmount")}
+                      radius={[0, 4, 4, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {byStoreChartRows.length > 0 ? (
+                <div className="h-[240px] rounded-xl border border-border/70 bg-card p-3">
+                  <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                    {tr("adminRealtimeSalesByStoreShare", "매장별 실매출 비중")}
+                  </p>
+                  <ResponsiveContainer width="100%" height="88%">
+                    <PieChart>
+                      <Pie
+                        data={byStoreChartRows}
+                        dataKey="paid"
+                        nameKey="storeId"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={88}
+                        label={({ name, percent }) =>
+                          `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
+                        }
+                      >
+                        {byStoreChartRows.map((r, i) => (
+                          <Cell key={r.storeId} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatBahtInt(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
               <div className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
@@ -357,6 +545,33 @@ export function StoreSalesRealtimeView({
             <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
               {t("mobileStoreSalesTableEmpty")}
             </p>
+          ) : showSalesCharts ? (
+            tableAmountBarRows.length > 0 ? (
+            <div className="h-[min(360px,50vh)] rounded-xl border border-border/70 bg-card p-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tableAmountBarRows} layout="vertical" margin={{ left: 4, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" {...chartYAxisProps} />
+                  <YAxis dataKey="name" type="category" width={72} tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    formatter={(v: number, _name, item) => {
+                      const payload = item?.payload as { guests?: number } | undefined
+                      const guests = payload?.guests ?? 0
+                      return [
+                        `${formatBahtInt(v)} (${tr("mobileStoreSalesGuests", "손님")} ${guests})`,
+                        tr("mobileStoreSalesOrderAmt", "주문금액"),
+                      ]
+                    }}
+                  />
+                  <Bar dataKey="amount" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+                {t("mobileStoreSalesTableEmpty")}
+              </p>
+            )
           ) : (
             <ul className="flex flex-col gap-2">
               {sortedTables.map((tbl) => {

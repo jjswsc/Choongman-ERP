@@ -1,5 +1,7 @@
 # 출고·미수금·통장·입고 연계 구조
 
+운영 SOP(중복 방지·월말 체크): [ACCOUNTING_LEDGER_SOP.md](ACCOUNTING_LEDGER_SOP.md)
+
 ## 1. 전체 흐름 요약
 
 | 구분 | 출고(Outbound) | 입고(Inbound) | 미수금 | 미지급금 | 통장 |

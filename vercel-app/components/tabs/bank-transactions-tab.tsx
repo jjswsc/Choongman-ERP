@@ -77,6 +77,8 @@ import {
   saveBankQuickMemos,
 } from "@/lib/bank-quick-memos"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
+import { PosChannelSettlementPanel } from "@/components/erp/pos-channel-settlement-panel"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -1162,7 +1164,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           if (r.transType === "deposit") {
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
-            initialEdits[idx] = { category: "revenue_delivery", salesDate: d.toISOString().slice(0, 10) }
+            initialEdits[idx] = {
+              category: "receivable_receive",
+              salesDate: d.toISOString().slice(0, 10),
+              ...(selectedAccountStore ? { storeName: selectedAccountStore } : {}),
+            }
           } else if (r.transType === "withdraw") {
             initialEdits[idx] = { category: "unclassified" }
           }
@@ -1397,6 +1403,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         </Link>
         <span className="font-normal">{` · ${tt("bankCoaUsedForBankHint", "통장·적요 규칙·분개는 동일 DB(account_subjects)를 사용합니다")}`}</span>
       </p>
+      <div className="rounded-md border border-amber-200/80 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2.5 space-y-1">
+        <p className="text-xs font-medium text-foreground">{tt("bankPosReceivableDepositTitle", "POS 자동분개 매장 — 입금 분류")}</p>
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          {tt(
+            "bankPosReceivableDepositBody",
+            "Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 사용하세요. 배달앱정산/카드매출(revenue_*)는 매출(4110) 이중 인식 위험이 있습니다. 수수료는 아래 채널 정산으로 NET+FEE 분개하세요."
+          )}
+        </p>
+      </div>
+      {selectedAccountStore ? (
+        <PosChannelSettlementPanel
+          t={(key) => tt(key, key)}
+          storeCode={selectedAccountStore}
+          settleDate={startStr || getBangkokTodayDateString()}
+        />
+      ) : null}
       <div className="rounded-md border border-sky-200/80 dark:border-sky-800/50 bg-sky-50/60 dark:bg-sky-950/25 px-3 py-2.5 space-y-1.5">
         <p className="text-xs font-medium text-foreground">{tt("bankExpenseMgmtCoexistTitle", "지출 관리와 같은 출금 줄을 쓸 때 (출금 용도)")}</p>
         <p className="text-[11px] text-muted-foreground whitespace-pre-line leading-snug">

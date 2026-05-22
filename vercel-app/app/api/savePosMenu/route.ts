@@ -20,15 +20,7 @@ function normalizeStoreCodes(raw: unknown): string[] {
 async function loadMenuAuditSnapshot(menuId: string): Promise<Record<string, unknown> | null> {
   const id = String(menuId || '').trim()
   if (!id) return null
-  const rows = (await supabaseSelectFilter(
-    'pos_menus',
-    `id=eq.${encodeURIComponent(id)}`,
-    {
-      limit: 1,
-      select:
-        'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,delivery_app_fee_percent',
-    }
-  )) as {
+  type AuditMenuRow = {
     id?: number
     code?: string
     name?: string
@@ -41,7 +33,31 @@ async function loadMenuAuditSnapshot(menuId: string): Promise<Record<string, unk
     is_active?: boolean
     sort_order?: number
     delivery_app_fee_percent?: number | null
-  }[] | null
+    sell_hall?: boolean | null
+    sell_delivery?: boolean | null
+    sell_packaging?: boolean | null
+  }
+  let rows: AuditMenuRow[] | null = null
+  try {
+    rows = (await supabaseSelectFilter(
+      'pos_menus',
+      `id=eq.${encodeURIComponent(id)}`,
+      {
+        limit: 1,
+        select:
+          'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,delivery_app_fee_percent,sell_hall,sell_delivery,sell_packaging',
+      }
+    )) as AuditMenuRow[] | null
+  } catch {
+    rows = (await supabaseSelectFilter(
+      'pos_menus',
+      `id=eq.${encodeURIComponent(id)}`,
+      {
+        limit: 1,
+        select: 'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,delivery_app_fee_percent',
+      }
+    )) as AuditMenuRow[] | null
+  }
   const row = rows?.[0]
   if (!row?.id) return null
   let scopeRows: { store_code?: string | null; enabled?: boolean | null }[] = []
@@ -74,6 +90,9 @@ async function loadMenuAuditSnapshot(menuId: string): Promise<Record<string, unk
     sortOrder: Number(row.sort_order ?? 0),
     deliveryAppFeePercent:
       row.delivery_app_fee_percent != null ? Number(row.delivery_app_fee_percent) : null,
+    sellHall: row.sell_hall !== false,
+    sellDelivery: row.sell_delivery !== false,
+    sellPackaging: row.sell_packaging !== false,
     storeCodes,
   }
 }
@@ -110,7 +129,8 @@ export async function POST(req: NextRequest) {
         changed.includes('category_main') ||
         changed.includes('price') ||
         changed.includes('price_delivery') ||
-        changed.includes('image')
+        changed.includes('image') ||
+        changed.includes('sell_delivery')
       if (hasMenuImpact) {
         const reason = result.syncHint?.imageChanged ? 'menu_image_changed' : 'menu_updated'
         void triggerGrabMenuNotification({

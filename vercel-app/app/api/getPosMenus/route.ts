@@ -24,7 +24,7 @@ const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_group
 const POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG = POS_MENUS_SELECT_WITH_GROUPS + ',option_selection_config'
 const POS_MENUS_SELECT_WITH_ALL =
   POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG +
-  ',kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table'
+  ',kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,sell_hall,sell_delivery,sell_packaging'
 const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
@@ -111,6 +111,9 @@ export async function GET(request: Request) {
       description_default?: string
       description_delivery?: string | null
       description_table?: string | null
+      sell_hall?: boolean
+      sell_delivery?: boolean
+      sell_packaging?: boolean
     }[]
 
     const storeCodesByMenuId = new Map<number, string[]>()
@@ -219,6 +222,9 @@ export async function GET(request: Request) {
         descriptionTable:
           row.description_table == null ? null : String(row.description_table),
         storeCodes: scopedStores,
+        sellHall: row.sell_hall !== false,
+        sellDelivery: row.sell_delivery !== false,
+        sellPackaging: row.sell_packaging !== false,
       }]
     })
 
@@ -300,6 +306,9 @@ export async function GET(request: Request) {
           descriptionTable:
             row.description_table == null ? null : String(row.description_table),
           storeCodes: scopedStores,
+          sellHall: row.sell_hall !== false,
+          sellDelivery: row.sell_delivery !== false,
+          sellPackaging: row.sell_packaging !== false,
         }
       })
       console.warn('getPosMenus scope fallback to all menus', {

@@ -12,6 +12,7 @@ import { useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
 import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
+import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
 import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { Button } from "@/components/ui/button"
@@ -52,7 +53,7 @@ export default function AdminLiveStoreSalesPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-4">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -83,6 +84,11 @@ export default function AdminLiveStoreSalesPage() {
           currentStore={currentStore}
           showInlineRefresh
           showHeaderBadge
+          showSalesCharts
+        />
+        <AdminSalesDashboardCharts
+          effectiveStoreCode={effectiveStoreCode}
+          isOfficeSelector={isOfficeSelector}
         />
         <PosRevenueRealtimeDashboard
           effectiveStoreCode={effectiveStoreCode}

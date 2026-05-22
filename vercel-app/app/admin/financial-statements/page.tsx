@@ -27,6 +27,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { IncomeStatementTab } from "@/components/tabs/income-statement-tab"
 import { BalanceSheetTab } from "@/components/tabs/balance-sheet-tab"
+import { LedgerReconciliationTab } from "@/components/tabs/ledger-reconciliation-tab"
 import { cn } from "@/lib/utils"
 
 export default function FinancialStatementsPage() {
@@ -56,7 +57,7 @@ export default function FinancialStatementsPage() {
   const [storeFilter, setStoreFilter] = React.useState(() =>
     isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All"
   )
-  const [tab, setTab] = React.useState<"income" | "balance">("income")
+  const [tab, setTab] = React.useState<"income" | "balance" | "reconcile">("income")
   const [queryToken, setQueryToken] = React.useState(0)
 
   React.useEffect(() => {
@@ -166,7 +167,11 @@ export default function FinancialStatementsPage() {
           </CardContent>
         </Card>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "income" | "balance")} className={adminTabsRootCn}>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as "income" | "balance" | "reconcile")}
+          className={adminTabsRootCn}
+        >
           <AdminTabsBarWithHelp>
             <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="income" className={adminTabsTriggerCn}>
@@ -174,6 +179,9 @@ export default function FinancialStatementsPage() {
               </TabsTrigger>
               <TabsTrigger value="balance" className={adminTabsTriggerCn}>
                 {t("adminBalanceSheet")}
+              </TabsTrigger>
+              <TabsTrigger value="reconcile" className={adminTabsTriggerCn}>
+                {t("adminLedgerReconciliation")}
               </TabsTrigger>
             </TabsList>
           </AdminTabsBarWithHelp>
@@ -193,6 +201,14 @@ export default function FinancialStatementsPage() {
               yearMonth={yearMonthEnd}
               yearMonthStart={yearMonthStart}
               yearMonthEnd={yearMonthEnd}
+              storeFilter={storeFilter}
+              hideControls
+              queryToken={queryToken}
+            />
+          </TabsContent>
+          <TabsContent value="reconcile" className={cn(adminTabsContentCn, "space-y-3")}>
+            <LedgerReconciliationTab
+              yearMonth={yearMonthEnd}
               storeFilter={storeFilter}
               hideControls
               queryToken={queryToken}

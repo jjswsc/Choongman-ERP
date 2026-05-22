@@ -48,7 +48,7 @@ async function resolveBearerCaller(
 }
 
 const POS_ORDER_SELECT =
-  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
+  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,card_fee_amt,card_fee_mode,card_rate,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
 
 function addStoreVariants(set: Set<string>, raw: string) {
   const v = String(raw || '').trim()
@@ -557,6 +557,12 @@ export async function GET(request: NextRequest) {
           serviceReason: String(serviceRow?.service_reason ?? ''),
           deliveryFee: Number(r.delivery_fee) ?? 0,
           packagingFee: Number(r.packaging_fee) ?? 0,
+          cardFeeAmt: Math.max(0, Number((r as { card_fee_amt?: number }).card_fee_amt) || 0),
+          cardFeeMode:
+            String((r as { card_fee_mode?: string }).card_fee_mode || '').trim() === 'included'
+              ? 'included'
+              : 'separate',
+          cardRate: Math.max(0, Number((r as { card_rate?: number }).card_rate) || 0),
           paymentCash: Number(r.payment_cash) ?? 0,
           ...(Math.max(0, Number((r as { payment_cash_tendered?: number }).payment_cash_tendered) || 0) > 0.005
             ? {

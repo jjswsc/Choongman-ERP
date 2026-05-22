@@ -467,6 +467,9 @@ const emptyForm = {
   vatIncluded: true,
   isActive: true,
   isBanban: false,
+  sellHall: true,
+  sellDelivery: true,
+  sellPackaging: true,
 }
 
 type PackagingChecklistDraftRow = {
@@ -552,6 +555,7 @@ export default function PosMenusPage() {
   React.useEffect(() => {
     const tab = String(searchParams.get("tab") || "").trim()
     if (tab === "optionsConfig") setMainTab("optionsConfig")
+    else if (tab === "deliveryOps") setMainTab("deliveryOps")
   }, [searchParams])
   const [priceManageTab, setPriceManageTab] = React.useState<"history" | "schedule">("history")
   const [pricingStoreCode, setPricingStoreCode] = React.useState("")
@@ -759,6 +763,7 @@ export default function PosMenusPage() {
     enabled: true,
     orderAcceptanceMode: "manual",
     autoAcceptEnabled: false,
+    settlementFeePct: null,
   })
   const [deliveryOpsMenuPolicyMap, setDeliveryOpsMenuPolicyMap] = React.useState<Record<string, PosDeliveryMenuPolicy>>({})
   const deliveryOpsImageInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
@@ -1199,6 +1204,9 @@ export default function PosMenusPage() {
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
           isBanban: m.isBanban ?? false,
+          sellHall: m.sellHall !== false,
+          sellDelivery: m.sellDelivery !== false,
+          sellPackaging: m.sellPackaging !== false,
         })
         void loadPackagingChecklistRows(editingId)
       }
@@ -1330,6 +1338,10 @@ export default function PosMenusPage() {
       await appAlert(t("posMenuAlertCodeName"))
       return
     }
+    if (!formData.sellHall && !formData.sellDelivery && !formData.sellPackaging) {
+      await appAlert(t("posSetTabChannelsRequired"))
+      return
+    }
     if (!editingId && menus.some((m) => m.code === code)) {
       await appAlert(t("itemsAlertCodeExists"))
       return
@@ -1381,6 +1393,9 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
+      sellHall: formData.sellHall,
+      sellDelivery: formData.sellDelivery,
+      sellPackaging: formData.sellPackaging,
     }
     if (shouldPersistStoreScope) {
       savePayload.storeCodes = scopeForSave
@@ -1418,6 +1433,9 @@ export default function PosMenusPage() {
       optionSelectionConfig: editingMenu?.optionSelectionConfig,
       isBanban: formData.isBanban,
       storeCodes: scopeForSave,
+      sellHall: formData.sellHall,
+      sellDelivery: formData.sellDelivery,
+      sellPackaging: formData.sellPackaging,
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
@@ -1467,6 +1485,9 @@ export default function PosMenusPage() {
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
+      sellHall: menu.sellHall !== false,
+      sellDelivery: menu.sellDelivery !== false,
+      sellPackaging: menu.sellPackaging !== false,
     })
     setSelectedStoreCodes(getEditorScopeStoreCodes(menu))
     setStoreScopeDirty(false)
@@ -2834,7 +2855,7 @@ export default function PosMenusPage() {
           optionStepValues: { [selectedKey]: label },
           sellHall: channelPayload.sellHall,
           sellDelivery: channelPayload.sellDelivery,
-          sellPackaging: channelPayload.sellHall,
+          sellPackaging: channelPayload.sellPackaging,
         })
         duplicates.add(key)
         added++
@@ -3030,7 +3051,7 @@ export default function PosMenusPage() {
       const normalizedCurrentOptions = optionsConfigMenuOptions.map((o) => ({
         ...o,
         optionCode: resolveOptionCode(o, optionsConfigSelectedMenu?.code),
-        sellPackaging: o.sellHall ?? true,
+        sellPackaging: o.sellPackaging ?? true,
         priceModifierPackaging: null,
       }))
       const originalMap = new Map(optionsConfigOriginalOptions.map((o) => [String(o.id), o]))
@@ -3567,6 +3588,8 @@ export default function PosMenusPage() {
         enabled: Boolean(res.appPolicy?.enabled ?? true),
         orderAcceptanceMode: (res.appPolicy?.orderAcceptanceMode ?? "manual") as "manual" | "auto",
         autoAcceptEnabled: Boolean(res.appPolicy?.autoAcceptEnabled ?? false),
+        settlementFeePct:
+          res.appPolicy?.settlementFeePct != null ? Number(res.appPolicy.settlementFeePct) : null,
         updatedAt: res.appPolicy?.updatedAt,
       })
       const menuMap: Record<string, PosDeliveryMenuPolicy> = {}
@@ -3753,7 +3776,8 @@ export default function PosMenusPage() {
           appCode: deliveryOpsAppCode,
           enabled: Boolean(deliveryOpsAppPolicy.enabled),
           orderAcceptanceMode: deliveryOpsAppPolicy.orderAcceptanceMode,
-          autoAcceptEnabled: false,
+          autoAcceptEnabled: Boolean(deliveryOpsAppPolicy.autoAcceptEnabled),
+          settlementFeePct: deliveryOpsAppPolicy.settlementFeePct,
         },
         menuPolicies,
         categoryOrders,
@@ -3860,7 +3884,8 @@ export default function PosMenusPage() {
             appCode: deliveryOpsAppCode,
             enabled: Boolean(deliveryOpsAppPolicy.enabled),
             orderAcceptanceMode: deliveryOpsAppPolicy.orderAcceptanceMode,
-            autoAcceptEnabled: false,
+            autoAcceptEnabled: Boolean(deliveryOpsAppPolicy.autoAcceptEnabled),
+            settlementFeePct: deliveryOpsAppPolicy.settlementFeePct,
           },
           menuPolicies: menuPolicies.map((row) => ({ ...row, storeCode: targetStore })),
           categoryOrders: categoryOrders.map((row) => ({ ...row, storeCode: targetStore })),
@@ -4209,6 +4234,35 @@ export default function PosMenusPage() {
                         <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
                         <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
                       </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={formData.sellHall}
+                          onChange={(e) => setFormData((p) => ({ ...p, sellHall: e.target.checked }))}
+                          disabled={!!editingMenuLinkedPromoId}
+                        />
+                        {t("posOptionSellHall") || "홀"}
+                      </label>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={formData.sellDelivery}
+                          onChange={(e) => setFormData((p) => ({ ...p, sellDelivery: e.target.checked }))}
+                          disabled={!!editingMenuLinkedPromoId}
+                        />
+                        {t("posOptionSellDelivery") || "배달"}
+                      </label>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={formData.sellPackaging}
+                          onChange={(e) => setFormData((p) => ({ ...p, sellPackaging: e.target.checked }))}
+                          disabled={!!editingMenuLinkedPromoId}
+                        />
+                        {t("posOptionSellPackaging") || "포장"}
+                      </label>
                     </div>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 text-xs">
@@ -4825,6 +4879,20 @@ export default function PosMenusPage() {
                       <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
                       <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
                     </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={formData.sellHall} onChange={(e) => setFormData((p) => ({ ...p, sellHall: e.target.checked }))} />
+                      {t("posOptionSellHall") || "홀"}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={formData.sellDelivery} onChange={(e) => setFormData((p) => ({ ...p, sellDelivery: e.target.checked }))} />
+                      {t("posOptionSellDelivery") || "배달"}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={formData.sellPackaging} onChange={(e) => setFormData((p) => ({ ...p, sellPackaging: e.target.checked }))} />
+                      {t("posOptionSellPackaging") || "포장"}
+                    </label>
                   </div>
                   <div className="flex items-center gap-4">
                     <label className="flex items-center gap-2 text-xs">
@@ -6324,6 +6392,35 @@ export default function PosMenusPage() {
                       <SelectItem value="auto">{t("posDeliveryOpsAcceptModeAuto") || "자동"}</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold">
+                    {t("posDeliveryOpsSettlementFeePct") || "플랫폼 정산 수수료 (%)"}
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    className="mt-1 h-9 tabular-nums"
+                    placeholder={t("posDeliveryOpsSettlementFeePctPh") || "미입력 시 25%"}
+                    value={
+                      deliveryOpsAppPolicy.settlementFeePct != null
+                        ? String(deliveryOpsAppPolicy.settlementFeePct)
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value.trim()
+                      setDeliveryOpsAppPolicy((p) => ({
+                        ...p,
+                        settlementFeePct: raw === "" ? null : Math.max(0, Math.min(100, Number(raw) || 0)),
+                      }))
+                    }}
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
+                    {t("posDeliveryOpsSettlementFeePctHint") ||
+                      "앱이 매출에서 차감·익일 NET 입금하는 비율. 본사 PO 배달 GP 청구와 별도."}
+                  </p>
                 </div>
                 <div className="flex items-end gap-4 pb-1">
                   <label className="flex items-center gap-2 text-xs">

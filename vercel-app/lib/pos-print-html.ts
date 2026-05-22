@@ -1,7 +1,9 @@
 import {
   printHtmlInHiddenIframe,
+  printHtmlInDedicatedPrintWindow,
   type PrintHtmlInHiddenIframeOptions,
 } from '@/lib/print-html-iframe'
+import { isPosAndroidWebPrintClient } from '@/lib/cm-pos-shell'
 import { appAlert } from '@/lib/app-message'
 import { getClientUiLang, getUiString } from '@/lib/i18n'
 
@@ -208,6 +210,15 @@ export function printPosHtmlDocument(
         }
         printHtmlInHiddenIframe(fullDocumentHtml, opts)
       })
+    return
+  }
+
+  if (isPosAndroidWebPrintClient()) {
+    printHtmlInDedicatedPrintWindow(fullDocumentHtml, {
+      ...opts,
+      focusIframeBeforePrint: false,
+      printDelayMs: opts?.printDelayMs ?? 80,
+    })
     return
   }
 

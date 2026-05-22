@@ -489,6 +489,65 @@ export async function postPosOrderJournal(params: {
   })
 }
 
+export type PosChannelSettlementChannel = 'card' | 'grab' | 'lineman' | 'shopee' | 'delivery_all'
+
+function feeLineForChannel(channel: PosChannelSettlementChannel, amount: number): JournalLineInput {
+  const code = channel === 'card' ? '5521' : '5522'
+  const name = channel === 'card' ? '카드정산수수료' : '배달플랫폼수수료'
+  return {
+    ...accountLine(code, { nameKo: name }),
+    side: 'debit',
+    amount,
+    memo: '채널 정산 수수료',
+  }
+}
+
+/** 카드·배달앱 정산: Dr 현금(NET) + Dr 수수료(FEE), Cr 채권(GROSS) */
+export async function postPosChannelSettlementJournal(params: {
+  settlementId?: number
+  storeCode: string
+  settleDate: string
+  channel: PosChannelSettlementChannel
+  gross: number
+  fee: number
+  net: number
+  memo?: string
+  postedBy?: string | null
+}): Promise<number | null> {
+  const gross = Math.abs(Number(params.gross) || 0)
+  const fee = Math.abs(Number(params.fee) || 0)
+  const net = Math.abs(Number(params.net) || 0)
+  if (gross <= 0) return null
+  if (Math.abs(gross - fee - net) > 0.02) {
+    throw new Error(`CHANNEL_SETTLEMENT_AMOUNT_MISMATCH: gross=${gross}, fee=${fee}, net=${net}`)
+  }
+  const receivable = accountLine('1130', { nameKo: '결제대기자산' })
+  const lines: JournalLineInput[] = []
+  if (net > 0) {
+    lines.push({ ...GL.cash(), side: 'debit', amount: net, memo: `${params.channel} 정산 입금` })
+  }
+  if (fee > 0) {
+    lines.push(feeLineForChannel(params.channel, fee))
+  }
+  lines.push({
+    ...receivable,
+    side: 'credit',
+    amount: gross,
+    memo: `${params.channel} 채권 소거`,
+  })
+  if (lines.length < 2) return null
+
+  return postJournalEntry({
+    accountingDate: String(params.settleDate || '').slice(0, 10),
+    sourceType: 'pos_channel_settlement',
+    sourceId: params.settlementId ?? null,
+    storeName: params.storeCode || null,
+    memo: params.memo || `POS 채널 정산 (${params.channel})`,
+    postedBy: params.postedBy || null,
+    lines,
+  })
+}
+
 export async function postPosDayClearingJournal(params: {
   storeCode: string
   businessDate: string

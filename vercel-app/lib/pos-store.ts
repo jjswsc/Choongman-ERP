@@ -554,7 +554,12 @@ export function usePosStore() {
           ? [currentStoreId]
           : effectiveStoreCodes
     if (!targetStoreCodes.length) return Promise.resolve()
-    setLoading(true)
+    /** Realtime·폴링 등 백그라운드 갱신: 테이블 플로어를 「로딩」으로 덮지 않음(인쇄·주문 UX) */
+    const backgroundRefresh =
+      options?.scope === 'current' && stores.length > 0 && targetStoreCodes.length > 0
+    if (!backgroundRefresh) {
+      setLoading(true)
+    }
     const businessDate = getPosBusinessDateStr()
     return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
       .then((results) => {
@@ -585,7 +590,7 @@ export function usePosStore() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [effectiveStoreCodes.join(','), currentStoreId, fetchStoreSnapshot])
+  }, [effectiveStoreCodes.join(','), currentStoreId, fetchStoreSnapshot, stores.length])
 
   /** refetchStores 디바운스 (600ms) - 연속 호출 시 API 부하 감소. `immediate`면 즉시 실행하고 Promise 반환 */
   const refetchStores = useCallback((options?: RefetchStoresOptions) => {

@@ -40,6 +40,23 @@ export const MISE_DEFAULT = 3
 /** 원가 계산기·DB 미설정 시 배달앱 수수료 기본값(%) */
 export const DELIVERY_APP_FEE_PERCENT_DEFAULT = 25
 
+/** 플랫폼 정산(익일 NET) 앱별 기본 % — DB 미설정 시 */
+export const DELIVERY_PLATFORM_SETTLEMENT_FEE_PCT: Record<"grab" | "lineman" | "shopee", number> = {
+  grab: 20,
+  lineman: 18,
+  shopee: 13,
+}
+
+export function defaultPlatformSettlementFeePct(appCode: string | null | undefined): number {
+  const c = String(appCode ?? "")
+    .trim()
+    .toLowerCase()
+  if (c === "grab") return DELIVERY_PLATFORM_SETTLEMENT_FEE_PCT.grab
+  if (c === "lineman") return DELIVERY_PLATFORM_SETTLEMENT_FEE_PCT.lineman
+  if (c === "shopee") return DELIVERY_PLATFORM_SETTLEMENT_FEE_PCT.shopee
+  return DELIVERY_APP_FEE_PERCENT_DEFAULT
+}
+
 export function normalizeDeliveryAppFeePercent(value: unknown): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return DELIVERY_APP_FEE_PERCENT_DEFAULT

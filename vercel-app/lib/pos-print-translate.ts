@@ -43,12 +43,50 @@ export function prettyChickenPartLibraryLabel(dedupeKey: string, originalRaw: st
   return noSize || String(originalRaw ?? '').trim()
 }
 
-/** 테이블명 끝 한글 접미사 `번` 제거 (1F-2번 → 1F-2). 언어와 무관하게 표시만 정리. */
-export function translateReceiptTableDisplayName(tableName: string, _t?: (key: string) => string): string {
-  const s = String(tableName || '').trim()
+/**
+ * 저장 시점 언어로 남은 포장 슬롯 라벨(예: ko `포장 3`)을 현재 UI 언어로 다시 표시.
+ * `posTakeoutSlotN`에 쓰인 접두사와 동일 목록.
+ */
+const TAKEOUT_SLOT_LABEL_PREFIXES = [
+  '포장',
+  'Takeout',
+  'ห่อกลับ',
+  'ထုပ်ယူ',
+  'ຫໍ່ກັບ',
+  'យកតាមខ្លួន',
+  'Mang đi',
+  'Bungkus',
+  'ซื้อกลับบ้าน',
+] as const
+
+function tryTranslateTakeoutTableLabel(s: string, t: (key: string) => string): string | null {
+  for (const prefix of TAKEOUT_SLOT_LABEL_PREFIXES) {
+    const esc = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const slotRe = new RegExp(`^${esc}\\s*#?\\s*(\\d+)\\s*$`, 'iu')
+    const slotMatch = s.match(slotRe)
+    if (slotMatch) {
+      const tmpl = t('posTakeoutSlotN') || '포장 {{n}}'
+      return tmpl.replace(/\{\{n\}\}/g, slotMatch[1])
+    }
+    if (s.localeCompare(prefix, undefined, { sensitivity: 'accent' }) === 0) {
+      return t('posTakeoutSlot') || t('posOrderTypeTakeout') || prefix
+    }
+  }
+  return null
+}
+
+/** 테이블명 끝 한글 접미사 `번` 제거 (1F-2번 → 1F-2). 포장 슬롯명은 `t`가 있으면 현재 언어로 표시. */
+export function translateReceiptTableDisplayName(tableName: string, t?: (key: string) => string): string {
+  let s = String(tableName || '').trim()
   if (!s) return s
-  if (!/\s*번\s*$/u.test(s)) return s
-  return s.replace(/\s*번\s*$/u, '').trimEnd()
+  if (/\s*번\s*$/u.test(s)) {
+    s = s.replace(/\s*번\s*$/u, '').trimEnd()
+  }
+  if (t) {
+    const localized = tryTranslateTakeoutTableLabel(s, t)
+    if (localized) return localized
+  }
+  return s
 }
 
 /**

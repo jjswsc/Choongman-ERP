@@ -155,3 +155,90 @@ export function printHtmlInHiddenIframe(
     removeIframe()
   }, fallbackCleanupMs)
 }
+
+const ANDROID_PRINT_POPUP_FEATURES =
+  'left=0,top=0,width=1,height=1,menubar=no,toolbar=no,location=no,status=no'
+
+/**
+ * Android WebView: 숨김 iframe 대신 영수증 HTML만 담은 보조 창에서 print().
+ * (미리보기에 POS 터미널·「กำลังโหลด…」가 보이는 현상 완화)
+ */
+export function printHtmlInDedicatedPrintWindow(
+  fullDocumentHtml: string,
+  opts?: PrintHtmlInHiddenIframeOptions
+): void {
+  const printDelayMs = opts?.printDelayMs ?? 80
+  const fallbackCleanupMs = opts?.fallbackCleanupMs ?? 120000
+  const restoreDocumentFocus = opts?.restoreDocumentFocus !== false
+  const previousActive =
+    restoreDocumentFocus && typeof document !== 'undefined'
+      ? (document.activeElement as HTMLElement | null)
+      : null
+
+  let popup: Window | null = null
+  try {
+    popup = window.open('about:blank', '_blank', ANDROID_PRINT_POPUP_FEATURES)
+  } catch {
+    popup = null
+  }
+  if (!popup) {
+    printHtmlInHiddenIframe(fullDocumentHtml, {
+      ...opts,
+      focusIframeBeforePrint: false,
+    })
+    return
+  }
+
+  let cleaned = false
+  const restoreFocusIfNeeded = () => {
+    if (!restoreDocumentFocus || !previousActive) return
+    requestAnimationFrame(() => {
+      try {
+        previousActive.focus({ preventScroll: true })
+      } catch {
+        /* ignore */
+      }
+    })
+  }
+  const closePopup = () => {
+    if (cleaned) return
+    cleaned = true
+    try {
+      if (!popup.closed) popup.close()
+    } catch {
+      /* ignore */
+    }
+    restoreFocusIfNeeded()
+    opts?.onAfterCleanup?.()
+  }
+
+  try {
+    popup.document.open()
+    popup.document.write(fullDocumentHtml)
+    popup.document.close()
+  } catch {
+    closePopup()
+    printHtmlInHiddenIframe(fullDocumentHtml, { ...opts, focusIframeBeforePrint: false })
+    return
+  }
+
+  popup.onafterprint = () => closePopup()
+
+  const invokePrint = () => {
+    try {
+      popup!.focus()
+      popup!.print()
+    } catch {
+      closePopup()
+      opts?.onPrintUnavailable?.()
+      printHtmlInHiddenIframe(fullDocumentHtml, { ...opts, focusIframeBeforePrint: false })
+    }
+  }
+
+  if (printDelayMs > 0) {
+    setTimeout(invokePrint, printDelayMs)
+  } else {
+    requestAnimationFrame(invokePrint)
+  }
+  setTimeout(closePopup, fallbackCleanupMs)
+}

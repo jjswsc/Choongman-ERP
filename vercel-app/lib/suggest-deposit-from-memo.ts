@@ -3,17 +3,37 @@
  * 배달앱, 카드, QR/이체, 현금입금 등
  */
 
-export type DepositCategory = 'revenue_delivery' | 'revenue_card' | 'revenue_qr' | 'revenue_cash' | 'correction'
+export type DepositCategory =
+  | 'revenue_delivery'
+  | 'revenue_card'
+  | 'revenue_qr'
+  | 'revenue_cash'
+  | 'receivable_receive'
+  | 'correction'
 
-/** code 4110=배달앱, 4120=카드, 4130=QR/이체, 4140=현금입금 */
+/**
+ * POS 주문 자동분개(카드·배달→1130) 매장: 채널 정산 입금은 매출 수령으로만 분류 (revenue_* 이중 매출 방지).
+ * 현금·미식별 입금만 revenue_* 유지.
+ */
 export function suggestDepositFromMemo(
   memo: string,
-  revenueSubjects: { id?: number; code: string }[]
+  revenueSubjects: { id?: number; code: string }[],
+  options?: { preferReceivableClearing?: boolean }
 ): { category: DepositCategory; accountSubjectId?: number } | null {
   const m = (memo || '').toLowerCase().trim()
   if (!m) return null
 
+  const preferAr = options?.preferReceivableClearing !== false
   const byCode = Object.fromEntries((revenueSubjects || []).map((s) => [s.code, s.id]).filter(([, id]) => id != null))
+
+  const channelSettlement =
+    /\b(grab|line\s*man|lineman|shopee|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney)\b/i.test(
+      m
+    )
+
+  if (preferAr && channelSettlement) {
+    return { category: 'receivable_receive' }
+  }
 
   // 배달앱 - 세부 구분
   if (/\bgrab\b/i.test(m)) return { category: 'revenue_delivery', accountSubjectId: byCode['4111'] ?? byCode['4110'] }

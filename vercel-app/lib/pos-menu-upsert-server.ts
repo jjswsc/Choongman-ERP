@@ -49,6 +49,9 @@ export type PosMenuUpsertApiBody = {
   descriptionDefault?: string
   descriptionDelivery?: string | null
   descriptionTable?: string | null
+  sellHall?: boolean
+  sellDelivery?: boolean
+  sellPackaging?: boolean
   /** 원가 계산기 배달앱 수수료(%) — 0 허용, null이면 DB NULL(앱 기본 25%) */
   deliveryAppFeePercent?: number | null
   id?: string
@@ -83,6 +86,9 @@ type ExistingMenuRow = {
   description_delivery?: string | null
   description_table?: string | null
   delivery_app_fee_percent?: number | null
+  sell_hall?: boolean | null
+  sell_delivery?: boolean | null
+  sell_packaging?: boolean | null
 }
 
 /** 수정 시 요청 본문에 포함된 필드만 DB에 반영 (미포함 필드는 기존값 유지) */
@@ -157,6 +163,9 @@ export function buildPosMenuUpsertRow(
           : null
     }
     row.is_banban = 'isBanban' in body ? body.isBanban === true : false
+    row.sell_hall = body.sellHall !== false
+    row.sell_delivery = body.sellDelivery !== false
+    row.sell_packaging = body.sellPackaging !== false
     row.description_default = String(body.descriptionDefault ?? '').trim()
     const vDel = body.descriptionDelivery
     row.description_delivery = vDel == null ? null : String(vDel).trim()
@@ -205,6 +214,9 @@ export function buildPosMenuUpsertRow(
         : null
   }
   if ('isBanban' in body) row.is_banban = body.isBanban === true
+  if ('sellHall' in body) row.sell_hall = body.sellHall !== false
+  if ('sellDelivery' in body) row.sell_delivery = body.sellDelivery !== false
+  if ('sellPackaging' in body) row.sell_packaging = body.sellPackaging !== false
   if (opts.hasDescriptionDefault) {
     row.description_default = String(body.descriptionDefault ?? '').trim()
   }
@@ -473,7 +485,7 @@ export async function upsertPosMenuFromBody(
           {
             limit: 1,
             select:
-              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,delivery_app_fee_percent',
+              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,delivery_app_fee_percent,sell_hall,sell_delivery,sell_packaging',
           }
         )) as ExistingMenuRow[] | null
       } catch {
@@ -607,6 +619,9 @@ export async function upsertPosMenuFromBody(
             fieldUnchanged('description_delivery', normStr) &&
             fieldUnchanged('description_table', normStr) &&
             fieldUnchanged('delivery_app_fee_percent', normNum) &&
+            fieldUnchanged('sell_hall', normBool) &&
+            fieldUnchanged('sell_delivery', normBool) &&
+            fieldUnchanged('sell_packaging', normBool) &&
             fieldUnchanged('option_selection_groups', normStrArr) &&
             fieldUnchanged('option_selection_config', normalizeOptionConfig)
           if (!sameFieldsExceptImage) {
@@ -642,6 +657,18 @@ export async function upsertPosMenuFromBody(
         if ('image' in row) {
           const nextImage = String(row.image ?? '').trim()
           if (nextImage !== prevImage) changedFields.push('image')
+        }
+        if ('sell_hall' in row) {
+          const nextSellHall = row.sell_hall !== false
+          if (nextSellHall !== (prev.sell_hall !== false)) changedFields.push('sell_hall')
+        }
+        if ('sell_delivery' in row) {
+          const nextSellDelivery = row.sell_delivery !== false
+          if (nextSellDelivery !== (prev.sell_delivery !== false)) changedFields.push('sell_delivery')
+        }
+        if ('sell_packaging' in row) {
+          const nextSellPackaging = row.sell_packaging !== false
+          if (nextSellPackaging !== (prev.sell_packaging !== false)) changedFields.push('sell_packaging')
         }
         const catMain = (prev.category_main || '').trim()
         const cat = (prev.category || '').trim()
@@ -809,7 +836,10 @@ export async function upsertPosMenuFromBody(
         'isBanban' in body ||
         hasDescriptionDefault ||
         hasDescriptionDelivery ||
-        hasDescriptionTable) &&
+        hasDescriptionTable ||
+        'sellHall' in body ||
+        'sellDelivery' in body ||
+        'sellPackaging' in body) &&
       (err.includes('option_selection_groups') ||
         err.includes('option_selection_config') ||
         err.includes('kitchen_printer') ||
@@ -818,6 +848,9 @@ export async function upsertPosMenuFromBody(
         err.includes('description_default') ||
         err.includes('description_delivery') ||
         err.includes('description_table') ||
+        err.includes('sell_hall') ||
+        err.includes('sell_delivery') ||
+        err.includes('sell_packaging') ||
         err.includes('42703'))
     ) {
       const rowWithout = { ...baseRow }
@@ -829,6 +862,9 @@ export async function upsertPosMenuFromBody(
       delete rowWithout.description_default
       delete rowWithout.description_delivery
       delete rowWithout.description_table
+      delete rowWithout.sell_hall
+      delete rowWithout.sell_delivery
+      delete rowWithout.sell_packaging
       const result = await doSave(rowWithout)
       if (result.success && itemsSyncCode && 'price' in body) {
         const newPrice = Number(body.price ?? 0)
