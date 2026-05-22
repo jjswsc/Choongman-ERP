@@ -4,6 +4,7 @@ import { computeTrialBalanceReport } from '@/lib/trial-balance-report'
 import { computeIncomeStatementReport, computeBalanceSheetReport } from '@/lib/accounting-reports'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
+import { isAccountingStoreScopeForbidden } from '@/lib/accounting-store-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
@@ -35,10 +36,18 @@ export async function GET(request: NextRequest) {
     throw e
   }
 
+  const scopeInput = {
+    yearMonth,
+    storeFilter,
+    userStore,
+    userRole,
+    allowedStores: auth.allowedStores,
+  }
+
   try {
-    const trial = await computeTrialBalanceReport({ yearMonth, storeFilter, userStore, userRole })
-    const income = await computeIncomeStatementReport({ yearMonth, storeFilter, userStore, userRole })
-    const balanceSheet = await computeBalanceSheetReport({ yearMonth, storeFilter, userStore, userRole })
+    const trial = await computeTrialBalanceReport(scopeInput)
+    const income = await computeIncomeStatementReport(scopeInput)
+    const balanceSheet = await computeBalanceSheetReport(scopeInput)
     const closingPreview = buildIncomeExpenseClosingPreview({
       trial,
       profitLossAccountCode,
@@ -86,6 +95,9 @@ export async function GET(request: NextRequest) {
       { headers }
     )
   } catch (e) {
+    if (isAccountingStoreScopeForbidden(e)) {
+      return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+    }
     console.error('getAccountingReconciliation:', e)
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500, headers })
   }

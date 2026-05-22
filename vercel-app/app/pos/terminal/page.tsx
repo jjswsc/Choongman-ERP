@@ -116,8 +116,8 @@ import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display
 import {
   printPosHtmlDocument,
   POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
-  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
-  POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS,
+  resolveBetweenKitchenSlipsDelayMs,
+  resolveBetweenSplitReceiptsDelayMs,
   resolveAfterReceiptToKitchenDelayMs,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
@@ -266,6 +266,9 @@ const MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX = 'pos_main_last_seen_order_id:'
 const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
 const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
 const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
+const MAIN_POS_POLL_INTERVAL_MS = 6000
+const MAIN_POS_META_SCAN_INTERVAL_MS = 30000
+const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
 
 function readMainPosLastSeenOrderId(storeCodeRaw: unknown): number {
   if (typeof window === 'undefined') return 0
@@ -943,7 +946,7 @@ export default function PosTerminalPage() {
     splitReceiptFlushTimerRef.current = setTimeout(() => {
       splitReceiptFlushTimerRef.current = null
       setReceiptData(next)
-    }, POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS)
+    }, resolveBetweenSplitReceiptsDelayMs())
   }, [])
   const clearReceiptQueue = useCallback(() => {
     receiptQueueRef.current = []
@@ -1083,6 +1086,8 @@ export default function PosTerminalPage() {
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
+  /** 더치·분할: 인원별 현금 결제 확정 시 돈통을 이미 연 경우(주문 완료 시 중복 오픈 방지) */
+  const splitCashDrawerStepsRef = useRef(0)
   const posPrinterSettingsRef = useRef<PosPrinterSettings | null>(null)
   const posPrinterSettingsStoreCodeRef = useRef("")
   const posPrinterSettingsInFlightStoreCodeRef = useRef("")
@@ -1934,7 +1939,7 @@ export default function PosTerminalPage() {
                 },
                 onAfterCleanup: () => {
                   if (idx + 1 < slips.length) {
-                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                   }
                 },
               })
@@ -1966,7 +1971,7 @@ export default function PosTerminalPage() {
           autoPrintKitchenSlipOnOrder ? runKitchenForAcceptedOrder : undefined
         )
       } else if (autoPrintKitchenSlipOnOrder) {
-        setTimeout(runKitchenForAcceptedOrder, 180)
+        setTimeout(runKitchenForAcceptedOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
       logPosPrintDebug('accept_flow_autoprint_done', {
         orderId,
@@ -2141,7 +2146,7 @@ export default function PosTerminalPage() {
                         },
                         onAfterCleanup: () => {
                           if (idx + 1 < slips.length) {
-                            setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                            setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                           }
                         },
                       })
@@ -2173,7 +2178,7 @@ export default function PosTerminalPage() {
                   autoPrintKitchenSlipOnOrder ? runKitchenForAcceptedOrder : undefined
                 )
               } else if (autoPrintKitchenSlipOnOrder) {
-                setTimeout(runKitchenForAcceptedOrder, 180)
+                setTimeout(runKitchenForAcceptedOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
               }
             }
           }
@@ -2484,6 +2489,10 @@ export default function PosTerminalPage() {
   const lastSeenOrderIdPersistedRef = useRef<number>(0)
   const startupCatchupUntilRef = useRef<number>(Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS)
   const prevStoreForPollRef = useRef<string | null>(null)
+  const triggerMainPosPollNowRef = useRef<(() => void) | null>(null)
+  const mainPosPollInFlightRef = useRef(false)
+  const lastMetaScanAtRef = useRef(0)
+  const lastRealtimeOrderEventAtRef = useRef(0)
 
   const bumpLastSeenOrderId = useCallback(
     (orderIdRaw: unknown) => {
@@ -2881,7 +2890,7 @@ export default function PosTerminalPage() {
               },
               onAfterCleanup: () => {
                 if (idx + 1 < slips.length)
-                  setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                  setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
               },
             })
           }
@@ -3070,7 +3079,7 @@ export default function PosTerminalPage() {
               },
               onAfterCleanup: () => {
                 if (idx + 1 < slips.length)
-                  setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                  setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
               },
             })
           }
@@ -3086,7 +3095,7 @@ export default function PosTerminalPage() {
       } else if (printHallOrderSheet) {
         await printReceiptNow(receiptPayload, null, false, undefined, true)
       } else if (!skipKitchen && autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
-        setTimeout(runKitchenPartialReprint, 180)
+        setTimeout(runKitchenPartialReprint, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
     } catch (e) {
       console.error('runAfterPartialLineCancelPrints:', e)
@@ -3105,6 +3114,7 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
       if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) {
         logPosPrintDebug('realtime_insert_skip_not_incoming', {
           orderId,
@@ -3141,6 +3151,7 @@ export default function PosTerminalPage() {
       /* items_json이 Realtime에 비어 있으면 폴링이 다시 잡도록 seen에 넣지 않음 */
       if (items.length === 0) {
         logPosPrintDebug('realtime_insert_skip_empty_items', { orderId })
+        triggerMainPosPollNowRef.current?.()
         return
       }
       seenOrderIdsRef.current.add(orderId)
@@ -3233,7 +3244,7 @@ export default function PosTerminalPage() {
                 },
                 onAfterCleanup: () => {
                   if (idx + 1 < slips.length)
-                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                 },
               })
             }
@@ -3260,7 +3271,7 @@ export default function PosTerminalPage() {
         } else if (autoPrintReceiptOnOrder) {
           printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
         } else if (autoPrintKitchenSlipOnOrder) {
-          setTimeout(runKitchenFromRealtimeOrderInsert, 180)
+          setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
         }
       } else {
         logPosPrintDebug('realtime_insert_pending_delivery_wait_accept', {
@@ -3387,6 +3398,7 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
       if (!isCurrentStoreOrder(row.store_code)) return
 
       const shouldAlert = applyGrabCancelWatchRealtimeRow({
@@ -3429,6 +3441,7 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
       const rowStore = String(row.store_code ?? '').trim()
       const variants = [
         currentStoreId,
@@ -3658,7 +3671,7 @@ export default function PosTerminalPage() {
                 },
                 onAfterCleanup: () => {
                   if (idx + 1 < slips.length)
-                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                 },
               })
             }
@@ -3675,7 +3688,7 @@ export default function PosTerminalPage() {
       } else if (shouldAutoPrintReceipt) {
         void printReceiptNow(receiptPayloadRemote, null, false, undefined, true)
       } else if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
-        setTimeout(runKitchenRemoteDineInAdd, 180)
+        setTimeout(runKitchenRemoteDineInAdd, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
     }, { store: currentStoreId })
     return () => {
@@ -3710,7 +3723,9 @@ export default function PosTerminalPage() {
         lastSeenOrderIdPersistedRef.current = 0
         startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
         prevStoreForPollRef.current = null
+        lastMetaScanAtRef.current = 0
       }
+      triggerMainPosPollNowRef.current = null
       return
     }
     if (prevStoreForPollRef.current !== currentStoreId) {
@@ -3722,9 +3737,12 @@ export default function PosTerminalPage() {
       prevStoreForPollRef.current = currentStoreId
       grabCancelWatchSnapshotRef.current.clear()
       grabCancelWatchSeededRef.current = false
+      lastMetaScanAtRef.current = 0
     }
     const today = getPosBusinessDateStr()
     const poll = async () => {
+      if (mainPosPollInFlightRef.current) return
+      mainPosPollInFlightRef.current = true
       try {
         const runPaymentReceiptScan = async () => {
           if (!autoPrintReceiptOnPayment) return
@@ -3965,7 +3983,7 @@ export default function PosTerminalPage() {
                     },
                     onAfterCleanup: () => {
                       if (idx + 1 < slips.length)
-                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                     },
                   })
                 }
@@ -3994,7 +4012,7 @@ export default function PosTerminalPage() {
             } else if (autoPrintReceiptOnOrder) {
               printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
             } else if (autoPrintKitchenSlipOnOrder) {
-              setTimeout(runKitchenForPolledOrder, 180)
+              setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
             }
           } else {
             logPosPrintDebug('poll_pending_delivery_wait_accept', {
@@ -4012,34 +4030,48 @@ export default function PosTerminalPage() {
           refetchCurrentStore()
         }
 
-        try {
-          const watchOrders = await getPosOrders({
-            startStr: today,
-            endStr: today,
-            posBizDayScope: true,
-            storeCode: currentStoreId,
-            strictStore: true,
-            limit: 800,
-            orderBy: 'id.desc',
-          })
-          if (!grabCancelWatchSeededRef.current) {
-            runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
-          } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
-            refetchCurrentStore()
+        const nowMs = Date.now()
+        const shouldRunMetaScan =
+          !lastMetaScanAtRef.current ||
+          nowMs - lastMetaScanAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS ||
+          nowMs - lastRealtimeOrderEventAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS
+        if (shouldRunMetaScan) {
+          lastMetaScanAtRef.current = nowMs
+          try {
+            const watchOrders = await getPosOrders({
+              startStr: today,
+              endStr: today,
+              posBizDayScope: true,
+              storeCode: currentStoreId,
+              strictStore: true,
+              limit: 800,
+              orderBy: 'id.desc',
+            })
+            if (!grabCancelWatchSeededRef.current) {
+              runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
+            } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
+              refetchCurrentStore()
+            }
+          } catch {
+            /* grab cancel watch */
           }
-        } catch {
-          /* grab cancel watch */
         }
 
         await runPaymentReceiptScan()
       } catch {
         // ignore poll errors
+      } finally {
+        mainPosPollInFlightRef.current = false
       }
+    }
+    triggerMainPosPollNowRef.current = () => {
+      void poll()
     }
     poll()
     /* Realtime 미동작·지연 시에도 수 초 내 폴백 (45초는 현장에서 “안 찍힘”으로 느껴짐) */
-    const id = setInterval(poll, 10000)
+    const id = setInterval(poll, MAIN_POS_POLL_INTERVAL_MS)
     return () => {
+      triggerMainPosPollNowRef.current = null
       clearInterval(id)
     }
   }, [
@@ -4107,6 +4139,26 @@ export default function PosTerminalPage() {
       }
     },
     [isPosDemo, currentStoreId, auth?.user, drawerOpenOption, t]
+  )
+
+  const tryOpenDrawerOnOrderComplete = useCallback(
+    async (payment: CartPanelPaymentPayload | null | undefined) => {
+      /** 인원별 확정 시 이미 열었으면 마감 시 중복 오픈만 막음(분할 영수증 유무와 무관) */
+      if (splitCashDrawerStepsRef.current > 0) {
+        splitCashDrawerStepsRef.current = 0
+        return
+      }
+      await tryOpenDrawerForPayment(payment)
+    },
+    [tryOpenDrawerForPayment]
+  )
+
+  const handleSplitCashPaymentStep = useCallback(
+    async (payment: CartPanelPaymentPayload) => {
+      splitCashDrawerStepsRef.current += 1
+      await tryOpenDrawerForPayment(payment)
+    },
+    [tryOpenDrawerForPayment]
   )
 
   const runLinkposPaymentIfNeeded = useCallback(
@@ -4938,9 +4990,11 @@ export default function PosTerminalPage() {
             selectedTable={selectedTable}
             onStoreChange={() => {}}
             t={t}
+            onSplitCashPaymentStep={handleSplitCashPaymentStep}
             onPaymentModalOpenChange={(open) => {
               setTourPaymentModalOpen(open)
               if (open) {
+                splitCashDrawerStepsRef.current = 0
                 setTourPaymentCompletedCount(0)
               } else {
                 setTourPaymentTab('cash')
@@ -5012,7 +5066,7 @@ export default function PosTerminalPage() {
                 if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
                   printedPaymentReceiptIdsRef.current.add(existingOrderId)
                 }
-                await tryOpenDrawerForPayment(payload.payment)
+                await tryOpenDrawerOnOrderComplete(payload.payment)
                 const receiptPayload: ReceiptModalData = {
                   orderNo: pendingReceiptOrderNo ?? '',
                   items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -5115,7 +5169,7 @@ export default function PosTerminalPage() {
                 if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
                   printedPaymentReceiptIdsRef.current.add(existingOrderId)
                 }
-                await tryOpenDrawerForPayment(payload.payment)
+                await tryOpenDrawerOnOrderComplete(payload.payment)
                 const receiptPayload: ReceiptModalData = {
                   orderNo: pendingReceiptOrderNo ?? '',
                   items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -5592,7 +5646,7 @@ export default function PosTerminalPage() {
                           },
                           onAfterCleanup: () => {
                             if (idx + 1 < slips.length)
-                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                           },
                         })
                       }
@@ -5635,7 +5689,7 @@ export default function PosTerminalPage() {
                     skipLocalAutoPrint,
                     kitchenLines: kitchenCartLines.length,
                   })
-                  setTimeout(runKitchenAfterDineInSubmit, 180)
+                  setTimeout(runKitchenAfterDineInSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
                 } else if (
                   isMainPosDevice &&
                   !skipLocalAutoPrint &&
@@ -5820,7 +5874,7 @@ export default function PosTerminalPage() {
                 if (orderIdToComplete != null && orderIdToComplete > 0 && isMainPosDevice) {
                   printedPaymentReceiptIdsRef.current.add(orderIdToComplete)
                 }
-                await tryOpenDrawerForPayment(payload.payment)
+                await tryOpenDrawerOnOrderComplete(payload.payment)
                 const receiptPayload: ReceiptModalData = {
                   orderNo,
                   items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -5958,7 +6012,7 @@ export default function PosTerminalPage() {
                   Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
                 const hasPayment = paymentSum > 0.0001
-                await tryOpenDrawerForPayment(payload.payment)
+                await tryOpenDrawerOnOrderComplete(payload.payment)
                 const receiptItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 const receiptPayloadSubmit = {
                   orderNo,
@@ -6075,7 +6129,7 @@ export default function PosTerminalPage() {
                           },
                           onAfterCleanup: () => {
                             if (idx + 1 < slips.length) {
-                              setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                              setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
                             }
                           },
                         })
@@ -6098,7 +6152,7 @@ export default function PosTerminalPage() {
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                   } else if (autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
-                    setTimeout(runKitchenAfterNonDineSubmit, 180)
+                    setTimeout(runKitchenAfterNonDineSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
                   } else {
                     setReceiptData({
                       ...receiptPayloadSubmit,

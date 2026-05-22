@@ -12,6 +12,7 @@ import {
   askAiCenter,
   approveAiAction,
   getAiActionHistory,
+  getAiCenterHealth,
   getAiMetrics,
   syncExternalContext,
   proposeAiAction,
@@ -182,6 +183,21 @@ export function AiCenterClient() {
   const [metricsLoading, setMetricsLoading] = React.useState(false)
   const [syncLoading, setSyncLoading] = React.useState(false)
   const [syncMsg, setSyncMsg] = React.useState("")
+  const [openaiConfigured, setOpenaiConfigured] = React.useState<boolean | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    void getAiCenterHealth()
+      .then((h) => {
+        if (!cancelled) setOpenaiConfigured(h.openaiConfigured)
+      })
+      .catch(() => {
+        if (!cancelled) setOpenaiConfigured(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     if (!canSelectCrossStore && auth?.store) {
@@ -332,6 +348,17 @@ export function AiCenterClient() {
             {t("store_refresh")}
           </Button>
         </div>
+
+        {openaiConfigured === false && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+            {t("aiCenterLlmNotConfigured")}
+          </p>
+        )}
+        {openaiConfigured === true && (
+          <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-900 dark:text-emerald-100">
+            {t("aiCenterLlmReady")}
+          </p>
+        )}
 
         <Tabs defaultValue="qa" className="space-y-4">
           <TabsList>

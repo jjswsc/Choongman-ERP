@@ -39,7 +39,7 @@ import {
 } from "@/lib/financial-statements-compare"
 import { isMaterialHqOutboundOrderDiff } from "@/lib/income-statement-hq-diff"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
   readIncomeStatementBeginningInvOverride,
   writeIncomeStatementBeginningInvOverride,
@@ -1239,9 +1239,20 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const t = useT(lang)
   const { stores: storeList } = useStoreList()
 
-  const isOffice = isOfficeRole(auth?.role || "")
-  const isManager = isManagerOrFranchiseeRole(auth?.role || "")
+  const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
+  const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
   const managerStore = (auth?.store || "").trim()
+  const scopedStoreChoices = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const s of [...(auth?.allowedStores || []), managerStore]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      out.push(t)
+    }
+    return out
+  }, [auth?.allowedStores, managerStore])
 
   const defaultYm = props.yearMonth || getBangkokRecentYearMonths(1)[0]
   const [yearMonthStart, setYearMonthStart] = React.useState(
@@ -1251,7 +1262,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     () => props.yearMonthEnd ?? props.yearMonth ?? defaultYm
   )
   const [storeFilter, setStoreFilter] = React.useState(() =>
-    props.storeFilter ?? (isManager && managerStore ? managerStore : "All")
+    props.storeFilter ?? (isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All")
   )
   const [data, setData] = React.useState<IncomeStatementData | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -1300,10 +1311,10 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const printRef = React.useRef<HTMLDivElement | null>(null)
 
   React.useEffect(() => {
-    if (isManager && managerStore) {
-      setStoreFilter(managerStore)
+    if (isManager && scopedStoreChoices[0]) {
+      setStoreFilter(scopedStoreChoices[0])
     }
-  }, [isManager, managerStore])
+  }, [isManager, scopedStoreChoices])
 
   React.useEffect(() => {
     if (props.yearMonth) {
@@ -1735,8 +1746,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   const storeOptions = isOffice
     ? ["본사", ...(storeList || []).filter((s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office"))]
-    : isManager && managerStore
-      ? [managerStore]
+    : isManager
+      ? scopedStoreChoices
       : []
 
   const view = React.useMemo(() => {

@@ -107,7 +107,8 @@ foreach ($bytes in $variants) {
       }
     }
     if ($idx -lt $variants.Count) {
-      Start-Sleep -Milliseconds 100
+      # 인쇄 몰림 시 절단 재시도 대기 누적으로 체감이 커서 최소 간격으로 줄임
+      Start-Sleep -Milliseconds 35
     }
   }
 }

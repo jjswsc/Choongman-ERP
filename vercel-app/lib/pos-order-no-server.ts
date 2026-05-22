@@ -18,7 +18,7 @@ import {
   posBusinessDateYmdToUtcRange,
 } from '@/lib/pos-business-day'
 import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 
 const SELECT_LIMIT = 12000
 
@@ -39,6 +39,20 @@ export async function allocateNextPosOrderNo(storeCode: string): Promise<string>
   const businessHours = await loadPosBusinessHoursForServer(storeCode)
   const businessDay = getPosBusinessDateStrFromConfig(new Date(), businessHours)
   const ymd = businessDay.replace(/-/g, '')
+  /**
+   * 1) RPC 우선: 동시 주문에서도 원자적으로 순번 증가
+   * 2) RPC 미배포/오류 시 기존 select+scan fallback
+   */
+  try {
+    const rpcOut = await supabaseRpc<string>('allocate_pos_order_no', {
+      p_store_slug: slug,
+      p_business_ymd: ymd,
+    })
+    const orderNo = String(rpcOut ?? '').trim()
+    if (orderNo) return orderNo
+  } catch {
+    /* fallback below */
+  }
   const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(businessDay, businessHours)
   const variants = storeCodeQueryVariants(storeCode)
   let maxSeq = 0

@@ -46,7 +46,9 @@ explorer $env:APPDATA\choongman-pos-windows
 - `allowedOrigin`: 허용 오리진(외부 이동 차단 기준)
 - `kiosk`: `1`(기본) 키오스크 / `0` 일반창
 - `updateManifestUrl`: 업데이트 매니페스트 URL (`latest.json`)
-- `printHtmlSettleMs`: HTML을 숨김 창에 `loadFile`한 뒤 `print` 전 대기(ms). 기본 **400**, 범위 **150~5000**(`main.js`의 `readConfigInt`). 너무 짧으면 무인쇄 실패·대화상자 폴백이 늘 수 있음.
+- `printHtmlSettleMs`: HTML을 숨김 창에 `loadFile`한 뒤 `print` 전 대기(ms). 기본 **260**, 범위 **80~5000**(`main.js`의 `readConfigInt`). 너무 짧으면 무인쇄 실패·대화상자 폴백이 늘 수 있어 실패 시 내부 백오프로 보완.
+- `postHtmlPrintSpoolFlushMs`: HTML 인쇄 후 ESC/POS 절단 전 스풀 안정화 대기(ms). 기본 **350**.
+- `printHtmlQueueGapMs`: 하이브리드 셸 인쇄 큐의 작업 간 최소 간격(ms). 기본 **80**.
 - `print.silent`: `true`(기본)이면 영수증·주방 HTML 인쇄도 **무인쇄 우선**. `false`이면 **항상 인쇄 대화상자**가 먼저 뜸.
 - `print.deviceName`: 무인쇄·빠른 인쇄에 쓸 프린터 이름. Windows **정확한 표시 이름**과 일치해야 무인쇄 성공률이 높음 (비우면 Windows 기본 프린터).
 - **ESC/POS 절단(무인쇄 RAW)**: `WINDOWS_POS_PRINT_ESC_POS_CUT=0`이면 종류와 관계없이 절단 안 함. 그 외에는 종류별로 `print` 또는 환경 변수로 지정:
@@ -74,7 +76,9 @@ explorer $env:APPDATA\choongman-pos-windows
 - `WINDOWS_POS_AUTO_UPDATE`: `1`(기본) 자동 업데이트 체크 / `0` 비활성
 - `WINDOWS_POS_PRINT_SILENT`: `1`(기본과 동일) 무인쇄 우선 / `0`이면 HTML 인쇄 시 대화상자를 먼저 시도
 - `WINDOWS_POS_PRINT_DEVICE`: 빠른 인쇄 고정 프린터 이름
-- `WINDOWS_POS_PRINT_HTML_SETTLE_MS`: 위 `printHtmlSettleMs`와 동일(환경 변수가 우선). 기본 **400**
+- `WINDOWS_POS_PRINT_HTML_SETTLE_MS`: 위 `printHtmlSettleMs`와 동일(환경 변수가 우선). 기본 **260**
+- `WINDOWS_POS_PRINT_SPOOL_FLUSH_MS`: 위 `postHtmlPrintSpoolFlushMs`와 동일(환경 변수가 우선). 기본 **350**
+- `WINDOWS_POS_PRINT_HTML_QUEUE_GAP_MS`: 위 `printHtmlQueueGapMs`와 동일(환경 변수가 우선). 기본 **80**
 
 PowerShell 예시:
 

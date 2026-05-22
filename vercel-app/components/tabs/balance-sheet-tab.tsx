@@ -14,7 +14,7 @@ import { Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
   useStoreList,
   getBalanceSheet,
@@ -69,9 +69,20 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   const t = useT(lang)
   const { auth } = useAuth()
   const { stores: storeList } = useStoreList()
-  const isOffice = isOfficeRole(auth?.role || "")
-  const isManager = isManagerOrFranchiseeRole(auth?.role || "")
+  const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
+  const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
   const managerStore = (auth?.store || "").trim()
+  const scopedStoreChoices = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const s of [...(auth?.allowedStores || []), managerStore]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      out.push(t)
+    }
+    return out
+  }, [auth?.allowedStores, managerStore])
 
   const defaultYm = props.yearMonth || getBangkokRecentYearMonths(1)[0]
   const [yearMonthStart, setYearMonthStart] = React.useState(
@@ -81,7 +92,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
     () => props.yearMonthEnd ?? props.yearMonth ?? defaultYm
   )
   const [storeFilter, setStoreFilter] = React.useState(() =>
-    props.storeFilter ?? (isManager && managerStore ? managerStore : "All")
+    props.storeFilter ?? (isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All")
   )
   const [loading, setLoading] = React.useState(false)
   const [data, setData] = React.useState<BalanceSheetData | null>(null)
@@ -135,8 +146,8 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   )
 
   React.useEffect(() => {
-    if (isManager && managerStore) setStoreFilter(managerStore)
-  }, [isManager, managerStore])
+    if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
+  }, [isManager, scopedStoreChoices])
 
   React.useEffect(() => {
     if (props.yearMonth) {
@@ -285,8 +296,8 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
           (s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office")
         ),
       ]
-    : isManager && managerStore
-      ? [managerStore]
+    : isManager
+      ? scopedStoreChoices
       : []
 
   const storeLabel =

@@ -78,6 +78,26 @@ function parseAiApiError(text: string, fallback: string): { message: string; cod
   }
 }
 
+export interface AiCenterHealthResponse {
+  step: number
+  label: string
+  allTablesOk: boolean
+  openaiConfigured: boolean
+  readyForStep1: boolean
+  tables: Record<string, { ok: boolean; error?: string }>
+  nextActions: string[]
+}
+
+export async function getAiCenterHealth(): Promise<AiCenterHealthResponse> {
+  const res = await apiFetchWithOffline("/api/ai/health")
+  const text = await res.text()
+  if (!res.ok) {
+    const parsed = parseAiApiError(text, "AI 상태 확인 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+  return JSON.parse(text) as AiCenterHealthResponse
+}
+
 export async function askAiCenter(payload: AiAskRequest): Promise<AiAskResponse> {
   const res = await apiFetchWithOffline("/api/ai/ask", {
     method: "POST",

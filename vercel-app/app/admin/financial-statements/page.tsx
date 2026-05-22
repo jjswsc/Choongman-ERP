@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useStoreList } from "@/lib/api-client"
-import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
   adminTabsContentCn,
@@ -35,20 +35,33 @@ export default function FinancialStatementsPage() {
   const t = useT(lang)
   const { stores: storeList } = useStoreList()
 
-  const isOffice = isOfficeRole(auth?.role || "")
-  const isManager = isManagerOrFranchiseeRole(auth?.role || "")
+  const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
+  const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
   const managerStore = (auth?.store || "").trim()
+  const scopedStoreChoices = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const s of [...(auth?.allowedStores || []), managerStore]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      out.push(t)
+    }
+    return out
+  }, [auth?.allowedStores, managerStore])
 
   const defaultYm = getBangkokRecentYearMonths(1)[0]
   const [yearMonthStart, setYearMonthStart] = React.useState(() => defaultYm)
   const [yearMonthEnd, setYearMonthEnd] = React.useState(() => defaultYm)
-  const [storeFilter, setStoreFilter] = React.useState(() => (isManager && managerStore ? managerStore : "All"))
+  const [storeFilter, setStoreFilter] = React.useState(() =>
+    isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All"
+  )
   const [tab, setTab] = React.useState<"income" | "balance">("income")
   const [queryToken, setQueryToken] = React.useState(0)
 
   React.useEffect(() => {
-    if (isManager && managerStore) setStoreFilter(managerStore)
-  }, [isManager, managerStore])
+    if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
+  }, [isManager, scopedStoreChoices])
 
   const storeOptions = isOffice
     ? [
@@ -57,8 +70,8 @@ export default function FinancialStatementsPage() {
           (s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office")
         ) || []),
       ]
-    : isManager && managerStore
-      ? [managerStore]
+    : isManager
+      ? scopedStoreChoices
       : []
 
   const yearMonthOptions = getBangkokRecentYearMonths(60).map((value) => {

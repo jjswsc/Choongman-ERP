@@ -29,8 +29,8 @@ import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-do
 import { enrichReceiptModalItemsForPromoDisplay } from '@/lib/pos-payment-receipt-from-order'
 import {
   printPosHtmlDocument,
-  POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS,
-  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  resolveAfterKitchenToReceiptDelayMs,
+  resolveBetweenKitchenSlipsDelayMs,
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
@@ -392,7 +392,7 @@ export function PosReceiptModal({
           escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
         })
         if (idx + 1 < slips.length) {
-          await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+          await new Promise((resolve) => setTimeout(resolve, resolveBetweenKitchenSlipsDelayMs()))
           await printOne(idx + 1)
         }
       }
@@ -439,7 +439,7 @@ export function PosReceiptModal({
           if (autoKitchenSlip) {
             await handlePrintKitchenSlipRef.current(false)
             if (autoReceipt) {
-              await new Promise((r) => setTimeout(r, POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS))
+              await new Promise((r) => setTimeout(r, resolveAfterKitchenToReceiptDelayMs()))
               await handlePrintReceiptRef.current(false)
             }
           } else if (autoReceipt) {

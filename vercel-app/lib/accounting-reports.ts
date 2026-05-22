@@ -16,6 +16,7 @@ import {
   listHqOutboundPurchaseDrillLines,
   sumHqOutboundSubtotalMatchingOutboundManagement,
 } from '@/lib/hq-outbound-income-total'
+import { resolveAccountingStoreFilterFromAuth } from '@/lib/accounting-store-scope'
 import {
   buildStoreFieldOrIlikeFragment,
   sqlIlikeContains,
@@ -52,6 +53,8 @@ export type IncomeScopeInput = {
   storeFilter?: string
   userStore?: string
   userRole?: string
+  /** JWT allowedStores — 가맹 복수 매장·매니저 허용 매장 */
+  allowedStores?: string[]
   includeDebug?: boolean
 }
 
@@ -330,12 +333,11 @@ export function normalizeIncomeScope(input: IncomeScopeInput): {
   storeFilter: string
   isHQ: boolean
 } {
-  let storeFilter = String(input.storeFilter || '').trim()
-  const userStore = String(input.userStore || '').trim()
-  const userRole = String(input.userRole || '').toLowerCase()
-  const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-  if (!isOffice && userStore) storeFilter = userStore
-  if (!storeFilter) storeFilter = 'All'
+  const storeFilter = resolveAccountingStoreFilterFromAuth(input.storeFilter, {
+    userRole: input.userRole,
+    userStore: input.userStore,
+    allowedStores: input.allowedStores,
+  })
   const { yearMonth, startStr, endStr } = getBangkokMonthRange(input.yearMonth)
   const isHQ = isOfficeStore(storeFilter)
   return { yearMonth, startStr, endStr, storeFilter, isHQ }

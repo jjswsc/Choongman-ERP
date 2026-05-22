@@ -14,15 +14,17 @@ import { getClientUiLang, getUiString } from '@/lib/i18n'
  */
 export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS = 3000
 /** 하이브리드(Electron)에서는 스풀 연결 여유를 유지하되 지연을 소폭 단축 */
-export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID = 2000
+export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID = 1200
 
 /**
  * 주방전이 여러 장일 때 장·장 사이 간격(동일 드라이버 스풀 합침 완화).
  */
 export const POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS = 1200
+export const POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS_HYBRID = 700
 
 /** 더치페이·분할 결제 영수증이 연속으로 나갈 때 장·장 사이 간격(스풀 합침·다음 장 누락 완화) */
 export const POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS = 1200
+export const POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS_HYBRID = 700
 
 /**
  * 숨김 iframe 인쇄 가드(`onPrintUnavailable`)를 Promise로 감쌀 때 `reject`에 쓰는 고정 메시지.
@@ -34,6 +36,7 @@ export const POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE = '__CM_POS_PRINT_DOCUMENT_U
  * 주방 자동 인쇄 직후 고객용 영수증 자동 인쇄 전(모달 경로). 주방 컷·스풀 안정화.
  */
 export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS = 1000
+export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS_HYBRID = 600
 
 /**
  * 영수증(홀 주문) 직후 주방전 시작 지연.
@@ -45,6 +48,38 @@ export function resolveAfterReceiptToKitchenDelayMs(): number {
     return POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID
   }
   return POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+}
+
+export function resolveBetweenKitchenSlipsDelayMs(): number {
+  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
+    return POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS_HYBRID
+  }
+  return POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS
+}
+
+export function resolveBetweenSplitReceiptsDelayMs(): number {
+  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
+    return POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS_HYBRID
+  }
+  return POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS
+}
+
+export function resolveAfterKitchenToReceiptDelayMs(): number {
+  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
+    return POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS_HYBRID
+  }
+  return POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS
+}
+
+let shellPrintQueue = Promise.resolve()
+
+function enqueueShellPrint<T>(task: () => Promise<T>): Promise<T> {
+  const next = shellPrintQueue.catch(() => undefined).then(task)
+  shellPrintQueue = next.then(
+    () => undefined,
+    () => undefined
+  )
+  return next
 }
 
 /** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
@@ -145,8 +180,7 @@ export function printPosHtmlDocument(
 
   if (useShell) {
     const uiLang = getClientUiLang()
-    void shell
-      .printHtml!(fullDocumentHtml, shellOpts)
+    void enqueueShellPrint(() => shell.printHtml!(fullDocumentHtml, shellOpts))
       .then((r) => {
         opts?.onShellPrintResult?.(r || {})
         const ok = Boolean(r?.ok)

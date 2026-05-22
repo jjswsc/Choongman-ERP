@@ -73,6 +73,8 @@ cp .env.example .env
 | `JWT_SECRET` | JWT 서명용 (32자 이상). 미설정 시 ANON_KEY 사용. **운영(Vercel)에서는 둘 중 하나 필수** | 권장 |
 | `RESEND_API_KEY` | 급여 명세서 이메일 발송 (resend.com) | 선택 |
 | `RESEND_FROM` | 발신 이메일 주소 | 선택 |
+| `OPENAI_API_KEY` | AI 센터 LLM (OpenAI API). **서버 전용** — `docs/AI-DATA-SECURITY.md` 참고 | AI 센터 사용 시 |
+| `OPENAI_ERP_AI_MODEL` | AI 센터 모델 (기본 `gpt-4o-mini`) | 선택 |
 | `POS_MENU_SCOPE_COMPATIBILITY_MODE` | POS 메뉴 매장 스코프 호환 모드. `1`=scope 없는 기존 메뉴 임시 노출 허용(권장 초기값), `0`=scope 없는 메뉴 비노출 | 권장 |
 
 Supabase 값은 **Supabase 대시보드 → Project Settings → API**에서 확인합니다.

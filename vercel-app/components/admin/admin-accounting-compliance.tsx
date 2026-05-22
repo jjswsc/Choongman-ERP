@@ -114,7 +114,12 @@ import {
   uploadEtaxEvidenceFile,
   getExportEtaxTimestampAuditCsvUrl,
 } from "@/lib/api-client"
-import { isOfficeRole, isManagerOrFranchiseeRole, isOfficeStore } from "@/lib/permissions"
+import {
+  isAccountingRole,
+  isOfficeRole,
+  isManagerOrFranchiseeRole,
+  isOfficeStore,
+} from "@/lib/permissions"
 import { isHeadOfficeLikeStoreName } from "@/lib/internal-outbound"
 import {
   aliasKeysForStore,
@@ -700,9 +705,24 @@ export function AdminAccountingCompliance({
   const canApproveUnlock = canApproveAccountingPeriodUnlock(role)
   const { stores: storeList, resolveStoreKey, storeLabels, legacyToCanonical } = useStoreList()
   const managerStore = (auth?.store || "").trim()
-  const officeByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
-  const isOffice = isOfficeRole(role) || officeByStore
+  const hqUserByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
+  /** 본사·회계만 전 매장; 매장 매니저·가맹은 소속 매장만(본사 store 문자열이어도 역할이 매장이면 전체 조회 불가) */
+  const isOffice =
+    isOfficeRole(role) ||
+    isAccountingRole(role) ||
+    (hqUserByStore && !isManagerOrFranchiseeRole(role))
   const isManager = !isOffice && isManagerOrFranchiseeRole(role)
+  const scopedStoreChoices = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const s of [...(auth?.allowedStores || []), managerStore]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      out.push(t)
+    }
+    return out
+  }, [auth?.allowedStores, managerStore])
 
   const externalFiling =
     filingYearMonth !== undefined &&
@@ -1065,17 +1085,17 @@ export function AdminAccountingCompliance({
     etaxPilotIssued,
   ])
   const storeOptions = React.useMemo(() => {
-    if (!isOffice) return isManager && managerStore ? [managerStore] : []
+    if (!isOffice) return isManager ? scopedStoreChoices : []
     const uniq = Array.from(
       new Set((storeList || []).map((s) => String(s).trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
     return ["All", ...uniq]
-  }, [isOffice, isManager, managerStore, storeList])
+  }, [isOffice, isManager, scopedStoreChoices, storeList])
 
   React.useEffect(() => {
     if (externalFiling) return
-    if (isManager && managerStore) setInternalStoreTb(managerStore)
-  }, [externalFiling, isManager, managerStore])
+    if (isManager && scopedStoreChoices[0]) setInternalStoreTb(scopedStoreChoices[0])
+  }, [externalFiling, isManager, scopedStoreChoices])
 
   React.useEffect(() => {
     setTab(initialTab)

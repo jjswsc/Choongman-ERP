@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
 import { getBangkokMonthRange } from '@/lib/bangkok-time'
+import { isAccountingStoreScopeForbidden } from '@/lib/accounting-store-scope'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
       storeFilter,
       userStore,
       userRole,
+      allowedStores: auth.allowedStores,
       includeDebug: false,
     })
 
@@ -86,6 +88,9 @@ export async function GET(request: NextRequest) {
       },
     }, { headers })
   } catch (e) {
+    if (isAccountingStoreScopeForbidden(e)) {
+      return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+    }
     console.error('getAccountingReconcile:', e)
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

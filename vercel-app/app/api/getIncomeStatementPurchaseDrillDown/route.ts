@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computeIncomeStatementPurchaseDrillDown } from '@/lib/accounting-reports'
+import { isAccountingStoreScopeForbidden } from '@/lib/accounting-store-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
@@ -28,10 +29,14 @@ export async function GET(request: NextRequest) {
       storeFilter,
       userStore,
       userRole,
+      allowedStores: auth.allowedStores,
       vendorKey,
     })
     return NextResponse.json(data, { headers })
   } catch (e) {
+    if (isAccountingStoreScopeForbidden(e)) {
+      return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+    }
     console.error('getIncomeStatementPurchaseDrillDown:', e)
     return NextResponse.json({ error: String(e) }, { status: 500, headers })
   }

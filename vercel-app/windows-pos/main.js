@@ -409,14 +409,14 @@ const PRINT_HTML_OFFSCREEN_WIDTH = Math.round((80 / 25.4) * 96);
 const PRINT_HTML_OFFSCREEN_HEIGHT = 4096;
 /** loadFile 직후 너무 빨리 print 하면 Windows에서 무인쇄가 실패·곧바로 대화상자로 떨어지는 경우가 있음 */
 const PRINT_HTML_SETTLE_MS = readConfigInt(
-  process.env.WINDOWS_POS_PRINT_HTML_SETTLE_MS || runtimeConfig.printHtmlSettleMs || 400,
-  400,
-  150,
+  process.env.WINDOWS_POS_PRINT_HTML_SETTLE_MS || runtimeConfig.printHtmlSettleMs || 260,
+  260,
+  80,
   5000
 );
 const POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED = readConfigInt(
-  process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS || runtimeConfig.postHtmlPrintSpoolFlushMs || POST_HTML_PRINT_SPOOL_FLUSH_MS,
-  POST_HTML_PRINT_SPOOL_FLUSH_MS,
+  process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS || runtimeConfig.postHtmlPrintSpoolFlushMs || 350,
+  350,
   0,
   10000
 );
@@ -425,6 +425,12 @@ const PRINT_HTML_SILENT_RETRY_COUNT = readConfigInt(
   1,
   0,
   3
+);
+const PRINT_HTML_QUEUE_GAP_MS = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_HTML_QUEUE_GAP_MS || runtimeConfig.printHtmlQueueGapMs || 80,
+  80,
+  0,
+  2000
 );
 
 /**
@@ -518,6 +524,9 @@ function debugLog(hypothesisId, location, message, data) {
 }
 
 let mainWindow = null;
+let htmlPrintQueue = Promise.resolve();
+let htmlHiddenPrintWindow = null;
+let htmlPrintFailureStreak = 0;
 /** POS 메인 URL 로드 실패 시 재시도(did-fail-load 일시 오류·리다이렉트 완화) */
 let posMainLoadFailAttempts = 0;
 let posMainLoadRetryTimer = null;
@@ -1097,201 +1106,277 @@ function printWebContentsPromise(wc, options) {
   });
 }
 
+function delayMs(ms) {
+  const n = Math.max(0, Math.trunc(Number(ms) || 0));
+  if (n <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, n));
+}
+
+function queueHtmlPrintTask(runTask) {
+  const queued = htmlPrintQueue
+    .catch(() => {})
+    .then(async () => {
+      if (PRINT_HTML_QUEUE_GAP_MS > 0) {
+        await delayMs(PRINT_HTML_QUEUE_GAP_MS);
+      }
+      return runTask();
+    });
+  htmlPrintQueue = queued.then(
+    () => undefined,
+    () => undefined
+  );
+  return queued;
+}
+
+function buildHiddenPrintWindowOptions(preferDialog) {
+  const printWinOptions = {
+    width: PRINT_HTML_OFFSCREEN_WIDTH,
+    height: PRINT_HTML_OFFSCREEN_HEIGHT,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+    },
+  };
+  if (preferDialog && mainWindow && !mainWindow.isDestroyed()) {
+    printWinOptions.parent = mainWindow;
+  }
+  return printWinOptions;
+}
+
+function ensureReusableHiddenPrintWindow() {
+  if (htmlHiddenPrintWindow && !htmlHiddenPrintWindow.isDestroyed()) {
+    return htmlHiddenPrintWindow;
+  }
+  htmlHiddenPrintWindow = new BrowserWindow(buildHiddenPrintWindowOptions(false));
+  htmlHiddenPrintWindow.on("closed", () => {
+    if (htmlHiddenPrintWindow && htmlHiddenPrintWindow.isDestroyed()) {
+      htmlHiddenPrintWindow = null;
+    }
+  });
+  try {
+    htmlHiddenPrintWindow.webContents.setZoomFactor(1);
+  } catch {
+    /* ignore */
+  }
+  return htmlHiddenPrintWindow;
+}
+
+async function waitForHiddenWindowSettle(printWindow, baseSettleMs) {
+  const settle = Math.max(0, Math.trunc(Number(baseSettleMs) || 0));
+  const adaptiveExtra = Math.min(800, htmlPrintFailureStreak * 160);
+  const quickSettleMs = Math.min(settle + adaptiveExtra, 220);
+  if (quickSettleMs > 0) {
+    await delayMs(quickSettleMs);
+  }
+  try {
+    await Promise.race([
+      printWindow.webContents.executeJavaScript(
+        "new Promise((resolve)=>{try{requestAnimationFrame(()=>requestAnimationFrame(resolve));}catch(_e){resolve();}})",
+        true
+      ),
+      delayMs(220),
+    ]);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 영수증·주방전 HTML: 렌더러 iframe.print()는 Electron에서 무시되는 경우가 많아 메인에서 숨은 창으로 인쇄
  * @param {{ preferDialog?: boolean }} [options] preferDialog true면 무인쇄·열전사 최적화를 건너뛰고 시스템 인쇄 대화상자만 사용(프린터 선택·미리보기)
  */
 async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
-  const preferDialog = Boolean(options && options.preferDialog);
-  const tmpRoot = app.getPath("temp");
-  const tmpPath = path.join(
-    tmpRoot,
-    `cm-pos-print-${Date.now()}-${Math.random().toString(16).slice(2)}.html`
-  );
-  let printWindow;
-  try {
-    const warnings = [];
-    let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
-    if (!resolvedDevice) {
-      try {
-        resolvedDevice = await getWindowsDefaultPrinterName();
-      } catch {
-        /* ignore */
-      }
-    }
-    if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
-      try {
-        const printers = await mainWindow.webContents.getPrintersAsync();
-        const matched = printers.some((p) => String(p.name || "").trim() === resolvedDevice);
-        if (!matched) {
-          warnings.push(`configured device not found: ${resolvedDevice}`);
-          resolvedDevice = "";
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    // #region agent log
-    debugLog("H4_layout_shrink", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:start", "print_html_start", {
-      htmlLength: String(htmlString || "").length,
-      offscreenWidth: PRINT_HTML_OFFSCREEN_WIDTH,
-      offscreenHeight: PRINT_HTML_OFFSCREEN_HEIGHT,
-      settleMs: PRINT_HTML_SETTLE_MS,
-      resolvedDevice: resolvedDevice || "",
-      configuredDevice: DEFAULT_PRINT_DEVICE || "",
-    });
-    // #endregion
-    fs.writeFileSync(tmpPath, htmlString, "utf8");
-    const printWinOptions = {
-      width: PRINT_HTML_OFFSCREEN_WIDTH,
-      height: PRINT_HTML_OFFSCREEN_HEIGHT,
-      show: false,
-      /** 매 인쇄마다 작업 표시줄 아이콘이 깜빡이지 않게 */
-      skipTaskbar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: false,
-      },
-    };
-    /** 수동 인쇄(시스템 대화상자): 부모 없이 숨은 창만 쓰면 일부 Windows에서 대화상자가 안 뜨거나 뒤에 깔림 */
-    if (preferDialog && mainWindow && !mainWindow.isDestroyed()) {
-      printWinOptions.parent = mainWindow;
-    }
-    printWindow = new BrowserWindow(printWinOptions);
+  return queueHtmlPrintTask(async () => {
+    const preferDialog = Boolean(options && options.preferDialog);
+    const tmpRoot = app.getPath("temp");
+    const tmpPath = path.join(
+      tmpRoot,
+      `cm-pos-print-${Date.now()}-${Math.random().toString(16).slice(2)}.html`
+    );
+    let printWindow = null;
+    let destroyAfterRun = false;
     try {
-      printWindow.webContents.setZoomFactor(1);
-    } catch {
-      /* ignore */
-    }
-    await printWindow.loadFile(tmpPath);
-    await new Promise((r) => setTimeout(r, PRINT_HTML_SETTLE_MS));
-
-    if (preferDialog) {
-      const printStage = "dialog_only";
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.focus();
+      const warnings = [];
+      let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
+      if (!resolvedDevice) {
+        try {
+          resolvedDevice = await getWindowsDefaultPrinterName();
+        } catch {
+          /* ignore */
         }
-        /** 완전 비표시 창에서 print(silent:false) 호출 시 OS 인쇄 창이 생략되는 사례 완화 */
-        printWindow.showInactive();
-      } catch {
-        /* ignore */
       }
-      const r = await printWebContentsPromise(
-        printWindow.webContents,
-        getThermalHtmlDialogPrintOptions(resolvedDevice)
-      );
-      debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:preferDialog", "print_dialog_only", {
-        ok: Boolean(r.success),
-        reason: String(r.failureReason || ""),
+      if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          const printers = await mainWindow.webContents.getPrintersAsync();
+          const matched = printers.some((p) => String(p.name || "").trim() === resolvedDevice);
+          if (!matched) {
+            warnings.push(`configured device not found: ${resolvedDevice}`);
+            resolvedDevice = "";
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      // #region agent log
+      debugLog("H4_layout_shrink", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:start", "print_html_start", {
+        htmlLength: String(htmlString || "").length,
+        offscreenWidth: PRINT_HTML_OFFSCREEN_WIDTH,
+        offscreenHeight: PRINT_HTML_OFFSCREEN_HEIGHT,
+        settleMs: PRINT_HTML_SETTLE_MS,
+        resolvedDevice: resolvedDevice || "",
+        configuredDevice: DEFAULT_PRINT_DEVICE || "",
       });
+      // #endregion
+      fs.writeFileSync(tmpPath, htmlString, "utf8");
+      if (preferDialog) {
+        printWindow = new BrowserWindow(buildHiddenPrintWindowOptions(true));
+        destroyAfterRun = true;
+        try {
+          printWindow.webContents.setZoomFactor(1);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        printWindow = ensureReusableHiddenPrintWindow();
+      }
+
+      await printWindow.loadFile(tmpPath);
+      await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
+
+      if (preferDialog) {
+        const printStage = "dialog_only";
+        try {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.focus();
+          }
+          printWindow.showInactive();
+        } catch {
+          /* ignore */
+        }
+        const r = await printWebContentsPromise(
+          printWindow.webContents,
+          getThermalHtmlDialogPrintOptions(resolvedDevice)
+        );
+        debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:preferDialog", "print_dialog_only", {
+          ok: Boolean(r.success),
+          reason: String(r.failureReason || ""),
+        });
+        return {
+          ok: r.success,
+          reason: r.failureReason || (r.success ? "" : "print_failed"),
+          printStage,
+          warnings,
+          usedDevice: "",
+        };
+      }
+
+      let printStage = "thermal";
+      const thermalOpts = getThermalHtmlPrintOptions();
+      if (resolvedDevice) thermalOpts.deviceName = resolvedDevice;
+      // #region agent log
+      debugLog("H1_silent_flag", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_opts", "thermal_options", {
+        silent: Boolean(thermalOpts.silent),
+        deviceName: String(thermalOpts.deviceName || ""),
+        scaleFactor: Number(thermalOpts.scaleFactor || 0),
+        pageSize: thermalOpts.pageSize || null,
+        margins: thermalOpts.margins || null,
+        pagesPerSheet: Number(thermalOpts.pagesPerSheet || 0),
+        defaultPrintSilent: DEFAULT_PRINT_SILENT,
+        defaultPrintDevice: DEFAULT_PRINT_DEVICE || "",
+      });
+      // #endregion
+      let r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
+      let thermalAttempts = 1;
+      while (!r.success && thermalAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
+        thermalAttempts += 1;
+        await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
+        await waitForHiddenWindowSettle(printWindow, Math.min(220, PRINT_HTML_SETTLE_MS));
+        r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
+      }
+      // #region agent log
+      debugLog("H3_thermal_fail", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_result", "thermal_result", {
+        success: Boolean(r.success),
+        failureReason: String(r.failureReason || ""),
+      });
+      // #endregion
+      if (!r.success && DEFAULT_PRINT_SILENT) {
+        printStage = "silent_driver_default";
+        const driverDefaultOpts = getHtmlSilentDriverDefaultPrintOptions();
+        if (resolvedDevice) driverDefaultOpts.deviceName = resolvedDevice;
+        r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
+        let driverAttempts = 1;
+        while (!r.success && driverAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
+          driverAttempts += 1;
+          await delayMs(120 * driverAttempts + htmlPrintFailureStreak * 80);
+          await waitForHiddenWindowSettle(printWindow, Math.min(220, PRINT_HTML_SETTLE_MS));
+          r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
+        }
+        // #region agent log
+        debugLog("H2_device_or_driver", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:driver_default_result", "driver_default_result", {
+          success: Boolean(r.success),
+          failureReason: String(r.failureReason || ""),
+          optsSilent: Boolean(driverDefaultOpts.silent),
+          optsDeviceName: String(driverDefaultOpts.deviceName || ""),
+        });
+        // #endregion
+      }
+      if (!r.success) {
+        printStage = "dialog";
+        // #region agent log
+        debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:dialog_fallback", "dialog_fallback_triggered", {
+          previousFailureReason: String(r.failureReason || ""),
+          defaultPrintSilent: DEFAULT_PRINT_SILENT,
+        });
+        // #endregion
+        r = await printWebContentsPromise(
+          printWindow.webContents,
+          getThermalHtmlDialogPrintOptions(resolvedDevice)
+        );
+        if (!DEFAULT_PRINT_DEVICE) {
+          warnings.push("print dialog fallback used without explicit thermal device");
+        }
+      }
+      // #region agent log
+      debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:final", "print_html_final", {
+        ok: Boolean(r.success),
+        finalFailureReason: String(r.failureReason || ""),
+        printStage,
+      });
+      // #endregion
+      if (r.success) {
+        htmlPrintFailureStreak = 0;
+      } else {
+        htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
+      }
+      let usedDeviceOut = resolvedDevice || "";
+      if (r.success && !String(usedDeviceOut).trim() && printStage !== "dialog") {
+        usedDeviceOut = await getWindowsDefaultPrinterName();
+      }
       return {
         ok: r.success,
         reason: r.failureReason || (r.success ? "" : "print_failed"),
         printStage,
         warnings,
-        usedDevice: "",
+        usedDevice: usedDeviceOut,
       };
-    }
-
-    let printStage = "thermal";
-    /** 1) 80mm 커스텀 용지 무인쇄 → 2) 드라이버 기본 용지 무인쇄(무인쇄 유지) → 3) 대화상자 */
-    const thermalOpts = getThermalHtmlPrintOptions();
-    if (resolvedDevice) thermalOpts.deviceName = resolvedDevice;
-    // #region agent log
-    debugLog("H1_silent_flag", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_opts", "thermal_options", {
-      silent: Boolean(thermalOpts.silent),
-      deviceName: String(thermalOpts.deviceName || ""),
-      scaleFactor: Number(thermalOpts.scaleFactor || 0),
-      pageSize: thermalOpts.pageSize || null,
-      margins: thermalOpts.margins || null,
-      pagesPerSheet: Number(thermalOpts.pagesPerSheet || 0),
-      defaultPrintSilent: DEFAULT_PRINT_SILENT,
-      defaultPrintDevice: DEFAULT_PRINT_DEVICE || "",
-    });
-    // #endregion
-    let r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
-    let thermalAttempts = 1;
-    while (!r.success && thermalAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
-      thermalAttempts += 1;
-      await new Promise((x) => setTimeout(x, 120 * thermalAttempts));
-      r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
-    }
-    // #region agent log
-    debugLog("H3_thermal_fail", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_result", "thermal_result", {
-      success: Boolean(r.success),
-      failureReason: String(r.failureReason || ""),
-    });
-    // #endregion
-    if (!r.success && DEFAULT_PRINT_SILENT) {
-      printStage = "silent_driver_default";
-      const driverDefaultOpts = getHtmlSilentDriverDefaultPrintOptions();
-      if (resolvedDevice) driverDefaultOpts.deviceName = resolvedDevice;
-      r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
-      let driverAttempts = 1;
-      while (!r.success && driverAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
-        driverAttempts += 1;
-        await new Promise((x) => setTimeout(x, 120 * driverAttempts));
-        r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
+    } catch (e) {
+      htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
+      return { ok: false, reason: String(e && e.message ? e.message : e), usedDevice: "" };
+    } finally {
+      try {
+        if (destroyAfterRun && printWindow && !printWindow.isDestroyed()) printWindow.destroy();
+      } catch {
+        /* ignore */
       }
-      // #region agent log
-      debugLog("H2_device_or_driver", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:driver_default_result", "driver_default_result", {
-        success: Boolean(r.success),
-        failureReason: String(r.failureReason || ""),
-        optsSilent: Boolean(driverDefaultOpts.silent),
-        optsDeviceName: String(driverDefaultOpts.deviceName || ""),
-      });
-      // #endregion
-    }
-    if (!r.success) {
-      printStage = "dialog";
-      // #region agent log
-      debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:dialog_fallback", "dialog_fallback_triggered", {
-        previousFailureReason: String(r.failureReason || ""),
-        defaultPrintSilent: DEFAULT_PRINT_SILENT,
-      });
-      // #endregion
-      r = await printWebContentsPromise(
-        printWindow.webContents,
-        getThermalHtmlDialogPrintOptions(resolvedDevice)
-      );
-      if (!DEFAULT_PRINT_DEVICE) {
-        warnings.push("print dialog fallback used without explicit thermal device");
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
       }
     }
-    // #region agent log
-    debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:final", "print_html_final", {
-      ok: Boolean(r.success),
-      finalFailureReason: String(r.failureReason || ""),
-      printStage,
-    });
-    // #endregion
-    /** deviceName 없이 무인쇄 성공 시 실제로는 OS 기본 프린터로 나감 — 절단(RAW) 대상 이름이 비지 않게 보정 */
-    let usedDeviceOut = resolvedDevice || "";
-    if (r.success && !String(usedDeviceOut).trim() && printStage !== "dialog") {
-      usedDeviceOut = await getWindowsDefaultPrinterName();
-    }
-    return {
-      ok: r.success,
-      reason: r.failureReason || (r.success ? "" : "print_failed"),
-      printStage,
-      warnings,
-      usedDevice: usedDeviceOut,
-    };
-  } catch (e) {
-    return { ok: false, reason: String(e && e.message ? e.message : e), usedDevice: "" };
-  } finally {
-    try {
-      if (printWindow && !printWindow.isDestroyed()) printWindow.destroy();
-    } catch {
-      /* ignore */
-    }
-    try {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    } catch {
-      /* ignore */
-    }
-  }
+  });
 }
 
 async function printWithDialogManual() {

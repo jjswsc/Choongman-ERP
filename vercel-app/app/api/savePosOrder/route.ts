@@ -160,6 +160,8 @@ function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: numbe
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const startedAtMs = Date.now()
+  let allocateOrderNoMs = 0
 
   try {
     const auth = await getVerifiedAuth(req)
@@ -316,7 +318,9 @@ export async function POST(req: NextRequest) {
       delivery_app_code = code || null
     }
 
+    const allocateStartMs = Date.now()
     const orderNo = await allocateNextPosOrderNo(storeCode)
+    allocateOrderNoMs = Date.now() - allocateStartMs
     const row = {
       order_no: orderNo,
       store_code: storeCode,
@@ -544,20 +548,37 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({
-      success: true,
-      orderId: created?.id,
-      orderNo,
-      pointEarned,
-    }, { headers })
+    const totalElapsedMs = Date.now() - startedAtMs
+    headers.set('X-Pos-Save-Elapsed-Ms', String(totalElapsedMs))
+    headers.set('X-Pos-Save-Allocate-OrderNo-Ms', String(allocateOrderNoMs))
+    return NextResponse.json(
+      {
+        success: true,
+        orderId: created?.id,
+        orderNo,
+        pointEarned,
+        perf: {
+          elapsedMs: totalElapsedMs,
+          allocateOrderNoMs,
+        },
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('savePosOrder:', e)
     const msg = e instanceof Error ? e.message : String(e)
+    const totalElapsedMs = Date.now() - startedAtMs
+    headers.set('X-Pos-Save-Elapsed-Ms', String(totalElapsedMs))
+    headers.set('X-Pos-Save-Allocate-OrderNo-Ms', String(allocateOrderNoMs))
     return NextResponse.json(
       {
         success: false,
         message: msg.slice(0, 500),
         retryAfterQueue: true,
+        perf: {
+          elapsedMs: totalElapsedMs,
+          allocateOrderNoMs,
+        },
       },
       { headers }
     )

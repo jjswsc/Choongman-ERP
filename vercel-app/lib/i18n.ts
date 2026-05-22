@@ -627,6 +627,9 @@ export const i18n = {
     aiCenter: 'AI 센터',
     aiCenterHeaderPrefill: '{{path}} 화면 관련 질문',
     aiCenterSubtitle: '질문/제안/승인 기반 실행을 한 곳에서 관리합니다.',
+    aiCenterLlmReady: 'AI 모델 연결됨 (OpenAI API)',
+    aiCenterLlmNotConfigured:
+      'AI 모델 미연결 — Vercel 환경 변수 OPENAI_API_KEY 설정 후 재배포가 필요합니다. (규칙 기반 안내만 표시됩니다)',
     aiCenterTabQa: '질문/제안',
     aiCenterTabActions: '실행 초안',
     aiCenterTabApprovals: '실행대기함/이력',
@@ -8981,6 +8984,9 @@ Only matters the employee must handle personally on a working day:
     aiCenter: 'AI Center',
     aiCenterHeaderPrefill: 'Questions about the {{path}} screen',
     aiCenterSubtitle: 'Manage Q&A, proposals, and approval-based actions in one place.',
+    aiCenterLlmReady: 'AI model connected (OpenAI API)',
+    aiCenterLlmNotConfigured:
+      'AI model not connected — set OPENAI_API_KEY on Vercel and redeploy. (Rule-based guidance only until then)',
     aiCenterTabQa: 'Q&A / proposals',
     aiCenterTabActions: 'Action drafts',
     aiCenterTabApprovals: 'Pending / history',

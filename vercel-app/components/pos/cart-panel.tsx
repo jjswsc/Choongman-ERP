@@ -528,6 +528,11 @@ interface CartPanelProps {
   onTaxInvoiceToggleChange?: (enabled: boolean) => void
   /** 터미널 투어: 결제 완료 버튼이 실제 실행됨 */
   onPaymentComplete?: () => void
+  /**
+   * 더치·분할 결제에서 인원별 결제가 확정될 때(현금 포함 시).
+   * 터미널에서 즉시 돈통을 열어 거스름돈을 받을 수 있게 함.
+   */
+  onSplitCashPaymentStep?: (payment: CartPanelPaymentPayload) => void
   /** 터미널 데모: 홀에서 손님 수가 0이면 지정 값으로(투어 주문 버튼) */
   posDineInDemoDefaultGuestCount?: number
   /** 터미널 투어 등: 홀 손님 수 변경 시 부모 동기 */
@@ -809,6 +814,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onPaymentTabChange,
   onTaxInvoiceToggleChange,
   onPaymentComplete,
+  onSplitCashPaymentStep,
   posDineInDemoDefaultGuestCount,
   onGuestCountChange,
 }, ref) {
@@ -1516,8 +1522,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       arr[personIdx] = snap
       splitPaymentsByPersonRef.current = arr
       setSplitCaptureTick((t) => t + 1)
+      if ((snap.paymentCash || 0) > 0.005) {
+        onSplitCashPaymentStep?.(snap)
+      }
     },
-    [buildPaymentSnapshot]
+    [buildPaymentSnapshot, onSplitCashPaymentStep]
   )
 
   const buildOrderPaymentFromSplit = useCallback((): CartPanelPaymentPayload => {
