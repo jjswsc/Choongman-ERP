@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
-import { useStoreList } from '@/lib/api-client'
+import { useStoreList, getPosBusinessDaySettings } from '@/lib/api-client'
 import {
   getPosOrders,
   getPosMenus,
@@ -71,7 +71,7 @@ import {
 } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
-import { addDaysYmd, getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { addDaysYmd, getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import {
@@ -231,9 +231,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     [t]
   )
 
-  const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const [startStr, setStartStr] = React.useState(today)
-  const [endStr, setEndStr] = React.useState(today)
+  const todayStr = getPosBusinessDateStr()
+  const [startStr, setStartStr] = React.useState(() => getPosBusinessDateStr())
+  const [endStr, setEndStr] = React.useState(() => getPosBusinessDateStr())
+  const endStrRef = React.useRef(endStr)
+  React.useEffect(() => {
+    endStrRef.current = endStr
+  }, [endStr])
   const [storeFilter, setStoreFilter] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [searchTerm, setSearchTerm] = React.useState('')
@@ -387,6 +391,34 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     return nf || nu || storeCode || ''
   }, [isHqWideAccess, storeFilter, storeCode, resolveStoreKey, receiptStoreChoices])
 
+  /** 매장 영업시간 설정 로드 후 영업일 라벨·조회일 동기화(전사 기본 08:00 → 매장 05:00 등) */
+  const lastReceiptBizHoursKeyRef = React.useRef('')
+  React.useEffect(() => {
+    let cancel = false
+    const storeKey = catalogStoreKey.trim()
+    void getPosBusinessDaySettings(storeKey || null).then((j) => {
+      if (cancel) return
+      setPosBusinessHoursClient({
+        start: { hour: j.hour, minute: j.minute },
+        end: { hour: j.endHour, minute: j.endMinute },
+      })
+      const hoursKey = `${storeKey}|${j.hour}:${j.minute}-${j.endHour}:${j.endMinute}`
+      if (hoursKey === lastReceiptBizHoursKeyRef.current) return
+      lastReceiptBizHoursKeyRef.current = hoursKey
+      const bd = getPosBusinessDateStr()
+      setStartStr((s) => {
+        const e = endStrRef.current
+        if (s !== e) return s
+        endStrRef.current = bd
+        setEndStr(bd)
+        return bd
+      })
+    })
+    return () => {
+      cancel = true
+    }
+  }, [catalogStoreKey])
+
   React.useEffect(() => {
     getPosDeliveryApps({
       storeCode: catalogStoreKey.trim() || undefined,
@@ -519,6 +551,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       endStr,
       storeCode: store || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
+      posBizDayScope: true,
     }
     fetcher(params)
       .then(setOrders)
@@ -575,7 +608,6 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     })
   }, [offlineAware, loadOrders])
 
-  const todayStr = new Date().toISOString().slice(0, 10)
   const isToday = startStr === todayStr && endStr === todayStr && statusFilter === 'all'
   const todaySummary = React.useMemo(() => {
     if (!isToday || orders.length === 0) return null
@@ -1271,33 +1303,34 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4">
-          <div className="mb-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <Input
-                type="date"
-                value={startStr}
-                onChange={(e) => setStartStr(e.target.value)}
-                className="h-9 w-full text-[13px] sm:w-[172px]"
-              />
-              <span className="hidden text-slate-500 sm:inline">~</span>
-              <Input
-                type="date"
-                value={endStr}
-                onChange={(e) => setEndStr(e.target.value)}
-                className="h-9 w-full text-[13px] sm:w-[172px]"
-              />
-            </div>
-            <Button
-              variant={isToday ? 'secondary' : 'outline'}
-              size="sm"
-              className="h-9 px-3"
-              onClick={() => {
-                setStartStr(todayStr)
-                setEndStr(todayStr)
-              }}
-            >
-              {t('posToday') || '오늘'}
-            </Button>
+          <div className="mb-4 space-y-2">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <Input
+                  type="date"
+                  value={startStr}
+                  onChange={(e) => setStartStr(e.target.value)}
+                  className="h-9 w-full text-[13px] sm:w-[172px]"
+                />
+                <span className="hidden text-slate-500 sm:inline">~</span>
+                <Input
+                  type="date"
+                  value={endStr}
+                  onChange={(e) => setEndStr(e.target.value)}
+                  className="h-9 w-full text-[13px] sm:w-[172px]"
+                />
+              </div>
+              <Button
+                variant={isToday ? 'secondary' : 'outline'}
+                size="sm"
+                className="h-9 px-3"
+                onClick={() => {
+                  setStartStr(todayStr)
+                  setEndStr(todayStr)
+                }}
+              >
+                {t('posToday') || '오늘'}
+              </Button>
             {receiptStoreChoices.length > 1 && (
               <Select
                 value={
@@ -1365,6 +1398,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               <Search className="mr-1 h-4 w-4" />
               {t('search') || '검색'}
             </Button>
+            </div>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              {t('posReceiptSearchBizDayHint') ||
+                '조회 날짜는 마감·결산과 같은 POS 영업일 기준입니다(매장 영업 시작 시각~익일 시작 전).'}
+            </p>
           </div>
 
           {loading && (
@@ -1405,7 +1443,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                     {t('posCount') || '건'}
                   </span>
                   <span className="tabular-nums text-muted-foreground">
-                    ({todaySummary.cancelledTotal.toLocaleString()} ฿)
+                    ({formatBahtNum(todaySummary.cancelledTotal)} ฿)
                   </span>
                 </div>
               )}

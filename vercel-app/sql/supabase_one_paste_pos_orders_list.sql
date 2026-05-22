@@ -1,7 +1,6 @@
--- POS 터미널 주문 목록(getPosOrders) / 저장(savePosOrder) 공통 컬럼 — Supabase SQL Editor에서 1회 실행
--- 증상: 주문·인쇄는 되는데 홀·배달·포장 리스트가 전부 비어 있음 (API가 [] 반환)
--- 전체(회계+POS+메뉴) 일괄: sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql §(3)
--- POS 리스트만: sql/supabase_one_paste_pos_orders_list.sql
+-- 이 파일은 §(3)만 분리한 축약본입니다.
+-- 전체(회계+POS+메뉴)는 아래 한 파일만 실행하세요:
+--   sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql
 
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS payment_cash_tendered NUMERIC(12,2) DEFAULT 0;
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS applied_coupons JSONB;

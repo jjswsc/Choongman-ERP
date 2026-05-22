@@ -2,15 +2,22 @@
 -- supabase_one_paste_accounting_and_pos_printer_cut_clean.sql
 -- Supabase SQL Editor에서 이 파일 전체를 한 번에 실행 (UTF-8)
 --
--- 구성(필수만 유지):
---   (1) 000_accounting_core_one_shot.sql
---   (2) pos_printer_settings 부트스트랩 + ESC/POS 절단 컬럼 3개
+-- 구성:
+--   (1) 회계·복식부기·세무·급여(KT20k/PND1A RPC)
+--   (2) pos_printer_settings + ESC/POS 절단 + 주방 옵션 출력 JSON
+--   (3) pos_orders — 목록(getPosOrders)·저장(savePosOrder) 필수 컬럼
+--   (4) pos_orders 멱등 idempotency_key_hash
+--   (5) POS 다중 쿠폰(loyalty·redemptions·applied_coupons)
+--   (6) 치킨 BBQ 메뉴 옵션 UI 정리 (C020~C023, 재실행 가능)
+--   (7) pos_menu_options.option_code prefix 자동 보정
+--
+-- 별도 파일(환경·ID 확인 후만):
+--   sql/supabase_one_paste_optional_menu_code_recovery.sql — K001/T001 등 코드 복구
 --
 -- 의도적으로 제외:
---   - 운영 중 일회성 데이터 복구/치환 SQL
---   - 진단용 SELECT 블록
---   - 중복 DDL/중복 ALTER TABLE/중복 NOTIFY
---   - 회계·프린터 범위를 벗어난 기능성 확장
+--   - 진단용 SELECT (실행해도 스키마는 안 바뀜, Editor 결과만 쌓임)
+--   - 동일 ALTER 중복 블록
+--   - pos_purge / go-live 데이터 삭제
 -- ============================================================
 
 BEGIN;
@@ -865,3 +872,285 @@ COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_hall_order_html 
   'Windows 설치형 POS: 홀/터미널 주문서 인쇄 후 절단';
 COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_payment_receipt_html IS
   'Windows 설치형 POS: 결제 영수증 인쇄 후 절단';
+
+ALTER TABLE public.pos_printer_settings
+  ADD COLUMN IF NOT EXISTS kitchen_slip_option_group_print JSONB NOT NULL DEFAULT
+  '{"size": true, "part": true, "flavor": true, "side": true, "other": true}'::JSONB;
+
+COMMENT ON COLUMN public.pos_printer_settings.kitchen_slip_option_group_print IS
+  'Kitchen slip option group print flags: size/part/flavor/side/other';
+
+-- ------------------------------------------------------------
+-- (3) pos_orders — POS 터미널 주문 목록·저장 공통 컬럼
+--     (컬럼 누락 시 getPosOrders 실패 → 홀/배달/포장 리스트 전부 비어 보임)
+-- ------------------------------------------------------------
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS payment_cash_tendered NUMERIC(12,2) DEFAULT 0;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS applied_coupons JSONB;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS service_amt NUMERIC NOT NULL DEFAULT 0;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS service_reason TEXT;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS payment_other_breakdown JSONB;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS delivery_app_code TEXT;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS guest_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS payment_delivery_app NUMERIC NOT NULL DEFAULT 0;
+
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS delivery_payment_channel TEXT;
+
+COMMENT ON COLUMN public.pos_orders.payment_cash_tendered IS
+  'POS 현금: 손님이 건넨 금액(거스름 표시)';
+COMMENT ON COLUMN public.pos_orders.applied_coupons IS
+  '다중 쿠폰 적용 스냅샷(JSON)';
+COMMENT ON COLUMN public.pos_orders.guest_count IS
+  '홀(dine_in) 손님 수';
+
+-- ------------------------------------------------------------
+-- (4) pos_orders 멱등 저장 (savePosOrder X-Idempotency-Key)
+-- ------------------------------------------------------------
+ALTER TABLE public.pos_orders
+  ADD COLUMN IF NOT EXISTS idempotency_key_hash TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_idempotency_key_hash
+  ON public.pos_orders(idempotency_key_hash)
+  WHERE idempotency_key_hash IS NOT NULL;
+
+-- ------------------------------------------------------------
+-- (5) POS 다중 쿠폰 — pos_multi_coupon.sql
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.pos_loyalty_settings (
+  brand_key TEXT PRIMARY KEY DEFAULT 'default',
+  max_coupons_per_order INTEGER NOT NULL DEFAULT 10,
+  coupon_stack_with_manual_discount BOOLEAN NOT NULL DEFAULT TRUE,
+  coupon_stack_with_points BOOLEAN NOT NULL DEFAULT TRUE,
+  coupon_calc_base TEXT NOT NULL DEFAULT 'remaining',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO public.pos_loyalty_settings (brand_key)
+VALUES ('default')
+ON CONFLICT (brand_key) DO NOTHING;
+
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS min_order_amt NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS max_per_order INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS redemption_mode TEXT NOT NULL DEFAULT 'reusable_code';
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS allow_quantity_entry BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS stack_mode TEXT NOT NULL DEFAULT 'fixed_only';
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS max_discount_amt NUMERIC(14,2);
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS max_uses INTEGER;
+ALTER TABLE public.pos_coupons ADD COLUMN IF NOT EXISTS used_count INTEGER NOT NULL DEFAULT 0;
+
+UPDATE public.pos_coupons
+SET max_per_order = GREATEST(max_per_order, 10),
+    allow_quantity_entry = CASE
+      WHEN redemption_mode = 'reusable_code' THEN TRUE
+      ELSE allow_quantity_entry
+    END
+WHERE discount_type <> 'percent'
+  AND max_per_order <= 1;
+
+CREATE TABLE IF NOT EXISTS public.pos_order_coupon_redemptions (
+  id BIGSERIAL PRIMARY KEY,
+  order_id BIGINT NOT NULL REFERENCES public.pos_orders(id) ON DELETE CASCADE,
+  store_code TEXT NOT NULL,
+  coupon_id BIGINT REFERENCES public.pos_coupons(id),
+  coupon_code TEXT NOT NULL,
+  discount_amt NUMERIC(14,2) NOT NULL DEFAULT 0,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  serial_id BIGINT,
+  member_coupon_issue_id BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_order_coupon_redemptions_order_id
+  ON public.pos_order_coupon_redemptions(order_id);
+CREATE INDEX IF NOT EXISTS idx_pos_order_coupon_redemptions_store_created
+  ON public.pos_order_coupon_redemptions(store_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pos_order_coupon_redemptions_code
+  ON public.pos_order_coupon_redemptions(coupon_code);
+
+CREATE TABLE IF NOT EXISTS public.pos_coupon_serials (
+  id BIGSERIAL PRIMARY KEY,
+  coupon_id BIGINT NOT NULL REFERENCES public.pos_coupons(id) ON DELETE CASCADE,
+  serial_code TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'issued',
+  order_id BIGINT REFERENCES public.pos_orders(id),
+  redeemed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (serial_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_coupon_serials_coupon_id
+  ON public.pos_coupon_serials(coupon_id);
+CREATE INDEX IF NOT EXISTS idx_pos_coupon_serials_status
+  ON public.pos_coupon_serials(status);
+
+ALTER TABLE public.pos_promo_items
+  ADD COLUMN IF NOT EXISTS option_code TEXT;
+
+COMMENT ON COLUMN public.pos_promo_items.option_code IS
+  'POS option_code snapshot for promo composition (Grab/order mapping)';
+
+-- ------------------------------------------------------------
+-- (6) 치킨 BBQ 옵션 UI — pos_menu_fix_curry_garlic_barbq_option_ui.sql (SELECT 제외)
+-- ------------------------------------------------------------
+UPDATE public.pos_menus m
+SET
+  option_selection_groups = COALESCE(
+    (
+      SELECT jsonb_agg(to_jsonb(trim(elem)))
+      FROM jsonb_array_elements_text(COALESCE(m.option_selection_groups, '[]'::JSONB)) AS elem
+      WHERE lower(trim(elem)) NOT IN ('size', 'part')
+    ),
+    '[]'::JSONB
+  ),
+  option_selection_config = COALESCE(
+    (
+      SELECT jsonb_agg(cfg)
+      FROM jsonb_array_elements(COALESCE(m.option_selection_config, '[]'::JSONB)) AS cfg
+      WHERE lower(trim(COALESCE(cfg->>'key', ''))) NOT IN ('size', 'part')
+    ),
+    '[]'::JSONB
+  )
+WHERE m.code IN ('C020', 'C021', 'C022', 'C023');
+
+DO $$
+BEGIN
+  IF to_regclass('public.pos_menu_option_group_links') IS NOT NULL
+     AND to_regclass('public.pos_option_groups') IS NOT NULL THEN
+    DELETE FROM public.pos_menu_option_group_links l
+    USING public.pos_menus m, public.pos_option_groups g
+    WHERE l.menu_id = m.id
+      AND l.group_id = g.id
+      AND m.code IN ('C020', 'C021', 'C022', 'C023')
+      AND lower(trim(COALESCE(g.group_key, ''))) IN ('size', 'part');
+  END IF;
+END $$;
+
+DELETE FROM public.pos_menu_options o
+USING public.pos_menus m
+WHERE o.menu_id = m.id
+  AND m.code IN ('C020', 'C021', 'C022', 'C023')
+  AND COALESCE(o.option_type, 'substitution') = 'substitution'
+  AND trim(COALESCE(o.name, '')) IN ('M - Wing', 'M - Drumette');
+
+INSERT INTO public.pos_menu_options (
+  menu_id, name, price_modifier, price_modifier_delivery, sort_order,
+  option_type, option_step_values, sell_hall, sell_delivery, sell_packaging
+)
+SELECT
+  m.id,
+  v.name,
+  90,
+  100,
+  v.sort_order,
+  'substitution',
+  '{}'::JSONB,
+  TRUE,
+  TRUE,
+  TRUE
+FROM public.pos_menus m
+CROSS JOIN (VALUES ('M - Boneless', 0)) AS v(name, sort_order)
+WHERE m.code IN ('C020', 'C021', 'C022', 'C023')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.pos_menu_options o
+    WHERE o.menu_id = m.id
+      AND COALESCE(o.option_type, 'substitution') = 'substitution'
+      AND trim(COALESCE(o.name, '')) = v.name
+  );
+
+UPDATE public.pos_menu_options o
+SET option_step_values = '{}'::JSONB
+FROM public.pos_menus m
+WHERE o.menu_id = m.id
+  AND m.code IN ('C020', 'C021', 'C022', 'C023')
+  AND COALESCE(o.option_type, 'substitution') = 'substitution'
+  AND trim(COALESCE(o.name, '')) = 'M - Boneless'
+  AND (
+    o.option_step_values IS NULL
+    OR o.option_step_values = 'null'::JSONB
+    OR trim(COALESCE(o.option_step_values::TEXT, '')) IN ('', '{}')
+    OR (o.option_step_values ? 'size')
+    OR (o.option_step_values ? 'part')
+  );
+
+-- ------------------------------------------------------------
+-- (7) option_code prefix 자동 보정 — UPDATE만 (진단 SELECT 제외)
+-- ------------------------------------------------------------
+WITH analyzed AS (
+  SELECT
+    o.id,
+    o.menu_id,
+    trim(COALESCE(m.code, '')) AS menu_code,
+    trim(COALESCE(o.option_code, '')) AS option_code,
+    regexp_match(trim(COALESCE(o.option_code, '')), '^(.*)-([0-9]+)$') AS code_match
+  FROM public.pos_menu_options o
+  JOIN public.pos_menus m ON m.id = o.menu_id
+),
+normalized AS (
+  SELECT
+    a.*,
+    COALESCE((a.code_match)[1], '') AS code_prefix,
+    CASE
+      WHEN a.code_match IS NOT NULL THEN ((a.code_match)[2])::INT
+      ELSE NULL
+    END AS suffix_num,
+    CASE
+      WHEN a.code_match IS NOT NULL
+       AND lower(COALESCE((a.code_match)[1], '')) = lower(a.menu_code) THEN TRUE
+      ELSE FALSE
+    END AS prefix_ok,
+    row_number() OVER (
+      PARTITION BY a.menu_id, lower(a.option_code)
+      ORDER BY a.id
+    ) AS dup_rn
+  FROM analyzed a
+),
+menu_max_suffix AS (
+  SELECT menu_id, max(suffix_num) AS max_suffix
+  FROM normalized
+  WHERE menu_code <> ''
+    AND prefix_ok = TRUE
+    AND suffix_num IS NOT NULL
+  GROUP BY menu_id
+),
+targets AS (
+  SELECT
+    n.id,
+    n.menu_id,
+    n.menu_code,
+    row_number() OVER (PARTITION BY n.menu_id ORDER BY n.id) AS seq
+  FROM normalized n
+  WHERE n.menu_code <> ''
+    AND (
+      n.option_code = ''
+      OR n.prefix_ok = FALSE
+      OR (n.option_code <> '' AND n.dup_rn > 1)
+    )
+),
+new_codes AS (
+  SELECT
+    t.id,
+    t.menu_id,
+    t.menu_code || '-' || (COALESCE(ms.max_suffix, 0) + t.seq)::TEXT AS next_option_code
+  FROM targets t
+  LEFT JOIN menu_max_suffix ms ON ms.menu_id = t.menu_id
+)
+UPDATE public.pos_menu_options o
+SET option_code = nc.next_option_code
+FROM new_codes nc
+WHERE o.id = nc.id;

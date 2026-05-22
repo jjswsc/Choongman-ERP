@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
-import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import {
   loadPosBusinessDaySettingsContext,
   posBusinessDayUtcEnvelopeBangkokYmd,
-  resolvePosBusinessHoursFromContext,
   type PosBusinessDaySettingsContext,
 } from '@/lib/pos-business-day-server'
+import {
+  filterRowsByPosSalesBusinessDateRange,
+  posSalesBusinessDateRangeUtcEnvelope,
+} from '@/lib/pos-sales-business-day-range'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { isOfficeRole } from '@/lib/permissions'
@@ -348,11 +350,14 @@ export async function GET(request: NextRequest) {
     const endDate = endStr ? endStr.slice(0, 10) : ''
     const posBizDayScope =
       searchParams.get('posBizDayScope') === '1' || searchParams.get('posBizDayScope') === 'true'
-    let singleBusinessDayUtcRange: { startISO: string; endISOExclusive: string } | null = null
+    let bizDayUtcRange: { startISO: string; endISOExclusive: string } | null = null
     let posBizDayFilterCtx: PosBusinessDaySettingsContext | null = null
-    if (posBizDayScope && startDate && endDate && startDate === endDate) {
+    if (posBizDayScope && startDate && endDate) {
       posBizDayFilterCtx = await loadPosBusinessDaySettingsContext()
-      singleBusinessDayUtcRange = posBusinessDayUtcEnvelopeBangkokYmd(startDate, posBizDayFilterCtx)
+      bizDayUtcRange =
+        startDate === endDate
+          ? posBusinessDayUtcEnvelopeBangkokYmd(startDate, posBizDayFilterCtx)
+          : posSalesBusinessDateRangeUtcEnvelope(posBizDayFilterCtx, startDate, endDate)
     }
 
     /** 단건 id 조회: Realtime UPDATE 후 풀 행 보강용 */
@@ -383,7 +388,7 @@ export async function GET(request: NextRequest) {
         const parts: string[] = []
         if (startDate && endDate) {
           const { startISO, endISOExclusive } =
-            singleBusinessDayUtcRange ?? bangkokDateRangeToUtc(startDate, endDate)
+            bizDayUtcRange ?? bangkokDateRangeToUtc(startDate, endDate)
           parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
           parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
         }
@@ -506,16 +511,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (posBizDayFilterCtx && posBizDayScope && startDate && endDate && startDate === endDate) {
-      rows = (rows || []).filter((r) => {
-        const ca = r.created_at
-        if (!ca) return false
-        const biz = getPosBusinessDateStrFromConfig(
-          new Date(ca),
-          resolvePosBusinessHoursFromContext(posBizDayFilterCtx, String(r.store_code ?? ''))
-        )
-        return biz === startDate
-      })
+    if (posBizDayFilterCtx && posBizDayScope && startDate && endDate) {
+      rows = filterRowsByPosSalesBusinessDateRange(rows || [], posBizDayFilterCtx, startDate, endDate)
     }
 
     let serviceById = new Map<number, PosOrderServiceColumnsRow>()

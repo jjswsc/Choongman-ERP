@@ -806,6 +806,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const deliveryAppTotalNum = deliveryNum + dineInNum
   const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + dineInNum + otherNum
   const currencySuffix = ' ฿'
+  /** 화면 금액 표시 — 영수증·주문과 동일하게 `formatBahtNum`(소수 둘째 자리) */
+  const fmtBahtSuffix = (n: number | null | undefined) => `${formatBahtNum(n)}${currencySuffix}`
+  const fmtSignedBaht = (n: number) => `${n > 0 ? '+' : ''}${formatBahtNum(n)} ฿`
   const savedCash = Number(settlement?.cashAmt ?? 0)
   const savedCard = Number(settlement?.cardAmt ?? 0)
   const savedQr = Number(settlement?.qrAmt ?? 0)
@@ -1115,7 +1118,7 @@ ${footerStamp}
       await appAlert(
         `${t('posSettlement') || '결산'} Validate: ${
           res.result.status === 'validated' ? 'OK' : 'Draft'
-        }\nDiff: ${diff.toLocaleString()}`
+        }\nDiff: ${formatBahtNum(diff)}`
       )
       loadData()
     } finally {
@@ -1251,13 +1254,13 @@ ${footerStamp}
                   {t('posPrevDayCash') || '전날 시재'}
                 </p>
                 <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground">
-                  {prevDayCashActual != null ? `${prevDayCashActual.toLocaleString()} ฿` : '—'}
+                  {prevDayCashActual != null ? `${formatBahtNum(prevDayCashActual)} ฿` : '—'}
                 </p>
               </div>
               {settlement?.cashActual != null && Number(settlement.cashActual) > 0 && (
                 <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-900 dark:text-emerald-200">
                   {t('posSavedCashActual') || '저장된 시제'}:{' '}
-                  <span className="font-semibold tabular-nums">{Number(settlement.cashActual).toLocaleString()} ฿</span>
+                  <span className="font-semibold tabular-nums">{formatBahtNum(Number(settlement.cashActual))} ฿</span>
                 </p>
               )}
               <div>
@@ -1305,7 +1308,7 @@ ${footerStamp}
                       </span>
                       <div className="ml-auto min-w-[4.5rem] shrink-0 text-right sm:min-w-[5.25rem]">
                         <span className="text-sm font-bold tabular-nums text-primary sm:text-base">
-                          {line.toLocaleString()}
+                          {formatBahtNum(line)}
                         </span>
                         <span className="ml-0.5 text-xs font-medium text-muted-foreground">฿</span>
                       </div>
@@ -1321,7 +1324,7 @@ ${footerStamp}
                   {t('posCashActualDenomGrandTotal') || t('posCashActual')}
                 </div>
                 <div className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary">
-                  {denomTotal.toLocaleString()} <span className="text-xl font-bold text-primary/70">฿</span>
+                  {formatBahtNum(denomTotal)} <span className="text-xl font-bold text-primary/70">฿</span>
                 </div>
               </div>
               <div className="space-y-2.5">
@@ -1364,15 +1367,15 @@ ${footerStamp}
               <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3" data-tour="pos-tour-close-system-summary">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{t('posSystemSubtotal') || '공급가액'}</span>
-                  <span className="tabular-nums">{systemSubtotal.toLocaleString()} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(systemSubtotal)} ฿</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{t('posSystemVat') || 'VAT (7%)'}</span>
-                  <span className="tabular-nums">{systemVat.toLocaleString()} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(systemVat)} ฿</span>
                 </div>
                 <div className="flex justify-between items-center pt-1 border-t border-border">
                   <span className="font-medium">{t('posSystemTotal') || '시스템 매출'}</span>
-                  <span className="text-lg font-bold tabular-nums">{systemTotal.toLocaleString()} ฿</span>
+                  <span className="text-lg font-bold tabular-nums">{formatBahtNum(systemTotal)} ฿</span>
                 </div>
               </div>
               {linkposSummary && (
@@ -1388,15 +1391,15 @@ ${footerStamp}
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{t('posLinkposCardInputTotal')}</span>
-                    <span className="tabular-nums">{linkposSummary.cardReportedTotal.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{formatBahtNum(linkposSummary.cardReportedTotal)} ฿</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{t('posLinkposApprovedTotal')}</span>
-                    <span className="tabular-nums">{linkposSummary.approvedTotal.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{formatBahtNum(linkposSummary.approvedTotal)} ฿</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{t('posLinkposRequestedTotal')}</span>
-                    <span className="tabular-nums">{linkposSummary.requestedTotal.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{formatBahtNum(linkposSummary.requestedTotal)} ฿</span>
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-primary/20">
                     <span className="font-medium">{t('posLinkposCardVsApprovedDiff')}</span>
@@ -1407,7 +1410,7 @@ ${footerStamp}
                       )}
                     >
                       {linkposSummary.diffVsApproved >= 0 ? '+' : ''}
-                      {linkposSummary.diffVsApproved.toLocaleString()} ฿
+                      {formatBahtNum(linkposSummary.diffVsApproved)} ฿
                     </span>
                   </div>
                 </div>
@@ -1419,7 +1422,7 @@ ${footerStamp}
                   <p className="mb-2 text-sm font-medium">{t('posCashActual') || '돈통 시제'}</p>
                   {settlement?.cashActual != null && Number(settlement.cashActual) > 0 && (
                     <p className="mb-2 text-xs text-muted-foreground">
-                      {t('posSavedCashActual') || '저장된 시제'}: {Number(settlement.cashActual).toLocaleString()} ฿
+                      {t('posSavedCashActual') || '저장된 시제'}: {formatBahtNum(Number(settlement.cashActual))} ฿
                     </p>
                   )}
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -1460,7 +1463,7 @@ ${footerStamp}
                             =
                           </span>
                           <div className="ml-auto min-w-[4rem] shrink-0 text-right sm:min-w-[4.75rem]">
-                            <span className="text-sm font-bold tabular-nums text-primary">{line.toLocaleString()}</span>
+                            <span className="text-sm font-bold tabular-nums text-primary">{formatBahtNum(line)}</span>
                             <span className="ml-0.5 text-xs text-muted-foreground">฿</span>
                           </div>
                         </div>
@@ -1469,7 +1472,7 @@ ${footerStamp}
                   </div>
                   <p className="mt-1.5 text-sm font-semibold tabular-nums">
                     {t('posCashActualDenomGrandTotal') || `${t('posCashActual')} 합계`}:{' '}
-                    {denomTotal.toLocaleString()}
+                    {formatBahtNum(denomTotal)}
                     {currencySuffix}
                   </p>
                 </div>
@@ -1490,8 +1493,7 @@ ${footerStamp}
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">
-                          {cashAmtNum.toLocaleString()}
-                          {currencySuffix}
+                          {fmtBahtSuffix(cashAmtNum)}
                         </span>
                         {cashExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </span>
@@ -1518,7 +1520,7 @@ ${footerStamp}
                         )}
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className="tabular-nums font-semibold">{cardNum.toLocaleString()}{currencySuffix}</span>
+                        <span className="tabular-nums font-semibold">{fmtBahtSuffix(cardNum)}</span>
                         {cardExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </span>
                     </div>
@@ -1528,7 +1530,7 @@ ${footerStamp}
                       <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
                         <span className="text-muted-foreground">{t('posSettlementPosCardOrdersTotal')}</span>
                         <span className="font-semibold tabular-nums text-foreground">
-                          {(linkposSummary?.cardReportedTotal ?? 0).toLocaleString()}
+                          {formatBahtNum(linkposSummary?.cardReportedTotal ?? 0)}
                           {currencySuffix}
                         </span>
                       </div>
@@ -1575,7 +1577,7 @@ ${footerStamp}
                         )}
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className="tabular-nums font-semibold">{qrNum.toLocaleString()}{currencySuffix}</span>
+                        <span className="tabular-nums font-semibold">{fmtBahtSuffix(qrNum)}</span>
                         {qrExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </span>
                     </div>
@@ -1626,8 +1628,7 @@ ${footerStamp}
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">
-                          {deliveryAppTotalNum.toLocaleString()}
-                          {currencySuffix}
+                          {fmtBahtSuffix(deliveryAppTotalNum)}
                         </span>
                         {deliveryExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </span>
@@ -1649,7 +1650,7 @@ ${footerStamp}
                         <p className="text-xs font-semibold text-foreground">
                           {t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}
                           <span className="ml-2 tabular-nums font-normal text-muted-foreground">
-                            {deliveryNum.toLocaleString()}
+                            {formatBahtNum(deliveryNum)}
                             {currencySuffix}
                           </span>
                         </p>
@@ -1684,7 +1685,7 @@ ${footerStamp}
                         <p className="text-xs font-semibold text-foreground">
                           {t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}
                           <span className="ml-2 tabular-nums font-normal text-muted-foreground">
-                            {dineInNum.toLocaleString()}
+                            {formatBahtNum(dineInNum)}
                             {currencySuffix}
                           </span>
                         </p>
@@ -1735,7 +1736,7 @@ ${footerStamp}
                         )}
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className="tabular-nums font-semibold">{otherNum.toLocaleString()}{currencySuffix}</span>
+                        <span className="tabular-nums font-semibold">{fmtBahtSuffix(otherNum)}</span>
                         {otherExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </span>
                     </div>
@@ -1802,22 +1803,22 @@ ${footerStamp}
                     {t('posCash') || '현금'} + {t('posCard') || '카드'} + {t('posPaymentQrCode') || 'QR'} +{' '}
                     {t('posPaymentDeliveryApp') || '배달앱'} + {t('posPaymentOther') || '기타'}
                   </span>
-                  <span className="tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
+                  <span className="tabular-nums">{fmtBahtSuffix(totalInput)}</span>
                 </div>
                 <div className="flex justify-between items-center pt-1 border-t font-medium">
                   <span>{t('posInputTotal') || '입력 합계'}</span>
-                  <span className="font-bold tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
+                  <span className="font-bold tabular-nums">{fmtBahtSuffix(totalInput)}</span>
                 </div>
               </div>
 
               <div className="space-y-1 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('posMorningOpeningFloat') || '아침 시작 시제'}</span>
-                  <span className="tabular-nums">{openingCashActual != null ? `${openingCashActual.toLocaleString()} ฿` : '-'}</span>
+                  <span className="tabular-nums">{openingCashActual != null ? `${formatBahtNum(openingCashActual)} ฿` : '-'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('posTodayCashTotal') || '당일 현금 총액'}</span>
-                  <span className="tabular-nums">{cashAmtNum.toLocaleString()} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(cashAmtNum)} ฿</span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground shrink">
@@ -1830,14 +1831,14 @@ ${footerStamp}
                     )}
                   >
                     {tillNetAppliedToDrawer !== 0
-                      ? `${tillNetAppliedToDrawer >= 0 ? '+' : ''}${tillNetAppliedToDrawer.toLocaleString()} ฿`
+                      ? fmtSignedBaht(tillNetAppliedToDrawer)
                       : `0${currencySuffix}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="font-medium">{t('posExpectedDrawerCash') || '예상 돈통 시제(시작+현금)'}</span>
                   <span className="tabular-nums font-semibold">
-                    {openingCashActual != null ? `${expectedDrawerByOpenAndCash.toLocaleString()} ฿` : '-'}
+                    {openingCashActual != null ? `${formatBahtNum(expectedDrawerByOpenAndCash)} ฿` : '-'}
                   </span>
                 </div>
 
@@ -1867,7 +1868,7 @@ ${footerStamp}
                       )}
                     >
                       {drawerDenomDeltaVsPosCash != null
-                        ? `${drawerDenomDeltaVsPosCash >= 0 ? '+' : ''}${drawerDenomDeltaVsPosCash.toLocaleString()} ฿`
+                        ? fmtSignedBaht(drawerDenomDeltaVsPosCash)
                         : '-'}
                     </span>
                   </div>
@@ -1987,32 +1988,32 @@ ${footerStamp}
                   <div className="space-y-1.5 rounded-lg border px-4 py-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{t('posSystemTotal') || '시스템 매출'}</span>
-                      <span className="tabular-nums">{systemTotal.toLocaleString()} ฿</span>
+                      <span className="tabular-nums">{formatBahtNum(systemTotal)} ฿</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{t('posInputTotal') || '입력 합계'}</span>
-                      <span className="tabular-nums">{savedTotal.toLocaleString()} ฿</span>
+                      <span className="tabular-nums">{formatBahtNum(savedTotal)} ฿</span>
                     </div>
                     <div className="flex justify-between text-sm font-medium pt-1 border-t">
                       <span>{t('posDifference') || '차액'}</span>
-                      <span className="tabular-nums">{(savedTotal - systemTotal).toLocaleString()} ฿</span>
+                      <span className="tabular-nums">{formatBahtNum(savedTotal - systemTotal)} ฿</span>
                     </div>
                   </div>
 
                   <div className="space-y-2 rounded-lg border px-4 py-3 text-sm">
                     <div className="flex justify-between">
                       <span>{t('posCashActual') || '돈통 시제'}</span>
-                      <span className="tabular-nums">{Number(settlement.cashActual ?? 0).toLocaleString()} ฿</span>
+                      <span className="tabular-nums">{formatBahtNum(Number(settlement.cashActual ?? 0))} ฿</span>
                     </div>
                     <div className="flex justify-between">
                       <span>{t('posCash') || '현금'}</span>
-                      <span className="tabular-nums">{savedCash.toLocaleString()} ฿</span>
+                      <span className="tabular-nums">{formatBahtNum(savedCash)} ฿</span>
                     </div>
                     <Collapsible className="group">
                       <CollapsibleTrigger className="flex w-full items-center justify-between py-1 hover:bg-muted/30 rounded">
                         <span>{t('posCard') || '카드'}</span>
                         <span className="flex items-center gap-1 tabular-nums">
-                          {savedCard.toLocaleString()} ฿
+                          {formatBahtNum(savedCard)} ฿
                           <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
                         </span>
                       </CollapsibleTrigger>
@@ -2021,7 +2022,7 @@ ${footerStamp}
                           {settlement.cardBreakdown && Object.entries(settlement.cardBreakdown).filter(([, v]) => (v ?? 0) > 0).map(([k, v]) => (
                             <div key={k} className="flex justify-between text-xs text-muted-foreground">
                               <span>{k}</span>
-                              <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                              <span className="tabular-nums">{formatBahtNum(Number(v))} ฿</span>
                             </div>
                           ))}
                         </div>
@@ -2031,7 +2032,7 @@ ${footerStamp}
                       <CollapsibleTrigger className="flex w-full items-center justify-between py-1 hover:bg-muted/30 rounded">
                         <span>{t('posPaymentQrCode') || 'QR 코드'}</span>
                         <span className="flex items-center gap-1 tabular-nums">
-                          {savedQr.toLocaleString()} ฿
+                          {formatBahtNum(savedQr)} ฿
                           <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
                         </span>
                       </CollapsibleTrigger>
@@ -2040,7 +2041,7 @@ ${footerStamp}
                           {settlement.qrBreakdown && Object.entries(settlement.qrBreakdown).filter(([, v]) => (v ?? 0) > 0).map(([k, v]) => (
                             <div key={k} className="flex justify-between text-xs text-muted-foreground">
                               <span>{k}</span>
-                              <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                              <span className="tabular-nums">{formatBahtNum(Number(v))} ฿</span>
                             </div>
                           ))}
                         </div>
@@ -2050,7 +2051,7 @@ ${footerStamp}
                       <CollapsibleTrigger className="flex w-full items-center justify-between py-1 hover:bg-muted/30 rounded">
                         <span>{t('posPaymentDeliveryApp') || '배달앱'}</span>
                         <span className="flex items-center gap-1 tabular-nums">
-                          {(savedDelivery + savedDineIn).toLocaleString()} ฿
+                          {formatBahtNum(savedDelivery + savedDineIn)} ฿
                           <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
                         </span>
                       </CollapsibleTrigger>
@@ -2064,7 +2065,7 @@ ${footerStamp}
                             <p className="font-medium text-foreground">
                               {t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}
                               <span className="ml-2 tabular-nums text-muted-foreground">
-                                {savedDelivery.toLocaleString()} ฿
+                                {formatBahtNum(savedDelivery)} ฿
                               </span>
                             </p>
                             <div className="mt-1 space-y-0.5 pl-1">
@@ -2074,7 +2075,7 @@ ${footerStamp}
                                   .map(([k, v]) => (
                                     <div key={k} className="flex justify-between text-muted-foreground">
                                       <span>{deliveryPlatformSettlementLabel(k)}</span>
-                                      <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                                      <span className="tabular-nums">{formatBahtNum(Number(v))} ฿</span>
                                     </div>
                                   ))}
                             </div>
@@ -2083,7 +2084,7 @@ ${footerStamp}
                             <p className="font-medium text-foreground">
                               {t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}
                               <span className="ml-2 tabular-nums text-muted-foreground">
-                                {savedDineIn.toLocaleString()} ฿
+                                {formatBahtNum(savedDineIn)} ฿
                               </span>
                             </p>
                             <div className="mt-1 space-y-0.5 pl-1">
@@ -2097,7 +2098,7 @@ ${footerStamp}
                                           ? t('posDeliveryPayDineIn') || 'Dine in'
                                           : deliveryPlatformSettlementLabel(k)}
                                       </span>
-                                      <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                                      <span className="tabular-nums">{formatBahtNum(Number(v))} ฿</span>
                                     </div>
                                   ))}
                               {savedDineIn > 0 &&
@@ -2118,7 +2119,7 @@ ${footerStamp}
                           {t('posPaymentOther') || '기타'} · {t('posPaymentOtherExpand') || '세부'}
                         </span>
                         <span className="flex items-center gap-1 tabular-nums">
-                          {savedOther.toLocaleString()} ฿
+                          {formatBahtNum(savedOther)} ฿
                           <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
                         </span>
                       </CollapsibleTrigger>
@@ -2130,7 +2131,7 @@ ${footerStamp}
                               .map(([k, v]) => (
                                 <div key={k} className="flex justify-between text-xs text-muted-foreground">
                                   <span>{k}</span>
-                                  <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                                  <span className="tabular-nums">{formatBahtNum(Number(v))} ฿</span>
                                 </div>
                               ))}
                           {savedOther > 0 &&
@@ -2187,12 +2188,12 @@ ${footerStamp}
                               <span className="ml-2 text-xs text-primary">({t('posSelected')})</span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-right tabular-nums">{r.systemTotal.toLocaleString()} ฿</td>
+                          <td className="px-4 py-2 text-right tabular-nums">{formatBahtNum(r.systemTotal)} ฿</td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {r.hasSettlement ? `${r.inputTotal.toLocaleString()} ฿` : '-'}
+                            {r.hasSettlement ? `${formatBahtNum(r.inputTotal)} ฿` : '-'}
                           </td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {r.hasSettlement ? `${r.diff.toLocaleString()} ฿` : '-'}
+                            {r.hasSettlement ? `${formatBahtNum(r.diff)} ฿` : '-'}
                           </td>
                           <td className="px-4 py-2 text-center">
                             {r.hasSettlement ? (r.closed ? t('posSettlementClosedDone') : t('posSettlementNotClosed')) : '-'}
