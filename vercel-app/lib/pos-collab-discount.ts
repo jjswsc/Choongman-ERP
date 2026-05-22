@@ -71,7 +71,11 @@ function blobMatchesCollabScope(blobRaw: string, detail: MarketingCollabDetail):
   return false
 }
 
-/** 협업 상세의 카테고리 체크와 pos_menus 대분류·소분류·이름을 대응 (영·한·태국어 일부 키워드) */
+/**
+ * 협업 POS 메뉴 범위 — 관리 화면 1·2·3단계 선택은 AND(교집합).
+ * 예: Chicken + SNOW + [C008] → SNOW 카테고리 메뉴만(Chicken 전체 아님).
+ * 각 단계를 비우면 해당 단계는 제한하지 않음(Chicken만 → 치킨 전체).
+ */
 export function menuMatchesCollabScope(menu: CollabMenuPick, detail: MarketingCollabDetail): boolean {
   if (collabDynamicScopeAny(detail)) {
     const menuIds = scopeSet(detail.scopeMenuIds)
@@ -80,11 +84,15 @@ export function menuMatchesCollabScope(menu: CollabMenuPick, detail: MarketingCo
     const menuId = String(menu.id ?? '').trim()
     const main = String(menu.categoryMain ?? '').trim()
     const cat = String(menu.category ?? '').trim()
-    return (
-      (menuId !== '' && menuIds.has(menuId)) ||
-      (main !== '' && mains.has(main)) ||
-      (main !== '' && cat !== '' && categoryKeys.has(categoryScopeKey(main, cat)))
-    )
+    const hasMains = mains.size > 0
+    const hasCats = categoryKeys.size > 0
+    const hasMenus = menuIds.size > 0
+    if (!hasMains && !hasCats && !hasMenus) return false
+
+    if (hasMains && (main === '' || !mains.has(main))) return false
+    if (hasCats && (main === '' || cat === '' || !categoryKeys.has(categoryScopeKey(main, cat)))) return false
+    if (hasMenus && (menuId === '' || !menuIds.has(menuId))) return false
+    return true
   }
   return blobMatchesCollabScope(`${menu.categoryMain ?? ''} ${menu.category ?? ''} ${menu.name ?? ''} ${menu.code ?? ''}`, detail)
 }
@@ -236,10 +244,6 @@ export function isCartLineEligibleForCollabDiscount(
   if (lineFailsDefaultPromoDrinkExclusion(line, menuById, detail)) return false
 
   const dynamicScope = collabDynamicScopeAny(detail)
-  if (dynamicScope) {
-    const selectedMenuIds = scopeSet(detail.scopeMenuIds)
-    if (menuIdsForCollabLine(line).some((id) => selectedMenuIds.has(id))) return true
-  }
   const ids = menuIdsForCollabLineWithCatalog(line, menuById)
   if (dynamicScope && ids.length === 0) return false
   if (ids.length === 0) return !collabScopeAny(detail)

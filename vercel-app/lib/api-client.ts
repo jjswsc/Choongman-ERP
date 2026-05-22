@@ -11392,13 +11392,24 @@ export async function getFranchiseeMultiStoreRoster(): Promise<FranchiseeMultiSt
 }
 
 export async function saveFranchiseeMultiStoreRoster(
-  assignments: { employeeId: number; extraStores: string[] }[]
+  assignments: { employeeId: number; extraStores: string[] }[],
+  options?: { syncSettings?: FranchiseeMultiStoreSettings }
 ): Promise<FranchiseeMultiStoreRosterResponse> {
   try {
     const res = await apiFetch('/api/franchiseeMultiStoreRoster', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignments }),
+      body: JSON.stringify({
+        assignments,
+        ...(options?.syncSettings
+          ? {
+              settings: {
+                enabled: options.syncSettings.enabled === true,
+                maxStores: options.syncSettings.maxStores,
+              },
+            }
+          : {}),
+      }),
     })
     const data = (await res.json().catch(() => ({}))) as FranchiseeMultiStoreRosterResponse
     const out = data && typeof data === 'object' ? data : {}

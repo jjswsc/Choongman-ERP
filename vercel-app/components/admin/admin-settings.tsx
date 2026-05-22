@@ -757,53 +757,58 @@ export function AdminSettings() {
                   <h2 className="text-sm font-bold text-foreground">{t("settings_franchisee_multi_title")}</h2>
                   <p className="text-xs text-muted-foreground mt-1">{t("settings_franchisee_multi_desc")}</p>
                 </div>
-                {franchiseeMultiLoading ? (
-                  <p className="py-6 text-center text-muted-foreground text-xs">{t("loading")}</p>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 rounded-lg border p-4">
-                      <Checkbox
-                        id="franchisee_multi_enabled"
-                        checked={franchiseeMultiEnabled}
-                        onCheckedChange={(c) => setFranchiseeMultiEnabled(c === true)}
-                        disabled={!canEditFranchiseeSettings}
-                      />
-                      <label htmlFor="franchisee_multi_enabled" className="text-sm cursor-pointer">
-                        {t("settings_franchisee_multi_enabled")}
-                      </label>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold block mb-1">{t("settings_franchisee_multi_max")}</label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={20}
-                        className="h-9 w-32 text-xs"
-                        value={franchiseeMultiMax}
-                        onChange={(e) => {
-                          const n = Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1))
-                          setFranchiseeMultiMax(n)
-                        }}
-                        disabled={!franchiseeMultiEnabled || !canEditFranchiseeSettings}
-                      />
-                    </div>
-                    <Button
-                      className="h-9"
-                      onClick={() => void handleSaveFranchiseeMulti()}
-                      disabled={franchiseeMultiSaving || !canEditFranchiseeSettings}
-                    >
-                      {franchiseeMultiSaving ? t("loading") : t("settings_franchisee_multi_save")}
-                    </Button>
-                    <FranchiseeMultiStoreRoster
-                      enabled={franchiseeMultiEnabled}
-                      maxStores={franchiseeMultiMax}
-                      canEdit={canEditFranchiseeSettings}
-                      allStores={storeKeys}
-                      storeLabels={erpStoreLabels}
-                      reloadKey={franchiseeRosterReloadKey}
-                    />
-                  </div>
-                )}
+                <div className="space-y-4">
+                  {franchiseeMultiLoading ? (
+                    <p className="py-4 text-center text-muted-foreground text-xs">{t("loading")}</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 rounded-lg border p-4">
+                        <Checkbox
+                          id="franchisee_multi_enabled"
+                          checked={franchiseeMultiEnabled}
+                          onCheckedChange={(c) => setFranchiseeMultiEnabled(c === true)}
+                          disabled={!canEditFranchiseeSettings}
+                        />
+                        <label htmlFor="franchisee_multi_enabled" className="text-sm cursor-pointer">
+                          {t("settings_franchisee_multi_enabled")}
+                        </label>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold block mb-1">{t("settings_franchisee_multi_max")}</label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={20}
+                          className="h-9 w-32 text-xs"
+                          value={franchiseeMultiMax}
+                          onChange={(e) => {
+                            const n = Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1))
+                            setFranchiseeMultiMax(n)
+                          }}
+                          disabled={!franchiseeMultiEnabled || !canEditFranchiseeSettings}
+                        />
+                      </div>
+                      <Button
+                        className="h-9"
+                        onClick={() => void handleSaveFranchiseeMulti()}
+                        disabled={franchiseeMultiSaving || !canEditFranchiseeSettings}
+                      >
+                        {franchiseeMultiSaving ? t("loading") : t("settings_franchisee_multi_save")}
+                      </Button>
+                    </>
+                  )}
+                  <FranchiseeMultiStoreRoster
+                    active={tab === "franchisee"}
+                    enabled={franchiseeMultiEnabled}
+                    maxStores={franchiseeMultiMax}
+                    canEdit={canEditFranchiseeSettings}
+                    reloadKey={franchiseeRosterReloadKey}
+                    onRosterSaved={() => {
+                      void loadFranchiseeMulti()
+                      setFranchiseeRosterReloadKey((k) => k + 1)
+                    }}
+                  />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

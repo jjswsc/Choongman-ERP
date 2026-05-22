@@ -493,7 +493,10 @@ export function CollabManagementDetailForm(props: {
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {tr("marketingCollabScopeMenuHint", "대분류/카테고리와 별도로 특정 메뉴를 추가 적용할 수 있습니다.")}
+                  {tr(
+                    "marketingCollabScopeMenuHint",
+                    "1·2·3단계를 함께 고르면 모두 맞는 메뉴만 할인됩니다. Snow Onion만 줄이려면 Chicken 전체 체크는 해제하고 SNOW·해당 메뉴만 선택하세요."
+                  )}
                 </p>
                 <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2">
                   {visibleMenuRows.length <= 0 ? (

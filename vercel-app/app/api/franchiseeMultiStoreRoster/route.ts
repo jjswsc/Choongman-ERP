@@ -5,9 +5,14 @@ import { canAccessSettings } from '@/lib/permissions'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import {
   normalizeFranchiseeExtraStores,
+  normalizeFranchiseeMultiStoreSettings,
   rowRoleLooksFranchisee,
+  type FranchiseeMultiStoreSettings,
 } from '@/lib/franchisee-multi-store'
-import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
+import {
+  getFranchiseeMultiStoreSettings,
+  saveFranchiseeMultiStoreSettings,
+} from '@/lib/franchisee-multi-store-settings-server'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 
 export const dynamic = 'force-dynamic'
@@ -147,15 +152,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
   }
   try {
-    const settings = await getFranchiseeMultiStoreSettings()
-    if (!settings.enabled) {
-      return NextResponse.json(
-        { success: false, message: '복수 매장 기능을 먼저 켜 주세요.' },
-        { status: 400, headers }
-      )
-    }
     const body = (await request.json()) as {
       assignments?: { employeeId?: number; extraStores?: unknown }[]
+      settings?: { enabled?: boolean; maxStores?: number }
+    }
+    if (body.settings?.enabled === true) {
+      const toSave = normalizeFranchiseeMultiStoreSettings({
+        enabled: true,
+        maxStores: body.settings.maxStores,
+      })
+      await saveFranchiseeMultiStoreSettings(toSave)
+    }
+    let settings: FranchiseeMultiStoreSettings = await getFranchiseeMultiStoreSettings()
+    if (!settings.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '복수 매장 기능이 서버에 저장되지 않았습니다. 「복수 매장 기능 사용」을 켠 뒤 「설정 저장」을 누르거나, 다시 「매장 지정 저장」을 시도해 주세요.',
+        },
+        { status: 400, headers }
+      )
     }
     const assignments = Array.isArray(body.assignments) ? body.assignments : []
     if (assignments.length === 0) {

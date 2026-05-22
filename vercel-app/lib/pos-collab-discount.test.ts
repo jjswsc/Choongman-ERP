@@ -56,6 +56,26 @@ const menuById = new Map([
       category: 'ORIGINAL',
     },
   ],
+  [
+    '8',
+    {
+      id: '8',
+      name: 'SNOW ONION',
+      code: 'C008',
+      categoryMain: 'Chicken',
+      category: 'SNOW',
+    },
+  ],
+  [
+    '9',
+    {
+      id: '9',
+      name: 'GARLIC Bar.B.Q FRIED CHICKEN',
+      code: 'C010',
+      categoryMain: 'Chicken',
+      category: 'Bar.B.Q',
+    },
+  ],
 ])
 
 describe('pos-collab-discount exclusions', () => {
@@ -105,6 +125,26 @@ describe('pos-collab-discount exclusions', () => {
     const line = { id: '30', name: 'Choongman Festival Set 3', price: 333, qty: 1, menuId: '30' }
     expect(isPromotionMenu(menuById.get('30')!)).toBe(true)
     expect(isCartLineEligibleForCollabDiscount(line, menuById, withPromo)).toBe(true)
+  })
+
+  it('대분류+하위+특정메뉴는 교집합 — SNOW·C008만 대상, Bar.B.Q 치킨은 제외', () => {
+    const snowOnly = detail({
+      posDiscountType: 'amount',
+      posDiscountValue: 229,
+      scopeMainCategories: ['Chicken'],
+      scopeCategoryKeys: ['Chicken::SNOW'],
+      scopeMenuIds: ['8'],
+    })
+    const snowLine = { id: '8-opt', name: 'SNOW ONION (M)', price: 229, qty: 1, menuId: '8' }
+    const garlicLine = { id: '9-opt', name: 'GARLIC Bar.B.Q', price: 229, qty: 1, menuId: '9' }
+    expect(isCartLineEligibleForCollabDiscount(snowLine, menuById, snowOnly)).toBe(true)
+    expect(isCartLineEligibleForCollabDiscount(garlicLine, menuById, snowOnly)).toBe(false)
+    const lines = [snowLine, garlicLine]
+    const total = collabDiscountAmountForCart(lines, menuById, snowOnly)
+    expect(total).toBe(229)
+    const alloc = collabLineDiscountAllocations(lines, menuById, snowOnly, total)
+    expect(alloc[0]).toBe(229)
+    expect(alloc[1]).toBe(0)
   })
 
   it('협업 할인 줄 배분은 대상 줄에만 표시한다', () => {
