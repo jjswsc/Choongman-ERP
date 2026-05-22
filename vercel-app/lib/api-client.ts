@@ -9382,6 +9382,8 @@ export interface PosOrder {
   orderNo: string
   storeCode: string
   orderType: string
+  /** pos_orders.order_type (메모·채널 추론 전 DB 값) — 테이블 점유 매칭용 */
+  dbOrderType?: string
   tableName: string
   memo: string
   discountAmt?: number

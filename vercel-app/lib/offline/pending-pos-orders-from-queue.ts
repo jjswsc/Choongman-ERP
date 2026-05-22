@@ -136,6 +136,7 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
     orderNo,
     storeCode,
     orderType,
+    dbOrderType: orderType,
     tableName,
     memo,
     discountAmt: discountAmt || undefined,

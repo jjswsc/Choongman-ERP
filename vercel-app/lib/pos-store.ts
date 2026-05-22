@@ -17,6 +17,7 @@ import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
+import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
@@ -398,7 +399,7 @@ export function usePosStore() {
     )
     const dineInOrders = activeOrders.filter(
       (o) =>
-        o.orderType === 'dine_in' &&
+        isDineInOrderForTableDisplay(o.orderType, o.dbOrderType) &&
         (o.tableName ?? '').trim() !== '' &&
         !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
     )

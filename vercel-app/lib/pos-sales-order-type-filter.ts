@@ -30,6 +30,15 @@ export function isDineInOrderTypeForGuestCount(raw: string | undefined | null): 
   return k === 'dine_in' || k === ''
 }
 
+/** 테이블 바닥도 점유: DB order_type 우선(목록 API의 memo 추론 delivery 제외) */
+export function isDineInOrderForTableDisplay(
+  orderType: string | undefined | null,
+  dbOrderType?: string | undefined | null
+): boolean {
+  const k = normalizePosOrderTypeKey(dbOrderType ?? orderType)
+  return k === 'dine_in'
+}
+
 /**
  * pos_orders.table_name 저장값.
  * - 홀: 테이블명

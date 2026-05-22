@@ -16,6 +16,20 @@ import { normStoreKey } from '@/lib/store-list-keys'
 import { expandGrabStoreMapLinkedCodes, parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+
+async function selectPosOrders(
+  filter: string,
+  opts: { limit?: number; order?: string },
+  logLabel: string
+): Promise<unknown> {
+  return supabaseSelectFilterStrippingUnknownColumns(
+    'pos_orders',
+    filter,
+    { ...opts, select: POS_ORDER_SELECT },
+    logLabel
+  )
+}
 
 async function resolveBearerCaller(
   request: NextRequest
@@ -347,20 +361,18 @@ export async function GET(request: NextRequest) {
       if (primaryStoreFilter) {
         idFilters.push(`store_code=ilike.${encodeURIComponent(primaryStoreFilter)}`)
       }
-      let idRows = (await supabaseSelectFilter('pos_orders', idFilters.join('&'), {
+      let idRows = (await selectPosOrders(idFilters.join('&'), {
         order: 'created_at.desc',
         limit: 1,
-        select: POS_ORDER_SELECT,
-      })) as typeof rows
+      }, 'getPosOrders/id')) as typeof rows
 
       if (!strictStore && !idRows?.length && storeFilterCandidates.length > 1) {
         for (const alt of storeFilterCandidates.slice(1)) {
           const altFilter = `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`
-          idRows = (await supabaseSelectFilter('pos_orders', altFilter, {
+          idRows = (await selectPosOrders(altFilter, {
             order: 'created_at.desc',
             limit: 1,
-            select: POS_ORDER_SELECT,
-          })) as typeof rows
+          }, 'getPosOrders/id-alt')) as typeof rows
           if (idRows?.length) break
         }
       }
@@ -392,11 +404,10 @@ export async function GET(request: NextRequest) {
       const filterStr = buildListFilter(primaryStoreFilter)
 
       if (filterStr) {
-        rows = (await supabaseSelectFilter('pos_orders', filterStr, {
+        rows = (await selectPosOrders(filterStr, {
           order: listOrder,
           limit: listLimit,
-          select: POS_ORDER_SELECT,
-        })) as typeof rows
+        }, 'getPosOrders/list')) as typeof rows
 
         if (!strictStore && storeFilterCandidates.length > 1) {
           const variants = storeFilterCandidates.slice(1)
@@ -408,11 +419,10 @@ export async function GET(request: NextRequest) {
             }
             for (const alt of variants) {
               const altFilter = buildListFilter(alt)
-              const altRows = (await supabaseSelectFilter('pos_orders', altFilter, {
+              const altRows = (await selectPosOrders(altFilter, {
                 order: listOrder,
                 limit: listLimit,
-                select: POS_ORDER_SELECT,
-              })) as typeof rows
+              }, 'getPosOrders/list-alt')) as typeof rows
               for (const row of altRows || []) {
                 const id = Number(row.id || 0)
                 if (id > 0 && !mergedById.has(id)) mergedById.set(id, row)
@@ -423,11 +433,10 @@ export async function GET(request: NextRequest) {
         }
         if (!strictStore && !rows?.length && primaryStoreFilter) {
           const fallbackFilterNoStore = buildListFilter('')
-          const fallbackRows = (await supabaseSelectFilter('pos_orders', fallbackFilterNoStore, {
+          const fallbackRows = (await selectPosOrders(fallbackFilterNoStore, {
             order: listOrder,
             limit: listLimit,
-            select: POS_ORDER_SELECT,
-          })) as typeof rows
+          }, 'getPosOrders/list-fallback')) as typeof rows
           const candidateKeys = new Set<string>()
           addStoreVariants(candidateKeys, primaryStoreFilter)
           for (const c of storeFilterCandidates) addStoreVariants(candidateKeys, c)
@@ -473,11 +482,10 @@ export async function GET(request: NextRequest) {
           }
         }
       } else {
-        rows = (await supabaseSelect('pos_orders', {
+        rows = (await selectPosOrders('', {
           order: 'created_at.desc',
           limit: 10000,
-          select: POS_ORDER_SELECT,
-        })) as typeof rows
+        }, 'getPosOrders/list-all')) as typeof rows
       }
     }
 
@@ -530,6 +538,7 @@ export async function GET(request: NextRequest) {
       .map((r) => {
         const serviceRow = serviceById.get(Number(r.id || 0))
         const paymentOtherBreakdown = parsePaymentOtherBreakdown(r.payment_other_breakdown)
+        const dbOrderType = coercePosOrderTypeForDb(r.order_type)
         const inferredOrderType = inferOrderTypeForResponse({
           order_type: r.order_type,
           memo: r.memo,
@@ -542,6 +551,7 @@ export async function GET(request: NextRequest) {
           orderNo: String(r.order_no ?? ''),
           storeCode: String(r.store_code ?? ''),
           orderType: inferredOrderType,
+          dbOrderType,
           tableName: String(r.table_name ?? ''),
           memo: String(r.memo ?? ''),
           discountAmt: Number(r.discount_amt) ?? 0,
@@ -671,7 +681,9 @@ export async function GET(request: NextRequest) {
     headers.set('X-Pos-Orders-Count', String(list.length))
     return NextResponse.json(list, { headers })
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
     console.error('getPosOrders:', e)
+    headers.set('X-Pos-Orders-Error', msg.slice(0, 200))
     return NextResponse.json([], { headers })
   }
 }
