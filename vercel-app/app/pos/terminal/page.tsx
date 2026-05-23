@@ -540,6 +540,7 @@ export default function PosTerminalPage() {
     completedTakeoutOrders,
     refetchStores,
     clearTableOrder,
+    upsertOptimisticOrder,
     loadingTables,
   } = usePosStore()
 
@@ -5456,6 +5457,35 @@ export default function PosTerminalPage() {
                   const queued = Boolean((res as { queued?: boolean }).queued)
                   await notifyQueuedSave(savedOrderNo, queued)
                   if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
+                  if (queued && !(savedOrderId != null && savedOrderId > 0)) {
+                    upsertOptimisticOrder({
+                      storeCode: currentStoreId,
+                      orderNo: savedOrderNo,
+                      orderType: 'dine_in',
+                      tableName: payload.tableName,
+                      memo: payload.memo,
+                      status: 'pending',
+                      total: incomingItems.reduce(
+                        (acc, it) => acc + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
+                        0
+                      ),
+                      items: incomingItems.map((it) => ({
+                        id: String(it.id ?? ''),
+                        name: String(it.name ?? ''),
+                        quantity: resolveCartLineQuantityForSave(it),
+                        price: Number(it.price ?? 0),
+                        ...(String((it as { menuId?: string }).menuId ?? '').trim()
+                          ? { menuId: String((it as { menuId?: string }).menuId).trim() }
+                          : {}),
+                        ...(String((it as { optionId?: string }).optionId ?? '').trim()
+                          ? { optionId: String((it as { optionId?: string }).optionId).trim() }
+                          : {}),
+                        ...(String((it as { note?: string }).note ?? '').trim()
+                          ? { note: String((it as { note?: string }).note).trim() }
+                          : {}),
+                      })),
+                    })
+                  }
                   logPosPrintDebug('submit_save_success_new_pos_order', {
                     orderId: savedOrderId,
                     orderNo: savedOrderNo,
@@ -6032,6 +6062,32 @@ export default function PosTerminalPage() {
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment)
+                if (queued && !(newOrderId != null && newOrderId > 0)) {
+                  upsertOptimisticOrder({
+                    storeCode: currentStoreId,
+                    orderNo,
+                    orderType: payload.orderType,
+                    tableName: payload.orderLabel,
+                    memo: payload.memo,
+                    status: hasPayment ? 'paid' : 'pending',
+                    total: pricing.finalTotal,
+                    items: payloadItemsNormalized.map((it) => ({
+                      id: String(it.id ?? ''),
+                      name: String(it.name ?? ''),
+                      quantity: resolveCartLineQuantityForSave(it),
+                      price: Number(it.price ?? 0),
+                      ...(String((it as { menuId?: string }).menuId ?? '').trim()
+                        ? { menuId: String((it as { menuId?: string }).menuId).trim() }
+                        : {}),
+                      ...(String((it as { optionId?: string }).optionId ?? '').trim()
+                        ? { optionId: String((it as { optionId?: string }).optionId).trim() }
+                        : {}),
+                      ...(String((it as { note?: string }).note ?? '').trim()
+                        ? { note: String((it as { note?: string }).note).trim() }
+                        : {}),
+                    })),
+                  })
+                }
                 const receiptItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 const receiptPayloadSubmit = {
                   orderNo,

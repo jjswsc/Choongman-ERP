@@ -286,6 +286,27 @@ type RefetchStoresOptions = {
   immediate?: boolean
 }
 
+type OptimisticOrderInput = {
+  storeCode: string
+  orderNo?: string
+  orderType?: string
+  tableName?: string
+  memo?: string
+  status?: Order['status']
+  createdAt?: Date | number
+  total?: number
+  items: Array<{
+    id?: string
+    name?: string
+    quantity?: number
+    qty?: number
+    price?: number
+    menuId?: string
+    optionId?: string
+    note?: string
+  }>
+}
+
 export function usePosStore() {
   const { stores: storeCodes, legacyToCanonical } = useStoreList()
   const { auth } = useAuth()
@@ -646,6 +667,85 @@ export function usePosStore() {
     })
   }, [])
 
+  const upsertOptimisticOrder = useCallback((input: OptimisticOrderInput) => {
+    const storeCode = String(input.storeCode || '').trim()
+    if (!storeCode) return
+    const type = mapOrderType(input.orderType || '')
+    const tableName = String(input.tableName || '').trim()
+    const status = input.status ?? 'pending'
+    const createdAt =
+      input.createdAt instanceof Date
+        ? input.createdAt
+        : new Date(
+            typeof input.createdAt === 'number' && Number.isFinite(input.createdAt)
+              ? input.createdAt
+              : Date.now()
+          )
+    const safeItems = (Array.isArray(input.items) ? input.items : []).map((it, idx) => {
+      const qty = Math.max(1, Number(it.quantity ?? it.qty ?? 1) || 1)
+      const price = Number(it.price ?? 0) || 0
+      const id = String(it.id ?? '').trim() || `local-line-${idx + 1}`
+      return {
+        id,
+        name: String(it.name ?? '').trim() || id,
+        quantity: qty,
+        price,
+        ...(String(it.menuId ?? '').trim() ? { menuId: String(it.menuId).trim() } : {}),
+        ...(String(it.optionId ?? '').trim() ? { optionId: String(it.optionId).trim() } : {}),
+        ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      }
+    })
+    if (safeItems.length === 0) return
+    const orderNo = String(input.orderNo || '').trim()
+    const sumTotal = safeItems.reduce((acc, it) => acc + Number(it.price || 0) * Number(it.quantity || 1), 0)
+    const total = Number(input.total ?? sumTotal) || 0
+    const orderId = orderNo || `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const optimistic: Order = {
+      id: orderId,
+      type,
+      items: safeItems,
+      total,
+      status,
+      createdAt,
+      ...(tableName ? { tableName, customerName: tableName } : {}),
+      ...(String(input.memo || '').trim() ? { memo: String(input.memo).trim() } : {}),
+      ...(orderNo ? { orderNo } : {}),
+    }
+
+    setOrdersByStoreId((prev) => {
+      const list = Array.isArray(prev[storeCode]) ? [...prev[storeCode]] : []
+      const next = list.filter((o) => {
+        if (orderNo && String(o.orderNo ?? '').trim() === orderNo) return false
+        if (!orderNo && tableName && type === 'dine-in') {
+          const t1 = normalizePosTableNameForMatch(String(o.tableName ?? ''))
+          const t2 = normalizePosTableNameForMatch(tableName)
+          if (t1 && t2 && t1 === t2 && o.type === 'dine-in') return false
+        }
+        return true
+      })
+      next.unshift(optimistic)
+      return { ...prev, [storeCode]: next }
+    })
+
+    if (type === 'dine-in' && tableName) {
+      const targetNorm = normalizePosTableNameForMatch(tableName)
+      setStores((prev) =>
+        prev.map((store) => {
+          if (store.id !== storeCode) return store
+          return {
+            ...store,
+            tables: store.tables.map((tbl) => {
+              const nameNorm = normalizePosTableNameForMatch(String(tbl.name ?? ''))
+              const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
+              const matched = Boolean(targetNorm && (nameNorm === targetNorm || idNorm === targetNorm))
+              return matched ? { ...tbl, order: optimistic, isOccupied: true } : tbl
+            }),
+          }
+        })
+      )
+    }
+  }, [])
+
   const currentLayout = (currentStoreId && layoutByStoreId[currentStoreId]) || []
 
   return {
@@ -668,6 +768,7 @@ export function usePosStore() {
     packagedTakeoutOrders,
     completedTakeoutOrders,
     updateOrderStatus,
+    upsertOptimisticOrder,
     loadingTables: loading,
     refetchStores,
   }

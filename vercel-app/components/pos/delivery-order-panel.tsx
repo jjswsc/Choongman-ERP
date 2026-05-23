@@ -26,7 +26,7 @@ import {
 } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
-import { Check, CheckCircle, ChevronDown, ChevronUp, Clock, FileText } from 'lucide-react'
+import { Check, CheckCircle, Clock, FileText } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -113,7 +113,6 @@ export function DeliveryOrderPanel({
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [itemChildPackaged, setItemChildPackaged] = useState<Record<string, boolean>>({})
   const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
   const [optimisticGrabState, setOptimisticGrabState] = useState<string | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
@@ -274,7 +273,6 @@ export function DeliveryOrderPanel({
       setItemPackaged({})
       setItemChildPackaged({})
       setItemCancelled({})
-      setExpandedItemId(null)
     } else {
       setItemPackaged((prev) => {
         const next = { ...prev }
@@ -780,38 +778,18 @@ export function DeliveryOrderPanel({
                         }}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-start gap-0.5">
-                            <button
-                              type="button"
-                              className="min-w-0 flex-1 truncate rounded-sm px-0.5 text-left text-sm font-medium hover:underline -mx-0.5"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (cancelled) return
-                                setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
-                              }}
-                              title={displayName}
-                            >
-                              {mainName}
-                            </button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 text-muted-foreground"
-                              aria-label={t('posOrderLineExpandHint') || ti('posOrderLineExpandHint')}
-                              title={t('posOrderLineExpandHint') || ti('posOrderLineExpandHint')}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setExpandedItemId((prev) => (prev === item.id ? null : item.id))
-                              }}
-                            >
-                              {expandedItemId === item.id ? (
-                                <ChevronUp className="h-4 w-4" aria-hidden />
-                              ) : (
-                                <ChevronDown className="h-4 w-4" aria-hidden />
-                              )}
-                            </Button>
-                          </div>
+                          <button
+                            type="button"
+                            className="w-full min-w-0 rounded-sm px-0.5 text-left text-sm font-medium leading-snug break-words hover:underline -mx-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (cancelled) return
+                              setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
+                            }}
+                            title={displayName}
+                          >
+                            {mainName}
+                          </button>
                           <p className="text-xs text-muted-foreground tabular-nums">
                             {optionPart && <span className="mr-1">{optionPart}</span>}
                             x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
@@ -867,11 +845,6 @@ export function DeliveryOrderPanel({
                                 )
                               })}
                             </div>
-                          )}
-                          {expandedItemId === item.id && (
-                            <p className="mt-1 text-xs text-muted-foreground whitespace-normal break-words">
-                              {displayName}
-                            </p>
                           )}
                           {cancelled && (
                             <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">
