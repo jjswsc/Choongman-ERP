@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isBanbanMenu, parseBanbanFlavorsFromName } from './pos-banban-utils'
+import {
+  expandBanbanComposeLineForPrint,
+  isBanbanMenu,
+  parseBanbanFlavorsFromName,
+  splitBanbanSlashOptionParts,
+} from './pos-banban-utils'
 
 describe('parseBanbanFlavorsFromName', () => {
   it('기본 패턴 "Base (A / B)" 두 가지 맛을 분리한다', () => {
@@ -35,6 +40,33 @@ describe('parseBanbanFlavorsFromName', () => {
 
   it('기본명이 비어 있으면 null', () => {
     expect(parseBanbanFlavorsFromName('(A / B)')).toBeNull()
+  })
+})
+
+describe('splitBanbanSlashOptionParts', () => {
+  it('슬래시 2맛을 분리한다', () => {
+    expect(splitBanbanSlashOptionParts('CHEESE TORNADO / GARLIC Bar.B.Q FRIED CHICKEN')).toEqual([
+      'CHEESE TORNADO',
+      'GARLIC Bar.B.Q FRIED CHICKEN',
+    ])
+  })
+
+  it('3맛 이상이면 null', () => {
+    expect(splitBanbanSlashOptionParts('A / B / C')).toBeNull()
+  })
+})
+
+describe('expandBanbanComposeLineForPrint', () => {
+  it('compose 줄을 맛별 줄로 펼친다', () => {
+    expect(
+      expandBanbanComposeLineForPrint(
+        'Banban Chicken (CHEESE TORNADO / GARLIC Bar.B.Q FRIED CHICKEN) x1'
+      )
+    ).toEqual(['CHEESE TORNADO x1', 'GARLIC Bar.B.Q FRIED CHICKEN x1'])
+  })
+
+  it('반반 패턴이 아니면 null', () => {
+    expect(expandBanbanComposeLineForPrint('Rice x1')).toBeNull()
   })
 })
 

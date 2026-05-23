@@ -7,6 +7,7 @@ export {
   addToQueue,
   getPendingCount,
   getAllPending,
+  OFFLINE_QUEUE_UPDATED_EVENT,
   getOfflineQueueCounts,
   getOfflineQueueErrorHint,
   removeDeadLetterFromQueue,

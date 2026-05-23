@@ -207,6 +207,20 @@ describe('grab-pos-order-enrich', () => {
     ).toEqual(['SOY SAUCE CHICKEN x1', 'SPICY YANGNYEOM x1'])
   })
 
+  it('formatGrabPromoComposeLinesForPrint splits slash-separated banban flavors', () => {
+    expect(
+      formatGrabPromoComposeLinesForPrint(
+        {
+          menuName: 'Banban Chicken',
+          optionName: 'CHEESE TORNADO / GARLIC Bar.B.Q FRIED CHICKEN',
+          quantity: 1,
+          parentItemName: 'Banban Chicken',
+        },
+        false
+      )
+    ).toEqual(['CHEESE TORNADO x1', 'GARLIC Bar.B.Q FRIED CHICKEN x1'])
+  })
+
   it('avoids double-counting M-size surcharge when item name includes size', () => {
     expect(grabItemNameImpliesAllInPrice('GARLIC + M - Boneless')).toBe(true)
     const unit = resolveGrabLineUnitMinor({

@@ -6,6 +6,7 @@ import { getDB, STORES } from './db'
 
 /** `sync.ts`와 동일 — 이 횟수 이상 실패 시 더 이상 자동 전송하지 않음 */
 export const OFFLINE_QUEUE_MAX_RETRIES = 8
+export const OFFLINE_QUEUE_UPDATED_EVENT = 'cm-offline-queue-updated'
 
 export interface PendingRequest {
   id: string
@@ -30,6 +31,11 @@ function uuid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 }
 
+function notifyQueueUpdated() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(OFFLINE_QUEUE_UPDATED_EVENT))
+}
+
 export async function addToQueue(req: Omit<PendingRequest, 'id' | 'createdAt' | 'retryCount'>): Promise<string> {
   const db = await getDB()
   const id = uuid()
@@ -44,7 +50,10 @@ export async function addToQueue(req: Omit<PendingRequest, 'id' | 'createdAt' | 
     const store = tx.objectStore(STORES.PENDING_REQUESTS)
     const r = store.put(item)
     r.onerror = () => reject(r.error)
-    r.onsuccess = () => resolve(id)
+    r.onsuccess = () => {
+      notifyQueueUpdated()
+      resolve(id)
+    }
   })
 }
 
@@ -117,7 +126,10 @@ export async function removeFromQueue(id: string): Promise<void> {
     const store = tx.objectStore(STORES.PENDING_REQUESTS)
     const r = store.delete(id)
     r.onerror = () => reject(r.error)
-    r.onsuccess = () => resolve()
+    r.onsuccess = () => {
+      notifyQueueUpdated()
+      resolve()
+    }
   })
 }
 
@@ -137,7 +149,10 @@ export async function updateQueueItem(id: string, updates: Partial<PendingReques
       const updated = { ...item, ...updates }
       const putReq = store.put(updated)
       putReq.onerror = () => reject(putReq.error)
-      putReq.onsuccess = () => resolve()
+      putReq.onsuccess = () => {
+        notifyQueueUpdated()
+        resolve()
+      }
     }
   })
 }

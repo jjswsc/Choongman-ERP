@@ -547,6 +547,23 @@ export function enrichGrabPromoItemsForPrint<T extends GrabPromoPrintRow>(
   })
 }
 
+/** 세트·반반 compose 옵션: 콤마 또는 `/`(2맛)로 분리 */
+function splitPromoOptionNameParts(optName: string): string[] {
+  const text = String(optName ?? '').trim()
+  if (!text) return []
+  const slashParts = text
+    .split(/\s*\/\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (slashParts.length === 2) return slashParts
+  const commaParts = text
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (commaParts.length > 1) return commaParts
+  return [text]
+}
+
 /** 세트 구성 줄: Grab일 때 옵션(사이즈 등)을 항목별로 분리 */
 export function formatGrabPromoComposeLinesForPrint(
   p: {
@@ -562,24 +579,18 @@ export function formatGrabPromoComposeLinesForPrint(
   const qty = Math.max(1, Number(p.quantity) || 1)
   const optName = String(p.optionName ?? '').trim()
   const optionOnly =
-    grabSplit && optName && shouldGrabPromoComposeOptionOnly(p.parentItemName, menuName)
+    optName && shouldGrabPromoComposeOptionOnly(p.parentItemName, menuName)
 
   if (!optName) return [`${menuName} x${qty}`]
 
   if (optionOnly) {
-    const parts = optName
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
+    const parts = splitPromoOptionNameParts(optName)
     if (parts.length <= 1) return [`${optName} x${qty}`]
     return parts.map((part) => `${part} x${qty}`)
   }
 
   if (!grabSplit) return [`${menuName} (${optName}) x${qty}`]
-  const parts = optName
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
+  const parts = splitPromoOptionNameParts(optName)
   if (parts.length <= 1) return [`${menuName} (${optName}) x${qty}`]
   return parts.map((part) => `${menuName} (${part}) x${qty}`)
 }

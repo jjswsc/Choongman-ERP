@@ -75,7 +75,7 @@ import { PosPostPaymentCashChangeDialog } from '@/components/pos/pos-post-paymen
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { tr, useT } from '@/lib/i18n'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
@@ -575,8 +575,15 @@ export default function PosTerminalPage() {
       orderNo,
       queued,
       onAlert: appAlert,
+      i18n: {
+        withoutOrderNo:
+          t('posQueuedSavedNoOrder') || '오프라인으로 저장했습니다. 네트워크 복구 시 자동 동기화됩니다.',
+        withOrderNo: (no) =>
+          tr(t, 'posQueuedSavedWithOrder', { orderNo: no }) ||
+          `주문 ${no}를 오프라인 큐에 저장했습니다. 네트워크 복구 시 자동 동기화됩니다.`,
+      },
     })
-  }, [])
+  }, [t])
 
   const applyOrderStatusWithRetry = useCallback(
     async (params: { id: number; status: 'ready' | 'paid' | 'completed' | 'cancelled' | 'refunded' }) => {
@@ -587,6 +594,16 @@ export default function PosTerminalPage() {
         onAlert: appAlert,
         onConfirm: appConfirm,
         failMessageFallback: t('processFail') || '처리 실패',
+        i18n: {
+          retryConfirm: t('posStatusRetryConfirm') || '후속 처리를 다시 시도할까요?',
+          sideEffectLabels: {
+            stock: t('posStatusSideEffectStock') || '재고',
+            journal: t('posStatusSideEffectJournal') || '분개',
+            vat: t('posStatusSideEffectVat') || '부가세',
+          },
+          postProcessSuffix: (steps) =>
+            tr(t, 'posStatusPostProcessSuffix', { steps }) || `(${steps} 후처리)`,
+        },
       })
     },
     [isPosDemo, t]

@@ -4,7 +4,7 @@
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
-import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
+import { parseBanbanFlavorsFromName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 import { formatGrabOptionFragmentForPrint } from '@/lib/grab-pos-order-enrich'
 import {
@@ -527,7 +527,11 @@ export function formatKitchenSlipItemRowHtml(
   const promoLines = (() => {
     const raw = (Array.isArray(it.promoComposeLines) ? it.promoComposeLines : [])
       .filter(Boolean)
-      .flatMap((line) => filterKitchenPromoComposeLine(String(line), optionGroupPrint))
+      .flatMap((line) => {
+        const expanded = expandBanbanComposeLineForPrint(String(line))
+        const candidates = expanded ?? [String(line)]
+        return candidates.flatMap((part) => filterKitchenPromoComposeLine(part, optionGroupPrint))
+      })
     const deduped: string[] = []
     const seen = new Set<string>()
     for (const line of raw) {

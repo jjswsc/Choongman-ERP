@@ -116,6 +116,32 @@ export function parseBanbanFlavorsFromName(rawName: string | null | undefined): 
   return { baseName, flavor1, flavor2 }
 }
 
+/** 옵션 조각 `A / B` → 두 맛 (정확히 2개일 때만) */
+export function splitBanbanSlashOptionParts(optName: string): [string, string] | null {
+  const parts = String(optName ?? '')
+    .trim()
+    .split(/\s*\/\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length !== 2) return null
+  return [parts[0], parts[1]]
+}
+
+/**
+ * 주방·영수증 compose 줄 `Banban Chicken (A / B) x1` → [`A x1`, `B x1`].
+ * 반반 패턴이 아니면 null.
+ */
+export function expandBanbanComposeLineForPrint(line: string): string[] | null {
+  const trimmed = String(line ?? '').trim()
+  if (!trimmed) return null
+  const qtyMatch = /\s+x\s*([\d.]+)\s*$/iu.exec(trimmed)
+  const qtySuffix = qtyMatch ? ` x${qtyMatch[1]}` : ''
+  const namePart = qtyMatch ? trimmed.slice(0, qtyMatch.index).trim() : trimmed
+  const parsed = parseBanbanFlavorsFromName(namePart)
+  if (!parsed) return null
+  return [`${parsed.flavor1}${qtySuffix}`, `${parsed.flavor2}${qtySuffix}`]
+}
+
 function sortMenusByName(arr: PosMenu[]): PosMenu[] {
   return arr.slice().sort((a, b) => a.name.localeCompare(b.name))
 }

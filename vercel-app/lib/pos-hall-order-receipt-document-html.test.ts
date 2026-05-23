@@ -55,6 +55,35 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).not.toContain('1x &gt; Banban Chicken')
   })
 
+  it('prints banban flavors on separate lines', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '006',
+        storeCode: 'CM Huamak',
+        orderType: 'dine-in',
+        tableName: '1',
+        guestCount: 1,
+        items: [
+          {
+            id: 'banban-1',
+            name: 'Banban Chicken (CHEESE TORNADO / GARLIC Bar.B.Q FRIED CHICKEN)',
+            price: 239,
+            qty: 1,
+          },
+        ],
+        subtotal: 239,
+        discountAmt: 0,
+        total: 239,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).toContain('1x Banban Chicken')
+    expect(html).toContain('- CHEESE TORNADO')
+    expect(html).toContain('- GARLIC Bar.B.Q FRIED CHICKEN')
+    expect(html).not.toContain('CHEESE TORNADO / GARLIC')
+  })
+
   it('does not print internal memo stamps inside tax invoice address', () => {
     const tax = {
       memberNo: '',

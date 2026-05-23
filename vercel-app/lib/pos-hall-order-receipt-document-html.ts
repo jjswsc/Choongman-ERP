@@ -20,6 +20,10 @@ import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+import {
+  expandBanbanComposeLineForPrint,
+  parseBanbanFlavorsFromName,
+} from '@/lib/pos-banban-utils'
 
 type HallOrderItem = {
   id: string
@@ -348,14 +352,20 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   const itemsRows = receiptItems
     .map((it) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
+      const banban = parseBanbanFlavorsFromName(lineName)
       const lineSplit = splitPosPrintItemLine(lineName)
-      const lineMain = translatePosMenuLineForReceipt(lineSplit.mainName || lineName, (k) => t(k))
-      const lineOption = lineSplit.optionLine
-        ? translatePosMenuLineForReceipt(
-            formatGrabOptionFragmentForPrint(lineSplit.optionLine, optionNameByCode),
-            (k) => t(k)
-          )
-        : ''
+      const lineMain = translatePosMenuLineForReceipt(
+        banban ? banban.baseName : lineSplit.mainName || lineName,
+        (k) => t(k)
+      )
+      const lineOption = banban
+        ? ''
+        : lineSplit.optionLine
+          ? translatePosMenuLineForReceipt(
+              formatGrabOptionFragmentForPrint(lineSplit.optionLine, optionNameByCode),
+              (k) => t(k)
+            )
+          : ''
       const grabOptionLines = grabInbound
         ? collectGrabPrintOptionLines({
             note: it.note,
@@ -363,9 +373,16 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
             optionNameByCode,
           }).map((opt) => translatePosMenuLineForReceipt(opt, (k) => t(k)))
         : []
-      const lineOptionTokens = grabInbound
-        ? grabOptionLines
-        : splitReceiptOptionTokens(lineOption)
+      const banbanFlavorLines = banban
+        ? [banban.flavor1, banban.flavor2].map((flavor) =>
+            translatePosMenuLineForReceipt(flavor, (k) => t(k))
+          )
+        : []
+      const lineOptionTokens = banban
+        ? banbanFlavorLines
+        : grabInbound
+          ? grabOptionLines
+          : splitReceiptOptionTokens(lineOption)
       const lineNote = grabInbound
         ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
         : formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
@@ -411,17 +428,20 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
                     ? translatePosMenuLineForReceipt(optName, (k) => t(k))
                     : '',
                   quantity: Math.max(1, Number(p.quantity) || 1),
-                  parentItemName: grabInbound
-                    ? translatePosMenuLineForReceipt(lineMainForPromo, (k) => t(k))
-                    : undefined,
+                  parentItemName: translatePosMenuLineForReceipt(lineMainForPromo, (k) => t(k)),
                 },
                 grabInbound
               )
             })
           : []
+      const promoComposeLinesExpanded = promoComposeLines.flatMap(
+        (line) => expandBanbanComposeLineForPrint(line) ?? [line]
+      )
       const promoComposeHtml =
-        promoComposeLines.length > 0
-          ? '<div class="receipt-line-note">' + promoComposeLines.map((line) => '- ' + esc(line)).join('<br/>') + c('div')
+        promoComposeLinesExpanded.length > 0
+          ? '<div class="receipt-line-note">' +
+            promoComposeLinesExpanded.map((line) => '- ' + esc(line)).join('<br/>') +
+            c('div')
           : ''
       const optionHtml =
         lineOptionTokens.length > 0

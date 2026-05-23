@@ -15,8 +15,8 @@ const DEGRADE_FAIL_THRESHOLD = 1
 
 /** 프로브·성공한 fetch 이후 이 시간 안이면 navigator 가 false 여도 온라인으로 간주 */
 const REACHABILITY_STALE_MS = 45_000
-const OFFLINE_PROBE_INTERVAL_MS = 22_000
-const PROBE_TIMEOUT_MS = 4_000
+const OFFLINE_PROBE_INTERVAL_MS = 10_000
+const PROBE_TIMEOUT_MS = 3_000
 
 export const REACHABILITY_EVENT = 'cm-reachability'
 

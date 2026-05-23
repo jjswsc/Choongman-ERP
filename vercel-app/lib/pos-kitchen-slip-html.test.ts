@@ -109,6 +109,23 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).not.toContain('[Set 1] GOLDEN')
     })
 
+    it('반반 compose 줄은 맛별로 펼친다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Banban Chicken',
+          qty: 1,
+          promoComposeLines: [
+            'Banban Chicken (CHEESE TORNADO / GARLIC Bar.B.Q FRIED CHICKEN) x1',
+          ],
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('- CHEESE TORNADO x1')
+      expect(html).toContain('- GARLIC Bar.B.Q FRIED CHICKEN x1')
+      expect(html).not.toContain('CHEESE TORNADO / GARLIC')
+    })
+
     it('옵션·세트가 아닌 일반 메뉴의 자기복제 구성줄은 숨긴다', () => {
       const html = formatKitchenSlipItemRowHtml(
         {

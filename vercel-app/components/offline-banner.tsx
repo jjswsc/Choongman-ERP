@@ -17,6 +17,7 @@ import {
   useOnlineStatus,
   getOfflineQueueCounts,
   getOfflineQueueErrorHint,
+  OFFLINE_QUEUE_UPDATED_EVENT,
   removeDeadLetterFromQueue,
   syncPending,
   onSyncComplete,
@@ -105,20 +106,43 @@ export function OfflineBanner({
       })
   }, [])
 
+  const triggerSyncNow = React.useCallback(() => {
+    if (syncing) return
+    setSyncing(true)
+    syncPending({ bypassBackoff: true })
+      .then((result) => {
+        if (result.synced > 0) onSync?.()
+        refreshPending()
+      })
+      .finally(() => setSyncing(false))
+  }, [onSync, refreshPending, syncing])
+
   React.useEffect(() => {
     refreshPending()
   }, [refreshPending])
 
   React.useEffect(() => {
     if (!online) return
-    setSyncing(true)
-    syncPending()
-      .then((result) => {
-        if (result.synced > 0) onSync?.()
-        refreshPending()
-      })
-      .finally(() => setSyncing(false))
-  }, [online, onSync, refreshPending])
+    triggerSyncNow()
+  }, [online, triggerSyncNow])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onQueueUpdated = () => {
+      refreshPending()
+      if (online) triggerSyncNow()
+    }
+    window.addEventListener(OFFLINE_QUEUE_UPDATED_EVENT, onQueueUpdated)
+    return () => window.removeEventListener(OFFLINE_QUEUE_UPDATED_EVENT, onQueueUpdated)
+  }, [online, refreshPending, triggerSyncNow])
+
+  React.useEffect(() => {
+    if (!online || retriableCount <= 0 || syncing) return
+    const tid = window.setInterval(() => {
+      triggerSyncNow()
+    }, 6000)
+    return () => window.clearInterval(tid)
+  }, [online, retriableCount, syncing, triggerSyncNow])
 
   React.useEffect(() => {
     return onSyncComplete(() => {
@@ -263,13 +287,7 @@ export function OfflineBanner({
               size="sm"
               className="h-7 gap-1 border-amber-600/50 text-amber-700 hover:bg-amber-500/20"
               onClick={() => {
-                setSyncing(true)
-                syncPending({ bypassBackoff: true })
-                  .then(() => {
-                    refreshPending()
-                    onSync?.()
-                  })
-                  .finally(() => setSyncing(false))
+                triggerSyncNow()
               }}
             >
               <RefreshCw className="h-3.5 w-3.5" />

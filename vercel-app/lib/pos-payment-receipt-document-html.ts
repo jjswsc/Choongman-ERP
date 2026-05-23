@@ -8,7 +8,7 @@ import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
 import { buildPosReceiptVatPrintLabelEscaped } from '@/lib/pos-receipt-vat-print-label'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
-import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
+import { parseBanbanFlavorsFromName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
   escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
@@ -563,14 +563,15 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                         )
                       : '',
                     quantity: Math.max(1, Number(pi.quantity) || 1),
-                    parentItemName: grabInbound
-                      ? translatePosMenuLineForReceipt(displayName, t)
-                      : undefined,
+                    parentItemName: translatePosMenuLineForReceipt(displayName, t),
                   },
                   grabInbound
                 )
               })
             : []
+        const promoComposeLinesExpanded = promoComposeLines.flatMap(
+          (line) => expandBanbanComposeLineForPrint(line) ?? [line]
+        )
         const grabOptionLines = grabInbound
           ? collectGrabPrintOptionLines({
               note: it.note,
@@ -598,7 +599,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         const lineNote = grabInbound
           ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
           : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
-        const detailLines = [...baseOptionLine, ...banbanFlavorLines, ...promoComposeLines]
+        const detailLines = [...baseOptionLine, ...banbanFlavorLines, ...promoComposeLinesExpanded]
         const detailRows = detailLines
           .map(
             (line) =>
@@ -840,14 +841,15 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                             )
                           : '',
                         quantity: Math.max(1, Number(pi.quantity) || 1),
-                        parentItemName: grabInbound
-                          ? translatePosMenuLineForReceipt(displayName, t)
-                          : undefined,
+                        parentItemName: translatePosMenuLineForReceipt(displayName, t),
                       },
                       grabInbound
                     )
                   })
                 : []
+            const promoComposeLinesExpanded = promoComposeLines.flatMap(
+              (line) => expandBanbanComposeLineForPrint(line) ?? [line]
+            )
             const banbanFlavorLines = banban
               ? [
                   translatePosMenuLineForReceipt(banban.flavor1, t),
@@ -881,8 +883,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 ? `<div class="receipt-line-note">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(lineDiscount)}</div>`
                 : ''
             const promoComposeHtml =
-              promoComposeLines.length > 0
-                ? `<div class="receipt-line-note">${promoComposeLines
+              promoComposeLinesExpanded.length > 0
+                ? `<div class="receipt-line-note">${promoComposeLinesExpanded
                     .map((line) => `- ${esc(line)}`)
                     .join('<br/>')}</div>`
                 : ''
