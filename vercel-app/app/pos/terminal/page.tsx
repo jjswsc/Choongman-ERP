@@ -5463,7 +5463,7 @@ export default function PosTerminalPage() {
                   await notifyQueuedSave(savedOrderNo, queued)
                   if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
                   queuedWithoutServerId = queued && !(savedOrderId != null && savedOrderId > 0)
-                  if (queued && !(savedOrderId != null && savedOrderId > 0)) {
+                  if (!(savedOrderId != null && savedOrderId > 0)) {
                     upsertOptimisticOrder({
                       storeCode: currentStoreId,
                       orderNo: savedOrderNo,
@@ -6071,7 +6071,7 @@ export default function PosTerminalPage() {
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment)
-                if (queuedWithoutServerId) {
+                if (!(newOrderId != null && newOrderId > 0)) {
                   upsertOptimisticOrder({
                     storeCode: currentStoreId,
                     orderNo,

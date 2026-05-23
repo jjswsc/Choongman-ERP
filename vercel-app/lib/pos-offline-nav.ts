@@ -32,13 +32,20 @@ function pathOnly(urlOrPath: string): string {
   return p.split('?')[0] || p
 }
 
+function normalizedPathWithSearch(urlOrPath: string): string {
+  const p = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`
+  return p
+}
+
 /** 이미 /pos 셸이 로드된 뒤 하위 경로 이동 — SW가 /pos HTML만 내릴 때 location.assign 회귀 방지 */
 function canUseSoftPosInAppNav(targetPath: string): boolean {
   if (typeof window === 'undefined') return false
-  const current = window.location.pathname || ''
-  const target = pathOnly(targetPath)
-  if (!current.startsWith('/pos') || !target.startsWith('/pos/')) return false
-  return current !== target
+  const currentPath = window.location.pathname || ''
+  const currentFull = `${window.location.pathname || ''}${window.location.search || ''}`
+  const target = normalizedPathWithSearch(targetPath)
+  const targetPathOnly = pathOnly(target)
+  if (!currentPath.startsWith('/pos') || !targetPathOnly.startsWith('/pos/')) return false
+  return currentFull !== target
 }
 
 /**
