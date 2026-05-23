@@ -89,7 +89,6 @@ export function PosRevenueRealtimeDashboard({
   const [data, setData] = React.useState<DashboardResponse | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string>("")
-  const [queried, setQueried] = React.useState(false)
   const storeCode = String(effectiveStoreCode || "").trim()
 
   const loadDashboard = React.useCallback(async () => {
@@ -111,8 +110,12 @@ export function PosRevenueRealtimeDashboard({
     }
   }, [storeCode, tr])
 
+  /** 첫 화면·매장 변경 시 자동 조회. 이후 갱신은 검색 버튼만(60초 폴링 없음) */
+  React.useEffect(() => {
+    void loadDashboard()
+  }, [loadDashboard])
+
   const handleSearch = React.useCallback(() => {
-    setQueried(true)
     void loadDashboard()
   }, [loadDashboard])
 
@@ -225,17 +228,11 @@ export function PosRevenueRealtimeDashboard({
         </p>
       ) : null}
 
-      {!queried && !loading ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {tr("adminLiveStoreSalesSearchPrompt", "「검색」을 누르면 실시간 운영 지표를 불러옵니다.")}
-        </p>
-      ) : null}
-
-      {queried && loading && !store && !officeRows.length ? (
+      {loading && !store && !officeRows.length ? (
         <p className="py-6 text-center text-sm text-muted-foreground">{tr("loading", "로딩 중…")}</p>
       ) : null}
 
-      {queried && !loading && !error && !store && !isOfficeSelector ? (
+      {!loading && !error && !store && !isOfficeSelector ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           {tr("mobileStoreSalesByStoreEmpty", "표시할 매장 데이터가 없습니다.")}
         </p>
@@ -335,7 +332,7 @@ export function PosRevenueRealtimeDashboard({
         </div>
       ) : null}
 
-      {isOfficeSelector && queried ? (
+      {isOfficeSelector ? (
         <div className="space-y-4 rounded-lg border border-border/60 bg-card p-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -441,7 +438,7 @@ export function PosRevenueRealtimeDashboard({
           <p className="text-[11px] text-muted-foreground">
             {data?.truncated
               ? tr("adminLiveStoreSalesDataTruncated", "집계 행 제한으로 일부 데이터가 생략될 수 있습니다.")
-              : tr("adminLiveStoreSalesDataRealtimeHint", "매장을 바꾼 뒤에는「검색」으로 다시 조회하세요.")}
+              : tr("adminLiveStoreSalesDataRealtimeHint", "최신 집계는「검색」으로 갱신합니다.")}
           </p>
         </div>
       ) : null}

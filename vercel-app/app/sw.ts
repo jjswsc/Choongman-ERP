@@ -219,6 +219,35 @@ const authLoginPostNetworkOnly = {
   handler: new NetworkOnly(),
 }
 
+/** POS 로그인 문서 — 오프라인 cold start(하이브리드·PWA)에서 프리캐시·캐시 우선 */
+const posLoginDocumentNetworkFirst = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (!sameOrigin || request.method !== "GET") return false
+    return pathname === "/pos/login" && request.destination === "document"
+  },
+  method: "GET" as const,
+  handler: new NetworkFirst({
+    cacheName: "pos-login-document",
+    networkTimeoutSeconds: 4,
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 4,
+        maxAgeSeconds: 30 * 24 * 60 * 60,
+        maxAgeFrom: "last-used",
+      }),
+    ],
+  }),
+}
+
 const loginPagesGetNetworkOnly = {
   matcher({
     sameOrigin,
@@ -231,7 +260,7 @@ const loginPagesGetNetworkOnly = {
     event?: ExtendableEvent
   }) {
     if (!sameOrigin || request.method !== "GET") return false
-    return pathname === "/admin/login" || pathname === "/login" || pathname === "/pos/login"
+    return pathname === "/admin/login" || pathname === "/login"
   },
   method: "GET" as const,
   handler: new NetworkOnly(),
@@ -301,6 +330,7 @@ const serwist = new Serwist({
     posMenuImageProxyGetNetworkOnly,
     authLoginApisGetNetworkOnly,
     authLoginPostNetworkOnly,
+    posLoginDocumentNetworkFirst,
     loginPagesGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,

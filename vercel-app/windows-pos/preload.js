@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("cmPosShell", {
   platform: "windows-electron",
-  /** 메인 창이 offline.html 일 때 POS URL 을 다시 로드(다시 시도 버튼) */
-  reloadPosUrl: () => ipcRenderer.invoke("cm-pos-reload-pos-url"),
+  /** 메인 창이 offline.html 일 때 POS URL 을 다시 로드(다시 시도·캐시로 열기) */
+  reloadPosUrl: (opts) => ipcRenderer.invoke("cm-pos-reload-pos-url", opts || {}),
   getVersion: () => ipcRenderer.invoke("cm-pos-get-version"),
   checkForUpdates: () => ipcRenderer.invoke("cm-pos-check-updates"),
   exitKioskOrFullscreen: () => ipcRenderer.invoke("cm-pos-exit-kiosk"),

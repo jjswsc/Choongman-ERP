@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut, screen } = require("electron");
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut, screen, net } = require("electron");
 
 function requireDeployPublicOrigin() {
   const candidates = [
@@ -533,6 +533,8 @@ let posMainLoadRetryTimer = null;
 let posMainLoadWatchdogTimer = null;
 let posDomBlankWatchdogTimer = null;
 const POS_MAIN_LOAD_MAX_ATTEMPTS = 5;
+/** 오프라인 cold start: SW·Chromium 캐시에서 셸을 띄울 시간을 더 준다 */
+const POS_MAIN_LOAD_MAX_ATTEMPTS_OFFLINE = 12;
 let customerDisplayWindow = null;
 let isCheckingUpdate = false;
 let customerDisplayConfig = {
@@ -715,6 +717,49 @@ function senderAllowedOrigin(sender) {
 }
 
 /** 로컬 offline.html 또는 허용 origin — 복구용 IPC(cm-pos-reload-pos-url)만 허용 */
+function isSystemOnline() {
+  try {
+    return net.isOnline();
+  } catch {
+    return true;
+  }
+}
+
+/** 온라인 + 강제 새로고침일 때만 no-cache — 오프라인 cold start는 SW·디스크 캐시 우선 */
+function posUrlLoadOptions(preferFresh) {
+  if (preferFresh && isSystemOnline()) {
+    return {
+      extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
+    };
+  }
+  return {};
+}
+
+function loadPosMainUrl(preferFresh) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  clearPosDomBlankWatchdog();
+  schedulePosMainLoadWatchdog();
+  try {
+    void mainWindow.loadURL(POS_URL, posUrlLoadOptions(preferFresh));
+  } catch (e) {
+    console.error("[cm-pos] loadURL error", e);
+  }
+}
+
+function posMainLoadMaxAttempts() {
+  return isSystemOnline() ? POS_MAIN_LOAD_MAX_ATTEMPTS : POS_MAIN_LOAD_MAX_ATTEMPTS_OFFLINE;
+}
+
+function posMainLoadWatchdogMs() {
+  const base = POS_MAIN_LOAD_WATCHDOG_MS;
+  return isSystemOnline() ? base : Math.max(base, 90000);
+}
+
+function posDomBlankCheckMs() {
+  const base = POS_DOM_BLANK_CHECK_MS;
+  return isSystemOnline() ? base : Math.max(base, 35000);
+}
+
 function senderAllowedForTrustedShell(sender) {
   if (!sender) return false;
   try {
@@ -789,7 +834,7 @@ function schedulePosDomBlankWatchdog() {
     } catch (e) {
       console.warn("[cm-pos] dom blank probe failed", e && e.message ? e.message : e);
     }
-  }, POS_DOM_BLANK_CHECK_MS);
+  }, posDomBlankCheckMs());
 }
 
 /** POS URL 로드 시작 후 일정 시간 안에 화면이 확정되지 않으면 offline.html 로 폴백 */
@@ -808,7 +853,7 @@ function schedulePosMainLoadWatchdog() {
       console.warn("[cm-pos] watchdog check failed", e && e.message ? e.message : e);
       loadOfflineFallbackPage();
     }
-  }, POS_MAIN_LOAD_WATCHDOG_MS);
+  }, posMainLoadWatchdogMs());
 }
 
 function loadOfflineFallbackPage() {
@@ -832,7 +877,7 @@ function loadOfflineFallbackPage() {
 function schedulePosMainUrlRetryFromFailure() {
   clearPosMainLoadRetryTimer();
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (posMainLoadFailAttempts >= POS_MAIN_LOAD_MAX_ATTEMPTS) {
+  if (posMainLoadFailAttempts >= posMainLoadMaxAttempts()) {
     posMainLoadFailAttempts = 0;
     loadOfflineFallbackPage();
     return;
@@ -842,14 +887,7 @@ function schedulePosMainUrlRetryFromFailure() {
   posMainLoadRetryTimer = setTimeout(() => {
     posMainLoadRetryTimer = null;
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    clearPosDomBlankWatchdog();
-    try {
-      void mainWindow.loadURL(POS_URL, {
-        extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
-      });
-    } catch (e) {
-      console.error("[cm-pos] loadURL retry error", e);
-    }
+    loadPosMainUrl(false);
   }, delay);
 }
 
@@ -1819,8 +1857,7 @@ function createWindow() {
     mainWindow = null;
   });
 
-  void mainWindow.loadURL(POS_URL);
-  schedulePosMainLoadWatchdog();
+  loadPosMainUrl(false);
 
   if (OPEN_DEVTOOLS_ON_START) {
     try {
@@ -1889,21 +1926,20 @@ if (!gotLock) {
     });
     // #endregion
 
-    ipcMain.handle("cm-pos-reload-pos-url", async (event) => {
+    ipcMain.handle("cm-pos-reload-pos-url", async (event, opts) => {
       if (!senderAllowedForTrustedShell(event.sender)) {
         return { ok: false, reason: "forbidden" };
       }
       if (!mainWindow || mainWindow.isDestroyed()) {
         return { ok: false, reason: "no_window" };
       }
+      const preferFresh = opts && opts.preferFresh === true;
       posMainLoadFailAttempts = 0;
       clearPosMainLoadRetryTimer();
       clearPosDomBlankWatchdog();
       schedulePosMainLoadWatchdog();
       try {
-        await mainWindow.loadURL(POS_URL, {
-          extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
-        });
+        await mainWindow.loadURL(POS_URL, posUrlLoadOptions(preferFresh));
         return { ok: true };
       } catch (e) {
         return { ok: false, reason: String(e && e.message ? e.message : e) };

@@ -4,6 +4,8 @@ declare global {
   interface Window {
     cmPosShell?: {
       platform: string
+      /** offline.html 등 — preferFresh true면 no-cache(온라인일 때만), false면 SW·디스크 캐시 우선 */
+      reloadPosUrl?: (opts?: { preferFresh?: boolean }) => Promise<{ ok: boolean; reason?: string }>
       getVersion?: () => Promise<string | null>
       checkForUpdates?: () => Promise<Record<string, unknown>>
       /** 키오스크·전체화면 해제 후 창 최대화 */

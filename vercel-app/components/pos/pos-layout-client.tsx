@@ -199,34 +199,20 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   }, [])
 
   /**
-   * 하이브리드: Serwist 미등록 정책과 맞추어, 예전에 깔린 SW가 있으면 제거 후 1회 새로고침.
-   * (이미 SW가 없으면 플래그만 세우고 리로드 없음.)
+   * 하이브리드 cold start 오프라인: Serwist SW·프리캐시가 있어야 로그인 셸이 뜬다.
+   * (예전에는 SW 제거 정책이었으나 오프라인 부팅을 위해 등록으로 전환)
    */
   useEffect(() => {
-    if (!isCmPosHybridShell() || !navigator.serviceWorker?.getRegistrations) return
-    const flag = "cm-pos-hybrid-sw-cleared-v1"
-    try {
-      if (sessionStorage.getItem(flag) === "1") return
-    } catch {
-      return
-    }
-    void navigator.serviceWorker.getRegistrations().then(async (regs) => {
-      if (regs.length === 0) {
-        try {
-          sessionStorage.setItem(flag, "1")
-        } catch {
-          /* ignore */
-        }
-        return
-      }
-      await Promise.all(regs.map((r) => r.unregister()))
-      try {
-        sessionStorage.setItem(flag, "1")
-      } catch {
-        /* ignore */
-      }
-      window.location.reload()
-    })
+    if (!isCmPosHybridShell()) return
+    if (process.env.NODE_ENV !== "production") return
+    const t = window.setTimeout(() => {
+      import("@/lib/firebase-client")
+        .then((m) => {
+          m.preRegisterServiceWorker()
+        })
+        .catch(() => {})
+    }, 0)
+    return () => window.clearTimeout(t)
   }, [])
 
   useEffect(() => {

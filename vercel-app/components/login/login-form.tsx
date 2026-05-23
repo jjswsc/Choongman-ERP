@@ -316,8 +316,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (typeof navigator !== "undefined" && !isBrowserOnline()) {
         await runReachabilityProbe()
       }
-      /** Supabase 다구간 + 느린 망 — 짧은 타임아웃은 오탐이 잦음 */
-      const timeoutMs = 60_000
+      const hybridOfflineBoot =
+        typeof window !== "undefined" &&
+        isCmPosHybridShell() &&
+        !isBrowserOnline() &&
+        !!loadOfflineResumeAuth()
+      /** Supabase 다구간 + 느린 망 — 짧은 타임아웃은 오탐이 잦음. 하이브리드 오프라인 cold start는 빠르게 캐시·오프라인 UI로 */
+      const timeoutMs = hybridOfflineBoot ? 3_000 : 60_000
       const fetchOnce = () =>
         Promise.race([
           getLoginData(),

@@ -90,7 +90,6 @@ export function AdminSalesDashboardCharts({
   >({ items: [], total: 0 })
   const [hourRows, setHourRows] = React.useState<{ axisLabel: string; sales: number }[]>([])
   const [vendorLookup, setVendorLookup] = React.useState(() => new Map<string, string>())
-  const [queried, setQueried] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
@@ -155,8 +154,12 @@ export function AdminSalesDashboardCharts({
     }
   }, [today, storesParam, tr])
 
+  /** 첫 화면·매장 변경 시 자동 조회. 이후 갱신은 검색 버튼만(60초 폴링 없음) */
+  React.useEffect(() => {
+    void loadCharts()
+  }, [loadCharts])
+
   const handleSearch = React.useCallback(() => {
-    setQueried(true)
     void loadCharts()
   }, [loadCharts])
 
@@ -248,23 +251,17 @@ export function AdminSalesDashboardCharts({
         </p>
       ) : null}
 
-      {!queried ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {tr("adminDashboardChartsSearchPrompt", "「검색」을 누르면 당일 매출 차트를 불러옵니다.")}
-        </p>
-      ) : null}
-
-      {queried && loading && !hasAnyChart ? (
+      {loading && !hasAnyChart ? (
         <p className="py-6 text-center text-sm text-muted-foreground">{tr("loading", "로딩 중…")}</p>
       ) : null}
 
-      {queried && !loading && !hasAnyChart ? (
+      {!loading && !hasAnyChart ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
         </p>
       ) : null}
 
-      {queried && hourRows.some((r) => r.sales > 0) ? (
+      {hourRows.some((r) => r.sales > 0) ? (
         <div>
           <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
             {tr("salesPeriodHour", "시간대별")}
@@ -283,8 +280,6 @@ export function AdminSalesDashboardCharts({
         </div>
       ) : null}
 
-      {queried ? (
-      <>
       <div className={`grid gap-6 ${showStoreBar ? "lg:grid-cols-2" : ""}`}>
         {showStoreBar ? (
           <div className="lg:col-span-2">
@@ -452,13 +447,11 @@ export function AdminSalesDashboardCharts({
           </div>
         </div>
       ) : null}
-      </>
-      ) : null}
 
       <p className="text-[11px] text-muted-foreground">
         {tr(
           "adminDashboardChartsRefreshHint",
-          "매장을 바꾼 뒤에는「검색」으로 다시 조회하세요. 기간·상세 분석은「매출 관리」를 이용하세요."
+          "최신 데이터는「검색」으로 갱신합니다. 기간·상세 분석은「매출 관리」를 이용하세요."
         )}
       </p>
     </section>
