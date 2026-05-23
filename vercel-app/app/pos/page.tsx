@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
+import { isBrowserOnline } from '@/lib/offline/network'
 import { POSHeader } from '@/components/pos/pos-header'
 import { POSMainGrid } from '@/components/pos/pos-main-grid'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
@@ -114,6 +115,39 @@ function POSMainPageInner() {
   const showDemoIntro = isPosDemo && !requestedScenarioId && !demoIntroAccepted
   const isDemoTourEnabled = isPosDemo && !showDemoIntro
   const businessNavDrawerWarnedRef = useRef(false)
+  const navigateWatchdogRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (navigateWatchdogRef.current != null) {
+        window.clearTimeout(navigateWatchdogRef.current)
+        navigateWatchdogRef.current = null
+      }
+    },
+    []
+  )
+
+  const pushPosRouteWithFallback = useCallback(
+    (target: string) => {
+      const currentUrl =
+        typeof window === 'undefined'
+          ? ''
+          : `${window.location.pathname || ''}${window.location.search || ''}`
+      navigatePosOfflineAware(target, (p) => router.push(p))
+      // 오프라인에서 라우트 청크가 캐시에 없으면 push가 no-op인 사례가 있어, 동일 URL에 머물면 하드 네비 1회 재시도.
+      if (typeof window === 'undefined' || isBrowserOnline() || !target.startsWith('/pos/')) return
+      if (navigateWatchdogRef.current != null) {
+        window.clearTimeout(navigateWatchdogRef.current)
+        navigateWatchdogRef.current = null
+      }
+      navigateWatchdogRef.current = window.setTimeout(() => {
+        const now = `${window.location.pathname || ''}${window.location.search || ''}`
+        if (now === currentUrl) window.location.assign(target)
+        navigateWatchdogRef.current = null
+      }, 850)
+    },
+    [router]
+  )
+
   useEffect(() => {
     setHybridPosShell(
       typeof window !== 'undefined' &&
@@ -228,9 +262,9 @@ function POSMainPageInner() {
           )
         }
       }
-      navigatePosOfflineAware(path, (p) => router.push(p))
+      pushPosRouteWithFallback(path)
     },
-    [isPosDemo, storeCode, auth?.user, t, router]
+    [isPosDemo, storeCode, auth?.user, t, pushPosRouteWithFallback]
   )
 
   /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
@@ -283,40 +317,43 @@ function POSMainPageInner() {
       }
       switch (tile.type) {
         case 'dine-in':
-          navigatePosOfflineAware(isPosDemo ? getPosDemoTerminalRoute('dine_in') : '/pos/terminal?type=dine_in', (p) => router.push(p))
-          break
-        case 'takeout':
-          navigatePosOfflineAware(isPosDemo ? getPosDemoTerminalRoute('takeout') : '/pos/terminal?type=takeout', (p) => router.push(p))
-          break
-        case 'delivery':
-          navigatePosOfflineAware(isPosDemo ? getPosDemoTerminalRoute('delivery') : '/pos/terminal?type=delivery', (p) => router.push(p))
-          break
-        case 'cash':
-          navigatePosOfflineAware(
-            isPosDemo ? POS_DEMO_ROUTES.cashManagement : '/pos/local/cash',
-            (p) => router.push(p)
+          pushPosRouteWithFallback(
+            isPosDemo ? getPosDemoTerminalRoute('dine_in') : '/pos/terminal?type=dine_in'
           )
           break
+        case 'takeout':
+          pushPosRouteWithFallback(
+            isPosDemo ? getPosDemoTerminalRoute('takeout') : '/pos/terminal?type=takeout'
+          )
+          break
+        case 'delivery':
+          pushPosRouteWithFallback(
+            isPosDemo ? getPosDemoTerminalRoute('delivery') : '/pos/terminal?type=delivery'
+          )
+          break
+        case 'cash':
+          pushPosRouteWithFallback(isPosDemo ? POS_DEMO_ROUTES.cashManagement : '/pos/local/cash')
+          break
         case 'petty-cash':
-          navigatePosOfflineAware('/pos/local/petty-cash', (p) => router.push(p))
+          pushPosRouteWithFallback('/pos/local/petty-cash')
           break
         case 'attendance':
-          navigatePosOfflineAware('/pos/attendance', (p) => router.push(p))
+          pushPosRouteWithFallback('/pos/attendance')
           break
         case 'members':
           navigatePosOfflineAware('/admin/employees', (p) => router.push(p))
           break
         case 'sales':
-          navigatePosOfflineAware('/pos/sales', (p) => router.push(p))
+          pushPosRouteWithFallback('/pos/sales')
           break
         case 'receipt':
-          navigatePosOfflineAware('/pos/receipts', (p) => router.push(p))
+          pushPosRouteWithFallback('/pos/receipts')
           break
         default:
           break
       }
     },
-    [router, isPosDemo]
+    [isPosDemo, pushPosRouteWithFallback, router]
   )
 
   const onSubmenuSelect = useCallback(
