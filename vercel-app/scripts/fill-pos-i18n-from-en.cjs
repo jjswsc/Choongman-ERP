@@ -29,6 +29,18 @@ function getLangRange(src, lang) {
   return { start, end }
 }
 
+/** parseKeyValues가 읽은 \'·\\ 를 실제 문자열로 복원 */
+function unescapeParsedI18nValue(v) {
+  return String(v || "")
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, "\\")
+}
+
+/** i18n.ts 단일따옴표 리터럴용 이스케이프 (이중 이스케이프 방지) */
+function toSingleQuotedJsLiteral(v) {
+  return unescapeParsedI18nValue(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")
+}
+
 function parseKeyValues(block) {
   const map = new Map()
   const re = /\n\s*([A-Za-z0-9_]+):\s*'((?:\\'|[^'])*)',/g
@@ -90,7 +102,7 @@ for (const lang of langs) {
 
   const addLines = missing
     .map((k) => {
-      const v = String(enMap.get(k) || "").replace(/'/g, "\\'")
+      const v = toSingleQuotedJsLiteral(enMap.get(k) || "")
       return `    ${k}: '${v}',`
     })
     .join("\n")
