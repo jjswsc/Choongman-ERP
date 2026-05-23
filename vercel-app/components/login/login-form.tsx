@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
-import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-context"
+import { useAuth, loadOfflineResumeAuth, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
 import {
   isLangCode,
   useLang,
@@ -645,7 +645,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    * 스냅샷 없어도 POS·하이브리드는 캐시 목록에서 고른 매장·이름으로 오프라인 진입 허용.
    */
   const effectiveOfflineResume = useMemo((): AuthState | null => {
-    if (offlineResume) return offlineResume
+    if (offlineResume) return enrichOfflinePosAuth(offlineResume)
     if (loginApp !== "pos" && !hybridPosShell) return null
     const s = store.trim()
     const u = user.trim()
@@ -657,13 +657,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     } catch {
       /* ignore */
     }
-    return {
+    return enrichOfflinePosAuth({
       ...(company ? { company: company.trim() } : {}),
       store: s,
       user: u,
       role: "",
       token,
-    }
+    })
   }, [
     offlineResume,
     loginApp,

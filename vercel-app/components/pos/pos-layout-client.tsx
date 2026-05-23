@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
+import { navigatePosOfflineAware, replacePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useRouter, usePathname } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronUp, Home } from "lucide-react"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
@@ -247,17 +247,17 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     if (!initialized) return
     if (isPosLoginPage) return
     if (!auth) {
-      router.replace("/pos/login")
+      replacePosOfflineAware("/pos/login", (p) => router.replace(p))
       return
     }
     if (!canAccessPosOrder(auth.role || "")) {
       if (isPosSettlementOnlyRole(auth.role || "")) {
         if (pathname !== "/pos/settlement") {
-          router.replace("/pos/settlement")
+          replacePosOfflineAware("/pos/settlement", (p) => router.replace(p))
           return
         }
       } else {
-        router.replace("/pos/login")
+        replacePosOfflineAware("/pos/login", (p) => router.replace(p))
         return
       }
     }

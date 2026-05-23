@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { canAccessPosOrder } from '@/lib/permissions'
 
 export interface AuthState {
   company?: string
@@ -155,6 +156,54 @@ export function loadOfflineResumeAuth(): AuthState | null {
   }
 }
 
+/**
+ * 오프라인 진입 시 role 이 비어 있으면 POS 주문 화면 권한 검사에 막혀 /pos ↔ /pos/login 이 반복된다.
+ * 스냅샷 역할을 보강하고, 없으면 staff 로 최소 POS 주문 접근을 허용한다(PIN 검증은 생략된 오프라인 세션).
+ */
+export function enrichOfflinePosAuth(partial: AuthState): AuthState {
+  const role = String(partial.role || '').trim()
+  if (role && canAccessPosOrder(role)) return partial
+
+  try {
+    const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
+    if (raw) {
+      const o = JSON.parse(raw) as {
+        role?: string
+        employeeId?: number
+        employeeCode?: string
+        allowedStores?: string[]
+      }
+      const snapRole = String(o.role ?? '').trim()
+      if (snapRole && canAccessPosOrder(snapRole)) {
+        const snapEid =
+          o.employeeId != null && Number.isFinite(Number(o.employeeId))
+            ? Math.floor(Number(o.employeeId))
+            : 0
+        const snapCode = o.employeeCode != null ? String(o.employeeCode).trim() : ''
+        let allowedStores: string[] | undefined
+        if (Array.isArray(o.allowedStores)) {
+          allowedStores = o.allowedStores.map((x) => String(x || '').trim()).filter(Boolean)
+          if (allowedStores.length === 0) allowedStores = undefined
+        }
+        return {
+          ...partial,
+          role: snapRole,
+          ...(partial.employeeId == null && snapEid > 0 ? { employeeId: snapEid } : {}),
+          ...(partial.employeeCode == null && snapCode ? { employeeCode: snapCode } : {}),
+          ...(partial.allowedStores == null && allowedStores ? { allowedStores } : {}),
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  if (!role) {
+    return { ...partial, role: 'staff' }
+  }
+  return partial
+}
+
 function saveAuth(auth: AuthState) {
   try {
     sessionStorage.setItem('cm_store', auth.store)
@@ -241,6 +290,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         a = loadOfflineResumeAuth()
       }
     }
+    if (a) a = enrichOfflinePosAuth(a)
     setAuthState(a)
     // 세션 복구·스냅샷 복구 후 sessionStorage·스냅샷 동기화 (새 탭/401 직후에도 POS 레이아웃이 로그인으로 튕기지 않게)
     if (a) saveAuth(a)
@@ -248,9 +298,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setAuth = useCallback((a: AuthState | null) => {
-    setAuthState(a)
-    if (a) saveAuth(a)
-    else clearAuth()
+    if (a) {
+      const enriched = enrichOfflinePosAuth(a)
+      setAuthState(enriched)
+      saveAuth(enriched)
+      return
+    }
+    setAuthState(null)
+    clearAuth()
   }, [])
 
   const logout = useCallback(() => {
