@@ -26,6 +26,7 @@ import {
   persistPosOrderCouponRedemptions,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
+import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -237,6 +238,18 @@ export async function POST(req: NextRequest) {
 
     if (items.length === 0) {
       return NextResponse.json({ success: false, message: '주문 항목이 없습니다.' }, { headers })
+    }
+
+    if (!storeCode) {
+      return NextResponse.json({ success: false, message: 'store_required' }, { headers })
+    }
+
+    const openCheck = await assertPosBusinessOpenForOrderSave(storeCode)
+    if (!openCheck.ok) {
+      return NextResponse.json(
+        { success: false, message: openCheck.message, retryAfterQueue: false },
+        { headers }
+      )
     }
 
     let subtotal = 0

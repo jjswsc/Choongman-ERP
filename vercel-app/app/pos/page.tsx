@@ -18,6 +18,7 @@ import { translateApiMessage } from '@/lib/translate-api-message'
 import type { Store } from '@/lib/pos-types'
 import {
   canAccessPosSettlement,
+  canAccessPosPrinters,
   canAccessAdmin,
   canAccessPosOrder,
   canNavigateFromPosToAdmin,
@@ -53,7 +54,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { appAlert } from '@/lib/app-message'
-import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
+import { drawerOpenOptionFromPrinterSettings } from '@/lib/pos-cash-drawer'
+import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
+import { PosDrawerPinSettingsDialog } from '@/components/pos/pos-drawer-pin-settings-dialog'
 
 /** POS 첫 화면: 주문(매장/포장/배달), 영수증, 결산, 근태 등 타일 */
 function POSMainPageInner() {
@@ -115,6 +118,9 @@ function POSMainPageInner() {
   const showDemoIntro = isPosDemo && !requestedScenarioId && !demoIntroAccepted
   const isDemoTourEnabled = isPosDemo && !showDemoIntro
   const businessNavDrawerWarnedRef = useRef(false)
+  const [drawerPinSettingsOpen, setDrawerPinSettingsOpen] = useState(false)
+  const { openPosCashDrawerSecure, invalidateDrawerPinCache } = usePosCashDrawerOpen()
+  const canManageDrawerPin = canAccessPosPrinters(auth?.role || '') || canAccessPosSettlement(auth?.role || '')
   const navigateWatchdogRef = useRef<number | null>(null)
   useEffect(
     () => () => {
@@ -250,7 +256,7 @@ function POSMainPageInner() {
     async (mode: 'open' | 'close', path: string) => {
       if (!isPosDemo && storeCode) {
         const hw = await getPosPrinterSettings({ storeCode }).catch(() => null)
-        const dr = await openPosCashDrawer({
+        const dr = await openPosCashDrawerSecure({
           reason: mode === 'open' ? 'business_open_nav' : 'business_close_nav',
           source: mode === 'open' ? 'business_open_nav' : 'business_close_nav',
           storeCode,
@@ -267,7 +273,7 @@ function POSMainPageInner() {
       }
       pushPosRouteWithFallback(path)
     },
-    [isPosDemo, storeCode, auth?.user, t, pushPosRouteWithFallback]
+    [isPosDemo, storeCode, auth?.user, t, pushPosRouteWithFallback, openPosCashDrawerSecure]
   )
 
   /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
@@ -294,6 +300,10 @@ function POSMainPageInner() {
           break
         case 'settings':
           navigatePosOfflineAware('/admin', (p) => router.push(p))
+          break
+        case 'drawer-pin':
+          setSubmenuParent(null)
+          setDrawerPinSettingsOpen(true)
           break
         default:
           break
@@ -663,6 +673,13 @@ function POSMainPageInner() {
           </div>
         )}
       </footer>
+      <PosDrawerPinSettingsDialog
+        open={drawerPinSettingsOpen}
+        onOpenChange={setDrawerPinSettingsOpen}
+        storeCode={storeCode}
+        canManage={canManageDrawerPin}
+        onSaved={() => invalidateDrawerPinCache(storeCode)}
+      />
     </div>
       )}
     </PosTourProvider>

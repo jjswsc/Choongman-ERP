@@ -8795,6 +8795,7 @@ export interface PosPrinterSettings {
   /** true면 카드 금액만 반영하고 LINKPOS 단말/릴레이 승인 호출을 하지 않음 */
   linkposSkipTerminalForCard?: boolean
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
+  drawerPinConfigured?: boolean
   logoPrint?: boolean
   receiptPrintTiming?: 'per_payment' | 'final_payment'
   customerReceiptOrderDetails?: boolean
@@ -8917,6 +8918,29 @@ export async function getPosPrinterSettings(params: { storeCode: string }) {
   }
 }
 
+export async function verifyPosDrawerPin(params: { storeCode: string; pin: string }) {
+  const res = await apiFetch('/api/verifyPosDrawerPin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; skipped?: boolean }
+}
+
+export async function savePosDrawerPin(params: {
+  storeCode: string
+  newPin?: string
+  currentPin?: string
+  clearPin?: boolean
+}) {
+  const res = await apiFetch('/api/savePosDrawerPin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; cleared?: boolean }
+}
+
 export async function savePosPrinterSettings(params: {
   storeCode: string
   kitchenMode: 1 | 2 | 3
@@ -8941,6 +8965,7 @@ export async function savePosPrinterSettings(params: {
   checkAutoOpen?: boolean
   linkposSkipTerminalForCard?: boolean
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
+  drawerPinConfigured?: boolean
   logoPrint?: boolean
   receiptPrintTiming?: 'per_payment' | 'final_payment'
   customerReceiptOrderDetails?: boolean

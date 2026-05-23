@@ -35,6 +35,8 @@ import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
+import { PosBusinessOpenGateBlock } from "@/components/pos/pos-business-open-gate-block"
+import { usePosBusinessOpenGate } from "@/lib/use-pos-business-open-gate"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import {
   computePosPricing,
@@ -255,6 +257,16 @@ export default function PosOrderPage() {
     }
   }, [optionPickerMenu?.id, allOptions, orderType])
   const [storeCode, setStoreCode] = React.useState("")
+  const businessOpenGate = usePosBusinessOpenGate(storeCode)
+  const businessOpenBlocked = !businessOpenGate.allowed
+  const ensureBusinessOpenForOrder = React.useCallback(async (): Promise<boolean> => {
+    if (businessOpenGate.allowed) return true
+    await appAlert(
+      t("posBusinessOpenRequiredBody") ||
+        "오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요."
+    )
+    return false
+  }, [businessOpenGate.allowed, t])
   const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
     React.useCallback((list) => setMenus(list), []),
     storeCode || null
@@ -816,6 +828,10 @@ export default function PosOrderPage() {
   }
 
   const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {
+    if (businessOpenBlocked) {
+      void ensureBusinessOpenForOrder()
+      return
+    }
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
     const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt) : ""
     const name = opt
@@ -847,6 +863,7 @@ export default function PosOrderPage() {
   }
 
   const addToCart = async (menu: PosMenu) => {
+    if (!(await ensureBusinessOpenForOrder())) return
     const mirrorPromoId = menu.promoId?.trim()
     if (mirrorPromoId) {
       const pr = promos.find((x) => x.id === mirrorPromoId)
@@ -973,6 +990,7 @@ export default function PosOrderPage() {
   }, [getPromoPrice, allOptions, menus])
 
   const addPromoToCart = async (promo: PosPromoWithItems) => {
+    if (!(await ensureBusinessOpenForOrder())) return
     const freshItems = await getPosPromoItems({ promoId: promo.id }).catch(() => null)
     const resolvedItems =
       Array.isArray(freshItems) && freshItems.length > 0
@@ -1267,6 +1285,7 @@ export default function PosOrderPage() {
     deliveryChannel: "grab" | "lineman" | "shopee" | null
   }) => {
     if (cart.length === 0) return
+    if (!(await ensureBusinessOpenForOrder())) return
     const checkoutPricing = computePosPricing({
       subtotal,
       discountAmt,
@@ -1689,7 +1708,13 @@ export default function PosOrderPage() {
           </div>
         )}
         {/* Oll star pos 15dlscl (1024x768/1366x768) 최적화: 1024 이하 3열, 이상 4~5열 */}
-        <div className="flex-1 overflow-y-auto p-2 sm:p-3">
+        <PosBusinessOpenGateBlock
+          blocked={businessOpenBlocked}
+          loading={businessOpenGate.loading}
+          businessDateYmd={businessOpenGate.businessDateYmd}
+          className="relative flex-1 min-h-0"
+        >
+          <div className="h-full flex-1 overflow-y-auto p-2 sm:p-3">
           <div className="grid content-start auto-rows-max grid-cols-3 items-start gap-2 sm:gap-2.5 min-[1025px]:grid-cols-4 min-[1200px]:grid-cols-5">
             {filteredPromos.map((p) => {
               const promoImageSrc = resolvePromoTileImageSrc(p, menus, {
@@ -1778,7 +1803,8 @@ export default function PosOrderPage() {
               {t("posNoMenus") || "등록된 메뉴가 없습니다."}
             </div>
           )}
-        </div>
+          </div>
+        </PosBusinessOpenGateBlock>
       </div>
 
       {/* 장바구니: 1024 이하 240px, 이상 288px (태블릿 가로 여백 확보) */}

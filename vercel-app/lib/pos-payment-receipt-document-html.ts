@@ -18,6 +18,10 @@ import {
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import {
+  buildReceiptVoidBannerHtml,
+  POS_RECEIPT_VOID_EXTRA_STYLES,
+} from '@/lib/pos-void-receipt'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import {
   buildOptionNameByCodeFromMenus,
@@ -395,6 +399,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const logoUrl = d.receiptLogoImageUrl || `${origin}/company-stamp.png`
   const isPaymentReceipt =
     !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
+  const voidMode = Boolean(receiptData.voidReceiptMode)
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
@@ -441,12 +446,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const paymentSimpleLine = payMethodsInline
     ? `<div class="simple-line"><b>${esc(tr('posReceiptPaymentMethods', 'Payment'))}</b>: ${payMethodsInline}</div>`
     : ''
-  const cashTenderReceiptRowsHtml = isPaymentReceipt
+  const cashTenderReceiptRowsHtml = isPaymentReceipt && !voidMode
     ? buildCashTenderReceiptRowsHtml(receiptData, tr, paymentRowHtml)
     : ''
-  const cashTenderReceiptSimpleHtml = isPaymentReceipt
+  const cashTenderReceiptSimpleHtml = isPaymentReceipt && !voidMode
     ? buildCashTenderReceiptSimpleLinesHtml(receiptData, tr, esc)
     : ''
+  const voidBannerHtml = voidMode ? buildReceiptVoidBannerHtml(tr) : ''
   const showLogo = isPaymentReceipt && (d.receiptShowLogo || forceReceiptLogo)
   const footerPrimaryText =
     String(d.receiptFooterPrimaryText || '').trim() ||
@@ -661,11 +667,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${isPaymentReceipt && d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         ${taxInvoice ? buildPosTaxInvoiceThermalHtml({ taxInvoice, esc, tr }) : ''}
+        ${voidBannerHtml}
         <div class="simple-divider"></div>
         <table class="simple-table">${itemRows}</table>
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
+        ${
+          voidMode
+            ? `<div class="simple-total">${esc(tr('posReceiptVoidAmount', 'Void Amount'))}: ${formatBahtNum(receiptData.total)}</div>`
+            : ''
+        }
         ${cashTenderReceiptSimpleHtml ? `<div class="simple-divider"></div>${cashTenderReceiptSimpleHtml}` : ''}
         ${
           paymentSimpleLine
@@ -710,6 +722,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-k { width: 72%; }
         .simple-v { width: 28%; text-align: right; white-space: nowrap; }
         .simple-total { font-size: 12px; font-weight: 800; margin-top: 4px; color: #000; }
+        ${voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''}
       `,
     })
   }
@@ -771,6 +784,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         }
         ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
+        ${voidBannerHtml}
         ${
           useLegacyAligned
             ? `<div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>`
@@ -920,12 +934,21 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           formatBahtNum(receiptData.total),
           useLegacyAligned ? 'receipt-total' : 'receipt-pay-line--total'
         )}
+        ${
+          voidMode
+            ? paymentRowHtml(
+                esc(tr('posReceiptVoidAmount', 'Void Amount')),
+                formatBahtNum(receiptData.total),
+                useLegacyAligned ? 'receipt-total' : 'receipt-pay-line--total'
+              )
+            : ''
+        }
         ${cashTenderReceiptRowsHtml ? '<div class="receipt-divider"></div>' : ''}${cashTenderReceiptRowsHtml}
-        ${paymentRowsHtml}${paymentChannelFallbackHtml}
+        ${voidMode ? '' : `${paymentRowsHtml}${paymentChannelFallbackHtml}`}
         <div class="receipt-divider"></div>
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}
-        ${d.receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
+        ${d.receiptShowPaidStamp && !voidMode ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
         ${showMembershipQr ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(membershipQrSrc)}" alt="Membership QR" style="width:84px;height:84px;object-fit:contain;" />${membershipQrText ? `<div class="text-xs receipt-muted" style="margin-top:2px;">${esc(membershipQrText)}</div>` : ''}</div>` : ''}
         ${showStamp ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(d.receiptStampImageUrl)}" alt="Company stamp" style="width:72px;height:72px;object-fit:contain;" /></div>` : ''}
         ${footerPrimaryText || footerSecondaryText ? '<div class="text-center text-xs receipt-muted">' : ''}
@@ -1006,6 +1029,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment .receipt-pay-line--total .receipt-pay-line-amt { font-size: 12px; font-weight: 800; }
         `
         }
+        ${voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''}
       `,
   })
 }

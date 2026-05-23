@@ -108,6 +108,8 @@ export type ReceiptModalData = {
   suppressReceiptModalAutoPrint?: boolean
   /** 동일 주문의 다중 인쇄(더치 분할 등) 구분용 키 */
   printInstanceKey?: string
+  /** 주문 취소·void 시 음수 금액·Voided 배너 영수증 */
+  voidReceiptMode?: boolean
 }
 
 interface PosReceiptModalProps {
@@ -256,6 +258,15 @@ export function PosReceiptModal({
             })),
             subtotal: Number(receiptData.subtotal ?? 0) || 0,
             discountAmt: Number(receiptData.discountAmt ?? 0) || 0,
+            couponDiscountAmt: Math.max(
+              0,
+              Number(
+                (receiptData as { couponDiscountAmt?: number }).couponDiscountAmt ??
+                  receiptData.appliedCoupons?.reduce((s, c) => s + Math.max(0, Number(c.discountAmt ?? 0) || 0), 0) ??
+                  0
+              ) || 0
+            ),
+            discountReason: receiptData.discountReason ? String(receiptData.discountReason) : undefined,
             total: Number(receiptData.total ?? 0) || 0,
             deliveryFee: Number(receiptData.deliveryFee ?? 0) || 0,
             packagingFee: Number(receiptData.packagingFee ?? 0) || 0,

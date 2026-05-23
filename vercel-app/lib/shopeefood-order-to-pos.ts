@@ -211,14 +211,27 @@ export async function persistShopeeFoodOrderToPos(params: {
   const paymentMethod = String(order.payment_method ?? '').toUpperCase()
   const totalMinor = num(amount.total_amount)
   const totalMajor = minorToMajor(totalMinor, currency)
-  const pricing = computePosPricing({
+  const pricingAtMenuPrice = computePosPricing({
     subtotal,
     discountAmt: 0,
+    deliveryFee,
+    packagingFee,
+    adjustments: {},
+  })
+  const menuGrossTotal = pricingAtMenuPrice.finalTotal
+  const discountAmt =
+    totalMajor > 0.005
+      ? Math.max(0, Math.round((menuGrossTotal - totalMajor) * 100) / 100)
+      : 0
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt,
     deliveryFee,
     packagingFee,
     cardPaymentAmount: paymentMethod === 'ONLINE_PAYMENT' ? totalMajor : 0,
     adjustments: {},
   })
+  const orderTotal = totalMajor > 0.005 ? totalMajor : pricing.finalTotal
 
   const orderNo = await allocateNextPosOrderNo(storeCode)
   const remark = String(order.remark ?? '').trim()
@@ -237,19 +250,19 @@ export async function persistShopeeFoodOrderToPos(params: {
     table_name: tableName,
     /** 중복 수신 시 동일 문자열로 조회 (주문 비고는 table_name에 반영) */
     memo,
-    discount_amt: 0,
-    discount_reason: '',
+    discount_amt: discountAmt,
+    discount_reason: discountAmt > 0.005 ? 'ShopeeFood' : '',
     delivery_fee: deliveryFee,
     packaging_fee: packagingFee,
     items_json: JSON.stringify(items),
     subtotal,
     vat: pricing.vatFeeAmt,
-    total: pricing.finalTotal,
+    total: orderTotal,
     status: 'pending',
-    payment_cash: paymentMethod === 'CASH_ON_DELIVERY' ? pricing.finalTotal : 0,
+    payment_cash: paymentMethod === 'CASH_ON_DELIVERY' ? orderTotal : 0,
     payment_card: 0,
     payment_qr: 0,
-    payment_other: paymentMethod === 'ONLINE_PAYMENT' ? pricing.finalTotal : 0,
+    payment_other: paymentMethod === 'ONLINE_PAYMENT' ? orderTotal : 0,
     member_id: null,
     member_no: null,
     coupon_code: null,

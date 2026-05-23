@@ -1,4 +1,6 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
+import { orderUiItemsToPosOrderItems } from '@/lib/pos-order-item-map'
+import type { Order } from '@/lib/pos-types'
 import {
   formatGrabOrderLineNoteForPrint,
   isGrabInboundPosOrder,
@@ -517,5 +519,78 @@ export function receiptModalDataFromPosOrderForPayment(
     otherFeeMode: pricing.otherFeeMode,
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: false,
+  }
+}
+
+/** 결제 후 세금계산서 수취인 저장 → 결제(세금) 영수증 재인쇄용 */
+export function receiptModalDataFromTerminalOrderTaxReprint(
+  order: Pick<
+    Order,
+    | 'orderNo'
+    | 'type'
+    | 'tableName'
+    | 'items'
+    | 'discountAmt'
+    | 'discountReason'
+    | 'total'
+    | 'paymentCash'
+    | 'paymentCashTendered'
+    | 'paymentCard'
+    | 'paymentQr'
+    | 'paymentOther'
+    | 'paymentDeliveryApp'
+    | 'deliveryPaymentChannel'
+    | 'deliveryAppCode'
+    | 'guestCount'
+    | 'appliedCoupons'
+  >,
+  storeCode: string,
+  memo: string,
+  adjustments: PosPricingAdjustments,
+  opts?: PosOrderReceiptLineOptions
+): ReceiptModalData {
+  const posItems = orderUiItemsToPosOrderItems(order.items)
+  const subtotal = posItems.reduce(
+    (sum, it) => sum + Math.max(0, Number(it.price) || 0) * Math.max(0, Number(it.qty) || 0),
+    0
+  )
+  const orderType =
+    order.type === 'delivery' ? 'delivery' : order.type === 'takeout' ? 'takeout' : 'dine_in'
+  const posOrder: PosOrder = {
+    id: 0,
+    orderNo: String(order.orderNo || ''),
+    storeCode,
+    orderType,
+    tableName: String(order.tableName || ''),
+    memo,
+    items: posItems,
+    subtotal,
+    discountAmt: Number(order.discountAmt || 0),
+    total: Number(order.total || 0),
+    vat: 0,
+    createdAt: new Date().toISOString(),
+    status: 'paid',
+    paymentCash: Number(order.paymentCash || 0),
+    paymentCard: Number(order.paymentCard || 0),
+    paymentQr: Number(order.paymentQr || 0),
+    paymentOther: Number(order.paymentOther || 0),
+    paymentDeliveryApp: Number(order.paymentDeliveryApp || 0),
+    deliveryPaymentChannel: order.deliveryPaymentChannel,
+    ...(Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) > 0.005
+      ? { paymentCashTendered: Math.max(0, Number(order.paymentCashTendered || 0) || 0) }
+      : {}),
+    ...(order.discountReason ? { discountReason: order.discountReason } : {}),
+    ...(order.appliedCoupons?.length ? { appliedCoupons: order.appliedCoupons } : {}),
+    ...(String(order.deliveryAppCode ?? '').trim()
+      ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
+      : {}),
+    ...(order.guestCount != null ? { guestCount: order.guestCount } : {}),
+  }
+  const base = receiptModalDataFromPosOrderForPayment(posOrder, adjustments, opts)
+  const dbTotal = Number(order.total || 0)
+  return {
+    ...base,
+    ...(dbTotal > 0.005 ? { total: dbTotal } : {}),
+    suppressReceiptModalAutoPrint: true,
   }
 }

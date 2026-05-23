@@ -66,6 +66,7 @@ export type POSTileType =
   | "cash-withdrawal"
   | "cash-drawer"
   | "settings"
+  | "drawer-pin"
   | "refresh"
   | "logout"
 
@@ -101,6 +102,7 @@ export const POS_SUBMENUS: Record<"business" | "operations", POSSubMenuItem[]> =
     { type: "close", labelKey: "posBusinessClose" },
   ],
   operations: [
+    { type: "drawer-pin", labelKey: "posDrawerPinManage" },
     { type: "refresh", labelKey: "posRefresh" },
     { type: "logout", labelKey: "posLogout" },
     { type: "settings", labelKey: "posSettings" },

@@ -17,6 +17,7 @@ import {
 } from '@/lib/grab-pos-order-enrich'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
@@ -24,6 +25,11 @@ import {
   expandBanbanComposeLineForPrint,
   parseBanbanFlavorsFromName,
 } from '@/lib/pos-banban-utils'
+import {
+  buildReceiptVoidBannerHtml,
+  negatePosReceiptMoney,
+  POS_RECEIPT_VOID_EXTRA_STYLES,
+} from '@/lib/pos-void-receipt'
 
 type HallOrderItem = {
   id: string
@@ -85,6 +91,8 @@ type HallOrderPayload = {
   items: HallOrderItem[]
   subtotal: number
   discountAmt: number
+  couponDiscountAmt?: number
+  discountReason?: string
   total: number
   deliveryFee?: number
   packagingFee?: number
@@ -101,6 +109,49 @@ type HallOrderPayload = {
   otherFeeMode?: 'included' | 'separate'
   /** 홀(dine-in) 인원. 0·미입력이면 영수증에 표시하지 않음 */
   guestCount?: number
+  /** 주문 전체 취소 void 영수증 */
+  voidReceiptMode?: boolean
+}
+
+/** 홀 주문서·결제 영수증이 같은 할인 금액을 쓰도록 정규화(쿠폰·플랫폼 차액 포함). */
+export function resolveHallOrderReceiptDiscountAmt(payload: {
+  discountAmt?: number
+  couponDiscountAmt?: number
+  items: { price: number; qty: number }[]
+  subtotal?: number
+  deliveryFee?: number
+  packagingFee?: number
+  vatFeeAmt?: number
+  total: number
+}): number {
+  const explicit = resolvePosSalesDiscountAmount(
+    Math.max(0, Number(payload.discountAmt) || 0),
+    Math.max(0, Number(payload.couponDiscountAmt) || 0)
+  )
+  if (explicit > 0.0001) return explicit
+
+  const itemsGross = (payload.items || []).reduce(
+    (sum, it) => sum + Math.max(0, Number(it.price) || 0) * Math.max(0, Number(it.qty) || 0),
+    0
+  )
+  const subtotal = Math.max(0, Number(payload.subtotal) || 0) || itemsGross
+  const fees =
+    Math.max(0, Number(payload.deliveryFee) || 0) + Math.max(0, Number(payload.packagingFee) || 0)
+  const vat = Math.max(0, Number(payload.vatFeeAmt) || 0)
+  const total = Math.max(0, Number(payload.total) || 0)
+  const gross = Math.max(itemsGross, subtotal) + fees
+  const implied = Math.round((gross + vat - total) * 100) / 100
+  if (implied > 0.02 && total > 0.005 && implied < gross + vat + 0.01) return implied
+  return 0
+}
+
+function resolveHallOrderDiscountLabel(
+  t: (key: string) => string,
+  discountReason?: string
+): string {
+  const base = t('posDiscount') || '할인'
+  const reason = String(discountReason ?? '').trim()
+  return reason ? `${base} ${reason}` : base
 }
 
 function parseReceiptSetChildLineName(name: string): { promoLabel: string; childName: string } | null {
@@ -344,6 +395,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '<span class="receipt-order-type-chip receipt-order-type-chip--inline"> ' +
     esc(orderTypeLabelText) +
     '</span>'
+  const voidMode = Boolean(payload.voidReceiptMode)
   const grabInbound = isGrabInboundPosOrder({ memo: payload.memo, items: payload.items })
   const receiptItems = mergeSetChildrenForReceipt(payload.items || [], {
     grabInbound,
@@ -459,7 +511,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         esc(lineMain) +
         c('span') +
         '<span>' +
-        formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0)) +
+        formatBahtNum(
+          (voidMode ? negatePosReceiptMoney(it.price) : Number(it.price) || 0) * (Number(it.qty) || 0)
+        ) +
         c('span') +
         c('div') +
         optionHtml +
@@ -474,13 +528,14 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   const taxInvoiceRow = parsedMemo.taxInvoice
     ? buildPosTaxInvoiceThermalHtml({ taxInvoice: parsedMemo.taxInvoice, esc, tr })
     : ''
+  const effectiveDiscountAmt = resolveHallOrderReceiptDiscountAmt(payload)
   const discountRow =
-    payload.discountAmt > 0
+    effectiveDiscountAmt > 0.0001
       ? '<div class="receipt-row discount"><span>' +
-        esc(t('posDiscount') || '할인') +
+        esc(resolveHallOrderDiscountLabel(t, payload.discountReason)) +
         c('span') +
         '<span>-' +
-        formatBahtNum(payload.discountAmt) +
+        formatBahtNum(effectiveDiscountAmt) +
         c('span') +
         c('div')
       : ''
@@ -519,6 +574,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '<div class="receipt-divider">' +
     c('div') +
     (taxInvoiceRow ? taxInvoiceRow + '<div class="receipt-divider">' + c('div') : '') +
+    (voidMode ? buildReceiptVoidBannerHtml(tr) : '') +
     '<div class="receipt-item-head"><span>' +
     esc(tr('posMenuName', '품목')) +
     c('span') +
@@ -539,9 +595,18 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     esc(t('posTotal') || '합계') +
     c('span') +
     '<span>' +
-    formatBahtNum(payload.total) +
+    formatBahtNum(voidMode ? negatePosReceiptMoney(payload.total) : payload.total) +
     c('span') +
     c('div') +
+    (voidMode
+      ? '<div class="receipt-row receipt-total"><span>' +
+        esc(tr('posReceiptVoidAmount', 'Void Amount')) +
+        c('span') +
+        '<span>' +
+        formatBahtNum(negatePosReceiptMoney(payload.total)) +
+        c('span') +
+        c('div')
+      : '') +
     c('div')
 
   return buildReceiptDocumentHtml({
@@ -555,6 +620,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       String(RECEIPT_GRID_COL_GAP_PX) +
       'px;vertical-align:top}.receipt-order-simple .receipt-row>span:last-child,.receipt-order-simple .receipt-item-head>span:last-child{display:table-cell;width:' +
       String(RECEIPT_AMOUNT_COL_MM) +
-      'mm;text-align:right;vertical-align:top;white-space:normal}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}',
+      'mm;text-align:right;vertical-align:top;white-space:normal}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}' +
+      (voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''),
   })
 }

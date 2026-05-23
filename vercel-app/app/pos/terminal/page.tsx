@@ -134,12 +134,17 @@ import {
 } from '@/lib/pos-hall-order-receipt-document-html'
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
+  enrichReceiptModalItemsForPromoDisplay,
   isPosOrderPaidLikeStatus,
   posOrderPaymentSum,
   posOrderRowPaymentSum,
   receiptModalDataFromPosOrderForPayment,
+  receiptModalDataFromTerminalOrderTaxReprint,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
+import { negatePosReceiptMoney, receiptModalDataForVoidReceipt } from '@/lib/pos-void-receipt'
 import {
   posOrderPaymentFieldsFromSnapshot,
   receiptPaymentFieldsFromSnapshot,
@@ -159,6 +164,7 @@ import {
   markPosSelfInitiatedGrabCancel,
 } from '@/lib/pos-grab-cancel-alert-suppress'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
+import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import {
   publishPosCustomerDisplayState,
   type PosCustomerDisplayPayload,
@@ -176,6 +182,8 @@ import {
   PosTourProvider,
   usePosTour,
 } from '@/lib/pos-tour'
+import { PosBusinessOpenGateBlock } from '@/components/pos/pos-business-open-gate-block'
+import { usePosBusinessOpenGate } from '@/lib/use-pos-business-open-gate'
 
 function buildCustomerDisplayPaymentLines(
   draft: CartPanelPaymentPayload | null,
@@ -544,6 +552,17 @@ export default function PosTerminalPage() {
     loadingTables,
   } = usePosStore()
 
+  const businessOpenGate = usePosBusinessOpenGate(currentStoreId, { skip: isPosDemo })
+  const businessOpenBlocked = !businessOpenGate.allowed
+  const ensureBusinessOpenForOrder = useCallback(async (): Promise<boolean> => {
+    if (isPosDemo || businessOpenGate.allowed) return true
+    await appAlert(
+      t('posBusinessOpenRequiredBody') ||
+        '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+    )
+    return false
+  }, [isPosDemo, businessOpenGate.allowed, t])
+
   useEffect(() => {
     if (!currentStoreId) return
     let cancel = false
@@ -691,6 +710,7 @@ export default function PosTerminalPage() {
   const [receiptBarcode, setReceiptBarcode] = useState(false)
   const [itemBarcode, setItemBarcode] = useState(false)
   const [drawerOpenOption, setDrawerOpenOption] = useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
+  const { openPosCashDrawerSecure } = usePosCashDrawerOpen()
   const [receiptPrintLang, setReceiptPrintLang] = useState<string>('')
   const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
   const printLang = receiptPrintLang && validPrintLangs.includes(receiptPrintLang) ? receiptPrintLang : lang
@@ -2841,6 +2861,152 @@ export default function PosTerminalPage() {
     })
   }
 
+  /** 전체 취소 직후: void 영수증 자동 인쇄(결제 있으면 결제 영수증, 없으면 홀 주문표) */
+  async function runAfterFullOrderCancelVoidReceiptPrint(orderId: number) {
+    if (posDemoRef.current) return
+    if (!isMainPosDevice) return
+    try {
+      const list = await getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+      const po = list?.[0] as PosOrder | undefined
+      if (!po?.items?.length) return
+
+      const settings = await getPrinterSettingsForStore(currentStoreId)
+      const paymentSum = posOrderPaymentSum(po)
+      const orderTypeLabelMap = {
+        dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
+        takeout: tPrint('posOrderTypeTakeout') ?? '포장',
+        delivery: tPrint('posOrderTypeDelivery') ?? '배달',
+      }
+
+      if (paymentSum > 0.005) {
+        const voidBase = receiptModalDataForVoidReceipt(po, posReceiptLineOpts)
+        const receiptData = {
+          ...voidBase,
+          items: enrichReceiptModalItemsForPromoDisplay(voidBase.items, posReceiptLineOpts),
+        }
+        const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+          receiptData,
+          menus,
+          orderTypeLabels: orderTypeLabelMap,
+          t: tPrint,
+          lang: printLang,
+          origin: typeof window !== 'undefined' ? window.location.origin : '',
+          printerSettings: settings,
+          forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(currentStoreId),
+        })
+        printPosHtmlDocument(receiptHtml, {
+          title: tPrint('posReceipt') || '영수증',
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
+          focusIframeBeforePrint: false,
+          printRole: 'receipt',
+          printReceiptKind: 'payment',
+          escPosCutOverride: resolveEscPosCutOverride(settings, {
+            printRole: 'receipt',
+            printReceiptKind: 'payment',
+          }),
+          onPrintUnavailable: () => {
+            void appAlert(t('posPrintUnavailable'))
+          },
+        })
+        return
+      }
+
+      const channel = normalizePosOrderTypeKey(po.orderType ?? 'dine_in')
+      const orderTypeLabel =
+        channel === 'delivery'
+          ? orderTypeLabelMap.delivery
+          : channel === 'takeout'
+            ? orderTypeLabelMap.takeout
+            : orderTypeLabelMap.dine_in
+      const subtotal = Math.max(0, Number(po.subtotal ?? 0) || 0)
+      const discountAmt = Math.max(0, Number(po.discountAmt ?? 0) || 0)
+      const pricing = computePosPricing({
+        subtotal,
+        discountAmt,
+        cardPaymentAmount: Math.max(0, Number(po.paymentCard ?? 0) || 0),
+        adjustments: pricingAdjustments,
+      })
+      const receiptPrintItems = (po.items || []).map((it) => {
+        const row = it as PosOrderItem
+        const menuId = String(row.menuId1 ?? row.menuId2 ?? '').trim()
+        const displayName = resolveOrderItemDisplayName({
+          id: String(it.id ?? ''),
+          name: String(it.name ?? ''),
+          menuId,
+        })
+        const note = String(it.note ?? '').trim()
+        return {
+          id: String(it.id ?? ''),
+          name: displayName,
+          price: negatePosReceiptMoney(Number(it.price ?? 0)),
+          qty: Math.max(1, Number(it.qty ?? 1) || 1),
+          ...(note ? { note } : {}),
+          ...(Array.isArray(row.promoItems) && row.promoItems.length > 0
+            ? { promoItems: enrichPromoItemsWithOptionName(row.promoItems) }
+            : {}),
+        }
+      })
+      const hallHtml = buildPosHallOrderReceiptDocumentHtml({
+        payload: {
+          orderNo: String(po.orderNo ?? '').trim(),
+          storeCode: currentStoreId,
+          orderType: orderTypeLabel,
+          tableName: String(po.tableName ?? '').trim(),
+          memo: String(po.memo ?? ''),
+          items: receiptPrintItems,
+          subtotal: negatePosReceiptMoney(subtotal),
+          discountAmt,
+          total: negatePosReceiptMoney(pricing.finalTotal),
+          vatFeeAmt: pricing.vatFeeAmt,
+          vatFeeMode: pricing.vatFeeMode,
+          ...receiptTaxDisplayFieldsFromPricing(pricing),
+          serviceFeeAmt: pricing.serviceFeeAmt,
+          serviceFeeMode: pricing.serviceFeeMode,
+          cardFeeAmt: pricing.cardFeeAmt,
+          cardFeeMode: pricing.cardFeeMode,
+          otherFeeAmt: pricing.otherFeeAmt,
+          otherFeeMode: pricing.otherFeeMode,
+          ...posGuestCountSpread(po.guestCount),
+          voidReceiptMode: true,
+        },
+        t: tPrint,
+        lang: printLang,
+        resolveOrderItemDisplayName: (it) =>
+          resolveOrderItemDisplayName({
+            id: String(it.id ?? ''),
+            name: String(it.name ?? ''),
+            menuId: String((it as { menuId?: string }).menuId ?? ''),
+            promoId: String((it as { promoId?: string }).promoId ?? ''),
+            promoCode: String((it as { promoCode?: string }).promoCode ?? ''),
+          }),
+        menuNameById: (menuId: string) =>
+          menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
+        menuCodeByMenuId: Object.fromEntries(
+          menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+        ),
+        optionNameByCode,
+      })
+      printPosHtmlDocument(hallHtml, {
+        title: tPrint('posReceipt') || '영수증',
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        focusIframeBeforePrint: false,
+        printRole: 'receipt',
+        printReceiptKind: 'hall_order',
+        escPosCutOverride: resolveEscPosCutOverride(settings, {
+          printRole: 'receipt',
+          printReceiptKind: 'hall_order',
+        }),
+        onPrintUnavailable: () => {
+          void appAlert(t('posPrintUnavailable'))
+        },
+      })
+    } catch (e) {
+      console.error('Void receipt print (full cancel):', e)
+    }
+  }
+
   /** 전체 취소 직후: 주방에 취소 줄(`-`)만 인쇄(프린터 설정 `autoPrintKitchenSlipOnOrder` 따름) */
   async function runAfterFullOrderCancelKitchenPrints(
     orderId: number,
@@ -2930,6 +3096,7 @@ export default function PosTerminalPage() {
         .catch((e) => console.error('Kitchen slip print (full cancel):', e))
     }
     setTimeout(runKitchenFullCancel, 0)
+    void runAfterFullOrderCancelVoidReceiptPrint(orderId)
   }
 
   /** 일부 취소(updatePosOrder) 직후: DB 기준 스냅샷으로 홀 주문표·주방 재인쇄(매장 프린터 설정 따름) */
@@ -2949,6 +3116,7 @@ export default function PosTerminalPage() {
     const tableName = String(po.tableName ?? '').trim()
     const memo = String(po.memo ?? '')
     const discountAmt = Math.max(0, Number(po.discountAmt ?? 0) || 0)
+    const couponDiscountAmt = Math.max(0, Number(po.couponDiscountAmt ?? 0) || 0)
     const subtotal = Math.max(0, Number(po.subtotal ?? 0) || 0)
     const pricing = computePosPricing({
       subtotal,
@@ -3002,6 +3170,8 @@ export default function PosTerminalPage() {
       items: receiptPrintItems,
       subtotal,
       discountAmt,
+      couponDiscountAmt,
+      discountReason: String(po.discountReason ?? '').trim() || undefined,
       total: pricing.finalTotal,
       vatFeeAmt: pricing.vatFeeAmt,
       vatFeeMode: pricing.vatFeeMode,
@@ -3209,6 +3379,7 @@ export default function PosTerminalPage() {
       const memo = String(row.memo ?? '')
       const subtotal = Number(row.subtotal ?? 0)
       const discountAmt = Number(row.discount_amt ?? 0)
+      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
       const total = Number(row.total ?? 0)
       const receiptPayloadRealtime = {
         orderNo,
@@ -3219,6 +3390,8 @@ export default function PosTerminalPage() {
         items,
         subtotal,
         discountAmt,
+        couponDiscountAmt,
+        discountReason: String(row.discount_reason ?? '').trim() || undefined,
         total,
         ...posGuestCountSpread(row.guest_count),
       }
@@ -3573,6 +3746,7 @@ export default function PosTerminalPage() {
 
       const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
       const discountAmt = Number(row.discount_amt ?? 0)
+      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
       const pricing = computePosPricing({
         subtotal: mergeSubtotal,
         discountAmt,
@@ -3599,6 +3773,8 @@ export default function PosTerminalPage() {
         items: receiptPrintItemsRemote,
         subtotal: mergeSubtotal,
         discountAmt,
+        couponDiscountAmt,
+        discountReason: String(row.discount_reason ?? '').trim() || undefined,
         total: pricing.finalTotal,
         vatFeeAmt: pricing.vatFeeAmt,
         vatFeeMode: pricing.vatFeeMode,
@@ -3954,6 +4130,8 @@ export default function PosTerminalPage() {
             items,
             subtotal: order.subtotal ?? 0,
             discountAmt: order.discountAmt ?? 0,
+            couponDiscountAmt: order.couponDiscountAmt ?? 0,
+            discountReason: String(order.discountReason ?? '').trim() || undefined,
             total: order.total ?? 0,
             ...posGuestCountSpread(order.guestCount),
           }
@@ -4154,7 +4332,7 @@ export default function PosTerminalPage() {
       if (cashAmt <= 0) return
       // force 는 "수동 강제 열기 전용"으로 간주: 자동 결제 오픈은 수행하지 않음
       if (drawerOpenOption === 'force') return
-      const res = await openPosCashDrawer({
+      const res = await openPosCashDrawerSecure({
         reason: 'cash_payment',
         source: 'payment_auto',
         storeCode: currentStoreId,
@@ -4169,7 +4347,7 @@ export default function PosTerminalPage() {
         )
       }
     },
-    [isPosDemo, currentStoreId, auth?.user, drawerOpenOption, t]
+    [isPosDemo, currentStoreId, auth?.user, drawerOpenOption, t, openPosCashDrawerSecure]
   )
 
   const tryOpenDrawerOnOrderComplete = useCallback(
@@ -4343,6 +4521,7 @@ export default function PosTerminalPage() {
 
   const handleSaveTaxInvoiceForOrder = async () => {
     if (!taxInvoiceTargetOrder) return
+    if (!(await ensureBusinessOpenForOrder())) return
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       await appAlert(t('posReceiptPayCorrectOffline'))
       return
@@ -4395,70 +4574,55 @@ export default function PosTerminalPage() {
         guestCount: Number(taxInvoiceTargetOrder.guestCount || 0),
       })
       if (!res.success) {
-        await appAlert(String(res.message || t('processFail') || '실패'))
+        await appAlert(
+          translateApiMessage(String(res.message || ''), t) || t('processFail') || '실패'
+        )
         return
       }
-      /** 결제 후 세금 정보 저장 시: DB 반영된 memo(세금 블록)로 홀 간이 영수증 재인쇄 — 저장만 하고 인쇄가 없던 동작 보완 */
+      /** 결제 후 세금 정보 저장 시: 결제(세금계산서) 영수증 재인쇄 — 홀 주문표는 매장·VAT·결제 수단이 빠짐 */
       if (isMainPosDevice) {
-        const o = taxInvoiceTargetOrder
-        const printItems = o.items.map((it) => {
-          const menuId = String(it.menuId ?? '').trim()
-          const name = resolveOrderItemDisplayName({
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            menuId,
-          })
-          const qty = Math.max(1, Number(it.quantity || 1) || 1)
-          return {
-            id: String(it.id ?? ''),
-            name,
-            price: Number(it.price || 0),
-            qty,
-            ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-            ...(menuId ? { menuId } : {}),
-            ...(Array.isArray(it.promoItems) && it.promoItems.length > 0
-              ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
-              : {}),
-          }
-        })
-        const mergeSubtotal = printItems.reduce((s, i) => s + i.price * i.qty, 0)
-        const discountAmt = Number(o.discountAmt || 0)
-        const pricing = computePosPricing({
-          subtotal: mergeSubtotal,
-          discountAmt,
-          cardPaymentAmount: Number(o.paymentCard || 0),
-          adjustments: pricingAdjustments,
-        })
-        const dbTotal = Number(o.total || 0)
-        const total = dbTotal > 0.005 ? dbTotal : pricing.finalTotal
-        const orderTypeLabel =
-          o.type === 'delivery'
-            ? t('posOrderTypeDelivery') || 'Delivery'
-            : o.type === 'takeout'
-              ? t('posOrderTypeTakeout') || 'Takeout'
-              : t('posOrderTypeDineIn') || '매장'
-        const receiptPayloadAfterTax = {
-          orderNo: String(o.orderNo || ''),
-          storeCode: currentStoreId,
-          orderType: orderTypeLabel,
-          tableName: o.tableName,
-          memo: nextMemo,
-          items: printItems,
-          subtotal: mergeSubtotal,
-          discountAmt,
-          total,
-          vatFeeAmt: pricing.vatFeeAmt,
-          vatFeeMode: pricing.vatFeeMode,
-          ...receiptTaxDisplayFieldsFromPricing(pricing),
-          serviceFeeAmt: pricing.serviceFeeAmt,
-          serviceFeeMode: pricing.serviceFeeMode,
-          cardFeeAmt: pricing.cardFeeAmt,
-          cardFeeMode: pricing.cardFeeMode,
-          otherFeeAmt: pricing.otherFeeAmt,
-          otherFeeMode: pricing.otherFeeMode,
-          ...posGuestCountSpread(o.guestCount),
+        const settings = await getPrinterSettingsForStore(currentStoreId)
+        const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
+          taxInvoiceTargetOrder,
+          currentStoreId,
+          nextMemo,
+          pricingAdjustments,
+          posReceiptLineOpts
+        )
+        const receiptData = {
+          ...receiptBase,
+          items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, posReceiptLineOpts),
         }
-        void printReceiptNow(receiptPayloadAfterTax, null, false, undefined, true)
+        const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+          receiptData,
+          menus,
+          orderTypeLabels: {
+            dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
+            takeout: tPrint('posOrderTypeTakeout') ?? '포장',
+            delivery: tPrint('posOrderTypeDelivery') ?? '배달',
+          },
+          t: tPrint,
+          lang: printLang,
+          origin: typeof window !== 'undefined' ? window.location.origin : '',
+          printedAt: new Date(),
+          printerSettings: settings,
+          forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(currentStoreId),
+        })
+        printPosHtmlDocument(receiptHtml, {
+          title: tPrint('posReceipt') || '영수증',
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
+          focusIframeBeforePrint: false,
+          printRole: 'receipt',
+          printReceiptKind: 'payment',
+          escPosCutOverride: resolveEscPosCutOverride(settings, {
+            printRole: 'receipt',
+            printReceiptKind: 'payment',
+          }),
+          onPrintUnavailable: () => {
+            void appAlert(t('posPrintUnavailable'))
+          },
+        })
       }
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
@@ -5007,6 +5171,13 @@ export default function PosTerminalPage() {
     setSelectedTableId(tableId)
   }
   const handleAddItemToCart = useCallback((item: CartPanelAddItemPayload) => {
+    if (!isPosDemo && businessOpenBlocked) {
+      void appAlert(
+        t('posBusinessOpenRequiredBody') ||
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+      )
+      return
+    }
     // CartPanel ref가 있으면 addItem으로 위임 (패널 내부 setCartItems = setTerminalCartLines)
     if (cartRef.current?.addItem) {
       cartRef.current.addItem(item)
@@ -5014,7 +5185,7 @@ export default function PosTerminalPage() {
       // 패널 마운트 전/전환 중이면 state 직접 갱신
       setTerminalCartLines((prev) => mergeCartPanelAddItem(prev, item))
     }
-  }, [])
+  }, [businessOpenBlocked, isPosDemo, t])
 
   const renderTerminalCartPanel = (
     debugOwner: 'inline-mobile' | 'side-panel' | 'inline-delivery' | 'inline-takeout'
@@ -5073,6 +5244,7 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                if (!(await ensureBusinessOpenForOrder())) return
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
@@ -5176,6 +5348,7 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                if (!(await ensureBusinessOpenForOrder())) return
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
@@ -5380,6 +5553,7 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                if (!(await ensureBusinessOpenForOrder())) return
                 const incomingItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 /** 카트에 기존 줄이 없을 때(첫 주문 후 카트 비움)에도 DB·영수증이 한 주문으로 유지되도록 병합 */
                 const posItemsForSave =
@@ -5596,6 +5770,8 @@ export default function PosTerminalPage() {
                   items: receiptPrintItems,
                   subtotal: mergeSubtotal,
                   discountAmt,
+                  couponDiscountAmt: payload.couponDiscountAmt ?? 0,
+                  discountReason: String(payload.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
@@ -5832,6 +6008,7 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                if (!(await ensureBusinessOpenForOrder())) return
                 let orderIdToComplete: number | null = null
                 let orderNo: string = ''
                 const pay = payload.payment
@@ -6025,6 +6202,7 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                if (!(await ensureBusinessOpenForOrder())) return
                 /** `await` 사이에 카트가 비면 터미널 보정이 불가 → 링크포스/결제 대기 전에 스냅샷 */
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
@@ -6124,6 +6302,8 @@ export default function PosTerminalPage() {
                   items: receiptItems,
                   subtotal,
                   discountAmt,
+                  couponDiscountAmt: payload.couponDiscountAmt ?? 0,
+                  discountReason: String(payload.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
@@ -6696,23 +6876,30 @@ export default function PosTerminalPage() {
                     !isNarrowViewport && 'min-h-[260px]'
                   )}
                 >
-                  <PosTerminalMenuScreen
-                    mode="pos-order"
-                    storeCode={currentStoreId}
-                    selectedTableName={
-                      selectedTable?.name
-                        ? translateReceiptTableDisplayName(selectedTable.name, t)
-                        : String(selectedTableId ?? '')
-                    }
-                    onBack={() => setSelectedTableId(null)}
-                    hideTableContextBar
-                    onAddItem={handleAddItemToCart}
-                    orderType="dine-in"
-                    showMenuDescriptions={showGuestMenuDescriptions}
-                    touchMode={isNarrowViewport ? 'large' : 'default'}
-                    containMenuHeight={isNarrowViewport}
+                  <PosBusinessOpenGateBlock
+                    blocked={businessOpenBlocked}
+                    loading={businessOpenGate.loading}
+                    businessDateYmd={businessOpenGate.businessDateYmd}
                     className="h-full"
-                  />
+                  >
+                    <PosTerminalMenuScreen
+                      mode="pos-order"
+                      storeCode={currentStoreId}
+                      selectedTableName={
+                        selectedTable?.name
+                          ? translateReceiptTableDisplayName(selectedTable.name, t)
+                          : String(selectedTableId ?? '')
+                      }
+                      onBack={() => setSelectedTableId(null)}
+                      hideTableContextBar
+                      onAddItem={handleAddItemToCart}
+                      orderType="dine-in"
+                      showMenuDescriptions={showGuestMenuDescriptions}
+                      touchMode={isNarrowViewport ? 'large' : 'default'}
+                      containMenuHeight={isNarrowViewport}
+                      className="h-full"
+                    />
+                  </PosBusinessOpenGateBlock>
                 </div>
               ) : (
                 <>
@@ -6817,19 +7004,26 @@ export default function PosTerminalPage() {
             {/* min-h 고정 금지: 뷰포트보다 크면 부모 overflow-hidden에 하단이 잘려 메뉴 끝까지 스크롤 불가(배달·포장 메뉴). 주문 바 목록은 OrderBarList min-h 유지 */}
             <TabsContent value="delivery" className="flex-1 m-0 min-w-0 p-4 min-h-0 overflow-auto">
               {selectedDeliveryTargetId === 'delivery-draft' ? (
-                <PosTerminalMenuScreen
-                  mode="pos-order"
-                  storeCode={currentStoreId}
-                  selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
-                  onBack={() => setSelectedDeliveryTargetId(null)}
-                  backButtonLabel={t('posBack') || '뒤로가기'}
-                  onAddItem={handleAddItemToCart}
-                  orderType="delivery"
-                  deliveryAppCode={deliveryApp || null}
-                  touchMode={isNarrowViewport ? 'large' : 'default'}
-                  containMenuHeight={isNarrowViewport}
+                <PosBusinessOpenGateBlock
+                  blocked={businessOpenBlocked}
+                  loading={businessOpenGate.loading}
+                  businessDateYmd={businessOpenGate.businessDateYmd}
                   className="h-full"
-                />
+                >
+                  <PosTerminalMenuScreen
+                    mode="pos-order"
+                    storeCode={currentStoreId}
+                    selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
+                    onBack={() => setSelectedDeliveryTargetId(null)}
+                    backButtonLabel={t('posBack') || '뒤로가기'}
+                    onAddItem={handleAddItemToCart}
+                    orderType="delivery"
+                    deliveryAppCode={deliveryApp || null}
+                    touchMode={isNarrowViewport ? 'large' : 'default'}
+                    containMenuHeight={isNarrowViewport}
+                    className="h-full"
+                  />
+                </PosBusinessOpenGateBlock>
               ) : (
                 <OrderBarList
                   items={currentDeliveryBarItems}
@@ -6865,18 +7059,25 @@ export default function PosTerminalPage() {
             {/* 포장 탭 — 배달 TabsContent와 동일(고정 min-h 없음) */}
             <TabsContent value="takeout" className="flex-1 m-0 min-w-0 p-4 min-h-0 overflow-auto">
               {selectedTakeoutTargetId === 'takeout-draft' ? (
-                <PosTerminalMenuScreen
-                  mode="pos-order"
-                  storeCode={currentStoreId}
-                  selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${takeoutLabel}`}
-                  onBack={() => setSelectedTakeoutTargetId(null)}
-                  backButtonLabel={t('posBack') || '뒤로가기'}
-                  onAddItem={handleAddItemToCart}
-                  orderType="takeout"
-                  touchMode={isNarrowViewport ? 'large' : 'default'}
-                  containMenuHeight={isNarrowViewport}
+                <PosBusinessOpenGateBlock
+                  blocked={businessOpenBlocked}
+                  loading={businessOpenGate.loading}
+                  businessDateYmd={businessOpenGate.businessDateYmd}
                   className="h-full"
-                />
+                >
+                  <PosTerminalMenuScreen
+                    mode="pos-order"
+                    storeCode={currentStoreId}
+                    selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${takeoutLabel}`}
+                    onBack={() => setSelectedTakeoutTargetId(null)}
+                    backButtonLabel={t('posBack') || '뒤로가기'}
+                    onAddItem={handleAddItemToCart}
+                    orderType="takeout"
+                    touchMode={isNarrowViewport ? 'large' : 'default'}
+                    containMenuHeight={isNarrowViewport}
+                    className="h-full"
+                  />
+                </PosBusinessOpenGateBlock>
               ) : (
                 <OrderBarList
                   items={currentTakeoutBarItems}

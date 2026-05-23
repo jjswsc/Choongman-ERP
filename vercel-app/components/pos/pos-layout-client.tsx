@@ -11,6 +11,7 @@ import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
+import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 
 const POS_TOPBAR_HIDDEN_KEY = "cm-pos-topbar-hidden"
 
@@ -338,6 +339,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
+      <PosDrawerPinProvider>
       <PosBusinessDayHydrate />
       {topBarRevealStrip}
       {showTopChrome(effectiveShowPosHeader) ? (
@@ -412,6 +414,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </main>
+      </PosDrawerPinProvider>
     </div>
   )
 }

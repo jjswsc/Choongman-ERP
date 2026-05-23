@@ -22,6 +22,7 @@ import {
   persistPosOrderCouponRedemptions,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
+import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -148,6 +149,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const current = existing[0]
+
+    const openCheck = await assertPosBusinessOpenForOrderSave(String(current?.store_code ?? ''))
+    if (!openCheck.ok) {
+      return NextResponse.json(
+        { success: false, message: openCheck.message, retryAfterQueue: false },
+        { headers }
+      )
+    }
+
     /** select에서 service_amt를 뺐다면 DB에 컬럼이 없는 레거시 스키마 — PATCH도 할인 필드 정합에 맞춘다 */
     const hasServiceColumns = Object.prototype.hasOwnProperty.call(current ?? {}, 'service_amt')
     const tableName = sanitizePosOrderTableNameForDb(current?.order_type, body?.tableName)

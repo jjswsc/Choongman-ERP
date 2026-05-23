@@ -224,6 +224,7 @@ export async function GET(request: NextRequest) {
       check_auto_open?: boolean
       linkpos_skip_terminal_for_card?: boolean
       drawer_open_option?: string
+      drawer_pin_hash?: string | null
       logo_print?: boolean
       receipt_print_timing?: string
       customer_receipt_order_details?: boolean
@@ -358,6 +359,7 @@ export async function GET(request: NextRequest) {
         : String(raw?.drawer_open_option || 'reason_only') === 'force'
           ? 'force'
           : 'reason_only',
+      drawerPinConfigured: Boolean(String(raw?.drawer_pin_hash ?? '').trim()),
       logoPrint: Boolean(raw?.logo_print),
       receiptPrintTiming: String(raw?.receipt_print_timing || 'per_payment') === 'final_payment' ? 'final_payment' : 'per_payment',
       customerReceiptOrderDetails: raw?.customer_receipt_order_details !== false,

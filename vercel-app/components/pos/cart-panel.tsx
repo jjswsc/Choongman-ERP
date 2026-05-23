@@ -90,7 +90,7 @@ import {
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart, collabSupportsQuantityEntry } from '@/lib/pos-collab-discount'
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
-import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
+import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
   computePosPricing,
   receiptTaxDisplayFieldsFromPricing,
@@ -2949,20 +2949,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   ) => {
     const includeTax = opts?.includeTaxInvoice !== false && needTaxInvoice
     if (!includeTax) return baseMemo
-    const lines = [
-      '[TAX_INVOICE]',
-      `memberNo=${encodeTaxInvoiceMemoValue(taxMemberNo.trim())}`,
-      `customerType=${invoiceCustomerType}`,
-      `name=${encodeTaxInvoiceMemoValue(normalizedTaxName)}`,
-      `taxId=${encodeTaxInvoiceMemoValue(normalizedTaxId)}`,
-      `branchNo=${encodeTaxInvoiceMemoValue(effectiveTaxBranchNo)}`,
-      `phone=${encodeTaxInvoiceMemoValue(normalizedTaxPhone)}`,
-      `email=${encodeTaxInvoiceMemoValue(normalizedTaxEmail)}`,
-      `address=${encodeTaxInvoiceMemoValue(normalizedTaxAddress)}`,
-      `member=${isMemberOrder ? 'Y' : 'N'}`,
-    ]
-    const taxMemo = lines.join(' | ')
-    return baseMemo.trim() ? `${baseMemo.trim()}\n${taxMemo}` : taxMemo
+    return upsertPosOrderTaxInvoiceMemo(baseMemo, {
+      memberNo: taxMemberNo.trim(),
+      customerType: invoiceCustomerType === 'company' ? 'company' : 'person',
+      name: normalizedTaxName,
+      taxId: normalizedTaxId,
+      branchNo: effectiveTaxBranchNo,
+      phone: normalizedTaxPhone,
+      email: normalizedTaxEmail,
+      address: normalizedTaxAddress,
+      member: isMemberOrder,
+    })
   }
 
   const openPaymentModalWithAmount = async (

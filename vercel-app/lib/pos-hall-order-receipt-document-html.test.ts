@@ -3,6 +3,7 @@ import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
   buildPosHallOrderReceiptDocumentHtml,
   mergeSetChildrenForReceipt,
+  resolveHallOrderReceiptDiscountAmt,
 } from '@/lib/pos-hall-order-receipt-document-html'
 
 type MergeSetTestItem = {
@@ -31,7 +32,60 @@ describe('mergeSetChildrenForReceipt', () => {
   })
 })
 
+describe('resolveHallOrderReceiptDiscountAmt', () => {
+  it('uses resolvePosSalesDiscountAmount for discount_amt and coupon_discount_amt', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 10,
+        couponDiscountAmt: 5,
+        items: [{ price: 100, qty: 1 }],
+        total: 85,
+      })
+    ).toBe(10)
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 0,
+        couponDiscountAmt: 5,
+        items: [{ price: 100, qty: 1 }],
+        total: 95,
+      })
+    ).toBe(5)
+  })
+
+  it('infers platform discount when line gross exceeds stored total', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 0,
+        items: [{ price: 100, qty: 1 }],
+        subtotal: 100,
+        total: 77,
+      })
+    ).toBe(23)
+  })
+})
+
 describe('buildPosHallOrderReceiptDocumentHtml', () => {
+  it('prints discount row when effective discount is positive', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: 'sp-638',
+        storeCode: 'CM The Street',
+        orderType: 'delivery',
+        tableName: 'Shopee #sp-638',
+        items: [{ id: '1', name: '[April] Set 3', price: 111, qty: 1 }],
+        subtotal: 111,
+        discountAmt: 23,
+        total: 88,
+        vatFeeAmt: 6,
+      },
+      t: (k) => (k === 'posDiscount' ? 'Discount' : k),
+      lang: 'en',
+    })
+    expect(html).toContain('Discount')
+    expect(html).toContain('-23')
+    expect(html).toContain('88')
+  })
+
   it('prefixes add-on order lines with > before item name', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {

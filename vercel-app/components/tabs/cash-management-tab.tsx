@@ -30,7 +30,8 @@ import { isOfficeRole } from '@/lib/permissions'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { cn } from '@/lib/utils'
-import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
+import { drawerOpenOptionFromPrinterSettings } from '@/lib/pos-cash-drawer'
+import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 
 const tillTypeKeys: Record<string, string> = {
@@ -64,6 +65,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
   const { stores, formatStoreLabel } = useStoreList()
   const online = useOnlineStatus()
   const tillDepositDrawerWarnedRef = React.useRef(false)
+  const { openPosCashDrawerSecure } = usePosCashDrawerOpen()
   const canSearchAll = isOfficeRole(auth?.role || '')
   const storeCode = auth?.store || stores[0] || ''
 
@@ -243,7 +245,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
       if (addType === 'deposit' && !isPosDemo) {
         const hw = await getPosPrinterSettings({ storeCode: addStore }).catch(() => null)
         const drawerOpenOption = drawerOpenOptionFromPrinterSettings(hw)
-        const dr = await openPosCashDrawer({
+        const dr = await openPosCashDrawerSecure({
           reason: 'till_deposit',
           source: 'till_deposit',
           storeCode: addStore,

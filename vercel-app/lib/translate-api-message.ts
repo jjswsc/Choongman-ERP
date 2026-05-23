@@ -66,6 +66,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // POS 메뉴 노출 매장
   "신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.": "posMenuVisibleStoresRequiredNewMenu",
   "노출 매장을 1개 이상 선택해 주세요.": "posMenuVisibleStoresPickAtLeastOne",
+  pos_business_open_required: "posBusinessOpenRequiredBody",
+  pos_drawer_pin_invalid_format: "posDrawerPinInvalidFormat",
+  pos_drawer_pin_wrong: "posDrawerPinWrong",
+  pos_drawer_pin_current_required: "posDrawerPinCurrentRequired",
 
   // 비밀번호
   "비밀번호가 변경되었습니다. 다시 로그인해 주세요.": "pw_success",
