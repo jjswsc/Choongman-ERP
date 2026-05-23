@@ -23,6 +23,10 @@ function sessionPrefersHardNav(): boolean {
   }
 }
 
+export function prefersPosSessionHardNavigation(): boolean {
+  return sessionPrefersHardNav()
+}
+
 function pathOnly(urlOrPath: string): string {
   const p = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`
   return p.split('?')[0] || p

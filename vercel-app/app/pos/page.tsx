@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
+import { navigatePosOfflineAware, prefersPosSessionHardNavigation } from '@/lib/pos-offline-nav'
 import { isBrowserOnline } from '@/lib/offline/network'
 import { POSHeader } from '@/components/pos/pos-header'
 import { POSMainGrid } from '@/components/pos/pos-main-grid'
@@ -134,7 +134,10 @@ function POSMainPageInner() {
           : `${window.location.pathname || ''}${window.location.search || ''}`
       navigatePosOfflineAware(target, (p) => router.push(p))
       // 오프라인에서 라우트 청크가 캐시에 없으면 push가 no-op인 사례가 있어, 동일 URL에 머물면 하드 네비 1회 재시도.
-      if (typeof window === 'undefined' || isBrowserOnline() || !target.startsWith('/pos/')) return
+      if (typeof window === 'undefined' || !target.startsWith('/pos/')) return
+      const shouldWatchdogFallback =
+        !isBrowserOnline() || prefersPosSessionHardNavigation()
+      if (!shouldWatchdogFallback) return
       if (navigateWatchdogRef.current != null) {
         window.clearTimeout(navigateWatchdogRef.current)
         navigateWatchdogRef.current = null

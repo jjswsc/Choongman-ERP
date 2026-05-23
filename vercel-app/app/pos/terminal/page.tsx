@@ -71,6 +71,7 @@ import {
 } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
+import { PosPostPaymentCashChangeDialog } from '@/components/pos/pos-post-payment-cash-change-dialog'
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
@@ -699,6 +700,8 @@ export default function PosTerminalPage() {
   const tourPaymentOtherAmount = Number(customerDisplayPaymentDraft?.paymentOther ?? 0)
   /** 결제 완료 직후 고객 모니터에 설정된 QR을 잠시 표시(ms 기준 타임스탬프) */
   const [postPaymentQrUntil, setPostPaymentQrUntil] = useState(0)
+  /** 결제 후 거스름 — CartPanel 언마운트와 무관하게 확인 전까지 유지 */
+  const [postPaymentCashChangeBaht, setPostPaymentCashChangeBaht] = useState<number | null>(null)
   /** 기존 주문 결제 시 영수증 orderNo (pendingPayRequest/pendingTakeoutPayRequest에 있던 값) */
   const [pendingReceiptOrderNo, setPendingReceiptOrderNo] = useState<string | null>(null)
   const [taxInvoiceTargetOrder, setTaxInvoiceTargetOrder] = useState<Order | null>(null)
@@ -1684,7 +1687,12 @@ export default function PosTerminalPage() {
   }, [customerDisplayOrderTotal, pricingAdjustments])
   /** 1023px 이하(세로 태블릿/모바일)에서만 하단 카트로 전환 */
   const isNarrowViewport = useMediaQuery('(max-width: 920px)')
-  const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
+  const showSidePanel =
+    activeTab !== 'tables' ||
+    Boolean(servingTable?.order) ||
+    Boolean(selectedTableId) ||
+    hasPendingPaymentFlow ||
+    postPaymentCashChangeBaht != null
   const shouldFullscreenOrderDetailOnNarrow =
     isNarrowViewport &&
     (
@@ -5014,6 +5022,7 @@ export default function PosTerminalPage() {
             onPaymentTabChange={setTourPaymentTab}
             onTaxInvoiceToggleChange={setTourTaxInvoiceEnabled}
             onPaymentComplete={() => setTourPaymentCompletedCount((v) => v + 1)}
+            onPostPaymentCashChange={setPostPaymentCashChangeBaht}
             onGuestCountChange={setTourCartGuestCount}
             posDineInDemoDefaultGuestCount={undefined}
             lockOrderType
@@ -5965,6 +5974,13 @@ export default function PosTerminalPage() {
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                 if (!linkpos.ok) return
+                const paymentSumBeforeSave =
+                  Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
+                const hasPayment = paymentSumBeforeSave > 0.0001
                 const res = await savePosOrderWithOffline({
                   storeCode: currentStoreId,
                   createdBy: auth?.user ?? '',
@@ -5988,7 +6004,7 @@ export default function PosTerminalPage() {
                   ...posOrderPaymentFieldsFromSnapshot(payload.payment ?? null),
                   linkposPayment: linkpos.linkposPayment,
                   pricingAdjustments,
-                  closeStatus: 'paid',
+                  ...(hasPayment ? { closeStatus: 'paid' as const } : {}),
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
@@ -6015,13 +6031,6 @@ export default function PosTerminalPage() {
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
-                const paymentSum =
-                  Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
-                  Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
-                  Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
-                  Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
-                  Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
-                const hasPayment = paymentSum > 0.0001
                 await tryOpenDrawerOnOrderComplete(payload.payment)
                 const receiptItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 const receiptPayloadSubmit = {
@@ -7188,6 +7197,11 @@ export default function PosTerminalPage() {
         t={t}
         isDemo={isPosDemo}
         onServedUpdated={refetchCurrentStore}
+      />
+      <PosPostPaymentCashChangeDialog
+        amountBaht={postPaymentCashChangeBaht}
+        onDismiss={() => setPostPaymentCashChangeBaht(null)}
+        t={t}
       />
       <PosReceiptModal
         onOpenChange={(open) => {
