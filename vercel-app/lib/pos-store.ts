@@ -307,6 +307,49 @@ type OptimisticOrderInput = {
   }>
 }
 
+function isLocalOfflineOrder(order: Order | undefined | null): boolean {
+  if (!order) return false
+  const no = String(order.orderNo ?? '').trim()
+  const id = String(order.id ?? '').trim().toLowerCase()
+  return no.startsWith('LOCAL-') || id.startsWith('local-')
+}
+
+function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
+  const out = [...fetched]
+  const seen = new Set<string>()
+  for (const row of fetched) {
+    const key = String(row.orderNo ?? '').trim() || `id:${String(row.id ?? '').trim()}`
+    if (key) seen.add(key)
+  }
+  for (const row of prev) {
+    if (!isLocalOfflineOrder(row)) continue
+    const key = String(row.orderNo ?? '').trim() || `id:${String(row.id ?? '').trim()}`
+    if (!key || seen.has(key)) continue
+    out.unshift(row)
+    seen.add(key)
+  }
+  return out
+}
+
+function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): Store {
+  if (!prevStore) return nextStore
+  const nextTables = nextStore.tables.map((tbl) => {
+    if (tbl.order) return tbl
+    const nameNorm = normalizePosTableNameForMatch(String(tbl.name ?? ''))
+    const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
+    const local = prevStore.tables.find((pt) => {
+      const o = pt.order
+      if (!isLocalOfflineOrder(o)) return false
+      const pn = normalizePosTableNameForMatch(String(pt.name ?? ''))
+      const pid = normalizePosTableNameForMatch(String(pt.id ?? ''))
+      return Boolean((nameNorm && (pn === nameNorm || pid === nameNorm)) || (idNorm && (pn === idNorm || pid === idNorm)))
+    })
+    if (!local?.order) return tbl
+    return { ...tbl, order: local.order, isOccupied: true }
+  })
+  return { ...nextStore, tables: nextTables }
+}
+
 export function usePosStore() {
   const { stores: storeCodes, legacyToCanonical } = useStoreList()
   const { auth } = useAuth()
@@ -457,9 +500,25 @@ export function usePosStore() {
         results.forEach((r) => {
           nextOrdersByStore[r.storeCode] = (r.activeOrders || []).map(posOrderToOrder)
         })
-        setStores(storeList)
+        setStores((prev) =>
+          storeList.map((nextStore) =>
+            mergeStoreTablesWithLocalOrders(
+              nextStore,
+              prev.find((p) => p.id === nextStore.id)
+            )
+          )
+        )
         setLayoutByStoreId(layouts)
-        setOrdersByStoreId(nextOrdersByStore)
+        setOrdersByStoreId((prev) => {
+          const merged: Record<string, Order[]> = {}
+          for (const code of effectiveStoreCodes) {
+            merged[code] = mergeFetchedOrdersWithLocal(
+              nextOrdersByStore[code] ?? [],
+              prev[code] ?? []
+            )
+          }
+          return merged
+        })
         setCurrentStoreId((prev) => {
           const next =
             canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)
@@ -590,9 +649,22 @@ export function usePosStore() {
 
         setStores((prev) => {
           if (targetStoreCodes.length === effectiveStoreCodes.length) {
-            return effectiveStoreCodes.map((code) => resultStoreMap.get(code)).filter(Boolean) as Store[]
+            return effectiveStoreCodes
+              .map((code) => {
+                const next = resultStoreMap.get(code)
+                if (!next) return null
+                return mergeStoreTablesWithLocalOrders(
+                  next,
+                  prev.find((p) => p.id === code)
+                )
+              })
+              .filter(Boolean) as Store[]
           }
-          return prev.map((store) => resultStoreMap.get(store.id) ?? store)
+          return prev.map((store) => {
+            const next = resultStoreMap.get(store.id)
+            if (!next) return store
+            return mergeStoreTablesWithLocalOrders(next, store)
+          })
         })
         setLayoutByStoreId((prev) => {
           const next = { ...prev }
@@ -604,7 +676,10 @@ export function usePosStore() {
         setOrdersByStoreId((prev) => {
           const next = { ...prev }
           for (const code of targetStoreCodes) {
-            next[code] = resultOrdersMap.get(code) ?? []
+            next[code] = mergeFetchedOrdersWithLocal(
+              resultOrdersMap.get(code) ?? [],
+              prev[code] ?? []
+            )
           }
           return next
         })
