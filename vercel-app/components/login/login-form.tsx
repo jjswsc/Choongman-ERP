@@ -1056,7 +1056,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               (canOfferOfflineResume &&
               (errorIsConnectivity || loginApp === "pos" || hybridPosShell) ? (
                 <div className="mb-3 space-y-2">
-                  <motion.div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
                     <p className="font-medium">
                       {useSoftSubmitNetworkCopy
                         ? pickLoginStr(tMsg, "msg_login_submit_network_title", lang)
