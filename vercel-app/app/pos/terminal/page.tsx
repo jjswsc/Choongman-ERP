@@ -618,6 +618,10 @@ export default function PosTerminalPage() {
   const [activeTab, setActiveTab] = useState<'tables' | 'delivery' | 'takeout'>(
     orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'tables'
   )
+  useEffect(() => {
+    const nextTab = orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'tables'
+    setActiveTab((prev) => (prev === nextTab ? prev : nextTab))
+  }, [orderType])
   const [pendingDineInOrderId, setPendingDineInOrderId] = useState<number | null>(null)
   /** `pendingDineInOrderId`가 가리키는 주문의 테이블명 — 다른 테이블로 잘못 병합(updatePosOrder)되는 것을 막음 */
   const pendingDineInOrderTableRef = useRef<string>('')

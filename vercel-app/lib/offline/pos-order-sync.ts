@@ -68,12 +68,14 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
   try {
     const res = await savePosOrder(params)
     if (res.success) {
-      logPosOrderPipeline('save_pos_order_online_success', {
+      const queued = Boolean((res as { queued?: boolean }).queued)
+      logPosOrderPipeline(queued ? 'save_pos_order_queued_by_api_fallback' : 'save_pos_order_online_success', {
         localOrderNo: String(params.localOrderNo ?? ''),
         orderId: Number((res as { orderId?: number }).orderId ?? 0) || null,
         orderNo: String((res as { orderNo?: string }).orderNo ?? ''),
+        queued,
       })
-      return { ...res, queued: false }
+      return { ...res, queued }
     }
     if (looksLikeInfraFailureMessage(res.message)) {
       const localOrderNo = String(params.localOrderNo ?? '').trim() || `LOCAL-${Date.now()}`
