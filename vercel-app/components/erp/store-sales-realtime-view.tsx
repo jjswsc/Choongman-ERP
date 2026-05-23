@@ -168,12 +168,6 @@ export function StoreSalesRealtimeView({
     loadTodaySales()
   }, [effectiveStoreCode, loadTodaySales])
 
-  useEffect(() => {
-    if (!showSalesCharts || !effectiveStoreCode) return
-    const timer = setInterval(() => loadTodaySales({ forceNetwork: true }), 60000)
-    return () => clearInterval(timer)
-  }, [showSalesCharts, effectiveStoreCode, loadTodaySales])
-
   const sortedTables = useMemo(() => {
     const tables = currentStore?.tables || []
     return [...tables].sort((a, b) => {

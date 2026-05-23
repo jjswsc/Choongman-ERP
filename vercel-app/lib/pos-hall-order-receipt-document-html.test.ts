@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
+import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
+import {
+  buildPosHallOrderReceiptDocumentHtml,
+  mergeSetChildrenForReceipt,
+} from '@/lib/pos-hall-order-receipt-document-html'
 
 type MergeSetTestItem = {
   id: string
@@ -24,5 +28,64 @@ describe('mergeSetChildrenForReceipt', () => {
       'PEPSI MEGA 1',
       'PEPSI MEGA 2',
     ])
+  })
+})
+
+describe('buildPosHallOrderReceiptDocumentHtml', () => {
+  it('prefixes add-on order lines with > before item name', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '009',
+        storeCode: 'CM Union Mall',
+        orderType: 'dine-in',
+        tableName: 'T5',
+        items: [
+          { id: '1', name: 'Banban Chicken', price: 239, qty: 1 },
+          { id: '2', name: 'Squid Ring', price: 130, qty: 1, isAddon: true },
+        ],
+        subtotal: 369,
+        discountAmt: 0,
+        total: 369,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).toContain('1x Banban Chicken')
+    expect(html).toContain('1x &gt; Squid Ring')
+    expect(html).not.toContain('1x &gt; Banban Chicken')
+  })
+
+  it('does not print internal memo stamps inside tax invoice address', () => {
+    const tax = {
+      memberNo: '',
+      customerType: 'person' as const,
+      name: 'ABC',
+      taxId: '1234567890123',
+      branchNo: '00000',
+      phone: '0987654321',
+      email: 'a@b.com',
+      address: 'Bangkok',
+      member: false,
+    }
+    const memo =
+      upsertPosOrderTaxInvoiceMemo('', tax) +
+      '\n[ORDER_CANCELLED 2026-05-22T08:39:34.240Z] pressed wrong'
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '001',
+        storeCode: 'CM Union Mall',
+        orderType: 'dine-in',
+        memo,
+        items: [{ id: '1', name: '7UP', price: 30, qty: 1 }],
+        subtotal: 30,
+        discountAmt: 0,
+        total: 30,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).toContain('Bangkok')
+    expect(html).not.toContain('ORDER_CANCELLED')
+    expect(html).not.toContain('PAY_CORRECT')
   })
 })

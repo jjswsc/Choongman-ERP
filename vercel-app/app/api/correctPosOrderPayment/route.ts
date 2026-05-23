@@ -12,6 +12,7 @@ import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
+import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 
@@ -191,8 +192,7 @@ export async function POST(req: NextRequest) {
         ? `${reason.slice(0, 180)} | total ${round2(prevTotal)}→${effectiveTotal}`
         : reason.slice(0, 240)
     const stamp = `[PAY_CORRECT ${new Date().toISOString()} ${who}] ${reasonLine}`
-    const prevMemo = String(row.memo ?? '').trim()
-    const nextMemo = prevMemo ? `${prevMemo}\n${stamp}` : stamp
+    const nextMemo = appendPosInternalMemoStamp(String(row.memo ?? ''), stamp)
 
     const breakdownExplicit =
       Object.prototype.hasOwnProperty.call(body, 'paymentOtherBreakdown') ||

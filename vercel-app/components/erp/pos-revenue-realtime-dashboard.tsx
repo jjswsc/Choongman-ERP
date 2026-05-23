@@ -89,6 +89,7 @@ export function PosRevenueRealtimeDashboard({
   const [data, setData] = React.useState<DashboardResponse | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string>("")
+  const [queried, setQueried] = React.useState(false)
   const storeCode = String(effectiveStoreCode || "").trim()
 
   const loadDashboard = React.useCallback(async () => {
@@ -110,15 +111,9 @@ export function PosRevenueRealtimeDashboard({
     }
   }, [storeCode, tr])
 
-  React.useEffect(() => {
+  const handleSearch = React.useCallback(() => {
+    setQueried(true)
     void loadDashboard()
-  }, [loadDashboard])
-
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      void loadDashboard()
-    }, 60000)
-    return () => clearInterval(timer)
   }, [loadDashboard])
 
   const store = data?.store
@@ -218,7 +213,7 @@ export function PosRevenueRealtimeDashboard({
             )}
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void loadDashboard()} disabled={loading}>
+        <Button type="button" size="sm" variant="outline" onClick={handleSearch} disabled={loading}>
           <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           {tr("search", "검색")}
         </Button>
@@ -227,6 +222,22 @@ export function PosRevenueRealtimeDashboard({
       {error ? (
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           {error}
+        </p>
+      ) : null}
+
+      {!queried && !loading ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {tr("adminLiveStoreSalesSearchPrompt", "「검색」을 누르면 실시간 운영 지표를 불러옵니다.")}
+        </p>
+      ) : null}
+
+      {queried && loading && !store && !officeRows.length ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">{tr("loading", "로딩 중…")}</p>
+      ) : null}
+
+      {queried && !loading && !error && !store && !isOfficeSelector ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {tr("mobileStoreSalesByStoreEmpty", "표시할 매장 데이터가 없습니다.")}
         </p>
       ) : null}
 
@@ -324,7 +335,7 @@ export function PosRevenueRealtimeDashboard({
         </div>
       ) : null}
 
-      {isOfficeSelector ? (
+      {isOfficeSelector && queried ? (
         <div className="space-y-4 rounded-lg border border-border/60 bg-card p-3">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -430,7 +441,7 @@ export function PosRevenueRealtimeDashboard({
           <p className="text-[11px] text-muted-foreground">
             {data?.truncated
               ? tr("adminLiveStoreSalesDataTruncated", "집계 행 제한으로 일부 데이터가 생략될 수 있습니다.")
-              : tr("adminLiveStoreSalesDataRealtimeHint", "집계는 60초마다 자동 갱신됩니다.")}
+              : tr("adminLiveStoreSalesDataRealtimeHint", "매장을 바꾼 뒤에는「검색」으로 다시 조회하세요.")}
           </p>
         </div>
       ) : null}

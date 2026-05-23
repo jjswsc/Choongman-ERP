@@ -90,6 +90,7 @@ export function AdminSalesDashboardCharts({
   >({ items: [], total: 0 })
   const [hourRows, setHourRows] = React.useState<{ axisLabel: string; sales: number }[]>([])
   const [vendorLookup, setVendorLookup] = React.useState(() => new Map<string, string>())
+  const [queried, setQueried] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
@@ -154,15 +155,9 @@ export function AdminSalesDashboardCharts({
     }
   }, [today, storesParam, tr])
 
-  React.useEffect(() => {
+  const handleSearch = React.useCallback(() => {
+    setQueried(true)
     void loadCharts()
-  }, [loadCharts])
-
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      void loadCharts()
-    }, 60000)
-    return () => clearInterval(timer)
   }, [loadCharts])
 
   const storeChartRows = React.useMemo(
@@ -237,7 +232,7 @@ export function AdminSalesDashboardCharts({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => void loadCharts()} disabled={loading}>
+          <Button type="button" size="sm" variant="outline" onClick={handleSearch} disabled={loading}>
             <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             {tr("search", "검색")}
           </Button>
@@ -253,17 +248,23 @@ export function AdminSalesDashboardCharts({
         </p>
       ) : null}
 
-      {loading && !hasAnyChart ? (
+      {!queried ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {tr("adminDashboardChartsSearchPrompt", "「검색」을 누르면 당일 매출 차트를 불러옵니다.")}
+        </p>
+      ) : null}
+
+      {queried && loading && !hasAnyChart ? (
         <p className="py-6 text-center text-sm text-muted-foreground">{tr("loading", "로딩 중…")}</p>
       ) : null}
 
-      {!loading && !hasAnyChart ? (
+      {queried && !loading && !hasAnyChart ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
         </p>
       ) : null}
 
-      {hourRows.some((r) => r.sales > 0) ? (
+      {queried && hourRows.some((r) => r.sales > 0) ? (
         <div>
           <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
             {tr("salesPeriodHour", "시간대별")}
@@ -282,6 +283,8 @@ export function AdminSalesDashboardCharts({
         </div>
       ) : null}
 
+      {queried ? (
+      <>
       <div className={`grid gap-6 ${showStoreBar ? "lg:grid-cols-2" : ""}`}>
         {showStoreBar ? (
           <div className="lg:col-span-2">
@@ -449,9 +452,14 @@ export function AdminSalesDashboardCharts({
           </div>
         </div>
       ) : null}
+      </>
+      ) : null}
 
       <p className="text-[11px] text-muted-foreground">
-        {tr("adminDashboardChartsRefreshHint", "차트는 60초마다 자동 갱신됩니다. 기간·상세 분석은「매출 관리」를 이용하세요.")}
+        {tr(
+          "adminDashboardChartsRefreshHint",
+          "매장을 바꾼 뒤에는「검색」으로 다시 조회하세요. 기간·상세 분석은「매출 관리」를 이용하세요."
+        )}
       </p>
     </section>
   )

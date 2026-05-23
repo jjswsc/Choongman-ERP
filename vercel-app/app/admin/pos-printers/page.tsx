@@ -792,7 +792,6 @@ export default function PosPrintersPage() {
           printDelayMs: 0,
           fallbackCleanupMs: 120_000,
           focusIframeBeforePrint: false,
-          preferSystemPrintDialog: true,
           ...thermal,
           onPrintUnavailable: () => reject(new Error("print_unavailable")),
           onAfterCleanup: () => resolve(),

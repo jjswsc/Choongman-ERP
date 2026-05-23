@@ -152,6 +152,8 @@ interface CartItem {
   price: number
   qty: number
   note?: string
+  /** 추가 주문 줄(홀 영수증 `>` 표시) */
+  isAddon?: boolean
   optionId?: string
   optionCode?: string
   optionName?: string
@@ -1436,6 +1438,7 @@ export default function PosOrderPage() {
           price: Number(it.price ?? 0) || 0,
           qty: Number(it.qty ?? 0) || 0,
           note: String(it.note ?? ""),
+          ...(it.isAddon ? { isAddon: true as const } : {}),
           promoItems: Array.isArray((it as { promoItems?: unknown }).promoItems)
             ? ((it as { promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[] }).promoItems ?? [])
             : [],

@@ -22,6 +22,7 @@ import {
   extractGrabOrderIdFromMemo,
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
+import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -266,8 +267,7 @@ export async function POST(req: NextRequest) {
     }
     if (memoAppend && isPosReversalStatus(nextStatus)) {
       const stamp = `[ORDER_${nextStatus.toUpperCase()} ${new Date().toISOString()}] ${memoAppend.slice(0, 240)}`
-      const baseMemo = String(patch.memo ?? prev?.memo ?? '').trim()
-      patch.memo = baseMemo ? `${baseMemo}\n${stamp}` : stamp
+      patch.memo = appendPosInternalMemoStamp(String(patch.memo ?? prev?.memo ?? ''), stamp)
     }
 
     await supabaseUpdate('pos_orders', id, patch)

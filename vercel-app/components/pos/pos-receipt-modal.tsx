@@ -59,6 +59,8 @@ export type ReceiptModalData = {
     /** items_json menuId1·재인쇄 시 음료 제외 할인 배분 */
     menuId?: string
     note?: string
+    /** 추가 주문 줄 — 홀 주문 영수증에 `>` 접두 표시 */
+    isAddon?: boolean
     promoId?: string
     promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
     /** 줄 단위 배달 플랫폼(있으면 영수증 채널 유추에 사용) */
@@ -249,6 +251,7 @@ export function PosReceiptModal({
               price: Number(it.price ?? 0) || 0,
               qty: Number(it.qty ?? 0) || 0,
               note: String(it.note ?? ''),
+              ...(it.isAddon ? { isAddon: true as const } : {}),
               promoItems: Array.isArray(it.promoItems) ? it.promoItems : [],
             })),
             subtotal: Number(receiptData.subtotal ?? 0) || 0,

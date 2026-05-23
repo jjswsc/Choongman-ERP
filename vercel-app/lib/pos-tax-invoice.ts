@@ -30,6 +30,25 @@ export function decodeTaxInvoiceMemoValue(raw: string): string {
   }
 }
 
+/** 80mm 영수증 — 세금계산서 수취인 필드(라벨 위·값 아래, 좌우 2열 낭비 없음) */
+function taxInvoiceThermalStackRow(
+  esc: (s: string) => string,
+  label: string,
+  value: string
+): string {
+  const v = String(value ?? '').trim()
+  if (!v) return ''
+  return (
+    '<div class="tax-inv-stack-row" style="margin:5px 0">' +
+    '<div style="font-size:9px;font-weight:700;color:#111;line-height:1.25">' +
+    esc(label) +
+    '</div>' +
+    '<div style="font-size:11px;line-height:1.38;margin-top:1px;overflow-wrap:anywhere;word-break:break-word">' +
+    esc(v) +
+    '</div></div>'
+  )
+}
+
 /**
  * 80mm 등 단순 영수증 HTML — 태국 Tax Invoice 수취인(ผู้ซื้อ) 필수 표기
  */
@@ -46,24 +65,21 @@ export function buildPosTaxInvoiceThermalHtml(opts: {
     taxInvoice.customerType === 'company'
       ? tr('posTaxCustomerCorporate', '법인')
       : tr('posTaxCustomerIndividual', '개인')
-  const row = (label: string, value: string) =>
-    '<div style="margin:2px 0;overflow-wrap:anywhere;word-break:break-word"><span style="font-weight:700">' +
-    esc(label) +
-    ':</span> ' +
-    esc(value) +
-    '</div>'
+  const rows = [
+    taxInvoiceThermalStackRow(esc, tr('posTaxCustomerTypeLabel', '구분'), typeLabel),
+    taxInvoiceThermalStackRow(esc, tr('posName', '이름'), taxInvoice.name),
+    taxInvoiceThermalStackRow(esc, tr('posTaxIdLabel', 'Tax ID'), taxInvoice.taxId),
+    taxInvoiceThermalStackRow(esc, tr('posBranchLabel', '지점'), branchDisplay),
+    taxInvoiceThermalStackRow(esc, tr('settings_address', '주소'), taxInvoice.address),
+    taxInvoiceThermalStackRow(esc, tr('posPhone', '전화번호'), taxInvoice.phone),
+    taxInvoiceThermalStackRow(esc, tr('posTaxEmailLabel', 'E-mail'), taxInvoice.email),
+  ].join('')
   return (
-    '<div style="border:1px solid #000;padding:6px;margin:8px 0;font-size:11px;line-height:1.35;text-align:left">' +
-    '<div style="font-weight:700;margin-bottom:4px;text-align:center">' +
+    '<div style="border:1px solid #000;padding:6px 8px;margin:8px 0;font-size:11px;line-height:1.35;text-align:left">' +
+    '<div style="font-weight:700;margin-bottom:6px;text-align:center;font-size:12px">' +
     esc(tr('posReceiptTaxInvoice', '세금계산서')) +
     '</div>' +
-    row(tr('posTaxCustomerTypeLabel', '구분'), typeLabel) +
-    row(tr('posName', '이름'), taxInvoice.name) +
-    row(tr('posTaxIdLabel', 'Tax ID'), taxInvoice.taxId) +
-    row(tr('posBranchLabel', '지점'), branchDisplay) +
-    row(tr('settings_address', '주소'), taxInvoice.address) +
-    row(tr('posPhone', '전화번호'), taxInvoice.phone) +
-    row(tr('posTaxEmailLabel', 'E-mail'), taxInvoice.email) +
+    rows +
     '</div>'
   )
 }
@@ -75,10 +91,37 @@ export interface ParsedPosOrderMemo {
 
 export const TAX_INVOICE_MARKER = '[TAX_INVOICE]'
 
+const POS_INTERNAL_MEMO_STAMP_PREFIX =
+  /^\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED))\s+[^\]]*\]\s*(.*)$/i
+
+/** 동일 스탬프가 한 줄 안에 여러 번 붙은 경우 */
+const POS_INTERNAL_MEMO_STAMP_INLINE =
+  /\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED))\s+[^\]]*\]/gi
+
+function stripInternalMemoLine(line: string): string {
+  const t = String(line || '').trim()
+  if (!t) return ''
+  const prefixed = POS_INTERNAL_MEMO_STAMP_PREFIX.exec(t)
+  if (prefixed) {
+    const rest = String(prefixed[1] || '').trim()
+    if (!rest) return ''
+    const parts = rest.split('|').map((p) => p.trim()).filter(Boolean)
+    if (parts.length > 1) return parts.slice(1).join(' | ')
+    return ''
+  }
+  return t.replace(POS_INTERNAL_MEMO_STAMP_INLINE, '').trim()
+}
+
 function stripPosInternalMemoTokens(input: string): string {
   let text = String(input || '').trim()
   if (!text) return ''
-  // 플랫폼 내부 추적 토큰은 손님 메모에서 숨긴다.
+  // 플랫폼·POS 내부 추적 토큰은 손님 메모에서 숨긴다.
+  text = text
+    .split(/\r?\n/)
+    .map(stripInternalMemoLine)
+    .filter(Boolean)
+    .join('\n')
+  text = text.replace(POS_INTERNAL_MEMO_STAMP_INLINE, '')
   text = text
     .replace(/\b(grab|lineman|shopee)_order:[A-Za-z0-9._:-]+/gi, '')
     .replace(/\|?\s*grab_state:[A-Za-z0-9._-]+/gi, '')
@@ -89,6 +132,30 @@ function stripPosInternalMemoTokens(input: string): string {
   return text.trim()
 }
 
+/** `[TAX_INVOICE]` 앞에 운영 스탬프를 붙인다(블록 뒤에 붙이면 address 파싱이 깨짐). */
+export function appendPosInternalMemoStamp(memo: string | undefined | null, stamp: string): string {
+  const raw = String(memo ?? '').trim()
+  const line = String(stamp ?? '').trim()
+  if (!line) return raw
+  const markerIndex = raw.indexOf(TAX_INVOICE_MARKER)
+  if (markerIndex < 0) return raw ? `${raw}\n${line}` : line
+  const before = raw.slice(0, markerIndex).trimEnd()
+  const taxSection = raw.slice(markerIndex).trimStart()
+  const nextBefore = before ? `${before}\n${line}` : line
+  return `${nextBefore} ${taxSection}`.trim()
+}
+
+function stripInternalStampsFromTaxInvoicePayload(payload: string): string {
+  let text = String(payload || '').trim()
+  if (!text) return ''
+  text = text.replace(/\r?\n\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED))\s+[^\]]*\][^\r\n]*/gi, '')
+  return text.replace(POS_INTERNAL_MEMO_STAMP_INLINE, '').trim()
+}
+
+function sanitizeTaxInvoiceFieldValue(raw: string): string {
+  return stripPosInternalMemoTokens(decodeTaxInvoiceMemoValue(raw))
+}
+
 export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrderMemo {
   const raw = String(memo || '')
   if (!raw.trim()) return { plainMemo: '', taxInvoice: null }
@@ -97,7 +164,9 @@ export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrd
   if (markerIndex < 0) return { plainMemo: stripPosInternalMemoTokens(raw), taxInvoice: null }
 
   const plainMemo = stripPosInternalMemoTokens(raw.slice(0, markerIndex))
-  const payloadRaw = raw.slice(markerIndex + TAX_INVOICE_MARKER.length).trim()
+  const payloadRaw = stripInternalStampsFromTaxInvoicePayload(
+    raw.slice(markerIndex + TAX_INVOICE_MARKER.length)
+  )
   const parsed: Record<string, string> = {}
 
   for (const token of payloadRaw.split('|')) {
@@ -114,14 +183,14 @@ export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrd
   const customerType: PosTaxInvoiceCustomerType =
     parsed.customerType === 'company' ? 'company' : 'person'
   const taxInvoice: PosTaxInvoiceData = {
-    memberNo: decodeTaxInvoiceMemoValue(parsed.memberNo || ''),
+    memberNo: sanitizeTaxInvoiceFieldValue(parsed.memberNo || ''),
     customerType,
-    name: decodeTaxInvoiceMemoValue(parsed.name || ''),
-    taxId: decodeTaxInvoiceMemoValue(parsed.taxId || '').replace(/\D/g, ''),
-    branchNo: decodeTaxInvoiceMemoValue(parsed.branchNo || '').replace(/\D/g, ''),
-    phone: decodeTaxInvoiceMemoValue(parsed.phone || ''),
-    email: decodeTaxInvoiceMemoValue(parsed.email || ''),
-    address: decodeTaxInvoiceMemoValue(parsed.address || ''),
+    name: sanitizeTaxInvoiceFieldValue(parsed.name || ''),
+    taxId: sanitizeTaxInvoiceFieldValue(parsed.taxId || '').replace(/\D/g, ''),
+    branchNo: sanitizeTaxInvoiceFieldValue(parsed.branchNo || '').replace(/\D/g, ''),
+    phone: sanitizeTaxInvoiceFieldValue(parsed.phone || ''),
+    email: sanitizeTaxInvoiceFieldValue(parsed.email || ''),
+    address: sanitizeTaxInvoiceFieldValue(parsed.address || ''),
     member: parsed.member === 'Y',
   }
 

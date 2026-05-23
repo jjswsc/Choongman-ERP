@@ -682,9 +682,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       htmlLang: lang,
       bodyContent: simpleHtml,
       extraStyles: `
-        .receipt-payment-simple { color: #000; }
-        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
-        .simple-tax-subtitle { text-align: center; font-size: 11px; font-weight: 700; margin: 0 0 4px 0; color: #000; }
+        .receipt-payment-simple { color: #000; font-weight: 700; }
+        .simple-title { text-align: center; font-size: 13px; font-weight: 800; margin-bottom: 2px; color: #000; }
+        .simple-tax-subtitle { text-align: center; font-size: 11px; font-weight: 800; margin: 0 0 4px 0; color: #000; }
         .simple-split-badge {
           margin: 0 auto 5px auto;
           padding: 2px 8px;
@@ -697,52 +697,22 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           color: #000;
           background: #fff;
         }
-        .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
-        .simple-biz { color: #111; }
+        .simple-store { text-align: center; font-size: 12px; font-weight: 800; margin-bottom: 6px; color: #000; }
+        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; font-weight: 700; color: #000; }
+        .simple-biz { color: #000; font-weight: 700; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
         .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .simple-table td { font-size: 11px; line-height: 1.4; padding: 1px 0; vertical-align: top; }
+        .simple-table td { font-size: 11px; line-height: 1.4; padding: 1px 0; vertical-align: top; font-weight: 700; color: #000; }
         .simple-item-name { width: 72%; word-break: break-word; }
         .simple-item-amt { width: 28%; text-align: right; white-space: nowrap; }
+        .simple-item-sub { font-weight: 700; color: #000; }
         .simple-k { width: 72%; }
         .simple-v { width: 28%; text-align: right; white-space: nowrap; }
-        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; }
+        .simple-total { font-size: 12px; font-weight: 800; margin-top: 4px; color: #000; }
       `,
     })
   }
-  const taxCustType = taxInvoice
-    ? taxInvoice.customerType === 'company'
-      ? tr('posTaxCustomerCorporate', '법인')
-      : tr('posTaxCustomerIndividual', '개인')
-    : ''
-  const taxInvoiceBlock = taxInvoice
-    ? `
-        <div class="tax-invoice-premium">
-          <div class="tax-invoice-header">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>
-          ${
-            useLegacyAligned
-              ? `
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxCustomerTypeLabel', '구분'))}</span><span>${esc(taxCustType)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posName', '이름'))}</span><span>${esc(taxInvoice.name)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxIdLabel', 'Tax ID'))}</span><span>${esc(taxInvoice.taxId)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posBranchLabel', '지점'))}</span><span>${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</span></div>
-          <div class="tax-invoice-row tax-invoice-addr"><span class="tax-invoice-label">${esc(tr('settings_address', '주소'))}</span><span>${esc(taxInvoice.address)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posPhone', '전화번호'))}</span><span>${esc(taxInvoice.phone)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxEmailLabel', 'E-mail'))}</span><span>${esc(taxInvoice.email)}</span></div>
-          `
-              : `
-          <div class="tax-invoice-stack"><div class="tax-invoice-stack-l">${esc(tr('posTaxCustomerTypeLabel', '구분'))}</div><div class="tax-invoice-stack-v">${esc(taxCustType)}</div></div>
-          <div class="tax-invoice-stack"><div class="tax-invoice-stack-l">${esc(tr('posName', '이름'))}</div><div class="tax-invoice-stack-v">${esc(taxInvoice.name)}</div></div>
-          <div class="tax-invoice-stack"><div class="tax-invoice-stack-l">${esc(tr('posTaxIdLabel', 'Tax ID'))}</div><div class="tax-invoice-stack-v">${esc(taxInvoice.taxId)}</div></div>
-          <div class="tax-invoice-stack"><div class="tax-invoice-stack-l">${esc(tr('posBranchLabel', '지점'))}</div><div class="tax-invoice-stack-v">${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</div></div>
-          <div class="tax-invoice-stack tax-invoice-stack--addr"><div class="tax-invoice-stack-l">${esc(tr('settings_address', '주소'))}</div><div class="tax-invoice-stack-v">${esc(taxInvoice.address)}</div></div>
-          <div class="tax-invoice-stack"><div class="tax-invoice-stack-l">${esc(tr('posPhone', '전화번호'))}</div><div class="tax-invoice-stack-v">${esc(taxInvoice.phone)}</div></div>
-          <div class="tax-invoice-stack"><div class="tax-invoice-stack-l">${esc(tr('posTaxEmailLabel', 'E-mail'))}</div><div class="tax-invoice-stack-v">${esc(taxInvoice.email)}</div></div>
-          `
-          }
-        </div>`
-    : ''
+  const taxInvoiceBlock = taxInvoice ? buildPosTaxInvoiceThermalHtml({ taxInvoice, esc, tr }) : ''
   const printContent = `
       <div class="receipt-content receipt-payment${useLegacyAligned ? ' receipt-payment--legacy-safe' : ''} ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
         <div class="receipt-brand-wrap text-center">
@@ -968,14 +938,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     bodyContent: printContent,
     extraStyles: `
         .receipt-brand-wrap { text-align: center; }
-        .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
+        .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.35); }
         .receipt-brand-logo.sm { width: 84px; }
         .receipt-brand-logo.md { width: 108px; }
         .receipt-brand-logo.lg { width: 132px; }
-        .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 700; }
+        .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 800; }
         .receipt-title-block { margin: 4px 0 9px 0; }
         .receipt-divider-strong { margin: 10px 0; }
-        .receipt-line-note { margin: -1px 0 5px 0; color: #111; }
         .receipt-biz-wrap { line-height: 1.42; }
         .receipt-split-badge-wrap { text-align: center; margin: 2px 0 6px 0; }
         .receipt-split-badge {
@@ -990,11 +959,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           background: #fff;
           letter-spacing: .02em;
         }
-        .receipt-order-no-print { color: #000 !important; font-weight: 700 !important; }
-        .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }
-        .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; }
-        .tax-invoice-premium { border: 2px solid #000; padding: 8px 10px; margin-top: 8px; background: #fff; color: #000; }
-        .tax-invoice-header { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #000; text-align: center; color: #000; }
+        .receipt-order-no-print { color: #000 !important; font-weight: 800 !important; }
+        .receipt-payment { color: #000; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .receipt-payment .receipt-line-note {
+          font-size: 10px;
+          font-weight: 700;
+          color: #000 !important;
+          padding-left: 2mm;
+          margin: -2px 0 4px 0;
+          line-height: 1.35;
+        }
+        .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; font-weight: 700; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
         .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
         .receipt-payment { position: static !important; left: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
@@ -1004,30 +979,22 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment--legacy-safe .receipt-row,
         .receipt-payment--legacy-safe .receipt-item-head { display: table !important; width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; break-inside: avoid; page-break-inside: avoid; }
         .receipt-payment--legacy-safe .receipt-row > span:first-child,
-        .receipt-payment--legacy-safe .receipt-item-head > span:first-child { display: table-cell !important; width: auto !important; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px !important; vertical-align: top !important; word-break: break-word; }
+        .receipt-payment--legacy-safe .receipt-item-head > span:first-child { display: table-cell !important; width: auto !important; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px !important; vertical-align: top !important; word-break: break-word; font-weight: 700; color: #000; }
         .receipt-payment--legacy-safe .receipt-row > span:last-child,
-        .receipt-payment--legacy-safe .receipt-item-head > span:last-child { display: table-cell !important; width: ${RECEIPT_AMOUNT_COL_MM}mm !important; min-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; vertical-align: top !important; white-space: nowrap !important; }
-        .receipt-payment--legacy-safe .receipt-item-head { margin-top: 2px; }
+        .receipt-payment--legacy-safe .receipt-item-head > span:last-child { display: table-cell !important; width: ${RECEIPT_AMOUNT_COL_MM}mm !important; min-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; vertical-align: top !important; white-space: nowrap !important; font-weight: 700; color: #000; }
+        .receipt-payment--legacy-safe .receipt-item-head { margin-top: 2px; font-weight: 800; color: #000; }
         .receipt-payment--legacy-safe .receipt-row { margin: 5px 0; }
         .receipt-payment--legacy-safe .receipt-total { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; font-weight: 800; }
         .receipt-payment--legacy-safe .receipt-meta-row { display: table !important; width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; margin: 5px 0; }
-        .receipt-payment--legacy-safe .receipt-meta-label { display: table-cell !important; width: 22mm !important; vertical-align: top !important; white-space: nowrap !important; padding-right: 3mm !important; font-size: 10px; font-weight: 600; line-height: 1.3; }
-        .receipt-payment--legacy-safe .receipt-meta-value { display: table-cell !important; width: auto !important; vertical-align: top !important; font-size: 11px; font-weight: 700; line-height: 1.38; color: #000; word-break: break-word; }
-        .receipt-payment--legacy-safe .tax-invoice-row { display: table !important; width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; margin: 4px 0; font-size: 11px; color: #000; }
-        .receipt-payment--legacy-safe .tax-invoice-row > .tax-invoice-label { display: table-cell !important; width: 22mm !important; vertical-align: top !important; padding-right: 4px !important; font-weight: 600; }
-        .receipt-payment--legacy-safe .tax-invoice-row > span:last-child { display: table-cell !important; width: auto !important; vertical-align: top !important; word-break: break-word; }
-        .receipt-payment--legacy-safe .tax-invoice-row.tax-invoice-addr > span:last-child { word-break: break-word; }
+        .receipt-payment--legacy-safe .receipt-meta-label { display: table-cell !important; width: 22mm !important; vertical-align: top !important; white-space: nowrap !important; padding-right: 3mm !important; font-size: 10px; font-weight: 700; line-height: 1.3; color: #000; }
+        .receipt-payment--legacy-safe .receipt-meta-value { display: table-cell !important; width: auto !important; vertical-align: top !important; font-size: 11px; font-weight: 800; line-height: 1.38; color: #000; word-break: break-word; }
         `
             : `
-        .tax-invoice-stack { margin: 6px 0; break-inside: avoid; page-break-inside: avoid; }
-        .tax-invoice-stack-l { display: block; font-size: 10px; font-weight: 600; color: #000; margin-bottom: 2px; }
-        .tax-invoice-stack-v { display: block; font-size: 11px; color: #000; line-height: 1.38; word-break: break-word; overflow-wrap: anywhere; }
-        .tax-invoice-stack--addr .tax-invoice-stack-v { word-break: break-word; }
         .receipt-payment .receipt-pay-meta { margin: 5px 0; break-inside: avoid; page-break-inside: avoid; }
-        .receipt-payment .receipt-pay-meta-l { display: block; font-size: 10px; font-weight: 600; line-height: 1.3; }
-        .receipt-payment .receipt-pay-meta-v { display: block; font-size: 11px; font-weight: 700; color: #000; margin-top: 2px; line-height: 1.38; word-break: break-word; overflow-wrap: anywhere; }
+        .receipt-payment .receipt-pay-meta-l { display: block; font-size: 10px; font-weight: 700; line-height: 1.3; color: #000; }
+        .receipt-payment .receipt-pay-meta-v { display: block; font-size: 11px; font-weight: 800; color: #000; margin-top: 2px; line-height: 1.38; word-break: break-word; overflow-wrap: anywhere; }
         .receipt-payment .receipt-pay-line { display: block; width: 100%; max-width: 100%; box-sizing: border-box; margin: 5px 0; break-inside: avoid; page-break-inside: avoid; }
-        .receipt-payment .receipt-pay-line-name { display: block; width: 100%; font-size: 11px; font-weight: 600; color: #000; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
+        .receipt-payment .receipt-pay-line-name { display: block; width: 100%; font-size: 11px; font-weight: 700; color: #000; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
         .receipt-payment .receipt-pay-line-amt { display: block; width: 100%; text-align: right; font-size: 11px; font-weight: 700; color: #000; margin-top: 2px; line-height: 1.2; }
         .receipt-payment .receipt-pay-line--head { margin-top: 2px; margin-bottom: 2px; }
         .receipt-payment .receipt-pay-line--head .receipt-pay-line-name { font-size: 10px; font-weight: 700; }

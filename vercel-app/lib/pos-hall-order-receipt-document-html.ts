@@ -27,6 +27,8 @@ type HallOrderItem = {
   price: number
   qty: number
   note?: string
+  /** 추가 주문(테이블 merge)으로 새로 들어온 줄 — 영수증 품목명 앞 `>` 표시 */
+  isAddon?: boolean
   promoId?: string
   promoCode?: string
   promoItems?: {
@@ -428,10 +430,12 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       const noteHtml = lineNote
         ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
         : ''
+      const addonPrefix = it.isAddon ? '&gt; ' : ''
       return (
         '<div class="receipt-row"><span>' +
         String(it.qty) +
         'x ' +
+        addonPrefix +
         esc(lineMain) +
         c('span') +
         '<span>' +
@@ -494,6 +498,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     c('div') +
     '<div class="receipt-divider">' +
     c('div') +
+    (taxInvoiceRow ? taxInvoiceRow + '<div class="receipt-divider">' + c('div') : '') +
     '<div class="receipt-item-head"><span>' +
     esc(tr('posMenuName', '품목')) +
     c('span') +
@@ -502,7 +507,6 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     c('span') +
     c('div') +
     itemsRows +
-    taxInvoiceRow +
     memoRow +
     '<div class="receipt-divider">' +
     c('div') +
@@ -525,7 +529,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     htmlLang: lang,
     bodyContent: printContent,
     extraStyles:
-      '.receipt-order-simple .receipt-order-label{font-weight:800;line-height:1.35}.receipt-order-simple .receipt-order-type-chip{display:inline-block;vertical-align:middle;border:1.4px solid #000;border-radius:999px;font-weight:800;color:#000;background:#fff}.receipt-order-simple .receipt-order-type-chip--inline{margin-left:5px;padding:1px 8px;font-size:10px;letter-spacing:.02em;line-height:1.2}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#111}.receipt-order-simple .receipt-row,.receipt-order-simple .receipt-item-head{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-row>span:first-child,.receipt-order-simple .receipt-item-head>span:first-child{display:table-cell;width:calc(100% - ' +
+      '.receipt-order-simple .receipt-order-label{font-weight:800;line-height:1.35}.receipt-order-simple .receipt-order-type-chip{display:inline-block;vertical-align:middle;border:1.4px solid #000;border-radius:999px;font-weight:800;color:#000;background:#fff}.receipt-order-simple .receipt-order-type-chip--inline{margin-left:5px;padding:1px 8px;font-size:10px;letter-spacing:.02em;line-height:1.2}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#000;font-weight:700}.receipt-order-simple .receipt-row,.receipt-order-simple .receipt-item-head{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-row>span:first-child,.receipt-order-simple .receipt-item-head>span:first-child{display:table-cell;width:calc(100% - ' +
       String(RECEIPT_AMOUNT_COL_MM) +
       'mm);padding-right:' +
       String(RECEIPT_GRID_COL_GAP_PX) +
