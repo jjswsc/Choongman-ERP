@@ -5375,6 +5375,7 @@ export default function PosTerminalPage() {
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
                 let queuedLocalOrderNo: string | null = null
+                let queuedWithoutServerId = false
                 // 기존 주문 id만 남고 본문 스냅샷이 비는 레이스(리패치/동기화 직후)에서는
                 // 저장을 막지 않고 신규 저장 경로로 폴백해 주문 유실을 방지한다.
                 if (isAddOrder && existingOrder) {
@@ -5461,6 +5462,7 @@ export default function PosTerminalPage() {
                   const queued = Boolean((res as { queued?: boolean }).queued)
                   await notifyQueuedSave(savedOrderNo, queued)
                   if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
+                  queuedWithoutServerId = queued && !(savedOrderId != null && savedOrderId > 0)
                   if (queued && !(savedOrderId != null && savedOrderId > 0)) {
                     upsertOptimisticOrder({
                       storeCode: currentStoreId,
@@ -5785,7 +5787,9 @@ export default function PosTerminalPage() {
                 }
                 setServingTableId(null)
                 setSelectedTableId(null)
-                await refetchCurrentStore()
+                if (!queuedWithoutServerId) {
+                  await refetchCurrentStore()
+                }
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
               } finally {
@@ -6048,6 +6052,7 @@ export default function PosTerminalPage() {
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const newOrderId = (res as { orderId?: number }).orderId ?? null
                 const queued = Boolean((res as { queued?: boolean }).queued)
+                const queuedWithoutServerId = queued && !(newOrderId != null && newOrderId > 0)
                 await notifyQueuedSave(orderNo, queued)
                 let queuedLocalOrderNo: string | null =
                   queued && orderNo.startsWith('LOCAL-') ? orderNo : null
@@ -6066,7 +6071,7 @@ export default function PosTerminalPage() {
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment)
-                if (queued && !(newOrderId != null && newOrderId > 0)) {
+                if (queuedWithoutServerId) {
                   upsertOptimisticOrder({
                     storeCode: currentStoreId,
                     orderNo,
@@ -6271,7 +6276,9 @@ export default function PosTerminalPage() {
                     })
                   }
                 }
-                await refetchCurrentStore()
+                if (!queuedWithoutServerId) {
+                  await refetchCurrentStore()
+                }
                 /** 배달·포장「주문」만 저장 시: 목록에서 다시 누르지 않도록 방금 저장한 건 자동 선택 */
                 if (payload.orderType === 'delivery') {
                   if (!hasPayment && newOrderId != null && newOrderId > 0) {
