@@ -38,6 +38,7 @@ import {
   isBrowserOnline,
   runReachabilityProbe,
   REACHABILITY_EVENT,
+  reportNetworkFailure,
 } from "@/lib/offline/network"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 
@@ -523,6 +524,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         msg.includes("network") ||
         msg.includes("연결")
       if (isNetErr) {
+        reportNetworkFailure()
+        setLoginListProbeOk(false)
         setError(pickLoginStr(tMsg, "msg_login_network_error", lang))
         setErrorIsConnectivity(true)
         setLoginErrorFromClientFetch(true)
@@ -639,21 +642,44 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    */
   const listFromServerOk = loginDataSource === "api" || loginDataSource === "cache"
   /**
-   * 목록은 캐시로 채워져도 loginCheck·PIN 확인은 서버가 필요하다.
-   * 예전에는 cache만으로 treatAsOnline → 오프라인인데 매장 목록만 보이고「오프라인 모드」버튼이 안 떴음.
+   * 스냅샷 없어도 POS·하이브리드는 캐시 목록에서 고른 매장·이름으로 오프라인 진입 허용.
    */
-  const loginAuthReachable =
-    browserOnline || loginListProbeOk === true || loginDataSource === "api"
-  /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 — !offlineResume 로 배너를 막지 않음 */
-  const showServerUnreachableBanner =
-    serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
-  /** 동일 출처 프로브 성공 + 목록 API만 실패 — 긴 PIN·오프라인 안내 대신 짧은 안내 */
-  const useSoftListFailureCopy = Boolean(showServerUnreachableBanner && loginListProbeOk === true)
-  const useSoftSubmitNetworkCopy = Boolean(
-    errorIsConnectivity && loginListProbeOk === true && loginErrorFromClientFetch
-  )
-  /** 이전 세션 스냅샷으로 오프라인 POS/ERP 진입 */
-  const canOfferOfflineResume = Boolean(offlineResume) && !loginAuthReachable
+  const effectiveOfflineResume = useMemo((): AuthState | null => {
+    if (offlineResume) return offlineResume
+    if (loginApp !== "pos" && !hybridPosShell) return null
+    const s = store.trim()
+    const u = user.trim()
+    if (!s || !u) return null
+    if (loginDataSource !== "cache" && loginDataSource !== "api") return null
+    let token: string | undefined
+    try {
+      token = sessionStorage.getItem("cm_token") || localStorage.getItem("cm_token") || undefined
+    } catch {
+      /* ignore */
+    }
+    return {
+      ...(company ? { company: company.trim() } : {}),
+      store: s,
+      user: u,
+      role: "",
+      token,
+    }
+  }, [
+    offlineResume,
+    loginApp,
+    hybridPosShell,
+    store,
+    user,
+    company,
+    loginDataSource,
+  ])
+  /**
+   * 목록이 캐시뿐이거나, 온라인 목록 뒤 loginCheck가 네트워크로 실패한 경우 오프라인 CTA.
+   * browserOnline·stale 프로브로 숨기지 않음(Windows/Electron에서 Wi‑Fi 끊어도 onLine=true 인 경우).
+   */
+  const canOfferOfflineResume =
+    Boolean(effectiveOfflineResume) &&
+    (loginDataSource !== "api" || errorIsConnectivity)
   /**
    * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷·목록 없음·서버 로그인 불가일 때.
    */
@@ -664,6 +690,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    */
   const showOfflineResumeBanner =
     canOfferOfflineResume && !offlineOnlyScreen
+
+  /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 */
+  const showServerUnreachableBanner =
+    serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
+  /** 동일 출처 프로브 성공 + 목록 API만 실패 — 긴 PIN·오프라인 안내 대신 짧은 안내 */
+  const useSoftListFailureCopy = Boolean(showServerUnreachableBanner && loginListProbeOk === true)
+  const useSoftSubmitNetworkCopy = Boolean(
+    errorIsConnectivity && loginListProbeOk === true && loginErrorFromClientFetch
+  )
 
   const labels = {
     ko: {
@@ -884,15 +919,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </div>
           ) : offlineOnlyScreen ? (
             <div className="space-y-3 py-4">
-              {offlineResume ? (
+              {effectiveOfflineResume ? (
                 <div className="rounded-lg border border-white/15 bg-white/5 px-3 py-3 text-left text-sm text-white/90">
                   <p>
                     <span className="text-white/55">{t.offlineResumeStore}</span>{' '}
-                    <span className="font-medium text-white">{offlineResume.store}</span>
+                    <span className="font-medium text-white">{effectiveOfflineResume.store}</span>
                   </p>
                   <p className="mt-1">
                     <span className="text-white/55">{t.offlineResumeStaff}</span>{' '}
-                    <span className="font-medium text-white">{offlineResume.user}</span>
+                    <span className="font-medium text-white">{effectiveOfflineResume.user}</span>
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-white/70">{t.offlineResumeSyncNote}</p>
                 </div>
@@ -900,9 +935,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               <button
                 type="button"
                 onClick={() => {
-                  if (offlineResume) {
+                  if (effectiveOfflineResume) {
                     setPosSessionPreferHardNavigation()
-                    setAuth(offlineResume)
+                    setAuth(effectiveOfflineResume)
                     replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
                   }
                 }}
@@ -975,33 +1010,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 </div>
               </div>
             ) : null}
-            {showOfflineResumeBanner && offlineResume ? (
-              <div className="mb-3 rounded-lg border border-emerald-500/45 bg-emerald-950/35 px-3 py-3 text-center">
-                <p className="text-xs leading-relaxed text-emerald-100/95">
-                  {pickLoginStr(
-                    tMsg,
-                    browserOnline ? "msg_login_offline_banner_hint_online" : "msg_login_offline_banner_hint",
-                    lang
-                  )}
-                </p>
-                <p className="mt-2 text-sm font-medium text-emerald-50">
-                  <span className="text-emerald-200/80">{t.offlineResumeStore}</span> {offlineResume.store}
-                  <span className="mx-1.5 text-emerald-400/60">·</span>
-                  <span className="text-emerald-200/80">{t.offlineResumeStaff}</span> {offlineResume.user}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPosSessionPreferHardNavigation()
-                    setAuth(offlineResume)
-                    replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
-                  }}
-                  className="mt-2 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                >
-                  {t.enterOfflineMode}
-                </button>
-              </div>
-            ) : null}
 
             <Select value={company} onValueChange={handleCompanyChange} disabled={companies.length === 0}>
               <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
@@ -1042,6 +1050,34 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               </SelectContent>
             </Select>
 
+            {showOfflineResumeBanner && effectiveOfflineResume ? (
+              <div className="mb-3 rounded-lg border border-emerald-500/45 bg-emerald-950/35 px-3 py-3 text-center">
+                <p className="text-xs leading-relaxed text-emerald-100/95">
+                  {pickLoginStr(
+                    tMsg,
+                    browserOnline ? "msg_login_offline_banner_hint_online" : "msg_login_offline_banner_hint",
+                    lang
+                  )}
+                </p>
+                <p className="mt-2 text-sm font-medium text-emerald-50">
+                  <span className="text-emerald-200/80">{t.offlineResumeStore}</span> {effectiveOfflineResume.store}
+                  <span className="mx-1.5 text-emerald-400/60">·</span>
+                  <span className="text-emerald-200/80">{t.offlineResumeStaff}</span> {effectiveOfflineResume.user}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPosSessionPreferHardNavigation()
+                    setAuth(effectiveOfflineResume)
+                    replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
+                  }}
+                  className="mt-2 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                >
+                  {t.enterOfflineMode}
+                </button>
+              </div>
+            ) : null}
+
             <input
               type="password"
               value={pw}
@@ -1053,8 +1089,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             />
 
             {error &&
-              (canOfferOfflineResume &&
-              (errorIsConnectivity || loginApp === "pos" || hybridPosShell) ? (
+              (canOfferOfflineResume ? (
                 <div className="mb-3 space-y-2">
                   <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
                     <p className="font-medium">
@@ -1071,8 +1106,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   <button
                     type="button"
                     onClick={() => {
+                      if (!effectiveOfflineResume) return
                       setPosSessionPreferHardNavigation()
-                      setAuth(offlineResume!)
+                      setAuth(effectiveOfflineResume)
                       replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
                     }}
                     className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
