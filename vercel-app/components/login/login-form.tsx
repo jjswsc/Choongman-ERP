@@ -639,11 +639,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    */
   const listFromServerOk = loginDataSource === "api" || loginDataSource === "cache"
   /**
-   * navigator.onLine 거짓·일시 오류와 무관하게, 서버/프로브로 온라인이면 오프라인 유도 UI를 숨김.
-   * (이전: 목록 API만 실패해도 serverListDegraded 로 에메랄드「오프라인으로」가 떠 사용자 혼란)
+   * 목록은 캐시로 채워져도 loginCheck·PIN 확인은 서버가 필요하다.
+   * 예전에는 cache만으로 treatAsOnline → 오프라인인데 매장 목록만 보이고「오프라인 모드」버튼이 안 떴음.
    */
-  const treatAsOnline =
-    browserOnline || loginListProbeOk === true || listFromServerOk
+  const loginAuthReachable =
+    browserOnline || loginListProbeOk === true || loginDataSource === "api"
   /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 — !offlineResume 로 배너를 막지 않음 */
   const showServerUnreachableBanner =
     serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
@@ -652,17 +652,18 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const useSoftSubmitNetworkCopy = Boolean(
     errorIsConnectivity && loginListProbeOk === true && loginErrorFromClientFetch
   )
+  /** 이전 세션 스냅샷으로 오프라인 POS/ERP 진입 */
+  const canOfferOfflineResume = Boolean(offlineResume) && !loginAuthReachable
   /**
-   * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷·목록 없음·오프라인으로만 보일 때.
-   * 서버/캐시로 목록 출처가 있거나 프로브 성공(treatAsOnline)이면 일반 폼 유지.
+   * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷·목록 없음·서버 로그인 불가일 때.
    */
   const offlineOnlyScreen =
-    Boolean(offlineResume) && !listLoadedOk && !serverListDegraded && !treatAsOnline
+    canOfferOfflineResume && !listLoadedOk && !serverListDegraded
   /**
-   * 이전 세션 오프라인 복귀 안내 — 실제로 오프라인일 때만(온라인인데 목록만 실패한 경우 제외).
+   * 목록은 캐시로 보여도 서버 로그인 불가면 폼 위에 오프라인 진입 배너.
    */
   const showOfflineResumeBanner =
-    Boolean(offlineResume) && !offlineOnlyScreen && !listLoadedOk && !treatAsOnline
+    canOfferOfflineResume && !offlineOnlyScreen
 
   const labels = {
     ko: {
@@ -1052,18 +1053,33 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             />
 
             {error &&
-              (errorIsConnectivity && offlineResume && !treatAsOnline ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPosSessionPreferHardNavigation()
-                    setAuth(offlineResume)
-                    replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
-                  }}
-                  className="mb-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                >
-                  {t.enterOfflineMode}
-                </button>
+              (canOfferOfflineResume &&
+              (errorIsConnectivity || loginApp === "pos" || hybridPosShell) ? (
+                <div className="mb-3 space-y-2">
+                  <motion.div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
+                    <p className="font-medium">
+                      {useSoftSubmitNetworkCopy
+                        ? pickLoginStr(tMsg, "msg_login_submit_network_title", lang)
+                        : error}
+                    </p>
+                    {!useSoftSubmitNetworkCopy && errorIsConnectivity ? (
+                      <p className="mt-2 text-xs leading-relaxed text-amber-100/90">
+                        {pickLoginStr(tMsg, "msg_login_offline_connect_detail", lang)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPosSessionPreferHardNavigation()
+                      setAuth(offlineResume!)
+                      replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
+                    }}
+                    className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                  >
+                    {t.enterOfflineMode}
+                  </button>
+                </div>
               ) : errorIsConnectivity ? (
                 <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
                   <p className="font-medium">
