@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
 import {
+  buildPosSalesSplitSeriesByStore,
+  groupPosSalesRowsByCanonicalStore,
   mergePeriodSeriesToAggregated,
   periodRowsForStoreSelection,
+  resolvePeriodSeriesStoreKey,
+  type PeriodOrderRow,
 } from '@/lib/pos-sales-period-aggregate'
 
 function row(key: string, total: number, count: number): PeriodAggRow {
@@ -41,6 +45,84 @@ describe('mergePeriodSeriesToAggregated', () => {
 
   it('returns empty when no series', () => {
     expect(mergePeriodSeriesToAggregated({})).toEqual([])
+  })
+})
+
+describe('groupPosSalesRowsByCanonicalStore', () => {
+  it('merges CM prefix variants into one store bucket', () => {
+    const rows: PeriodOrderRow[] = [
+      {
+        store_code: 'Ekkamai',
+        status: 'completed',
+        total: 100,
+        created_at: '2026-05-01T12:00:00Z',
+      },
+      {
+        store_code: 'CM Ekkamai',
+        status: 'completed',
+        total: 200,
+        created_at: '2026-05-01T13:00:00Z',
+      },
+    ]
+    const grouped = groupPosSalesRowsByCanonicalStore(rows, null)
+    expect(grouped.size).toBe(1)
+    const only = [...grouped.values()][0]
+    expect(only?.length).toBe(2)
+    expect(only?.reduce((s, r) => s + (Number(r.total) || 0), 0)).toBe(300)
+  })
+})
+
+describe('buildPosSalesSplitSeriesByStore', () => {
+  it('daily totals match posSalesByStore row set for one selected store', () => {
+    const rows: PeriodOrderRow[] = [
+      {
+        store_code: 'Ekkamai',
+        status: 'completed',
+        total: 100,
+        subtotal: 90,
+        created_at: '2026-05-01T12:00:00Z',
+      },
+      {
+        store_code: 'CM Ekkamai',
+        status: 'completed',
+        total: 50,
+        subtotal: 45,
+        created_at: '2026-05-02T12:00:00Z',
+      },
+      {
+        store_code: 'CM Other',
+        status: 'completed',
+        total: 999,
+        created_at: '2026-05-02T12:00:00Z',
+      },
+    ]
+    const grouped = groupPosSalesRowsByCanonicalStore(rows, null)
+    const storeTotal = [...grouped.entries()]
+      .filter(([k]) => k.includes('Ekkamai'))
+      .reduce((s, [, list]) => s + list.reduce((a, r) => a + (Number(r.total) || 0), 0), 0)
+
+    const series = buildPosSalesSplitSeriesByStore({
+      rows,
+      stores: ['CM Ekkamai'],
+      groupBy: 'day',
+      orderTypesAllowed: null,
+      resolveBusinessDayStart: () => ({ start: '06:00', end: '05:59' }),
+    })
+    const daily = periodRowsForStoreSelection(series, ['CM Ekkamai'])
+    const dailyTotal = daily.reduce((s, r) => s + r.total, 0)
+    expect(dailyTotal).toBe(150)
+    expect(storeTotal).toBe(150)
+  })
+})
+
+describe('resolvePeriodSeriesStoreKey', () => {
+  it('resolves alias selection to canonical series key', () => {
+    const series = {
+      'CM True Digital': [row('2026-05-01', 100, 1)],
+    }
+    expect(resolvePeriodSeriesStoreKey(series, 'True Digital')).toBe('CM True Digital')
+    expect(resolvePeriodSeriesStoreKey(series, 'CM True Digital')).toBe('CM True Digital')
+    expect(resolvePeriodSeriesStoreKey(series, 'Other')).toBeUndefined()
   })
 })
 

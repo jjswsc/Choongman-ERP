@@ -24,7 +24,9 @@ import {
   rowMatchesSalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
 
-const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+export const POS_SALES_COMPLETED_STATUSES = ['completed', 'paid', 'ready'] as const
+
+const COMPLETED_STATUSES: readonly string[] = POS_SALES_COMPLETED_STATUSES
 
 export type PeriodOrderRow = {
   created_at?: string
@@ -107,6 +109,35 @@ const emptyBucket = (): Bucket => ({
   dineInTotal: 0,
   dineInGuestSum: 0,
 })
+
+/** posSalesByStore·기간 집계 공통 — 완료 건·주문유형 필터 */
+export function filterCompletedPosSalesRows(
+  rows: PeriodOrderRow[],
+  orderTypesAllowed: PosOrderTypeValue[] | null
+): PeriodOrderRow[] {
+  return rows.filter(
+    (r) =>
+      rowMatchesOrderFilter(r.order_type, orderTypesAllowed) &&
+      COMPLETED_STATUSES.includes(String(r.status ?? ''))
+  )
+}
+
+/**
+ * posSalesByStore 와 동일: DB store_code → canonical 매장별 행 묶음.
+ */
+export function groupPosSalesRowsByCanonicalStore(
+  rows: PeriodOrderRow[],
+  orderTypesAllowed: PosOrderTypeValue[] | null
+): Map<string, PeriodOrderRow[]> {
+  const map = new Map<string, PeriodOrderRow[]>()
+  for (const r of filterCompletedPosSalesRows(rows, orderTypesAllowed)) {
+    const key = canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)')
+    const list = map.get(key)
+    if (list) list.push(r)
+    else map.set(key, [r])
+  }
+  return map
+}
 
 /**
  * @param orderTypesAllowed - parseOrderTypesParam 결과(null = 전체)
@@ -267,6 +298,18 @@ export function mergePeriodSeriesToAggregated(
   return baseRows.map((r) => sumForKey(r.key))
 }
 
+/** split 시리즈 객체에서 UI 매장 코드에 해당하는 키 (canonical·별칭 매칭) */
+export function resolvePeriodSeriesStoreKey(
+  series: Record<string, PeriodAggRow[]>,
+  storeCode: string
+): string | undefined {
+  const code = String(storeCode || '').trim()
+  if (!code) return undefined
+  const canon = canonicalSalesStoreRowKey(code)
+  if (series[canon]?.length) return canon
+  return Object.keys(series).find((k) => rowMatchesSalesStoreSelection(k, code))
+}
+
 /**
  * split 시리즈 → 화면용 기간 행.
  * 매장 선택 시: 선택 매장(표기 차이 포함)에 해당하는 시리즈만 합산 — posSalesByStore 와 동일 범위.
@@ -279,10 +322,7 @@ export function periodRowsForStoreSelection(
     return mergePeriodSeriesToAggregated(series)
   }
   if (storeCodes.length === 1) {
-    const code = storeCodes[0]!
-    const canon = canonicalSalesStoreRowKey(code)
-    if (series[canon]?.length) return series[canon]!
-    const hit = Object.keys(series).find((k) => rowMatchesSalesStoreSelection(k, code))
+    const hit = resolvePeriodSeriesStoreKey(series, storeCodes[0]!)
     return hit && series[hit]?.length ? series[hit]! : []
   }
   const matchingKeys = Object.keys(series).filter((k) =>
@@ -307,46 +347,16 @@ type BuildSplitSeriesParams = {
 export function buildPosSalesSplitSeriesByStore(params: BuildSplitSeriesParams): Record<string, PeriodAggRow[]> {
   const { rows, stores, groupBy, orderTypesAllowed, resolveBusinessDayStart } = params
   const series: Record<string, PeriodAggRow[]> = {}
+  const grouped = groupPosSalesRowsByCanonicalStore(rows, orderTypesAllowed)
 
-  if (stores.length >= 1) {
-    const buckets: Record<string, PeriodOrderRow[]> = {}
-    for (const code of stores) {
-      const key = canonicalSalesStoreRowKey(code)
-      if (!buckets[key]) buckets[key] = []
+  for (const [storeKey, subset] of grouped) {
+    if (
+      stores.length >= 1 &&
+      !stores.some((code) => rowMatchesSalesStoreSelection(storeKey, code))
+    ) {
+      continue
     }
-    for (const r of rows) {
-      const raw = String(r.store_code ?? '').trim()
-      for (const code of stores) {
-        if (!rowMatchesSalesStoreSelection(raw, code)) continue
-        const key = canonicalSalesStoreRowKey(code)
-        buckets[key]!.push(r)
-        break
-      }
-    }
-    for (const [key, subset] of Object.entries(buckets)) {
-      if (!subset.length) continue
-      series[key] = aggregatePosSalesByPeriod(
-        subset,
-        groupBy,
-        orderTypesAllowed,
-        undefined,
-        resolveBusinessDayStart
-      )
-    }
-    return series
-  }
-
-  const codes = [
-    ...new Set(
-      rows.map((r) => canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)'))
-    ),
-  ].sort((a, b) => a.localeCompare(b))
-  for (const code of codes) {
-    const subset = rows.filter(
-      (r) =>
-        canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)') === code
-    )
-    series[code] = aggregatePosSalesByPeriod(
+    series[storeKey] = aggregatePosSalesByPeriod(
       subset,
       groupBy,
       orderTypesAllowed,

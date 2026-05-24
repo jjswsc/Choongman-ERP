@@ -3548,6 +3548,8 @@ export const i18n = {
     salesRecentStoreSets: '최근 선택',
     salesDataTruncatedWarning:
       '조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요.',
+    salesDataTruncatedDailyWarning:
+      '주문 조회 상한에 걸려 일부만 반영되었습니다. 기간을 나누어 조회하지 않으면 같은 날짜도 금액이 달라 보일 수 있습니다.',
     salesCompareByStorePeriod: '기간 차트를 매장별로 비교',
     salesMenuSearchAndMode: '검색어 모두 포함 (AND)',
     salesQuery: '조회',
@@ -3681,6 +3683,8 @@ export const i18n = {
     bankRegisterLinkedOrderIdPlaceholder: '예: 12345 (orders.id)',
     pL_purchaseCompositionNote:
       '매입 구성: (1) 본사 창고에서 매장으로 나간 출고(Outbound/강제출고) 금액, (2) 직접 입고의 외부 거래처별 원가, (3) 통장 「매입 지급」 중 본사 법인이 아닌 거래처. 본사 유형 거래처의 직접 입고·매입지급·From HQ 입고는 출고와 이중 방지를 위해 합계에서 제외합니다. 통장 일반 지출(expense)은 매입이 아니라 비용만 반영됩니다.',
+    pL_purchaseCompositionNoteHq:
+      '본사 매입은 외부 거래처 직접입고(입고등록)와 통장 「매입 지급」만 포함합니다. 가맹 매장으로의 창고 출고는 매출(물류 출고)로 반영하며 매입에 넣지 않습니다.',
     pL_accountUnclassified: '계정 미지정',
     pL_clickToExpand: '클릭하여 펼치기',
     pL_colAmount: '금액',
@@ -12095,6 +12099,8 @@ Only matters the employee must handle personally on a working day:
     salesRecentStoreSets: 'Recent',
     salesDataTruncatedWarning:
       'Too many orders in this range; results may be partial. Try a shorter period.',
+    salesDataTruncatedDailyWarning:
+      'Order fetch hit the row cap; only part of the data is included. Without splitting the date range, the same day can show different totals.',
     salesCompareByStorePeriod: 'Compare period chart by store',
     salesMenuSearchAndMode: 'Match all tokens (AND)',
     salesQuery: 'Query',
@@ -12228,6 +12234,8 @@ Only matters the employee must handle personally on a working day:
     bankRegisterLinkedOrderIdPlaceholder: 'e.g. 12345 (orders.id)',
     pL_purchaseCompositionNote:
       'Purchases = (1) HQ warehouse outbound to stores (Outbound/Force outbound), (2) external-vendor cost from direct inbound, (3) bank purchase_payment for non–Head-Office vendors. HQ-type vendor inbound, purchase payments, and From HQ inbound are excluded to avoid doubling with outbound. General bank expenses hit expenses only, not purchases.',
+    pL_purchaseCompositionNoteHq:
+      'HQ purchases include only external-vendor direct inbound (입고등록) and bank purchase_payment. Warehouse outbound to franchise stores is revenue (logistics outbound), not purchases.',
     pL_accountUnclassified: 'Account not set',
     pL_clickToExpand: 'Click to expand',
     pL_colAmount: 'Amount',

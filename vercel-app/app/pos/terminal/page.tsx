@@ -2661,18 +2661,50 @@ export default function PosTerminalPage() {
     [enrichPromoItemsWithOptionName, resolveOrderItemDisplayName]
   )
 
+  const resolveDineInSnapshotItemKey = useCallback(
+    (item: {
+      id?: unknown
+      name?: unknown
+      price?: unknown
+      note?: unknown
+      menuId?: unknown
+      optionCode?: unknown
+    }): string => {
+      const id = String(item.id ?? '').trim()
+      if (id) return id
+      const name = String(item.name ?? '').trim()
+      const price = Number(item.price ?? 0) || 0
+      const note = formatLineNoteForPrint(String(item.note ?? '').trim())
+      const menuId = String(item.menuId ?? '').trim()
+      const optionCode = String(item.optionCode ?? '').trim()
+      return `sig:${name}\u001f${price}\u001f${menuId}\u001f${optionCode}\u001f${note}`
+    },
+    []
+  )
+
   const buildDineInQtySnapshot = useCallback(
-    (items: Array<{ id?: unknown; qty?: unknown; quantity?: unknown }>): Map<string, number> => {
+    (
+      items: Array<{
+        id?: unknown
+        qty?: unknown
+        quantity?: unknown
+        name?: unknown
+        price?: unknown
+        note?: unknown
+        menuId?: unknown
+        optionCode?: unknown
+      }>
+    ): Map<string, number> => {
       const map = new Map<string, number>()
       for (const it of items) {
-        const id = String(it.id ?? '').trim()
-        if (!id) continue
+        const key = resolveDineInSnapshotItemKey(it)
+        if (!key) continue
         const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
-        map.set(id, (map.get(id) ?? 0) + qty)
+        map.set(key, (map.get(key) ?? 0) + qty)
       }
       return map
     },
-    []
+    [resolveDineInSnapshotItemKey]
   )
 
   async function printReceiptNow(
@@ -3757,7 +3789,7 @@ export default function PosTerminalPage() {
       const changedSet = new Set(changedIds)
       const previousStub = [...prevQtyById.entries()].map(([id, qty]) => ({ id, qty, quantity: qty }))
       const cartLikeNew = items.map((it) => ({
-        id: it.id,
+        id: resolveDineInSnapshotItemKey(it),
         name: it.name,
         price: it.price,
         quantity: it.qty,
@@ -3780,7 +3812,7 @@ export default function PosTerminalPage() {
 
       const receiptPrintItemsRemote = items.map((it) => ({
         ...it,
-        ...(changedSet.has(String(it.id).trim()) ? { isAddon: true as const } : {}),
+        ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
       }))
 
       const storeCode = String(row.store_code ?? currentStoreId)
@@ -3949,6 +3981,7 @@ export default function PosTerminalPage() {
     tPrint,
     logPosPrintDebug,
     buildDineInQtySnapshot,
+    resolveDineInSnapshotItemKey,
   ])
 
   useEffect(() => {

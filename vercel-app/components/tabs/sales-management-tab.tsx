@@ -37,7 +37,10 @@ import {
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
-import { periodRowsForStoreSelection } from "@/lib/pos-sales-period-aggregate"
+import {
+  periodRowsForStoreSelection,
+  resolvePeriodSeriesStoreKey,
+} from "@/lib/pos-sales-period-aggregate"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
@@ -595,61 +598,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const officeStoreSelectionReady = !canSearchAll || selectedStores.length > 0
   const canQuerySales = !!(startStr && endStr) && officeStoreSelectionReady
 
-  /** API·표기 차이로 요청 매장 외 행이 섞일 때 화면·합계를 선택 매장에 맞춤 */
-  const derivedSingleStoreDataFromPeriod = React.useMemo(() => {
-    if ((selectedStoresParam?.length ?? 0) !== 1) return null
-    const periodRows = periodData.map((r) => mapPosSalesPeriodRowToChartRow(r, periodGroup, tr))
-    if (periodRows.length === 0) return null
-    const selected = selectedStoresParam?.[0]
-    if (!selected) return null
-    const agg = periodRows.reduce(
-      (acc, r) => {
-        acc.count += Number(r.count ?? 0)
-        acc.subtotal += Number(r.subtotal ?? 0)
-        acc.vat += Number(r.vat ?? 0)
-        acc.discount += Number(r.discount ?? 0)
-        acc.service += Number(r.service ?? 0)
-        acc.total += Number(r.total ?? 0)
-        acc.guestSum += Number(r.guestSum ?? 0)
-        acc.dineInOrderCount += Number(r.dineInOrderCount ?? 0)
-        acc.dineInTotal += Number(r.dineInTotal ?? 0)
-        acc.dineInGuestSum += Number(r.dineInGuestSum ?? 0)
-        return acc
-      },
-      {
-        count: 0,
-        subtotal: 0,
-        vat: 0,
-        discount: 0,
-        service: 0,
-        total: 0,
-        guestSum: 0,
-        dineInOrderCount: 0,
-        dineInTotal: 0,
-        dineInGuestSum: 0,
-      }
-    )
-    return [
-      {
-        storeName: selected,
-        ...agg,
-        salesPerDineInOrder:
-          agg.dineInOrderCount > 0 ? Math.round((agg.dineInTotal / agg.dineInOrderCount) * 100) / 100 : 0,
-        salesPerGuest:
-          agg.dineInGuestSum > 0 ? Math.round((agg.dineInTotal / agg.dineInGuestSum) * 100) / 100 : 0,
-        salesPerOrder: agg.count > 0 ? Math.round((agg.total / agg.count) * 100) / 100 : 0,
-      },
-    ]
-  }, [selectedStoresParam, periodData, periodGroup, tr])
-
-  const effectiveStoreData = React.useMemo(
-    () => derivedSingleStoreDataFromPeriod ?? storeData,
-    [derivedSingleStoreDataFromPeriod, storeData]
-  )
-
   const scopedStoreData = React.useMemo(
-    () => filterStoreRowsBySalesSelection(effectiveStoreData, salesFetchStoresParam),
-    [effectiveStoreData, salesFetchStoresParam]
+    () => filterStoreRowsBySalesSelection(storeData, salesFetchStoresParam),
+    [storeData, salesFetchStoresParam]
   )
 
   /** 매장별 집계(posSalesByStore) 합 — 상단 카드·순매출·매장·기간 표와 동일 */
@@ -919,8 +870,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const comparePeriodChartRows = React.useMemo(() => {
     if (!periodSplitSeries || storesForCompareChart.length < 2) return []
-    const first = storesForCompareChart[0]
-    const base = periodSplitSeries[first]
+    const firstKey = resolvePeriodSeriesStoreKey(periodSplitSeries, storesForCompareChart[0]!)
+    const base = firstKey ? periodSplitSeries[firstKey] : undefined
     if (!base?.length) return []
     return base.map((r) => {
       const row: Record<string, string | number> = {
@@ -928,16 +879,41 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         axisLabel: translatePeriodAxisLabel({ key: r.key, label: r.label }, periodGroup, tr),
       }
       for (const s of storesForCompareChart) {
-        const hit = periodSplitSeries[s]?.find((x) => x.key === r.key)
+        const sk = resolvePeriodSeriesStoreKey(periodSplitSeries, s)
+        const hit = sk ? periodSplitSeries[sk]?.find((x) => x.key === r.key) : undefined
         row[`sales_${s}`] = hit?.sales ?? 0
       }
       return row
     })
   }, [periodSplitSeries, storesForCompareChart, periodGroup, tr])
 
-  /** 매장·기간 목록: split 시리즈 → (매장 × 기간) 행 */
+  /** 매장·기간 목록 — 단일 매장은 periodData(일별)와 동일, 복수 매장은 split 시리즈 */
   const storeByPeriodFlatRows = React.useMemo(() => {
-    if (selectedView !== "store-period" || !periodSplitSeries) return []
+    if (selectedView !== "store-period") return []
+
+    const sortRows = (
+      rows: Array<
+        ReturnType<typeof mapPosSalesPeriodRowToChartRow> & { storeCode: string; storeDisplay: string }
+      >
+    ) =>
+      rows.sort((a, b) => {
+        const c = a.storeDisplay.localeCompare(b.storeDisplay, undefined, { sensitivity: "base" })
+        if (c !== 0) return c
+        return a.key.localeCompare(b.key)
+      })
+
+    if ((selectedStoresParam?.length ?? 0) === 1 && periodChartRows.length > 0) {
+      const code = selectedStoresParam![0]!
+      return sortRows(
+        periodChartRows.map((r) => ({
+          storeCode: code,
+          storeDisplay: posStoreDisplayName(code),
+          ...r,
+        }))
+      )
+    }
+
+    if (!periodSplitSeries) return []
     const codes = Object.keys(periodSplitSeries).sort((a, b) =>
       posStoreDisplayName(a).localeCompare(posStoreDisplayName(b), undefined, { sensitivity: "base" })
     )
@@ -959,12 +935,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         })
       }
     }
-    return out.sort((a, b) => {
-      const c = a.storeDisplay.localeCompare(b.storeDisplay, undefined, { sensitivity: "base" })
-      if (c !== 0) return c
-      return a.key.localeCompare(b.key)
-    })
-  }, [selectedView, periodSplitSeries, periodGroup, tr, posStoreDisplayName, salesFetchStoresParam])
+    return sortRows(out)
+  }, [
+    selectedView,
+    selectedStoresParam,
+    periodChartRows,
+    periodSplitSeries,
+    periodGroup,
+    tr,
+    posStoreDisplayName,
+    salesFetchStoresParam,
+  ])
 
   const showComparePeriodChart =
     selectedView === "period" && compareStores && !!periodSplitSeries && storesForCompareChart.length >= 2
@@ -1504,11 +1485,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const prevEnd = addDaysYmd(endStr, -dateSpan)
     const weekStart = addDaysYmd(startStr, -7)
     const weekEnd = addDaysYmd(endStr, -7)
-    const hasStoreSelection = (selectedStoresParam?.length ?? 0) > 0
     const needSplit =
       (compareStores && (selectedStoresParam?.length ?? 0) >= 2 && selectedView === "period") ||
-      selectedView === "store-period" ||
-      hasStoreSelection
+      selectedView === "store-period"
     const periodRun = offlineAware ? getPosSalesByPeriodWithCache : getPosSalesByPeriod
     const menuFetcher = offlineAware ? getPosSalesByMenuWithCache : getPosSalesByMenu
     const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
@@ -2407,6 +2386,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               </div>
             </div>
           </>
+          ) : null}
+
+          {showSalesResults && periodTruncated ? (
+            <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
+              {tr(
+                "salesDataTruncatedDailyWarning",
+                "주문 조회 상한에 걸려 일부만 반영되었습니다. 기간을 나누어 조회하지 않으면 같은 날짜도 금액이 달라 보일 수 있습니다."
+              )}
+            </p>
           ) : null}
 
           {summaryRowShowFull ? (

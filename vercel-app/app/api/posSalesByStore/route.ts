@@ -3,18 +3,11 @@
  * 매장명, 주문건수, guestSum(홀 guest_count 합), dine_in 전용 건수·매출·손님수, 홀 건당·홀 1인당·건당, 공급가액·세금·할인·서비스처리·매출액
  */
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  normalizePosOrderTypeKey,
-  parseOrderTypesParam,
-  rowMatchesOrderFilter,
-} from '@/lib/pos-sales-order-type-filter'
-import {
-  resolveStoresFromParams,
-  canonicalSalesStoreRowKey,
-} from '@/lib/pos-sales-store-filter'
+import { normalizePosOrderTypeKey, parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
-
-const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
+import { groupPosSalesRowsByCanonicalStore } from '@/lib/pos-sales-period-aggregate'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -58,37 +51,40 @@ export async function GET(request: NextRequest) {
       }
     > = {}
 
-    for (const r of rows) {
-      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
-      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
-      const store = canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)')
-      if (!byStore[store])
-        byStore[store] = {
-          count: 0,
-          subtotal: 0,
-          vat: 0,
-          discount: 0,
-          service: 0,
-          total: 0,
-          guestSum: 0,
-          dineInOrderCount: 0,
-          dineInTotal: 0,
-          dineInGuestSum: 0,
-        }
-      byStore[store].count += 1
-      byStore[store].subtotal += Number(r.subtotal) || 0
-      byStore[store].vat += Number(r.vat) || 0
-      byStore[store].discount += (Number(r.discount_amt) || 0) + (Number(r.coupon_discount_amt) || 0)
-      byStore[store].service += Number(r.service_amt) || 0
-      byStore[store].total += Number(r.total) || 0
-      const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
-      byStore[store].guestSum += gc
-      {
-        const k = normalizePosOrderTypeKey(r.order_type)
-        if (k === 'dine_in' || k === '') {
-          byStore[store].dineInOrderCount += 1
-          byStore[store].dineInTotal += Number(r.total) || 0
-          byStore[store].dineInGuestSum += gc
+    const grouped = groupPosSalesRowsByCanonicalStore(rows, orderTypesAllowed)
+    for (const [store, subset] of grouped) {
+      for (const r of subset) {
+        if (!byStore[store])
+          byStore[store] = {
+            count: 0,
+            subtotal: 0,
+            vat: 0,
+            discount: 0,
+            service: 0,
+            total: 0,
+            guestSum: 0,
+            dineInOrderCount: 0,
+            dineInTotal: 0,
+            dineInGuestSum: 0,
+          }
+        byStore[store].count += 1
+        byStore[store].subtotal += Number(r.subtotal) || 0
+        byStore[store].vat += Number(r.vat) || 0
+        byStore[store].discount += resolvePosSalesDiscountAmount(
+          Number(r.discount_amt) || 0,
+          Number(r.coupon_discount_amt) || 0
+        )
+        byStore[store].service += Number(r.service_amt) || 0
+        byStore[store].total += Number(r.total) || 0
+        const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
+        byStore[store].guestSum += gc
+        {
+          const k = normalizePosOrderTypeKey(r.order_type)
+          if (k === 'dine_in' || k === '') {
+            byStore[store].dineInOrderCount += 1
+            byStore[store].dineInTotal += Number(r.total) || 0
+            byStore[store].dineInGuestSum += gc
+          }
         }
       }
     }

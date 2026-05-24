@@ -63,7 +63,7 @@ export function resolveAccountingStoreFilterFromAuth(
 
   if (canAccessAllAccountingStores(auth)) {
     if (requested && requested !== 'All' && requested !== '전체' && requested !== '*') {
-      if (isOfficeStore(requested) || isHeadOfficeLikeStoreName(requested)) return 'All'
+      /** 손익 본사(isHQ): 「본사」를 All로 바꾸지 않음 — 가맹용 창고 출고(매입) 합산이 매입에 들어가 이중·과대 집계됨 */
       return requested
     }
     return requested || 'All'

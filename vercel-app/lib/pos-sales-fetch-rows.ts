@@ -7,7 +7,9 @@
  * 결제수단별·메뉴별·채널별 API는 breakdown 용도이며, 결제 합 ≠ total 일 수 있음.
  */
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import {
+  supabaseSelectFilterAllPagesStrippingUnknownColumns,
+} from '@/lib/supabase-pgrst204-retry'
 import {
   filterRowsByPosSalesBusinessDateRange,
   posSalesBusinessDateRangeUtcEnvelope,
@@ -27,7 +29,13 @@ import {
 export const POS_SALES_ORDER_ROW_SELECT =
   'created_at,store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type'
 
+/** 단일 select 상한(레거시). 실제 조회는 페이지 반복으로 수집 */
 export const POS_SALES_BY_STORE_FETCH_LIMIT = 50_000
+
+/** 매장 지정 시 월간 주문 전량 수집 상한(초과 시 truncated) */
+const POS_SALES_FETCH_MAX_ROWS_STORE = 500_000
+/** 전 매장 조회 상한 */
+const POS_SALES_FETCH_MAX_ROWS_ALL = 200_000
 
 export type PosSalesFetchedRows = {
   rows: PeriodOrderRow[]
@@ -66,15 +74,24 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
   let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
   filter = appendStoreCodeFilter(filter, expanded.length > 0 ? params.storeCodes! : [])
 
-  const rowsRaw = (await supabaseSelectFilterStrippingUnknownColumns(
+  const maxRows =
+    params.storeCodes && params.storeCodes.length > 0
+      ? POS_SALES_FETCH_MAX_ROWS_STORE
+      : POS_SALES_FETCH_MAX_ROWS_ALL
+
+  const rowsRaw = (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
     'pos_orders',
     filter,
     {
-      limit: POS_SALES_BY_STORE_FETCH_LIMIT,
       select: params.select ?? POS_SALES_ORDER_ROW_SELECT,
+      order: 'created_at.asc',
+      pageSize: 8000,
+      maxRows,
     },
     params.queryLabel ?? 'posSalesFetchRows'
   )) as PeriodOrderRow[]
+
+  const truncated = rowsRaw.length >= maxRows
 
   let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, params.startStr, params.endStr)
 
@@ -90,7 +107,7 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
 
   return {
     rows,
-    truncated: rowsRaw.length >= POS_SALES_BY_STORE_FETCH_LIMIT,
+    truncated,
     bizCtx,
   }
 }

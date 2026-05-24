@@ -1096,7 +1096,9 @@ function IncomePlDetailTableContent({
           {expandPurchases && (
             <tr className="border-b bg-muted/10">
               <td colSpan={3} className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed">
-                {t("pL_purchaseCompositionNote")}
+                {salesBreakdownIsHqOutbound(data)
+                  ? t("pL_purchaseCompositionNoteHq")
+                  : t("pL_purchaseCompositionNote")}
               </td>
             </tr>
           )}
@@ -2591,7 +2593,9 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           colSpan={incomeCompareCols.length + 1}
                                           className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed"
                                         >
-                                          {t("pL_purchaseCompositionNote")}
+                                          {salesBreakdownIsHqOutbound(data ?? undefined)
+                                            ? t("pL_purchaseCompositionNoteHq")
+                                            : t("pL_purchaseCompositionNote")}
                                         </td>
                                       </tr>
                                     )}
@@ -2841,7 +2845,9 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       colSpan={compareIncomeRows.length + 1}
                                       className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed"
                                     >
-                                      {t("pL_purchaseCompositionNote")}
+                                      {salesBreakdownIsHqOutbound(data ?? undefined)
+                                        ? t("pL_purchaseCompositionNoteHq")
+                                        : t("pL_purchaseCompositionNote")}
                                     </td>
                                   </tr>
                                 )}

@@ -19,6 +19,7 @@ import {
   sumHqOutboundSubtotalMatchingOutboundManagement,
 } from '@/lib/hq-outbound-income-total'
 import { resolveAccountingStoreFilterFromAuth } from '@/lib/accounting-store-scope'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import {
   buildStoreFieldOrIlikeFragment,
   sqlIlikeContains,
@@ -360,7 +361,7 @@ export function normalizeIncomeScope(input: IncomeScopeInput): {
     allowedStores: input.allowedStores,
   })
   const { yearMonth, startStr, endStr } = getBangkokMonthRange(input.yearMonth)
-  const isHQ = isOfficeStore(storeFilter)
+  const isHQ = isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter)
   return { yearMonth, startStr, endStr, storeFilter, isHQ }
 }
 
