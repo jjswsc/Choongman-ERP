@@ -15,6 +15,7 @@ import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
 import { fetchStockLogPurchaseAgg, resolvePurchaseLocationPatterns } from '@/lib/accounting-stock-purchase-agg'
 import {
   listHqOutboundPurchaseDrillLines,
+  sumHqOutboundSalesMatchingOutboundManagement,
   sumHqOutboundSubtotalMatchingOutboundManagement,
 } from '@/lib/hq-outbound-income-total'
 import { resolveAccountingStoreFilterFromAuth } from '@/lib/accounting-store-scope'
@@ -98,8 +99,10 @@ export type IncomeStatementReport = {
   }[]
   /** 매장: 본사 발주 + 직접입고 거래처별. 본사: 입고 거래처별 */
   purchaseByVendor?: IncomeStatementLineDetail[]
-  /** 본사: 출고(배송완료) 발주의 주문 매장(store_name)별 매출 */
+  /** 본사: 물류 출고(stock_logs) 매출처(vendor_target)별 매출 — 출고 관리와 동일 단가 */
   salesByCustomer?: IncomeStatementLineDetail[]
+  /** 매장: POS 영업일별 매출 (posSalesByStore·일별 집계와 동일) */
+  salesByDay?: IncomeStatementLineDetail[]
   diagnostics?: {
     warnings: string[]
     limits: Record<string, { fetched: number; limit: number; total?: number }>
@@ -693,7 +696,6 @@ async function getInventoryValue(
 export async function computeIncomeStatementReport(input: IncomeScopeInput): Promise<IncomeStatementReport> {
   const scope = normalizeIncomeScope(input)
   const { startStr, endStr, storeFilter, isHQ, yearMonth } = scope
-  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   const warnings: string[] = []
   const limits: Record<string, { fetched: number; limit: number; total?: number }> = {}
   let purchaseInboundBankOverlapVendorKeys: string[] = []
@@ -715,6 +717,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let ordersPurchaseSubtotal = 0
   let purchaseByVendor: IncomeStatementLineDetail[] = []
   let salesByCustomer: IncomeStatementLineDetail[] = []
+  let salesByDay: IncomeStatementLineDetail[] = []
   let purchaseHqOutboundBasis:
     | { outboundTotal: number; approvedOrdersTotal: number; diff: number }
     | undefined = undefined
@@ -722,30 +725,22 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const excludedHqVendorDupRaw: { key: string; amount: number }[] = []
 
   if (isHQ) {
-    const outboundFilter =
-      `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
-      `&or=(delivery_status.eq.${encodeURIComponent('배송완료')},delivery_status.eq.${encodeURIComponent('일부배송완료')})`
-    const outboundOrders = (await supabaseSelectFilterAllPages('orders', outboundFilter, {
-      select: 'total,store_name',
-      pageSize: 8000,
-      maxRows: 200_000,
-    })) as { total?: number; store_name?: string }[]
-    const salesByStoreMap: Record<string, number> = {}
-    for (const o of outboundOrders) {
-      const amt = Number(o.total) || 0
-      sales += amt
-      const raw = String(o.store_name || '').trim()
-      const k = raw || '__pl_sales_customer_unknown__'
-      salesByStoreMap[k] = (salesByStoreMap[k] || 0) + amt
+    const hqSalesAgg = await sumHqOutboundSalesMatchingOutboundManagement({
+      startStr,
+      endStr,
+      storeFilter,
+    })
+    sales += hqSalesAgg.salesTotal
+    salesByCustomer = hqSalesAgg.salesByCustomer
+    limits.hq_outbound_sales = {
+      fetched: hqSalesAgg.lineCount,
+      limit: 100_000,
     }
-    limits.orders_outbound = { fetched: outboundOrders.length, limit: BASE_LIMIT }
-    if (outboundOrders.length >= 200_000) {
-      warnings.push('orders(본사 출고 매출) 조회 상한에 도달해 매출이 과소할 수 있습니다.')
+    if (hqSalesAgg.hitRowCap) {
+      warnings.push(
+        '본사 매출(물류 출고) 조회가 상한에 도달해 매출이 과소할 수 있습니다. 출고 관리와 동일 기준입니다.'
+      )
     }
-    salesByCustomer = Object.entries(salesByStoreMap)
-      .filter(([, v]) => v > 0)
-      .map(([key, amount]) => ({ key, amount }))
-      .sort((a, b) => b.amount - a.amount)
 
     const inboundHq = await getDirectInboundPurchasesByVendor(
       '입고등록',
@@ -839,17 +834,20 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       .sort((a, b) => b.amount - a.amount)
   } else {
     const posSalesSum = await sumCompletedPosSalesTotal({
-      startUtcIso: dayStartUtcIso,
-      endUtcExclusive: nextDayStartUtcIso,
+      startStr,
+      endStr,
       storeFilter,
     })
     sales += posSalesSum.total
+    salesByDay = posSalesSum.salesByDay.filter((r) => r.amount > 0)
     limits.pos_orders = {
       fetched: posSalesSum.completedCount,
       limit: 50000,
     }
     if (posSalesSum.truncated) {
-      warnings.push('pos_orders 조회가 상한(50,000건)에 도달해 매출이 과소할 수 있습니다.')
+      warnings.push(
+        'pos_orders 조회가 상한에 도달해 매출이 과소할 수 있습니다. (매출 관리와 동일 영업일 기준)'
+      )
     }
 
     const orderFilter =
@@ -1100,6 +1098,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     expenseByAccountSubject,
     purchaseByVendor,
     salesByCustomer,
+    ...(salesByDay.length > 0 ? { salesByDay } : {}),
     diagnostics:
       input.includeDebug ||
       warnings.length > 0 ||

@@ -3,8 +3,6 @@
  * 매장명, 주문건수, guestSum(홀 guest_count 합), dine_in 전용 건수·매출·손님수, 홀 건당·홀 1인당·건당, 공급가액·세금·할인·서비스처리·매출액
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
-import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import {
   normalizePosOrderTypeKey,
   parseOrderTypesParam,
@@ -12,13 +10,11 @@ import {
 } from '@/lib/pos-sales-order-type-filter'
 import {
   resolveStoresFromParams,
-  appendStoreCodeFilter,
   canonicalSalesStoreRowKey,
 } from '@/lib/pos-sales-store-filter'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
-const FETCH_LIMIT = 50000
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -37,32 +33,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
-    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
-    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      queryLabel: 'posSalesByStore',
+    })
 
-    const rowsRaw = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
-      limit: FETCH_LIMIT,
-      select:
-        'created_at,store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type',
-    }, 'posSalesByStore')) as {
-      created_at?: string
-      store_code?: string
-      subtotal?: number
-      vat?: number
-      total?: number
-      discount_amt?: number
-      coupon_discount_amt?: number
-      service_amt?: number
-      guest_count?: number
-      status?: string
-      order_type?: string
-    }[]
-
-    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
-
-    if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    if (truncated) headers.set('X-Sales-Truncated', '1')
 
     const byStore: Record<
       string,

@@ -3537,6 +3537,12 @@ export const i18n = {
     salesSelectStoreAll: '매장(전체)',
     salesStorePickerLoading: '매장 목록 불러오는 중…',
     salesSelectStoreDefault: '매장(기본)',
+    salesSelectStorePrompt: '매장 선택',
+    salesSelectStoreBeforeQuery:
+      '매장을 하나 이상 선택한 뒤「조회」를 눌러 주세요. 「전체 선택」으로 여러 매장·전체를 볼 수 있습니다.',
+    salesSelectStoreHint:
+      '매장을 선택하지 않으면 집계되지 않습니다. 한 매장·여러 매장은 체크 후 「조회」, 전 매장은 「전체 선택」 후 「조회」하세요.',
+    salesQueryNeedStore: '매장을 선택해 주세요.',
     salesStoreSelectAll: '전체 선택',
     salesStoreDeselectAll: '전체 해제',
     salesRecentStoreSets: '최근 선택',
@@ -3597,6 +3603,16 @@ export const i18n = {
     salesPaymentMethod: '결제수단',
     salesTotalLabel: '합계',
     pL_sales: '매출',
+    pL_salesBreakdownPosDailyNote:
+      '아래는 POS 영업일별 매출입니다. 상단 매출은 수동 입력을 반영할 수 있습니다.',
+    pL_salesBreakdownPosDailyHint:
+      'POS 완료 주문 매출액(매출 관리 「매장별 매출 집계」·영업일 기준과 동일)입니다.',
+    pL_salesBreakdownHqOutboundHint:
+      '본사 창고 실제 출고(stock_logs) 합계로, 출고 관리와 동일한 단가·기간입니다. POS·승인 발주 금액과 다를 수 있습니다.',
+    pL_salesBreakdownHqOutboundNote:
+      '아래는 물류 출고(출고 관리) 매출처별 합계입니다. 상단 매출은 수동 입력을 반영할 수 있습니다.',
+    salesExcludeTestOfficePosNote:
+      '본사·오피스 POS 주문은 테스트용이라 매출 관리 집계·매장 목록에 포함되지 않습니다. 본사 매출은 손익(물류 출고)에서 확인하세요.',
     pL_purchases: '매입',
     pL_expenses: '비용',
     pL_grossProfit: '매출총이익',
@@ -12067,6 +12083,12 @@ Only matters the employee must handle personally on a working day:
     salesSelectStoreAll: 'Store (All)',
     salesStorePickerLoading: 'Loading store list…',
     salesSelectStoreDefault: 'Store (default)',
+    salesSelectStorePrompt: 'Select store(s)',
+    salesSelectStoreBeforeQuery:
+      'Select one or more stores, then tap Query. Use Select all for every store in the list.',
+    salesSelectStoreHint:
+      'Nothing loads until you select stores. Check store(s) and tap Query, or Select all for the full list.',
+    salesQueryNeedStore: 'Select at least one store.',
     salesStoreSelectAll: 'Select all',
     salesStoreDeselectAll: 'Clear all',
     salesRecentStoreSets: 'Recent',
@@ -12127,6 +12149,16 @@ Only matters the employee must handle personally on a working day:
     salesPaymentMethod: 'Payment method',
     salesTotalLabel: 'Total',
     pL_sales: 'Sales',
+    pL_salesBreakdownPosDailyNote:
+      'Daily POS sales by business day below. Top-line sales may include manual override.',
+    pL_salesBreakdownPosDailyHint:
+      'Completed POS sales (same as Sales Management store totals and business-day rules).',
+    pL_salesBreakdownHqOutboundHint:
+      'HQ warehouse outbound (stock_logs), same pricing and period as Outbound Management. May differ from POS or approved order totals.',
+    pL_salesBreakdownHqOutboundNote:
+      'Breakdown by customer from logistics outbound. Top-line sales may include a manual override.',
+    salesExcludeTestOfficePosNote:
+      'HQ/office POS orders are for testing only and are excluded from Sales Management. Use P&L (logistics outbound) for HQ revenue.',
     pL_purchases: 'Purchases',
     pL_expenses: 'Expenses',
     pL_grossProfit: 'Gross Profit',

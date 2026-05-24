@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
         const p = String(r.store_code ?? '').trim()
         if (p) posSet.add(p)
       }
-      const posOptions = Array.from(posSet).sort()
+      const posOptions = filterPosSalesStoreOptionsForManagement(Array.from(posSet)).sort()
       return NextResponse.json({ posOptions, source: 'rpc' as const }, { headers })
     } catch (_rpcErr) {
       const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
         const p = String(r.store_code ?? '').trim()
         if (p) posSet.add(p)
       }
-      const posOptions = Array.from(posSet).sort()
+      const posOptions = filterPosSalesStoreOptionsForManagement(Array.from(posSet)).sort()
       if (rowsRaw.length >= 50000) headers.set('X-Sales-Truncated', '1')
 
       return NextResponse.json({ posOptions, source: 'select' as const }, { headers })

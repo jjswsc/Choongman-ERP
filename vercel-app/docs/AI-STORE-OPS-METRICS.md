@@ -9,7 +9,7 @@
 
 | 항목 | 정의 |
 |------|------|
-| **분모 (매출)** | 해당 매장 `pos_orders` **완료 주문** 매출 합계 (`total`) |
+| **분모 (매출)** | 가맹: `pos_orders` 완료 `total` 합(본사·오피스 store_code 테스트 POS는 **매출 관리 제외**). **본사 손익 매출**은 물류 `stock_logs` 출고 |
 | **분자 (본사 매입)** | 해당 매장으로의 **본사 창고 출고** 금액 (`sumHqOutboundPurchaseFromOffice` — 손익계산서 「본사 창고 출고(매입)」과 동일) |
 | **비율** | `분자 ÷ 분모 × 100` (%). 분모 0이면 비율 null, 매출만 표시 |
 | **기간** | 방콕 **달력일** `start` ~ `end` (YYYY-MM-DD). AI 질의 시 `applyAiDateRangePolicy` 상한 적용 (본사·회계 90일, 매장 45일) |

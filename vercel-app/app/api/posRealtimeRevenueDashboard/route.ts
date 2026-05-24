@@ -8,7 +8,10 @@ import {
   appendStoreCodeFilter,
   canonicalSalesStoreRowKey,
   resolveStoresFromParams,
+  rowMatchesSalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
+import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
+import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
@@ -226,7 +229,9 @@ export async function GET(request: NextRequest) {
       },
       'posRealtimeRevenueDashboard'
     )) as DashboardOrderRow[]
-    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+    let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+    rows = excludePosSalesTestOfficeRows(rows)
+    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
     if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const byStore = new Map<string, StoreAccumulator>()
@@ -313,9 +318,10 @@ export async function GET(request: NextRequest) {
       for (let h = 0; h < 24; h += 1) totalAcc.hourlyRevenue[h] += s.hourlyRevenue[h]
     }
 
-    const selectedStoreCode = stores.length === 1 ? canonicalSalesStoreRowKey(stores[0]) : ''
     const selectedStore =
-      (selectedStoreCode ? storeRows.find((r) => r.storeCode === selectedStoreCode) : null) || null
+      stores.length === 1
+        ? storeRows.find((r) => rowMatchesSalesStoreSelection(r.storeCode, stores[0]!)) ?? null
+        : null
     const summaryStore = selectedStore || finalizeStoreRow(totalAcc)
 
     return NextResponse.json(

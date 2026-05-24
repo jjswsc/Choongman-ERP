@@ -39,6 +39,7 @@ import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-busines
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
+import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
 import { addDaysYmd } from "@/lib/pos-business-day"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
@@ -396,15 +397,19 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [posOptions, setPosOptions] = React.useState<string[]>([])
   const posBizDayStoreChoices = React.useMemo(() => {
-    if (canSearchAll) return posOptions
-    const out: string[] = []
-    const main = String(auth?.store || "").trim()
-    if (main) out.push(main)
-    for (const x of auth?.allowedStores || []) {
-      const s = String(x || "").trim()
-      if (s && !out.includes(s)) out.push(s)
-    }
-    return out
+    const raw = canSearchAll
+      ? posOptions
+      : (() => {
+          const out: string[] = []
+          const main = String(auth?.store || "").trim()
+          if (main) out.push(main)
+          for (const x of auth?.allowedStores || []) {
+            const s = String(x || "").trim()
+            if (s && !out.includes(s)) out.push(s)
+          }
+          return out
+        })()
+    return filterPosSalesStoreOptionsForManagement(raw)
   }, [canSearchAll, posOptions, auth?.store, auth?.allowedStores])
   const [loading, setLoading] = React.useState(false)
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
@@ -414,8 +419,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
   const storePickerRef = React.useRef<HTMLDivElement | null>(null)
-  /** 전체 해제 후 첫 매장 자동 선택(useEffect)을 막기 위함 */
-  const skipDefaultStoreAutoSelectRef = React.useRef(false)
+  /** 본사: URL·프리셋으로 매장 0개를 유지할 때만 사용(자동 1매장 선택 없음) */
+  const skipDefaultStoreAutoSelectRef = React.useRef(true)
   /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
   const [compareStores, setCompareStores] = React.useState(false)
@@ -581,14 +586,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     () => (selectedStoresKey ? selectedStoresKey.split(",") : undefined),
     [selectedStoresKey]
   )
-  /** 본사: 매장 미선택 시 전 매장 API 호출 방지 → 첫 매장만 조회. 매장 비교 차트는 사용자 선택(selectedStoresParam) 유지 */
+  /** 본사: 매장 미선택 시 API 호출 없음. 선택·「전체 선택」만 조회 대상 */
   const salesFetchStoresParam = React.useMemo((): string[] | undefined => {
     if (selectedStoresKey) return selectedStoresParam
-    if (canSearchAll && posBizDayStoreChoices.length > 0) {
-      return normalizeStoreCodes([posBizDayStoreChoices[0]])
-    }
     return undefined
-  }, [selectedStoresKey, selectedStoresParam, canSearchAll, posBizDayStoreChoices])
+  }, [selectedStoresKey, selectedStoresParam])
+
+  const officeStoreSelectionReady = !canSearchAll || selectedStores.length > 0
+  const canQuerySales = !!(startStr && endStr) && officeStoreSelectionReady
 
   /** API·표기 차이로 요청 매장 외 행이 섞일 때 화면·합계를 선택 매장에 맞춤 */
   const scopedStoreData = React.useMemo(
@@ -991,6 +996,23 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const showSalesResults = fetchedAnalyticsKey !== "" && fetchedAnalyticsKey === analyticsParamKey
 
+  const salesAnalyticsPlaceholder = React.useMemo(() => {
+    if (!hasData) return tr("salesSelectPeriod", "기간을 선택해 주세요.")
+    if (canSearchAll && selectedStores.length === 0) {
+      return tr(
+        "salesSelectStoreBeforeQuery",
+        "매장을 하나 이상 선택한 뒤「조회」를 눌러 주세요. 「전체 선택」으로 여러 매장·전체를 볼 수 있습니다."
+      )
+    }
+    if (!showSalesResults) {
+      return tr(
+        "salesPressQueryToLoad",
+        "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
+      )
+    }
+    return null
+  }, [hasData, canSearchAll, selectedStores.length, showSalesResults, tr])
+
   /** 상단(현재·직전동일·전주) — 기간/매장×기간 탐색 주제만 3칸 비교, 그 외 금액 위주는 현재만, 메뉴·채널·배달은 생략 */
   const summaryRowShowFull =
     showSalesResults &&
@@ -1026,13 +1048,23 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [paymentData])
 
   const activeTotalsSummary = React.useMemo(() => {
-    if (selectedView === "store" || selectedView === "store-category") return storeTotalsSummary
+    if (
+      selectedView === "store" ||
+      selectedView === "store-category" ||
+      selectedView === "store-period"
+    )
+      return storeTotalsSummary
     if (selectedView === "payment") return paymentTotalsSummary
     return totalsSummary
   }, [selectedView, storeTotalsSummary, paymentTotalsSummary, totalsSummary])
 
   const activeSummaryCurrent = React.useMemo(() => {
-    if (selectedView === "store" || selectedView === "store-category") return storeTotalsSummary.total
+    if (
+      selectedView === "store" ||
+      selectedView === "store-category" ||
+      selectedView === "store-period"
+    )
+      return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
     return summaryCards.current
   }, [selectedView, storeTotalsSummary.total, paymentTotalsSummary.total, summaryCards.current])
@@ -1354,15 +1386,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
   }, [canSearchAll, auth?.store, selectedStoresKey])
 
-  React.useEffect(() => {
-    if (!canSearchAll) return
-    if (selectedStores.length > 0) return
-    if (skipDefaultStoreAutoSelectRef.current) return
-    const first = posBizDayStoreChoices[0]
-    if (!first) return
-    setSelectedStores(normalizeStoreCodes([first]))
-  }, [canSearchAll, selectedStores.length, posBizDayStoreChoices])
-
   const sumPeriodTotal = React.useCallback(
     (res: Awaited<ReturnType<typeof getPosSalesByPeriod>>) => {
       if (res.kind === "split") {
@@ -1382,6 +1405,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const loadAllAnalytics = React.useCallback(() => {
     if (isHoursPanel) return
     if (!startStr || !endStr) return
+    if (canSearchAll && selectedStores.length === 0) return
     const keySnapshot = analyticsParamKey
     const id = ++loadIdRef.current
     const dateSpan = diffDaysInclusiveBangkok(startStr, endStr)
@@ -1399,7 +1423,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needChannel = selectedView === "channel"
     const needMenu = selectedView === "menu"
     const needPayment = selectedView === "payment"
-    const needStore = selectedView === "store" || selectedView === "store-category"
+    const needStore =
+      selectedView === "store" ||
+      selectedView === "store-category" ||
+      selectedView === "store-period"
     const needRealtimeRevenue = selectedView === "realtime-revenue"
     const needFullSummary = selectedView === "period" || selectedView === "store-period"
     const needCurrentSummaryOnly =
@@ -1561,35 +1588,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       )
     }
     if (needFullSummary) {
+      const storeSummaryFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
+      const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
+        rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
       tasks.push(
         Promise.all([
-          periodRun({
+          storeSummaryFetcher({
             startStr,
             endStr,
-            groupBy: "day",
             stores: salesFetchStoresParam,
             orderTypes: orderTypesParam,
           }),
-          periodRun({
+          storeSummaryFetcher({
             startStr: prevStart,
             endStr: prevEnd,
-            groupBy: "day",
             stores: salesFetchStoresParam,
             orderTypes: orderTypesParam,
           }),
-          periodRun({
+          storeSummaryFetcher({
             startStr: weekStart,
             endStr: weekEnd,
-            groupBy: "day",
             stores: salesFetchStoresParam,
             orderTypes: orderTypesParam,
           }),
         ])
-          .then(([currentRes, prevRes, weekRes]) => {
+          .then(([currentRows, prevRows, weekRows]) => {
+            const scope = (rows: { total?: number; storeName: string }[]) =>
+              filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
             gSummary({
-              current: sumPeriodTotal(currentRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
-              prevRange: sumPeriodTotal(prevRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
-              prevWeek: sumPeriodTotal(weekRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+              current: sumScopedStoreTotal(scope(currentRows)),
+              prevRange: sumScopedStoreTotal(scope(prevRows)),
+              prevWeek: sumScopedStoreTotal(scope(weekRows)),
             })
           })
           .catch(() => gSummary({ current: 0, prevRange: 0, prevWeek: 0 }))
@@ -1647,6 +1676,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     menuSearchAnd,
     sumPeriodTotal,
     isHoursPanel,
+    canSearchAll,
+    selectedStores.length,
   ])
 
   const online = useOnlineStatus()
@@ -1747,7 +1778,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {selectedStores.length === 0
                         ? posBizDayStoreChoices.length === 0
                           ? tr("salesStorePickerLoading", "매장 목록 불러오는 중…")
-                          : tr("salesSelectStoreDefault", "매장(기본)")
+                          : tr("salesSelectStorePrompt", "매장 선택")
                         : selectedStores.length === 1
                           ? posStoreDisplayName(selectedStores[0])
                           : `${selectedStores.length}${tr("selected", "개 선택")}`}
@@ -1844,13 +1875,40 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </Button>
               )}
             </div>
-            <Button size="sm" onClick={loadAllAnalytics} disabled={!hasData || loading}>
+            <Button
+              size="sm"
+              onClick={loadAllAnalytics}
+              disabled={!canQuerySales || loading}
+              title={
+                canSearchAll && selectedStores.length === 0
+                  ? tr("salesQueryNeedStore", "매장을 선택해 주세요.")
+                  : undefined
+              }
+            >
               {tr("salesQuery", "조회")}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={saveCurrentPreset}>
               {tr("salesSavePreset", "조건 저장")}
             </Button>
           </div>
+          ) : null}
+
+          {!isHoursPanel ? (
+            <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+              {tr(
+                "salesExcludeTestOfficePosNote",
+                "본사·오피스 POS 주문은 테스트용이라 매출 관리 집계·매장 목록에 포함되지 않습니다. 본사 매출은 손익(물류 출고)에서 확인하세요."
+              )}
+            </p>
+          ) : null}
+
+          {!isHoursPanel && canSearchAll && selectedStores.length === 0 && posBizDayStoreChoices.length > 0 ? (
+            <p className="mb-3 text-xs text-amber-800 dark:text-amber-300 leading-relaxed" role="status">
+              {tr(
+                "salesSelectStoreHint",
+                "매장을 선택하지 않으면 집계되지 않습니다. 한 매장·여러 매장은 체크 후 「조회」, 전 매장은 「전체 선택」 후 「조회」하세요."
+              )}
+            </p>
           ) : null}
 
           {!isHoursPanel && savedPresets.length > 0 ? (
@@ -2436,16 +2494,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             ) : (
             <>
             {selectedView === "period" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : (
                 <>
@@ -2612,16 +2663,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "store-period" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : (
                 <>
@@ -2713,16 +2757,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "delivery" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : deliveryAppData.items.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -2870,16 +2907,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "channel" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : (
                 <>
@@ -2928,16 +2958,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "menu" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : (
                 <>
@@ -2999,16 +3022,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "store" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : (
                 <>
@@ -3192,16 +3208,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "store-category" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : (
                 <>
@@ -3301,16 +3310,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "payment" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : paymentData.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -3374,16 +3376,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             )}
 
             {selectedView === "realtime-revenue" && (
-              !hasData ? (
+              salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
-                </p>
-              ) : !showSalesResults ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr(
-                    "salesPressQueryToLoad",
-                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
-                  )}
+                  {salesAnalyticsPlaceholder}
                 </p>
               ) : !realtimeRevenueData ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">

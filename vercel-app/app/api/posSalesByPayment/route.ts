@@ -7,6 +7,8 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
+import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
+import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
@@ -54,7 +56,9 @@ export async function GET(request: NextRequest) {
       store_code?: string
     }[]
 
-    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+    let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+    rows = excludePosSalesTestOfficeRows(rows)
+    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
 
     if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 

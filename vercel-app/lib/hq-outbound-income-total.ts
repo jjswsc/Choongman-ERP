@@ -12,6 +12,20 @@ import {
   unitPriceFromOutboundLogSnapshot,
 } from '@/lib/outbound-order-line-match'
 import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+
+const OFFICE_STORE_LABELS = new Set(['본사', 'Office', '오피스', '본점'])
+
+/**
+ * 본사 손익(매출) — 매출처 필터: UI에서 「본사」를 고른 경우 전 매출처 출고 합.
+ * 특정 가맹 매장만 볼 때는 해당 vendor_target 만 (본사 화면에서 매장 선택 시 isHQ=false).
+ */
+export function resolveHqOutboundSalesCustomerFilter(storeFilter: string | null): string | null {
+  const s = String(storeFilter || '').trim()
+  if (!s || s === 'All' || s === '전체 매출처') return null
+  if (OFFICE_STORE_LABELS.has(s) || isHeadOfficeLikeStoreName(s)) return null
+  return s
+}
 
 type OutboundLogRow = {
   id?: number
@@ -274,6 +288,53 @@ export type HqOutboundIncomeSplit = {
   lineCount: number
   subtotalBeforeExpenseSplit: number
   hitRowCap: boolean
+}
+
+export type HqOutboundSalesAggregate = {
+  salesTotal: number
+  salesByCustomer: { key: string; amount: number; label?: string }[]
+  lineCount: number
+  hitRowCap: boolean
+}
+
+/**
+ * 본사 손익 「매출」— 출고 관리(getCombinedOutboundHistory)와 동일:
+ * 본사 창고 stock_logs 출고 줄 합계(매출처별), 발주 orders.total 아님.
+ */
+export async function sumHqOutboundSalesMatchingOutboundManagement(params: {
+  startStr: string
+  endStr: string
+  storeFilter: string | null
+}): Promise<HqOutboundSalesAggregate> {
+  const customerFilter = resolveHqOutboundSalesCustomerFilter(params.storeFilter)
+  const { lines, hitRowCap } = await loadHqOutboundProcessedLines({
+    startStr: params.startStr,
+    endStr: params.endStr,
+    storeFilter: customerFilter,
+  })
+
+  const byCustomer: Record<string, number> = {}
+  let salesTotal = 0
+
+  for (const line of lines) {
+    const store = String(line.targetStore || '').trim()
+    if (!store || isHeadOfficeLikeStoreName(store)) continue
+    salesTotal += line.lineAmount
+    const k = store || '__pl_sales_customer_unknown__'
+    byCustomer[k] = (byCustomer[k] || 0) + line.lineAmount
+  }
+
+  const salesByCustomer = Object.entries(byCustomer)
+    .filter(([, v]) => v > 0)
+    .map(([key, amount]) => ({ key, amount, label: key === '__pl_sales_customer_unknown__' ? undefined : key }))
+    .sort((a, b) => b.amount - a.amount)
+
+  return {
+    salesTotal: round2(salesTotal),
+    salesByCustomer,
+    lineCount: lines.length,
+    hitRowCap,
+  }
 }
 
 /**

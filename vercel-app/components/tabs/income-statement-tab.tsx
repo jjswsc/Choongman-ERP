@@ -95,19 +95,51 @@ function salesCustomerRowLabel(row: { key: string; label?: string }, t: (k: stri
   return n || row.key
 }
 
-function salesAmountForCustomer(data: IncomeStatementData | undefined, customerKey: string): number {
-  if (!data?.salesByCustomer) return 0
-  const r = data.salesByCustomer.find((x) => x.key === customerKey)
+/** 본사 매출처별 또는 매장 POS 영업일별 */
+function incomeStatementSalesBreakdown(data: IncomeStatementData | undefined): {
+  key: string
+  amount: number
+  label?: string
+}[] {
+  if (!data) return []
+  if ((data.salesByCustomer?.length ?? 0) > 0) return data.salesByCustomer!
+  if ((data.salesByDay?.length ?? 0) > 0) return data.salesByDay!
+  return []
+}
+
+function salesBreakdownIsDaily(data: IncomeStatementData | undefined): boolean {
+  return (data?.salesByDay?.length ?? 0) > 0 && (data?.salesByCustomer?.length ?? 0) === 0
+}
+
+/** 본사 손익 — 물류 출고 매출처별 (POS·일별 아님) */
+function salesBreakdownIsHqOutbound(data: IncomeStatementData | undefined): boolean {
+  return (data?.salesByCustomer?.length ?? 0) > 0 && (data?.salesByDay?.length ?? 0) === 0
+}
+
+function salesBreakdownRowLabel(
+  row: { key: string; label?: string },
+  t: (k: string) => string,
+  daily: boolean
+): string {
+  if (daily) return row.key
+  return salesCustomerRowLabel(row, t)
+}
+
+function salesAmountForBreakdownKey(
+  data: IncomeStatementData | undefined,
+  breakdownKey: string
+): number {
+  const r = incomeStatementSalesBreakdown(data).find((x) => x.key === breakdownKey)
   return r ? Number(r.amount) || 0 : 0
 }
 
-function mergeSalesCustomerKeysForCompare(
+function mergeSalesBreakdownKeysForCompare(
   rows: { ym: string; data: IncomeStatementData }[]
 ): { key: string; label?: string }[] {
   const labelByKey = new Map<string, string | undefined>()
   for (const { data } of rows) {
     if (data.error) continue
-    for (const r of data.salesByCustomer || []) {
+    for (const r of incomeStatementSalesBreakdown(data)) {
       if (!labelByKey.has(r.key)) {
         const lbl = String(r.label || "").trim()
         labelByKey.set(r.key, lbl || undefined)
@@ -119,11 +151,20 @@ function mergeSalesCustomerKeysForCompare(
   }
   const keys = [...labelByKey.keys()]
   keys.sort((a, b) => {
-    const ta = rows.reduce((s, x) => s + salesAmountForCustomer(x.data, a), 0)
-    const tb = rows.reduce((s, x) => s + salesAmountForCustomer(x.data, b), 0)
+    const dateCmp = dailyBreakdownKeySort(a, b)
+    if (dateCmp !== 0) return dateCmp
+    const ta = rows.reduce((s, x) => s + salesAmountForBreakdownKey(x.data, a), 0)
+    const tb = rows.reduce((s, x) => s + salesAmountForBreakdownKey(x.data, b), 0)
     return tb - ta
   })
   return keys.map((key) => ({ key, label: labelByKey.get(key) }))
+}
+
+/** YYYY-MM-DD 키는 날짜순, 그 외는 금액 정렬 유지 */
+function dailyBreakdownKeySort(a: string, b: string): number {
+  const daily = /^\d{4}-\d{2}-\d{2}$/
+  if (daily.test(a) && daily.test(b)) return a.localeCompare(b)
+  return 0
 }
 
 function mergePurchaseVendorKeysForCompare(
@@ -215,16 +256,16 @@ function yearlyPurchaseVendorAmount(
   return s
 }
 
-function yearlySalesCustomerAmount(
+function yearlySalesBreakdownAmount(
   rows: { ym: string; data: IncomeStatementData }[],
   year: string,
-  customerKey: string
+  breakdownKey: string
 ): number {
   let s = 0
   for (const { ym, data } of rows) {
     if (!ym.startsWith(year)) continue
     if (data.error) continue
-    s += salesAmountForCustomer(data, customerKey)
+    s += salesAmountForBreakdownKey(data, breakdownKey)
   }
   return s
 }
@@ -926,7 +967,7 @@ function IncomePlDetailTableContent({
           </tr>
         </thead>
         <tbody>
-          {(data.salesByCustomer?.length ?? 0) > 0 ? (
+          {incomeStatementSalesBreakdown(data).length > 0 ? (
             <>
               <tr
                 className="border-b cursor-pointer hover:bg-muted/40 select-none"
@@ -947,10 +988,10 @@ function IncomePlDetailTableContent({
                 <td className="py-2 text-right text-muted-foreground">100.0%</td>
               </tr>
               {expandSales &&
-                data.salesByCustomer!.map((row) => (
+                incomeStatementSalesBreakdown(data).map((row) => (
                   <tr key={row.key} className="border-b bg-muted/20">
                     <td className="py-1.5 text-muted-foreground pl-10 text-xs">
-                      {salesCustomerRowLabel(row, t)}
+                      {salesBreakdownRowLabel(row, t, salesBreakdownIsDaily(data))}
                     </td>
                     <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
                       {formatBath(row.amount)}
@@ -958,11 +999,35 @@ function IncomePlDetailTableContent({
                     <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
                   </tr>
                 ))}
-              {expandSales && view.useManualSales && (
+              {expandSales && view.useManualSales && salesBreakdownIsHqOutbound(data) && (
                 <tr className="border-b bg-muted/10">
                   <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
-                    {t("pL_salesBreakdownSystemNote") ||
-                      "아래 금액은 시스템 출고(배송완료) 기준 매출처별 합계입니다. 상단 매출은 수동 입력을 반영할 수 있습니다."}
+                    {t("pL_salesBreakdownHqOutboundNote") ||
+                      "아래는 물류 출고(출고 관리) 매출처별 합계입니다. 상단 매출은 수동 입력을 반영할 수 있습니다."}
+                  </td>
+                </tr>
+              )}
+              {expandSales && !view.useManualSales && salesBreakdownIsHqOutbound(data) && (
+                <tr className="border-b bg-muted/10">
+                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
+                    {t("pL_salesBreakdownHqOutboundHint") ||
+                      "본사 창고 실제 출고(stock_logs) 합계로, 출고 관리 화면과 동일한 단가·기간입니다. POS·승인 발주 금액과 다를 수 있습니다."}
+                  </td>
+                </tr>
+              )}
+              {expandSales && view.useManualSales && salesBreakdownIsDaily(data) && (
+                <tr className="border-b bg-muted/10">
+                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
+                    {t("pL_salesBreakdownPosDailyNote") ||
+                      "아래는 POS 영업일별 매출입니다. 상단 매출은 수동 입력을 반영할 수 있습니다."}
+                  </td>
+                </tr>
+              )}
+              {expandSales && salesBreakdownIsDaily(data) && !view.useManualSales && (
+                <tr className="border-b bg-muted/10">
+                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
+                    {t("pL_salesBreakdownPosDailyHint") ||
+                      "POS 완료 주문 매출액 합계(매출 관리 「매장별 매출 집계」·영업일 기준과 동일)입니다."}
                   </td>
                 </tr>
               )}
@@ -1660,8 +1725,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     [compareIncomeRows]
   )
 
-  const compareMergedSalesCustomers = React.useMemo(
-    () => mergeSalesCustomerKeysForCompare(compareIncomeRows),
+  const compareMergedSalesBreakdown = React.useMemo(
+    () => mergeSalesBreakdownKeysForCompare(compareIncomeRows),
+    [compareIncomeRows]
+  )
+  const compareSalesBreakdownDaily = React.useMemo(
+    () => compareIncomeRows.some(({ data }) => salesBreakdownIsDaily(data)),
     [compareIncomeRows]
   )
 
@@ -1797,10 +1866,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     const q = roundFinancialAmount
     const rows: IncomeStatementXlsxRow[] = []
     rows.push({ label: t("pL_sales"), amount: q(view.sales), pct: "100.0%" })
-    if ((data.salesByCustomer?.length || 0) > 0) {
-      for (const row of data.salesByCustomer!) {
+    if (incomeStatementSalesBreakdown(data).length > 0) {
+      const daily = salesBreakdownIsDaily(data)
+      for (const row of incomeStatementSalesBreakdown(data)) {
         rows.push({
-          label: `      ${salesCustomerRowLabel(row, t)}`,
+          label: `      ${salesBreakdownRowLabel(row, t, daily)}`,
           amount: q(row.amount),
           pct: view.pct(row.amount),
         })
@@ -2398,7 +2468,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                               <>
                                 {incomeComparePlRows.map((row) => {
                                   const salesExpandable =
-                                    row.key === "sales" && compareMergedSalesCustomers.length > 0
+                                    row.key === "sales" && compareMergedSalesBreakdown.length > 0
                                   return (
                                   <React.Fragment key={row.key}>
                                     <tr
@@ -2463,15 +2533,16 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                     </tr>
                                     {row.key === "sales" &&
                                       compareUnifiedExpandSales &&
-                                      compareMergedSalesCustomers.map((sc) => (
+                                      compareMergedSalesBreakdown.map((sc) => (
                                         <tr
                                           key={`y-sc-${sc.key}`}
                                           className="border-b bg-muted/10 last:border-0"
                                         >
                                           <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
-                                            {salesCustomerRowLabel(
+                                            {salesBreakdownRowLabel(
                                               { key: sc.key, label: sc.label },
-                                              t
+                                              t,
+                                              compareSalesBreakdownDaily
                                             )}
                                           </td>
                                           {incomeCompareCols.map((c) => (
@@ -2481,7 +2552,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                               title={t("fs_compareYearAggregateHint")}
                                             >
                                               {formatBath(
-                                                yearlySalesCustomerAmount(
+                                                yearlySalesBreakdownAmount(
                                                   compareIncomeRows,
                                                   c.key,
                                                   sc.key
@@ -2633,7 +2704,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                               </>
                             ) : (
                               <>
-                                {compareMergedSalesCustomers.length > 0 ? (
+                                {compareMergedSalesBreakdown.length > 0 ? (
                                   <tr
                                     className="border-b cursor-pointer hover:bg-muted/40 select-none"
                                     onClick={() => setCompareUnifiedExpandSales((v) => !v)}
@@ -2673,13 +2744,17 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   </tr>
                                 )}
                                 {compareUnifiedExpandSales &&
-                                  compareMergedSalesCustomers.map((sc) => (
+                                  compareMergedSalesBreakdown.map((sc) => (
                                     <tr key={`m-sc-${sc.key}`} className="border-b bg-muted/10">
                                       <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
-                                        {salesCustomerRowLabel({ key: sc.key, label: sc.label }, t)}
+                                        {salesBreakdownRowLabel(
+                                          { key: sc.key, label: sc.label },
+                                          t,
+                                          compareSalesBreakdownDaily
+                                        )}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => {
-                                        const amt = salesAmountForCustomer(rowData, sc.key)
+                                        const amt = salesAmountForBreakdownKey(rowData, sc.key)
                                         return (
                                           <td
                                             key={ym}

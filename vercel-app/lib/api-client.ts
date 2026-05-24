@@ -2359,6 +2359,8 @@ export interface IncomeStatementData {
   purchaseByVendor?: { key: string; amount: number; label?: string }[]
   /** 본사 손익: 출고 발주 store_name(매출처)별 매출 */
   salesByCustomer?: { key: string; amount: number; label?: string }[]
+  /** 매장 손익: POS 영업일별 매출 */
+  salesByDay?: { key: string; amount: number; label?: string }[]
   grossProfit: number
   netProfit: number
   error?: string
