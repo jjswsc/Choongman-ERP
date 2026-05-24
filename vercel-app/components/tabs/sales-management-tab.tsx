@@ -37,7 +37,7 @@ import {
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
-import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
+import { periodRowsForStoreSelection } from "@/lib/pos-sales-period-aggregate"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
@@ -596,10 +596,67 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const canQuerySales = !!(startStr && endStr) && officeStoreSelectionReady
 
   /** API·표기 차이로 요청 매장 외 행이 섞일 때 화면·합계를 선택 매장에 맞춤 */
-  const scopedStoreData = React.useMemo(
-    () => filterStoreRowsBySalesSelection(storeData, salesFetchStoresParam),
-    [storeData, salesFetchStoresParam]
+  const derivedSingleStoreDataFromPeriod = React.useMemo(() => {
+    if ((selectedStoresParam?.length ?? 0) !== 1) return null
+    const periodRows = periodData.map((r) => mapPosSalesPeriodRowToChartRow(r, periodGroup, tr))
+    if (periodRows.length === 0) return null
+    const selected = selectedStoresParam?.[0]
+    if (!selected) return null
+    const agg = periodRows.reduce(
+      (acc, r) => {
+        acc.count += Number(r.count ?? 0)
+        acc.subtotal += Number(r.subtotal ?? 0)
+        acc.vat += Number(r.vat ?? 0)
+        acc.discount += Number(r.discount ?? 0)
+        acc.service += Number(r.service ?? 0)
+        acc.total += Number(r.total ?? 0)
+        acc.guestSum += Number(r.guestSum ?? 0)
+        acc.dineInOrderCount += Number(r.dineInOrderCount ?? 0)
+        acc.dineInTotal += Number(r.dineInTotal ?? 0)
+        acc.dineInGuestSum += Number(r.dineInGuestSum ?? 0)
+        return acc
+      },
+      {
+        count: 0,
+        subtotal: 0,
+        vat: 0,
+        discount: 0,
+        service: 0,
+        total: 0,
+        guestSum: 0,
+        dineInOrderCount: 0,
+        dineInTotal: 0,
+        dineInGuestSum: 0,
+      }
+    )
+    return [
+      {
+        storeName: selected,
+        ...agg,
+        salesPerDineInOrder:
+          agg.dineInOrderCount > 0 ? Math.round((agg.dineInTotal / agg.dineInOrderCount) * 100) / 100 : 0,
+        salesPerGuest:
+          agg.dineInGuestSum > 0 ? Math.round((agg.dineInTotal / agg.dineInGuestSum) * 100) / 100 : 0,
+        salesPerOrder: agg.count > 0 ? Math.round((agg.total / agg.count) * 100) / 100 : 0,
+      },
+    ]
+  }, [selectedStoresParam, periodData, periodGroup, tr])
+
+  const effectiveStoreData = React.useMemo(
+    () => derivedSingleStoreDataFromPeriod ?? storeData,
+    [derivedSingleStoreDataFromPeriod, storeData]
   )
+
+  const scopedStoreData = React.useMemo(
+    () => filterStoreRowsBySalesSelection(effectiveStoreData, salesFetchStoresParam),
+    [effectiveStoreData, salesFetchStoresParam]
+  )
+
+  /** 매장별 집계(posSalesByStore) 합 — 상단 카드·순매출·매장·기간 표와 동일 */
+  const scopedStoreSalesTotal = React.useMemo(() => {
+    if (scopedStoreData.length === 0) return null
+    return sumStoreSalesTotals(scopedStoreData).total
+  }, [scopedStoreData])
 
   const storeChartRows = React.useMemo(
     () =>
@@ -888,6 +945,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       ReturnType<typeof mapPosSalesPeriodRowToChartRow> & { storeCode: string; storeDisplay: string }
     > = []
     for (const code of codes) {
+      if (
+        salesFetchStoresParam?.length &&
+        !salesFetchStoresParam.some((sel) => rowMatchesSalesStoreSelection(code, sel))
+      ) {
+        continue
+      }
       for (const pr of periodSplitSeries[code] ?? []) {
         out.push({
           storeCode: code,
@@ -901,7 +964,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       if (c !== 0) return c
       return a.key.localeCompare(b.key)
     })
-  }, [selectedView, periodSplitSeries, periodGroup, tr, posStoreDisplayName])
+  }, [selectedView, periodSplitSeries, periodGroup, tr, posStoreDisplayName, salesFetchStoresParam])
 
   const showComparePeriodChart =
     selectedView === "period" && compareStores && !!periodSplitSeries && storesForCompareChart.length >= 2
@@ -1048,6 +1111,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [paymentData])
 
   const activeTotalsSummary = React.useMemo(() => {
+    if (scopedStoreData.length > 0 && (selectedStoresParam?.length ?? 0) > 0) {
+      const t = sumStoreSalesTotals(scopedStoreData)
+      return { ...t, gross: t.subtotal + t.vat }
+    }
     if (
       selectedView === "store" ||
       selectedView === "store-category" ||
@@ -1056,9 +1123,19 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       return storeTotalsSummary
     if (selectedView === "payment") return paymentTotalsSummary
     return totalsSummary
-  }, [selectedView, storeTotalsSummary, paymentTotalsSummary, totalsSummary])
+  }, [
+    scopedStoreData,
+    selectedStoresParam,
+    selectedView,
+    storeTotalsSummary,
+    paymentTotalsSummary,
+    totalsSummary,
+  ])
 
   const activeSummaryCurrent = React.useMemo(() => {
+    if (scopedStoreSalesTotal != null && (selectedStoresParam?.length ?? 0) > 0) {
+      return scopedStoreSalesTotal
+    }
     if (
       selectedView === "store" ||
       selectedView === "store-category" ||
@@ -1067,7 +1144,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
     return summaryCards.current
-  }, [selectedView, storeTotalsSummary.total, paymentTotalsSummary.total, summaryCards.current])
+  }, [
+    scopedStoreSalesTotal,
+    selectedStoresParam,
+    selectedView,
+    storeTotalsSummary.total,
+    paymentTotalsSummary.total,
+    summaryCards.current,
+  ])
+
+  const summaryCardsCurrentDisplay = React.useMemo(() => {
+    if (scopedStoreSalesTotal != null && (selectedStoresParam?.length ?? 0) > 0) {
+      return scopedStoreSalesTotal
+    }
+    return summaryCards.current
+  }, [scopedStoreSalesTotal, selectedStoresParam, summaryCards.current])
 
   const insightTopMenus = React.useMemo(
     () => [...menuData].sort((a, b) => b.sales - a.sales).slice(0, 3),
@@ -1426,7 +1517,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needStore =
       selectedView === "store" ||
       selectedView === "store-category" ||
-      selectedView === "store-period"
+      selectedView === "store-period" ||
+      (selectedView === "period" && (selectedStoresParam?.length ?? 0) > 0)
     const needRealtimeRevenue = selectedView === "realtime-revenue"
     const needFullSummary = selectedView === "period" || selectedView === "store-period"
     const needCurrentSummaryOnly =
@@ -1466,7 +1558,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           if (loadIdRef.current !== id) return
           if (res.kind === "split") {
             setPeriodSplitSeries(res.series)
-            setPeriodData(mergePeriodSeriesToAggregated(res.series, salesFetchStoresParam ?? []))
+            setPeriodData(periodRowsForStoreSelection(res.series, salesFetchStoresParam))
             setPeriodTruncated(res.truncated)
           } else {
             setPeriodSplitSeries(null)
@@ -2319,7 +2411,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
-                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCards.current)}</p>
+                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCardsCurrentDisplay)}</p>
               </div>
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevRange", "직전 동일기간")}</p>

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
-import { mergePeriodSeriesToAggregated } from '@/lib/pos-sales-period-aggregate'
+import {
+  mergePeriodSeriesToAggregated,
+  periodRowsForStoreSelection,
+} from '@/lib/pos-sales-period-aggregate'
 
 function row(key: string, total: number, count: number): PeriodAggRow {
   return {
@@ -38,5 +41,37 @@ describe('mergePeriodSeriesToAggregated', () => {
 
   it('returns empty when no series', () => {
     expect(mergePeriodSeriesToAggregated({})).toEqual([])
+  })
+})
+
+describe('periodRowsForStoreSelection', () => {
+  it('picks canonical series only for one store (does not sum alias keys)', () => {
+    const series = {
+      'CM True Digital': [row('2026-05-01', 321_732, 923)],
+      'True Digital': [row('2026-05-01', 457_375, 400)],
+    }
+    const picked = periodRowsForStoreSelection(series, ['CM True Digital'])
+    expect(picked).toHaveLength(1)
+    expect(picked[0]?.total).toBe(321_732)
+  })
+
+  it('does not include a different store that partially matches the name', () => {
+    const series = {
+      'CM True Digital': [row('2026-05-01', 100, 1)],
+      'CM True Digital Park': [row('2026-05-01', 50, 1)],
+    }
+    const picked = periodRowsForStoreSelection(series, ['CM True Digital'])
+    expect(picked[0]?.total).toBe(100)
+  })
+
+  it('merges multiple selected stores using canonical series keys (not selection aliases)', () => {
+    const series = {
+      'CM Store A': [row('2026-05-01', 100, 1)],
+      'CM Store B': [row('2026-05-01', 200, 2)],
+    }
+    const picked = periodRowsForStoreSelection(series, ['Store A', 'Store B'])
+    expect(picked).toHaveLength(1)
+    expect(picked[0]?.total).toBe(300)
+    expect(picked[0]?.count).toBe(3)
   })
 })

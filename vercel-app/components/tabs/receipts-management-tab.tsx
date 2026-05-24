@@ -75,10 +75,13 @@ import { addDaysYmd, getPosBusinessDateStr, setPosBusinessHoursClient } from '@/
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import {
+  enrichReceiptModalItemsForPromoDisplay,
   receiptModalDataFromPosOrderReprint,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import {
   POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
@@ -622,6 +625,95 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       cancelledTotal: cancelled.reduce((s, o) => s + (o.total ?? 0), 0),
     }
   }, [isToday, orders, statusFilter])
+
+  const handlePrintHallOrderSlip = async (o: PosOrder) => {
+    const store = (o.storeCode ?? '').trim()
+    if (!store || !o.items?.length) {
+      await appAlert(t('posPrintUnavailable'))
+      return
+    }
+    try {
+      const settings = await getPosPrinterSettings({ storeCode: store })
+      const receiptData = receiptModalDataFromPosOrderReprint(o, { promoCatalogById, menus })
+      const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
+      const itemsForReceipt = enrichReceiptModalItemsForPromoDisplay(receiptData.items, {
+        ...posReceiptLineOptsKitchen,
+        optionNameByCode,
+      })
+      const fullHtml = buildPosHallOrderReceiptDocumentHtml({
+        payload: {
+          orderNo: String(receiptData.orderNo ?? ''),
+          storeCode: String(receiptData.storeCode ?? ''),
+          orderType: String(receiptData.orderType ?? ''),
+          tableName: receiptData.tableName ? String(receiptData.tableName) : undefined,
+          memo: receiptData.memo ? String(receiptData.memo) : '',
+          guestCount: o.guestCount,
+          items: itemsForReceipt.map((it) => ({
+            id: String(it.id ?? ''),
+            name: String(it.name ?? ''),
+            price: Number(it.price ?? 0) || 0,
+            qty: Number(it.qty ?? 0) || 0,
+            note: String(it.note ?? ''),
+            ...(it.isAddon ? { isAddon: true as const } : {}),
+            promoItems: Array.isArray(it.promoItems) ? it.promoItems : [],
+          })),
+          subtotal: Number(receiptData.subtotal ?? 0) || 0,
+          discountAmt: Number(receiptData.discountAmt ?? 0) || 0,
+          couponDiscountAmt: Math.max(
+            0,
+            Number(
+              (receiptData as { couponDiscountAmt?: number }).couponDiscountAmt ??
+                receiptData.appliedCoupons?.reduce(
+                  (s, c) => s + Math.max(0, Number(c.discountAmt ?? 0) || 0),
+                  0
+                ) ??
+                0
+            ) || 0
+          ),
+          discountReason: receiptData.discountReason ? String(receiptData.discountReason) : undefined,
+          total: Number(receiptData.total ?? 0) || 0,
+          deliveryFee: Number(receiptData.deliveryFee ?? 0) || 0,
+          packagingFee: Number(receiptData.packagingFee ?? 0) || 0,
+          vatFeeAmt: Number(receiptData.vatFeeAmt ?? 0) || 0,
+          vatFeeMode: receiptData.vatFeeMode,
+          receiptExclusiveSubtotalDisplay: Number(receiptData.receiptExclusiveSubtotalDisplay ?? 0) || 0,
+          receiptVatDisplayAmt: Number(receiptData.receiptVatDisplayAmt ?? 0) || 0,
+          receiptTaxableGrossForDisplay: Number(receiptData.receiptTaxableGrossForDisplay ?? 0) || 0,
+          serviceFeeAmt: Number(receiptData.serviceFeeAmt ?? 0) || 0,
+          serviceFeeMode: receiptData.serviceFeeMode,
+          cardFeeAmt: Number(receiptData.cardFeeAmt ?? 0) || 0,
+          cardFeeMode: receiptData.cardFeeMode,
+          otherFeeAmt: Number(receiptData.otherFeeAmt ?? 0) || 0,
+          otherFeeMode: receiptData.otherFeeMode,
+        },
+        t,
+        lang,
+        menuNameById: (menuId: string) =>
+          menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
+        menuCodeByMenuId: Object.fromEntries(
+          menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+        ),
+        optionNameByCode,
+      })
+      printPosHtmlDocument(fullHtml, {
+        title: t('posHallOrder') || '홀 주문서',
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        focusIframeBeforePrint: false,
+        printRole: 'receipt',
+        printReceiptKind: 'hall_order',
+        escPosCutOverride: resolveEscPosCutOverride(settings, {
+          printRole: 'receipt',
+          printReceiptKind: 'hall_order',
+        }),
+        onPrintUnavailable: () => {
+          void appAlert(t('posPrintUnavailable'))
+        },
+      })
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    }
+  }
 
   const handlePrintCustomerReceipt = async (o: PosOrder) => {
     const store = (o.storeCode ?? '').trim()
@@ -1597,11 +1689,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       className={ADMIN_BTN_XS_CN}
                                       onClick={(e) => {
                                         e.stopPropagation()
-                                        handlePrintCustomerReceipt(o)
+                                        handlePrintHallOrderSlip(o)
                                       }}
                                     >
                                       <Printer className="h-3 w-3" />
-                                      {t('posCustomerReceiptPrint') || '손님 영수증'}
+                                      {t('posHallOrder') || '홀 주문서'}
                                     </Button>
                                     {(() => {
                                       const failureRec = getKitchenPrintFailure(resolveKitchenPrintOrderRef(o))
@@ -1649,6 +1741,18 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                         </>
                                       )
                                     })()}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className={ADMIN_BTN_XS_CN}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handlePrintCustomerReceipt(o)
+                                      }}
+                                    >
+                                      <Printer className="h-3 w-3" />
+                                      {t('posCustomerReceiptPrint') || '손님 영수증'}
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="outline"

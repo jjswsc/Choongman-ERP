@@ -1,19 +1,15 @@
 /**
  * 기간별 집계 (연/월/주/일/요일/시간대별). pos_orders 기반.
  * 조회 구간·버킷: POS 영업일 라벨(getPosTodaySales / posBizDayScope 와 동일).
- * splitByStore=1 이면 매장별 시리즈: { split, series } (매장 0·1·N 모두).
- * - 매장 2개 이상: 요청 매장 코드별 부분집합 집계
- * - 매장 1개: 해당 매장 행만 집계 (posSalesByStore 합계와 일치)
- * - 매장 0개(전체): 응답 행에 등장한 store_code 기준으로 분해
+ * splitByStore=1 이면 매장별 시리즈: { split, series } — 키는 canonicalSalesStoreRowKey (posSalesByStore 와 동일).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import {
-  resolveStoresFromParams,
-  rowMatchesSalesStoreSelection,
-  canonicalSalesStoreRowKey,
-} from '@/lib/pos-sales-store-filter'
-import { aggregatePosSalesByPeriod } from '@/lib/pos-sales-period-aggregate'
+  aggregatePosSalesByPeriod,
+  buildPosSalesSplitSeriesByStore,
+} from '@/lib/pos-sales-period-aggregate'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 
@@ -49,32 +45,13 @@ export async function GET(request: NextRequest) {
     const resolveSc = (sc: string) => resolvePosBusinessHoursFromContext(bizCtx, sc)
 
     if (splitByStore) {
-      const series: Record<string, ReturnType<typeof aggregatePosSalesByPeriod>> = {}
-      if (stores.length >= 2) {
-        for (const code of stores) {
-          const subset = rows.filter((r) => rowMatchesSalesStoreSelection(r.store_code, code))
-          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
-        }
-      } else if (stores.length === 1) {
-        const code = stores[0]!
-        const subset = rows.filter((r) => rowMatchesSalesStoreSelection(r.store_code, code))
-        series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
-      } else {
-        const codes = [
-          ...new Set(
-            rows.map((r) =>
-              canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)')
-            )
-          ),
-        ].sort((a, b) => a.localeCompare(b))
-        for (const code of codes) {
-          const subset = rows.filter(
-            (r) =>
-              canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)') === code
-          )
-          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
-        }
-      }
+      const series = buildPosSalesSplitSeriesByStore({
+        rows,
+        stores,
+        groupBy,
+        orderTypesAllowed,
+        resolveBusinessDayStart: resolveSc,
+      })
       return NextResponse.json({ split: true as const, series, truncated }, { headers })
     }
 
