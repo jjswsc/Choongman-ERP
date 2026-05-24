@@ -62,6 +62,50 @@ describe('resolveHallOrderReceiptDiscountAmt', () => {
       })
     ).toBe(23)
   })
+
+  it('does not treat included VAT as discount when totals match line gross', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 0,
+        items: [
+          { price: 111, qty: 1 },
+          { price: 111, qty: 1 },
+          { price: 111, qty: 1 },
+        ],
+        subtotal: 333,
+        total: 333,
+        vatFeeAmt: 21.79,
+        vatFeeMode: 'included',
+      })
+    ).toBe(0)
+  })
+})
+
+describe('buildPosHallOrderReceiptDocumentHtml — discount row', () => {
+  it('omits discount row for VAT-included orders with no real discount', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '123',
+        storeCode: 'CM Asoke',
+        orderType: 'delivery',
+        tableName: 'Shopee #123',
+        items: [
+          { id: '1', name: '[April] Set 1', price: 111, qty: 1 },
+          { id: '2', name: '[April] Set 2', price: 111, qty: 1 },
+          { id: '3', name: '[April] Set 3', price: 111, qty: 1 },
+        ],
+        subtotal: 333,
+        discountAmt: 0,
+        total: 333,
+        vatFeeAmt: 21.79,
+        vatFeeMode: 'included',
+      },
+      t: (k) => (k === 'posDiscount' ? 'Discount' : k),
+      lang: 'en',
+    })
+    expect(html).not.toMatch(/Discount[\s\S]*?-21\.79/)
+    expect(html).toContain('333')
+  })
 })
 
 describe('buildPosHallOrderReceiptDocumentHtml', () => {

@@ -1757,8 +1757,12 @@ export default function PosTerminalPage() {
   const grabCancelWatchSeededRef = useRef(false)
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
-  /** 메인 포스: dine_in 품목 id 스냅샷(다른 단말 UPDATE 시 추가분만 홀/주방 자동인쇄) */
-  const dineInRemoteItemIdsSnapshotRef = useRef<Map<number, Set<string>>>(new Map())
+  /**
+   * 메인 포스: dine_in 품목 수량 스냅샷(다른 단말 UPDATE 시 id 추가 + 수량 증가를 모두 감지)
+   * - key: orderId
+   * - value: (itemId -> qty)
+   */
+  const dineInRemoteItemQtySnapshotRef = useRef<Map<number, Map<string, number>>>(new Map())
   /** 메인 포스가 updatePosOrder(추가주문) 직후 수신하는 Realtime UPDATE로 이중 인쇄 방지 */
   const mainPosSelfDineInUpdateSuppressUntilRef = useRef<Map<number, number>>(new Map())
   useEffect(() => {
@@ -1766,7 +1770,7 @@ export default function PosTerminalPage() {
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     paymentReceiptScanSeededRef.current = false
-    dineInRemoteItemIdsSnapshotRef.current = new Map()
+    dineInRemoteItemQtySnapshotRef.current = new Map()
     mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
 
@@ -2657,6 +2661,20 @@ export default function PosTerminalPage() {
     [enrichPromoItemsWithOptionName, resolveOrderItemDisplayName]
   )
 
+  const buildDineInQtySnapshot = useCallback(
+    (items: Array<{ id?: unknown; qty?: unknown; quantity?: unknown }>): Map<string, number> => {
+      const map = new Map<string, number>()
+      for (const it of items) {
+        const id = String(it.id ?? '').trim()
+        if (!id) continue
+        const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
+        map.set(id, (map.get(id) ?? 0) + qty)
+      }
+      return map
+    },
+    []
+  )
+
   async function printReceiptNow(
     payload: {
       orderNo: string
@@ -3372,8 +3390,8 @@ export default function PosTerminalPage() {
       const orderNo = String(row.order_no ?? '')
       const orderType = String(row.order_type ?? 'dine_in')
       if (orderType.trim().toLowerCase() === 'dine_in') {
-        const snap = new Set(items.map((it) => String(it.id).trim()).filter(Boolean))
-        if (snap.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(orderId, snap)
+        const snap = buildDineInQtySnapshot(items)
+        if (snap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, snap)
       }
       const tableName = String(row.table_name ?? '')
       const memo = String(row.memo ?? '')
@@ -3523,6 +3541,7 @@ export default function PosTerminalPage() {
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
     parseRealtimePosOrderRowItemsJson,
+    buildDineInQtySnapshot,
   ])
 
   useEffect(() => {
@@ -3695,8 +3714,8 @@ export default function PosTerminalPage() {
           mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
           const parsedSelf = parseRealtimePosOrderRowItemsJson(row)
           if (parsedSelf.ok && parsedSelf.items.length > 0) {
-            const sid = new Set(parsedSelf.items.map((it) => String(it.id).trim()).filter(Boolean))
-            if (sid.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(orderId, sid)
+            const sid = buildDineInQtySnapshot(parsedSelf.items)
+            if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
           }
           logPosPrintDebug('realtime_update_skip_self_dine_in_suppress', { orderId })
           return
@@ -3708,30 +3727,35 @@ export default function PosTerminalPage() {
       if (!parsed.ok || parsed.items.length === 0) return
 
       const items = parsed.items
-      const prevIds = dineInRemoteItemIdsSnapshotRef.current.get(orderId)
-      const newIdSet = new Set(items.map((it) => String(it.id).trim()).filter(Boolean))
-      if (newIdSet.size === 0) return
+      const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
+      const newQtyById = buildDineInQtySnapshot(items)
+      if (newQtyById.size === 0) return
 
-      if (!prevIds) {
-        dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+      if (!prevQtyById) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         logPosPrintDebug('realtime_update_dine_in_snapshot_seeded', { orderId })
         return
       }
 
-      const addedIds = [...newIdSet].filter((id) => !prevIds.has(id))
-      if (addedIds.length === 0) {
-        dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+      const changedIds = [...newQtyById.keys()].filter((id) => {
+        const prevQty = Number(prevQtyById.get(id) ?? 0)
+        const nextQty = Number(newQtyById.get(id) ?? 0)
+        if (prevQty <= 0) return nextQty > 0
+        return nextQty > prevQty
+      })
+      if (changedIds.length === 0) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         return
       }
 
       const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
       if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {
-        dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         return
       }
 
-      const addedSet = new Set(addedIds)
-      const previousStub = [...prevIds].map((id) => ({ id }))
+      const changedSet = new Set(changedIds)
+      const previousStub = [...prevQtyById.entries()].map(([id, qty]) => ({ id, qty, quantity: qty }))
       const cartLikeNew = items.map((it) => ({
         id: it.id,
         name: it.name,
@@ -3756,7 +3780,7 @@ export default function PosTerminalPage() {
 
       const receiptPrintItemsRemote = items.map((it) => ({
         ...it,
-        ...(addedSet.has(String(it.id).trim()) ? { isAddon: true as const } : {}),
+        ...(changedSet.has(String(it.id).trim()) ? { isAddon: true as const } : {}),
       }))
 
       const storeCode = String(row.store_code ?? currentStoreId)
@@ -3788,7 +3812,11 @@ export default function PosTerminalPage() {
         ...posGuestCountSpread(row.guest_count),
       }
 
-      const kitchenDedupeKey = `order:${orderId}:kitchen:add-remote:${Array.from(addedSet).sort().join('|')}`
+      const changedKey = changedIds
+        .map((id) => `${id}:${Number(prevQtyById.get(id) ?? 0)}->${Number(newQtyById.get(id) ?? 0)}`)
+        .sort()
+        .join('|')
+      const kitchenDedupeKey = `order:${orderId}:kitchen:add-remote:${changedKey}`
       const runKitchenRemoteDineInAdd = () => {
         if (kitchenCartLines.length === 0) return
         if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
@@ -3887,8 +3915,8 @@ export default function PosTerminalPage() {
           .catch((e) => console.error('Kitchen slip print (remote dine-in add):', e))
       }
 
-      dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
-      logPosPrintDebug('remote_dine_in_add_autoprint', { orderId, addedCount: addedIds.length })
+      dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+      logPosPrintDebug('remote_dine_in_add_autoprint', { orderId, changedCount: changedIds.length })
 
       if (shouldAutoPrintReceipt && autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
         void printReceiptNow(receiptPayloadRemote, null, false, undefined, true, runKitchenRemoteDineInAdd)
@@ -3920,6 +3948,7 @@ export default function PosTerminalPage() {
     t,
     tPrint,
     logPosPrintDebug,
+    buildDineInQtySnapshot,
   ])
 
   useEffect(() => {
@@ -4021,12 +4050,8 @@ export default function PosTerminalPage() {
                 String(o.orderType ?? '').trim().toLowerCase() === 'dine_in' &&
                 (o.items || []).length > 0
               ) {
-                const idset = new Set(
-                  (o.items || [])
-                    .map((it) => String((it as { id?: string }).id ?? '').trim())
-                    .filter(Boolean)
-                )
-                if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(oid, idset)
+                const qtySnap = buildDineInQtySnapshot(o.items || [])
+                if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(oid, qtySnap)
               }
             }
           }
@@ -4231,8 +4256,8 @@ export default function PosTerminalPage() {
             })
           }
           if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
-            const idset = new Set(items.map((it) => String(it.id ?? '').trim()).filter(Boolean))
-            if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(oid, idset)
+            const qtySnap = buildDineInQtySnapshot(items)
+            if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(oid, qtySnap)
           }
         }
         if (shouldRefreshCurrentStore) {
@@ -4300,6 +4325,7 @@ export default function PosTerminalPage() {
     logPosPrintDebug,
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
+    buildDineInQtySnapshot,
   ])
 
   useEffect(() => {
@@ -5969,10 +5995,8 @@ export default function PosTerminalPage() {
                   })
                 }
                 if (savedOrderId != null && savedOrderId > 0) {
-                  const idset = new Set(
-                    receiptPrintItems.map((it) => String(it.id ?? '').trim()).filter(Boolean)
-                  )
-                  if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(savedOrderId, idset)
+                  const qtySnap = buildDineInQtySnapshot(receiptPrintItems)
+                  if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(savedOrderId, qtySnap)
                 }
                 if (savedOrderId != null) {
                   setPendingDineInOrderId(savedOrderId)

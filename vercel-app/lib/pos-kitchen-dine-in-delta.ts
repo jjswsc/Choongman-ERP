@@ -1,6 +1,7 @@
 /**
  * 홀 추가 주문: 장바구니에 기존 테이블 줄이 섞여 있으면 주방은 "새로 넣은 줄"만 찍는다.
  * id가 기존 주문 items_json 과 동일하면 제외. cart-existing-{n}-{원본id} 형태도 원본 id로 비교.
+ * 기존 줄 수량(qty/quantity)이 있으면 증가분만 반환한다.
  */
 
 type KitchenComparableLine = {
@@ -15,28 +16,61 @@ type KitchenComparableLine = {
 function lineSignature(line: KitchenComparableLine): string {
   const name = String(line.name ?? '').trim()
   const price = Number(line.price ?? 0) || 0
-  const qty = Number(line.quantity ?? line.qty ?? 1) || 1
+  const qty = lineQty(line)
   const note = String(line.note ?? '').trim()
   return [name, price, qty, note].join('\u001f')
 }
 
+function lineQty(line: KitchenComparableLine): number {
+  return Math.max(0, Math.trunc(Number(line.quantity ?? line.qty ?? 1) || 1))
+}
+
+function resolveExistingId(line: { id?: string }): string {
+  const raw = String(line.id ?? '').trim()
+  if (!raw) return ''
+  const m = raw.match(/^cart-existing-\d+-(.+)$/)
+  return (m?.[1] ?? raw).trim()
+}
+
+function existingHasQtyInfo(items: Array<{ quantity?: number; qty?: number }>): boolean {
+  return items.some((it) => it.quantity != null || it.qty != null)
+}
+
 export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLine>(
   cartLines: T[],
-  existingOrderItems: Array<{ id?: string }> | null | undefined
+  existingOrderItems: Array<{ id?: string; quantity?: number; qty?: number }> | null | undefined
 ): T[] {
   if (!existingOrderItems?.length) return cartLines
-  const existingIds = new Set(
-    existingOrderItems.map((it) => String(it.id ?? '').trim()).filter(Boolean)
-  )
-  if (existingIds.size === 0) return cartLines
 
+  const existingQtyById = new Map<string, number>()
+  for (const it of existingOrderItems) {
+    const id = resolveExistingId(it)
+    if (!id) continue
+    existingQtyById.set(id, (existingQtyById.get(id) ?? 0) + lineQty(it))
+  }
+  if (existingQtyById.size === 0) return cartLines
+
+  if (existingHasQtyInfo(existingOrderItems)) {
+    const deltaLines: T[] = []
+    for (const line of cartLines) {
+      const baseId = resolveExistingId(line)
+      if (baseId && existingQtyById.has(baseId)) {
+        const delta = lineQty(line) - (existingQtyById.get(baseId) ?? 0)
+        if (delta > 0) {
+          deltaLines.push({ ...line, quantity: delta, qty: delta })
+        }
+        continue
+      }
+      deltaLines.push(line)
+    }
+    return deltaLines
+  }
+
+  const existingIds = new Set(existingQtyById.keys())
   const filteredById = cartLines.filter((line) => {
-    const raw = String(line.id ?? '').trim()
-    if (!raw) return true
-    if (existingIds.has(raw)) return false
-    const m = raw.match(/^cart-existing-\d+-(.+)$/)
-    if (m?.[1] && existingIds.has(m[1])) return false
-    return true
+    const baseId = resolveExistingId(line)
+    if (!baseId) return true
+    return !existingIds.has(baseId)
   })
 
   if (filteredById.length > 0) return filteredById

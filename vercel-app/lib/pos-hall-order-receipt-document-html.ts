@@ -122,6 +122,7 @@ export function resolveHallOrderReceiptDiscountAmt(payload: {
   deliveryFee?: number
   packagingFee?: number
   vatFeeAmt?: number
+  vatFeeMode?: 'included' | 'separate'
   total: number
 }): number {
   const explicit = resolvePosSalesDiscountAmount(
@@ -138,11 +139,15 @@ export function resolveHallOrderReceiptDiscountAmt(payload: {
   const fees =
     Math.max(0, Number(payload.deliveryFee) || 0) + Math.max(0, Number(payload.packagingFee) || 0)
   const vat = Math.max(0, Number(payload.vatFeeAmt) || 0)
+  const vatIncluded = String(payload.vatFeeMode ?? '') === 'included'
   const total = Math.max(0, Number(payload.total) || 0)
   const gross = Math.max(itemsGross, subtotal) + fees
-  const implied = Math.round((gross + vat - total) * 100) / 100
-  if (implied > 0.02 && total > 0.005 && implied < gross + vat + 0.01) return implied
-  return 0
+  /** VAT 포함가는 품목·합계에 이미 반영됨 — vatFeeAmt를 더하면 부가세가 할인으로 오인됨 */
+  const vatForBalance = vatIncluded ? 0 : vat
+  const implied = Math.round((gross + vatForBalance - total) * 100) / 100
+  if (implied <= 0.02 || total <= 0.005 || implied >= gross + vatForBalance + 0.01) return 0
+  if (vat > 0.02 && Math.abs(implied - vat) < 0.03) return 0
+  return implied
 }
 
 function resolveHallOrderDiscountLabel(

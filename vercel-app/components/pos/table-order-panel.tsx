@@ -823,7 +823,7 @@ export function TableOrderPanel({
                           setSelectedLineItemId(null)
                         }}
                       >
-                        <div className="min-w-0 flex-1 space-y-1">
+                        <div className="min-w-0 space-y-1">
                           <button
                             type="button"
                             className="block w-full rounded-sm px-0.5 text-left text-base font-medium leading-snug break-words -mx-0.5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
@@ -938,7 +938,7 @@ export function TableOrderPanel({
                       <li
                         key={item.id}
                         className={cn(
-                          'flex cursor-default items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
+                          'grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-1.5 gap-y-1 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
                           served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
                           selectedLineItemId === item.id &&
@@ -949,7 +949,7 @@ export function TableOrderPanel({
                           setSelectedLineItemId(null)
                         }}
                       >
-                        <div className="min-w-0 flex-1 space-y-1">
+                        <div className="min-w-0 space-y-1">
                           <button
                             type="button"
                             className="w-full min-w-0 rounded-sm px-0.5 text-left hover:underline -mx-0.5"
@@ -979,44 +979,6 @@ export function TableOrderPanel({
                             >
                               {noteTrim}
                             </p>
-                          )}
-                          {hasSetChildren && (
-                            <div className="mt-1 w-full max-w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
-                              {item.promoItems!.flatMap((line, idx) => {
-                                const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
-                                const menuId = String(line.menuId ?? '').trim()
-                                const optId = String(line.optionId ?? '').trim()
-                                const menuLabel = menuId
-                                  ? resolvePosOrderItemMenuDisplayName({ id: menuId, name: menuId, menuId }, menusFromProps)
-                                  : `Set ${idx + 1}`
-                                const childLabel = optId ? `${menuLabel} (${optId})` : menuLabel
-                                return Array.from({ length: qty }).map((_, n) => {
-                                  const childKey = buildPosSetChildKey(line, idx, n)
-                                  const mapKey = `${item.id}::${childKey}`
-                                  const childDone = Boolean(itemChildServed[mapKey])
-                                  return (
-                                    <button
-                                      key={`${item.id}-${childKey}`}
-                                      type="button"
-                                      className={cn(
-                                        'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-base font-medium transition-colors',
-                                        childDone
-                                          ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
-                                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                                      )}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        void toggleSetChildServed(item.id, childKey)
-                                      }}
-                                      disabled={savingItemId === item.id || removingItemId !== null || cancelled}
-                                    >
-                                      <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, t)}</span>
-                                      {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
-                                    </button>
-                                  )
-                                })
-                              })}
-                            </div>
                           )}
                           {cancelled && (
                             <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">
@@ -1049,6 +1011,44 @@ export function TableOrderPanel({
                         >
                           {served ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                         </Button>
+                        {hasSetChildren && (
+                          <div className="col-span-3 w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
+                            {item.promoItems!.flatMap((line, idx) => {
+                              const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
+                              const menuId = String(line.menuId ?? '').trim()
+                              const optId = String(line.optionId ?? '').trim()
+                              const menuLabel = menuId
+                                ? resolvePosOrderItemMenuDisplayName({ id: menuId, name: menuId, menuId }, menusFromProps)
+                                : `Set ${idx + 1}`
+                              const childLabel = optId ? `${menuLabel} (${optId})` : menuLabel
+                              return Array.from({ length: qty }).map((_, n) => {
+                                const childKey = buildPosSetChildKey(line, idx, n)
+                                const mapKey = `${item.id}::${childKey}`
+                                const childDone = Boolean(itemChildServed[mapKey])
+                                return (
+                                  <button
+                                    key={`${item.id}-${childKey}`}
+                                    type="button"
+                                    className={cn(
+                                      'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-base font-medium transition-colors',
+                                      childDone
+                                        ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void toggleSetChildServed(item.id, childKey)
+                                    }}
+                                    disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                                  >
+                                    <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, t)}</span>
+                                    {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
+                                  </button>
+                                )
+                              })
+                            })}
+                          </div>
+                        )}
                       </li>
                     )
                   })}

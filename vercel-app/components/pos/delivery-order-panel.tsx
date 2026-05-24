@@ -241,12 +241,8 @@ export function DeliveryOrderPanel({
   ])
 
   const childStateMapKey = (itemId: string, childKey: string) => `${itemId}::${childKey}`
-  const resolveSetChildRows = (
-    item: OrderItem,
-    parentDisplayName: string
-  ) => {
+  const resolveSetChildRows = (item: OrderItem) => {
     const rows: Array<{ key: string; label: string }> = []
-    const parentLabel = String(parentDisplayName ?? '').trim()
     const parentQty = Math.max(1, Math.trunc(Number(item.quantity ?? 1) || 1))
     ;(item.promoItems ?? []).forEach((line, idx) => {
       const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1)) * parentQty
@@ -261,8 +257,7 @@ export function DeliveryOrderPanel({
         String(line.optionName ?? '').trim() ||
         optFromCode ||
         String(line.optionId ?? '').trim()
-      const childCore = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
-      const childLabel = parentLabel ? `[${parentLabel}] ${childCore}` : childCore
+      const childLabel = rawOpt || rawMenu
       for (let n = 0; n < qty; n += 1) rows.push({ key: buildPosSetChildKey(line, idx, n), label: childLabel })
     })
     return rows
@@ -762,11 +757,12 @@ export function DeliveryOrderPanel({
                     const mainName = optMatch ? optMatch[1].trim() : displayName
                     const optionPart = optMatch ? optMatch[2].trim() : null
                     const meta = parseItemMeta(item.note)
+                    const hasSetChildren = Array.isArray(item.promoItems) && item.promoItems.length > 0
                     return (
                       <li
                         key={item.id}
                         className={cn(
-                          'grid cursor-default grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50 transition-shadow',
+                          'grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 py-2 px-2 rounded-lg border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
                           packaged && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
                           selectedLineItemId === item.id &&
@@ -777,7 +773,7 @@ export function DeliveryOrderPanel({
                           setSelectedLineItemId(null)
                         }}
                       >
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           <button
                             type="button"
                             className="w-full min-w-0 rounded-sm px-0.5 text-left text-sm font-medium leading-snug break-words hover:underline -mx-0.5"
@@ -816,36 +812,6 @@ export function DeliveryOrderPanel({
                               {(t('posMenuDescriptionLabel') || '요청사항') + ': ' + meta.requestSummary}
                             </p>
                           )}
-                          {Array.isArray(item.promoItems) && item.promoItems.length > 0 && (
-                            <div className="mt-1.5 w-full max-w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
-                              {resolveSetChildRows(item, mainName).map(({ key: childKey, label: childLabel }, idx) => {
-                                const mapKey = childStateMapKey(item.id, childKey)
-                                const childDone = Boolean(itemChildPackaged[mapKey])
-                                return (
-                                  <button
-                                    key={`${item.id}-${childKey}-${idx}`}
-                                    type="button"
-                                    className={cn(
-                                      'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-sm font-medium transition-colors',
-                                      childDone
-                                        ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
-                                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      void toggleSetChildPackaged(item.id, childKey)
-                                    }}
-                                    disabled={savingItemId === item.id || removingItemId !== null || cancelled}
-                                  >
-                                    <span className="truncate pr-1 leading-snug">
-                                      {translatePosMenuLineForReceipt(childLabel, ti)}
-                                    </span>
-                                    {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
                           {cancelled && (
                             <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">
                               {t('posLineCancelled') || '취소 처리됨'}
@@ -869,6 +835,36 @@ export function DeliveryOrderPanel({
                         >
                           {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                         </Button>
+                        {hasSetChildren && (
+                          <div className="col-span-2 w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
+                            {resolveSetChildRows(item).map(({ key: childKey, label: childLabel }, idx) => {
+                              const mapKey = childStateMapKey(item.id, childKey)
+                              const childDone = Boolean(itemChildPackaged[mapKey])
+                              return (
+                                <button
+                                  key={`${item.id}-${childKey}-${idx}`}
+                                  type="button"
+                                  className={cn(
+                                    'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-sm font-medium transition-colors',
+                                    childDone
+                                      ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void toggleSetChildPackaged(item.id, childKey)
+                                  }}
+                                  disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                                >
+                                  <span className="truncate pr-1 leading-snug">
+                                    {translatePosMenuLineForReceipt(childLabel, ti)}
+                                  </span>
+                                  {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
                       </li>
                     )
                   })}
