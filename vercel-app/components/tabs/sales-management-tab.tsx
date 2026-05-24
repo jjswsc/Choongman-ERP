@@ -1504,9 +1504,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const prevEnd = addDaysYmd(endStr, -dateSpan)
     const weekStart = addDaysYmd(startStr, -7)
     const weekEnd = addDaysYmd(endStr, -7)
+    const hasStoreSelection = (selectedStoresParam?.length ?? 0) > 0
     const needSplit =
       (compareStores && (selectedStoresParam?.length ?? 0) >= 2 && selectedView === "period") ||
-      selectedView === "store-period"
+      selectedView === "store-period" ||
+      hasStoreSelection
     const periodRun = offlineAware ? getPosSalesByPeriodWithCache : getPosSalesByPeriod
     const menuFetcher = offlineAware ? getPosSalesByMenuWithCache : getPosSalesByMenu
     const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
