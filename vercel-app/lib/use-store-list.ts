@@ -71,6 +71,15 @@ export function useStoreList() {
         setUsedMaster(payload.usedMaster)
       })
       .catch(() => {
+        if (cache.data) {
+          setStores(cache.data.stores)
+          setUsers(cache.data.users)
+          setStaffByStore(cache.data.staffByStore || {})
+          setStoreLabels(cache.data.storeLabels || {})
+          setLegacyToCanonical(cache.data.legacyToCanonical || {})
+          setUsedMaster(cache.data.usedMaster ?? false)
+          return
+        }
         setStores([])
         setUsers({})
         setStaffByStore({})

@@ -86,6 +86,13 @@ function storeMatchesForPettyTransfer(empStore: string, selectedStore: string): 
 }
 
 const PETTY_TRANSFER_JOB_JUNK = new Set(["매장명", "Store", "직급", "Job", "부서"])
+const IGNORED_STORE_OPTION_VALUES = new Set(["store", "매장명"])
+
+function isSelectableStoreOption(value: unknown): value is string {
+  const raw = String(value || "").trim()
+  if (!raw) return false
+  return !IGNORED_STORE_OPTION_VALUES.has(raw.toLowerCase())
+}
 
 /** 이체→패티캐시 첫 셀렉트: 매장은 job→role, 본사(CM Office 등)는 job→grade→role로 직무 그룹 */
 function pettyTransferGroupKey(emp: { store: string; job: string; grade: string; role: string }): string {
@@ -369,9 +376,15 @@ export function WithdrawalManagementTab() {
     return office || list[0]
   }, [])
 
-  const sortedStores = React.useMemo(() => {
-    return [...(stores || [])]
-      .filter((s) => s && String(s).trim())
+  const availableStores = React.useMemo(() => {
+    const merged = Array.from(
+      new Set(
+        [...(stores || []), String(auth?.store || "").trim()]
+          .map((s) => String(s || "").trim())
+          .filter(isSelectableStoreOption)
+      )
+    )
+    return merged
       .sort((a, b) => {
         const lower = (x: string) => String(x).toLowerCase()
         const aOffice = ["office", "본사", "오피스"].includes(lower(a)) || lower(a).includes("office")
@@ -380,13 +393,13 @@ export function WithdrawalManagementTab() {
         if (!aOffice && bOffice) return 1
         return 0
       })
-  }, [stores])
+  }, [auth?.store, stores])
 
   React.useEffect(() => {
-    if (sortedStores.length > 0 && !storeName) {
-      setStoreName(pickOfficeStore(sortedStores))
-    }
-  }, [sortedStores, pickOfficeStore])
+    if (availableStores.length === 0) return
+    if (storeName && availableStores.includes(storeName)) return
+    setStoreName(pickOfficeStore(availableStores))
+  }, [availableStores, pickOfficeStore, storeName])
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
@@ -458,7 +471,7 @@ export function WithdrawalManagementTab() {
   }, [categoryMain, paymentMethod, auth?.store, auth?.role])
 
   React.useEffect(() => {
-    const list = (stores || []).filter((s) => s && String(s).trim())
+    const list = availableStores
     const effectiveStore = storeName || (list[0] ? pickOfficeStore(list) : "")
     getBankAccounts({
       store: effectiveStore || undefined,
@@ -475,7 +488,7 @@ export function WithdrawalManagementTab() {
           return first ? String(first.id) : ""
         })
       })
-  }, [storeName, auth?.role, auth?.store, stores, pickOfficeStore])
+  }, [storeName, auth?.role, auth?.store, availableStores, pickOfficeStore])
 
   const currentMain = CATEGORY_MAIN_OPTIONS.find((c) => c.value === categoryMain)
   const hasSub = currentMain && currentMain.sub.length > 0
@@ -1053,7 +1066,7 @@ export function WithdrawalManagementTab() {
           <div className="flex items-center gap-3">
             <Label className="font-semibold whitespace-nowrap">{tt("expenseStoreSelect", "Store")}</Label>
             <Select
-              value={storeName || sortedStores[0] || ""}
+              value={availableStores.includes(storeName) ? storeName : (availableStores[0] || "")}
               onValueChange={(v) => {
                 if (v !== storeName) {
                   setTransferToDept("")
@@ -1066,7 +1079,7 @@ export function WithdrawalManagementTab() {
                 <SelectValue placeholder={tt("expenseStoreSelect", "Select Store")} />
               </SelectTrigger>
               <SelectContent>
-                {sortedStores.map((s) => (
+                {availableStores.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
@@ -1607,7 +1620,7 @@ export function WithdrawalManagementTab() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {(stores || []).map((s) => (
+                      {availableStores.map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>

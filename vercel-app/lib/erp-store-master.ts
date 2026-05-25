@@ -2,6 +2,14 @@ import { supabaseSelect } from '@/lib/supabase-server'
 import { todayStrBangkok } from '@/lib/attendance-utils'
 import { normStoreKey } from '@/lib/store-list-keys'
 
+const STORE_HEADER_VALUES = new Set(['store', '매장명'])
+
+function isPlaceholderStoreValue(value: unknown): boolean {
+  const raw = String(value || '').trim()
+  if (!raw) return true
+  return STORE_HEADER_VALUES.has(raw.toLowerCase())
+}
+
 function resignDateStr(val: unknown): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
@@ -193,7 +201,7 @@ export function buildStoreListFromEmployees(
 
   for (const r of empList || []) {
     const rawStore = String(r.store || '').trim()
-    if (!rawStore) continue
+    if (isPlaceholderStoreValue(rawStore)) continue
     const key = legacyEmployeeStoreToCanonicalWithMap(rawStore, legacyToCanonical, usedMaster)
     allKeys.add(key)
   }
@@ -202,6 +210,7 @@ export function buildStoreListFromEmployees(
   for (const r of empList || []) {
     if (!includeResigned && isEffectivelyResignedForStaffRollup(r.employment_status, r.resign_date)) continue
     const rawStore = String(r.store || '').trim()
+    if (isPlaceholderStoreValue(rawStore)) continue
     const name = String(r.name || '').trim()
     const nick = String(r.nick || r.name || '').trim() || name
     const job = String(r.job || r.role || '').trim() || undefined
