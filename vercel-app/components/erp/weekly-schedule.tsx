@@ -286,13 +286,13 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   }, [hasSearched, schedule.length, loading])
 
   const displayStoreList = storeListProp.length > 0 ? storeListProp : storeList
-  const isOffice = displayStoreList.length > 1 && ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+  const isOffice = displayStoreList.length > 1 && ["director", "secretary", "officer", "ceo", "hr"].includes(auth?.role || "")
   const storeOptions = isOffice ? [t("scheduleStoreAll"), ...displayStoreList.filter((s) => s !== t("scheduleStoreAll") && s !== "All")] : displayStoreList
 
   const { stores: storeListRaw } = useStoreList()
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0 && storeListRaw.length > 0) {
-      const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+      const isOffice = ["director", "secretary", "officer", "ceo", "hr"].includes(auth?.role || "")
       if (isOffice) {
         setStoreList([t("scheduleStoreAll"), ...storeListRaw].filter(Boolean))
         setStoreFilter(t("scheduleStoreAll"))

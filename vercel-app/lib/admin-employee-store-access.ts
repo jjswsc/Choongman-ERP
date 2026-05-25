@@ -18,7 +18,7 @@ export function userCanAccessEmployeeStore(
   opts?: EmployeeStoreAccessOpts
 ): boolean {
   const role = userRole.toLowerCase()
-  if (role.includes('director') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)) {
+  if (role.includes('director') || role.includes('secretary') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)) {
     return true
   }
   if (role.includes('officer')) {

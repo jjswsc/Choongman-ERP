@@ -40,7 +40,7 @@ function encodeExpensePayeeCode(base: string): string {
 
 export function isOfficeRoleForMarketingExpenseSync(userRole: string): boolean {
   const r = String(userRole || '').toLowerCase()
-  return ['director', 'officer', 'ceo', 'hr'].some((x) => r.includes(x))
+  return ['director', 'secretary', 'officer', 'ceo', 'hr'].some((x) => r.includes(x))
 }
 
 export async function fetchCampaignMetaForExpenseMemo(campaignId: string): Promise<{

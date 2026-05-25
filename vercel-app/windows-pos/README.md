@@ -129,11 +129,28 @@ npm run build:win
 
 ## 매장별 프린터 설정 템플릿
 
-`windows-pos/store-configs/`에 샘플 파일을 두고, 매장마다 `print.deviceName`만 다르게 관리합니다.
+`windows-pos/store-configs/`에 샘플 파일을 두고, 매장마다 프린터 이름/속도 프로필을 다르게 관리합니다.
 
 - `store-a.sample.json`
 - `store-b.sample.json`
 - `store-c.sample.json`
+- `store-speed-safe.sample.json` (안정 우선)
+- `store-speed-fast.sample.json` (체감 속도 우선)
+- `store-speed-turbo.sample.json` (고속, 모니터링 필수)
+
+권장 적용 순서:
+
+1. `store-speed-safe.sample.json` 먼저 적용
+2. 주문 20건 연속 출력(주방/홀)에서 누락·대화상자 폴백이 없으면 `store-speed-fast.sample.json` 적용
+3. 추가로 더 줄여야 하면 `store-speed-turbo.sample.json` 적용
+4. 실패가 보이면 `printHtmlSettleMs`만 한 단계 상향(예: 140 -> 180 -> 220)
+
+주방/홀 분리 프린터를 쓸 때(완성형 템플릿):
+
+- `print.receiptDeviceName`: 홀/결제 영수증
+- `print.kitchen1DeviceName`~`kitchen3DeviceName`: 주방 1~3 스테이션
+- `print.kitchenDeviceName`: 주방 공통 폴백
+- `print.deviceName`: 레거시/전체 기본 폴백
 
 적용(프로젝트 루트 `vercel-app/`에서):
 

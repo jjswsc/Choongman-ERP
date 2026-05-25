@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     const rowStore = String(rows[0].store || '').trim()
-    const isTop = ['director', 'officer', 'ceo', 'hr'].some((role) => effectiveRole.includes(role)) || isAccountingRole(effectiveRole)
+    const isTop = ['director', 'secretary', 'officer', 'ceo', 'hr'].some((role) => effectiveRole.includes(role)) || isAccountingRole(effectiveRole)
     if (!isTop) {
       if (jwt && isFranchiseeRole(effectiveRole) && !franchiseeQueryStoreAllowed(jwt, userStore)) {
         return NextResponse.json(

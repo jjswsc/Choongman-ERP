@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  calcPayrollWithholdingTax3Percent,
   getSSOLimitsByYear,
   calcSSO,
   grossWageBeforeSSO,
@@ -77,6 +78,18 @@ describe('payroll-utils', () => {
           earlyDed: 0,
         })
       ).toBe(0)
+    })
+  })
+
+  describe('calcPayrollWithholdingTax3Percent', () => {
+    it('과세 기준액의 3%를 정수 바트로 반올림', () => {
+      expect(calcPayrollWithholdingTax3Percent(10000)).toBe(300)
+      expect(calcPayrollWithholdingTax3Percent(3333)).toBe(100)
+    })
+
+    it('0 이하 금액은 0', () => {
+      expect(calcPayrollWithholdingTax3Percent(0)).toBe(0)
+      expect(calcPayrollWithholdingTax3Percent(-100)).toBe(0)
     })
   })
 

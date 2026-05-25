@@ -158,6 +158,8 @@ export async function POST(request: NextRequest) {
 
     let inserted = 0
     let skipped = 0
+    let duplicateSkipped = 0
+    let policySkipped = 0
     for (const item of items) {
       const transDate = String(item.transDate || item.trans_date || '').slice(0, 10)
       const transType = String(item.transType || item.trans_type || 'deposit').toLowerCase()
@@ -191,6 +193,7 @@ export async function POST(request: NextRequest) {
       const dupIdx = findDuplicateDbEntryIndex(pool, memo, note)
       if (dupIdx >= 0) {
         pool.splice(dupIdx, 1)
+        duplicateSkipped++
         skipped++
         continue
       }
@@ -209,6 +212,7 @@ export async function POST(request: NextRequest) {
           await assertPosRevenueDepositCategorySafe({ storeName: posStore, category: validCategory })
         } catch (e) {
           if (e instanceof BankSettlementGuardError) {
+            policySkipped++
             skipped++
             continue
           }
@@ -320,10 +324,20 @@ export async function POST(request: NextRequest) {
       inserted++
     }
 
-    const msg = skipped > 0
-      ? `${inserted}건 등록, ${skipped}건 중복 제외`
-      : `${inserted}건 등록되었습니다.`
-    return NextResponse.json({ success: true, inserted, skipped, message: msg }, { headers })
+    let msg = `${inserted}건 등록되었습니다.`
+    if (duplicateSkipped > 0 || policySkipped > 0) {
+      const parts = [`${inserted}건 등록`]
+      if (duplicateSkipped > 0) parts.push(`중복 ${duplicateSkipped}건 제외`)
+      if (policySkipped > 0) parts.push(`정책 ${policySkipped}건 제외`)
+      msg = `${parts.join(', ')}.`
+      if (policySkipped > 0) {
+        msg += ' POS 자동분개 매장은 Grab·카드·QR 입금을 revenue_*로 저장하지 않습니다. 매출 수령(receivable_receive) 또는 채널 정산을 사용하세요.'
+      }
+    }
+    return NextResponse.json(
+      { success: true, inserted, skipped, duplicateSkipped, policySkipped, message: msg },
+      { headers }
+    )
   } catch (e) {
     console.error('addBankTransactionsBulk:', e)
     return NextResponse.json(

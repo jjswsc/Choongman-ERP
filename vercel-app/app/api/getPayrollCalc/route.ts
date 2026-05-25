@@ -10,6 +10,7 @@ import {
 } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import {
+  calcPayrollWithholdingTax3Percent,
   clockOutCountsForPayroll,
   calcSSO,
   grossWageBeforeSSO,
@@ -142,6 +143,7 @@ export type PayrollCalcExplain = {
   ot: PayrollExplainEntry[]
   lateEarly: PayrollExplainEntry[]
   sso: PayrollExplainEntry[]
+  tax: PayrollExplainEntry[]
   otherDed: PayrollExplainEntry[]
 }
 
@@ -746,7 +748,7 @@ export async function GET(request: NextRequest) {
   const normMonth = monthStr.slice(0, 7)
   const isAll = !storeFilter || storeFilter === 'All' || storeFilter === '전체'
   const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사'
-  const canSeeOffice = userRole.includes('director') || userRole.includes('ceo') || userRole.includes('hr')
+  const canSeeOffice = userRole.includes('director') || userRole.includes('secretary') || userRole.includes('ceo') || userRole.includes('hr')
 
   if (isOffice && !canSeeOffice) {
     return NextResponse.json({ success: true, list: [] }, { headers })
@@ -1472,7 +1474,8 @@ export async function GET(request: NextRequest) {
       })
       const ssoContributableWage = ssoExempt ? 0 : ssoContributableWageBaht(ssoGrossWage, year)
       const sso = ssoExempt ? 0 : calcSSO(ssoGrossWage, year)
-      const deduct = lateDed + earlyDed + sso + unpaidAbsenceDed
+      const tax = ssoExempt ? calcPayrollWithholdingTax3Percent(ssoGrossWage) : 0
+      const deduct = lateDed + earlyDed + sso + tax + unpaidAbsenceDed
       const netPay = Math.max(0, income - deduct)
       const ot15 = Math.round((otMin / 60) * 10) / 10
       const explain: PayrollCalcExplain = {
@@ -1486,6 +1489,7 @@ export async function GET(request: NextRequest) {
         ot: [],
         lateEarly: [],
         sso: [],
+        tax: [],
         otherDed: [],
       }
 
@@ -1704,6 +1708,13 @@ export async function GET(request: NextRequest) {
           : `총지급 ${fmtMoney(ssoGrossWage)} → 산정기준 ${fmtMoney(ssoContributableWage)} × 5% (1,650·상한·50สต. 반올림)`,
         amount: sso,
       })
+      explain.tax.push({
+        reason: '원천징수세(3%)',
+        detail: ssoExempt
+          ? `SSO 제외 대상: 과세기준 ${fmtMoney(ssoGrossWage)} × 3%`
+          : 'SSO 적용 대상: 3% 원천징수세 미적용',
+        amount: tax,
+      })
 
       const idNumRaw = (e as EmpRowPayroll).id_number != null ? String((e as EmpRowPayroll).id_number).trim() : ''
       const idDigits = idNumRaw.replace(/\D/g, '')
@@ -1752,7 +1763,7 @@ export async function GET(request: NextRequest) {
         joinDate: empYmd((e as EmpRowPayroll).join_date),
         resignDate: empYmd((e as EmpRowPayroll).resign_date),
         employerSso: ssoExempt ? 0 : sso,
-        tax: 0,
+        tax,
         otherDed: unpaidAbsenceDed,
         netPay,
         status: '대기',

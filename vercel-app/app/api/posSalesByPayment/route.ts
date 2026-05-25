@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
           add('other_truemoney', Number(bo.trueMoney) || 0)
           add('other_wechat', Number(bo.weChat) || 0)
           add('other_alipay', Number(bo.alipay) || 0)
+          add('other_unionpay', Number(bo.unionPay) || 0)
           add('other_linepay', Number(bo.linePay) || 0)
           add('other_shopeepay', Number(bo.shopeePay) || 0)
           add('other_misc', Number(bo.misc) || 0)

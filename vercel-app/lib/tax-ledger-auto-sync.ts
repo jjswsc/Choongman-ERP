@@ -970,6 +970,8 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     const whtAmount = round2(Math.max(0, Number(p.tax) || 0))
     if (whtAmount <= 0) continue
 
+    const ssoAmount = round2(Math.max(0, Number(p.sso) || 0))
+    const isPnd3Payroll = ssoAmount <= 0
     const grossFromPayroll =
       Number(p.salary || 0) +
       Number(p.pos_allow || 0) +
@@ -979,24 +981,39 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
       Number(p.holiday_pay || 0) +
       Number(p.spl_bonus || 0) +
       Number(p.ot_amt || 0)
+    const grossPaidBeforeWithholding = Number(p.net_pay || 0) + Number(p.tax || 0) + ssoAmount
     const grossFallback =
       Number(p.net_pay || 0) + Number(p.tax || 0) + Number(p.sso || 0) + Number(p.other_ded || 0)
-    const grossAmount = round2(Math.max(0, grossFromPayroll > 0 ? grossFromPayroll : grossFallback))
+    const grossAmount = round2(
+      Math.max(
+        0,
+        isPnd3Payroll
+          ? grossPaidBeforeWithholding > 0
+            ? grossPaidBeforeWithholding
+            : grossFromPayroll > 0
+              ? grossFromPayroll
+              : grossFallback
+          : grossFromPayroll > 0
+            ? grossFromPayroll
+            : grossFallback
+      )
+    )
     const rate = grossAmount > 0 ? round2((whtAmount / grossAmount) * 100) : null
     const paymentDate = monthEndYmd(taxMonth)
     const memoTag = `[AUTO:PAYROLL_RECORD_WHT:${payrollId}]`
+    const formHint = isPnd3Payroll ? 'PND3' : 'PND1'
     const saveRow = {
       payment_date: paymentDate,
       tax_month: taxMonth,
       payee_name: employeeName.slice(0, 500),
       payee_tax_id: payeeTaxId,
-      income_type: '급여',
+      income_type: isPnd3Payroll ? '용역/3% 원천' : '급여',
       gross_amount: grossAmount,
       wht_rate: rate,
       wht_amount: whtAmount,
-      form_hint: 'PND1',
-      certificate_no: `PR-${taxMonth.replace('-', '')}-${payrollId}`.slice(0, 128),
-      memo: `${memoTag} 급여 원천세 자동`.slice(0, 2000),
+      form_hint: formHint,
+      certificate_no: `${isPnd3Payroll ? 'PR3' : 'PR1'}-${taxMonth.replace('-', '')}-${payrollId}`.slice(0, 128),
+      memo: `${memoTag} ${formHint} 급여 원천세 자동`.slice(0, 2000),
       filing_status: 'draft',
       submitted_at: null,
       submitted_by: null,

@@ -39,7 +39,7 @@ function normalizePettyCashListPayload(data: unknown): { items: PettyCashItem[];
   return { items: arr, total: arr.length, page: 1 }
 }
 
-const OFFICE_ROLES = ['director', 'officer', 'ceo', 'hr']
+const OFFICE_ROLES = ['director', 'secretary', 'officer', 'ceo', 'hr']
 function isOfficeRole(role: string | undefined): boolean {
   const r = (role || '').toLowerCase()
   return OFFICE_ROLES.some((o) => r.includes(o))

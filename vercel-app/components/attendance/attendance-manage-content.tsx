@@ -204,7 +204,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
-    return ["director", "officer", "ceo", "hr"].includes(r)
+    return ["director", "secretary", "officer", "ceo", "hr"].includes(r)
   }, [auth?.role])
 
   const { stores: storeList, users: usersMap, staffByStore } = useStoreList()

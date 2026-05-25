@@ -54,7 +54,7 @@ export function NoticeCompose() {
 
   React.useEffect(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === "director" || auth.role === "officer"
+    const isOffice = auth.role === "director" || auth.role === "secretary" || auth.role === "officer"
     getNoticeOptions().then((r) => {
       const allLabel = t("noticeFilterAll")
       const storeList = isOffice ? (r.stores || []) : [auth.store!]

@@ -68,7 +68,7 @@ export function AdminLeaveApproval() {
   const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === 'director' || auth.role === 'officer'
+    const isOffice = auth.role === 'director' || auth.role === 'secretary' || auth.role === 'officer'
     queueMicrotask(() => {
       if (isOffice) {
         setLeaveStores(["All", ...storeList.filter((s) => s !== "All")])
@@ -79,7 +79,7 @@ export function AdminLeaveApproval() {
     })
   }, [auth?.store, auth?.role, storeList])
 
-  const isOffice = auth?.role === "director" || auth?.role === "officer"
+  const isOffice = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
 
   /** 급여 수정 등에서 ?month=yyyy-MM&store&name&status=all 로 진입 시 기간·조회 자동 적용 */
   useEffect(() => {

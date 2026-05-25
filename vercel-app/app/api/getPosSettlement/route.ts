@@ -254,6 +254,7 @@ export async function GET(request: NextRequest) {
           addO('TrueMoney', Number(bo.trueMoney) || 0)
           addO('WeChat', Number(bo.weChat) || 0)
           addO('Alipay', Number(bo.alipay) || 0)
+          addO('UnionPay', Number(bo.unionPay) || 0)
           addO('Line Pay', Number(bo.linePay) || 0)
           addO('Shopee Pay', Number(bo.shopeePay) || 0)
           addO('Misc', Number(bo.misc) || 0)

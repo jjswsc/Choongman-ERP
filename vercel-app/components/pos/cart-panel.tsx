@@ -923,6 +923,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payTrueMoney, setPayTrueMoney] = useState('')
   const [payWeChat, setPayWeChat] = useState('')
   const [payAlipay, setPayAlipay] = useState('')
+  const [payUnionPay, setPayUnionPay] = useState('')
   const [payPromptPay, setPayPromptPay] = useState('')
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
@@ -1391,6 +1392,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseFloat(payTrueMoney) || 0) +
     (parseFloat(payWeChat) || 0) +
     (parseFloat(payAlipay) || 0) +
+    (parseFloat(payUnionPay) || 0) +
     (parseFloat(payLinePay) || 0) +
     (parseFloat(payShopeePay) || 0) +
     (parseFloat(payOther) || 0)
@@ -1447,12 +1449,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const tm = r2(parseFloat(payTrueMoney) || 0)
     const wc = r2(parseFloat(payWeChat) || 0)
     const ap = r2(parseFloat(payAlipay) || 0)
+    const up = r2(parseFloat(payUnionPay) || 0)
     const lp = r2(parseFloat(payLinePay) || 0)
     const sp = r2(parseFloat(payShopeePay) || 0)
     const misc = r2(parseFloat(payOther) || 0)
     if (tm > 0.005) out.trueMoney = tm
     if (wc > 0.005) out.weChat = wc
     if (ap > 0.005) out.alipay = ap
+    if (up > 0.005) out.unionPay = up
     if (lp > 0.005) out.linePay = lp
     if (sp > 0.005) out.shopeePay = sp
     if (misc > 0.005) out.misc = misc
@@ -1460,6 +1464,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       !out.trueMoney &&
       !out.weChat &&
       !out.alipay &&
+      !out.unionPay &&
       !out.linePay &&
       !out.shopeePay &&
       !out.misc
@@ -1474,6 +1479,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     payTrueMoney,
     payWeChat,
     payAlipay,
+    payUnionPay,
     payLinePay,
     payShopeePay,
     payOther,
@@ -2175,6 +2181,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPayTrueMoney('0')
     setPayWeChat('0')
     setPayAlipay('0')
+    setPayUnionPay('0')
     setPayLinePay('0')
     setPayShopeePay('0')
     setPayOther('0')
@@ -2251,7 +2258,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setTaxAddress('')
   }
 
-  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay') => {
+  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'unionpay' | 'linepay' | 'shopeepay') => {
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const amount = Math.max(0, st - discount - pointUsedNum)
     resetPaymentInputs()
@@ -2262,6 +2269,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         target === 'truemoney' ||
         target === 'wechat' ||
         target === 'alipay' ||
+        target === 'unionpay' ||
         target === 'linepay' ||
         target === 'shopeepay')
     if (walletToAdmin) {
@@ -2276,6 +2284,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'truemoney') setPayTrueMoney(String(amount))
     if (target === 'wechat') setPayWeChat(String(amount))
     if (target === 'alipay') setPayAlipay(String(amount))
+    if (target === 'unionpay') setPayUnionPay(String(amount))
     if (target === 'linepay') setPayLinePay(String(amount))
     if (target === 'shopeepay') setPayShopeePay(String(amount))
   }
@@ -2289,6 +2298,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     | 'truemoney'
     | 'wechat'
     | 'alipay'
+    | 'unionpay'
     | 'linepay'
     | 'shopeepay'
 
@@ -2297,6 +2307,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     target === 'truemoney' ||
     target === 'wechat' ||
     target === 'alipay' ||
+    target === 'unionpay' ||
     target === 'linepay' ||
     target === 'shopeepay'
 
@@ -2356,6 +2367,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'truemoney') { setShowOtherPayments(true); setPayTrueMoney((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
     if (target === 'wechat') { setShowOtherPayments(true); setPayWeChat((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
     if (target === 'alipay') { setShowOtherPayments(true); setPayAlipay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+    if (target === 'unionpay') { setShowOtherPayments(true); setPayUnionPay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
     if (target === 'linepay') { setShowOtherPayments(true); setPayLinePay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
     if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
   }
@@ -2407,6 +2419,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       (parseFloat(payTrueMoney) || 0) +
       (parseFloat(payWeChat) || 0) +
       (parseFloat(payAlipay) || 0) +
+      (parseFloat(payUnionPay) || 0) +
       (parseFloat(payLinePay) || 0) +
       (parseFloat(payShopeePay) || 0) +
       (parseFloat(payOther) || 0)
@@ -2471,6 +2484,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       (parseFloat(payTrueMoney) || 0) +
       (parseFloat(payWeChat) || 0) +
       (parseFloat(payAlipay) || 0) +
+      (parseFloat(payUnionPay) || 0) +
       (parseFloat(payLinePay) || 0) +
       (parseFloat(payShopeePay) || 0) +
       (parseFloat(payOther) || 0)
@@ -3116,6 +3130,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       : (parseFloat(payTrueMoney) || 0) +
         (parseFloat(payWeChat) || 0) +
         (parseFloat(payAlipay) || 0) +
+        (parseFloat(payUnionPay) || 0) +
         (parseFloat(payLinePay) || 0) +
         (parseFloat(payShopeePay) || 0) +
         (parseFloat(payOther) || 0)
@@ -3655,6 +3670,116 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       id === 'w26d_tax_address'
     )
   }, [currentStep?.id, showTourStepOverlay])
+
+  const manualDiscountCard = (
+    <div
+      ref={manualDiscountCardRef}
+      className={cn(
+        'rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm transition-shadow dark:from-amber-950/25 dark:via-card dark:to-card',
+        manualDiscountFlash ? 'ring-2 ring-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]' : ''
+      )}
+    >
+      <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
+      </div>
+      <div className="grid gap-3">
+        <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0">
+              {selectedDiscountLineCount > 0
+                ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿`
+                : `${tr('posManualDiscountScopeAll', '할인적용 메뉴 미선택: 서비스처리 제외 전체 메뉴에 적용')}`}
+            </p>
+            {selectedDiscountLineCount > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 rounded-md px-2 text-[11px] text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                onClick={clearLineDiscountSelection}
+              >
+                {tr('posManualDiscountScopeClear', '할인 메뉴 해제')}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+          <p>
+            {tr('posManualDiscountExpected', '직접 할인 예상')}: {formatBahtNum(manualDiscountAmt)} ฿ ·{' '}
+            {tr('posCollabDiscountExpected', '협업 할인 예상')}: {formatBahtNum(collabDiscountAmt)} ฿
+          </p>
+          <p className="mt-0.5">
+            {tr('posTotalDiscountExpected', '총 할인 예상')}: {formatBahtNum(discountExpectedTotal)} ฿
+          </p>
+        </div>
+        <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
+          {DISCOUNT_PRESETS.map((pct) => (
+            <Button
+              key={pct}
+              type="button"
+              size="default"
+              variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
+              className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
+              onClick={() => {
+                setDiscountType('percent')
+                setDiscountValue(pct)
+              }}
+            >
+              {pct}%
+            </Button>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_7rem_1fr]">
+          <Button
+            type="button"
+            size="default"
+            variant="outline"
+            className="h-12 px-3 text-sm font-semibold rounded-xl border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+            onClick={() => {
+              setDiscountType('percent')
+              setDiscountValue(0)
+            }}
+          >
+            {tr('reset', '초기화')}
+          </Button>
+          <Select
+            value={discountType}
+            onValueChange={(v) => setDiscountType(v as 'percent' | 'fixed')}
+          >
+            <SelectTrigger className="h-12 w-[5.5rem] rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="percent">%</SelectItem>
+              <SelectItem value="fixed">฿</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="number"
+            min={0}
+            step={discountType === 'percent' ? 1 : 0.01}
+            placeholder={
+              discountType === 'percent'
+                ? (t('posDiscount') || '할인') + ' %'
+                : (t('posDiscount') || '할인') + ' ฿'
+            }
+            value={discountValue}
+            onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
+            className="h-11 text-sm rounded-xl px-2.5"
+          />
+          <Input
+            placeholder={t('posDiscountReasonPh')}
+            value={discountReason}
+            onChange={(e) => setDiscountReason(e.target.value)}
+            className="h-12 text-base rounded-xl sm:col-span-1"
+          />
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <>
@@ -4460,6 +4585,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
                 <p>{t('posDeliveryPaymentNote') || '배달 주문은 플랫폼에서 결제 완료되며, 익일 통장으로 정산됩니다.'}</p>
               </div>
+              {manualDiscountCard}
             </div>
             <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:justify-end">
               {!lockPaymentModalForTour && (
@@ -4505,113 +4631,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
                 <p>{t('posDeliveryPaymentNote') || '배달 주문은 플랫폼에서 결제 완료되며, 익일 통장으로 정산됩니다.'}</p>
               </div>
-              <div
-                ref={manualDiscountCardRef}
-                className={cn(
-                  'rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm transition-shadow dark:from-amber-950/25 dark:via-card dark:to-card',
-                  manualDiscountFlash ? 'ring-2 ring-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]' : ''
-                )}
-              >
-                <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
-                </div>
-                <div className="grid gap-3">
-                  <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="min-w-0">
-                        {selectedDiscountLineCount > 0
-                          ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿`
-                          : `${tr('posManualDiscountScopeAll', '할인적용 메뉴 미선택: 서비스처리 제외 전체 메뉴에 적용')}`}
-                      </p>
-                      {selectedDiscountLineCount > 0 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 shrink-0 rounded-md px-2 text-[11px] text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/50"
-                          onClick={clearLineDiscountSelection}
-                        >
-                          {tr('posManualDiscountScopeClear', '할인 메뉴 해제')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                    <p>
-                      {tr('posManualDiscountExpected', '직접 할인 예상')}: {formatBahtNum(manualDiscountAmt)} ฿ ·{' '}
-                      {tr('posCollabDiscountExpected', '협업 할인 예상')}: {formatBahtNum(collabDiscountAmt)} ฿
-                    </p>
-                    <p className="mt-0.5">
-                      {tr('posTotalDiscountExpected', '총 할인 예상')}: {formatBahtNum(discountExpectedTotal)} ฿
-                    </p>
-                  </div>
-                  <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
-                    {DISCOUNT_PRESETS.map((pct) => (
-                      <Button
-                        key={pct}
-                        type="button"
-                        size="default"
-                        variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
-                        className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
-                        onClick={() => {
-                          setDiscountType('percent')
-                          setDiscountValue(pct)
-                        }}
-                      >
-                        {pct}%
-                      </Button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_7rem_1fr]">
-                    <Button
-                      type="button"
-                      size="default"
-                      variant="outline"
-                      className="h-12 px-3 text-sm font-semibold rounded-xl border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                      onClick={() => {
-                        setDiscountType('percent')
-                        setDiscountValue(0)
-                      }}
-                    >
-                      {tr('reset', '초기화')}
-                    </Button>
-                    <Select
-                      value={discountType}
-                      onValueChange={(v) => setDiscountType(v as 'percent' | 'fixed')}
-                    >
-                      <SelectTrigger className="h-12 w-[5.5rem] rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="percent">%</SelectItem>
-                        <SelectItem value="fixed">฿</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={discountType === 'percent' ? 1 : 0.01}
-                      placeholder={
-                        discountType === 'percent'
-                          ? (t('posDiscount') || '할인') + ' %'
-                          : (t('posDiscount') || '할인') + ' ฿'
-                      }
-                      value={discountValue}
-                      onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
-                      className="h-11 text-sm rounded-xl px-2.5"
-                    />
-                    <Input
-                      placeholder={t('posDiscountReasonPh')}
-                      value={discountReason}
-                      onChange={(e) => setDiscountReason(e.target.value)}
-                      className="h-12 text-base rounded-xl sm:col-span-1"
-                    />
-                  </div>
-                </div>
-              </div>
+              {manualDiscountCard}
             </div>
             <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:justify-end">
               {!lockPaymentModalForTour && (
@@ -4727,113 +4747,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
 
               {/* 직접 할인 */}
-              <div
-                ref={manualDiscountCardRef}
-                className={cn(
-                  'rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm transition-shadow dark:from-amber-950/25 dark:via-card dark:to-card',
-                  manualDiscountFlash ? 'ring-2 ring-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]' : ''
-                )}
-              >
-                <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
-                </div>
-                <div className="grid gap-3">
-                  <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="min-w-0">
-                        {selectedDiscountLineCount > 0
-                          ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿`
-                          : `${tr('posManualDiscountScopeAll', '할인적용 메뉴 미선택: 서비스처리 제외 전체 메뉴에 적용')}`}
-                      </p>
-                      {selectedDiscountLineCount > 0 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 shrink-0 rounded-md px-2 text-[11px] text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/50"
-                          onClick={clearLineDiscountSelection}
-                        >
-                          {tr('posManualDiscountScopeClear', '할인 메뉴 해제')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                    <p>
-                      {tr('posManualDiscountExpected', '직접 할인 예상')}: {formatBahtNum(manualDiscountAmt)} ฿ ·{' '}
-                      {tr('posCollabDiscountExpected', '협업 할인 예상')}: {formatBahtNum(collabDiscountAmt)} ฿
-                    </p>
-                    <p className="mt-0.5">
-                      {tr('posTotalDiscountExpected', '총 할인 예상')}: {formatBahtNum(discountExpectedTotal)} ฿
-                    </p>
-                  </div>
-                  <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
-                    {DISCOUNT_PRESETS.map((pct) => (
-                      <Button
-                        key={pct}
-                        type="button"
-                        size="default"
-                        variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
-                        className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
-                        onClick={() => {
-                          setDiscountType('percent')
-                          setDiscountValue(pct)
-                        }}
-                      >
-                        {pct}%
-                      </Button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_7rem_1fr]">
-                    <Button
-                      type="button"
-                      size="default"
-                      variant="outline"
-                      className="h-12 px-3 text-sm font-semibold rounded-xl border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                      onClick={() => {
-                        setDiscountType('percent')
-                        setDiscountValue(0)
-                      }}
-                    >
-                      {tr('reset', '초기화')}
-                    </Button>
-                    <Select
-                      value={discountType}
-                      onValueChange={(v) => setDiscountType(v as 'percent' | 'fixed')}
-                    >
-                      <SelectTrigger className="h-12 w-[5.5rem] rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="percent">%</SelectItem>
-                        <SelectItem value="fixed">฿</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={discountType === 'percent' ? 1 : 0.01}
-                      placeholder={
-                        discountType === 'percent'
-                          ? (t('posDiscount') || '할인') + ' %'
-                          : (t('posDiscount') || '할인') + ' ฿'
-                      }
-                      value={discountValue}
-                      onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
-                      className="h-11 text-sm rounded-xl px-2.5"
-                    />
-                    <Input
-                      placeholder={t('posDiscountReasonPh')}
-                      value={discountReason}
-                      onChange={(e) => setDiscountReason(e.target.value)}
-                      className="h-12 text-base rounded-xl sm:col-span-1"
-                    />
-                  </div>
-                </div>
-              </div>
+              {manualDiscountCard}
 
               {/* 쿠폰 코드 — 제목 옆 입력 (직접 할인 아래) */}
               <div className="rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-50/80 via-card to-card p-3 shadow-sm dark:from-sky-950/20 dark:via-card dark:to-card">
@@ -5279,6 +5193,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         { value: payTrueMoney, set: setPayTrueMoney, labelKey: 'posPaymentTrueMoney', moveKey: 'truemoney' as const },
                         { value: payWeChat, set: setPayWeChat, labelKey: 'posPaymentWeChat', moveKey: 'wechat' as const },
                         { value: payAlipay, set: setPayAlipay, labelKey: 'posPaymentAlipay', moveKey: 'alipay' as const },
+                        { value: payUnionPay, set: setPayUnionPay, labelKey: 'posPaymentUnionPay', moveKey: 'unionpay' as const },
                         { value: payLinePay, set: setPayLinePay, labelKey: 'posPaymentLinePay', moveKey: 'linepay' as const },
                         { value: payShopeePay, set: setPayShopeePay, labelKey: 'posPaymentShopeePay', moveKey: 'shopeepay' as const },
                         { value: payOther, set: setPayOther, labelKey: 'posPaymentOtherEtc', moveKey: 'other' as const },

@@ -113,6 +113,15 @@ export function isEmployeeSsoExemptFlag(raw: unknown): boolean {
   return raw === true || raw === 'true' || raw === 1 || raw === '1'
 }
 
+/** SSO 미가입·면제 인력 급여/용역 3% 원천세. 급여 화면은 정수 바트로 운용한다. */
+export const PAYROLL_WITHHOLDING_TAX_RATE = 0.03
+
+export function calcPayrollWithholdingTax3Percent(grossPayBeforeTax: number): number {
+  const base = Math.max(0, Number(grossPayBeforeTax) || 0)
+  if (base <= 0) return 0
+  return Math.round(base * PAYROLL_WITHHOLDING_TAX_RATE)
+}
+
 export function ssoContributionBaseWage(isHourly: boolean, salAmt: number, hourlyMonthBaseSalary: number): number {
   if (isHourly) return Math.max(0, Math.floor(Number(hourlyMonthBaseSalary) || 0))
   return Math.max(0, Math.floor(Number(salAmt) || 0))

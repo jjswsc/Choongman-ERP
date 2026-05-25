@@ -47,7 +47,7 @@ export function HrPolicyReaderStatsDialog({ open, onOpenChange }: Props) {
 
   const loadStatsStores = React.useCallback(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === "director" || auth.role === "officer" || auth.role === "accounting" || (auth.role || "").includes("hr")
+    const isOffice = auth.role === "director" || auth.role === "secretary" || auth.role === "officer" || auth.role === "accounting" || (auth.role || "").includes("hr")
     getNoticeOptions()
       .then((r) => {
         const allLabel = t("noticeFilterAll")

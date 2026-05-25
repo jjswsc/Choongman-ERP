@@ -114,7 +114,7 @@ export function AdminComplaints() {
 
   const writerName = auth?.user || auth?.store || ""
   const isManager = isManagerRole(auth?.role || "")
-  const isHQ = auth?.role === "director" || auth?.role === "officer"
+  const isHQ = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
 
   const { stores: storeList } = useStoreList()
   // 조회 탭: 매니저는 전 매장 조회 가능 (입력 탭은 stores 사용, 자기 매장만)

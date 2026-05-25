@@ -313,7 +313,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const isDirector = userRole.includes('director') || userRole.includes('ceo') || userRole.includes('hr')
+  const isDirector = userRole.includes('director') || userRole.includes('secretary') || userRole.includes('ceo') || userRole.includes('hr')
   const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사' || storeFilter.toLowerCase() === 'office'
   if (isOffice && !isDirector) {
     return NextResponse.json({ success: true, list: [] }, { headers })

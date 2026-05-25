@@ -104,6 +104,7 @@ type PayrollCalcExplain = {
   ot: PayrollExplainEntry[]
   lateEarly: PayrollExplainEntry[]
   sso: PayrollExplainEntry[]
+  tax: PayrollExplainEntry[]
   otherDed: PayrollExplainEntry[]
 }
 
@@ -118,6 +119,7 @@ const PAYROLL_EXPLAIN_TITLE_KEY: Partial<Record<keyof PayrollCalcExplain, string
   ot: "pay_modal_ot",
   lateEarly: "pay_explain_title_late_early",
   sso: "pay_explain_reason_sso",
+  tax: "pay_tax",
   otherDed: "pay_other_ded",
 }
 
@@ -184,6 +186,7 @@ export function AdminPayrollCalc() {
   const [editOtAmt, setEditOtAmt] = useState("0")
   const [editLateDed, setEditLateDed] = useState("0")
   const [editSso, setEditSso] = useState("0")
+  const [editTax, setEditTax] = useState("0")
   const [editOtherDed, setEditOtherDed] = useState("0")
   const [explainOpen, setExplainOpen] = useState(false)
   const [explainTitle, setExplainTitle] = useState("")
@@ -365,6 +368,7 @@ export function AdminPayrollCalc() {
         otAmt: acc.otAmt + r.otAmt,
         lateEarly: acc.lateEarly + (r.lateDed || 0) + (r.earlyDed ?? 0),
         sso: acc.sso + r.sso,
+        tax: acc.tax + r.tax,
         otherDed: acc.otherDed + r.otherDed,
         netPay: acc.netPay + r.netPay,
       }),
@@ -380,6 +384,7 @@ export function AdminPayrollCalc() {
         otAmt: 0,
         lateEarly: 0,
         sso: 0,
+        tax: 0,
         otherDed: 0,
         netPay: 0,
       }
@@ -415,6 +420,7 @@ export function AdminPayrollCalc() {
     setEditOtAmt(String(r.otAmt || 0))
     setEditLateDed(String(r.lateDed || 0))
     setEditSso(String(r.sso || 0))
+    setEditTax(String(r.tax || 0))
     setEditOtherDed(String(r.otherDed || 0))
     setEditOpen(true)
   }
@@ -431,6 +437,7 @@ export function AdminPayrollCalc() {
     const otAmt = Number(editOtAmt) || 0
     const lateDed = Number(editLateDed) || 0
     const sso = Math.max(0, Math.floor(Number(editSso) || 0))
+    const tax = Math.max(0, Math.floor(Number(editTax) || 0))
     const otherDed = Number(editOtherDed) || 0
     const updated: PayrollRow = {
       ...r,
@@ -443,6 +450,7 @@ export function AdminPayrollCalc() {
       otAmt,
       lateDed,
       sso,
+      tax,
       otherDed,
       netPay: calcNetPay({
         ...r,
@@ -455,6 +463,7 @@ export function AdminPayrollCalc() {
         otAmt,
         lateDed,
         sso,
+        tax,
         otherDed,
       }),
     }
@@ -479,6 +488,7 @@ export function AdminPayrollCalc() {
       ot: row.otAmt,
       lateEarly: (row.lateDed || 0) + (row.earlyDed ?? 0),
       sso: row.sso,
+      tax: row.tax,
       otherDed: row.otherDed,
     }
     const titleKey = PAYROLL_EXPLAIN_TITLE_KEY[key] || "pay_explain_title_fallback"
@@ -638,7 +648,7 @@ export function AdminPayrollCalc() {
                   <th rowSpan={2} className="p-1.5 text-center font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
                   <th colSpan={6} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
-                  <th colSpan={3} className="p-2 text-center font-medium text-destructive">{t("pay_deduct")}</th>
+                  <th colSpan={4} className="p-2 text-center font-medium text-destructive">{t("pay_deduct")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium font-semibold bg-muted/70 whitespace-nowrap tabular-nums">{t("pay_net")}</th>
                   <th
                     rowSpan={2}
@@ -658,6 +668,7 @@ export function AdminPayrollCalc() {
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_ot_amt")}</th>
                   <th className="p-1.5 text-center font-medium text-destructive">{t("pay_col_late")}</th>
                   <th className="p-1.5 text-center font-medium text-destructive">{t("pay_col_sso")}</th>
+                  <th className="p-1.5 text-center font-medium text-destructive">{t("pay_tax")}</th>
                   <th className="p-1.5 text-center font-medium text-destructive">{t("pay_col_etc")}</th>
                 </tr>
               </thead>
@@ -789,6 +800,15 @@ export function AdminPayrollCalc() {
                         {fmt(r.sso)}
                       </button>
                     </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "tax")}
+                      >
+                        {fmt(r.tax)}
+                      </button>
+                    </td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums font-medium">
                       <button
                         type="button"
@@ -837,6 +857,7 @@ export function AdminPayrollCalc() {
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.otAmt)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.lateEarly)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.sso)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.tax)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.otherDed)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums text-primary">{fmt(payrollColumnTotals.netPay)}</td>
                   <td className="p-1.5 text-center sticky right-0 z-10 bg-muted/95 border-l border-border">—</td>
@@ -953,6 +974,16 @@ export function AdminPayrollCalc() {
                     min={0}
                     value={editSso}
                     onChange={(e) => setEditSso(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-destructive block mb-1">➖ {t("pay_tax")}</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editTax}
+                    onChange={(e) => setEditTax(e.target.value)}
                     className="text-end h-9"
                   />
                 </div>

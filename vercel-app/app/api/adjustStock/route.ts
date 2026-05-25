@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     const userRole = String(auth.role || '').toLowerCase()
     const userStore = (auth.store || '').trim()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
+    const isOffice = ['director', 'secretary', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
     const isManager = userRole.includes('manager') || userRole.includes('franchisee')
 
     if (!isOffice && !isManager) {

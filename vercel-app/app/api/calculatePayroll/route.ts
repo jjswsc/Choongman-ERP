@@ -6,6 +6,7 @@ import {
 } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 import {
+  calcPayrollWithholdingTax3Percent,
   calcSSO,
   clockOutCountsForPayroll,
   grossWageBeforeSSO,
@@ -332,6 +333,7 @@ export async function GET(request: NextRequest) {
       earlyMin: number
       earlyDed: number
       sso: number
+      tax: number
       netPay: number
     }[] = []
 
@@ -418,7 +420,8 @@ export async function GET(request: NextRequest) {
         earlyDed,
       })
       const sso = ssoExempt ? 0 : calcSSO(ssoGrossWage, payrollYear)
-      const deduct = lateDed + earlyDed + sso
+      const tax = ssoExempt ? calcPayrollWithholdingTax3Percent(ssoGrossWage) : 0
+      const deduct = lateDed + earlyDed + sso + tax
       const netPay = Math.max(0, income - deduct)
 
       list.push({
@@ -437,6 +440,7 @@ export async function GET(request: NextRequest) {
         earlyMin,
         earlyDed,
         sso,
+        tax,
         netPay,
       })
     }

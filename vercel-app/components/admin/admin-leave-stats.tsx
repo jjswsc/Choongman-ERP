@@ -53,7 +53,7 @@ export function AdminLeaveStats() {
   const { stores: storeKeys } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === 'director' || auth.role === 'officer' || auth.role === 'ceo' || auth.role === 'hr'
+    const isOffice = auth.role === 'director' || auth.role === 'secretary' || auth.role === 'officer' || auth.role === 'ceo' || auth.role === 'hr'
     queueMicrotask(() => {
       if (isOffice) {
         setStores(["All", ...storeKeys.filter((s) => s !== "All")])

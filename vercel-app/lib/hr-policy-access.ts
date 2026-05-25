@@ -9,7 +9,7 @@ import {
   type BroadcastTargetSummaryLabels,
 } from '@/lib/broadcast-target-selection'
 
-const OFFICE_PERMISSION_KEYS = new Set(['director', 'ceo', 'hr', 'officer'])
+const OFFICE_PERMISSION_KEYS = new Set(['director', 'secretary', 'ceo', 'hr', 'officer'])
 
 export type HrPolicyAuthContext = {
   store?: string

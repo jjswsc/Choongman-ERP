@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
     let finalRole = 'staff'
     if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
     else if (rawRole === 'hr' || rawRole.includes('인사') || /\bhr\b/.test(rawRole)) finalRole = 'hr'
+    else if (rawRole.includes('secretary') || rawRole.includes('비서')) finalRole = 'secretary'
     else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'
     else if (rawRole.includes('manager') || rawRole.includes('점장') || rawRole.includes('매니저')) finalRole = 'manager'
     else if (rawRole.includes('franchisee') || rawRole.includes('가맹') || rawRole.includes('점주')) finalRole = 'franchisee'
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
     else if (empIsOfficeStore) finalRole = 'officer' // store=Office → Officer로 인식
 
     // 관리자 페이지: 본사·매장 관리·회계 등 허용 역할만. 일반 직원(staff)은 차단
-    const adminAllowed = new Set(['director', 'officer', 'ceo', 'hr', 'manager', 'franchisee', 'accounting'])
+    const adminAllowed = new Set(['director', 'secretary', 'officer', 'ceo', 'hr', 'manager', 'franchisee', 'accounting'])
     if (isAdminPage && !adminAllowed.has(finalRole)) {
       return NextResponse.json({ success: false, message: '관리자 권한이 없습니다.' }, { headers })
     }

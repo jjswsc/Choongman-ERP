@@ -29,7 +29,7 @@ export function TimesheetTab() {
           auth.store === "본사" ||
           auth.store === "CM Office" ||
           auth.store.toLowerCase().includes("office"))) ||
-      ["director", "officer", "ceo", "hr"].some((r) => roleLower.includes(r))
+      ["director", "secretary", "officer", "ceo", "hr"].some((r) => roleLower.includes(r))
     if (isOffice && stores.length > 0) {
       setStoreList(stores)
       setStoreFilter(stores.includes(auth.store) ? auth.store : stores[0] || auth.store)

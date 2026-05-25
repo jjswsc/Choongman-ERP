@@ -78,7 +78,7 @@ export interface EmployeeFormData {
   idCardPhoto: string
   taxId: string
   ssoNumber: string
-  /** 급여 계산 시 SSO 공제 제외 (미가입 등) */
+  /** 급여 계산 시 SSO 공제 제외 + PND3용 3% 원천세 대상 */
   ssoExempt: boolean
   address: string
   bankName: string

@@ -48,7 +48,7 @@ export function NoticeReaderStatsDialog({ open, onOpenChange }: Props) {
 
   const loadStatsStores = React.useCallback(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === "director" || auth.role === "officer"
+    const isOffice = auth.role === "director" || auth.role === "secretary" || auth.role === "officer"
     getNoticeOptions()
       .then((r) => {
         const allLabel = t("noticeFilterAll")

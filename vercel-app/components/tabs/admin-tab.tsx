@@ -169,7 +169,7 @@ export function AdminTab() {
   const [adjustSavedKeys, setAdjustSavedKeys] = useState<Set<string>>(() => new Set())
 
   const { stores: storeList } = useStoreList()
-  const isOffice = auth?.role && ["director", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
+  const isOffice = auth?.role && ["director", "secretary", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
 
   useEffect(() => {
     if (!auth) return

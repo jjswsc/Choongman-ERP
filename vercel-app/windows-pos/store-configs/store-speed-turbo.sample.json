@@ -1,0 +1,18 @@
+{
+  "posUrl": "https://choongman-erp.vercel.app/pos/login",
+  "allowedOrigin": "https://choongman-erp.vercel.app",
+  "kiosk": "1",
+  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
+  "printHtmlSettleMs": 140,
+  "postHtmlPrintSpoolFlushMs": 160,
+  "printHtmlQueueGapMs": 20,
+  "print": {
+    "silent": true,
+    "deviceName": "HALL_RECEIPT_PRINTER_WINDOWS_NAME",
+    "receiptDeviceName": "HALL_RECEIPT_PRINTER_WINDOWS_NAME",
+    "kitchenDeviceName": "KITCHEN_FALLBACK_WINDOWS_NAME",
+    "kitchen1DeviceName": "KITCHEN1_PRINTER_WINDOWS_NAME",
+    "kitchen2DeviceName": "",
+    "kitchen3DeviceName": ""
+  }
+}

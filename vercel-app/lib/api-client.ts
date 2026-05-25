@@ -5130,7 +5130,14 @@ export async function addBankTransactionsBulk(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; inserted?: number; skipped?: number; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    inserted?: number
+    skipped?: number
+    duplicateSkipped?: number
+    policySkipped?: number
+    message?: string
+  }>
 }
 
 export async function updateBankTransactionInvoice(params: {
@@ -11523,7 +11530,7 @@ export interface AdminEmployeeItem {
   idCardPhoto: string
   taxId: string
   ssoNumber: string
-  /** true면 급여 SSO 공제 0 (미가입·서류 미비 등) */
+  /** true면 급여 SSO 공제 0 + PND3용 3% 원천세 대상 */
   ssoExempt?: boolean
   address: string
   bankName: string

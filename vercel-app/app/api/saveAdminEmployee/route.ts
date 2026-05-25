@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
     const effectiveRole = String(jwt?.role || userRole).toLowerCase()
 
     const isTop =
-      ['director', 'officer', 'ceo', 'hr'].some((r) => effectiveRole.includes(r)) || isAccountingRole(effectiveRole)
+      ['director', 'secretary', 'officer', 'ceo', 'hr'].some((r) => effectiveRole.includes(r)) || isAccountingRole(effectiveRole)
     const franchiseeJwtList =
       jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
 
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: '❌ Officer 역할은 Director급 또는 Secretary만 지정할 수 있습니다.',
+            message: '❌ Officer 역할은 Director급만 지정할 수 있습니다.',
           },
           { status: 403, headers }
         )
@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: '❌ Officer 역할은 Director급 또는 Secretary만 변경·지정할 수 있습니다.',
+            message: '❌ Officer 역할은 Director급만 변경·지정할 수 있습니다.',
           },
           { status: 403, headers }
         )

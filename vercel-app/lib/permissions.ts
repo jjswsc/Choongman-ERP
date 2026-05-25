@@ -2,8 +2,8 @@
  * 권한 관리 유틸리티
  *
  * 역할 구분:
- * - Director급: director, ceo, hr → 전체 권한, Office 검색 가능
- * - Secretary: secretary → 본사 권한, 직원 Officer 지정 가능(Director 지정 불가)
+ * - Director급: director, secretary, ceo, hr → 전체 권한, Office 검색 가능
+ * - Secretary: secretary → Director급과 동일 권한
  * - Officer: officer → Office 제외한 전체 권한 (급여/직원 관리)
  * - Manager: manager → 매장 매니저, 자기 매장 한정
  * - Franchisee: franchisee → 매장 소유자, 기본은 매니저와 동일(자기 매장). 시스템 설정+extra_stores로 복수 매장 허용 시 JWT·ERP 매장 전환
@@ -25,7 +25,7 @@ export function isOfficeStore(store: string): boolean {
 
 export const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "CM Office"]
 
-const DIRECTOR_ROLES = ["director", "ceo", "hr"]
+const DIRECTOR_ROLES = ["director", "secretary", "ceo", "hr"]
 const OFFICE_ROLES = ["director", "ceo", "hr", "officer", "secretary"]
 const SECRETARY_ROLE = "secretary"
 const MANAGER_ROLE = "manager"
@@ -64,12 +64,12 @@ export function isEmployeeAuthRoleOfficerOrDirector(formRole: string): boolean {
   return isEmployeeAuthRoleOfficer(formRole) || isEmployeeAuthRoleDirector(formRole)
 }
 
-/** Officer 역할을 새로 지정·변경할 수 있는지 — Director급 또는 Secretary */
+/** Officer 역할을 새로 지정·변경할 수 있는지 — Director급만(Secretary 포함) */
 export function canAssignEmployeeOfficerRole(actorRole: string): boolean {
-  return isDirectorRole(actorRole) || isSecretaryRole(actorRole)
+  return isDirectorRole(actorRole)
 }
 
-/** Director 역할을 새로 지정·변경할 수 있는지 — Director급만 */
+/** Director 역할을 새로 지정·변경할 수 있는지 — Director급만(Secretary 포함) */
 export function canAssignEmployeeDirectorRole(actorRole: string): boolean {
   return isDirectorRole(actorRole)
 }
@@ -234,7 +234,7 @@ export function canApproveAiActions(role: string): boolean {
 /** 설정 페이지 접근 가능 (Director, Officer만) */
 export function canAccessSettings(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()
-  return r.includes("director") || r.includes("officer") || r.includes("ceo") || r.includes("hr")
+  return r.includes("director") || r.includes("secretary") || r.includes("officer") || r.includes("ceo") || r.includes("hr")
 }
 
 /** 해당 경로에 매니저 접근 불가 여부 */

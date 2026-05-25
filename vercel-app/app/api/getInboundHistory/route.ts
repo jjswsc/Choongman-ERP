@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
     const auth = authResult.auth
     const authRole = String(auth.role || '').toLowerCase()
-    const isDirector = authRole.includes('director') || authRole.includes('ceo') || authRole.includes('hr')
+    const isDirector = authRole.includes('director') || authRole.includes('secretary') || authRole.includes('ceo') || authRole.includes('hr')
     const isOfficeLevel = isDirector || authRole.includes('officer') || isAccountingRole(authRole)
     const allowedStores =
       (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])

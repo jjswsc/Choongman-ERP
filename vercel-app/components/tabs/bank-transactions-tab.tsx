@@ -377,7 +377,10 @@ export function BankTransactionsTab() {
       }
       const res = await updateBankTransaction(payload)
       if (res.success) {
-        await invalidateReceivablePayableListCache()
+        await Promise.all([
+          invalidateBankTransactionsListCache({ accountId, startStr, endStr }),
+          invalidateReceivablePayableListCache(),
+        ])
         const nextCategory =
           edits.category !== undefined
             ? edits.category
@@ -612,6 +615,13 @@ export function BankTransactionsTab() {
       .finally(() => setLoading(false))
   }, [accountId, startStr, endStr])
 
+  const reloadBankTransactionsFresh = React.useCallback(async (): Promise<void> => {
+    if (accountId) {
+      await invalidateBankTransactionsListCache({ accountId, startStr, endStr })
+    }
+    await loadData()
+  }, [accountId, startStr, endStr, loadData])
+
   React.useEffect(() => {
     if (!plDrillNavReadyRef.current || plDrillAutoFetchRef.current || !accountId) return
     plDrillAutoFetchRef.current = true
@@ -703,6 +713,8 @@ export function BankTransactionsTab() {
       const next = { ...prev }
       importPreview.rows.forEach((r, idx) => {
         if (r.transType === "deposit" && r.memo) {
+          const existingCategory = String(next[idx]?.category || "").trim().toLowerCase()
+          if (existingCategory) return
           const sug = suggestDepositWithRules(r.memo, memoRules, revenueAccountOptions)
           if (sug) {
             const d = new Date(r.transDate)
@@ -757,7 +769,7 @@ export function BankTransactionsTab() {
           purchaseOrderId: r.purchaseOrderId,
         })
           .then(async (res) => {
-            if (res.success) loadData()
+            if (res.success) await reloadBankTransactionsFresh()
             else await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           })
           .catch(async (e) => {
@@ -775,7 +787,7 @@ export function BankTransactionsTab() {
           purchaseOrderId: r.purchaseOrderId,
         })
           .then(async (res) => {
-            if (res.success) loadData()
+            if (res.success) await reloadBankTransactionsFresh()
             else await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           })
           .catch(async (e) => {
@@ -788,7 +800,7 @@ export function BankTransactionsTab() {
       setInvoiceLinkRow(r)
       setInvoiceLinkSelectedPO("")
     },
-    [loadData, t]
+    [reloadBankTransactionsFresh, t]
   )
 
   React.useEffect(() => {
@@ -813,14 +825,14 @@ export function BankTransactionsTab() {
         invoiceReceived: !r.invoiceReceived,
         purchaseOrderId: poId ?? undefined,
       })
-      if (res.success) loadData()
+      if (res.success) await reloadBankTransactionsFresh()
       else await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
     } catch (e) {
       await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setUpdatingInvoiceId(null)
     }
-  }, [invoiceLinkRow, invoiceLinkSelectedPO, loadData, t])
+  }, [invoiceLinkRow, invoiceLinkSelectedPO, reloadBankTransactionsFresh, t])
 
   const invoicePhotoInputRef = React.useRef<HTMLInputElement>(null)
   const invoicePhotoTargetRowRef = React.useRef<(typeof list)[0] | null>(null)
@@ -834,7 +846,7 @@ export function BankTransactionsTab() {
           bankTransactionId: r.id,
           invoicePhotoUrl: dataUrl,
         })
-        if (res.success) loadData()
+        if (res.success) await reloadBankTransactionsFresh()
         else await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_upload_fail"))
       } catch (e) {
         await appAlert(t("msg_upload_fail") + ": " + (e instanceof Error ? e.message : String(e)))
@@ -843,7 +855,7 @@ export function BankTransactionsTab() {
         if (invoicePhotoInputRef.current) invoicePhotoInputRef.current.value = ""
       }
     },
-    [loadData, t]
+    [reloadBankTransactionsFresh, t]
   )
 
   const handleAddAccount = async () => {
@@ -1332,21 +1344,40 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       if (res.success) {
         const periodStart = importPreview.periodStart
         const periodEnd = importPreview.periodEnd
+        const refreshStart = periodStart || startStr
+        const refreshEnd = periodEnd || endStr
         setImportPreview(null)
         setImportRowEdits({})
         if (periodStart && periodEnd) {
           setStartStr(periodStart)
           setEndStr(periodEnd)
         }
+        await Promise.all([
+          invalidateBankTransactionsListCache({
+            accountId: Number(accountId),
+            startStr: refreshStart,
+            endStr: refreshEnd,
+          }),
+          invalidateReceivablePayableListCache(),
+        ])
         const fresh = await getBankTransactions({
           accountId: Number(accountId),
-          startStr: periodStart || startStr,
-          endStr: periodEnd || endStr,
+          startStr: refreshStart,
+          endStr: refreshEnd,
         })
         setList(fresh.list || [])
         setSummary(fresh.summary || null)
         setActiveBankTab("query")
-        await appAlert(translateApiMessage(res.message, t) || res.message || (t("bankImportSavedGoToQuery") || "저장되었습니다. 조회 탭에서 내역을 확인·추가 작업할 수 있습니다."))
+        const importMessage =
+          res.policySkipped && res.policySkipped > 0
+            ? (() => {
+                const parts = [`${res.inserted ?? 0}건 등록`]
+                if ((res.duplicateSkipped ?? 0) > 0) parts.push(`중복 ${res.duplicateSkipped ?? 0}건 제외`)
+                parts.push(`정책 ${res.policySkipped}건 제외`)
+                return `${parts.join(', ')}.\n\nPOS 자동분개 매장은 Grab·카드·QR 입금을 revenue_*로 저장하지 않습니다. 매출 수령(receivable_receive) 또는 채널 정산을 사용하세요.`
+              })()
+            : (translateApiMessage(res.message, t) || res.message || (t("bankImportSavedGoToQuery") || "저장되었습니다. 조회 탭에서 내역을 확인·추가 작업할 수 있습니다."))
+        await appAlert(importMessage)
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
       }

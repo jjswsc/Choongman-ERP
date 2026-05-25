@@ -57,7 +57,7 @@ export function VisitTab() {
     )
     // 본사(CM Office 등) 로그인 시 CM Office를 방문 대상 목록에 포함 (API에 없을 수 있음)
     const role = String(auth?.role || "").toLowerCase()
-    const isOfficeRole = ["director", "officer", "ceo", "hr"].some((r) => role.includes(r))
+    const isOfficeRole = ["director", "secretary", "officer", "ceo", "hr"].some((r) => role.includes(r))
     const isOfficeStore =
       auth?.store === "CM Office" ||
       auth?.store === "Office" ||
@@ -176,7 +176,7 @@ export function VisitTab() {
   }
 
   const role = String(auth.role || "").toLowerCase()
-  const isOfficeRole = ["director", "officer", "ceo", "hr"].some((r) => role.includes(r))
+  const isOfficeRole = ["director", "secretary", "officer", "ceo", "hr"].some((r) => role.includes(r))
   const isOfficeStore =
     auth.store?.toLowerCase() === "office" ||
     auth.store === "본사" ||

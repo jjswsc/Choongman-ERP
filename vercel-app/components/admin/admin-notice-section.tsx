@@ -32,7 +32,7 @@ export function AdminNoticeSection() {
   useEffect(() => {
     if (!auth?.store) return
     getNoticeOptions().then((r) => {
-      const isOffice = auth.role === "director" || auth.role === "officer"
+      const isOffice = auth.role === "director" || auth.role === "secretary" || auth.role === "officer"
       setNoticeStores(isOffice ? (r.stores || []) : [auth.store])
       setNoticeRoles(r.roles || [])
     })

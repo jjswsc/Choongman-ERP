@@ -364,6 +364,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       { key: 'trueMoney', label: t('posPaymentTrueMoney') || 'TrueMoney' },
       { key: 'weChat', label: t('posPaymentWeChat') || 'WeChat' },
       { key: 'alipay', label: t('posPaymentAlipay') || 'Alipay' },
+      { key: 'unionPay', label: t('posPaymentUnionPay') || 'UnionPay' },
       { key: 'linePay', label: t('posPaymentLinePay') || 'LINE Pay' },
       { key: 'shopeePay', label: t('posPaymentShopeePay') || 'Shopee Pay' },
       { key: 'misc', label: t('posPaymentOtherEtc') || '기타' },
@@ -1006,6 +1007,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     if ((Number(br?.trueMoney) || 0) > 0.005) setPcOtherDetailKey('trueMoney')
     else if ((Number(br?.weChat) || 0) > 0.005) setPcOtherDetailKey('weChat')
     else if ((Number(br?.alipay) || 0) > 0.005) setPcOtherDetailKey('alipay')
+    else if ((Number(br?.unionPay) || 0) > 0.005) setPcOtherDetailKey('unionPay')
     else if ((Number(br?.linePay) || 0) > 0.005) setPcOtherDetailKey('linePay')
     else if ((Number(br?.shopeePay) || 0) > 0.005) setPcOtherDetailKey('shopeePay')
     else if ((Number(br?.misc) || 0) > 0.005) setPcOtherDetailKey('misc')
@@ -1284,6 +1286,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       if (pcOtherDetailKey === 'trueMoney') paymentOtherBreakdown = { trueMoney: roundedOther }
       else if (pcOtherDetailKey === 'weChat') paymentOtherBreakdown = { weChat: roundedOther }
       else if (pcOtherDetailKey === 'alipay') paymentOtherBreakdown = { alipay: roundedOther }
+      else if (pcOtherDetailKey === 'unionPay') paymentOtherBreakdown = { unionPay: roundedOther }
       else if (pcOtherDetailKey === 'linePay') paymentOtherBreakdown = { linePay: roundedOther }
       else if (pcOtherDetailKey === 'shopeePay') paymentOtherBreakdown = { shopeePay: roundedOther }
       else if (pcOtherDetailKey.startsWith('admin:')) {

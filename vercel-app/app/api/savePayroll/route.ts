@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { syncPayrollSsoExpenseAccruals } from '@/lib/payroll-sso-expense-sync'
+import { syncTaxWithholdingLedgersFromPayroll } from '@/lib/tax-ledger-auto-sync'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   supabaseDeleteByFilter,
@@ -432,6 +433,13 @@ export async function POST(request: NextRequest) {
       console.error('savePayroll sso expense sync:', ssoSyncErr)
     }
 
+    let whtLedgerSync = { upserted: 0, deleted: 0 }
+    try {
+      whtLedgerSync = await syncTaxWithholdingLedgersFromPayroll({ months: [monthStr] })
+    } catch (whtSyncErr) {
+      console.error('savePayroll withholding sync:', whtSyncErr)
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -441,6 +449,7 @@ export async function POST(request: NextRequest) {
           updated: updatedAccrualCount,
         },
         ssoExpenseSync,
+        whtLedgerSync,
       },
       { headers }
     )

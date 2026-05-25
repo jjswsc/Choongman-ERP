@@ -7,6 +7,7 @@ export type PosPaymentOtherBreakdown = {
   trueMoney?: number
   weChat?: number
   alipay?: number
+  unionPay?: number
   linePay?: number
   shopeePay?: number
   /** POS 기타(직접입력) */
@@ -28,6 +29,7 @@ export function sumPaymentOtherBreakdown(b: PosPaymentOtherBreakdown | null | un
   s += num(b.trueMoney)
   s += num(b.weChat)
   s += num(b.alipay)
+  s += num(b.unionPay)
   s += num(b.linePay)
   s += num(b.shopeePay)
   s += num(b.misc)
@@ -68,6 +70,7 @@ export function parsePaymentOtherBreakdown(raw: unknown): PosPaymentOtherBreakdo
     ...(num(o.trueMoney) > 0 ? { trueMoney: num(o.trueMoney) } : {}),
     ...(num(o.weChat) > 0 ? { weChat: num(o.weChat) } : {}),
     ...(num(o.alipay) > 0 ? { alipay: num(o.alipay) } : {}),
+    ...(num(o.unionPay) > 0 ? { unionPay: num(o.unionPay) } : {}),
     ...(num(o.linePay) > 0 ? { linePay: num(o.linePay) } : {}),
     ...(num(o.shopeePay) > 0 ? { shopeePay: num(o.shopeePay) } : {}),
     ...(num(o.misc) > 0 ? { misc: num(o.misc) } : {}),
@@ -108,6 +111,7 @@ export function paymentOtherBreakdownSearchTokens(b: PosPaymentOtherBreakdown | 
   if (num(b.trueMoney) > 0) parts.push('truemoney', 'true', 'money', 'ทรูมันนี่')
   if (num(b.weChat) > 0) parts.push('wechat', 'weixin', '위챗')
   if (num(b.alipay) > 0) parts.push('alipay', '알리')
+  if (num(b.unionPay) > 0) parts.push('unionpay', 'union pay', 'cup', 'ยูเนี่ยนเพย์')
   if (num(b.linePay) > 0) parts.push('linepay', 'line pay', '라인페이')
   if (num(b.shopeePay) > 0) parts.push('shopeepay', 'shopee pay', '쇼피')
   if (num(b.misc) > 0) parts.push('misc', 'other', '기타')

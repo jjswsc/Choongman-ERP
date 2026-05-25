@@ -20,8 +20,8 @@ export async function GET() {
       if (job && job !== '직급' && job !== 'Job' && job !== '부서' && job !== '') jobs[job] = true
       if (role) permissionGroups[role] = true
     }
-    const PERMISSION_ORDER = ['director', 'ceo', 'hr', 'officer', 'manager', 'franchisee', 'staff']
-    const DEFAULT_PERMISSIONS = ['director', 'officer', 'manager', 'staff']
+    const PERMISSION_ORDER = ['director', 'secretary', 'ceo', 'hr', 'officer', 'manager', 'franchisee', 'staff']
+    const DEFAULT_PERMISSIONS = ['director', 'secretary', 'officer', 'manager', 'staff']
     if (Object.keys(permissionGroups).length === 0) {
       for (const p of DEFAULT_PERMISSIONS) permissionGroups[p] = true
     }

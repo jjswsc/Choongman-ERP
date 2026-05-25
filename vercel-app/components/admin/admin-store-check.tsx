@@ -91,7 +91,7 @@ export function AdminStoreCheck() {
   const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [remarkModalIdx, setRemarkModalIdx] = useState<number | null>(null)
 
-  const isHQ = auth?.role === "director" || auth?.role === "officer"
+  const isHQ = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
   const isManager = isManagerRole(auth?.role || "")
   const inspectorName = auth?.user || auth?.store || ""
 
