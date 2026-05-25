@@ -43,6 +43,10 @@ function loadLang(): LangCode {
     const s = sessionStorage.getItem('cm_lang')
     if (s && isLangCode(s)) return s
   } catch {}
+  try {
+    const s = localStorage.getItem('cm_lang')
+    if (s && isLangCode(s)) return s
+  } catch {}
   return 'ko'
 }
 
@@ -52,13 +56,23 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<LangCode>('ko')
 
   useEffect(() => {
-    setLangState(loadLang())
+    const loaded = loadLang()
+    setLangState(loaded)
+    try {
+      sessionStorage.setItem('cm_lang', loaded)
+    } catch {}
+    try {
+      localStorage.setItem('cm_lang', loaded)
+    } catch {}
   }, [])
 
   const setLang = useCallback((l: LangCode) => {
     setLangState(l)
     try {
       sessionStorage.setItem('cm_lang', l)
+    } catch {}
+    try {
+      localStorage.setItem('cm_lang', l)
     } catch {}
   }, [])
 

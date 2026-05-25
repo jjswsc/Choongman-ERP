@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getPosPrinterSettings, savePosPrinterSettings, type PosPrinterSettings } from "@/lib/api-client"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
-import { useLang } from "@/lib/lang-context"
+import { ADMIN_UI_LANG_OPTIONS, isLangCode, useLang, type LangCode } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
 
@@ -62,6 +62,8 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
   const [enabled, setEnabled] = React.useState(false)
   const [autoOpen, setAutoOpen] = React.useState(true)
   const [monitorPreference, setMonitorPreference] = React.useState<"secondary-first" | "primary-only">("secondary-first")
+  const [displayLangMode, setDisplayLangMode] = React.useState<"follow-pos" | "custom">("follow-pos")
+  const [displayLangOverride, setDisplayLangOverride] = React.useState<LangCode>(lang)
 
   const load = React.useCallback(async () => {
     const sc = String(storeCode || "").trim()
@@ -74,10 +76,16 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
       setMonitorPreference(
         s.customerDisplayMonitorPreference === "primary-only" ? "primary-only" : "secondary-first"
       )
+      const rawDisplayLangOverride = String(s.customerDisplayLangOverride ?? "").trim()
+      const normalizedDisplayLangOverride = isLangCode(rawDisplayLangOverride) ? rawDisplayLangOverride : lang
+      setDisplayLangMode(
+        s.customerDisplayLangMode === "custom" && isLangCode(rawDisplayLangOverride) ? "custom" : "follow-pos"
+      )
+      setDisplayLangOverride(normalizedDisplayLangOverride)
     } finally {
       setLoading(false)
     }
-  }, [storeCode])
+  }, [lang, storeCode])
 
   React.useEffect(() => {
     void load()
@@ -98,6 +106,8 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
         dualMonitorEnabled: enabled,
         customerDisplayAutoOpen: autoOpen,
         customerDisplayMonitorPreference: monitorPreference,
+        customerDisplayLangMode: displayLangMode,
+        customerDisplayLangOverride: displayLangMode === "custom" ? displayLangOverride : "",
       }
       const res = await savePosPrinterSettings(
         posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
@@ -119,7 +129,7 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
     } finally {
       setSaving(false)
     }
-  }, [autoOpen, enabled, load, monitorPreference, storeCode, tr])
+  }, [autoOpen, displayLangMode, displayLangOverride, enabled, load, monitorPreference, storeCode, tr])
 
   const openNow = React.useCallback(async () => {
     const shell = window.cmPosShell
@@ -201,6 +211,48 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
             <SelectItem value="primary-only">{tr("posDualMonitorPrimaryOnly", "주 모니터 고정")}</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div>
+        <label className="text-sm font-medium">{tr("posCustomerDisplayLanguage", "고객화면 언어")}</label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {tr(
+            "posCustomerDisplayLanguageHint",
+            "기본은 POS 직원 화면의 언어를 따라가고, 필요하면 고객화면만 다른 언어로 고정할 수 있습니다."
+          )}
+        </p>
+        <Select
+          value={displayLangMode}
+          onValueChange={(v) => setDisplayLangMode(v === "custom" ? "custom" : "follow-pos")}
+        >
+          <SelectTrigger className="mt-2 h-10 w-full max-w-md">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="follow-pos">
+              {tr("posCustomerDisplayLanguageFollowPos", "POS 직원 화면 언어 따라감")}
+            </SelectItem>
+            <SelectItem value="custom">
+              {tr("posCustomerDisplayLanguageCustom", "고객화면만 별도 언어 고정")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        {displayLangMode === "custom" ? (
+          <div className="mt-3">
+            <label className="text-xs font-medium text-muted-foreground">{tr("posLanguage", "언어")}</label>
+            <Select value={displayLangOverride} onValueChange={(v) => isLangCode(v) && setDisplayLangOverride(v)}>
+              <SelectTrigger className="mt-1 h-10 w-full max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ADMIN_UI_LANG_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
         {tr("posDualMonitorHint", "자동 감지는 Windows POS(Electron)에서만 동작합니다. 웹 브라우저 환경에서는 수동 창 열기만 가능합니다.")}

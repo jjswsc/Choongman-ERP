@@ -21,6 +21,8 @@ export type PosPrinterSettingsToSaveParamsOptions = {
   omitKitchenRoutes?: boolean
 }
 
+const VALID_DISPLAY_LANG_CODES = ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"] as const
+
 /** GET 응답(PosPrinterSettings)을 savePosPrinterSettings POST 본문으로 변환 */
 export function posPrinterSettingsToSaveParams(
   s: PosPrinterSettings,
@@ -57,6 +59,17 @@ export function posPrinterSettingsToSaveParams(
   const customerDisplayMonitorPreference = (
     rawDisplayMonitorPreference === "primary-only" ? "primary-only" : "secondary-first"
   ) as "secondary-first" | "primary-only"
+  const rawDisplayLangOverride = String(s.customerDisplayLangOverride ?? "").trim()
+  const customerDisplayLangOverride = (
+    VALID_DISPLAY_LANG_CODES.includes(rawDisplayLangOverride as (typeof VALID_DISPLAY_LANG_CODES)[number])
+      ? rawDisplayLangOverride
+      : ""
+  ) as "ko" | "en" | "th" | "mm" | "la" | "kh" | "vi" | "ms" | ""
+  const customerDisplayLangMode = (
+    String(s.customerDisplayLangMode || "follow-pos") === "custom" && customerDisplayLangOverride
+      ? "custom"
+      : "follow-pos"
+  ) as "follow-pos" | "custom"
   const rawDisplayTheme = String(s.customerDisplayTheme || "dark")
   const customerDisplayTheme = (
     rawDisplayTheme === "light" ? "light" : rawDisplayTheme === "brand" ? "brand" : "dark"
@@ -161,6 +174,8 @@ export function posPrinterSettingsToSaveParams(
     dualMonitorEnabled: Boolean(s.dualMonitorEnabled),
     customerDisplayAutoOpen: s.customerDisplayAutoOpen !== false,
     customerDisplayMonitorPreference,
+    customerDisplayLangMode,
+    customerDisplayLangOverride: customerDisplayLangMode === "custom" ? customerDisplayLangOverride : undefined,
     customerDisplayTheme,
     customerDisplayDefaultState,
     customerDisplayIdleMessage: String(s.customerDisplayIdleMessage ?? "").trim(),

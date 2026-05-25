@@ -8879,6 +8879,10 @@ export interface PosPrinterSettings {
   dualMonitorEnabled?: boolean
   customerDisplayAutoOpen?: boolean
   customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
+  /** 고객화면 언어: follow-pos=POS 직원 화면 언어 따라감, custom=고객화면만 고정 */
+  customerDisplayLangMode?: 'follow-pos' | 'custom'
+  /** custom 일 때만 사용 */
+  customerDisplayLangOverride?: 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms' | ''
   customerDisplayTheme?: 'dark' | 'light' | 'brand'
   customerDisplayDefaultState?: 'idle' | 'qr'
   customerDisplayIdleMessage?: string
@@ -9037,6 +9041,8 @@ export async function savePosPrinterSettings(params: {
   dualMonitorEnabled?: boolean
   customerDisplayAutoOpen?: boolean
   customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
+  customerDisplayLangMode?: 'follow-pos' | 'custom'
+  customerDisplayLangOverride?: 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms' | ''
   customerDisplayTheme?: 'dark' | 'light' | 'brand'
   customerDisplayDefaultState?: 'idle' | 'qr'
   customerDisplayIdleMessage?: string

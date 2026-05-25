@@ -14,7 +14,7 @@ import {
   type PosPrinterSettings,
 } from "@/lib/api-client"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
-import { useLang } from "@/lib/lang-context"
+import { ADMIN_UI_LANG_OPTIONS, isLangCode, useLang, type LangCode } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
 
@@ -79,6 +79,8 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [enabled, setEnabled] = React.useState(false)
+  const [displayLangMode, setDisplayLangMode] = React.useState<"follow-pos" | "custom">("follow-pos")
+  const [displayLangOverride, setDisplayLangOverride] = React.useState<LangCode>(lang)
   const [theme, setTheme] = React.useState<"dark" | "light" | "brand">("dark")
   const [defaultState, setDefaultState] = React.useState<"idle" | "qr">("idle")
   const [idleMessage, setIdleMessage] = React.useState("")
@@ -97,6 +99,12 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     try {
       const s = await getPosPrinterSettings({ storeCode: sc })
       setEnabled(Boolean(s.dualMonitorEnabled))
+      const rawDisplayLangOverride = String(s.customerDisplayLangOverride ?? "").trim()
+      const normalizedDisplayLangOverride = isLangCode(rawDisplayLangOverride) ? rawDisplayLangOverride : lang
+      setDisplayLangMode(
+        s.customerDisplayLangMode === "custom" && isLangCode(rawDisplayLangOverride) ? "custom" : "follow-pos"
+      )
+      setDisplayLangOverride(normalizedDisplayLangOverride)
       setTheme(
         s.customerDisplayTheme === "light" ? "light" : s.customerDisplayTheme === "brand" ? "brand" : "dark"
       )
@@ -112,7 +120,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     } finally {
       setLoading(false)
     }
-  }, [storeCode])
+  }, [lang, storeCode])
 
   React.useEffect(() => {
     void load()
@@ -131,6 +139,8 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
         ...latest,
         storeCode: sc,
         dualMonitorEnabled: enabled,
+        customerDisplayLangMode: displayLangMode,
+        customerDisplayLangOverride: displayLangMode === "custom" ? displayLangOverride : "",
         customerDisplayTheme: theme,
         customerDisplayDefaultState: defaultState,
         customerDisplayIdleMessage: idleMessage.trim(),
@@ -155,6 +165,8 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     }
   }, [
     defaultState,
+    displayLangMode,
+    displayLangOverride,
     enabled,
     idleMediaType,
     idleMediaUrl,
@@ -231,6 +243,48 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
         yesLabel={yesLabel}
         noLabel={noLabel}
       />
+      <div>
+        <label className="text-sm font-medium">{tr("posCustomerDisplayLanguage", "고객화면 언어")}</label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {tr(
+            "posCustomerDisplayLanguageHint",
+            "기본은 POS 직원 화면의 언어를 따라가고, 필요하면 고객화면만 다른 언어로 고정할 수 있습니다."
+          )}
+        </p>
+        <Select
+          value={displayLangMode}
+          onValueChange={(v) => setDisplayLangMode(v === "custom" ? "custom" : "follow-pos")}
+        >
+          <SelectTrigger className="mt-2 h-10 w-full max-w-md">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="follow-pos">
+              {tr("posCustomerDisplayLanguageFollowPos", "POS 직원 화면 언어 따라감")}
+            </SelectItem>
+            <SelectItem value="custom">
+              {tr("posCustomerDisplayLanguageCustom", "고객화면만 별도 언어 고정")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        {displayLangMode === "custom" ? (
+          <div className="mt-3">
+            <label className="text-xs font-medium text-muted-foreground">{tr("posLanguage", "언어")}</label>
+            <Select value={displayLangOverride} onValueChange={(v) => isLangCode(v) && setDisplayLangOverride(v)}>
+              <SelectTrigger className="mt-1 h-10 w-full max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ADMIN_UI_LANG_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+      </div>
       <div>
         <label className="text-sm font-medium">{tr("posCustomerDisplayTheme", "고객화면 테마")}</label>
         <Select value={theme} onValueChange={(v) => setTheme(v as "dark" | "light" | "brand")}>

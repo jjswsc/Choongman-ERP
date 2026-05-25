@@ -17,6 +17,8 @@ const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
   'dual_monitor_enabled',
   'customer_display_auto_open',
   'customer_display_monitor_preference',
+  'customer_display_lang_mode',
+  'customer_display_lang_override',
   'customer_display_theme',
   'customer_display_default_state',
   'customer_display_idle_message',
@@ -278,6 +280,16 @@ export async function POST(req: NextRequest) {
     const rawDisplayMonitorPreference = String(body?.customerDisplayMonitorPreference || 'secondary-first')
     const customerDisplayMonitorPreference =
       rawDisplayMonitorPreference === 'primary-only' ? 'primary-only' : 'secondary-first'
+    const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
+    const customerDisplayLangOverrideRaw = String(body?.customerDisplayLangOverride ?? '').trim()
+    const customerDisplayLangOverride =
+      customerDisplayLangOverrideRaw && validPrintLangs.includes(customerDisplayLangOverrideRaw)
+        ? customerDisplayLangOverrideRaw
+        : ''
+    const customerDisplayLangMode =
+      String(body?.customerDisplayLangMode || 'follow-pos') === 'custom' && customerDisplayLangOverride
+        ? 'custom'
+        : 'follow-pos'
     const rawDisplayTheme = String(body?.customerDisplayTheme || 'dark')
     const customerDisplayTheme =
       rawDisplayTheme === 'light' ? 'light' : rawDisplayTheme === 'brand' ? 'brand' : 'dark'
@@ -291,7 +303,6 @@ export async function POST(req: NextRequest) {
     const customerDisplayIdleMediaType =
       rawIdleMediaType === 'image' ? 'image' : rawIdleMediaType === 'video' ? 'video' : 'none'
     const customerDisplayIdleMediaUrl = String(body?.customerDisplayIdleMediaUrl ?? '').trim().slice(0, 2048)
-    const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
     const receiptPrintLangRaw = String(body?.receiptPrintLang ?? '').trim()
     const receiptPrintLang = receiptPrintLangRaw && validPrintLangs.includes(receiptPrintLangRaw) ? receiptPrintLangRaw : ''
     const kitchenSlipPrintLangRaw = String(body?.kitchenSlipPrintLang ?? '').trim()
@@ -434,6 +445,8 @@ export async function POST(req: NextRequest) {
       dual_monitor_enabled: dualMonitorEnabled,
       customer_display_auto_open: customerDisplayAutoOpen,
       customer_display_monitor_preference: customerDisplayMonitorPreference,
+      customer_display_lang_mode: customerDisplayLangMode,
+      customer_display_lang_override: customerDisplayLangOverride,
       customer_display_theme: customerDisplayTheme,
       customer_display_default_state: customerDisplayDefaultState,
       customer_display_idle_message: customerDisplayIdleMessage,

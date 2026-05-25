@@ -1133,6 +1133,8 @@ export default function PosPrintersPage() {
           "dualMonitorEnabled",
           "customerDisplayAutoOpen",
           "customerDisplayMonitorPreference",
+          "customerDisplayLangMode",
+          "customerDisplayLangOverride",
           "customerDisplayTheme",
           "customerDisplayDefaultState",
           "customerDisplayIdleMessage",

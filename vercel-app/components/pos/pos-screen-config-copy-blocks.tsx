@@ -42,6 +42,8 @@ const CUSTOMER_DISPLAY_COPY_KEYS: (keyof PosPrinterSettings)[] = [
   "dualMonitorEnabled",
   "customerDisplayAutoOpen",
   "customerDisplayMonitorPreference",
+  "customerDisplayLangMode",
+  "customerDisplayLangOverride",
   "customerDisplayTheme",
   "customerDisplayDefaultState",
   "customerDisplayIdleMessage",

@@ -74,7 +74,7 @@ import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-rec
 import { PosPostPaymentCashChangeDialog } from '@/components/pos/pos-post-payment-cash-change-dialog'
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
 import { useAuth } from '@/lib/auth-context'
-import { useLang } from '@/lib/lang-context'
+import { isLangCode, useLang, type LangCode } from '@/lib/lang-context'
 import { tr, useT } from '@/lib/i18n'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
@@ -163,7 +163,6 @@ import {
   consumePosSelfInitiatedGrabCancel,
   markPosSelfInitiatedGrabCancel,
 } from '@/lib/pos-grab-cancel-alert-suppress'
-import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import {
   publishPosCustomerDisplayState,
@@ -727,6 +726,8 @@ export default function PosTerminalPage() {
   const [dualMonitorEnabled, setDualMonitorEnabled] = useState(false)
   const [customerDisplayAutoOpen, setCustomerDisplayAutoOpen] = useState(true)
   const [customerDisplayMonitorPreference, setCustomerDisplayMonitorPreference] = useState<'secondary-first' | 'primary-only'>('secondary-first')
+  const [customerDisplayLangMode, setCustomerDisplayLangMode] = useState<'follow-pos' | 'custom'>('follow-pos')
+  const [customerDisplayLangOverride, setCustomerDisplayLangOverride] = useState<LangCode>('ko')
   const [customerDisplayDefaultState, setCustomerDisplayDefaultState] = useState<'idle' | 'qr'>('idle')
   const [customerDisplayIdleMessage, setCustomerDisplayIdleMessage] = useState('')
   const [customerDisplayPaymentMessage, setCustomerDisplayPaymentMessage] = useState('')
@@ -1344,6 +1345,13 @@ export default function PosTerminalPage() {
         setCustomerDisplayMonitorPreference(
           s.customerDisplayMonitorPreference === 'primary-only' ? 'primary-only' : 'secondary-first'
         )
+        const rawCustomerDisplayLangOverride = String(s.customerDisplayLangOverride ?? '').trim()
+        setCustomerDisplayLangMode(
+          s.customerDisplayLangMode === 'custom' && isLangCode(rawCustomerDisplayLangOverride)
+            ? 'custom'
+            : 'follow-pos'
+        )
+        setCustomerDisplayLangOverride(isLangCode(rawCustomerDisplayLangOverride) ? rawCustomerDisplayLangOverride : lang)
         setCustomerDisplayDefaultState(s.customerDisplayDefaultState === 'qr' ? 'qr' : 'idle')
         setCustomerDisplayIdleMessage(String(s.customerDisplayIdleMessage ?? '').trim())
         setCustomerDisplayPaymentMessage(String(s.customerDisplayPaymentMessage ?? '').trim())
@@ -1421,6 +1429,8 @@ export default function PosTerminalPage() {
         setDualMonitorEnabled(false)
         setCustomerDisplayAutoOpen(true)
         setCustomerDisplayMonitorPreference('secondary-first')
+        setCustomerDisplayLangMode('follow-pos')
+        setCustomerDisplayLangOverride(lang)
         setCustomerDisplayDefaultState('idle')
         setCustomerDisplayIdleMessage('')
         setCustomerDisplayPaymentMessage('')
@@ -1464,7 +1474,7 @@ export default function PosTerminalPage() {
         if (seq !== storeSettingsLoadSeqRef.current) return
         setPromosWithItems([])
       })
-  }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore])
+  }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore, lang])
 
   useLayoutEffect(() => {
     if (!pendingPayRequest) return
@@ -2435,6 +2445,14 @@ export default function PosTerminalPage() {
     }, 16000)
   }, [dualMonitorEnabled, customerDisplayQrPayload])
 
+  const customerDisplayUiLang = useMemo<LangCode>(() => {
+    if (customerDisplayLangMode === 'custom' && isLangCode(customerDisplayLangOverride)) {
+      return customerDisplayLangOverride
+    }
+    return lang
+  }, [customerDisplayLangMode, customerDisplayLangOverride, lang])
+  const customerDisplayT = useT(customerDisplayUiLang)
+
   useEffect(() => {
     if (!currentStoreId) return
     const shell = window.cmPosShell
@@ -2454,7 +2472,7 @@ export default function PosTerminalPage() {
       storeCode: currentStoreId,
       kind: 'idle',
       updatedAt: new Date().toISOString(),
-      uiLang: lang,
+      uiLang: customerDisplayUiLang,
       showOrderSummary: customerDisplayShowOrderSummary,
       showOrderTotal: customerDisplayShowOrderTotal,
       idleMediaType: customerDisplayIdleMediaType,
@@ -2471,26 +2489,26 @@ export default function PosTerminalPage() {
       ? {
           ...base,
           kind: 'qr',
-          title: t('posCustomerThankYou') || '감사합니다',
-          message: t('posCustomerPostPaymentQrHint') || '아래 QR을 이용해 주세요.',
+          title: customerDisplayT('posCustomerThankYou') || '감사합니다',
+          message: customerDisplayT('posCustomerPostPaymentQrHint') || '아래 QR을 이용해 주세요.',
           qrPayload: customerDisplayQrPayload,
         }
       : hasPendingPaymentFlow
         ? {
             ...base,
             kind: 'payment',
-            title: t('posCustomerPayment') || '결제 진행 중',
+            title: customerDisplayT('posCustomerPayment') || '결제 진행 중',
             message: customerDisplayPaymentMessage || undefined,
             items: customerDisplayOrderItems,
             totalAmount: customerDisplayBreakdown.total,
             breakdown: customerDisplayBreakdown,
-            paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, t),
+            paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, customerDisplayT),
           }
         : customerDisplayOrderItems.length > 0
           ? {
               ...base,
               kind: 'ordering',
-              title: t('posCustomerOrdering') || '주문 확인',
+              title: customerDisplayT('posCustomerOrdering') || '주문 확인',
               items: customerDisplayOrderItems,
               totalAmount: customerDisplayOrderTotal,
             }
@@ -2498,7 +2516,7 @@ export default function PosTerminalPage() {
             ? {
                 ...base,
                 kind: 'qr',
-                title: t('posCustomerQrTitle') || 'QR 코드',
+                title: customerDisplayT('posCustomerQrTitle') || 'QR 코드',
                 qrPayload: customerDisplayQrPayload,
               }
             : {
@@ -2517,6 +2535,8 @@ export default function PosTerminalPage() {
     customerDisplayShowOrderSummary,
     customerDisplayShowOrderTotal,
     hasPendingPaymentFlow,
+    customerDisplayLangMode,
+    customerDisplayLangOverride,
     customerDisplayPaymentMessage,
     customerDisplayOrderTotal,
     customerDisplayBreakdown,
@@ -2529,8 +2549,8 @@ export default function PosTerminalPage() {
     receiptLogoImageUrl,
     postPaymentQrUntil,
     customerDisplayPaymentDraft,
-    t,
-    lang,
+    customerDisplayT,
+    customerDisplayUiLang,
   ])
 
   useEffect(() => {

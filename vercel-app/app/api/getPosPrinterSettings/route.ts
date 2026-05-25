@@ -185,6 +185,8 @@ export async function GET(request: NextRequest) {
     dualMonitorEnabled: false,
     customerDisplayAutoOpen: true,
     customerDisplayMonitorPreference: 'secondary-first' as const,
+    customerDisplayLangMode: 'follow-pos' as const,
+    customerDisplayLangOverride: '' as string,
     customerDisplayTheme: 'dark' as const,
     customerDisplayDefaultState: 'idle' as const,
     customerDisplayIdleMessage: '',
@@ -291,6 +293,8 @@ export async function GET(request: NextRequest) {
       dual_monitor_enabled?: boolean
       customer_display_auto_open?: boolean
       customer_display_monitor_preference?: string
+      customer_display_lang_mode?: string
+      customer_display_lang_override?: string
       customer_display_theme?: string
       customer_display_default_state?: string
       customer_display_idle_message?: string
@@ -467,6 +471,18 @@ export async function GET(request: NextRequest) {
         String(raw?.customer_display_monitor_preference || 'secondary-first') === 'primary-only'
           ? 'primary-only'
           : 'secondary-first',
+      customerDisplayLangMode:
+        String(raw?.customer_display_lang_mode || 'follow-pos') === 'custom' &&
+        ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms'].includes(
+          String(raw?.customer_display_lang_override || '').trim()
+        )
+          ? 'custom'
+          : 'follow-pos',
+      customerDisplayLangOverride: ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms'].includes(
+        String(raw?.customer_display_lang_override || '').trim()
+      )
+        ? String(raw?.customer_display_lang_override || '').trim()
+        : '',
       customerDisplayTheme:
         String(raw?.customer_display_theme || 'dark') === 'light'
           ? 'light'

@@ -27,6 +27,8 @@ export default function PosCustomerDisplayPage() {
   const [paymentMessage, setPaymentMessage] = React.useState("")
   const [showOrderSummary, setShowOrderSummary] = React.useState(true)
   const [showOrderTotal, setShowOrderTotal] = React.useState(true)
+  const [settingsLangMode, setSettingsLangMode] = React.useState<"follow-pos" | "custom">("follow-pos")
+  const [settingsLangOverride, setSettingsLangOverride] = React.useState<LangCode>(lang)
   const [settingsIdleMediaType, setSettingsIdleMediaType] = React.useState<"none" | "image" | "video">("none")
   const [settingsIdleMediaUrl, setSettingsIdleMediaUrl] = React.useState("")
   const [receiptLogoUrl, setReceiptLogoUrl] = React.useState("")
@@ -41,6 +43,12 @@ export default function PosCustomerDisplayPage() {
       setPaymentMessage(String(s.customerDisplayPaymentMessage ?? "").trim())
       setShowOrderSummary(s.customerDisplayShowOrderSummary !== false)
       setShowOrderTotal(s.customerDisplayShowOrderTotal !== false)
+      const rawSettingsLangOverride = String(s.customerDisplayLangOverride ?? "").trim()
+      const normalizedSettingsLangOverride = isLangCode(rawSettingsLangOverride) ? rawSettingsLangOverride : lang
+      setSettingsLangMode(
+        s.customerDisplayLangMode === "custom" && isLangCode(rawSettingsLangOverride) ? "custom" : "follow-pos"
+      )
+      setSettingsLangOverride(normalizedSettingsLangOverride)
       const mt = String(s.customerDisplayIdleMediaType || "none").toLowerCase()
       setSettingsIdleMediaType(mt === "image" ? "image" : mt === "video" ? "video" : "none")
       setSettingsIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? "").trim())
@@ -49,7 +57,7 @@ export default function PosCustomerDisplayPage() {
     return () => {
       alive = false
     }
-  }, [storeCode])
+  }, [lang, storeCode])
 
   React.useEffect(() => {
     if (!storeCode) return
@@ -70,8 +78,9 @@ export default function PosCustomerDisplayPage() {
   const effectiveLang: LangCode = React.useMemo(() => {
     const from = state?.uiLang
     if (from && isLangCode(from)) return from
+    if (settingsLangMode === "custom" && isLangCode(settingsLangOverride)) return settingsLangOverride
     return lang
-  }, [state?.uiLang, lang])
+  }, [state?.uiLang, settingsLangMode, settingsLangOverride, lang])
 
   const t = useT(effectiveLang)
 

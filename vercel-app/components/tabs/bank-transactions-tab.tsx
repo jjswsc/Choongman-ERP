@@ -662,9 +662,6 @@ export function BankTransactionsTab() {
   }, [list, loading, router, searchParams])
 
   React.useEffect(() => {
-    getVendorsForPurchase().then((r) => setVendorOptions(r || []))
-  }, [])
-  React.useEffect(() => {
     getVendorsForSales().then((r) => setSalesVendorOptions(r || []))
   }, [])
   React.useEffect(() => {
@@ -682,6 +679,45 @@ export function BankTransactionsTab() {
     })
   }, [storeList, salesVendorOptions])
   const [revenueAccountOptions, setRevenueAccountOptions] = React.useState<AccountSubjectItem[]>([])
+  const normalizePurchaseVendorOptions = React.useCallback((rows: unknown): { code: string; name: string }[] => {
+    if (!Array.isArray(rows)) return []
+    const seen = new Set<string>()
+    return rows
+      .map((row) => {
+        const item = row as { code?: string; name?: string }
+        return {
+          code: String(item.code || "").trim(),
+          name: String(item.name || "").trim(),
+        }
+      })
+      .filter((row) => row.code)
+      .filter((row) => {
+        if (seen.has(row.code)) return false
+        seen.add(row.code)
+        return true
+      })
+      .sort((a, b) => (a.name || a.code).localeCompare(b.name || b.code))
+  }, [])
+  const loadPurchaseVendorOptions = React.useCallback(async (forceFresh = false) => {
+    if (!forceFresh) {
+      const cachedRows = normalizePurchaseVendorOptions(await getVendorsForPurchase().catch(() => []))
+      if (cachedRows.length > 0) {
+        setVendorOptions(cachedRows)
+        return
+      }
+    }
+    try {
+      const res = await fetch("/api/getVendorsForPurchase", { cache: "no-store" })
+      if (!res.ok) throw new Error(`getVendorsForPurchase failed: ${res.status}`)
+      const freshRows = normalizePurchaseVendorOptions(await res.json())
+      setVendorOptions(freshRows)
+    } catch {
+      if (forceFresh) setVendorOptions([])
+    }
+  }, [normalizePurchaseVendorOptions])
+  React.useEffect(() => {
+    void loadPurchaseVendorOptions()
+  }, [loadPurchaseVendorOptions])
   const reloadAccountSubjectOptions = React.useCallback(() => {
     Promise.all([
       getAccountSubjects({ forExpense: true, excludeHeaders: true }),
@@ -707,13 +743,17 @@ export function BankTransactionsTab() {
     return () => document.removeEventListener("visibilitychange", onVis)
   }, [reloadAccountSubjectOptions])
 
+  const getDefaultImportCategory = React.useCallback((row: KDepositParsedResult["rows"][number]) => {
+    return row.transType === "deposit" ? "receivable_receive" : "unclassified"
+  }, [])
+
   React.useEffect(() => {
     if (!importPreview || revenueAccountOptions.length === 0 || accountSubjectOptions.length === 0) return
     setImportRowEdits((prev) => {
       const next = { ...prev }
       importPreview.rows.forEach((r, idx) => {
         if (r.transType === "deposit" && r.memo) {
-          const existingCategory = String(next[idx]?.category || "").trim().toLowerCase()
+          const existingCategory = String(next[idx]?.category || getDefaultImportCategory(r)).trim().toLowerCase()
           if (existingCategory) return
           const sug = suggestDepositWithRules(r.memo, memoRules, revenueAccountOptions)
           if (sug) {
@@ -734,7 +774,7 @@ export function BankTransactionsTab() {
       })
       return next
     })
-  }, [importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
+  }, [getDefaultImportCategory, importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
 
   React.useEffect(() => {
     if (!importPreview) importMemoFocusIdxRef.current = null
@@ -1299,7 +1339,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           ? (rawWithdrawCat && (withdrawCats as readonly string[]).includes(rawWithdrawCat) ? rawWithdrawCat : "unclassified")
           : edit?.category && (depositCats as readonly string[]).includes(edit.category)
             ? edit.category
-            : "revenue_delivery"
+            : "receivable_receive"
 
       let accountSubjectId: number | undefined
       if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
@@ -1318,7 +1358,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           ? edit?.expenseDate || r.transDate
           : undefined
       const vendorCode = r.transType === "withdraw" && category === "purchase_payment" ? edit?.vendorCode?.trim() || undefined : undefined
-      const storeName = r.transType === "deposit" && category === "receivable_receive" ? edit?.storeName?.trim() || undefined : undefined
+      const storeName =
+        r.transType === "deposit" && category === "receivable_receive"
+          ? edit?.storeName?.trim() || selectedAccountStore || undefined
+          : undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -1760,7 +1803,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <Select
                                     value={(edits?.vendorCode ?? r.vendorCode ?? "") || "__none__"}
                                     onValueChange={(v) => r.id && setQueryRowEdit(r.id, "vendorCode", v === "__none__" ? "" : v)}
-                                    onOpenChange={(open) => !open && setQueryVendorSearch("")}
+                              onOpenChange={(open) => {
+                                if (!open) {
+                                  setQueryVendorSearch("")
+                                  return
+                                }
+                                if (vendorOptions.length === 0) void loadPurchaseVendorOptions(true)
+                              }}
                                   >
                                     <SelectTrigger className="h-8 text-xs max-w-[140px]">
                                       <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
@@ -2175,7 +2224,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   </thead>
                   <tbody>
                     {importPreview.rows.map((r, idx) => {
-                      const impRaw = importRowEdits[idx]?.category || "unclassified"
+                      const impRaw = importRowEdits[idx]?.category || getDefaultImportCategory(r)
                       const impCat = r.transType === "withdraw" && impRaw === "fixed" ? "expense" : impRaw
                       return (
                       <tr key={idx} className={`border-t ${importRowEdits[idx]?.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
@@ -2202,7 +2251,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             </Select>
                           ) : (
                             <Select
-                              value={importRowEdits[idx]?.category || "revenue_delivery"}
+                              value={impRaw}
                               onValueChange={(v) => setImportRowEdit(idx, "category", v)}
                             >
                               <SelectTrigger className="h-8 text-xs">
@@ -2223,11 +2272,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           )}
                         </td>
                         <td className="p-2">
-                          {r.transType === "withdraw" && importRowEdits[idx]?.category === "purchase_payment" ? (
+                          {r.transType === "withdraw" && impCat === "purchase_payment" ? (
                             <Select
                               value={(importRowEdits[idx]?.vendorCode ?? "") || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "vendorCode", v === "__none__" ? "" : v)}
-                              onOpenChange={(open) => !open && setImportVendorSearch("")}
+                              onOpenChange={(open) => {
+                                if (!open) {
+                                  setImportVendorSearch("")
+                                  return
+                                }
+                                if (vendorOptions.length === 0) void loadPurchaseVendorOptions(true)
+                              }}
                             >
                               <SelectTrigger className="h-8 text-xs max-w-[140px]">
                                 <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
@@ -2272,9 +2327,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : r.transType === "deposit" && importRowEdits[idx]?.category === "receivable_receive" ? (
+                          ) : r.transType === "deposit" && impCat === "receivable_receive" ? (
                             <Select
-                              value={importRowEdits[idx]?.storeName || "__none__"}
+                              value={importRowEdits[idx]?.storeName || selectedAccountStore || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "storeName", v === "__none__" ? "" : v)}
                               onOpenChange={(open) => !open && setImportStoreSearch("")}
                             >
@@ -2298,7 +2353,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ))}
                               </SelectContent>
                             </Select>
-                          ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(importRowEdits[idx]?.category || "") ? (
+                          ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -2337,7 +2392,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           />
                         </td>
                         <td className="p-2 whitespace-nowrap">
-                          {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(importRowEdits[idx]?.category || "") ? (
+                          {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
