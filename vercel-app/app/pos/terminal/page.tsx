@@ -3560,6 +3560,7 @@ export default function PosTerminalPage() {
   }, [
     isMainPosDevice,
     currentStoreId,
+    autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnOrder,
     autoPrintKitchenSlipOnOrder,
     autoPrintReceiptOnPayment,
@@ -4314,6 +4315,118 @@ export default function PosTerminalPage() {
               limit: 800,
               orderBy: 'id.desc',
             })
+            const wantMetaDineInAddonReceipt =
+              autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
+            if (wantMetaDineInAddonReceipt) {
+              for (const o of watchOrders) {
+                const oid = Number(o.id)
+                if (!Number.isFinite(oid) || oid <= 0) continue
+                if (String(o.orderType ?? '').trim().toLowerCase() !== 'dine_in') continue
+                const statusLower = String(o.status ?? '').trim().toLowerCase()
+                if (statusLower === 'completed' || statusLower === 'cancelled' || statusLower === 'canceled') continue
+                if (isPosOrderPaidLikeStatus(statusLower)) continue
+                if (posOrderPaymentSum(o) > 0) continue
+                const items = (o.items || []).map(
+                  (it: {
+                    id?: string
+                    name?: string
+                    price?: number
+                    qty?: number
+                    quantity?: number
+                    note?: string
+                    menuId1?: string
+                    menu_id1?: string
+                    menuId?: string
+                    optionCode1?: string
+                    option_code1?: string
+                    optionCode?: string
+                    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+                  }) => {
+                    const note = String(it.note ?? '').trim()
+                    const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+                    const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
+                    const displayName = resolveOrderItemDisplayName({
+                      id: String(it.id ?? ''),
+                      name: String(it.name ?? ''),
+                      menuId,
+                    })
+                    return {
+                      id: String(it.id ?? ''),
+                      name: displayName,
+                      price: Number(it.price ?? 0),
+                      qty: Number(it.qty ?? it.quantity ?? 1),
+                      ...(menuId ? { menuId } : {}),
+                      ...(optionCode ? { optionCode } : {}),
+                      ...(note ? { note: formatLineNoteForPrint(note) } : {}),
+                      ...(Array.isArray(it.promoItems)
+                        ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
+                        : {}),
+                    }
+                  }
+                )
+                if (!items.length) continue
+                const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
+                const newQtyById = buildDineInQtySnapshot(items)
+                if (newQtyById.size === 0) continue
+                if (!prevQtyById) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  continue
+                }
+                const changedIds = [...newQtyById.keys()].filter((id) => {
+                  const prevQty = Number(prevQtyById.get(id) ?? 0)
+                  const nextQty = Number(newQtyById.get(id) ?? 0)
+                  if (prevQty <= 0) return nextQty > 0
+                  return nextQty > prevQty
+                })
+                if (changedIds.length === 0) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  continue
+                }
+                dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                const changedSet = new Set(changedIds)
+                const receiptPrintItemsRemote = items.map((it) => ({
+                  ...it,
+                  ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+                }))
+                const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
+                const discountAmt = Number(o.discountAmt ?? 0)
+                const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
+                const pricing = computePosPricing({
+                  subtotal: mergeSubtotal,
+                  discountAmt,
+                  cardPaymentAmount: 0,
+                  adjustments: pricingAdjustments,
+                })
+                const receiptPayloadRemote = {
+                  orderNo: String(o.orderNo ?? ''),
+                  storeCode: String(o.storeCode ?? currentStoreId),
+                  orderType: t('posOrderTypeDineIn') || '매장',
+                  tableName: String(o.tableName ?? ''),
+                  memo: String(o.memo ?? ''),
+                  items: receiptPrintItemsRemote,
+                  subtotal: mergeSubtotal,
+                  discountAmt,
+                  couponDiscountAmt,
+                  discountReason: String(o.discountReason ?? '').trim() || undefined,
+                  total: pricing.finalTotal,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
+                  ...posGuestCountSpread(o.guestCount),
+                }
+                logPosPrintDebug('poll_meta_remote_dine_in_add_receipt', {
+                  orderId: oid,
+                  changedCount: changedIds.length,
+                })
+                void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)
+              }
+            }
             if (!grabCancelWatchSeededRef.current) {
               runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
             } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
@@ -4359,6 +4472,10 @@ export default function PosTerminalPage() {
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
     buildDineInQtySnapshot,
+    resolveDineInSnapshotItemKey,
+    resolveOrderItemDisplayName,
+    enrichPromoItemsWithOptionName,
+    printReceiptNow,
   ])
 
   useEffect(() => {
