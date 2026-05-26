@@ -1,3 +1,5 @@
+import type { PosMenu } from '@/lib/api-client'
+import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 import { supabaseSelectAllPages } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
@@ -20,6 +22,7 @@ import {
   buildMenuPolicyMap,
   getPosDeliveryPolicyBundle,
   isMenuAvailableByDeliveryPolicy,
+  type PosDeliveryMenuPolicy,
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
 
@@ -41,6 +44,7 @@ type MenuRow = {
   description_delivery?: string | null
   description_table?: string | null
   sell_delivery?: boolean
+  banbanFlavorMenuIds?: string[]
   /** POS 옵션 그룹 규칙 (Grab modifierGroups selectionRange에 반영) */
   option_selection_config?: unknown
 }
@@ -192,32 +196,85 @@ function buildGrabItemId(menu: MenuRow, itemIndex: number): string {
   return normalizeId(`item-${code}-${itemIndex + 1}`, `item-${itemIndex + 1}`)
 }
 
-function isBanbanMenuRow(menu: MenuRow): boolean {
-  if (menu.is_banban === true) return true
-  const name = String(menu.name ?? '').trim().toLowerCase()
-  const code = String(menu.code ?? '').trim().toLowerCase().replace(/[\s\-_.#]/g, '')
-  if (name.includes('banban') || name.includes('반반')) return true
-  return code === 'c024' || code.includes('banban') || code.startsWith('bb')
+function toBanbanPosMenu(menu: MenuRow): PosMenu {
+  return {
+    id: String(menu.id ?? ''),
+    code: String(menu.code ?? ''),
+    name: String(menu.name ?? ''),
+    category: String(menu.category ?? ''),
+    categoryMain: String(menu.category_main ?? ''),
+    price: Number(menu.price ?? 0),
+    priceDelivery: menu.price_delivery != null ? Number(menu.price_delivery) : null,
+    imageUrl: String(menu.image ?? ''),
+    vatIncluded: menu.vat_included !== false,
+    isActive: menu.is_active !== false,
+    sortOrder: Number(menu.sort_order ?? 0),
+    soldOutDate: menu.sold_out_date ? String(menu.sold_out_date).slice(0, 10) : null,
+    isBanban: menu.is_banban === true,
+    descriptionDefault: String(menu.description_default ?? ''),
+    descriptionDelivery:
+      menu.description_delivery == null ? null : String(menu.description_delivery),
+    descriptionTable:
+      menu.description_table == null ? null : String(menu.description_table),
+    sellDelivery: menu.sell_delivery !== false,
+    banbanFlavorMenuIds: Array.isArray(menu.banbanFlavorMenuIds) ? menu.banbanFlavorMenuIds : undefined,
+  }
 }
 
-function isBanbanFlavorCandidate(menu: MenuRow, banbanMenu: MenuRow): boolean {
+function isBanbanMenuRow(menu: MenuRow): boolean {
+  return isBanbanMenu(toBanbanPosMenu(menu))
+}
+
+function isGrabBanbanFlavorAvailable(
+  menu: MenuRow,
+  policy: PosDeliveryMenuPolicy | undefined
+): boolean {
   if (menu.is_active === false) return false
+  if (menu.sell_delivery === false) return false
   if (isSoldOutDate(menu.sold_out_date)) return false
-  if (isBanbanMenuRow(menu)) return false
-  const menuId = Number(menu.id ?? 0)
-  const banbanId = Number(banbanMenu.id ?? 0)
-  if (menuId > 0 && banbanId > 0 && menuId === banbanId) return false
+  if (policy && !policy.enabled) return false
+  if (policy && !isMenuAvailableByDeliveryPolicy(policy)) return false
+  return true
+}
 
-  const code = String(menu.code ?? '').trim().toLowerCase()
-  const main = String(menu.category_main ?? '').trim().toLowerCase()
-  const cat = String(menu.category ?? '').trim().toLowerCase()
-  const banbanMain = String(banbanMenu.category_main ?? '').trim().toLowerCase()
-
-  if (code.startsWith('c')) return true
-  if (main && banbanMain && main === banbanMain) return true
-  if (main.includes('chicken') || main.includes('치킨')) return true
-  if (cat.includes('chicken') || cat.includes('치킨')) return true
-  return false
+function mergeBanbanFlavorMenuIdsIntoMenus(
+  menus: MenuRow[],
+  rows: Array<{
+    banban_menu_id?: number | null
+    flavor_menu_id?: number | null
+    enabled?: boolean | null
+    sort_order?: number | null
+  }>
+): MenuRow[] {
+  if (!rows.length) return menus
+  const nextMenus = menus.map((menu) => ({ ...menu }))
+  const menuById = new Map<number, MenuRow>()
+  for (const menu of nextMenus) {
+    const id = Number(menu.id ?? 0)
+    if (id > 0) menuById.set(id, menu)
+  }
+  const sorted = [...rows]
+    .filter((row) => row.enabled !== false)
+    .sort((a, b) => {
+      const aMenuId = Number(a.banban_menu_id || 0)
+      const bMenuId = Number(b.banban_menu_id || 0)
+      if (aMenuId !== bMenuId) return aMenuId - bMenuId
+      const aSort = Number(a.sort_order || 0)
+      const bSort = Number(b.sort_order || 0)
+      if (aSort !== bSort) return aSort - bSort
+      return Number(a.flavor_menu_id || 0) - Number(b.flavor_menu_id || 0)
+    })
+  for (const row of sorted) {
+    const banbanMenuId = Number(row.banban_menu_id || 0)
+    const flavorMenuId = String(row.flavor_menu_id || '').trim()
+    if (!banbanMenuId || !flavorMenuId) continue
+    const menu = menuById.get(banbanMenuId)
+    if (!menu) continue
+    const list = Array.isArray(menu.banbanFlavorMenuIds) ? [...menu.banbanFlavorMenuIds] : []
+    if (!list.includes(flavorMenuId)) list.push(flavorMenuId)
+    menu.banbanFlavorMenuIds = list
+  }
+  return nextMenus
 }
 
 function toMinorUnit(value: unknown): number {
@@ -460,6 +517,31 @@ async function loadMenus(): Promise<MenuRow[]> {
   return []
 }
 
+async function loadBanbanFlavorLinkRows(): Promise<
+  Array<{
+    banban_menu_id?: number | null
+    flavor_menu_id?: number | null
+    enabled?: boolean | null
+    sort_order?: number | null
+  }>
+> {
+  try {
+    const rows = (await supabaseSelectAllPages('pos_banban_flavor_links', {
+      order: 'banban_menu_id.asc',
+      pageSize: 3000,
+      select: 'banban_menu_id,flavor_menu_id,enabled,sort_order',
+    })) as Array<{
+      banban_menu_id?: number | null
+      flavor_menu_id?: number | null
+      enabled?: boolean | null
+      sort_order?: number | null
+    }>
+    return Array.isArray(rows) ? rows : []
+  } catch {
+    return []
+  }
+}
+
 function looksLikeGrabMerchantId(raw: string): boolean {
   const s = String(raw || '').trim().toUpperCase()
   return s.startsWith('GF') || s.includes('GFSB') || s.includes('GFSBPOS')
@@ -575,7 +657,11 @@ export async function buildGrabMenuFromPos(params: {
   merchantID: string
   partnerMerchantID: string
 }): Promise<unknown> {
-  const menus = await loadMenus()
+  const [loadedMenus, banbanFlavorLinkRows] = await Promise.all([
+    loadMenus(),
+    loadBanbanFlavorLinkRows(),
+  ])
+  const menus = mergeBanbanFlavorMenuIdsIntoMenus(loadedMenus, banbanFlavorLinkRows)
   if (!menus.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 
   const storeGuess = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
@@ -817,7 +903,18 @@ export async function buildGrabMenuFromPos(params: {
         .filter((group): group is NonNullable<typeof group> => group != null)
 
       const banbanFlavorMenus = isBanbanMenuRow(menu)
-        ? menus.filter((m) => isBanbanFlavorCandidate(m, menu)).slice(0, 30)
+        ? getBanbanFlavorMenuList(
+            menus.map(toBanbanPosMenu),
+            toBanbanPosMenu(menu),
+            new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+          )
+            .map((candidate) => {
+              const id = Number(candidate.id || 0)
+              return menus.find((m) => Number(m.id ?? 0) === id)
+            })
+            .filter((m): m is MenuRow => !!m)
+            .filter((m) => isGrabBanbanFlavorAvailable(m, menuPolicyMap.get(Number(m.id ?? 0))))
+            .slice(0, 30)
         : []
       const banbanModifierGroups =
         banbanFlavorMenus.length > 0

@@ -5455,6 +5455,9 @@ export const i18n = {
     posTourFullW22Title: 'QR 결제',
     posTourFullW22Body:
       'QR 탭에서 QR 결제 금액을 입력합니다. 혼합 결제 시에는 필요한 금액만 부분 입력하고, 남은 금액은 다른 수단(현금/카드)으로 이어서 처리합니다.',
+    posTourFullW22aTitle: 'QR 생성 미리보기',
+    posTourFullW22aBody:
+      '데모에서는 QR 금액을 넣으면 오른쪽 상단에 연습용 QR 미리보기가 나타납니다. 실매장에서 카시콘 QR을 쓰는 매장은 결제 직전에 이 위치에서 고객에게 보여줄 QR이 생성된다고 이해하면 됩니다.',
     posTourFullW23Title: '배달앱 정산',
     posTourFullW23Body:
       '배달앱 탭은 플랫폼 정산 금액을 기록하는 영역입니다. 채널(플랫폼)과 금액을 정확히 맞춰 입력해야 정산서와 POS 매출이 일치합니다.',
@@ -14046,6 +14049,9 @@ orderItemQty: 'Qty',
     posTourFullW21Body: 'Open Card tab and check where card amount is entered. You can use full-amount shortcut or manual amount input.',
     posTourFullW22Title: 'QR payment',
     posTourFullW22Body: 'Open QR tab and check QR amount input. For mixed payment, only part of the total can be assigned to QR.',
+    posTourFullW22aTitle: 'QR preview step',
+    posTourFullW22aBody:
+      'In demo mode, entering a QR amount shows a training QR preview at the top-right. In live stores using KBank QR, this is the stage where the customer-facing QR is generated before final confirmation.',
     posTourFullW23Title: 'Delivery app settlement',
     posTourFullW23Body: 'Open Delivery App tab to record platform-settlement amount by channel so reconciliation matches.',
     posTourFullW24Title: 'Other methods',
@@ -23672,6 +23678,9 @@ orderItemQty: 'จำนวน',
     posTourFullW22Title: 'ชำระด้วย QR',
     posTourFullW22Body:
       'แท็บ QR: ใช้กรอกยอดที่ลูกค้าจ่ายผ่าน QR หากเป็นการจ่ายแบบผสม ให้ใส่เฉพาะยอดส่วนของ QR แล้วปิดส่วนที่เหลือด้วยวิธีอื่น',
+    posTourFullW22aTitle: 'ตัวอย่าง QR',
+    posTourFullW22aBody:
+      'ในโหมดเดโม เมื่อกรอกยอด QR แล้ว จะมีตัวอย่าง QR สำหรับฝึกปรากฏที่มุมขวาบน ในร้านจริงที่ใช้ KBank QR ให้เข้าใจว่านี่คือจุดที่ระบบจะสร้าง QR ให้ลูกค้าสแกนก่อนกดยืนยันชำระ',
     posTourFullW23Title: 'ตัดยอดแอปเดลิเวอรี',
     posTourFullW23Body:
       'แท็บแอปเดลิเวอรี: บันทึกยอดตามช่องทางแพลตฟอร์มให้ถูกต้อง เพื่อให้ยอดขายใน POS ตรงกับรายงานสรุป/รอบโอนของแพลตฟอร์ม',

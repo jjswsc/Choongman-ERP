@@ -31,7 +31,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { useStoreList } from '@/lib/use-store-list'
-import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
+import { LayoutGrid, Bike, Package, Search, QrCode as QrCodeIcon } from 'lucide-react'
 import {
   getMembers,
   getPosMenus,
@@ -2459,6 +2459,20 @@ export default function PosTerminalPage() {
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId])
 
+  const demoKbankQrPayload = useMemo(() => {
+    if (!isPosDemo || !tourPaymentModalOpen) return ''
+    const amount = Math.max(0, Number(tourPaymentQrAmount || 0))
+    if (amount <= 0) return ''
+    const store = String(currentStoreId || 'POS DEMO').trim() || 'POS DEMO'
+    return `CMERP-DEMO-KBANK|${store}|${amount.toFixed(2)}`
+  }, [isPosDemo, tourPaymentModalOpen, tourPaymentQrAmount, currentStoreId])
+
+  const effectiveStaffKbankQrPayload = useMemo(() => {
+    const live = String(liveKbankQrPayload || '').trim()
+    if (live) return live
+    return String(demoKbankQrPayload || '').trim()
+  }, [liveKbankQrPayload, demoKbankQrPayload])
+
   const effectiveCustomerDisplayQrPayload = useMemo(() => {
     const live = String(liveKbankQrPayload || '').trim()
     if (live) return live
@@ -2466,7 +2480,7 @@ export default function PosTerminalPage() {
   }, [liveKbankQrPayload, customerDisplayQrPayload])
 
   useEffect(() => {
-    const payload = String(liveKbankQrPayload || '').trim()
+    const payload = String(effectiveStaffKbankQrPayload || '').trim()
     if (!payload) {
       setStaffKbankQrDataUrl('')
       return
@@ -2482,7 +2496,7 @@ export default function PosTerminalPage() {
     return () => {
       cancelled = true
     }
-  }, [liveKbankQrPayload])
+  }, [effectiveStaffKbankQrPayload])
 
   const schedulePostPaymentCustomerQr = useCallback(() => {
     const q = String(effectiveCustomerDisplayQrPayload || '').trim()
@@ -3619,18 +3633,22 @@ export default function PosTerminalPage() {
         const paySum = posOrderRowPaymentSum(row)
         if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
           printedPaymentReceiptIdsRef.current.add(orderId)
-          void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true }).then((list) => {
-            const order = list[0] as PosOrder | undefined
-            if (!order?.items?.length) {
+          void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+            .then((list) => {
+              const order = list[0] as PosOrder | undefined
+              if (!order?.items?.length) {
+                printedPaymentReceiptIdsRef.current.delete(orderId)
+                return
+              }
+              if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+                printedPaymentReceiptIdsRef.current.delete(orderId)
+                return
+              }
+              setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
+            })
+            .catch(() => {
               printedPaymentReceiptIdsRef.current.delete(orderId)
-              return
-            }
-            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
-              return
-            }
-            setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
-          })
+            })
         }
       }
     }, { store: currentStoreId })
@@ -3794,18 +3812,22 @@ export default function PosTerminalPage() {
         !printedPaymentReceiptIdsRef.current.has(orderId)
       ) {
         printedPaymentReceiptIdsRef.current.add(orderId)
-        void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true }).then((list) => {
-          const order = list[0] as PosOrder | undefined
-          if (!order?.items?.length) {
+        void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+          .then((list) => {
+            const order = list[0] as PosOrder | undefined
+            if (!order?.items?.length) {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+              return
+            }
+            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+              return
+            }
+            setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
+          })
+          .catch(() => {
             printedPaymentReceiptIdsRef.current.delete(orderId)
-            return
-          }
-          if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-            printedPaymentReceiptIdsRef.current.delete(orderId)
-            return
-          }
-          setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
-        })
+          })
       }
 
       if (!wantRemoteDineInAdd) return
@@ -4616,7 +4638,10 @@ export default function PosTerminalPage() {
         splitCashDrawerStepsRef.current = 0
         return
       }
-      await tryOpenDrawerForPayment(payment)
+      /** 서랍 브리지/셸 지연이 영수증 자동 인쇄를 막지 않도록 백그라운드로 연다. */
+      void tryOpenDrawerForPayment(payment).catch((e) => {
+        console.error('tryOpenDrawerForPayment:', e)
+      })
     },
     [tryOpenDrawerForPayment]
   )
@@ -5661,9 +5686,6 @@ export default function PosTerminalPage() {
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
-                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
-                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
-                }
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -5711,6 +5733,9 @@ export default function PosTerminalPage() {
                   startReceiptBatch(splitBatch)
                 } else {
                   setReceiptData(receiptPayload)
+                }
+                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
+                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
                 }
                 setPendingReceiptOrderNo(null)
                 setPendingDeliveryOrderId(null)
@@ -5775,9 +5800,6 @@ export default function PosTerminalPage() {
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
-                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
-                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
-                }
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -5822,6 +5844,9 @@ export default function PosTerminalPage() {
                   startReceiptBatch(splitBatch)
                 } else {
                   setReceiptData(receiptPayload)
+                }
+                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
+                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
                 }
                 setPendingReceiptOrderNo(null)
                 setPendingTakeoutOrderId(null)
@@ -6528,9 +6553,6 @@ export default function PosTerminalPage() {
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
-                if (orderIdToComplete != null && orderIdToComplete > 0 && isMainPosDevice) {
-                  printedPaymentReceiptIdsRef.current.add(orderIdToComplete)
-                }
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -6575,6 +6597,9 @@ export default function PosTerminalPage() {
                   startReceiptBatch(splitBatch)
                 } else {
                   setReceiptData(receiptPayload)
+                }
+                if (orderIdToComplete != null && orderIdToComplete > 0 && isMainPosDevice) {
+                  printedPaymentReceiptIdsRef.current.add(orderIdToComplete)
                 }
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
@@ -7892,17 +7917,35 @@ export default function PosTerminalPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {isKbankPilotStore && String(liveKbankQrPayload || '').trim() ? (
-        <div className="pointer-events-none fixed right-4 top-20 z-[70] w-[320px] rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur">
-          <p className="text-sm font-semibold">{t('posPaymentQr') || 'QR 결제'} · 직원 모니터</p>
+      {String(effectiveStaffKbankQrPayload || '').trim() ? (
+        <div
+          className="pointer-events-none fixed right-4 top-20 z-[70] w-[320px] rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
+          data-tour={isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">{t('posPaymentQr') || 'QR 결제'} · 직원 모니터</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {String(liveKbankQrPayload || '').trim()
+                  ? t('posScanToPayHint') || '고객이 스캔해서 결제할 수 있게 이 화면을 보여주세요.'
+                  : t('posDemoBanner') || '데모 — 실제 주문·결제는 실데이터에 반영되지 않습니다.'}
+              </p>
+            </div>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+              {isPosDemo && !String(liveKbankQrPayload || '').trim() ? 'DEMO' : 'LIVE'}
+            </div>
+          </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t('posScanToPayHint') || '고객이 스캔해서 결제할 수 있게 이 화면을 보여주세요.'}
+            {`QR ${(t('amount') || '금액')}: ${Math.max(0, Number(tourPaymentQrAmount || 0)).toFixed(2)} ฿`}
           </p>
           <div className="mt-3 flex min-h-[280px] items-center justify-center rounded-md border bg-white p-2">
             {staffKbankQrDataUrl ? (
               <img src={staffKbankQrDataUrl} alt="KBank QR" className="h-[260px] w-[260px] object-contain" />
             ) : (
-              <span className="text-xs text-muted-foreground">{t('posLoading') || '로딩 중'}</span>
+              <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
+                <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
+                <span>{t('posLoading') || '로딩 중'}</span>
+              </div>
             )}
           </div>
         </div>
