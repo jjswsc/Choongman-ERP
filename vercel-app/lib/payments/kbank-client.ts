@@ -33,6 +33,38 @@ function buildUrl(pathEnvName: string, defaultPath: string): string {
   return `${base}${p}`
 }
 
+function getProxySecret(): string {
+  return String(process.env.KBANK_PROXY_SECRET || '').trim()
+}
+
+function isLikelyProxyUrl(urlStr: string): boolean {
+  try {
+    const host = new URL(urlStr).hostname.toLowerCase()
+    return !(host.includes('kasikornbank.com') || host.includes('kbank.com'))
+  } catch {
+    return false
+  }
+}
+
+function withProxySecret(headers: Record<string, string>, urlStr: string): Record<string, string> {
+  const proxySecret = getProxySecret()
+  if (proxySecret) {
+    return {
+      ...headers,
+      'X-Proxy-Secret': proxySecret,
+    }
+  }
+  return headers
+}
+
+function buildProxyHint(urlStr: string, status: number): string {
+  if (status !== 403 || !isLikelyProxyUrl(urlStr)) return ''
+  if (!getProxySecret()) {
+    return ' (프록시 경유 환경으로 보이지만 KBANK_PROXY_SECRET 환경변수가 없습니다.)'
+  }
+  return ' (프록시 시크릿 불일치 또는 프록시 접근 정책을 확인하세요.)'
+}
+
 function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs))
@@ -57,17 +89,20 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
   try {
     const res = await fetch(tokenUrl, {
       method: 'POST',
-      headers: {
-        Authorization: `Basic ${basic}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: withProxySecret(
+        {
+          Authorization: `Basic ${basic}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        tokenUrl
+      ),
       body: form.toString(),
       cache: 'no-store',
       signal,
     })
     const text = await res.text()
     if (!res.ok) {
-      throw new Error(`kbank_token_http_${res.status}: ${text.slice(0, 300)}`)
+      throw new Error(`kbank_token_http_${res.status}${buildProxyHint(tokenUrl, res.status)}: ${text.slice(0, 300)}`)
     }
     let json: Record<string, unknown>
     try {
@@ -126,13 +161,16 @@ export async function generateKbankQr(
   try {
     const res = await fetch(qrUrl, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        'Content-Type': 'application/json',
-        'X-Partner-Id': partnerId,
-        'X-Partner-Secret': partnerSecret,
-        'X-Merchant-Id': merchantId,
-      },
+      headers: withProxySecret(
+        {
+          Authorization: `Bearer ${token.access_token}`,
+          'Content-Type': 'application/json',
+          'X-Partner-Id': partnerId,
+          'X-Partner-Secret': partnerSecret,
+          'X-Merchant-Id': merchantId,
+        },
+        qrUrl
+      ),
       body: JSON.stringify(body),
       cache: 'no-store',
       signal,
@@ -201,13 +239,16 @@ export async function checkKbankQrStatus(
   try {
     const res = await fetch(statusUrl, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        'Content-Type': 'application/json',
-        'X-Partner-Id': partnerId,
-        'X-Partner-Secret': partnerSecret,
-        'X-Merchant-Id': merchantId,
-      },
+      headers: withProxySecret(
+        {
+          Authorization: `Bearer ${token.access_token}`,
+          'Content-Type': 'application/json',
+          'X-Partner-Id': partnerId,
+          'X-Partner-Secret': partnerSecret,
+          'X-Merchant-Id': merchantId,
+        },
+        statusUrl
+      ),
       body: JSON.stringify(body),
       cache: 'no-store',
       signal,
@@ -292,13 +333,16 @@ async function callKbankActionApi(
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token.access_token}`,
-        'Content-Type': 'application/json',
-        'X-Partner-Id': partnerId,
-        'X-Partner-Secret': partnerSecret,
-        'X-Merchant-Id': merchantId,
-      },
+      headers: withProxySecret(
+        {
+          Authorization: `Bearer ${token.access_token}`,
+          'Content-Type': 'application/json',
+          'X-Partner-Id': partnerId,
+          'X-Partner-Secret': partnerSecret,
+          'X-Merchant-Id': merchantId,
+        },
+        url
+      ),
       body: JSON.stringify(buildTxnPayload(req)),
       cache: 'no-store',
       signal,

@@ -115,10 +115,19 @@ export async function setCache<T>(
   })
 }
 
+async function getErpCacheDb(): Promise<IDBDatabase | null> {
+  try {
+    const db = await getDB()
+    return db.objectStoreNames.contains(STORES.ERP_CACHE) ? db : null
+  } catch {
+    return null
+  }
+}
+
 /** ERP 오프라인 캐시 - 매장/거래처/점검항목 등 */
 export async function getFromErpCache<T>(cacheKey: string): Promise<T | null> {
-  const db = await getDB()
-  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return null
+  const db = await getErpCacheDb()
+  if (!db) return null
   return new Promise((resolve) => {
     const tx = db.transaction(STORES.ERP_CACHE, 'readonly')
     const store = tx.objectStore(STORES.ERP_CACHE)
@@ -145,8 +154,8 @@ export async function getFromErpCache<T>(cacheKey: string): Promise<T | null> {
 
 /** ERP 캐시 항목 저장 시각(ms). 만료·없음이면 null */
 export async function getErpCacheCachedAt(cacheKey: string): Promise<number | null> {
-  const db = await getDB()
-  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return null
+  const db = await getErpCacheDb()
+  if (!db) return null
   return new Promise((resolve) => {
     const tx = db.transaction(STORES.ERP_CACHE, 'readonly')
     const store = tx.objectStore(STORES.ERP_CACHE)
@@ -171,8 +180,8 @@ export async function getErpCacheCachedAt(cacheKey: string): Promise<number | nu
 }
 
 export async function setErpCache<T>(cacheKey: string, data: T): Promise<void> {
-  const db = await getDB()
-  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
+  const db = await getErpCacheDb()
+  if (!db) return
   const entry = { cacheKey, data, cachedAt: Date.now() }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
@@ -185,8 +194,8 @@ export async function setErpCache<T>(cacheKey: string, data: T): Promise<void> {
 
 /** 단일 ERP 캐시 키 삭제 (통장 목록 등 갱신 후 재조회용) */
 export async function deleteErpCache(cacheKey: string): Promise<void> {
-  const db = await getDB()
-  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
+  const db = await getErpCacheDb()
+  if (!db) return
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
     const store = tx.objectStore(STORES.ERP_CACHE)
@@ -198,8 +207,8 @@ export async function deleteErpCache(cacheKey: string): Promise<void> {
 
 /** ERP 캐시 키 prefix로 삭제 (예: erp:appData) */
 export async function deleteErpCacheByPrefix(prefix: string): Promise<void> {
-  const db = await getDB()
-  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
+  const db = await getErpCacheDb()
+  if (!db) return
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
     const store = tx.objectStore(STORES.ERP_CACHE)

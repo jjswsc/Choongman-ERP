@@ -4,6 +4,7 @@
 
 const DB_NAME = 'cm_offline'
 const DB_VERSION = 4
+const OPEN_DB_TIMEOUT_MS = 4_000
 const STORES = {
   PENDING_REQUESTS: 'pending_requests',
   POS_ORDER_LOCAL: 'pos_order_local',
@@ -28,10 +29,27 @@ function openDB(): Promise<IDBDatabase> {
   if (dbInstance) return Promise.resolve(dbInstance)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onerror = () => reject(req.error)
+    let settled = false
+    const finish = (done: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      done()
+    }
+    const timeoutId = setTimeout(() => {
+      finish(() => reject(new Error('IndexedDB open timed out')))
+    }, OPEN_DB_TIMEOUT_MS)
+    req.onerror = () => finish(() => reject(req.error ?? new Error('IndexedDB open failed')))
+    req.onblocked = () => finish(() => reject(new Error('IndexedDB open blocked')))
     req.onsuccess = () => {
-      dbInstance = req.result
-      resolve(dbInstance)
+      finish(() => {
+        dbInstance = req.result
+        dbInstance.onversionchange = () => {
+          if (dbInstance === req.result) dbInstance = null
+          req.result.close()
+        }
+        resolve(dbInstance)
+      })
     }
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result

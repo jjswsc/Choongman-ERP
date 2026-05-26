@@ -4348,13 +4348,18 @@ export default function PosMenusPage() {
                       <div className="rounded border border-dashed border-sky-300 bg-sky-50/40 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <h4 className="text-xs font-semibold text-sky-800">반반 허용 맛</h4>
+                            <h4 className="text-xs font-semibold text-sky-800">
+                              {t("posMenuBanbanFlavorWhitelistTitle") || "반반 허용 맛"}
+                            </h4>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              이 반반 메뉴에서 보여줄 맛만 직접 선택합니다. 비워 두면 기존 자동 후보 규칙을 사용합니다.
+                              {t("posMenuBanbanFlavorWhitelistHint") || "이 반반 메뉴에서 보여줄 맛만 직접 선택합니다. 비워 두면 기존 자동 후보 규칙을 사용합니다."}
                             </p>
                           </div>
                           <span className="rounded bg-white px-2 py-1 text-[11px] text-muted-foreground">
-                            {formData.banbanFlavorMenuIds.length}개 선택
+                            {(t("posMenuBanbanFlavorSelectedCount") || "{count} selected").replace(
+                              "{count}",
+                              String(formData.banbanFlavorMenuIds.length)
+                            )}
                           </span>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -4375,7 +4380,7 @@ export default function PosMenusPage() {
                               setFormData((p) => ({ ...p, banbanFlavorMenuIds: nextIds }))
                             }}
                           >
-                            치킨 기본값 불러오기
+                            {t("posMenuBanbanFlavorLoadDefaults") || "치킨 기본값 불러오기"}
                           </Button>
                           <Button
                             type="button"
@@ -4385,7 +4390,7 @@ export default function PosMenusPage() {
                             disabled={!!editingMenuLinkedPromoId || formData.banbanFlavorMenuIds.length === 0}
                             onClick={() => setFormData((p) => ({ ...p, banbanFlavorMenuIds: [] }))}
                           >
-                            전체 해제
+                            {t("posMenuBanbanFlavorClearAll") || "전체 해제"}
                           </Button>
                         </div>
                         {banbanFlavorSelectableMenus.length > 0 ? (

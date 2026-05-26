@@ -574,7 +574,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       _source: 'api',
     }
     reportNetworkSuccess()
-    await setErpCache(key, {
+    // 로그인 화면은 캐시 저장 지연/실패로 막히면 안 된다.
+    void setErpCache(key, {
       users: result.users,
       vendors: result.vendors,
       companies: result.companies,
@@ -582,6 +583,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       storeLabels: result.storeLabels,
       legacyToCanonical: result.legacyToCanonical,
       usedMaster: result.usedMaster,
+    }).catch(() => {
+      /* IndexedDB blocked/unavailable */
     })
     return result
   } catch {
