@@ -68,6 +68,42 @@ export async function GET(request: Request) {
       // 신규 테이블 미배포 환경 fallback
     }
 
+    const banbanFlavorMenuIdsByMenuId = new Map<number, string[]>()
+    let banbanFlavorSchemaReady = false
+    try {
+      const rows = (await supabaseSelect('pos_banban_flavor_links', {
+        limit: 100000,
+        select: 'banban_menu_id,flavor_menu_id,enabled,sort_order',
+      })) as {
+        banban_menu_id?: number | null
+        flavor_menu_id?: number | null
+        enabled?: boolean | null
+        sort_order?: number | null
+      }[] | null
+      const sorted = (rows || [])
+        .filter((row) => row.enabled !== false)
+        .sort((a, b) => {
+          const aMenuId = Number(a.banban_menu_id || 0)
+          const bMenuId = Number(b.banban_menu_id || 0)
+          if (aMenuId !== bMenuId) return aMenuId - bMenuId
+          const aSort = Number(a.sort_order || 0)
+          const bSort = Number(b.sort_order || 0)
+          if (aSort !== bSort) return aSort - bSort
+          return Number(a.flavor_menu_id || 0) - Number(b.flavor_menu_id || 0)
+        })
+      for (const row of sorted) {
+        const menuId = Number(row.banban_menu_id || 0)
+        const flavorMenuId = String(row.flavor_menu_id || '').trim()
+        if (!menuId || !flavorMenuId) continue
+        const list = banbanFlavorMenuIdsByMenuId.get(menuId) || []
+        if (!list.includes(flavorMenuId)) list.push(flavorMenuId)
+        banbanFlavorMenuIdsByMenuId.set(menuId, list)
+      }
+      banbanFlavorSchemaReady = true
+    } catch {
+      // 신규 테이블 미배포 환경 fallback
+    }
+
     let rows: unknown[] | null = null
     for (const cols of [
       POS_MENUS_SELECT_WITH_ALL_PROMO,
@@ -215,6 +251,11 @@ export async function GET(request: Request) {
         kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
         isBanban,
+        banbanFlavorMenuIds: (() => {
+          if (!banbanFlavorSchemaReady || rowMenuId <= 0) return undefined
+          const linked = banbanFlavorMenuIdsByMenuId.get(rowMenuId) || []
+          return linked.length > 0 ? linked : undefined
+        })(),
         promoId: pid != null && Number(pid) > 0 ? String(pid) : null,
         descriptionDefault: String(row.description_default ?? ''),
         descriptionDelivery:
@@ -299,6 +340,11 @@ export async function GET(request: Request) {
           kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
           cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
           isBanban,
+          banbanFlavorMenuIds: (() => {
+            if (!banbanFlavorSchemaReady || rowMenuId <= 0) return undefined
+            const linked = banbanFlavorMenuIdsByMenuId.get(rowMenuId) || []
+            return linked.length > 0 ? linked : undefined
+          })(),
           promoId: pid != null && Number(pid) > 0 ? String(pid) : null,
           descriptionDefault: String(row.description_default ?? ''),
           descriptionDelivery:

@@ -1412,12 +1412,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         setSummary(fresh.summary || null)
         setActiveBankTab("query")
         const importMessage =
-          res.policySkipped && res.policySkipped > 0
+          (res.policySkipped ?? 0) > 0 || (res.policyAdjusted ?? 0) > 0
             ? (() => {
                 const parts = [`${res.inserted ?? 0}건 등록`]
                 if ((res.duplicateSkipped ?? 0) > 0) parts.push(`중복 ${res.duplicateSkipped ?? 0}건 제외`)
-                parts.push(`정책 ${res.policySkipped}건 제외`)
-                return `${parts.join(', ')}.\n\nPOS 자동분개 매장은 Grab·카드·QR 입금을 revenue_*로 저장하지 않습니다. 매출 수령(receivable_receive) 또는 채널 정산을 사용하세요.`
+                if ((res.policyAdjusted ?? 0) > 0) parts.push(`정책 ${res.policyAdjusted ?? 0}건 자동전환`)
+                if ((res.policySkipped ?? 0) > 0) parts.push(`정책 ${res.policySkipped ?? 0}건 제외`)
+                let detail = ""
+                if ((res.policyAdjusted ?? 0) > 0) {
+                  detail += "\n\nPOS 자동분개 매장의 Grab·카드·QR 입금은 매출 수령(receivable_receive)으로 자동 저장했습니다."
+                }
+                if ((res.policySkipped ?? 0) > 0) {
+                  detail += `${detail ? "\n" : "\n\n"}POS 자동분개 매장은 Grab·카드·QR 입금을 revenue_*로 저장하지 않습니다. 매출 수령(receivable_receive) 또는 채널 정산을 사용하세요.`
+                }
+                return `${parts.join(', ')}.${detail}`
               })()
             : (translateApiMessage(res.message, t) || res.message || (t("bankImportSavedGoToQuery") || "저장되었습니다. 조회 탭에서 내역을 확인·추가 작업할 수 있습니다."))
         await appAlert(importMessage)

@@ -38,7 +38,11 @@ import {
   normalizePosMenuScreenConfig,
   type PosMenuScreenConfig,
 } from '@/lib/pos-menu-screen-config'
-import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
+import {
+  getBanbanFlavorMenuList,
+  isBanbanFlavorWhitelistMissing,
+  isBanbanMenu,
+} from '@/lib/pos-banban-utils'
 import {
   PROMOTION_MAIN_CATEGORY,
   normalizePosMainCategoryTabs,
@@ -1503,6 +1507,7 @@ export function PosTerminalMenuScreen({
             if (isBanbanMenu(optionPickerMenu)) {
               const first = optionPickerBanbanFirst
               const list = banbanFlavorList
+              const flavorConfigMissing = isBanbanFlavorWhitelistMissing(optionPickerMenu)
               return (
                 <div className="flex flex-col gap-3 py-2">
                   <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
@@ -1523,7 +1528,11 @@ export function PosTerminalMenuScreen({
                     </div>
                   )}
                   {list.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{t('posBanbanNoChicken') || '치킨 메뉴가 없습니다.'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {flavorConfigMissing
+                        ? (t('posBanbanFlavorConfigNeeded') || '이 반반 메뉴의 맛 설정이 필요합니다. 관리자에서 반반 허용 맛을 선택해 주세요.')
+                        : (t('posBanbanNoChicken') || '치킨 메뉴가 없습니다.')}
+                    </p>
                   ) : (
                     <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                       {list.map((menu) => {

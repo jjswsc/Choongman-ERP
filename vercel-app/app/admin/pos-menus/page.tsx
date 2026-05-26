@@ -80,6 +80,7 @@ import {
   type PosPromo,
 } from "@/lib/api-client"
 import { preparePosMenuImageFileForUpload } from "@/lib/pos-menu-image-compress"
+import { getAutoBanbanFlavorMenuList } from "@/lib/pos-banban-utils"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -467,6 +468,7 @@ const emptyForm = {
   vatIncluded: true,
   isActive: true,
   isBanban: false,
+  banbanFlavorMenuIds: [] as string[],
   sellHall: true,
   sellDelivery: true,
   sellPackaging: true,
@@ -552,6 +554,66 @@ export default function PosMenusPage() {
     "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "finalPrice" | "deliveryOps"
   >("screen")
   const searchParams = useSearchParams()
+  const bangkokTodayStr = React.useMemo(
+    () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
+    []
+  )
+  const menusById = React.useMemo(() => {
+    const map = new Map<string, PosMenu>()
+    for (const menu of menus) {
+      const id = String(menu.id || "").trim()
+      if (id) map.set(id, menu)
+    }
+    return map
+  }, [menus])
+  const banbanFlavorDraftMenu = React.useMemo<PosMenu>(() => ({
+    id: editingId || "__draft_banban__",
+    code: formData.code,
+    name: formData.name || "Banban Chicken",
+    categoryMain: formData.categoryMain,
+    category: formData.category,
+    price: Number(formData.price || 0),
+    priceDelivery: formData.priceDelivery.trim() === "" ? null : Number(formData.priceDelivery),
+    imageUrl: formData.imageUrl,
+    descriptionDefault: formData.descriptionDefault,
+    descriptionDelivery: formData.descriptionDelivery || null,
+    descriptionTable: formData.descriptionTable || null,
+    vatIncluded: formData.vatIncluded,
+    isActive: formData.isActive,
+    sortOrder: 0,
+    isBanban: true,
+    banbanFlavorMenuIds: formData.banbanFlavorMenuIds,
+    sellHall: formData.sellHall,
+    sellDelivery: formData.sellDelivery,
+    sellPackaging: formData.sellPackaging,
+  }), [editingId, formData])
+  const banbanFlavorAutoMenus = React.useMemo(() => {
+    if (!formData.isBanban) return []
+    return getAutoBanbanFlavorMenuList(menus, banbanFlavorDraftMenu, {
+      todayStr: bangkokTodayStr,
+      includeSoldOut: true,
+    })
+  }, [bangkokTodayStr, banbanFlavorDraftMenu, formData.isBanban, menus])
+  const banbanSelectedMenuIdSet = React.useMemo(
+    () => new Set(formData.banbanFlavorMenuIds.map((id) => String(id || "").trim()).filter(Boolean)),
+    [formData.banbanFlavorMenuIds]
+  )
+  const banbanFlavorSelectableMenus = React.useMemo(() => {
+    if (!formData.isBanban) return [] as PosMenu[]
+    const out: PosMenu[] = []
+    const seen = new Set<string>()
+    const selfId = String(banbanFlavorDraftMenu.id || "").trim()
+    const push = (menu: PosMenu | undefined) => {
+      if (!menu) return
+      const id = String(menu.id || "").trim()
+      if (!id || id === selfId || seen.has(id)) return
+      seen.add(id)
+      out.push(menu)
+    }
+    banbanFlavorAutoMenus.forEach(push)
+    formData.banbanFlavorMenuIds.forEach((id) => push(menusById.get(String(id || "").trim())))
+    return out
+  }, [banbanFlavorAutoMenus, banbanFlavorDraftMenu.id, formData.banbanFlavorMenuIds, formData.isBanban, menusById])
   React.useEffect(() => {
     const tab = String(searchParams.get("tab") || "").trim()
     if (tab === "optionsConfig") setMainTab("optionsConfig")
@@ -1204,6 +1266,7 @@ export default function PosMenusPage() {
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
           isBanban: m.isBanban ?? false,
+          banbanFlavorMenuIds: m.banbanFlavorMenuIds ?? [],
           sellHall: m.sellHall !== false,
           sellDelivery: m.sellDelivery !== false,
           sellPackaging: m.sellPackaging !== false,
@@ -1393,6 +1456,7 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
+      banbanFlavorMenuIds: formData.isBanban ? formData.banbanFlavorMenuIds : [],
       sellHall: formData.sellHall,
       sellDelivery: formData.sellDelivery,
       sellPackaging: formData.sellPackaging,
@@ -1432,6 +1496,7 @@ export default function PosMenusPage() {
       optionSelectionGroups: editingMenu?.optionSelectionGroups,
       optionSelectionConfig: editingMenu?.optionSelectionConfig,
       isBanban: formData.isBanban,
+      banbanFlavorMenuIds: formData.isBanban ? formData.banbanFlavorMenuIds : [],
       storeCodes: scopeForSave,
       sellHall: formData.sellHall,
       sellDelivery: formData.sellDelivery,
@@ -1485,6 +1550,7 @@ export default function PosMenusPage() {
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
+      banbanFlavorMenuIds: menu.banbanFlavorMenuIds ?? [],
       sellHall: menu.sellHall !== false,
       sellDelivery: menu.sellDelivery !== false,
       sellPackaging: menu.sellPackaging !== false,
@@ -4278,6 +4344,88 @@ export default function PosMenusPage() {
                         {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
                       </label>
                     </div>
+                    {formData.isBanban && (
+                      <div className="rounded border border-dashed border-sky-300 bg-sky-50/40 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h4 className="text-xs font-semibold text-sky-800">반반 허용 맛</h4>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              이 반반 메뉴에서 보여줄 맛만 직접 선택합니다. 비워 두면 기존 자동 후보 규칙을 사용합니다.
+                            </p>
+                          </div>
+                          <span className="rounded bg-white px-2 py-1 text-[11px] text-muted-foreground">
+                            {formData.banbanFlavorMenuIds.length}개 선택
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            disabled={!!editingMenuLinkedPromoId}
+                            onClick={async () => {
+                              const nextIds = banbanFlavorAutoMenus
+                                .map((menu) => String(menu.id || "").trim())
+                                .filter(Boolean)
+                              if (nextIds.length === 0) {
+                                await appAlert("반반 기본 후보로 넣을 치킨 메뉴가 없습니다.")
+                                return
+                              }
+                              setFormData((p) => ({ ...p, banbanFlavorMenuIds: nextIds }))
+                            }}
+                          >
+                            치킨 기본값 불러오기
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs"
+                            disabled={!!editingMenuLinkedPromoId || formData.banbanFlavorMenuIds.length === 0}
+                            onClick={() => setFormData((p) => ({ ...p, banbanFlavorMenuIds: [] }))}
+                          >
+                            전체 해제
+                          </Button>
+                        </div>
+                        {banbanFlavorSelectableMenus.length > 0 ? (
+                          <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2">
+                            {banbanFlavorSelectableMenus.map((menu) => {
+                              const id = String(menu.id || "").trim()
+                              const checked = banbanSelectedMenuIdSet.has(id)
+                              const label = `${menu.code ? `[${menu.code}] ` : ""}${menu.name}`
+                              return (
+                                <div key={id} className="flex items-start gap-2 py-1">
+                                  <Checkbox
+                                    id={`banban-flavor-${id}`}
+                                    checked={checked}
+                                    disabled={!!editingMenuLinkedPromoId}
+                                    onCheckedChange={(nextChecked) => {
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        banbanFlavorMenuIds: nextChecked === true
+                                          ? Array.from(new Set([...prev.banbanFlavorMenuIds, id]))
+                                          : prev.banbanFlavorMenuIds.filter((x) => String(x || "").trim() !== id),
+                                      }))
+                                    }}
+                                  />
+                                  <label htmlFor={`banban-flavor-${id}`} className="min-w-0 cursor-pointer text-xs leading-tight">
+                                    <span className="block truncate">{label}</span>
+                                    <span className="block text-[11px] text-muted-foreground">
+                                      {String(menu.categoryMain ?? "").trim() || "-"} / {String(menu.category ?? "").trim() || "-"}
+                                    </span>
+                                  </label>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            선택할 치킨 후보가 없습니다. 카테고리/활성 상태를 확인해 주세요.
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div className="rounded border border-dashed border-primary/30 bg-muted/20 p-3">
                       <h4 className="text-xs font-semibold text-muted-foreground">{t("posMenuOptions") || "옵션"}</h4>
                       {(() => {

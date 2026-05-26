@@ -772,7 +772,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         }
         ${isPaymentReceipt && d.receiptBizName ? `<div class="receipt-biz" style="color:#000;font-weight:600">${esc(d.receiptBizName)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(d.receiptBizTaxId)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizAbn ? `<div class="receipt-biz">ABN: ${esc(d.receiptBizAbn)}</div>` : ''}
+        ${isPaymentReceipt && d.receiptBizAbn ? `<div class="receipt-biz">${esc(tr('posBizAbnLabel', 'POS ID'))}: ${esc(d.receiptBizAbn)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizOwner ? `<div class="receipt-biz">${esc(tr('posOwner', '대표'))}: ${esc(d.receiptBizOwner)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizAddress ? `<div class="receipt-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizPhone ? `<div class="receipt-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}

@@ -46,6 +46,7 @@ export type PosMenuUpsertApiBody = {
   kitchenPrinter?: number | null
   cookingTimeMin?: number | null
   isBanban?: boolean
+  banbanFlavorMenuIds?: string[]
   descriptionDefault?: string
   descriptionDelivery?: string | null
   descriptionTable?: string | null
@@ -323,6 +324,33 @@ export async function upsertPosMenuFromBody(
         )
       )
     : []
+  const hasBanbanFlavorMenuIdsPayload = Array.isArray(body.banbanFlavorMenuIds)
+  const normalizedBanbanFlavorMenuIds = hasBanbanFlavorMenuIdsPayload
+    ? Array.from(
+        new Set(
+          body.banbanFlavorMenuIds!
+            .map((x) => String(x ?? '').trim())
+            .filter(Boolean)
+        )
+      )
+    : []
+  let canSyncBanbanFlavorLinks = hasBanbanFlavorMenuIdsPayload
+  if (hasBanbanFlavorMenuIdsPayload) {
+    try {
+      await supabaseSelectFilter('pos_banban_flavor_links', 'id=gt.0', {
+        limit: 1,
+        select: 'id',
+      })
+    } catch {
+      canSyncBanbanFlavorLinks = false
+      if (normalizedBanbanFlavorMenuIds.length > 0) {
+        return {
+          success: false,
+          message: '반반 허용 맛 저장용 DB 스키마가 아직 배포되지 않았습니다. SQL 적용 후 다시 저장해 주세요.',
+        }
+      }
+    }
+  }
   if (hasStoreCodesPayload && normalizedStoreCodes.length === 0) {
     return { success: false, message: '노출 매장을 1개 이상 선택해 주세요.' }
   }
@@ -529,6 +557,12 @@ export async function upsertPosMenuFromBody(
           }
         }
         const pid = prev.promo_id
+        if (pid != null && Number(pid) > 0 && hasBanbanFlavorMenuIdsPayload) {
+          return {
+            success: false,
+            message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
+          }
+        }
         if (pid != null && Number(pid) > 0) {
           const rowWithoutImage = { ...row }
           delete rowWithoutImage.image
@@ -811,6 +845,85 @@ export async function upsertPosMenuFromBody(
         return {
           success: false,
           message: '메뉴 저장은 완료되었지만 매장 노출 범위 저장에 실패했습니다. DB 스키마를 확인해 주세요.',
+        }
+      }
+    }
+    if (result.success && hasBanbanFlavorMenuIdsPayload && canSyncBanbanFlavorLinks && !isImageOnlyEdit) {
+      const savedMenuId = String(result.newId || editingId || '').trim()
+      if (!savedMenuId) {
+        return {
+          success: false,
+          message: '메뉴 저장은 완료되었지만 반반 허용 맛을 저장하지 못했습니다. 다시 저장해 주세요.',
+        }
+      }
+      try {
+        const savedMenuRows = (await supabaseSelectFilter(
+          'pos_menus',
+          `id=eq.${encodeURIComponent(savedMenuId)}`,
+          { limit: 1, select: 'id,is_banban' }
+        )) as { id?: number | null; is_banban?: boolean | null }[] | null
+        const savedMenu = savedMenuRows?.[0]
+        const isBanbanMenuSaved = savedMenu?.is_banban === true
+        if (!isBanbanMenuSaved && normalizedBanbanFlavorMenuIds.length > 0) {
+          return {
+            success: false,
+            message: '반반 메뉴로 체크된 메뉴에만 반반 허용 맛을 지정할 수 있습니다.',
+          }
+        }
+        if (normalizedBanbanFlavorMenuIds.length > 0) {
+          const flavorFilter = `id=in.(${normalizedBanbanFlavorMenuIds.map((id) => encodeURIComponent(id)).join(',')})`
+          const flavorRows = (await supabaseSelectFilter('pos_menus', flavorFilter, {
+            limit: Math.max(100, normalizedBanbanFlavorMenuIds.length),
+            select: 'id,is_banban',
+          })) as { id?: number | null; is_banban?: boolean | null }[] | null
+          const flavorRowMap = new Map<string, { id?: number | null; is_banban?: boolean | null }>()
+          for (const row of flavorRows || []) {
+            const id = String(row.id || '').trim()
+            if (id) flavorRowMap.set(id, row)
+          }
+          for (const flavorMenuId of normalizedBanbanFlavorMenuIds) {
+            if (flavorMenuId === savedMenuId) {
+              return {
+                success: false,
+                message: '반반 메뉴 자기 자신은 반반 맛으로 지정할 수 없습니다.',
+              }
+            }
+            const row = flavorRowMap.get(flavorMenuId)
+            if (!row) {
+              return {
+                success: false,
+                message: '존재하지 않는 메뉴가 반반 허용 맛에 포함되어 있습니다. 새로고침 후 다시 저장해 주세요.',
+              }
+            }
+            if (row.is_banban === true) {
+              return {
+                success: false,
+                message: '반반 메뉴는 다른 반반 메뉴를 맛으로 지정할 수 없습니다.',
+              }
+            }
+          }
+        }
+        await supabaseDeleteByFilter(
+          'pos_banban_flavor_links',
+          `banban_menu_id=eq.${encodeURIComponent(savedMenuId)}`
+        )
+        if (isBanbanMenuSaved && normalizedBanbanFlavorMenuIds.length > 0) {
+          await supabaseUpsert(
+            'pos_banban_flavor_links',
+            normalizedBanbanFlavorMenuIds.map((flavorMenuId, idx) => ({
+              banban_menu_id: Number(savedMenuId),
+              flavor_menu_id: Number(flavorMenuId),
+              sort_order: idx,
+              enabled: true,
+            })),
+            'banban_menu_id,flavor_menu_id'
+          )
+        }
+      } catch (banbanErr: unknown) {
+        console.error('upsertPosMenuFromBody banban flavor sync:', banbanErr)
+        return {
+          success: false,
+          message: '메뉴 저장은 완료되었지만 반반 허용 맛 저장에 실패했습니다. DB 스키마를 확인해 주세요.',
         }
       }
     }

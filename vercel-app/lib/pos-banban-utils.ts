@@ -146,18 +146,65 @@ function sortMenusByName(arr: PosMenu[]): PosMenu[] {
   return arr.slice().sort((a, b) => a.name.localeCompare(b.name))
 }
 
+function isAvailableBanbanFlavorMenu(
+  menu: PosMenu,
+  banbanMenu: PosMenu,
+  opts?: { todayStr?: string; includeSoldOut?: boolean }
+): boolean {
+  const todayStr = String(opts?.todayStr ?? '').trim()
+  return (
+    menu.isActive !== false &&
+    (opts?.includeSoldOut === true || !todayStr || !menu.soldOutDate || menu.soldOutDate !== todayStr) &&
+    !isBanbanMenu(menu) &&
+    String(menu.id) !== String(banbanMenu.id) &&
+    !isExcludedFromBanbanFlavorPick(menu)
+  )
+}
+
+export function hasBanbanFlavorWhitelist(menu: Pick<PosMenu, 'banbanFlavorMenuIds'>): boolean {
+  return Array.isArray(menu.banbanFlavorMenuIds)
+}
+
+export function isBanbanFlavorWhitelistMissing(menu: Pick<PosMenu, 'banbanFlavorMenuIds'>): boolean {
+  return hasBanbanFlavorWhitelist(menu) && (menu.banbanFlavorMenuIds || []).length === 0
+}
+
+export function getConfiguredBanbanFlavorMenuList(
+  allMenus: PosMenu[],
+  banbanMenu: PosMenu,
+  todayStr: string
+): PosMenu[] | null {
+  if (!Array.isArray(banbanMenu.banbanFlavorMenuIds)) return null
+  const menuById = new Map(allMenus.map((menu) => [String(menu.id), menu] as const))
+  const out: PosMenu[] = []
+  const seen = new Set<string>()
+  for (const rawId of banbanMenu.banbanFlavorMenuIds) {
+    const id = String(rawId || '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const menu = menuById.get(id)
+    if (!menu) continue
+    if (!isAvailableBanbanFlavorMenu(menu, banbanMenu, { todayStr })) continue
+    out.push(menu)
+  }
+  return out
+}
+
 /**
  * 반반 1·2번째 맛 선택 목록.
- * 1차: 치킨 판별 규칙 — 비어 있으면 반반 메뉴와 같은 대분류 → 그다음 `c`코드 메뉴의 대분류 → 마지막 음료·디저트 제외 전체(상한).
+ * 1차: 명시적 whitelist. 미배포/레거시 환경(whitelist undefined)에서는 기존 치킨 판별 규칙으로 폴백.
  */
-export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu, todayStr: string): PosMenu[] {
+export function getAutoBanbanFlavorMenuList(
+  allMenus: PosMenu[],
+  banbanMenu: PosMenu,
+  opts?: { todayStr?: string; includeSoldOut?: boolean }
+): PosMenu[] {
+  const todayStr = String(opts?.todayStr ?? '').trim()
   const base = allMenus.filter(
-    (m) =>
-      m.isActive !== false &&
-      (!m.soldOutDate || m.soldOutDate !== todayStr) &&
-      !isBanbanMenu(m) &&
-      String(m.id) !== String(banbanMenu.id) &&
-      !isExcludedFromBanbanFlavorPick(m)
+    (m) => isAvailableBanbanFlavorMenu(m, banbanMenu, {
+      todayStr,
+      includeSoldOut: opts?.includeSoldOut === true,
+    })
   )
 
   const primary = base.filter((m) => isEligibleChickenHalfForBanban(m, allMenus))
@@ -193,4 +240,10 @@ export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu
   }
   const loose = base.filter(excludeDrinkDessert)
   return sortMenusByName(loose).slice(0, 120)
+}
+
+export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu, todayStr: string): PosMenu[] {
+  const configured = getConfiguredBanbanFlavorMenuList(allMenus, banbanMenu, todayStr)
+  if (configured) return configured
+  return getAutoBanbanFlavorMenuList(allMenus, banbanMenu, { todayStr })
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   expandBanbanComposeLineForPrint,
+  getBanbanFlavorMenuList,
   isBanbanMenu,
+  isBanbanFlavorWhitelistMissing,
   parseBanbanFlavorsFromName,
   splitBanbanSlashOptionParts,
 } from './pos-banban-utils'
@@ -89,5 +91,88 @@ describe('isBanbanMenu', () => {
         name: 'x',
       })
     ).toBe(true)
+  })
+})
+
+describe('getBanbanFlavorMenuList', () => {
+  const banbanMenu = {
+    id: '100',
+    code: 'C024',
+    name: 'Banban Chicken',
+    category: 'Banban',
+    categoryMain: 'Chicken',
+    price: 259,
+    imageUrl: '',
+    vatIncluded: true,
+    isActive: true,
+    sortOrder: 0,
+    isBanban: true,
+  }
+
+  const soyMenu = {
+    id: '1',
+    code: 'C001',
+    name: 'Soy Sauce Chicken',
+    category: 'Original',
+    categoryMain: 'Chicken',
+    price: 229,
+    imageUrl: '',
+    vatIncluded: true,
+    isActive: true,
+    sortOrder: 1,
+  }
+
+  const supremeMenu = {
+    id: '2',
+    code: 'C099',
+    name: 'Supreme Chicken',
+    category: 'SPECIALTIES',
+    categoryMain: 'Chicken',
+    price: 259,
+    imageUrl: '',
+    vatIncluded: true,
+    isActive: true,
+    sortOrder: 2,
+  }
+
+  it('whitelist가 있으면 연결된 맛만 반환한다', () => {
+    const list = getBanbanFlavorMenuList(
+      [
+        { ...banbanMenu, banbanFlavorMenuIds: ['2'] },
+        soyMenu,
+        supremeMenu,
+      ],
+      { ...banbanMenu, banbanFlavorMenuIds: ['2'] },
+      '2026-05-26'
+    )
+    expect(list.map((menu) => menu.id)).toEqual(['2'])
+  })
+
+  it('whitelist가 비어 있으면 설정 필요 상태로 판단할 수 있다', () => {
+    expect(isBanbanFlavorWhitelistMissing({ banbanFlavorMenuIds: [] })).toBe(true)
+    expect(
+      getBanbanFlavorMenuList(
+        [
+          { ...banbanMenu, banbanFlavorMenuIds: [] },
+          soyMenu,
+          supremeMenu,
+        ],
+        { ...banbanMenu, banbanFlavorMenuIds: [] },
+        '2026-05-26'
+      )
+    ).toEqual([])
+  })
+
+  it('whitelist가 없으면 기존 자동 후보 로직으로 폴백한다', () => {
+    const list = getBanbanFlavorMenuList(
+      [
+        banbanMenu,
+        soyMenu,
+        supremeMenu,
+      ],
+      banbanMenu,
+      '2026-05-26'
+    )
+    expect(list.map((menu) => menu.id)).toEqual(['1', '2'])
   })
 })

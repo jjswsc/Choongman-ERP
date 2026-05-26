@@ -5136,6 +5136,7 @@ export async function addBankTransactionsBulk(params: {
     skipped?: number
     duplicateSkipped?: number
     policySkipped?: number
+    policyAdjusted?: number
     message?: string
   }>
 }
@@ -6366,6 +6367,8 @@ export interface PosMenu {
   cookingTimeMin?: number | null
   /** 반반 메뉴: POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문, 원가는 각 0.5씩 */
   isBanban?: boolean
+  /** 반반 메뉴별 허용 맛 메뉴 id 목록 (명시적 whitelist) */
+  banbanFlavorMenuIds?: string[]
   /** 프로모션 마스터와 연동된 미러 메뉴 */
   promoId?: string | null
   /** 채널별 메뉴 설명 (미입력 시 default 사용) */
@@ -7265,6 +7268,7 @@ export async function savePosMenu(
     cookingTimeMin?: number | null
     deliveryAppFeePercent?: number | null
     isBanban?: boolean
+    banbanFlavorMenuIds?: string[]
     descriptionDefault?: string
     descriptionDelivery?: string | null
     descriptionTable?: string | null
@@ -10352,6 +10356,38 @@ export type LinkposPaymentSummary = {
   respondedAt: string
 }
 
+export type KbankQrGenerateResult = {
+  success: boolean
+  partnerTransactionId?: string
+  statusCode?: string | null
+  statusMessage?: string | null
+  data?: Record<string, unknown>
+  message?: string
+}
+
+export type KbankQrCheckStatusResult = {
+  success: boolean
+  partnerTransactionId?: string | null
+  originalTransactionId?: string | null
+  refId?: string | null
+  statusCode?: string | null
+  statusMessage?: string | null
+  status?: string | null
+  data?: Record<string, unknown>
+  message?: string
+}
+
+export type KbankQrActionResult = {
+  success: boolean
+  partnerTransactionId?: string | null
+  originalTransactionId?: string | null
+  refId?: string | null
+  statusCode?: string | null
+  statusMessage?: string | null
+  data?: Record<string, unknown>
+  message?: string
+}
+
 const LOCAL_LINKPOS_TX_ENDPOINTS = [
   'http://127.0.0.1:18181/linkpos/transaction',
   'http://localhost:18181/linkpos/transaction',
@@ -10441,6 +10477,224 @@ export async function executeLinkposPayment(params: {
     success: true,
     payment: (data.payment || null) as LinkposPaymentSummary | null,
     source: 'server' as const,
+  }
+}
+
+export async function executeLinkposDisplayQr(params: {
+  qrPayload: string
+  amount?: number
+  reference1?: string
+  reference2?: string
+  storeCode?: string
+  timeoutMs?: number
+}): Promise<{ success: boolean; source?: 'local'; message?: string }> {
+  if (!isLinkposCardApiEnabled()) {
+    return { success: false, message: 'linkpos_card_api_disabled' }
+  }
+  const qrPayload = String(params.qrPayload || '').trim()
+  if (!qrPayload) return { success: false, message: 'qr_payload_required' }
+  const timeoutMs = Math.max(800, Number(params.timeoutMs ?? 2000))
+  const payload = {
+    action: 'display_qr',
+    qrPayload,
+    amount: Number(params.amount ?? 0),
+    reference1: String(params.reference1 || '').slice(0, 20),
+    reference2: String(params.reference2 || '').slice(0, 20),
+    storeCode: String(params.storeCode || ''),
+    protocol: 'hypercom_v2',
+  }
+  for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
+    const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
+    if (!r.ok) continue
+    if (r.data?.success) return { success: true, source: 'local' as const }
+  }
+  return { success: false, message: 'linkpos_display_qr_not_supported' }
+}
+
+export async function executeKbankGenerateQr(params: {
+  amount: number
+  qrType?: string
+  orderId?: number
+  storeCode?: string
+  partnerTransactionId?: string
+  reference1?: string
+  reference2?: string
+  reference3?: string
+  reference4?: string
+  payload?: Record<string, unknown>
+}): Promise<KbankQrGenerateResult> {
+  const res = await apiFetch('/api/pos/kbank/generate-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || !data.success) {
+    return {
+      success: false,
+      partnerTransactionId: String(data.partnerTransactionId || params.partnerTransactionId || ''),
+      statusCode: String(data.statusCode || ''),
+      statusMessage: String(data.statusMessage || data.message || ''),
+      data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+      message: String(data.message || data.statusMessage || `HTTP ${res.status}`),
+    }
+  }
+  return {
+    success: true,
+    partnerTransactionId: String(data.partnerTransactionId || ''),
+    statusCode: String(data.statusCode || ''),
+    statusMessage: String(data.statusMessage || ''),
+    data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+  }
+}
+
+export async function executeKbankCheckStatus(params: {
+  orderId?: number
+  storeCode?: string
+  partnerTransactionId?: string
+  originalTransactionId?: string
+  refId?: string
+  payload?: Record<string, unknown>
+}): Promise<KbankQrCheckStatusResult> {
+  const res = await apiFetch('/api/pos/kbank/check-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || !data.success) {
+    return {
+      success: false,
+      partnerTransactionId: String(data.partnerTransactionId || params.partnerTransactionId || ''),
+      originalTransactionId: String(data.originalTransactionId || params.originalTransactionId || ''),
+      refId: String(data.refId || params.refId || ''),
+      statusCode: String(data.statusCode || ''),
+      statusMessage: String(data.statusMessage || data.message || ''),
+      status: String(data.status || ''),
+      data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+      message: String(data.message || data.statusMessage || `HTTP ${res.status}`),
+    }
+  }
+  return {
+    success: true,
+    partnerTransactionId: String(data.partnerTransactionId || ''),
+    originalTransactionId: String(data.originalTransactionId || ''),
+    refId: String(data.refId || ''),
+    statusCode: String(data.statusCode || ''),
+    statusMessage: String(data.statusMessage || ''),
+    status: String(data.status || ''),
+    data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+  }
+}
+
+export async function executeKbankCancelQr(params: {
+  orderId?: number
+  storeCode?: string
+  partnerTransactionId?: string
+  originalTransactionId?: string
+  refId?: string
+  payload?: Record<string, unknown>
+}): Promise<KbankQrActionResult> {
+  const res = await apiFetch('/api/pos/kbank/cancel-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || !data.success) {
+    return {
+      success: false,
+      partnerTransactionId: String(data.partnerTransactionId || params.partnerTransactionId || ''),
+      originalTransactionId: String(data.originalTransactionId || params.originalTransactionId || ''),
+      refId: String(data.refId || params.refId || ''),
+      statusCode: String(data.statusCode || ''),
+      statusMessage: String(data.statusMessage || data.message || ''),
+      data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+      message: String(data.message || data.statusMessage || `HTTP ${res.status}`),
+    }
+  }
+  return {
+    success: true,
+    partnerTransactionId: String(data.partnerTransactionId || ''),
+    originalTransactionId: String(data.originalTransactionId || ''),
+    refId: String(data.refId || ''),
+    statusCode: String(data.statusCode || ''),
+    statusMessage: String(data.statusMessage || ''),
+    data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+  }
+}
+
+export async function executeKbankVoidPayment(params: {
+  orderId?: number
+  storeCode?: string
+  partnerTransactionId?: string
+  originalTransactionId?: string
+  refId?: string
+  payload?: Record<string, unknown>
+}): Promise<KbankQrActionResult> {
+  const res = await apiFetch('/api/pos/kbank/void-payment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || !data.success) {
+    return {
+      success: false,
+      partnerTransactionId: String(data.partnerTransactionId || params.partnerTransactionId || ''),
+      originalTransactionId: String(data.originalTransactionId || params.originalTransactionId || ''),
+      refId: String(data.refId || params.refId || ''),
+      statusCode: String(data.statusCode || ''),
+      statusMessage: String(data.statusMessage || data.message || ''),
+      data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+      message: String(data.message || data.statusMessage || `HTTP ${res.status}`),
+    }
+  }
+  return {
+    success: true,
+    partnerTransactionId: String(data.partnerTransactionId || ''),
+    originalTransactionId: String(data.originalTransactionId || ''),
+    refId: String(data.refId || ''),
+    statusCode: String(data.statusCode || ''),
+    statusMessage: String(data.statusMessage || ''),
+    data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+  }
+}
+
+export async function executeKbankSettlement(params: {
+  orderId?: number
+  storeCode?: string
+  partnerTransactionId?: string
+  originalTransactionId?: string
+  refId?: string
+  payload?: Record<string, unknown>
+}): Promise<KbankQrActionResult> {
+  const res = await apiFetch('/api/pos/kbank/settlement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || !data.success) {
+    return {
+      success: false,
+      partnerTransactionId: String(data.partnerTransactionId || params.partnerTransactionId || ''),
+      originalTransactionId: String(data.originalTransactionId || params.originalTransactionId || ''),
+      refId: String(data.refId || params.refId || ''),
+      statusCode: String(data.statusCode || ''),
+      statusMessage: String(data.statusMessage || data.message || ''),
+      data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+      message: String(data.message || data.statusMessage || `HTTP ${res.status}`),
+    }
+  }
+  return {
+    success: true,
+    partnerTransactionId: String(data.partnerTransactionId || ''),
+    originalTransactionId: String(data.originalTransactionId || ''),
+    refId: String(data.refId || ''),
+    statusCode: String(data.statusCode || ''),
+    statusMessage: String(data.statusMessage || ''),
+    data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
   }
 }
 
@@ -10539,6 +10793,8 @@ export async function savePosOrder(params: {
   closeStatus?: 'paid' | 'completed'
   /** 카드 승인 완료 메타 (KBTG LINKPOS) */
   linkposPayment?: LinkposPaymentSummary | null
+  /** KBank QR 생성 시 발급된 partnerTransactionId (주문 저장 후 결제 시도 연결용) */
+  kbankPartnerTransactionId?: string | null
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'

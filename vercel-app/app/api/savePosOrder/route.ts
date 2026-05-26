@@ -235,6 +235,9 @@ export async function POST(req: NextRequest) {
       body.linkposPayment && typeof body.linkposPayment === 'object'
         ? (body.linkposPayment as Record<string, unknown>)
         : null
+    const kbankPartnerTransactionId = String(
+      body.kbankPartnerTransactionId ?? body.kbank_partner_transaction_id ?? ''
+    ).trim().slice(0, 40)
 
     if (items.length === 0) {
       return NextResponse.json({ success: false, message: '주문 항목이 없습니다.' }, { headers })
@@ -458,6 +461,19 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         // local_tx_id unique 충돌(중복 재전송) 시 무시
         console.error('savePosOrder linkpos attempt insert:', e)
+      }
+    }
+    if (kbankPartnerTransactionId && Number(created?.id) > 0) {
+      try {
+        await supabaseUpdateByFilter(
+          'pos_payment_attempts',
+          `local_tx_id=eq.${encodeURIComponent(kbankPartnerTransactionId)}`,
+          {
+            order_id: Number(created.id),
+          }
+        )
+      } catch (e) {
+        console.error('savePosOrder kbank attempt link:', e)
       }
     }
 

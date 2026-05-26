@@ -1429,14 +1429,14 @@ export default function PosPrintersPage() {
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "주문 유형"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
           </div>
           <div class="receipt-divider"></div>
-          ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ""}
+          ${(receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ""}
           ${receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
           ${receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "사업자번호"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
-          ${receiptBizAbn ? `<div class="biz-line">ABN: ${escapeHtml(receiptBizAbn)}</div>` : ""}
+          ${receiptBizAbn ? `<div class="biz-line">${escapeHtml(tr("posBizAbnLabel", "POS ID"))}: ${escapeHtml(receiptBizAbn)}</div>` : ""}
           ${receiptBizOwner ? `<div class="biz-line">${escapeHtml(tr("posOwner", "대표"))}: ${escapeHtml(receiptBizOwner)}</div>` : ""}
           ${receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
           ${receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "전화"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
-          ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? "</div>" : ""}
+          ${(receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? "</div>" : ""}
           <div class="receipt-divider-strong"></div>
           <div class="receipt-item-head"><span>${escapeHtml(tr("posMenuName", "품목"))}</span><span>${escapeHtml(tr("amount", "금액"))}</span></div>
           ${lines}
@@ -2284,8 +2284,8 @@ export default function PosPrintersPage() {
                     <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizTaxIdPh", "예: 0105566137147")} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">{tr("posBizAbnLabel", "ABN")}</label>
-                    <Input value={receiptBizAbn} onChange={(e) => setReceiptBizAbn(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizAbnPh", "예: 12 345 678 901")} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizAbnLabel", "POS ID")}</label>
+                    <Input value={receiptBizAbn} onChange={(e) => setReceiptBizAbn(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizAbnPh", "예: E020133303A0117")} />
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">{tr("posBizOwnerLabel", "대표자명")}</label>
@@ -2577,7 +2577,7 @@ export default function PosPrintersPage() {
                     <div className="space-y-0.5 text-black">
                       {receiptBizName && <div className="font-semibold">{receiptBizName}</div>}
                       {receiptBizTaxId && <div>{tr("posTaxIdLabel", "사업자번호")}: {receiptBizTaxId}</div>}
-                      {receiptBizAbn && <div>ABN: {receiptBizAbn}</div>}
+                      {receiptBizAbn && <div>{tr("posBizAbnLabel", "POS ID")}: {receiptBizAbn}</div>}
                       {receiptBizOwner && <div>{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
                       {receiptBizAddress && <div>{receiptBizAddress}</div>}
                       {receiptBizPhone && <div>{tr("posTelLabel", "전화")}: {receiptBizPhone}</div>}

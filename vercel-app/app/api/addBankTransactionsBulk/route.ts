@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
     let skipped = 0
     let duplicateSkipped = 0
     let policySkipped = 0
+    let policyAdjusted = 0
     for (const item of items) {
       const transDate = String(item.transDate || item.trans_date || '').slice(0, 10)
       const transType = String(item.transType || item.trans_type || 'deposit').toLowerCase()
@@ -206,15 +207,24 @@ export async function POST(request: NextRequest) {
         : (withdrawCategories.includes(category) ? category : 'unclassified')
       if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
 
+      let effectiveStoreNameForReceivable = storeNameForReceivable
       if (transType === 'deposit' && validCategory !== 'receivable_receive') {
         try {
-          const posStore = storeNameForReceivable || store || userStore
+          const posStore = effectiveStoreNameForReceivable || store || userStore
           await assertPosRevenueDepositCategorySafe({ storeName: posStore, category: validCategory })
         } catch (e) {
           if (e instanceof BankSettlementGuardError) {
-            policySkipped++
-            skipped++
-            continue
+            if (e.code === 'POS_REVENUE_DEPOSIT_DOUBLE_RISK') {
+              validCategory = 'receivable_receive'
+              effectiveStoreNameForReceivable = isScopedRole
+                ? (store || userStore)
+                : (effectiveStoreNameForReceivable || store || userStore)
+              policyAdjusted++
+            } else {
+              policySkipped++
+              skipped++
+              continue
+            }
           }
           throw e
         }
@@ -249,7 +259,7 @@ export async function POST(request: NextRequest) {
           row.account_subject_id = asid
         }
       }
-      if (transType === 'deposit' && salesDate) {
+      if (transType === 'deposit' && validCategory !== 'receivable_receive' && salesDate) {
         const sd = String(salesDate).slice(0, 10)
         if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) row.sales_date = sd
       }
@@ -257,7 +267,9 @@ export async function POST(request: NextRequest) {
         const ed = String(expenseDate).slice(0, 10)
         if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
       }
-      if (transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
+      if (transType === 'deposit' && validCategory === 'receivable_receive' && effectiveStoreNameForReceivable) {
+        row.store_name = effectiveStoreNameForReceivable
+      }
       if (transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
 
       let btInserted: { id?: number }[] = []
@@ -279,10 +291,10 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      if (bankId && transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) {
+      if (bankId && transType === 'deposit' && validCategory === 'receivable_receive' && effectiveStoreNameForReceivable) {
         await upsertReceivableFromBankReceive({
           bankTransactionId: bankId,
-          storeName: storeNameForReceivable,
+          storeName: effectiveStoreNameForReceivable,
           amountAbs: Math.abs(amount),
           transDate,
           memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
@@ -325,17 +337,21 @@ export async function POST(request: NextRequest) {
     }
 
     let msg = `${inserted}건 등록되었습니다.`
-    if (duplicateSkipped > 0 || policySkipped > 0) {
+    if (duplicateSkipped > 0 || policySkipped > 0 || policyAdjusted > 0) {
       const parts = [`${inserted}건 등록`]
       if (duplicateSkipped > 0) parts.push(`중복 ${duplicateSkipped}건 제외`)
+      if (policyAdjusted > 0) parts.push(`정책 ${policyAdjusted}건 자동전환`)
       if (policySkipped > 0) parts.push(`정책 ${policySkipped}건 제외`)
       msg = `${parts.join(', ')}.`
+      if (policyAdjusted > 0) {
+        msg += ' POS 자동분개 매장의 Grab·카드·QR 입금은 매출 수령(receivable_receive)으로 자동 저장했습니다.'
+      }
       if (policySkipped > 0) {
         msg += ' POS 자동분개 매장은 Grab·카드·QR 입금을 revenue_*로 저장하지 않습니다. 매출 수령(receivable_receive) 또는 채널 정산을 사용하세요.'
       }
     }
     return NextResponse.json(
-      { success: true, inserted, skipped, duplicateSkipped, policySkipped, message: msg },
+      { success: true, inserted, skipped, duplicateSkipped, policySkipped, policyAdjusted, message: msg },
       { headers }
     )
   } catch (e) {

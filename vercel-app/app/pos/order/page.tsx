@@ -65,7 +65,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { OfflineBanner } from "@/components/offline-banner"
-import { getBanbanFlavorMenuList, isBanbanMenu } from "@/lib/pos-banban-utils"
+import {
+  getBanbanFlavorMenuList,
+  isBanbanFlavorWhitelistMissing,
+  isBanbanMenu,
+} from "@/lib/pos-banban-utils"
 import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
 import {
   PROMOTION_MAIN_CATEGORY,
@@ -2426,6 +2430,7 @@ export default function PosOrderPage() {
             if (isBanbanMenu(optionPickerMenu)) {
               const first = optionPickerBanbanFirst
               const list = banbanFlavorList
+              const flavorConfigMissing = isBanbanFlavorWhitelistMissing(optionPickerMenu)
               return (
                 <div className="flex flex-col gap-3 py-2">
                   <p className="text-xs text-muted-foreground">
@@ -2437,7 +2442,11 @@ export default function PosOrderPage() {
                     </p>
                   )}
                   {list.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{t("posBanbanNoChicken") || "치킨 메뉴가 없습니다."}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {flavorConfigMissing
+                        ? (t("posBanbanFlavorConfigNeeded") || "이 반반 메뉴의 맛 설정이 필요합니다. 관리자에서 반반 허용 맛을 선택해 주세요.")
+                        : (t("posBanbanNoChicken") || "치킨 메뉴가 없습니다.")}
+                    </p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {list.map((menu) => {

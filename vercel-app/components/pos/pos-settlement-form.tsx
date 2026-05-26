@@ -60,8 +60,6 @@ import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
-import { drawerOpenOptionFromPrinterSettings } from '@/lib/pos-cash-drawer'
-import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import {
   Collapsible,
   CollapsibleContent,
@@ -239,8 +237,6 @@ export type PosSettlementFormProps = {
 export function PosSettlementForm({ t, compact, offlineAware = false, openMode = false }: PosSettlementFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { openPosCashDrawerSecure } = usePosCashDrawerOpen()
-  const businessOpenDrawerWarnedRef = React.useRef(false)
   const settlementFullCloseHref = React.useMemo(
     () =>
       isPosDemoFromQuery(searchParams)
@@ -987,24 +983,6 @@ ${footerStamp}
 
     setSaving(true)
     try {
-      if (openMode && !isPosDemoFromQuery(searchParams)) {
-        const hw = await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
-        const drawerOpenOption = drawerOpenOptionFromPrinterSettings(hw)
-        const dr = await openPosCashDrawerSecure({
-          reason: 'business_open_save',
-          source: 'business_open_save',
-          storeCode: effectiveStore,
-          userName: auth?.user,
-          drawerOpenOption,
-        })
-        if (!dr.success && !businessOpenDrawerWarnedRef.current) {
-          businessOpenDrawerWarnedRef.current = true
-          await appAlert(
-            t('posDrawerOpenBridgeFail') ||
-              '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.'
-          )
-        }
-      }
       const res = await savePosSettlementWithOffline({
         storeCode: effectiveStore,
         settleDate,
