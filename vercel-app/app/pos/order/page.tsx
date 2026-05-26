@@ -1643,7 +1643,7 @@ export default function PosOrderPage() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-slate-50">
+    <div className="flex h-full flex-col bg-slate-50 [&_button]:transition-transform [&_button]:duration-150 [&_button]:active:scale-[0.98] [&_button]:active:translate-y-[1px] [&_button]:motion-reduce:active:scale-100 [&_button]:motion-reduce:active:translate-y-0">
       <OfflineBanner
           onSyncComplete={loadTodaySales}
           offlineMsg={t("posOfflineSaved") || "오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다."}
