@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { getRuntimeDialogLabels } from "@/lib/runtime-ui-strings"
 import { registerAppMessage, unregisterAppMessage } from "@/lib/app-message"
 
 type QueueItem =
@@ -32,7 +32,7 @@ type QueueItem =
 
 export function AppMessageProvider({ children }: { children: React.ReactNode }) {
   const { lang } = useLang()
-  const t = useT(lang)
+  const labels = React.useMemo(() => getRuntimeDialogLabels(lang), [lang])
   const queueRef = React.useRef<QueueItem[]>([])
   const showingRef = React.useRef(false)
   const [open, setOpen] = React.useState(false)
@@ -114,8 +114,8 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
 
   const title =
     current?.kind === "confirm"
-      ? current.options?.title || t("appDialogConfirmTitle")
-      : t("appDialogAlertTitle")
+      ? current.options?.title || labels.confirmTitle
+      : labels.alertTitle
 
   return (
     <>
@@ -166,24 +166,24 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
             {current?.kind === "confirm" ? (
               <>
                 <Button type="button" variant="outline" onClick={() => onConfirm(false)}>
-                  {current.options?.cancelLabel || t("cancel")}
+                  {current.options?.cancelLabel || labels.cancel}
                 </Button>
                 <Button type="button" onClick={() => onConfirm(true)}>
-                  {current.options?.confirmLabel || t("btn_ok")}
+                  {current.options?.confirmLabel || labels.ok}
                 </Button>
               </>
             ) : current?.kind === "prompt" ? (
               <>
                 <Button type="button" variant="outline" onClick={onPromptCancel}>
-                  {t("cancel")}
+                  {labels.cancel}
                 </Button>
                 <Button type="button" onClick={onPromptOk}>
-                  {t("btn_ok")}
+                  {labels.ok}
                 </Button>
               </>
             ) : (
               <Button type="button" onClick={onAlertOk}>
-                {t("btn_ok")}
+                {labels.ok}
               </Button>
             )}
           </DialogFooter>

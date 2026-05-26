@@ -5,7 +5,7 @@ import {
 } from '@/lib/print-html-iframe'
 import { isPosAndroidWebPrintClient } from '@/lib/cm-pos-shell'
 import { appAlert } from '@/lib/app-message'
-import { getClientUiLang, getUiString } from '@/lib/i18n'
+import { getClientUiLang, getRuntimeUiString } from '@/lib/runtime-ui-strings'
 
 /**
  * 주문 영수증(directPrint) 직후 주방전을 바로 호출하면, 일부 ESC/POS 드라이버가 스풀에서
@@ -189,7 +189,7 @@ export function printPosHtmlDocument(
         if (ok) {
           if (r?.cutOk === false && opts?.alertOnCutFailure !== false) {
             const detail = r?.cutReason ? ` (${String(r.cutReason)})` : ''
-            void appAlert(getUiString(uiLang, 'posPrintCutFailedDetail', { detail }))
+            void appAlert(getRuntimeUiString(uiLang, 'posPrintCutFailedDetail', { detail }))
           }
           opts?.onAfterCleanup?.()
           return
@@ -199,14 +199,14 @@ export function printPosHtmlDocument(
             ? String((r as { reason?: string }).reason)
             : 'print_failed'
         if (opts?.suppressPrintError !== true) {
-          void appAlert(getUiString(uiLang, 'posPrintFailedWithReason', { reason }))
+          void appAlert(getRuntimeUiString(uiLang, 'posPrintFailedWithReason', { reason }))
         }
         printHtmlInHiddenIframe(fullDocumentHtml, opts)
       })
       .catch(() => {
         opts?.onShellPrintResult?.({ ok: false, reason: 'shell_invoke_error' })
         if (opts?.suppressPrintError !== true) {
-          void appAlert(getUiString(uiLang, 'posPrintRequestError'))
+          void appAlert(getRuntimeUiString(uiLang, 'posPrintRequestError'))
         }
         printHtmlInHiddenIframe(fullDocumentHtml, opts)
       })

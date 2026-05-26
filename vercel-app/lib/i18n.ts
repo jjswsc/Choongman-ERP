@@ -31015,6 +31015,8 @@ orderItemQty: 'အရေအတွက်',
     posStatusSideEffectStock: 'Stock',
     posStatusSideEffectVat: 'VAT',
     posHallOrder: 'Hall order slip',
+    posTourFullW22aBody: 'In demo mode, entering a QR amount shows a training QR preview at the top-right. In live stores using KBank QR, this is the stage where the customer-facing QR is generated before final confirmation.',
+    posTourFullW22aTitle: 'QR preview step',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -37660,6 +37662,8 @@ orderItemQty: 'ຈຳນວນ',
     posStatusSideEffectStock: 'Stock',
     posStatusSideEffectVat: 'VAT',
     posHallOrder: 'Hall order slip',
+    posTourFullW22aBody: 'In demo mode, entering a QR amount shows a training QR preview at the top-right. In live stores using KBank QR, this is the stage where the customer-facing QR is generated before final confirmation.',
+    posTourFullW22aTitle: 'QR preview step',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -41572,6 +41576,8 @@ orderItemQty: 'ຈຳນວນ',
     posStatusSideEffectStock: 'Stock',
     posStatusSideEffectVat: 'VAT',
     posHallOrder: 'Hall order slip',
+    posTourFullW22aBody: 'In demo mode, entering a QR amount shows a training QR preview at the top-right. In live stores using KBank QR, this is the stage where the customer-facing QR is generated before final confirmation.',
+    posTourFullW22aTitle: 'QR preview step',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -45461,6 +45467,8 @@ orderItemQty: 'ຈຳນວນ',
     posStatusSideEffectStock: 'Stock',
     posStatusSideEffectVat: 'VAT',
     posHallOrder: 'Hall order slip',
+    posTourFullW22aBody: 'In demo mode, entering a QR amount shows a training QR preview at the top-right. In live stores using KBank QR, this is the stage where the customer-facing QR is generated before final confirmation.',
+    posTourFullW22aTitle: 'QR preview step',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -49371,6 +49379,8 @@ orderItemQty: 'ຈຳນວນ',
     posStatusSideEffectStock: 'Stock',
     posStatusSideEffectVat: 'VAT',
     posHallOrder: 'Hall order slip',
+    posTourFullW22aBody: 'In demo mode, entering a QR amount shows a training QR preview at the top-right. In live stores using KBank QR, this is the stage where the customer-facing QR is generated before final confirmation.',
+    posTourFullW22aTitle: 'QR preview step',
   } as Record<string, string>,
 } as const
 

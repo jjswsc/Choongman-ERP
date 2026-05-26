@@ -71,6 +71,7 @@ import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catal
 import {
   cartLinesToPosOrderItems,
   mergeDineInAddonCartPosItemsWithExisting,
+  normalizeCartLineIdForSave,
   orderUiItemsToPosOrderItems,
   resolveCartLineQuantityForSave,
 } from '@/lib/pos-order-item-map'
@@ -2764,7 +2765,7 @@ export default function PosTerminalPage() {
       menuId?: unknown
       optionCode?: unknown
     }): string => {
-      const id = String(item.id ?? '').trim()
+      const id = normalizeCartLineIdForSave(item.id)
       if (id) return id
       const name = String(item.name ?? '').trim()
       const price = Number(item.price ?? 0) || 0
@@ -3651,7 +3652,12 @@ export default function PosTerminalPage() {
             })
         }
       }
-    }, { store: currentStoreId })
+    /**
+     * Realtime filter를 `store_code=eq.<현재매장>`로 고정하면
+     * `True` vs `CM True`처럼 매장 코드 표기가 섞인 지점은 이벤트 자체를 못 받는다.
+     * 콜백 안에서 변형 코드를 다시 판정하므로, 여기서는 필터를 걸지 않고 수신 후 매칭한다.
+     */
+    })
     return () => {
       if (channel) channel.unsubscribe()
     }
@@ -3704,7 +3710,7 @@ export default function PosTerminalPage() {
         memo: String(row.memo ?? ''),
       })
       refetchCurrentStore()
-    }, { store: currentStoreId })
+    })
     return () => {
       if (channel) channel.unsubscribe()
     }
@@ -4060,7 +4066,7 @@ export default function PosTerminalPage() {
       } else if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
         setTimeout(runKitchenRemoteDineInAdd, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
-    }, { store: currentStoreId })
+    })
     return () => {
       if (channel) channel.unsubscribe()
     }
@@ -6160,8 +6166,8 @@ export default function PosTerminalPage() {
                   if (!isAddOrder || !existingOrder) {
                     return mapPosItemToReceiptLine(it, false)
                   }
-                  const id = String(it.id ?? '').trim()
-                  const prev = existingOrder.items.find((e) => String(e.id ?? '').trim() === id)
+                  const id = normalizeCartLineIdForSave(it.id)
+                  const prev = existingOrder.items.find((e) => normalizeCartLineIdForSave(e.id) === id)
                   const qNow = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
                   const qPrev = prev
                     ? resolveCartLineQuantityForSave(prev as { quantity?: unknown; qty?: unknown })

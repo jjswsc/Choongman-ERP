@@ -1,8 +1,8 @@
 import type { LangCode } from '@/lib/lang-context'
-import { getUiString } from '@/lib/i18n'
 import type { PosPrinterSettings } from '@/lib/api-client'
 import type { KitchenSlipGroupLabels } from '@/lib/pos-kitchen-slip-routing'
 import { resolvePosPrintLang } from '@/lib/pos-print-lang'
+import { getRuntimeUiString } from '@/lib/runtime-ui-strings'
 
 /** 주방 슬립 문구·날짜 로케일: `kitchenSlipPrintLang` 미설정 시 POS 화면 언어 */
 export function kitchenSlipPrintI18n(
@@ -10,7 +10,7 @@ export function kitchenSlipPrintI18n(
   uiLang: LangCode
 ) {
   const lang = resolvePosPrintLang(settings.kitchenSlipPrintLang, uiLang)
-  const t = (k: string) => getUiString(lang, k)
+  const t = (k: string) => getRuntimeUiString(lang, k)
   const kLabels: KitchenSlipGroupLabels = {
     unified: t('posKitchenOrder') || '주방 주문서',
     kitchen1: t('posKitchen1') || '주방 1',

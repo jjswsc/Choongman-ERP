@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect } from "react"
-import { unregisterServiceWorkers } from "@/lib/firebase-client"
 
 /**
  * Serwist/Workbox가 `/_next/static/*.js`를 잘못 캐시(HTML 오류 페이지 등)하면 청크 실행 시 SyntaxError·ChunkLoadError가 난다.
@@ -20,7 +19,8 @@ export function LoginNextCacheReset() {
     if (typeof window === "undefined" || !("caches" in window)) return
     void (async () => {
       try {
-        await unregisterServiceWorkers()
+        const mod = await import("@/lib/firebase-client")
+        await mod.unregisterServiceWorkers()
       } catch {
         /* ignore */
       }

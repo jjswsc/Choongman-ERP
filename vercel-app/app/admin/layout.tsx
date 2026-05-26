@@ -1,16 +1,10 @@
 "use client"
 
-import { useEffect, useLayoutEffect, Suspense } from "react"
+import dynamic from "next/dynamic"
+import { useEffect, useLayoutEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { ErpSidebar } from "@/components/erp/erp-sidebar"
-import { ErpHeader } from "@/components/erp/erp-header"
-import { AdminContentHelpTabShell } from "@/components/erp/admin-content-help-tab-shell"
-import { OfflineBanner } from "@/components/offline-banner"
-import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
 import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
 import {
   isManagerRole,
   isFranchiseeRole,
@@ -20,6 +14,13 @@ import {
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
+
+const AdminShell = dynamic(
+  () => import("@/components/erp/admin-shell").then((m) => m.AdminShell),
+  {
+    loading: () => <AdminLayoutLoading />,
+  }
+)
 
 /** usePathname()이 첫 렌더에서 null이면 /admin/login인데도 로그인 분기로 못 들어가 스피너에 고정될 수 있음 */
 function normalizePathname(p: string | null): string {
@@ -63,7 +64,6 @@ export default function AdminLayout({
   const pathname = usePathname()
   const { auth, initialized, setAuth } = useAuth()
   const { lang, setLang } = useLang()
-  const t = useT(lang)
   const isLoginPage = isAdminLoginPath(pathname)
 
   useEffect(() => {
@@ -122,17 +122,6 @@ export default function AdminLayout({
   }
 
   return (
-    <StoreViewProvider>
-      <SidebarProvider>
-        <ErpSidebar />
-        <SidebarInset>
-          <ErpHeader />
-          <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
-          <Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
-            <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>
-          </Suspense>
-        </SidebarInset>
-      </SidebarProvider>
-    </StoreViewProvider>
+    <AdminShell>{children}</AdminShell>
   )
 }

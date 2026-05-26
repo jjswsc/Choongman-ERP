@@ -36,6 +36,14 @@ export type CartLineForPosOrder = {
   lineDiscountAmt?: number
 }
 
+/** 기존 주문 줄을 카트에 올릴 때 붙는 임시 prefix 제거 */
+export function normalizeCartLineIdForSave(id: unknown): string {
+  const raw = String(id ?? '').trim()
+  if (!raw) return ''
+  const matched = raw.match(/^cart-existing-\d+-(.+)$/)
+  return String(matched?.[1] ?? raw).trim()
+}
+
 /** items_json / API 줄 단위 — qty·quantity 외 레거시/연동 키 보강 */
 export function resolveItemsJsonLineQty(it: {
   qty?: unknown
@@ -68,6 +76,7 @@ export function resolveCartLineQuantityForSave(line: {
 export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrderItem[] {
   return lines.map((i) => {
     const q = resolveCartLineQuantityForSave(i)
+    const normalizedId = normalizeCartLineIdForSave(i.id)
     const menuIdPrimary = String(i.menuId1 ?? i.menuId ?? '').trim()
     const optionIdPrimary = String(i.optionId1 ?? i.optionId ?? '').trim()
     const optionCodePrimary = String(i.optionCode1 ?? i.optionCode ?? '').trim()
@@ -76,7 +85,7 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
     const optionCode2 = String(i.optionCode2 ?? '').trim()
     const lineDiscountAmt = Math.max(0, Number(i.lineDiscountAmt ?? 0) || 0)
     return {
-      id: i.id,
+      id: normalizedId,
       name: i.name,
       price: i.price,
       qty: q,
@@ -103,7 +112,7 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
 }
 
 function normPosOrderItemId(id: unknown): string {
-  return String(id ?? '').trim()
+  return normalizeCartLineIdForSave(id)
 }
 
 /** 테이블·조회용 `OrderItem` → `updatePosOrder` / 병합용 `PosOrderItem` */
@@ -170,6 +179,7 @@ export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[
     return {
       ...b,
       ...c,
+      id: k || String(b.id ?? c.id ?? ''),
       servedAt: c.servedAt ?? b.servedAt ?? null,
       servedBy: c.servedBy ?? b.servedBy ?? null,
       cancelledAt: c.cancelledAt ?? b.cancelledAt ?? null,
