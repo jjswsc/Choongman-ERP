@@ -46,7 +46,7 @@ function isLikelyProxyUrl(urlStr: string): boolean {
   }
 }
 
-function withProxySecret(headers: Record<string, string>, urlStr: string): Record<string, string> {
+function withProxySecret(headers: Record<string, string>, _urlStr: string): Record<string, string> {
   const proxySecret = getProxySecret()
   if (proxySecret) {
     return {
@@ -63,6 +63,38 @@ function buildProxyHint(urlStr: string, status: number): string {
     return ' (프록시 경유 환경으로 보이지만 KBANK_PROXY_SECRET 환경변수가 없습니다.)'
   }
   return ' (프록시 시크릿 불일치 또는 프록시 접근 정책을 확인하세요.)'
+}
+
+function pickFirstNonEmpty(values: unknown[]): string {
+  for (const v of values) {
+    const s = String(v ?? '').trim()
+    if (s) return s
+  }
+  return ''
+}
+
+function extractKbankErrorMessage(json: Record<string, unknown>, fallback: string): string {
+  const errorObj =
+    json.error && typeof json.error === 'object' && !Array.isArray(json.error)
+      ? (json.error as Record<string, unknown>)
+      : null
+  const firstError =
+    Array.isArray(json.errors) && json.errors[0] && typeof json.errors[0] === 'object'
+      ? (json.errors[0] as Record<string, unknown>)
+      : null
+  const msg = pickFirstNonEmpty([
+    json.statusMessage,
+    json.message,
+    json.error_description,
+    json.detail,
+    errorObj?.statusMessage,
+    errorObj?.message,
+    errorObj?.detail,
+    errorObj?.description,
+    firstError?.message,
+    firstError?.detail,
+  ])
+  return msg || fallback
 }
 
 function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
@@ -185,7 +217,10 @@ export async function generateKbankQr(
 
     if (!res.ok) {
       const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
-      const statusMessage = String(json.statusMessage || json.message || '').trim() || 'kbank_generate_qr_failed'
+      const statusMessage = extractKbankErrorMessage(
+        json,
+        `kbank_generate_qr_failed_http_${res.status}`
+      )
       return {
         ok: false,
         requestId: req.partnerTransactionId,

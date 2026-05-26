@@ -81,7 +81,57 @@ import { PosChannelSettlementPanel } from "@/components/erp/pos-channel-settleme
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
+}
+
+type BankImportRowEdit = {
+  category?: string
+  accountSubjectId?: string
+  note?: string
+  salesDate?: string
+  expenseDate?: string
+  vendorCode?: string
+  storeName?: string
+}
+
+type BankImportDraft = {
+  importPreview?: KDepositParsedResult | null
+  importRowEdits?: Record<number, BankImportRowEdit>
+  accountId?: string
+  startStr?: string
+  endStr?: string
+  newAccountName?: string
+  newAccountBankName?: string
+  newAccountStore?: string
+}
+
+type BankQueryDraft = {
+  accountId?: string
+  startStr?: string
+  endStr?: string
+  actualBalance?: string
+  activeBankTab?: string
+  filterTransType?: string
+  filterCategory?: string
+  filterVendorCode?: string
+  filterAccountSubjectId?: string
+  filterAccountSubjectEmpty?: boolean
+  filterPlExpenseOnly?: boolean
+  filterInvoiceNotReceived?: boolean
+  queryRowEdits?: Record<
+    number,
+    Partial<{
+      category: string
+      accountSubjectId: string
+      note: string
+      salesDate: string
+      expenseDate: string
+      vendorCode: string
+      storeName: string
+      withholdingTaxAmount: string
+      withholdingTaxRate: string
+    }>
+  >
 }
 
 function BankQuickMemoChipBar({
@@ -215,7 +265,7 @@ export function BankTransactionsTab() {
   const [accountDeletingId, setAccountDeletingId] = React.useState<number | null>(null)
 
   const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
-  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string; vendorCode?: string; storeName?: string }>>({})
+  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, BankImportRowEdit>>({})
   const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
   const [invoiceLinkRow, setInvoiceLinkRow] = React.useState<(typeof list)[0] | null>(null)
@@ -285,6 +335,46 @@ export function BankTransactionsTab() {
   const [bankQuickMemosDraft, setBankQuickMemosDraft] = React.useState<string[]>([])
   const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+  const importRestoreKey = "bank_import_pending_restore"
+  const importDraftStorageKey = "bank_import_input_draft_v1"
+  const queryDraftStorageKey = "bank_query_input_draft_v1"
+  const restoreQueryListRef = React.useRef(false)
+  const hasBankInputDraft = Boolean(
+    importPreview?.rows?.length ||
+    newAccountName.trim() ||
+    newAccountBankName.trim() ||
+    newAccountStore.trim()
+  )
+
+  const restoreBankImportDraft = React.useCallback((data: BankImportDraft | null | undefined) => {
+    if (!data) return false
+    const hasImportPreview = Boolean(data.importPreview?.rows?.length)
+    const hasNewAccountDraft = Boolean(
+      data.newAccountName?.trim() ||
+      data.newAccountBankName?.trim() ||
+      data.newAccountStore?.trim()
+    )
+    if (!hasImportPreview && !hasNewAccountDraft) return false
+    if (hasImportPreview) {
+      setImportPreview(data.importPreview || null)
+      setImportRowEdits(data.importRowEdits || {})
+      if (data.accountId) setAccountId(data.accountId)
+      if (data.startStr && /^\d{4}-\d{2}-\d{2}$/.test(data.startStr)) setStartStr(data.startStr)
+      if (data.endStr && /^\d{4}-\d{2}-\d{2}$/.test(data.endStr)) setEndStr(data.endStr)
+    }
+    if (typeof data.newAccountName === "string") setNewAccountName(data.newAccountName)
+    if (typeof data.newAccountBankName === "string") setNewAccountBankName(data.newAccountBankName)
+    if (typeof data.newAccountStore === "string") setNewAccountStore(data.newAccountStore)
+    setActiveBankTab("input")
+    return true
+  }, [])
+
+  const clearBankImportDraft = React.useCallback(() => {
+    try {
+      sessionStorage.removeItem(importDraftStorageKey)
+      sessionStorage.removeItem(importRestoreKey)
+    } catch {}
+  }, [])
 
   const allMemos = React.useMemo(() => {
     const fromList = list.map((r) => (r.memo || "").trim()).filter(Boolean)
@@ -499,6 +589,18 @@ export function BankTransactionsTab() {
   const [activeBankTab, setActiveBankTab] = React.useState(
     tabParam === "input" ? "input" : tabParam === "query" ? "query" : "input"
   )
+  const hasBankQueryDraft = Boolean(
+    activeBankTab === "query" ||
+    Object.keys(queryRowEdits).length > 0 ||
+    actualBalance.trim() ||
+    filterTransType ||
+    filterCategory ||
+    filterVendorCode ||
+    filterAccountSubjectId ||
+    filterAccountSubjectEmpty ||
+    filterPlExpenseOnly ||
+    filterInvoiceNotReceived
+  )
   const urlParamsApplied = React.useRef(false)
   const plDrillNavReadyRef = React.useRef(false)
   const plDrillAutoFetchRef = React.useRef(false)
@@ -508,6 +610,37 @@ export function BankTransactionsTab() {
   )
   const restoreListLoadedRef = React.useRef(false)
   const [restoredHighlightTxId, setRestoredHighlightTxId] = React.useState<number | null>(null)
+
+  const restoreBankQueryDraft = React.useCallback((data: BankQueryDraft | null | undefined) => {
+    if (!data) return false
+    const hasDraft =
+      data.activeBankTab === "query" ||
+      Boolean(data.actualBalance?.trim()) ||
+      Boolean(data.filterTransType) ||
+      Boolean(data.filterCategory) ||
+      Boolean(data.filterVendorCode) ||
+      Boolean(data.filterAccountSubjectId) ||
+      Boolean(data.filterAccountSubjectEmpty) ||
+      Boolean(data.filterPlExpenseOnly) ||
+      Boolean(data.filterInvoiceNotReceived) ||
+      Object.keys(data.queryRowEdits || {}).length > 0
+    if (!hasDraft) return false
+    if (data.accountId) setAccountId(data.accountId)
+    if (data.startStr && /^\d{4}-\d{2}-\d{2}$/.test(data.startStr)) setStartStr(data.startStr)
+    if (data.endStr && /^\d{4}-\d{2}-\d{2}$/.test(data.endStr)) setEndStr(data.endStr)
+    if (typeof data.actualBalance === "string") setActualBalance(data.actualBalance)
+    if (typeof data.filterTransType === "string") setFilterTransType(data.filterTransType)
+    if (typeof data.filterCategory === "string") setFilterCategory(data.filterCategory)
+    if (typeof data.filterVendorCode === "string") setFilterVendorCode(data.filterVendorCode)
+    if (typeof data.filterAccountSubjectId === "string") setFilterAccountSubjectId(data.filterAccountSubjectId)
+    setFilterAccountSubjectEmpty(Boolean(data.filterAccountSubjectEmpty))
+    setFilterPlExpenseOnly(Boolean(data.filterPlExpenseOnly))
+    setFilterInvoiceNotReceived(Boolean(data.filterInvoiceNotReceived))
+    setQueryRowEdits((data.queryRowEdits || {}) as Record<number, QueryRowEdit>)
+    setActiveBankTab("query")
+    restoreQueryListRef.current = true
+    return true
+  }, [])
   React.useEffect(() => {
     if (tabParam === "account-subjects") {
       router.replace("/admin/chart-of-accounts")
@@ -552,25 +685,106 @@ export function BankTransactionsTab() {
     if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) setEndStr(end)
   }, [searchParams])
 
-  const importRestoreKey = "bank_import_pending_restore"
   React.useEffect(() => {
     try {
+      const draftRaw = sessionStorage.getItem(importDraftStorageKey)
+      if (draftRaw) {
+        const data = JSON.parse(draftRaw) as BankImportDraft
+        if (restoreBankImportDraft(data)) return
+        sessionStorage.removeItem(importDraftStorageKey)
+      }
       const raw = sessionStorage.getItem(importRestoreKey)
-      if (!raw) return
-      const data = JSON.parse(raw) as { importPreview?: KDepositParsedResult; importRowEdits?: Record<number, Record<string, string>>; accountId?: string; startStr?: string; endStr?: string }
-      sessionStorage.removeItem(importRestoreKey)
-      if (data.importPreview?.rows?.length) {
-        setImportPreview(data.importPreview)
-        setImportRowEdits(data.importRowEdits || {})
-        if (data.accountId) setAccountId(data.accountId)
-        if (data.startStr && /^\d{4}-\d{2}-\d{2}$/.test(data.startStr)) setStartStr(data.startStr)
-        if (data.endStr && /^\d{4}-\d{2}-\d{2}$/.test(data.endStr)) setEndStr(data.endStr)
-        setActiveBankTab("input")
+      if (raw) {
+        const data = JSON.parse(raw) as BankImportDraft
+        sessionStorage.removeItem(importRestoreKey)
+        if (restoreBankImportDraft(data)) return
+      }
+      if (searchParams.toString()) return
+      const queryDraftRaw = sessionStorage.getItem(queryDraftStorageKey)
+      if (!queryDraftRaw) return
+      const queryDraft = JSON.parse(queryDraftRaw) as BankQueryDraft
+      if (!restoreBankQueryDraft(queryDraft)) {
+        sessionStorage.removeItem(queryDraftStorageKey)
       }
     } catch {
-      sessionStorage.removeItem(importRestoreKey)
+      clearBankImportDraft()
+      try {
+        sessionStorage.removeItem(queryDraftStorageKey)
+      } catch {}
     }
-  }, [])
+  }, [clearBankImportDraft, importDraftStorageKey, importRestoreKey, queryDraftStorageKey, restoreBankImportDraft, restoreBankQueryDraft, searchParams])
+
+  React.useEffect(() => {
+    try {
+      if (!hasBankInputDraft) {
+        sessionStorage.removeItem(importDraftStorageKey)
+        return
+      }
+      const draft: BankImportDraft = {
+        importPreview,
+        importRowEdits,
+        accountId,
+        startStr,
+        endStr,
+        newAccountName,
+        newAccountBankName,
+        newAccountStore,
+      }
+      sessionStorage.setItem(importDraftStorageKey, JSON.stringify(draft))
+    } catch {}
+  }, [
+    accountId,
+    endStr,
+    hasBankInputDraft,
+    importPreview,
+    importRowEdits,
+    importDraftStorageKey,
+    newAccountBankName,
+    newAccountName,
+    newAccountStore,
+    startStr,
+  ])
+
+  React.useEffect(() => {
+    try {
+      if (!hasBankQueryDraft) {
+        sessionStorage.removeItem(queryDraftStorageKey)
+        return
+      }
+      const draft: BankQueryDraft = {
+        accountId,
+        startStr,
+        endStr,
+        actualBalance,
+        activeBankTab,
+        filterTransType,
+        filterCategory,
+        filterVendorCode,
+        filterAccountSubjectId,
+        filterAccountSubjectEmpty,
+        filterPlExpenseOnly,
+        filterInvoiceNotReceived,
+        queryRowEdits,
+      }
+      sessionStorage.setItem(queryDraftStorageKey, JSON.stringify(draft))
+    } catch {}
+  }, [
+    accountId,
+    activeBankTab,
+    actualBalance,
+    endStr,
+    filterAccountSubjectEmpty,
+    filterAccountSubjectId,
+    filterCategory,
+    filterInvoiceNotReceived,
+    filterPlExpenseOnly,
+    filterTransType,
+    filterVendorCode,
+    hasBankQueryDraft,
+    queryDraftStorageKey,
+    queryRowEdits,
+    startStr,
+  ])
 
   React.useEffect(() => {
     getBankAccounts({
@@ -598,7 +812,6 @@ export function BankTransactionsTab() {
   const loadData = React.useCallback((): Promise<void> => {
     if (!accountId) return Promise.resolve()
     setLoading(true)
-    setQueryRowEdits({})
     return getBankTransactions({
       accountId,
       startStr,
@@ -621,6 +834,12 @@ export function BankTransactionsTab() {
     }
     await loadData()
   }, [accountId, startStr, endStr, loadData])
+
+  React.useEffect(() => {
+    if (!restoreQueryListRef.current || !accountId) return
+    restoreQueryListRef.current = false
+    void loadData()
+  }, [accountId, loadData])
 
   React.useEffect(() => {
     if (!plDrillNavReadyRef.current || plDrillAutoFetchRef.current || !accountId) return
@@ -1211,7 +1430,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           return
         }
         setImportPreview(parsed)
-        const initialEdits: Record<number, { category?: string; accountSubjectId?: string; salesDate?: string; expenseDate?: string; note?: string; vendorCode?: string; storeName?: string }> = {}
+        const initialEdits: Record<number, BankImportRowEdit> = {}
         parsed.rows.forEach((r, idx) => {
           if (r.transType === "deposit") {
             const d = new Date(r.transDate)
@@ -1389,6 +1608,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         const periodEnd = importPreview.periodEnd
         const refreshStart = periodStart || startStr
         const refreshEnd = periodEnd || endStr
+        clearBankImportDraft()
         setImportPreview(null)
         setImportRowEdits({})
         if (periodStart && periodEnd) {
@@ -2170,7 +2390,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 p-4 mb-4 space-y-3">
               <div className="flex justify-between items-center">
                 <p className="font-medium text-amber-800 dark:text-amber-200">{t("bankImportPreview")}</p>
-                <Button size="sm" variant="ghost" onClick={() => setImportPreview(null)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    clearBankImportDraft()
+                    setImportPreview(null)
+                    setImportRowEdits({})
+                  }}
+                >
                   <X className="h-4 w-4" />
                 </Button>
               </div>

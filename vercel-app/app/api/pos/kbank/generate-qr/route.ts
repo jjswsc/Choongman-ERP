@@ -125,17 +125,28 @@ export async function POST(req: NextRequest) {
     }
 
     const status = result.ok ? 200 : 422
+    const responseData = result.response && typeof result.response === 'object'
+      ? (result.response as Record<string, unknown>)
+      : {}
+    const responseCode = String(responseData.code || '').trim()
+    const responseMessage = String(responseData.message || '').trim()
+    const failureMessage =
+      result.statusMessage ||
+      responseMessage ||
+      responseCode ||
+      'kbank_generate_qr_failed'
     return withCorsHeaders(
       NextResponse.json(
         {
           success: result.ok,
+          message: result.ok ? undefined : failureMessage,
           partnerTransactionId,
           qrType: qrType || null,
           amount,
           orderId: orderId > 0 ? orderId : null,
           storeCode: storeCode || null,
-          statusCode: result.statusCode || null,
-          statusMessage: result.statusMessage || null,
+          statusCode: result.statusCode || responseCode || null,
+          statusMessage: result.statusMessage || responseMessage || null,
           data: result.response,
         },
         { status }
