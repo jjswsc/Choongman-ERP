@@ -13,15 +13,7 @@ import {
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
-
-const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
-
-function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
-  if (paymentDeliveryApp <= 0.005) return null
-  const s = String(raw ?? '').trim().toLowerCase()
-  if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
-  return 'grab'
-}
+import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 
 async function resolveBearerCaller(request: NextRequest): Promise<JwtPayload | null> {
   const auth = request.headers.get('authorization') || ''
@@ -84,15 +76,11 @@ export async function POST(req: NextRequest) {
     const paymentQr = Math.max(0, Number(body?.paymentQr ?? 0))
     const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
     const paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? 0))
-    const deliveryPaymentChannel = normalizeDeliveryPaymentChannel(
-      body?.deliveryPaymentChannel ?? body?.delivery_payment_channel,
-      paymentDeliveryApp
-    )
 
     const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
       limit: 1,
       select:
-        'id,store_code,total,subtotal,vat,status,created_at,memo,discount_amt,coupon_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
+        'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,delivery_app_code,discount_amt,coupon_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
     })) as {
       id?: number
       store_code?: string
@@ -102,6 +90,9 @@ export async function POST(req: NextRequest) {
       status?: string
       created_at?: string
       memo?: string
+      table_name?: string
+      order_no?: string
+      delivery_app_code?: string | null
       discount_amt?: number
       coupon_discount_amt?: number
       delivery_fee?: number
@@ -119,6 +110,15 @@ export async function POST(req: NextRequest) {
     if (!row) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { status: 404, headers })
     }
+    const deliveryPaymentChannel = resolveDeliveryPaymentChannelForSave({
+      deliveryAppCode: row.delivery_app_code,
+      deliveryPaymentChannel:
+        String(body?.deliveryPaymentChannel ?? body?.delivery_payment_channel ?? '').trim() || undefined,
+      tableName: row.table_name,
+      memo: row.memo,
+      orderNo: row.order_no,
+      paymentDeliveryApp,
+    })
     const storeCode = String(row.store_code ?? '').trim()
     if (!callerMayAccessStore(storeCode, caller)) {
       return NextResponse.json({ success: false, message: 'forbidden_store' }, { status: 403, headers })

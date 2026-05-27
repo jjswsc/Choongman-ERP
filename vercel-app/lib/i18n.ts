@@ -3156,6 +3156,10 @@ export const i18n = {
     bankQuickMemosNeedOne: '한 줄 이상 입력해 주세요.',
     bankQuickMemosResetConfirm: '저장된 목록을 지우고 기본 문구로 되돌릴까요?',
     bankImportSavedGoToQuery: '저장되었습니다. 조회 탭에서 내역을 확인·추가 작업할 수 있습니다.',
+    bankImportQueuedForSync:
+      '네트워크 문제로 이 브라우저에만 임시 저장되었습니다. 연결 후 자동 전송됩니다. 입금 분류가 배달앱/카드 매출(revenue_*)이면 저장 전 「매출 수령」으로 바꿔 주세요.',
+    bankImportPosRevenueHint:
+      'POS 매장: Grab·카드·QR 입금은 「매출 수령(receivable_receive)」+ 매장·매출일을 사용하세요. 수수료는 채널 정산으로 처리합니다.',
     bankParseNoRows: '파싱된 거래가 없습니다. K-DEPOSIT 형식인지 확인하세요.',
     bankParseFailPrefix: '파일 파싱 실패:',
     bankPlanAmountMismatch: '통장 금액과 선택한 지급예정 잔액이 일치해야 합니다.',
@@ -11731,6 +11735,10 @@ Only matters the employee must handle personally on a working day:
     bankQuickMemosNeedOne: 'Enter at least one phrase.',
     bankQuickMemosResetConfirm: 'Clear saved phrases and restore the default list?',
     bankImportSavedGoToQuery: 'Saved. Open the Query tab to review or continue.',
+    bankImportQueuedForSync:
+      'Saved only in this browser due to a network issue; it will send when online. If deposits use revenue_delivery/card/qr/cash, change to Sales collection (receivable_receive) before saving.',
+    bankImportPosRevenueHint:
+      'POS stores: use Sales collection (receivable_receive) with store and sales date for Grab/card/QR deposits. Post fees via Channel settlement.',
     bankParseNoRows: 'No parsed transactions found. Please check K-DEPOSIT format.',
     bankParseFailPrefix: 'File parse failed:',
     bankPlanAmountMismatch: 'Bank amount must match the selected payment plan balance.',
@@ -19641,6 +19649,10 @@ orderItemQty: 'จำนวน',
     bankQuickMemosNeedOne: 'กรุณาใส่อย่างน้อยหนึ่งบรรทัด',
     bankQuickMemosResetConfirm: 'ล้างรายการที่บันทึกและคืนข้อความเริ่มต้น?',
     bankImportSavedGoToQuery: 'บันทึกแล้ว ไปแท็บค้นหาเพื่อตรวจสอบหรือทำต่อ',
+    bankImportQueuedForSync:
+      'บันทึกชั่วคราวในเบราว์เซอร์นี้เท่านั้น (เครือข่าย) จะส่งเมื่อออนไลน์ หากเป็นหมวด revenue_* ให้เปลี่ยนเป็น receivable_receive ก่อนบันทึก',
+    bankImportPosRevenueHint:
+      'ร้าน POS: เงินเข้า Grab/บัตร/QR ใช้ Sales collection (receivable_receive) + ร้าน + วันที่ขาย ค่าธรรมเนียมใช้ Channel settlement',
     bankParseNoRows: 'ไม่พบรายการที่แปลงได้ กรุณาตรวจสอบรูปแบบ K-DEPOSIT',
     bankParseFailPrefix: 'แปลงไฟล์ไม่สำเร็จ:',
     bankPlanAmountMismatch: 'จำนวนเงินธนาคารต้องตรงกับยอดคงเหลือของรายการที่เลือก',

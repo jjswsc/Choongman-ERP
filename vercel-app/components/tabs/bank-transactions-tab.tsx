@@ -58,6 +58,10 @@ import {
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
+import {
+  isPosRevenueDepositCategory,
+  normalizeBulkImportDepositCategory,
+} from "@/lib/bank-import-deposit-category"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -972,13 +976,31 @@ export function BankTransactionsTab() {
       const next = { ...prev }
       importPreview.rows.forEach((r, idx) => {
         if (r.transType === "deposit" && r.memo) {
-          const existingCategory = String(next[idx]?.category || getDefaultImportCategory(r)).trim().toLowerCase()
-          if (existingCategory) return
+          const explicitCategory = String(next[idx]?.category ?? "").trim().toLowerCase()
+          if (explicitCategory) return
           const sug = suggestDepositWithRules(r.memo, memoRules, revenueAccountOptions)
           if (sug) {
+            const normalized = normalizeBulkImportDepositCategory({
+              category: sug.category,
+              accountStore: selectedAccountStore || undefined,
+            })
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
-            next[idx] = { ...next[idx], category: sug.category, accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined, salesDate: d.toISOString().slice(0, 10) }
+            next[idx] = {
+              ...next[idx],
+              category: normalized.category,
+              ...(normalized.storeName ? { storeName: normalized.storeName } : {}),
+              accountSubjectId:
+                normalized.category === "receivable_receive"
+                  ? undefined
+                  : sug.accountSubjectId
+                    ? String(sug.accountSubjectId)
+                    : undefined,
+              salesDate:
+                normalized.category === "receivable_receive"
+                  ? undefined
+                  : d.toISOString().slice(0, 10),
+            }
           }
         } else if (r.transType === "withdraw" && r.memo) {
           const sug = suggestWithdrawWithRules(r.memo, memoRules, accountSubjectOptions)
@@ -993,7 +1015,7 @@ export function BankTransactionsTab() {
       })
       return next
     })
-  }, [getDefaultImportCategory, importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
+  }, [getDefaultImportCategory, importPreview, revenueAccountOptions, accountSubjectOptions, memoRules, selectedAccountStore])
 
   React.useEffect(() => {
     if (!importPreview) importMemoFocusIdxRef.current = null
@@ -1553,12 +1575,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             ? "expense"
             : edit.category
           : undefined
-      const category =
+      let category =
         r.transType === "withdraw"
           ? (rawWithdrawCat && (withdrawCats as readonly string[]).includes(rawWithdrawCat) ? rawWithdrawCat : "unclassified")
           : edit?.category && (depositCats as readonly string[]).includes(edit.category)
             ? edit.category
             : "receivable_receive"
+
+      let storeName =
+        r.transType === "deposit" && category === "receivable_receive"
+          ? edit?.storeName?.trim() || selectedAccountStore || undefined
+          : undefined
+
+      if (r.transType === "deposit") {
+        const normalized = normalizeBulkImportDepositCategory({
+          category,
+          storeName,
+          accountStore: selectedAccountStore || acc?.store,
+        })
+        category = normalized.category
+        if (normalized.category === "receivable_receive") {
+          storeName = normalized.storeName
+        }
+      }
 
       let accountSubjectId: number | undefined
       if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
@@ -1577,10 +1616,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           ? edit?.expenseDate || r.transDate
           : undefined
       const vendorCode = r.transType === "withdraw" && category === "purchase_payment" ? edit?.vendorCode?.trim() || undefined : undefined
-      const storeName =
-        r.transType === "deposit" && category === "receivable_receive"
-          ? edit?.storeName?.trim() || selectedAccountStore || undefined
-          : undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -1603,6 +1638,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         userName: auth?.user,
         items,
       })
+      if (res.queued) {
+        await appAlert(
+          t("bankImportQueuedForSync") ||
+            "네트워크 문제로 이 브라우저에만 임시 저장되었습니다. 연결 후 자동 전송됩니다. 입금이 배달앱/카드 매출(revenue_*)로 되어 있으면 매출 수령(receivable_receive)으로 바꾼 뒤 다시 저장하세요."
+        )
+        return
+      }
       if (res.success) {
         const periodStart = importPreview.periodStart
         const periodEnd = importPreview.periodEnd
@@ -1650,7 +1692,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             : (translateApiMessage(res.message, t) || res.message || (t("bankImportSavedGoToQuery") || "저장되었습니다. 조회 탭에서 내역을 확인·추가 작업할 수 있습니다."))
         await appAlert(importMessage)
       } else {
-        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
+        const failMsg = translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패")
+        const hadRevenueInImport = importPreview.rows.some(
+          (row, rowIdx) =>
+            row.transType === "deposit" &&
+            isPosRevenueDepositCategory(importRowEdits[rowIdx]?.category)
+        )
+        const posHint =
+          hadRevenueInImport || String(res.message || "").includes("이중 인식")
+            ? `\n\n${t("bankImportPosRevenueHint") || "POS 매장: Grab·카드·QR 입금은 「매출 수령(receivable_receive)」+ 매장·매출일을 사용하세요. 수수료는 채널 정산으로 처리합니다."}`
+            : ""
+        await appAlert(`${failMsg}${posHint}`)
       }
     } catch (e) {
       await appAlert(String(e))

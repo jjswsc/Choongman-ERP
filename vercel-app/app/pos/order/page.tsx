@@ -81,6 +81,8 @@ import {
 import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from "@/lib/pos-promo-choice"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
+import { buildPromoRegularPriceById } from "@/lib/pos-promo-cut-price"
+import { PosPromoCutPriceLabel } from "@/components/pos/pos-promo-cut-price-label"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import {
@@ -730,6 +732,21 @@ export default function PosOrderPage() {
 
   const getPromoPrice = (p: PosPromoWithItems) =>
     orderType === "delivery" && p.priceDelivery != null ? p.priceDelivery : p.price
+
+  const promoRegularPriceById = React.useMemo(
+    () =>
+      buildPromoRegularPriceById({
+        promos,
+        menus: menus.map((m) => ({
+          id: m.id,
+          price: m.price,
+          priceDelivery: m.priceDelivery,
+        })),
+        optionsByMenuId,
+        channel: orderType === "delivery" ? "delivery" : "hall",
+      }),
+    [promos, menus, optionsByMenuId, orderType]
+  )
 
   const resolveCartLineNote = React.useCallback(
     (item: CartItem) => {
@@ -1748,8 +1765,11 @@ export default function PosOrderPage() {
                 >
                   {p.name}
                 </div>
-                <div className="mt-auto text-xs font-bold text-amber-600">
-                  {(getPromoPrice(p)) > 0 ? `${formatBahtNum(getPromoPrice(p))} ฿` : "-"}
+                <div className="mt-auto text-xs">
+                  <PosPromoCutPriceLabel
+                    salePrice={getPromoPrice(p)}
+                    regularPrice={promoRegularPriceById.get(String(p.id))}
+                  />
                 </div>
               </button>
               )

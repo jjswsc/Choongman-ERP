@@ -25,16 +25,25 @@ export async function POST(req: NextRequest) {
     const partnerTransactionId = String(body.partnerTransactionId || '').trim()
     const originalTransactionId = String(body.originalTransactionId || '').trim()
     const refId = String(body.refId || '').trim()
+    const terminalId = String(body.terminalId || '').trim()
+    const qrType = String(body.qrType || '').trim()
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
+    const payload = body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : {}
 
     const result = await settleKbankPayment({
       partnerTransactionId: partnerTransactionId || undefined,
       originalTransactionId: originalTransactionId || undefined,
       refId: refId || undefined,
+      terminalId: terminalId || undefined,
+      qrType: qrType || undefined,
       orderId: orderId > 0 ? orderId : undefined,
       storeCode: storeCode || undefined,
-      payload: body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : undefined,
+      payload: {
+        ...payload,
+        ...(terminalId ? { terminalId } : {}),
+        ...(qrType ? { qrType } : {}),
+      },
     })
 
     try {

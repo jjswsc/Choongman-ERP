@@ -24,14 +24,23 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const partnerTransactionId = String(body.partnerTransactionId || '').trim()
     const originalTransactionId = String(body.originalTransactionId || '').trim()
+    const origPartnerTxnUid = String(body.origPartnerTxnUid || '').trim()
     const refId = String(body.refId || '').trim()
+    const terminalId = String(body.terminalId || '').trim()
+    const txnNo = String(body.txnNo || '').trim()
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
+    const payload = body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : {}
+    const payloadOrigPartnerTxnUid = String(payload.origPartnerTxnUid || '').trim()
 
-    if (!partnerTransactionId && !originalTransactionId && !refId) {
+    if (!partnerTransactionId && !originalTransactionId && !origPartnerTxnUid && !payloadOrigPartnerTxnUid) {
       return withCorsHeaders(
         NextResponse.json(
-          { success: false, message: 'partnerTransactionId/originalTransactionId/refId 중 하나는 필요합니다.' },
+          {
+            success: false,
+            message:
+              'partnerTransactionId/originalTransactionId/origPartnerTxnUid/payload.origPartnerTxnUid 중 하나는 필요합니다.',
+          },
           { status: 400 }
         )
       )
@@ -40,10 +49,18 @@ export async function POST(req: NextRequest) {
     const result = await voidKbankPayment({
       partnerTransactionId: partnerTransactionId || undefined,
       originalTransactionId: originalTransactionId || undefined,
+      origPartnerTxnUid: origPartnerTxnUid || undefined,
       refId: refId || undefined,
+      terminalId: terminalId || undefined,
+      txnNo: txnNo || undefined,
       orderId: orderId > 0 ? orderId : undefined,
       storeCode: storeCode || undefined,
-      payload: body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : undefined,
+      payload: {
+        ...payload,
+        ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+        ...(terminalId ? { terminalId } : {}),
+        ...(txnNo ? { txnNo } : {}),
+      },
     })
 
     try {

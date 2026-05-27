@@ -9,8 +9,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
-import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
-import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
+import { computePurchaseOrderMoneyTotals, parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+import { roundMoney2, thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import { getLineRemarksFromCartLine, type OrderCartLine, unitPriceFromOutboundLogSnapshot } from '@/lib/outbound-order-line-match'
 
 export interface PayableItemRow {
@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
 
     const items: PayableItemRow[] = []
     let orderInvoiceTotals: OrderInvoiceTotals | undefined
+    let withholdingTaxAmount: number | undefined
+    let withholdingTaxRate: number | undefined
 
     if (refType === 'Order') {
       const orderRows = (await supabaseSelectFilter('orders', `id=eq.${refId}`, {
@@ -108,10 +110,23 @@ export async function GET(request: NextRequest) {
       }
     } else if (refType === 'PO') {
       const poRows = (await supabaseSelectFilter('purchase_orders', `id=eq.${refId}`, {
-        select: 'cart_json',
+        select: 'cart_json,withholding_tax_amount,withholding_tax_rate',
         limit: 1,
-      })) as { cart_json?: string }[] | null
-      const cartJson = poRows?.[0]?.cart_json
+      })) as
+        | {
+            cart_json?: string
+            withholding_tax_amount?: number | string | null
+            withholding_tax_rate?: number | string | null
+          }[]
+        | null
+      const poRow = poRows?.[0]
+      const cartJson = poRow?.cart_json
+      const whtAmt = Math.max(0, Number(poRow?.withholding_tax_amount) || 0)
+      const whtRate = Math.max(0, Number(poRow?.withholding_tax_rate) || 0)
+      if (whtAmt > 0) {
+        withholdingTaxAmount = roundMoney2(whtAmt)
+        if (whtRate > 0) withholdingTaxRate = whtRate
+      }
       if (cartJson) {
         try {
           const { items: cartLines } = parsePurchaseOrderCart(cartJson)
@@ -125,6 +140,14 @@ export async function GET(request: NextRequest) {
               unitCost: price,
               amount: qty * price,
             })
+          }
+          if (cartLines.length > 0) {
+            const money = computePurchaseOrderMoneyTotals(cartLines)
+            orderInvoiceTotals = {
+              subtotalRounded: roundMoney2(money.subtotal),
+              vatRounded: money.vat,
+              grandTotal: money.total,
+            }
           }
         } catch {
           // ignore parse error
@@ -180,7 +203,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ items, orderInvoiceTotals }, { headers })
+    return NextResponse.json(
+      {
+        items,
+        orderInvoiceTotals,
+        ...(withholdingTaxAmount != null && withholdingTaxAmount > 0
+          ? {
+              withholdingTaxAmount,
+              ...(withholdingTaxRate != null && withholdingTaxRate > 0
+                ? { withholdingTaxRate }
+                : {}),
+            }
+          : {}),
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('getPayableTransactionItems:', e)
     return NextResponse.json({ items: [], orderInvoiceTotals: undefined }, { headers })

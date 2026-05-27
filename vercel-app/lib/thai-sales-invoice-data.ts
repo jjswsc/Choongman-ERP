@@ -34,6 +34,8 @@ export function buildThaiSalesInvoiceData(params: {
   /** 인쇄 편집값 영구 저장용 source 식별자 */
   sourceRefType?: string
   sourceRefId?: number
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number | null
 }): InvoiceData {
   const { documentType, documentNo, issueDate, company, client, invSettings, lines } = params
   const dueDate = params.dueDate ?? issueDate
@@ -114,5 +116,14 @@ export function buildThaiSalesInvoiceData(params: {
     stampImageUrl: stampBase ? `${stampBase}/company-stamp.png` : "/company-stamp.png",
     sourceRefType: params.sourceRefType,
     sourceRefId: params.sourceRefId,
+    ...(Number(params.withholdingTaxAmount ?? 0) > 0
+      ? {
+          withholdingTaxAmount: Number(params.withholdingTaxAmount),
+          withholdingTaxRate:
+            params.withholdingTaxRate != null && Number(params.withholdingTaxRate) > 0
+              ? Number(params.withholdingTaxRate)
+              : undefined,
+        }
+      : {}),
   }
 }

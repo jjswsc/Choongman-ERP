@@ -3,6 +3,7 @@
  * POST/PUT 요청만 큐 적재 (GET은 읽기 전용이라 캐시 사용)
  */
 
+import { isNonRetryableBankBusinessErrorMessage } from '@/lib/bank-import-deposit-category'
 import { apiFetch } from './fetch'
 import { addToQueue } from '@/lib/offline/queue'
 import {
@@ -265,6 +266,29 @@ function canQueue(url: string, init?: RequestInit): boolean {
   return true
 }
 
+const BANK_NON_QUEUE_PATHS = new Set([
+  '/api/addBankTransactionsBulk',
+  '/api/addBankTransaction',
+  '/api/updateBankTransaction',
+])
+
+function shouldQueueHttpError(path: string, status: number, bodyText: string): boolean {
+  if (status < 500 || status >= 600) {
+    if (status >= 400 && status < 500 && BANK_NON_QUEUE_PATHS.has(path)) return false
+    return status >= 500
+  }
+  if (!BANK_NON_QUEUE_PATHS.has(path)) return true
+  try {
+    const j = JSON.parse(bodyText) as { success?: boolean; message?: string }
+    if (j?.success === false && isNonRetryableBankBusinessErrorMessage(j.message)) return false
+    const msg = String(j?.message ?? bodyText)
+    if (isNonRetryableBankBusinessErrorMessage(msg)) return false
+  } catch {
+    if (isNonRetryableBankBusinessErrorMessage(bodyText)) return false
+  }
+  return true
+}
+
 function getSerializableBody(init?: RequestInit): string | undefined {
   const body = init?.body
   if (body == null) return undefined
@@ -373,12 +397,16 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
       reportNetworkSuccess()
     }
     // 서버/DB 장애(5xx) 시에도 큐 적재 → Supabase 등 장애 시 오프라인처럼 동작
-    if (!res.ok && res.status >= 500 && res.status < 600) {
-      reportNetworkFailure()
-      try {
-        return await queueAndReturnFallback()
-      } catch {
-        return res
+    // 단, 통장 검증 거절(이중 매출 등)은 재시도해도 성공하지 않으므로 큐에 넣지 않음
+    if (!res.ok && (res.status >= 500 || (res.status >= 400 && BANK_NON_QUEUE_PATHS.has(path)))) {
+      const bodyText = await res.clone().text().catch(() => '')
+      if (shouldQueueHttpError(path, res.status, bodyText)) {
+        reportNetworkFailure()
+        try {
+          return await queueAndReturnFallback()
+        } catch {
+          return res
+        }
       }
     }
     return res

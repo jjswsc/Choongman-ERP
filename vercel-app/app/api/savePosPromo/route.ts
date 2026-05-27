@@ -14,6 +14,7 @@ import {
   fetchCampaignMetaForExpenseMemo,
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
+import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
 import { requireAuth } from '@/lib/verify-auth'
 
 function isColumnSchemaError(e: unknown): boolean {
@@ -300,6 +301,11 @@ export async function POST(req: NextRequest) {
         { success: false, message: mirror.message || '미러 메뉴 동기화 실패' },
         { headers }
       )
+    }
+
+    const channelDelivery = body.channelDelivery !== false
+    if (channelDelivery && ext.is_active !== false) {
+      void triggerGrabMenuNotification({ reason: 'save_pos_promo' })
     }
 
     const campaignIdForExpense = campaignIdRaw || String(body.marketingCampaignId ?? '').trim()

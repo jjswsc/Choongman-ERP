@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
+  resolveDefaultDeliveryPaymentChannel,
+  resolveDeliveryPaymentChannelForSave,
   resolveReceiptDeliveryPaymentChannelCode,
 } from '@/lib/pos-delivery-platform'
 
@@ -74,5 +76,34 @@ describe('resolveReceiptDeliveryPaymentChannelCode', () => {
         orderNo: 'CM01-20250502-042',
       })
     ).toBe('grab')
+  })
+})
+
+describe('resolveDefaultDeliveryPaymentChannel', () => {
+  it('defaults ShopeeFood inbound orders to shopee', () => {
+    expect(
+      resolveDefaultDeliveryPaymentChannel({
+        deliveryAppCode: 'shopee',
+        tableName: 'Shopee #789',
+        memo: 'sf_order:778899',
+      })
+    ).toBe('shopee')
+  })
+  it('defaults to grab when no order hints', () => {
+    expect(resolveDefaultDeliveryPaymentChannel({ tableName: '', memo: '' })).toBe('grab')
+  })
+})
+
+describe('resolveDeliveryPaymentChannelForSave', () => {
+  it('overrides grab UI channel when order is ShopeeFood', () => {
+    expect(
+      resolveDeliveryPaymentChannelForSave({
+        deliveryAppCode: 'shopee',
+        deliveryPaymentChannel: 'grab',
+        tableName: 'Shopee #789',
+        memo: '',
+        paymentDeliveryApp: 240,
+      })
+    ).toBe('shopee')
   })
 })

@@ -1,4 +1,6 @@
 import type { PosMenu } from '@/lib/api-client'
+import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
+import { loadGrabPromoCutPriceByPromoId } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 import { supabaseSelectAllPages } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
@@ -44,6 +46,7 @@ type MenuRow = {
   description_delivery?: string | null
   description_table?: string | null
   sell_delivery?: boolean
+  promo_id?: number | null
   banbanFlavorMenuIds?: string[]
   /** POS 옵션 그룹 규칙 (Grab modifierGroups selectionRange에 반영) */
   option_selection_config?: unknown
@@ -185,15 +188,6 @@ function normalizeId(raw: string, fallback: string): string {
   const base = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
   const cleaned = base.replace(/-+/g, '-').replace(/^-|-$/g, '')
   return cleaned || fallback
-}
-
-function buildGrabItemId(menu: MenuRow, itemIndex: number): string {
-  const menuId = Number(menu.id ?? 0)
-  const code = String(menu.code ?? '').trim()
-  const base = normalizeId(code, '')
-  if (menuId > 0 && base) return `item-${menuId}-${base}`
-  if (menuId > 0) return `item-${menuId}`
-  return normalizeId(`item-${code}-${itemIndex + 1}`, `item-${itemIndex + 1}`)
 }
 
 function toBanbanPosMenu(menu: MenuRow): PosMenu {
@@ -496,12 +490,12 @@ function flattenSectionsToSingle(
 
 async function loadMenus(): Promise<MenuRow[]> {
   const colsAll =
-    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery,option_selection_config'
+    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery,promo_id,option_selection_config'
   const colsAllNoConfig =
-    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery'
+    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery,promo_id'
   const colsWithoutDelivery =
-    'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery'
-  const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order,is_banban,sell_delivery'
+    'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,sell_delivery,promo_id'
+  const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order,is_banban,sell_delivery,promo_id'
   for (const cols of [colsAll, colsAllNoConfig, colsWithoutDelivery, colsBase]) {
     try {
       const rows = (await supabaseSelectAllPages('pos_menus', {
@@ -657,9 +651,10 @@ export async function buildGrabMenuFromPos(params: {
   merchantID: string
   partnerMerchantID: string
 }): Promise<unknown> {
-  const [loadedMenus, banbanFlavorLinkRows] = await Promise.all([
+  const [loadedMenus, banbanFlavorLinkRows, promoCutByPromoId] = await Promise.all([
     loadMenus(),
     loadBanbanFlavorLinkRows(),
+    loadGrabPromoCutPriceByPromoId().catch(() => new Map()),
   ])
   const menus = mergeBanbanFlavorMenuIdsIntoMenus(loadedMenus, banbanFlavorLinkRows)
   if (!menus.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
@@ -813,7 +808,7 @@ export async function buildGrabMenuFromPos(params: {
       )
       const preferredGroupKeys = selectionConfigEntries.map((cfg) => cfg.key)
       const policy = menuPolicyMap.get(menuId)
-      const itemId = buildGrabItemId(menu, itemIndex)
+      const itemId = buildGrabMenuItemId(menu, itemIndex)
       const menuOptions = (optionByMenuId.get(menuId) || []).sort((a, b) => {
         const ao = Number(a.sort_order ?? 0)
         const bo = Number(b.sort_order ?? 0)
@@ -944,6 +939,11 @@ export async function buildGrabMenuFromPos(params: {
       const active = menu.is_active !== false
       const available = active && !soldOut && isMenuAvailableByDeliveryPolicy(policy)
       const deliveryPrice = menu.price_delivery != null ? menu.price_delivery : menu.price
+      const promoId = Number(menu.promo_id ?? 0)
+      const promoCut = promoId > 0 ? promoCutByPromoId.get(promoId) : undefined
+      /** Grab Cut Price: 메뉴 정가 + fixPrice 캠페인(할인가). 일반 메뉴는 배달가 그대로. */
+      const grabListPriceMajor =
+        promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
         ? policyImageUrl
@@ -961,7 +961,7 @@ export async function buildGrabMenuFromPos(params: {
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
         ...(available ? {} : { maxStock: 0 }),
         // Grab 메뉴 검증에서 item price=0 이 거절될 수 있어 최소 1 minor unit 보정
-        price: Math.max(1, toMinorUnit(deliveryPrice ?? 0)),
+        price: Math.max(1, toMinorUnit(grabListPriceMajor)),
         campaignInfo: null,
         description: menuDesc,
         photos: photoUrl ? [photoUrl] : [],

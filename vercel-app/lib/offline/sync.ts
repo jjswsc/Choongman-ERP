@@ -14,6 +14,7 @@ import {
   updateQueueItem,
   OFFLINE_QUEUE_MAX_RETRIES,
 } from './queue'
+import { isNonRetryableBankBusinessErrorMessage } from '@/lib/bank-import-deposit-category'
 import { registerQueuedSavePosOrderSyncedServerId } from './pos-queued-sync-print-suppress'
 
 export type SyncResult = { synced: number; failed: number }
@@ -316,13 +317,21 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
       }
 
       if (parsedBody && typeof parsedBody === 'object' && parsedBody.success === false) {
+        const bizMsg = String(parsedBody.message ?? 'success:false')
+        const nonRetryableBank =
+          (item.api === '/api/addBankTransactionsBulk' ||
+            item.api === '/api/addBankTransaction' ||
+            item.api === '/api/updateBankTransaction') &&
+          isNonRetryableBankBusinessErrorMessage(bizMsg)
         await updateQueueItem(item.id, {
-          lastError: String(parsedBody.message ?? 'success:false').slice(0, 200),
-          retryCount: item.retryCount + 1,
+          lastError: bizMsg.slice(0, 200),
+          retryCount: nonRetryableBank
+            ? OFFLINE_QUEUE_MAX_RETRIES
+            : item.retryCount + 1,
           lastTriedAt: now,
           metadata: {
             ...(item.metadata || {}),
-            deadReason: 'business_reject',
+            deadReason: nonRetryableBank ? 'business_reject_permanent' : 'business_reject',
           },
         })
         failed++

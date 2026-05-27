@@ -30,6 +30,8 @@ export type KbankCheckStatusRequest = {
   partnerTransactionId?: string
   originalTransactionId?: string
   refId?: string
+  terminalId?: string
+  txnNo?: string
   orderId?: number
   storeCode?: string
   payload?: Record<string, unknown>
@@ -63,7 +65,10 @@ export type KbankCancelQrResult = {
 export type KbankVoidPaymentRequest = {
   partnerTransactionId?: string
   originalTransactionId?: string
+  origPartnerTxnUid?: string
   refId?: string
+  terminalId?: string
+  txnNo?: string
   orderId?: number
   storeCode?: string
   payload?: Record<string, unknown>
@@ -81,6 +86,8 @@ export type KbankSettlementRequest = {
   partnerTransactionId?: string
   originalTransactionId?: string
   refId?: string
+  terminalId?: string
+  qrType?: string
   orderId?: number
   storeCode?: string
   payload?: Record<string, unknown>

@@ -4,8 +4,13 @@
  */
 const VAT_RATE = 0.07
 
-function roundTo2(value: number): number {
+/** 태국 바트 금액 — 소수 둘째 자리 (PO·인보이스·미수금 공통) */
+export function roundMoney2(value: number): number {
   return Math.round(Number(value || 0) * 100) / 100
+}
+
+function roundTo2(value: number): number {
+  return roundMoney2(value)
 }
 
 export function thaiInvoiceTotalsFromRawSubtotal(rawLineSum: number): {

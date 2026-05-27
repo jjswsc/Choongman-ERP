@@ -243,6 +243,8 @@ export interface OrderInvoiceTotals {
 export type PayableTransactionItemsResponse = {
   items: PayableTransactionItem[]
   orderInvoiceTotals?: OrderInvoiceTotals
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number
 }
 
 export async function getPayableTransactionItemsWithCache(params: {

@@ -53,6 +53,8 @@ import {
 } from '@/lib/pos-promo-constants'
 import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
+import { buildPromoRegularPriceById } from '@/lib/pos-promo-cut-price'
+import { PosPromoCutPriceLabel } from '@/components/pos/pos-promo-cut-price-label'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
@@ -487,6 +489,21 @@ export function PosTerminalMenuScreen({
   }
   const getPromoPrice = (p: PosPromoWithItems) =>
     orderType === 'delivery' && p.priceDelivery != null ? p.priceDelivery : (p.price ?? 0)
+
+  const promoRegularPriceById = React.useMemo(
+    () =>
+      buildPromoRegularPriceById({
+        promos,
+        menus: menus.map((m) => ({
+          id: m.id,
+          price: m.price,
+          priceDelivery: m.priceDelivery,
+        })),
+        optionsByMenuId,
+        channel: orderType === 'delivery' ? 'delivery' : 'hall',
+      }),
+    [promos, menus, optionsByMenuId, orderType]
+  )
 
   /** 반반 맛 선택 목록 (열린 메뉴 기준, 후보 0개일 때 대분류·코드 기반 폴백) */
   const banbanFlavorList = React.useMemo(() => {
@@ -1275,7 +1292,12 @@ export function PosTerminalMenuScreen({
                 >
                   {p.name}
                 </div>
-                <div className="mt-auto text-xs font-bold text-amber-600">{getPromoPrice(p).toLocaleString()} ฿</div>
+                <div className="mt-auto text-xs">
+                  <PosPromoCutPriceLabel
+                    salePrice={getPromoPrice(p)}
+                    regularPrice={promoRegularPriceById.get(String(p.id))}
+                  />
+                </div>
               </button>
               )
             })}
@@ -1384,7 +1406,17 @@ export function PosTerminalMenuScreen({
                             : translatePosMenuLineForReceipt(row.name, t)}
                         </span>
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">{row.price.toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {row.rowType === 'promo' && row.promo ? (
+                          <PosPromoCutPriceLabel
+                            salePrice={row.price}
+                            regularPrice={promoRegularPriceById.get(String(row.promo.id))}
+                            className="justify-end"
+                          />
+                        ) : (
+                          row.price.toLocaleString()
+                        )}
+                      </td>
                       <td className="px-2 py-1.5 text-center">
                         <Button
                           size="sm"

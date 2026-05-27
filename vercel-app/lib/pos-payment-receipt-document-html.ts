@@ -14,6 +14,7 @@ import {
   escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
   formatPosReceiptOrderNoDisplay,
   resolvePosReceiptOrderNoRaw,
+  resolveReceiptDeliveryPaymentChannelCode,
 } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
@@ -113,7 +114,16 @@ function collectReceiptPaymentMethodLabels(
   if (qr > eps) labels.push(tr('posPaymentQrCode', 'QR'))
   if (other > eps) labels.push(tr('posPaymentOther', 'Other'))
   if (del > eps) {
-    const ch = String(receiptData.deliveryPaymentChannel ?? '').trim()
+    const ch = resolveReceiptDeliveryPaymentChannelCode({
+      deliveryAppCode: receiptData.deliveryAppCode,
+      deliveryPaymentChannel: receiptData.deliveryPaymentChannel,
+      tableName: receiptData.tableName,
+      memo: receiptData.memo,
+      orderNo: receiptData.orderNo,
+      itemDeliveryAppCodes: receiptData.items?.map((it) =>
+        'deliveryAppCode' in it ? (it as { deliveryAppCode?: string }).deliveryAppCode : undefined
+      ),
+    })
     labels.push(
       ch
         ? `${tr('posPaymentDeliveryApp', 'Delivery app')} (${ch})`

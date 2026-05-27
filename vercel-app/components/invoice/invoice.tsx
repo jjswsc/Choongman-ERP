@@ -64,6 +64,9 @@ export interface InvoiceData {
   vatRate: number
   vatAmount: number
   grandTotal: number
+  /** 회계 PO 등 — 원천징수(공급가 기준) */
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number | null
   bankInfo: {
     bankName: string
     accountNo: string
@@ -423,6 +426,33 @@ export function Invoice({
                     {formatCurrency(data.grandTotal)} THB
                   </span>
                 </div>
+                {Number(data.withholdingTaxAmount ?? 0) > 0 ? (
+                  <>
+                    <div className="flex justify-between text-sm py-2 text-rose-800">
+                      <span>
+                        {data.withholdingTaxRate != null && Number(data.withholdingTaxRate) > 0
+                          ? `Withholding tax (${Number(data.withholdingTaxRate)}%)`
+                          : "Withholding tax"}
+                        :
+                      </span>
+                      <span className="font-medium">
+                        −{formatCurrency(Number(data.withholdingTaxAmount))} THB
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm py-2 border-t border-slate-200">
+                      <span className="text-muted-foreground">Net payable (after WHT, reference):</span>
+                      <span className="font-semibold tabular-nums">
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            Math.round((data.grandTotal - Number(data.withholdingTaxAmount)) * 100) / 100
+                          )
+                        )}{" "}
+                        THB
+                      </span>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
           </div>

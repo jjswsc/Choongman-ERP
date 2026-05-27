@@ -19,6 +19,23 @@ export function getBangkokDateTimeString(base: Date = new Date()): string {
   return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
 }
 
+/** Kbank API `requestDt` — 방콕 벽시계 `YYYY-MM-DDTHH:mm:ss+07:00` */
+export function getBangkokRequestDtIso(base: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BANGKOK_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(base)
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '00'
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}+07:00`
+}
+
 /** 방콕 기준 오늘 날짜 (YYYY-MM-DD) */
 export function getBangkokTodayDateString(base: Date = new Date()): string {
   return base.toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })

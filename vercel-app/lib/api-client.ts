@@ -2304,6 +2304,8 @@ export interface OrderInvoiceTotals {
 export type PayableTransactionItemsResponse = {
   items: PayableTransactionItem[]
   orderInvoiceTotals?: OrderInvoiceTotals
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number
 }
 
 export async function getPayableTransactionItems(params: {
@@ -5130,15 +5132,32 @@ export async function addBankTransactionsBulk(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{
-    success: boolean
+  type BulkRes = {
+    success?: boolean
     inserted?: number
     skipped?: number
     duplicateSkipped?: number
     policySkipped?: number
     policyAdjusted?: number
     message?: string
-  }>
+    queued?: boolean
+  }
+  let data: BulkRes = {}
+  try {
+    data = (await res.json()) as BulkRes
+  } catch {
+    return {
+      success: false,
+      queued: false,
+      message: res.ok ? 'Invalid server response' : `HTTP ${res.status}`,
+    }
+  }
+  const queued = res.headers.get('X-Offline-Queued') === '1' || data.queued === true
+  return {
+    ...data,
+    success: queued ? false : Boolean(res.ok && data.success),
+    queued,
+  }
 }
 
 export async function updateBankTransactionInvoice(params: {
@@ -10554,6 +10573,8 @@ export async function executeKbankCheckStatus(params: {
   partnerTransactionId?: string
   originalTransactionId?: string
   refId?: string
+  terminalId?: string
+  txnNo?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrCheckStatusResult> {
   const res = await apiFetch('/api/pos/kbank/check-status', {
@@ -10629,7 +10650,10 @@ export async function executeKbankVoidPayment(params: {
   storeCode?: string
   partnerTransactionId?: string
   originalTransactionId?: string
+  origPartnerTxnUid?: string
   refId?: string
+  terminalId?: string
+  txnNo?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrActionResult> {
   const res = await apiFetch('/api/pos/kbank/void-payment', {
@@ -10667,6 +10691,8 @@ export async function executeKbankSettlement(params: {
   partnerTransactionId?: string
   originalTransactionId?: string
   refId?: string
+  terminalId?: string
+  qrType?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrActionResult> {
   const res = await apiFetch('/api/pos/kbank/settlement', {

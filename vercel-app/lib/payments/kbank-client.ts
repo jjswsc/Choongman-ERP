@@ -11,6 +11,7 @@ import type {
   KbankVoidPaymentRequest,
   KbankVoidPaymentResult,
 } from '@/lib/payments/kbank-types'
+import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
 
 function mustEnv(name: string): string {
   const v = String(process.env[name] || '').trim()
@@ -85,6 +86,7 @@ function extractKbankErrorMessage(json: Record<string, unknown>, fallback: strin
   const msg = pickFirstNonEmpty([
     json.statusMessage,
     json.message,
+    json.errorDesc,
     json.error_description,
     json.detail,
     errorObj?.statusMessage,
@@ -95,6 +97,23 @@ function extractKbankErrorMessage(json: Record<string, unknown>, fallback: strin
     firstError?.detail,
   ])
   return msg || fallback
+}
+
+function resolveKbankQrTypeCode(input: string | undefined): string {
+  const raw = String(input || '').trim().toUpperCase()
+  if (!raw || raw === 'THAI_QR' || raw === 'THQR' || raw === '3') {
+    return String(process.env.KBANK_QR_TYPE_THAI || '3').trim() || '3'
+  }
+  if (raw === 'CREDIT_CARD' || raw === 'QRCC' || raw === '5') {
+    return String(process.env.KBANK_QR_TYPE_CREDIT || '5').trim() || '5'
+  }
+  return raw
+}
+
+function normalizePartnerTxnUid(seed: string | undefined, fallbackPrefix: string): string {
+  const clean = String(seed || '').trim()
+  if (clean) return clean.slice(0, 15)
+  return `${fallbackPrefix}${Date.now()}`.replace(/[^A-Za-z0-9]/g, '').slice(0, 15)
 }
 
 function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
@@ -159,22 +178,30 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
 
 function buildQrPayload(req: KbankGenerateQrRequest): Record<string, unknown> {
   const partnerId = mustEnv('KBANK_PARTNER_ID')
+  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const payload = { ...(req.payload || {}) }
+  const payload = { ...(req.payload || {}) } as Record<string, unknown>
+  const partnerTxnUid = String(req.partnerTransactionId || '').trim().slice(0, 15)
+  const reference1 = String(req.reference1 || '').trim() || partnerTxnUid
+  const terminalId = String(process.env.KBANK_TERMINAL_ID || '').trim()
+  const qrType = resolveKbankQrTypeCode(req.qrType)
+  const txnAmount = Number(req.amount || 0).toFixed(2)
 
-  // 기본 키를 심어두되, payload에 동일 키가 있으면 payload 값을 우선 사용한다.
   return {
-    partnerId,
-    merchantId,
-    partnerTransactionId: req.partnerTransactionId,
-    partnerTxnUid: req.partnerTransactionId,
-    amount: Number(req.amount),
-    qrType: req.qrType || undefined,
-    reference1: req.reference1 || undefined,
-    reference2: req.reference2 || undefined,
-    reference3: req.reference3 || undefined,
-    reference4: req.reference4 || undefined,
     ...payload,
+    partnerTxnUid,
+    partnerId,
+    partnerSecret,
+    requestDt: String(payload.requestDt || getBangkokRequestDtIso()),
+    merchantId,
+    ...(terminalId ? { terminalId } : {}),
+    qrType,
+    txnAmount,
+    txnCurrencyCode: String(payload.txnCurrencyCode || 'THB'),
+    reference1,
+    reference2: req.reference2 || null,
+    reference3: req.reference3 || null,
+    reference4: req.reference4 || null,
   }
 }
 
@@ -183,7 +210,7 @@ export async function generateKbankQr(
   opts?: { timeoutMs?: number }
 ): Promise<KbankGenerateQrResult> {
   const token = await fetchKbankAccessToken(opts?.timeoutMs ?? 12000)
-  const qrUrl = buildUrl('KBANK_QR_GENERATE_PATH', '/qr/v1/generate')
+  const qrUrl = buildUrl('KBANK_QR_GENERATE_PATH', '/v1/qrpayment/request')
   const partnerId = mustEnv('KBANK_PARTNER_ID')
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
@@ -242,17 +269,34 @@ export async function generateKbankQr(
   }
 }
 
-function buildCheckStatusPayload(req: KbankCheckStatusRequest): Record<string, unknown> {
+function buildCheckStatusPayload(
+  req: KbankCheckStatusRequest,
+  requestTxnUid: string,
+  origPartnerTxnUid?: string
+): Record<string, unknown> {
   const partnerId = mustEnv('KBANK_PARTNER_ID')
+  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const payload = { ...(req.payload || {}) }
+  const payload = { ...(req.payload || {}) } as Record<string, unknown>
+  const terminalId = String(payload.terminalId || req.terminalId || process.env.KBANK_TERMINAL_ID || '').trim()
+  if (!terminalId) {
+    throw new Error('KBANK_TERMINAL_ID 누락: Inquire Payment(v4)에는 terminalId가 필수입니다.')
+  }
+  const resolvedTxnNo = String(payload.txnNo || req.txnNo || '').trim()
   return {
+    ...payload,
+    partnerTxnUid: requestTxnUid,
     partnerId,
+    partnerSecret,
+    requestDt: String(payload.requestDt || getBangkokRequestDtIso()),
     merchantId,
+    ...(terminalId ? { terminalId } : {}),
+    ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+    ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
+    // Backward-compatible keys
     partnerTransactionId: req.partnerTransactionId || undefined,
     originalTransactionId: req.originalTransactionId || undefined,
     refId: req.refId || undefined,
-    ...payload,
   }
 }
 
@@ -261,14 +305,19 @@ export async function checkKbankQrStatus(
   opts?: { timeoutMs?: number }
 ): Promise<KbankCheckStatusResult> {
   const token = await fetchKbankAccessToken(opts?.timeoutMs ?? 12000)
-  const statusUrl = buildUrl('KBANK_QR_STATUS_PATH', '/qr/v1/check-status')
+  const statusUrl = buildUrl('KBANK_QR_STATUS_PATH', '/v1/qrpayment/v4/inquiry')
   const partnerId = mustEnv('KBANK_PARTNER_ID')
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const requestId =
-    String(req.partnerTransactionId || req.originalTransactionId || req.refId || '').trim() ||
-    `CHK${Date.now()}`
-  const body = buildCheckStatusPayload(req)
+  const payload = (req.payload || {}) as Record<string, unknown>
+  const payloadRequestTxnUid = String(payload.partnerTxnUid || '').trim()
+  const requestId = normalizePartnerTxnUid(payloadRequestTxnUid || undefined, 'INQ')
+  const inferredOrigTxnUid = normalizePartnerTxnUid(
+    String(payload.origPartnerTxnUid || req.originalTransactionId || req.partnerTransactionId || req.refId || '').trim() ||
+      undefined,
+    'ORIG'
+  )
+  const body = buildCheckStatusPayload(req, requestId, inferredOrigTxnUid)
 
   const { signal, clear } = timeoutSignal(opts?.timeoutMs ?? 12000)
   try {
@@ -298,7 +347,7 @@ export async function checkKbankQrStatus(
 
     if (!res.ok) {
       const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
-      const statusMessage = String(json.statusMessage || json.message || '').trim() || 'kbank_check_status_failed'
+      const statusMessage = extractKbankErrorMessage(json, `kbank_check_status_failed_http_${res.status}`)
       return {
         ok: false,
         requestId,
@@ -324,18 +373,68 @@ function buildTxnPayload(
   req:
     | KbankCancelQrRequest
     | KbankVoidPaymentRequest
-    | KbankSettlementRequest
+    | KbankSettlementRequest,
+  requestTxnUid: string,
+  options?: {
+    includeOrigPartnerTxnUid?: boolean
+    requireOrigPartnerTxnUid?: boolean
+    requireTerminalId?: boolean
+    includeQrType?: boolean
+    includeTxnNo?: boolean
+  }
 ): Record<string, unknown> {
   const partnerId = mustEnv('KBANK_PARTNER_ID')
+  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const payload = { ...(req.payload || {}) }
+  const payload = { ...(req.payload || {}) } as Record<string, unknown>
+  const reqTerminalId =
+    'terminalId' in req ? String((req as { terminalId?: string }).terminalId || '').trim() : ''
+  const reqQrType = 'qrType' in req ? String((req as { qrType?: string }).qrType || '').trim() : ''
+  const reqTxnNo = 'txnNo' in req ? String((req as { txnNo?: string }).txnNo || '').trim() : ''
+  const reqOrigPartnerTxnUid =
+    'origPartnerTxnUid' in req
+      ? String((req as { origPartnerTxnUid?: string }).origPartnerTxnUid || '').trim()
+      : ''
+  const terminalId = String(payload.terminalId || reqTerminalId || process.env.KBANK_TERMINAL_ID || '').trim()
+  if (options?.requireTerminalId && !terminalId) {
+    throw new Error('KBANK_TERMINAL_ID 누락: terminalId가 필수입니다.')
+  }
+  const rawOrigPartnerTxnUid = String(
+    payload.origPartnerTxnUid ||
+      reqOrigPartnerTxnUid ||
+      req.partnerTransactionId ||
+      req.originalTransactionId ||
+      ''
+  ).trim()
+  const origPartnerTxnUid = options?.includeOrigPartnerTxnUid
+    ? (rawOrigPartnerTxnUid ? rawOrigPartnerTxnUid.slice(0, 15) : '')
+    : ''
+  if (options?.requireOrigPartnerTxnUid && !origPartnerTxnUid) {
+    throw new Error('origPartnerTxnUid 누락: Void/Cancel에는 원거래 ID가 필수입니다.')
+  }
+  const qrType = options?.includeQrType
+    ? resolveKbankQrTypeCode(
+        String(payload.qrType || reqQrType || process.env.KBANK_QR_TYPE_THAI || '3').trim() || undefined
+      )
+    : ''
+  const resolvedTxnNo = options?.includeTxnNo
+    ? String(payload.txnNo || reqTxnNo || '').trim()
+    : ''
   return {
+    ...payload,
+    partnerTxnUid: requestTxnUid,
     partnerId,
+    partnerSecret,
+    requestDt: String(payload.requestDt || getBangkokRequestDtIso()),
     merchantId,
+    ...(terminalId ? { terminalId } : {}),
+    ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+    ...(qrType ? { qrType } : {}),
+    ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
+    // Backward-compatible keys
     partnerTransactionId: req.partnerTransactionId || undefined,
     originalTransactionId: req.originalTransactionId || undefined,
     refId: req.refId || undefined,
-    ...payload,
   }
 }
 
@@ -347,7 +446,14 @@ async function callKbankActionApi(
     | KbankVoidPaymentRequest
     | KbankSettlementRequest,
   fallbackRequestPrefix: string,
-  timeoutMs = 12000
+  timeoutMs = 12000,
+  payloadOptions?: {
+    includeOrigPartnerTxnUid?: boolean
+    requireOrigPartnerTxnUid?: boolean
+    requireTerminalId?: boolean
+    includeQrType?: boolean
+    includeTxnNo?: boolean
+  }
 ): Promise<{
   ok: boolean
   requestId: string
@@ -360,9 +466,11 @@ async function callKbankActionApi(
   const partnerId = mustEnv('KBANK_PARTNER_ID')
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const requestId =
-    String(req.partnerTransactionId || req.originalTransactionId || req.refId || '').trim() ||
-    `${fallbackRequestPrefix}${Date.now()}`
+  const payloadPartnerTxnUid =
+    req.payload && typeof req.payload === 'object'
+      ? String((req.payload as Record<string, unknown>).partnerTxnUid || '').trim()
+      : ''
+  const requestId = normalizePartnerTxnUid(payloadPartnerTxnUid || undefined, fallbackRequestPrefix)
 
   const { signal, clear } = timeoutSignal(timeoutMs)
   try {
@@ -378,7 +486,7 @@ async function callKbankActionApi(
         },
         url
       ),
-      body: JSON.stringify(buildTxnPayload(req)),
+      body: JSON.stringify(buildTxnPayload(req, requestId, payloadOptions)),
       cache: 'no-store',
       signal,
     })
@@ -417,10 +525,11 @@ export async function cancelKbankQr(
 ): Promise<KbankCancelQrResult> {
   return callKbankActionApi(
     'KBANK_QR_CANCEL_PATH',
-    '/qr/v1/cancel',
+    '/v1/qrpayment/cancel',
     req,
     'CNL',
-    opts?.timeoutMs ?? 12000
+    opts?.timeoutMs ?? 12000,
+    { includeOrigPartnerTxnUid: true, requireOrigPartnerTxnUid: true, requireTerminalId: true }
   )
 }
 
@@ -430,10 +539,16 @@ export async function voidKbankPayment(
 ): Promise<KbankVoidPaymentResult> {
   return callKbankActionApi(
     'KBANK_QR_VOID_PATH',
-    '/qr/v1/void',
+    '/v1/qrpayment/void',
     req,
     'VOID',
-    opts?.timeoutMs ?? 12000
+    opts?.timeoutMs ?? 12000,
+    {
+      includeOrigPartnerTxnUid: true,
+      requireOrigPartnerTxnUid: true,
+      requireTerminalId: true,
+      includeTxnNo: true,
+    }
   )
 }
 
@@ -443,9 +558,10 @@ export async function settleKbankPayment(
 ): Promise<KbankSettlementResult> {
   return callKbankActionApi(
     'KBANK_QR_SETTLEMENT_PATH',
-    '/qr/v1/settlement',
+    '/v1/qrpayment/settlement',
     req,
     'SETTLE',
-    opts?.timeoutMs ?? 12000
+    opts?.timeoutMs ?? 12000,
+    { requireTerminalId: true, includeQrType: true }
   )
 }

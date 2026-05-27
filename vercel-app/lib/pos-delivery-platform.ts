@@ -143,7 +143,11 @@ export function escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableLine: strin
 }
 
 /** `pos_orders.delivery_payment_channel` 등에 쓰는 소문자 코드 */
-const CANON_RECEIPT_DELIVERY_CODES = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+export const POS_DELIVERY_PAYMENT_CHANNEL_CODES = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+
+const CANON_RECEIPT_DELIVERY_CODES = POS_DELIVERY_PAYMENT_CHANNEL_CODES
+
+export type PosDeliveryPaymentChannelUi = 'grab' | 'lineman' | 'shopee'
 
 export type ReceiptDeliveryChannelContext = {
   deliveryAppCode?: string | null | undefined
@@ -181,4 +185,26 @@ export function resolveReceiptDeliveryPaymentChannelCode(ctx: ReceiptDeliveryCha
   if (blob.includes('line man') || blob.includes('lineman') || blob.includes('라인맨')) return 'lineman'
   if (blob.includes('grab') || blob.includes('그랩')) return 'grab'
   return normalizeReceiptDeliveryCode(ctx.deliveryPaymentChannel)
+}
+
+/** 결제 모달 기본 채널 — 주문·라벨·memo만 보고 (결제 탭 현재값은 무시) */
+export function resolveDefaultDeliveryPaymentChannel(
+  ctx: Omit<ReceiptDeliveryChannelContext, 'deliveryPaymentChannel'>
+): PosDeliveryPaymentChannelUi {
+  const resolved = resolveReceiptDeliveryPaymentChannelCode({
+    ...ctx,
+    deliveryPaymentChannel: undefined,
+  })
+  if (resolved === 'lineman' || resolved === 'shopee') return resolved
+  return 'grab'
+}
+
+/** 결제 저장·영수증: 배달앱 결제 채널 — 주문 플랫폼이 결제 UI 기본값보다 우선 */
+export function resolveDeliveryPaymentChannelForSave(
+  ctx: ReceiptDeliveryChannelContext & { paymentDeliveryApp: number }
+): string | null {
+  if (ctx.paymentDeliveryApp <= 0.005) return null
+  const resolved = resolveReceiptDeliveryPaymentChannelCode(ctx)
+  if (CANON_RECEIPT_DELIVERY_CODES.has(resolved)) return resolved
+  return 'grab'
 }

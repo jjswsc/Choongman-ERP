@@ -38,9 +38,9 @@ function normalizeQrType(v: unknown): { raw: string; normalized: 'THAI_QR' | 'CR
 
 function buildPartnerTransactionId(seed?: string): string {
   const s = String(seed || '').trim()
-  if (s) return s.slice(0, 40)
+  if (s) return s.slice(0, 15)
   const rand = Math.random().toString(36).slice(2, 10)
-  return `POS${Date.now()}${rand}`.slice(0, 40)
+  return `P${Date.now()}${rand}`.slice(0, 15)
 }
 
 export async function OPTIONS() {

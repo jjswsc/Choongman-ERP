@@ -23,21 +23,14 @@ import {
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
+import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 
-const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 function isMissingServiceColumnsError(e: unknown): boolean {
   const msg = String(e ?? '').toLowerCase()
   return (
     (msg.includes('service_amt') || msg.includes('service_reason')) &&
     (msg.includes('column') || msg.includes('schema cache'))
   )
-}
-
-function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
-  if (paymentDeliveryApp <= 0.005) return null
-  const s = String(raw ?? '').trim().toLowerCase()
-  if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
-  return 'grab'
 }
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
@@ -73,10 +66,6 @@ export async function POST(req: NextRequest) {
     const paymentQr = Math.max(0, Number(body?.paymentQr ?? 0))
     const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
     const paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
-    const deliveryPaymentChannel = normalizeDeliveryPaymentChannel(
-      body?.deliveryPaymentChannel ?? body?.delivery_payment_channel,
-      paymentDeliveryApp
-    )
     const memberId = Math.max(0, Number(body?.memberId ?? 0))
     const memberNo = String(body?.memberNo ?? '').trim()
     const pointUsed = Math.max(0, Math.trunc(Number(body?.pointUsed ?? 0)))
@@ -161,6 +150,33 @@ export async function POST(req: NextRequest) {
     /** select에서 service_amt를 뺐다면 DB에 컬럼이 없는 레거시 스키마 — PATCH도 할인 필드 정합에 맞춘다 */
     const hasServiceColumns = Object.prototype.hasOwnProperty.call(current ?? {}, 'service_amt')
     const tableName = sanitizePosOrderTableNameForDb(current?.order_type, body?.tableName)
+
+    let deliveryAppCode = String(body?.deliveryAppCode ?? body?.delivery_app_code ?? '')
+      .trim()
+      .toLowerCase()
+    if (!deliveryAppCode) {
+      for (const it of items) {
+        const c = String((it as { deliveryAppCode?: string }).deliveryAppCode ?? '')
+          .trim()
+          .toLowerCase()
+        if (c) {
+          deliveryAppCode = c
+          break
+        }
+      }
+    }
+    const deliveryPaymentChannel = resolveDeliveryPaymentChannelForSave({
+      deliveryAppCode: deliveryAppCode || undefined,
+      deliveryPaymentChannel:
+        String(body?.deliveryPaymentChannel ?? body?.delivery_payment_channel ?? '').trim() || undefined,
+      tableName,
+      memo,
+      orderNo: current?.order_no,
+      paymentDeliveryApp,
+      itemDeliveryAppCodes: items.map((it) =>
+        String((it as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim() || undefined
+      ),
+    })
 
     const statusRaw = String(current?.status ?? '').trim()
     const status = statusRaw.toLowerCase()

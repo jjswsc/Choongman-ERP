@@ -91,13 +91,21 @@ export async function POST(req: NextRequest) {
     const partnerTransactionId = String(body.partnerTransactionId || '').trim()
     const originalTransactionId = String(body.originalTransactionId || '').trim()
     const refId = String(body.refId || '').trim()
+    const terminalId = String(body.terminalId || '').trim()
+    const txnNo = String(body.txnNo || '').trim()
+    const rawPayload =
+      body.payload && typeof body.payload === 'object'
+        ? (body.payload as Record<string, unknown>)
+        : undefined
+    const payloadOrigPartnerTxnUid = String(rawPayload?.origPartnerTxnUid || '').trim()
 
-    if (!partnerTransactionId && !originalTransactionId && !refId) {
+    if (!partnerTransactionId && !originalTransactionId && !refId && !payloadOrigPartnerTxnUid) {
       return withCorsHeaders(
         NextResponse.json(
           {
             success: false,
-            message: 'partnerTransactionId, originalTransactionId, refId 중 하나는 필요합니다.',
+            message:
+              'partnerTransactionId, originalTransactionId, refId, payload.origPartnerTxnUid 중 하나는 필요합니다.',
           },
           { status: 400 }
         )
@@ -110,10 +118,9 @@ export async function POST(req: NextRequest) {
       partnerTransactionId: partnerTransactionId || undefined,
       originalTransactionId: originalTransactionId || undefined,
       refId: refId || undefined,
-      payload:
-        body.payload && typeof body.payload === 'object'
-          ? (body.payload as Record<string, unknown>)
-          : undefined,
+      terminalId: terminalId || undefined,
+      txnNo: txnNo || undefined,
+      payload: rawPayload,
     }
 
     const requestedAt = new Date().toISOString()

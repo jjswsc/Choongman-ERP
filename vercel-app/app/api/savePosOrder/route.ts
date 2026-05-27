@@ -27,8 +27,8 @@ import {
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
+import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 
-const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
 
@@ -150,13 +150,6 @@ async function runCompletionSideEffects(params: {
   }
 }
 
-function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
-  if (paymentDeliveryApp <= 0.005) return null
-  const s = String(raw ?? '').trim().toLowerCase()
-  if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
-  return 'grab'
-}
-
 /** POS 주문 저장 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -218,10 +211,6 @@ export async function POST(req: NextRequest) {
     )
     const paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
     const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
-    const deliveryPaymentChannel = normalizeDeliveryPaymentChannel(
-      body.deliveryPaymentChannel ?? body.delivery_payment_channel,
-      paymentDeliveryApp
-    )
     const memberId = Math.max(0, Number(body.memberId ?? 0))
     const memberNo = String(body.memberNo ?? '').trim()
     const pointUsed = Math.max(0, Math.trunc(Number(body.pointUsed ?? 0)))
@@ -335,6 +324,17 @@ export async function POST(req: NextRequest) {
       }
       delivery_app_code = code || null
     }
+
+    const deliveryPaymentChannel = resolveDeliveryPaymentChannelForSave({
+      deliveryAppCode: delivery_app_code,
+      deliveryPaymentChannel: String(body.deliveryPaymentChannel ?? body.delivery_payment_channel ?? '').trim() || undefined,
+      tableName,
+      memo,
+      paymentDeliveryApp,
+      itemDeliveryAppCodes: items.map((it) =>
+        String((it as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim() || undefined
+      ),
+    })
 
     const allocateStartMs = Date.now()
     const orderNo = await allocateNextPosOrderNo(storeCode)

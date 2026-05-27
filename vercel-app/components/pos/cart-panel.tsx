@@ -111,6 +111,11 @@ import { computeMenuSplitDueByPerson } from '@/lib/pos-menu-split-due'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
 import { usePosTour } from '@/lib/pos-tour'
+import {
+  resolveDefaultDeliveryPaymentChannel,
+  resolveDeliveryPaymentChannelForSave,
+  type ReceiptDeliveryChannelContext,
+} from '@/lib/pos-delivery-platform'
 import { Separator } from '@/components/ui/separator'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
@@ -163,6 +168,27 @@ function deliveryAppBrandClasses(app: string | undefined) {
         badge:
           'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
       }
+  }
+}
+
+function cartPanelDeliveryChannelContext(params: {
+  deliveryAppProp?: string
+  deliveryOrderNoProp?: string
+  paymentTableNameOverride?: string | null
+  customerMemo?: string
+  deliveryPaymentChannel?: string
+}): ReceiptDeliveryChannelContext {
+  const fallbackLabel = [
+    params.deliveryAppProp,
+    params.deliveryOrderNoProp?.trim() ? `#${params.deliveryOrderNoProp.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  return {
+    deliveryAppCode: params.deliveryAppProp,
+    deliveryPaymentChannel: params.deliveryPaymentChannel,
+    tableName: params.paymentTableNameOverride ?? fallbackLabel,
+    memo: String(params.customerMemo ?? '').trim(),
   }
 }
 
@@ -1487,9 +1513,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const buildPaymentSnapshot = useCallback((): CartPanelPaymentPayload => {
     const payDel = parseFloat(payDeliveryApp) || 0
+    const channelCtx = cartPanelDeliveryChannelContext({
+      deliveryAppProp,
+      deliveryOrderNoProp,
+      paymentTableNameOverride,
+      customerMemo,
+      deliveryPaymentChannel,
+    })
     const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
       payDel > 0
-        ? { paymentDeliveryApp: payDel, deliveryPaymentChannel }
+        ? {
+            paymentDeliveryApp: payDel,
+            deliveryPaymentChannel: resolveDeliveryPaymentChannelForSave({
+              ...channelCtx,
+              paymentDeliveryApp: payDel,
+            }),
+          }
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
     const ob = buildPaymentOtherBreakdownSnapshot()
@@ -1517,6 +1556,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     payPromptPay,
     payDeliveryApp,
     deliveryPaymentChannel,
+    deliveryAppProp,
+    deliveryOrderNoProp,
+    paymentTableNameOverride,
+    customerMemo,
     useAdminPaymentLines,
     adminConfiguredWalletSum,
     legacyWalletPaymentSum,
@@ -2279,7 +2322,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'cash') setPayCash(String(amount))
     if (target === 'card') setPayCard(String(amount))
     if (target === 'qr') setPayPromptPay(String(amount))
-    if (target === 'delivery_app') setPayDeliveryApp(String(amount))
+    if (target === 'delivery_app') {
+      setPayDeliveryApp(String(amount))
+      setDeliveryPaymentChannel(
+        resolveDefaultDeliveryPaymentChannel(
+          cartPanelDeliveryChannelContext({
+            deliveryAppProp,
+            deliveryOrderNoProp,
+            paymentTableNameOverride,
+            customerMemo,
+          })
+        )
+      )
+    }
     if (target === 'other') setPayOther(String(amount))
     if (target === 'truemoney') setPayTrueMoney(String(amount))
     if (target === 'wechat') setPayWeChat(String(amount))
@@ -3107,7 +3162,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       )
     }
     resetPaymentInputs()
-    setDeliveryPaymentChannel('grab')
+    setDeliveryPaymentChannel(
+      resolveDefaultDeliveryPaymentChannel(
+        cartPanelDeliveryChannelContext({
+          deliveryAppProp,
+          deliveryOrderNoProp,
+          paymentTableNameOverride: receiptOpts?.receiptTableName ?? paymentTableNameOverride,
+          customerMemo,
+        })
+      )
+    )
     setPostPaymentCashChange(null)
     setShowPaymentModal(true)
   }
@@ -3121,9 +3185,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (orderType === 'dine-in') return
     if (!onNonDineOrderComplete) return
     const payDel = parseFloat(payDeliveryApp) || 0
+    const channelCtx = cartPanelDeliveryChannelContext({
+      deliveryAppProp,
+      deliveryOrderNoProp,
+      paymentTableNameOverride,
+      customerMemo,
+      deliveryPaymentChannel,
+    })
     const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
       payDel > 0
-        ? { paymentDeliveryApp: payDel, deliveryPaymentChannel }
+        ? {
+            paymentDeliveryApp: payDel,
+            deliveryPaymentChannel: resolveDeliveryPaymentChannelForSave({
+              ...channelCtx,
+              paymentDeliveryApp: payDel,
+            }),
+          }
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines
       ? adminConfiguredWalletSum
@@ -3495,10 +3572,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const existingId = normalizeExistingPosOrderId(checkoutExistingPosOrderIdRef.current)
     if (!onDeliveryOrderComplete || existingId == null) return
     if (total <= 0) return
-    const payChannel =
-      typeof deliveryAppProp === 'string' && deliveryAppProp.trim().length > 0
-        ? deliveryAppProp.trim().toLowerCase()
-        : null
+    const payChannel = resolveDeliveryPaymentChannelForSave({
+      ...cartPanelDeliveryChannelContext({
+        deliveryAppProp,
+        deliveryOrderNoProp,
+        paymentTableNameOverride,
+        customerMemo,
+      }),
+      paymentDeliveryApp: total,
+    })
     onDeliveryOrderComplete(
       {
         items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),

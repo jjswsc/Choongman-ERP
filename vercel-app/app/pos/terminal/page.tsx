@@ -2427,20 +2427,33 @@ export default function PosTerminalPage() {
     [notifyGrabCustomerCancelledOrder]
   )
 
+  const currentStoreCodeVariants = useMemo(() => {
+    const base = String(currentStoreId || '').trim()
+    if (!base) return [] as string[]
+    const variants = [
+      base,
+      base.startsWith('CM ') ? base.slice(3).trim() : `CM ${base}`.trim(),
+      base.replace(/^CM\s+/i, '').trim(),
+    ].filter(Boolean)
+    const out: string[] = []
+    for (const raw of variants) {
+      const v = String(raw).trim()
+      if (!v) continue
+      if (out.some((e) => e.toLowerCase() === v.toLowerCase())) continue
+      out.push(v)
+    }
+    return out
+  }, [currentStoreId])
+
   const isCurrentStoreOrder = useCallback(
     (rawStoreCode: unknown) => {
       const rowStore = String(rawStoreCode ?? '').trim()
-      if (!rowStore || !currentStoreId) return false
-      const variants = [
-        currentStoreId,
-        currentStoreId.startsWith('CM ')
-          ? currentStoreId.slice(3).trim()
-          : `CM ${currentStoreId}`.trim(),
-        currentStoreId.replace(/^CM\s+/i, ''),
-      ].filter(Boolean)
-      return variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))
+      if (!rowStore || currentStoreCodeVariants.length === 0) return false
+      return currentStoreCodeVariants.some(
+        (v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase())
+      )
     },
-    [currentStoreId]
+    [currentStoreCodeVariants]
   )
 
   const isKbankPilotStore = useMemo(() => {
@@ -3455,7 +3468,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
-    const channel = subscribePosOrdersInsert((payload: { new?: Record<string, unknown> }) => {
+    const onInsert = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
@@ -3469,7 +3482,7 @@ export default function PosTerminalPage() {
         return
       }
       const rowStore = String(row.store_code ?? '').trim()
-      const variants = [currentStoreId, currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(), currentStoreId.replace(/^CM\s+/i, '')].filter(Boolean)
+      const variants = currentStoreCodeVariants
       if (!rowStore) {
         logPosPrintDebug('realtime_insert_skip_no_store', { orderId })
         return
@@ -3652,18 +3665,17 @@ export default function PosTerminalPage() {
             })
         }
       }
-    /**
-     * Realtime filter를 `store_code=eq.<현재매장>`로 고정하면
-     * `True` vs `CM True`처럼 매장 코드 표기가 섞인 지점은 이벤트 자체를 못 받는다.
-     * 콜백 안에서 변형 코드를 다시 판정하므로, 여기서는 필터를 걸지 않고 수신 후 매칭한다.
-     */
-    })
+    }
+    const channels = currentStoreCodeVariants
+      .map((storeCode) => subscribePosOrdersInsert(onInsert, { store: storeCode }))
+      .filter(Boolean)
     return () => {
-      if (channel) channel.unsubscribe()
+      channels.forEach((channel) => channel?.unsubscribe())
     }
   }, [
     isMainPosDevice,
     currentStoreId,
+    currentStoreCodeVariants,
     autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnOrder,
     autoPrintKitchenSlipOnOrder,
@@ -3683,18 +3695,14 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (isMainPosDevice || !currentStoreId) return
-    const channel = subscribePosOrdersInsert((payload: { new?: Record<string, unknown> }) => {
+    const onInsert = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
       if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) return
       const rowStore = String(row.store_code ?? '').trim()
-      const variants = [
-        currentStoreId,
-        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
-        currentStoreId.replace(/^CM\s+/i, ''),
-      ].filter(Boolean)
+      const variants = currentStoreCodeVariants
       if (!rowStore) return
       if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
       if (seenOrderIdsRef.current.has(orderId)) return
@@ -3710,13 +3718,17 @@ export default function PosTerminalPage() {
         memo: String(row.memo ?? ''),
       })
       refetchCurrentStore()
-    })
+    }
+    const channels = currentStoreCodeVariants
+      .map((storeCode) => subscribePosOrdersInsert(onInsert, { store: storeCode }))
+      .filter(Boolean)
     return () => {
-      if (channel) channel.unsubscribe()
+      channels.forEach((channel) => channel?.unsubscribe())
     }
   }, [
     isMainPosDevice,
     currentStoreId,
+    currentStoreCodeVariants,
     autoFocusIncomingDeliveryOrder,
     refetchCurrentStore,
     bumpLastSeenOrderId,
@@ -3781,13 +3793,20 @@ export default function PosTerminalPage() {
       refetchCurrentStore()
     }
 
-    /** store 필터 Realtime이 UPDATE에서 누락되는 환경 대비 — 핸들러에서 매장 일치 검사 */
-    const channel = subscribePosOrdersUpdate(handleUpdate)
+    const channels = currentStoreCodeVariants
+      .map((storeCode) => subscribePosOrdersUpdate(handleUpdate, { store: storeCode }))
+      .filter(Boolean)
 
     return () => {
-      channel?.unsubscribe()
+      channels.forEach((channel) => channel?.unsubscribe())
     }
-  }, [currentStoreId, isCurrentStoreOrder, notifyGrabCustomerCancelledOrder, refetchCurrentStore])
+  }, [
+    currentStoreCodeVariants,
+    currentStoreId,
+    isCurrentStoreOrder,
+    notifyGrabCustomerCancelledOrder,
+    refetchCurrentStore,
+  ])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
@@ -3796,18 +3815,14 @@ export default function PosTerminalPage() {
       (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder) || autoPrintKitchenSlipOnOrder
     if (!wantPayment && !wantRemoteDineInAdd) return
 
-    const channel = subscribePosOrdersUpdate((payload: { new?: Record<string, unknown> }) => {
+    const onUpdate = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
       lastRealtimeOrderEventAtRef.current = Date.now()
       const rowStore = String(row.store_code ?? '').trim()
-      const variants = [
-        currentStoreId,
-        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
-        currentStoreId.replace(/^CM\s+/i, ''),
-      ].filter(Boolean)
+      const variants = currentStoreCodeVariants
       if (!rowStore) return
       if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
 
@@ -4066,13 +4081,17 @@ export default function PosTerminalPage() {
       } else if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
         setTimeout(runKitchenRemoteDineInAdd, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
-    })
+    }
+    const channels = currentStoreCodeVariants
+      .map((storeCode) => subscribePosOrdersUpdate(onUpdate, { store: storeCode }))
+      .filter(Boolean)
     return () => {
-      if (channel) channel.unsubscribe()
+      channels.forEach((channel) => channel?.unsubscribe())
     }
   }, [
     isMainPosDevice,
     currentStoreId,
+    currentStoreCodeVariants,
     autoPrintReceiptOnPayment,
     autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnOrder,
@@ -4714,13 +4733,13 @@ export default function PosTerminalPage() {
       }
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
-      const partnerTransactionId = `POSQR${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 40)
+      const partnerTransactionIdSeed = `POSQR${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 15)
       const generate = await executeKbankGenerateQr({
         amount: qrAmount,
         qrType: 'THAI_QR',
         storeCode: currentStoreId,
         orderId: context?.orderId,
-        partnerTransactionId,
+        partnerTransactionId: partnerTransactionIdSeed,
         reference1: String(context?.orderType || '').slice(0, 20),
         reference2: String(context?.orderLabel || '').slice(0, 20),
       })
@@ -4731,6 +4750,10 @@ export default function PosTerminalPage() {
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
+
+      const partnerTransactionId = String(generate.partnerTransactionId || partnerTransactionIdSeed)
+        .trim()
+        .slice(0, 15)
 
       const data = (generate.data || {}) as Record<string, unknown>
       const generatedQrPayload = String(

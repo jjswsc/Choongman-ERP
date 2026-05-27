@@ -63,6 +63,7 @@ import {
   type OrderInvoiceTotals,
 } from "@/lib/api-client"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
+import { roundMoney2 } from "@/lib/invoice-vat-total"
 import { resolveInvoiceClientForTarget, resolveInvoiceClientFromBillToCandidates } from "@/lib/invoice-client-resolve"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import type { InvoiceData } from "@/components/invoice"
@@ -211,7 +212,8 @@ export function ReceivablePayableTab() {
       setTaxInvoiceLoadingKey(loadKey)
       try {
         const targetLabel = String(recItem.storeName || recItem.vendorName || "").trim()
-        const [{ items, orderInvoiceTotals }, invoiceDataRes, invSettings, billToCandRes] = await Promise.all([
+        const [{ items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate }, invoiceDataRes, invSettings, billToCandRes] =
+          await Promise.all([
           getPayableTransactionItems({ refType, refId }),
           getInvoiceData(),
           getInvoiceSettings(),
@@ -287,9 +289,18 @@ export function ReceivablePayableTab() {
             spec: it.spec,
             lineRemarks: it.line_remarks?.trim() || undefined,
             qty: Math.abs(it.qty || 0),
-            amount: Math.round(Math.abs(it.amount || 0)),
+            amount: roundMoney2(Math.abs(it.amount || 0)),
           })),
           orderInvoiceTotals,
+          ...(refType === "PO" && Number(withholdingTaxAmount) > 0
+            ? {
+                withholdingTaxAmount: Number(withholdingTaxAmount),
+                withholdingTaxRate:
+                  withholdingTaxRate != null && Number(withholdingTaxRate) > 0
+                    ? Number(withholdingTaxRate)
+                    : undefined,
+              }
+            : {}),
         })
         sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
         const printWindow = window.open("/admin/invoice-print", "_blank")
