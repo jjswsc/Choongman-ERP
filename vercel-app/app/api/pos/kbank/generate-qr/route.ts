@@ -37,10 +37,11 @@ function normalizeQrType(v: unknown): { raw: string; normalized: 'THAI_QR' | 'CR
 }
 
 function buildPartnerTransactionId(seed?: string): string {
+  const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
   const s = String(seed || '').trim()
-  if (s) return s.slice(0, 15)
+  if (s) return s.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
   const rand = Math.random().toString(36).slice(2, 10)
-  return `P${Date.now()}${rand}`.slice(0, 15)
+  return `P${Date.now()}${rand}`.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
 }
 
 export async function OPTIONS() {
@@ -67,12 +68,14 @@ export async function POST(req: NextRequest) {
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
-    const terminalId = String(payloadObj?.terminalId || process.env.KBANK_TERMINAL_ID || '').trim()
+    const terminalId = String(
+      body.terminalId || payloadObj?.terminalId || process.env.KBANK_TERMINAL_ID || ''
+    ).trim()
 
     if (amount <= 0) {
       return withCorsHeaders(
         NextResponse.json(
-          { success: false, message: 'amount는 0보다 커야 합니다.' },
+          { success: false, message: 'amount must be greater than 0.' },
           { status: 400 }
         )
       )
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             statusCode: 'AMOUNT_LIMIT_EXCEEDED',
-            message: 'Thai QR는 80,000 THB 이하 금액만 생성할 수 있습니다.',
+            message: 'Thai QR amount must not exceed 80,000 THB.',
           },
           { status: 422 }
         )
@@ -95,7 +98,8 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             statusCode: 'KBANK_TERMINAL_ID_REQUIRED',
-            message: 'Credit Card QR 생성에는 terminalId가 필요합니다. KBANK_TERMINAL_ID를 설정해 주세요.',
+            message:
+              'terminalId is required for Credit Card QR. Set KBANK_TERMINAL_ID on the server or enter terminalId in the POS KBank panel.',
           },
           { status: 422 }
         )
@@ -112,7 +116,7 @@ export async function POST(req: NextRequest) {
       reference2: String(body.reference2 || '').trim() || undefined,
       reference3: String(body.reference3 || '').trim() || undefined,
       reference4: String(body.reference4 || '').trim() || undefined,
-      payload: payloadObj,
+      payload: terminalId ? { ...(payloadObj || {}), terminalId } : payloadObj,
     }
 
     const requestedAt = new Date().toISOString()

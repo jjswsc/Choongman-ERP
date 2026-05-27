@@ -58,7 +58,10 @@ import {
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
-import { isPosRevenueDepositCategory } from "@/lib/bank-import-deposit-category"
+import {
+  coercePosStoreImportDepositCategory,
+  isPosRevenueDepositCategory,
+} from "@/lib/bank-import-deposit-category"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -979,12 +982,19 @@ export function BankTransactionsTab() {
           if (sug) {
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
+            const coerced = coercePosStoreImportDepositCategory({
+              category: sug.category,
+              accountStore: selectedAccountStore,
+              accountSubjectId: sug.accountSubjectId,
+              revenueSubjects: revenueAccountOptions,
+            })
             next[idx] = {
               ...next[idx],
-              category: sug.category,
+              category: coerced.category,
               accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined,
+              storeName: coerced.storeName ?? next[idx]?.storeName,
               salesDate:
-                sug.category === "receivable_receive" ? undefined : d.toISOString().slice(0, 10),
+                coerced.category === "receivable_receive" ? undefined : d.toISOString().slice(0, 10),
             }
           }
         } else if (r.transType === "withdraw" && r.memo) {
@@ -1000,7 +1010,14 @@ export function BankTransactionsTab() {
       })
       return next
     })
-  }, [getDefaultImportCategory, importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
+  }, [
+    getDefaultImportCategory,
+    importPreview,
+    revenueAccountOptions,
+    accountSubjectOptions,
+    memoRules,
+    selectedAccountStore,
+  ])
 
   React.useEffect(() => {
     if (!importPreview) importMemoFocusIdxRef.current = null
@@ -1560,17 +1577,27 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             ? "expense"
             : edit.category
           : undefined
-      const category =
+      let category =
         r.transType === "withdraw"
           ? (rawWithdrawCat && (withdrawCats as readonly string[]).includes(rawWithdrawCat) ? rawWithdrawCat : "unclassified")
           : edit?.category && (depositCats as readonly string[]).includes(edit.category)
             ? edit.category
             : "receivable_receive"
 
-      const storeName =
-        r.transType === "deposit" && category === "receivable_receive"
-          ? edit?.storeName?.trim() || selectedAccountStore || undefined
-          : undefined
+      let storeName: string | undefined
+      if (r.transType === "deposit") {
+        const coerced = coercePosStoreImportDepositCategory({
+          category,
+          accountStore: selectedAccountStore,
+          accountSubjectId: edit?.accountSubjectId,
+          revenueSubjects: revenueAccountOptions,
+        })
+        category = coerced.category
+        storeName =
+          category === "receivable_receive"
+            ? coerced.storeName || edit?.storeName?.trim() || selectedAccountStore || undefined
+            : undefined
+      }
 
       let accountSubjectId: number | undefined
       if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {

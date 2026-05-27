@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,13 +36,8 @@ function parsePathListFromEnv(envName: string, fallback: string[]): string[] {
   return parsed.length > 0 ? parsed : fallback
 }
 
-function normalizeStatus(raw: string): 'approved' | 'declined' | 'pending' | 'failed' {
-  const s = String(raw || '').trim().toUpperCase()
-  if (!s) return 'pending'
-  if (s.includes('PAID') || s.includes('SUCCESS') || s === '00') return 'approved'
-  if (s.includes('VOID') || s.includes('CANCEL') || s.includes('FAIL') || s.includes('DECLINE')) return 'declined'
-  if (s.includes('PENDING') || s.includes('PROCESS')) return 'pending'
-  return 'failed'
+function normalizeStatus(txnStatus: string, statusCode: string): 'approved' | 'declined' | 'pending' | 'failed' {
+  return normalizeKbankTxnStatusToPos(txnStatus, statusCode)
 }
 
 function parseAmount(raw: unknown): number {
@@ -118,14 +114,18 @@ export async function POST(
   }
 
   const partnerTransactionIdPaths = parsePathListFromEnv('KBANK_WEBHOOK_PARTNER_TXN_PATHS', [
+    'partnerTxnUid',
     'partnerTransactionId',
     'partnerTxnId',
+    'data.partnerTxnUid',
     'data.partnerTransactionId',
     'data.partnerTxnId',
   ])
   const originalTransactionIdPaths = parsePathListFromEnv('KBANK_WEBHOOK_ORIGINAL_TXN_PATHS', [
+    'origPartnerTxnUid',
     'originalTransactionId',
     'transactionId',
+    'data.origPartnerTxnUid',
     'data.originalTransactionId',
     'data.transactionId',
   ])
@@ -142,22 +142,30 @@ export async function POST(
     'data.code',
   ])
   const statusMessagePaths = parsePathListFromEnv('KBANK_WEBHOOK_STATUS_MESSAGE_PATHS', [
+    'errorDesc',
+    'errorCode',
     'statusMessage',
     'message',
+    'data.errorDesc',
+    'data.errorCode',
     'data.statusMessage',
     'data.message',
   ])
   const transactionStatusPaths = parsePathListFromEnv('KBANK_WEBHOOK_TXN_STATUS_PATHS', [
+    'txnStatus',
     'transactionStatus',
     'status',
     'paymentStatus',
+    'data.txnStatus',
     'data.transactionStatus',
     'data.status',
     'data.paymentStatus',
   ])
   const amountPaths = parsePathListFromEnv('KBANK_WEBHOOK_AMOUNT_PATHS', [
+    'txnAmount',
     'amount',
     'transactionAmount',
+    'data.txnAmount',
     'data.amount',
     'data.transactionAmount',
   ])
@@ -168,7 +176,7 @@ export async function POST(
   const statusCode = pickFirst(body, statusCodePaths)
   const statusMessage = pickFirst(body, statusMessagePaths)
   const transactionStatusRaw = pickFirst(body, transactionStatusPaths)
-  const normalized = normalizeStatus(transactionStatusRaw || statusCode || statusMessage)
+  const normalized = normalizeStatus(transactionStatusRaw, statusCode)
   const amountRawPath = amountPaths.find((p) => String(getPathValue(body, p) ?? '').trim() !== '')
   const amount = parseAmount(amountRawPath ? getPathValue(body, amountRawPath) : undefined)
 
@@ -237,19 +245,16 @@ export async function POST(
     console.error('kbank webhook update pos_orders failed:', e)
   }
 
+  // KBank callback response format compatibility:
+  // success=00, error=10 (see API reference/generic codes).
   return NextResponse.json({
-    ok: true,
-    accepted: true,
-    method: 'POST',
-    path: path ?? [],
-    signatureVerified: sig.verified,
-    signatureReason: sig.reason,
-    partnerTransactionId: partnerTransactionId || null,
+    statusCode: '00',
+    errorCode: null,
+    errorDesc: null,
+    partnerTxnUid: partnerTransactionId || null,
     originalTransactionId: originalTransactionId || null,
     refId: refId || null,
     status: normalized,
-    statusCode: statusCode || null,
-    statusMessage: statusMessage || null,
     matchedAttemptId,
     matchedOrderId,
   })

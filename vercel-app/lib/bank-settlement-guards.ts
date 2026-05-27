@@ -18,6 +18,14 @@ export class BankSettlementGuardError extends Error {
   }
 }
 
+/** Next.js 번들 중복 시 instanceof 가 실패할 수 있어 code/name 으로도 판별 */
+export function isBankSettlementGuardError(e: unknown): e is BankSettlementGuardError {
+  if (e instanceof BankSettlementGuardError) return true
+  if (!e || typeof e !== 'object') return false
+  const o = e as { name?: string; code?: string }
+  return o.name === 'BankSettlementGuardError' && typeof o.code === 'string'
+}
+
 /** 동일 통장 입금에 채널 정산이 이미 연결된 경우 receivable_receive 등 금지 */
 export async function assertBankNotUsedByChannelSettlement(bankTransactionId: number): Promise<void> {
   if (!bankTransactionId || bankTransactionId <= 0) return

@@ -1,0 +1,50 @@
+import { describe, expect, it } from 'vitest'
+import {
+  formatKbankHttpErrorMessage,
+  isKbankAccessTokenExpiredError,
+  isKbankBusinessSuccess,
+  normalizeKbankTxnStatusToPos,
+  resolveKbankCreditCardBrandLabels,
+  resolveKbankOpenApiErrorMessage,
+  resolveKbankQrTypeCode,
+} from './kbank-api-reference'
+
+describe('kbank-api-reference', () => {
+  it('maps qr types per API reference', () => {
+    expect(resolveKbankQrTypeCode('THAI_QR')).toBe('3')
+    expect(resolveKbankQrTypeCode('CREDIT_CARD')).toBe('4')
+    expect(resolveKbankQrTypeCode('COMBO')).toBe('5')
+  })
+
+  it('maps txnStatus and statusCode', () => {
+    expect(normalizeKbankTxnStatusToPos('PAID')).toBe('approved')
+    expect(normalizeKbankTxnStatusToPos('REQUESTED')).toBe('pending')
+    expect(normalizeKbankTxnStatusToPos('EXPIRED')).toBe('declined')
+    expect(normalizeKbankTxnStatusToPos('', '11')).toBe('declined')
+    expect(normalizeKbankTxnStatusToPos('', '10')).toBe('failed')
+  })
+
+  it('detects business success code 00', () => {
+    expect(isKbankBusinessSuccess('00')).toBe(true)
+    expect(isKbankBusinessSuccess('10')).toBe(false)
+  })
+
+  it('resolves card brands from cardScheme/sof', () => {
+    expect(resolveKbankCreditCardBrandLabels({ cardScheme: 'VISA' })).toEqual(['VISA'])
+    expect(resolveKbankCreditCardBrandLabels({ sof: 'CC' })).toContain('VISA')
+  })
+
+  it('maps Generic Response Code openapi_error messages in English', () => {
+    expect(resolveKbankOpenApiErrorMessage('Access Token expired')).toContain('expired')
+    expect(
+      formatKbankHttpErrorMessage(401, {
+        code: 'openapi_error',
+        message: 'Invalid Consumer Secret',
+      })
+    ).toContain('Invalid Consumer Secret')
+  })
+
+  it('detects expired access token message', () => {
+    expect(isKbankAccessTokenExpiredError('Access Token expired')).toBe(true)
+  })
+})

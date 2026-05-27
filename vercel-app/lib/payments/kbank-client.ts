@@ -12,10 +12,20 @@ import type {
   KbankVoidPaymentResult,
 } from '@/lib/payments/kbank-types'
 import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
+import {
+  formatKbankApiErrorMessage,
+  formatKbankHttpErrorMessage,
+  isKbankAccessTokenAuthError,
+  isKbankAccessTokenExpiredError,
+  isKbankBusinessSuccess,
+  resolveKbankQrTypeCode,
+} from '@/lib/payments/kbank-api-reference'
+
+const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
 
 function mustEnv(name: string): string {
   const v = String(process.env[name] || '').trim()
-  if (!v) throw new Error(`${name} 환경변수가 필요합니다.`)
+  if (!v) throw new Error(`${name} environment variable is required.`)
   return v
 }
 
@@ -31,6 +41,13 @@ function normalizePath(v: string): string {
 function buildUrl(pathEnvName: string, defaultPath: string): string {
   const base = stripTrailingSlash(mustEnv('KBANK_OPENAPI_BASE_URL'))
   const p = normalizePath(String(process.env[pathEnvName] || '').trim() || defaultPath)
+  return `${base}${p}`
+}
+
+function buildTokenUrl(defaultPath: string): string {
+  const tokenBase = String(process.env.KBANK_OAUTH_BASE_URL || '').trim()
+  const base = stripTrailingSlash(tokenBase || mustEnv('KBANK_OPENAPI_BASE_URL'))
+  const p = normalizePath(String(process.env.KBANK_TOKEN_PATH || '').trim() || defaultPath)
   return `${base}${p}`
 }
 
@@ -61,9 +78,9 @@ function withProxySecret(headers: Record<string, string>, _urlStr: string): Reco
 function buildProxyHint(urlStr: string, status: number): string {
   if (status !== 403 || !isLikelyProxyUrl(urlStr)) return ''
   if (!getProxySecret()) {
-    return ' (프록시 경유 환경으로 보이지만 KBANK_PROXY_SECRET 환경변수가 없습니다.)'
+    return ' (Proxy detected but KBANK_PROXY_SECRET is not set.)'
   }
-  return ' (프록시 시크릿 불일치 또는 프록시 접근 정책을 확인하세요.)'
+  return ' (Proxy secret mismatch or proxy access policy denied.)'
 }
 
 function pickFirstNonEmpty(values: unknown[]): string {
@@ -74,7 +91,11 @@ function pickFirstNonEmpty(values: unknown[]): string {
   return ''
 }
 
-function extractKbankErrorMessage(json: Record<string, unknown>, fallback: string): string {
+function extractKbankErrorMessage(
+  json: Record<string, unknown>,
+  fallback: string,
+  httpStatus?: number
+): string {
   const errorObj =
     json.error && typeof json.error === 'object' && !Array.isArray(json.error)
       ? (json.error as Record<string, unknown>)
@@ -83,11 +104,20 @@ function extractKbankErrorMessage(json: Record<string, unknown>, fallback: strin
     Array.isArray(json.errors) && json.errors[0] && typeof json.errors[0] === 'object'
       ? (json.errors[0] as Record<string, unknown>)
       : null
+  const errorCode = pickFirstNonEmpty([
+    json.errorCode,
+    errorObj?.errorCode,
+    firstError?.errorCode,
+  ])
+  const errorDesc = pickFirstNonEmpty([
+    json.errorDesc,
+    json.error_description,
+    errorObj?.errorDesc,
+    firstError?.errorDesc,
+  ])
   const msg = pickFirstNonEmpty([
     json.statusMessage,
     json.message,
-    json.errorDesc,
-    json.error_description,
     json.detail,
     errorObj?.statusMessage,
     errorObj?.message,
@@ -96,24 +126,26 @@ function extractKbankErrorMessage(json: Record<string, unknown>, fallback: strin
     firstError?.message,
     firstError?.detail,
   ])
-  return msg || fallback
+  const openApiCode = String(json.code || '').trim().toLowerCase()
+  if (openApiCode === 'openapi_error' || (httpStatus != null && httpStatus >= 400)) {
+    const httpMsg = formatKbankHttpErrorMessage(httpStatus ?? 0, json, msg || fallback)
+    if (httpMsg) return httpMsg
+  }
+  return formatKbankApiErrorMessage(errorCode, errorDesc, msg || fallback)
 }
 
-function resolveKbankQrTypeCode(input: string | undefined): string {
-  const raw = String(input || '').trim().toUpperCase()
-  if (!raw || raw === 'THAI_QR' || raw === 'THQR' || raw === '3') {
-    return String(process.env.KBANK_QR_TYPE_THAI || '3').trim() || '3'
-  }
-  if (raw === 'CREDIT_CARD' || raw === 'QRCC' || raw === '5') {
-    return String(process.env.KBANK_QR_TYPE_CREDIT || '5').trim() || '5'
-  }
-  return raw
+function shouldRetryKbankAuth(httpStatus: number, json: Record<string, unknown>): boolean {
+  if (httpStatus !== 401) return false
+  const message = String(json.message || json.statusMessage || '').trim()
+  return isKbankAccessTokenExpiredError(message) || isKbankAccessTokenAuthError(message)
 }
 
 function normalizePartnerTxnUid(seed: string | undefined, fallbackPrefix: string): string {
   const clean = String(seed || '').trim()
-  if (clean) return clean.slice(0, 15)
-  return `${fallbackPrefix}${Date.now()}`.replace(/[^A-Za-z0-9]/g, '').slice(0, 15)
+  if (clean) return clean.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
+  return `${fallbackPrefix}${Date.now()}`
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
 }
 
 function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
@@ -132,6 +164,11 @@ type CachedKbankToken = {
 
 let cachedKbankToken: CachedKbankToken | null = null
 let inFlightKbankTokenPromise: Promise<KbankTokenResponse> | null = null
+
+export function clearKbankAccessTokenCache(): void {
+  cachedKbankToken = null
+  inFlightKbankTokenPromise = null
+}
 
 function isUsableCachedToken(nowMs: number): boolean {
   if (!cachedKbankToken) return false
@@ -152,7 +189,7 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
   inFlightKbankTokenPromise = (async () => {
     const consumerId = mustEnv('KBANK_CONSUMER_ID')
     const consumerSecret = mustEnv('KBANK_CONSUMER_SECRET')
-    const tokenUrl = buildUrl('KBANK_TOKEN_PATH', '/v2/oauth/token')
+    const tokenUrl = buildTokenUrl('/v2/oauth/token')
     const scope = String(process.env.KBANK_TOKEN_SCOPE || '').trim()
 
     const form = new URLSearchParams()
@@ -177,17 +214,28 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
       })
       const text = await res.text()
       if (!res.ok) {
-        throw new Error(`kbank_token_http_${res.status}${buildProxyHint(tokenUrl, res.status)}: ${text.slice(0, 300)}`)
+        let detail = text.slice(0, 300)
+        try {
+          const errJson = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+          detail = extractKbankErrorMessage(errJson, detail, res.status)
+        } catch {
+          /* keep raw */
+        }
+        throw new Error(`${detail}${buildProxyHint(tokenUrl, res.status)}`)
       }
       let json: Record<string, unknown>
       try {
         json = JSON.parse(text) as Record<string, unknown>
       } catch {
-        throw new Error('KBank 토큰 응답이 JSON 형식이 아닙니다.')
+        throw new Error('KBank token response is not valid JSON.')
       }
       const accessToken = String(json.access_token || '').trim()
       if (!accessToken) {
-        throw new Error(`KBank 토큰 응답에 access_token이 없습니다: ${text.slice(0, 300)}`)
+        throw new Error(`KBank token response missing access_token: ${text.slice(0, 300)}`)
+      }
+      const tokenStatus = String(json.status || '').trim().toLowerCase()
+      if (tokenStatus && tokenStatus !== 'approved') {
+        throw new Error(`KBank token status not approved (status=${tokenStatus}): ${text.slice(0, 300)}`)
       }
       const expiresInSec = Number(json.expires_in || 0) || 0
       const token: KbankTokenResponse = {
@@ -220,9 +268,13 @@ function buildQrPayload(req: KbankGenerateQrRequest): Record<string, unknown> {
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
   const payload = { ...(req.payload || {}) } as Record<string, unknown>
-  const partnerTxnUid = String(req.partnerTransactionId || '').trim().slice(0, 15)
+  const partnerTxnUid = String(req.partnerTransactionId || '')
+    .trim()
+    .slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
   const reference1 = String(req.reference1 || '').trim() || partnerTxnUid
-  const terminalId = String(process.env.KBANK_TERMINAL_ID || '').trim()
+  const terminalId = String(
+    payload.terminalId || process.env.KBANK_TERMINAL_ID || ''
+  ).trim()
   const qrType = resolveKbankQrTypeCode(req.qrType)
   const txnAmount = Number(req.amount || 0).toFixed(2)
 
@@ -255,13 +307,15 @@ export async function generateKbankQr(
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
   const body = buildQrPayload(req)
 
-  const { signal, clear } = timeoutSignal(opts?.timeoutMs ?? 12000)
+  const timeoutMs = opts?.timeoutMs ?? 12000
+  const { signal, clear } = timeoutSignal(timeoutMs)
   try {
-    const res = await fetch(qrUrl, {
+    let activeToken = token
+    let res = await fetch(qrUrl, {
       method: 'POST',
       headers: withProxySecret(
         {
-          Authorization: `Bearer ${token.access_token}`,
+          Authorization: `Bearer ${activeToken.access_token}`,
           'Content-Type': 'application/json',
           'X-Partner-Id': partnerId,
           'X-Partner-Secret': partnerSecret,
@@ -273,19 +327,43 @@ export async function generateKbankQr(
       cache: 'no-store',
       signal,
     })
-    const text = await res.text()
+    let text = await res.text()
     let json: Record<string, unknown>
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     } catch {
-      throw new Error(`KBank QR 응답이 JSON 형식이 아닙니다. status=${res.status}`)
+      throw new Error(`KBank QR response is not valid JSON. status=${res.status}`)
+    }
+
+    if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
+      clearKbankAccessTokenCache()
+      activeToken = await fetchKbankAccessToken(timeoutMs)
+      res = await fetch(qrUrl, {
+        method: 'POST',
+        headers: withProxySecret(
+          {
+            Authorization: `Bearer ${activeToken.access_token}`,
+            'Content-Type': 'application/json',
+            'X-Partner-Id': partnerId,
+            'X-Partner-Secret': partnerSecret,
+            'X-Merchant-Id': merchantId,
+          },
+          qrUrl
+        ),
+        body: JSON.stringify(body),
+        cache: 'no-store',
+        signal,
+      })
+      text = await res.text()
+      json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
 
     if (!res.ok) {
       const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
       const statusMessage = extractKbankErrorMessage(
         json,
-        `kbank_generate_qr_failed_http_${res.status}`
+        `kbank_generate_qr_failed_http_${res.status}`,
+        res.status
       )
       return {
         ok: false,
@@ -318,8 +396,9 @@ function buildCheckStatusPayload(
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
   const payload = { ...(req.payload || {}) } as Record<string, unknown>
   const terminalId = String(payload.terminalId || req.terminalId || process.env.KBANK_TERMINAL_ID || '').trim()
-  if (!terminalId) {
-    throw new Error('KBANK_TERMINAL_ID 누락: Inquire Payment(v4)에는 terminalId가 필수입니다.')
+  const resolvedOrigPartnerTxnUid = String(origPartnerTxnUid || '').trim().slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
+  if (!resolvedOrigPartnerTxnUid) {
+    throw new Error('origPartnerTxnUid is required for Inquire Payment (v5).')
   }
   const resolvedTxnNo = String(payload.txnNo || req.txnNo || '').trim()
   return {
@@ -330,7 +409,7 @@ function buildCheckStatusPayload(
     requestDt: String(payload.requestDt || getBangkokRequestDtIso()),
     merchantId,
     ...(terminalId ? { terminalId } : {}),
-    ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+    origPartnerTxnUid: resolvedOrigPartnerTxnUid,
     ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
     // Backward-compatible keys
     partnerTransactionId: req.partnerTransactionId || undefined,
@@ -344,18 +423,19 @@ export async function checkKbankQrStatus(
   opts?: { timeoutMs?: number }
 ): Promise<KbankCheckStatusResult> {
   const token = await fetchKbankAccessToken(opts?.timeoutMs ?? 12000)
-  const statusUrl = buildUrl('KBANK_QR_STATUS_PATH', '/v1/qrpayment/v4/inquiry')
+  const statusUrl = buildUrl('KBANK_QR_STATUS_PATH', '/v1/qrpayment/v5/inquiry')
   const partnerId = mustEnv('KBANK_PARTNER_ID')
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
   const payload = (req.payload || {}) as Record<string, unknown>
   const payloadRequestTxnUid = String(payload.partnerTxnUid || '').trim()
   const requestId = normalizePartnerTxnUid(payloadRequestTxnUid || undefined, 'INQ')
-  const inferredOrigTxnUid = normalizePartnerTxnUid(
-    String(payload.origPartnerTxnUid || req.originalTransactionId || req.partnerTransactionId || req.refId || '').trim() ||
-      undefined,
-    'ORIG'
-  )
+  const inferredOrigSource = String(
+    payload.origPartnerTxnUid || req.originalTransactionId || req.partnerTransactionId || req.refId || ''
+  ).trim()
+  const inferredOrigTxnUid = inferredOrigSource
+    ? normalizePartnerTxnUid(inferredOrigSource, 'ORIG')
+    : ''
   const body = buildCheckStatusPayload(req, requestId, inferredOrigTxnUid)
 
   const { signal, clear } = timeoutSignal(opts?.timeoutMs ?? 12000)
@@ -381,12 +461,16 @@ export async function checkKbankQrStatus(
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     } catch {
-      throw new Error(`KBank 상태조회 응답이 JSON 형식이 아닙니다. status=${res.status}`)
+      throw new Error(`KBank inquiry response is not valid JSON. status=${res.status}`)
     }
 
     if (!res.ok) {
       const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
-      const statusMessage = extractKbankErrorMessage(json, `kbank_check_status_failed_http_${res.status}`)
+      const statusMessage = extractKbankErrorMessage(
+        json,
+        `kbank_check_status_failed_http_${res.status}`,
+        res.status
+      )
       return {
         ok: false,
         requestId,
@@ -436,7 +520,7 @@ function buildTxnPayload(
       : ''
   const terminalId = String(payload.terminalId || reqTerminalId || process.env.KBANK_TERMINAL_ID || '').trim()
   if (options?.requireTerminalId && !terminalId) {
-    throw new Error('KBANK_TERMINAL_ID 누락: terminalId가 필수입니다.')
+    throw new Error('terminalId is required (set KBANK_TERMINAL_ID or pass terminalId).')
   }
   const rawOrigPartnerTxnUid = String(
     payload.origPartnerTxnUid ||
@@ -446,10 +530,10 @@ function buildTxnPayload(
       ''
   ).trim()
   const origPartnerTxnUid = options?.includeOrigPartnerTxnUid
-    ? (rawOrigPartnerTxnUid ? rawOrigPartnerTxnUid.slice(0, 15) : '')
+    ? (rawOrigPartnerTxnUid ? rawOrigPartnerTxnUid.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN) : '')
     : ''
   if (options?.requireOrigPartnerTxnUid && !origPartnerTxnUid) {
-    throw new Error('origPartnerTxnUid 누락: Void/Cancel에는 원거래 ID가 필수입니다.')
+    throw new Error('origPartnerTxnUid is required for Void/Cancel.')
   }
   const qrType = options?.includeQrType
     ? resolveKbankQrTypeCode(
@@ -511,13 +595,15 @@ async function callKbankActionApi(
       : ''
   const requestId = normalizePartnerTxnUid(payloadPartnerTxnUid || undefined, fallbackRequestPrefix)
 
+  const requestBody = buildTxnPayload(req, requestId, payloadOptions)
   const { signal, clear } = timeoutSignal(timeoutMs)
   try {
-    const res = await fetch(url, {
+    let activeToken = token
+    let res = await fetch(url, {
       method: 'POST',
       headers: withProxySecret(
         {
-          Authorization: `Bearer ${token.access_token}`,
+          Authorization: `Bearer ${activeToken.access_token}`,
           'Content-Type': 'application/json',
           'X-Partner-Id': partnerId,
           'X-Partner-Secret': partnerSecret,
@@ -525,32 +611,62 @@ async function callKbankActionApi(
         },
         url
       ),
-      body: JSON.stringify(buildTxnPayload(req, requestId, payloadOptions)),
+      body: JSON.stringify(requestBody),
       cache: 'no-store',
       signal,
     })
-    const text = await res.text()
+    let text = await res.text()
     let json: Record<string, unknown>
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     } catch {
-      throw new Error(`KBank API 응답이 JSON 형식이 아닙니다. status=${res.status}`)
+      throw new Error(`KBank API response is not valid JSON. status=${res.status}`)
     }
-    if (!res.ok) {
+
+    if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
+      clearKbankAccessTokenCache()
+      activeToken = await fetchKbankAccessToken(timeoutMs)
+      res = await fetch(url, {
+        method: 'POST',
+        headers: withProxySecret(
+          {
+            Authorization: `Bearer ${activeToken.access_token}`,
+            'Content-Type': 'application/json',
+            'X-Partner-Id': partnerId,
+            'X-Partner-Secret': partnerSecret,
+            'X-Merchant-Id': merchantId,
+          },
+          url
+        ),
+        body: JSON.stringify(requestBody),
+        cache: 'no-store',
+        signal,
+      })
+      text = await res.text()
+      json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+    }
+
+    const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
+    const statusMessage = extractKbankErrorMessage(
+      json,
+      String(json.statusMessage || json.message || '').trim() || 'kbank_action_failed',
+      res.status
+    )
+    const businessOk = isKbankBusinessSuccess(statusCode)
+    if (!res.ok || !businessOk) {
       return {
         ok: false,
         requestId,
-        statusCode: String(json.statusCode || json.code || '').trim() || String(res.status),
-        statusMessage:
-          String(json.statusMessage || json.message || '').trim() || 'kbank_action_failed',
+        statusCode,
+        statusMessage,
         response: json,
       }
     }
     return {
       ok: true,
       requestId,
-      statusCode: String(json.statusCode || json.code || '').trim() || '200',
-      statusMessage: String(json.statusMessage || json.message || '').trim() || 'ok',
+      statusCode,
+      statusMessage: statusMessage || 'ok',
       response: json,
     }
   } finally {
@@ -566,9 +682,9 @@ export async function cancelKbankQr(
     'KBANK_QR_CANCEL_PATH',
     '/v1/qrpayment/cancel',
     req,
-    'CNL',
+    'CCH',
     opts?.timeoutMs ?? 12000,
-    { includeOrigPartnerTxnUid: true, requireOrigPartnerTxnUid: true, requireTerminalId: true }
+    { includeOrigPartnerTxnUid: true, requireOrigPartnerTxnUid: true, requireTerminalId: false }
   )
 }
 
@@ -580,12 +696,12 @@ export async function voidKbankPayment(
     'KBANK_QR_VOID_PATH',
     '/v1/qrpayment/void',
     req,
-    'VOID',
+    'VOD',
     opts?.timeoutMs ?? 12000,
     {
       includeOrigPartnerTxnUid: true,
       requireOrigPartnerTxnUid: true,
-      requireTerminalId: true,
+      requireTerminalId: false,
       includeTxnNo: true,
     }
   )
@@ -595,11 +711,24 @@ export async function settleKbankPayment(
   req: KbankSettlementRequest,
   opts?: { timeoutMs?: number }
 ): Promise<KbankSettlementResult> {
+  const qrTypeRaw = String(req.qrType || (req.payload as Record<string, unknown> | undefined)?.qrType || '')
+    .trim()
+    .toUpperCase()
+  if (qrTypeRaw === 'CREDIT_CARD' || qrTypeRaw === 'QRCC' || qrTypeRaw === '5') {
+    return {
+      ok: false,
+      requestId: '',
+      statusCode: 'SETTLEMENT_NOT_SUPPORTED',
+      statusMessage:
+        'Manual Settlement API is not supported for Credit Card QR. Thai QR (qrType 3) only.',
+      response: {},
+    }
+  }
   return callKbankActionApi(
     'KBANK_QR_SETTLEMENT_PATH',
     '/v1/qrpayment/settlement',
     req,
-    'SETTLE',
+    'STM',
     opts?.timeoutMs ?? 12000,
     { requireTerminalId: true, includeQrType: true }
   )

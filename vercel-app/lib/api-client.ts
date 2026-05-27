@@ -10545,12 +10545,22 @@ export async function executeKbankGenerateQr(params: {
   reference2?: string
   reference3?: string
   reference4?: string
+  terminalId?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrGenerateResult> {
+  const terminalId = String(params.terminalId || '').trim()
+  const payload = {
+    ...(params.payload || {}),
+    ...(terminalId ? { terminalId } : {}),
+  }
   const res = await apiFetch('/api/pos/kbank/generate-qr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      ...(terminalId ? { terminalId } : {}),
+      ...(Object.keys(payload).length > 0 ? { payload } : {}),
+    }),
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok || !data.success) {
@@ -10617,14 +10627,35 @@ export async function executeKbankCancelQr(params: {
   orderId?: number
   storeCode?: string
   partnerTransactionId?: string
+  partnerTxnUid?: string
   originalTransactionId?: string
+  origPartnerTxnUid?: string
   refId?: string
+  terminalId?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrActionResult> {
+  const terminalId = String(params.terminalId || '').trim()
+  const origPartnerTxnUid = String(
+    params.origPartnerTxnUid || params.originalTransactionId || params.partnerTransactionId || ''
+  ).trim()
+  const payload = {
+    ...(params.payload || {}),
+    ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+    ...(terminalId ? { terminalId } : {}),
+    ...(String(params.partnerTxnUid || '').trim()
+      ? { partnerTxnUid: String(params.partnerTxnUid).trim() }
+      : {}),
+  }
   const res = await apiFetch('/api/pos/kbank/cancel-qr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      origPartnerTxnUid: origPartnerTxnUid || undefined,
+      originalTransactionId: origPartnerTxnUid || params.originalTransactionId || undefined,
+      ...(terminalId ? { terminalId } : {}),
+      ...(Object.keys(payload).length > 0 ? { payload } : {}),
+    }),
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok || !data.success) {
@@ -10654,6 +10685,7 @@ export async function executeKbankVoidPayment(params: {
   orderId?: number
   storeCode?: string
   partnerTransactionId?: string
+  partnerTxnUid?: string
   originalTransactionId?: string
   origPartnerTxnUid?: string
   refId?: string
@@ -10661,10 +10693,31 @@ export async function executeKbankVoidPayment(params: {
   txnNo?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrActionResult> {
+  const terminalId = String(params.terminalId || '').trim()
+  const txnNo = String(params.txnNo || '').trim()
+  const origPartnerTxnUid = String(
+    params.origPartnerTxnUid || params.originalTransactionId || params.partnerTransactionId || ''
+  ).trim()
+  const payload = {
+    ...(params.payload || {}),
+    ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+    ...(terminalId ? { terminalId } : {}),
+    ...(txnNo ? { txnNo } : {}),
+    ...(String(params.partnerTxnUid || '').trim()
+      ? { partnerTxnUid: String(params.partnerTxnUid).trim() }
+      : {}),
+  }
   const res = await apiFetch('/api/pos/kbank/void-payment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      origPartnerTxnUid: origPartnerTxnUid || undefined,
+      originalTransactionId: origPartnerTxnUid || params.originalTransactionId || undefined,
+      txnNo: txnNo || undefined,
+      ...(terminalId ? { terminalId } : {}),
+      ...(Object.keys(payload).length > 0 ? { payload } : {}),
+    }),
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok || !data.success) {
@@ -10694,16 +10747,32 @@ export async function executeKbankSettlement(params: {
   orderId?: number
   storeCode?: string
   partnerTransactionId?: string
+  partnerTxnUid?: string
   originalTransactionId?: string
   refId?: string
   terminalId?: string
   qrType?: string
   payload?: Record<string, unknown>
 }): Promise<KbankQrActionResult> {
+  const terminalId = String(params.terminalId || '').trim()
+  const qrType = String(params.qrType || 'THAI_QR').trim()
+  const payload = {
+    ...(params.payload || {}),
+    ...(terminalId ? { terminalId } : {}),
+    qrType,
+    ...(String(params.partnerTxnUid || '').trim()
+      ? { partnerTxnUid: String(params.partnerTxnUid).trim() }
+      : {}),
+  }
   const res = await apiFetch('/api/pos/kbank/settlement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      qrType,
+      ...(terminalId ? { terminalId } : {}),
+      ...(Object.keys(payload).length > 0 ? { payload } : {}),
+    }),
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok || !data.success) {

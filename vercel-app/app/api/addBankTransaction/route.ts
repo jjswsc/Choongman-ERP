@@ -13,7 +13,7 @@ import {
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   assertPosRevenueDepositCategorySafe,
-  BankSettlementGuardError,
+  isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     const salesDate = body.salesDate ?? body.sales_date
     const expenseDate = body.expenseDate ?? body.expense_date
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
-    const storeNameForReceivable = String(body.storeName || body.store_name || '').trim()
+    let storeNameForReceivable = String(body.storeName || body.store_name || '').trim()
     if (
       isScopedRole &&
       category === 'receivable_receive' &&
@@ -154,10 +154,26 @@ export async function POST(request: NextRequest) {
               : null,
         })
       } catch (e) {
-        if (e instanceof BankSettlementGuardError) {
-          return NextResponse.json({ success: false, message: e.message, code: e.code }, { status: 409, headers })
+        if (isBankSettlementGuardError(e)) {
+          if (e.code === 'POS_REVENUE_DEPOSIT_DOUBLE_RISK') {
+            validCategory = 'receivable_receive'
+            storeNameForReceivable = storeNameForReceivable || store || userStore
+          } else {
+            return NextResponse.json({ success: false, message: e.message, code: e.code }, { status: 409, headers })
+          }
+        } else {
+          throw e
         }
-        throw e
+      }
+    }
+
+    if (transType === 'deposit' && validCategory === 'receivable_receive') {
+      storeNameForReceivable = storeNameForReceivable || store || userStore
+      if (!storeNameForReceivable) {
+        return NextResponse.json(
+          { success: false, message: '매출 수령 입금은 매장(store)을 지정해 주세요.' },
+          { status: 400, headers }
+        )
       }
     }
 
@@ -174,7 +190,7 @@ export async function POST(request: NextRequest) {
       user_employee_code: userEmployeeCode,
       category: validCategory,
     }
-    if (accountSubjectId != null) {
+    if (accountSubjectId != null && validCategory !== 'receivable_receive') {
       const asid = Number(accountSubjectId)
       if (!isNaN(asid)) {
         const hdr = await assertAccountSubjectNotHeader(asid)
@@ -184,7 +200,7 @@ export async function POST(request: NextRequest) {
         row.account_subject_id = asid
       }
     }
-    if (transType === 'deposit' && salesDate) {
+    if (transType === 'deposit' && validCategory !== 'receivable_receive' && salesDate) {
       const sd = String(salesDate).slice(0, 10)
       if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) row.sales_date = sd
     }

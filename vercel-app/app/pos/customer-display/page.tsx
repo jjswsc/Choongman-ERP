@@ -5,6 +5,8 @@ import { useAuth } from "@/lib/auth-context"
 import { isLangCode, useLang, type LangCode } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosPrinterSettings } from "@/lib/api-client"
+import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from "@/lib/pos-qr-brand-assets"
+import { encodeQR, renderCard } from "thai-qr-payment"
 import {
   readPosCustomerDisplayState,
   subscribePosCustomerDisplayState,
@@ -13,6 +15,22 @@ import {
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from "@/lib/pos-pricing"
 
 type DisplayTheme = "dark" | "light" | "brand"
+
+function svgToDataUrl(svg: string): string {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+function buildThaiQrGuidelineCardDataUrl(payload: string): string {
+  const raw = String(payload || "").trim()
+  if (!raw) return ""
+  try {
+    const matrix = encodeQR(raw, { errorCorrectionLevel: "H" })
+    const svg = renderCard(matrix, { theme: "color" })
+    return svgToDataUrl(svg)
+  } catch {
+    return ""
+  }
+}
 
 export default function PosCustomerDisplayPage() {
   const { auth } = useAuth()
@@ -87,6 +105,10 @@ export default function PosCustomerDisplayPage() {
   const current = state?.kind || "idle"
   const resolvedQrType: "THAI_QR" | "CREDIT_CARD" =
     String(state?.qrType || "").trim().toUpperCase() === "CREDIT_CARD" ? "CREDIT_CARD" : "THAI_QR"
+  const thaiQrCardDataUrl = React.useMemo(
+    () => (resolvedQrType === "THAI_QR" ? buildThaiQrGuidelineCardDataUrl(String(state?.qrPayload || "")) : ""),
+    [resolvedQrType, state?.qrPayload]
+  )
   const resolvedIdleMedia = React.useMemo(() => {
     const mtRaw = state?.idleMediaType ?? settingsIdleMediaType
     const mt = mtRaw === "image" || mtRaw === "video" ? mtRaw : "none"
@@ -324,22 +346,45 @@ export default function PosCustomerDisplayPage() {
             {String(state?.qrPayload || "").trim() ? (
               <div className="w-full max-w-[520px] rounded-xl bg-white p-3">
                 <div className="overflow-hidden rounded-lg border">
-                  <div className="bg-[#073763] px-3 py-2 text-center text-sm font-bold tracking-wide text-white">
-                    THAI QR PAYMENT
-                  </div>
-                  <div className="border-b border-[#d8e1ef] bg-[#f4f7fc] px-2 py-1.5 text-center text-[10px] font-semibold tracking-[0.04em] text-[#073763]">
-                    {resolvedQrType === "CREDIT_CARD" ? "CREDIT CARD QR" : "PROMPTPAY QR"}
-                  </div>
-                  <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
-                    {(resolvedQrType === "CREDIT_CARD"
-                      ? ["VISA", "MASTERCARD", "UNIONPAY"]
-                      : ["PROMPTPAY"]
-                    ).map((label) => (
-                      <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
-                        {label}
-                      </span>
-                    ))}
-                  </div>
+                  {resolvedQrType === "CREDIT_CARD" ? (
+                    <>
+                      <div className="bg-[#073763] px-3 py-2 text-center text-sm font-bold tracking-wide text-white">
+                        CREDIT CARD QR
+                      </div>
+                      <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
+                        {["VISA", "MASTERCARD", "UNIONPAY"].map((label) => (
+                          <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : thaiQrCardDataUrl ? (
+                    <div className="flex items-center justify-center bg-white p-2">
+                      <img
+                        src={thaiQrCardDataUrl}
+                        alt="Thai QR Payment"
+                        className="h-auto w-[360px] max-w-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        className="bg-[#00427A] px-3 py-2"
+                      >
+                        <div
+                          className="mx-auto w-[74%] max-w-[320px] [&_svg]:h-auto [&_svg]:w-full"
+                          dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
+                        />
+                      </div>
+                      <div className="border-t border-[#d8e1ef] bg-white px-3 py-2">
+                        <div
+                          className="mx-auto w-[52%] max-w-[230px] [&_svg]:h-auto [&_svg]:w-full"
+                          dangerouslySetInnerHTML={{ __html: PROMPTPAY_LOGO_SVG }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="mt-3 flex items-center justify-center">
                   <img

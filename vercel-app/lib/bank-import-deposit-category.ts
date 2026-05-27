@@ -34,6 +34,31 @@ export function isChannelRevenueAccountCode(code: string | undefined | null): bo
   return CHANNEL_REVENUE_GL_CODES.has(c)
 }
 
+/**
+ * POS 매장 통장 일괄 가져오기: revenue_* 는 매출(4110) 이중 위험 → 매출 수령으로 통일.
+ * 채널 세부 계정(4111·4120 등)이면 revenue_* 유지(서버 가드와 동일).
+ */
+export function coercePosStoreImportDepositCategory(params: {
+  category: string
+  accountStore?: string
+  accountSubjectId?: string | number | null
+  revenueSubjects?: { id?: number; code?: string }[]
+}): { category: string; storeName?: string } {
+  const cat = String(params.category || '').trim().toLowerCase() || 'receivable_receive'
+  const store = String(params.accountStore || '').trim()
+  if (!store || !isPosRevenueDepositCategory(cat)) {
+    return { category: cat }
+  }
+  const asid = params.accountSubjectId
+  if (asid != null && asid !== '' && asid !== '__none__' && params.revenueSubjects?.length) {
+    const subj = params.revenueSubjects.find((s) => String(s.id) === String(asid))
+    if (subj && isChannelRevenueAccountCode(subj.code)) {
+      return { category: cat }
+    }
+  }
+  return { category: 'receivable_receive', storeName: store }
+}
+
 /** 오프라인 큐에 넣어도 재시도해도 성공하지 않는 통장 API 거절 메시지 */
 export function isNonRetryableBankBusinessErrorMessage(message: string | undefined | null): boolean {
   const m = String(message || '')

@@ -2,14 +2,46 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { settleKbankPayment } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
+import type { KbankSettlementRequest } from '@/lib/payments/kbank-types'
 
 export const dynamic = 'force-dynamic'
+
+const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
 
 function withCorsHeaders(res: NextResponse): NextResponse {
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   return res
+}
+
+function buildSettlementPartnerTxnUid(seed?: string): string {
+  const s = String(seed || '').trim()
+  if (s) return s.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
+  const rand = Math.random().toString(36).slice(2, 8)
+  return `STM${Date.now()}${rand}`.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
+}
+
+function normalizeSettlementQrType(v: unknown): 'THAI_QR' | 'CREDIT_CARD' | '' {
+  const raw = String(v || '').trim()
+  if (!raw) return ''
+  const key = raw
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_')
+    .replace(/__+/g, '_')
+  if (key.includes('CREDIT') || key.includes('CARD') || key === 'QRCC' || key === '5') {
+    return 'CREDIT_CARD'
+  }
+  if (key.includes('THAI') || key === 'THQR' || key === 'THAI_QR' || key === '3') {
+    return 'THAI_QR'
+  }
+  return ''
+}
+
+function parseSettlementAmount(json: Record<string, unknown>): number {
+  const n = Number(json.settlementAmount)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.round(n * 100) / 100
 }
 
 export async function OPTIONS() {
@@ -22,44 +54,82 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-    const partnerTransactionId = String(body.partnerTransactionId || '').trim()
-    const originalTransactionId = String(body.originalTransactionId || '').trim()
-    const refId = String(body.refId || '').trim()
-    const terminalId = String(body.terminalId || '').trim()
-    const qrType = String(body.qrType || '').trim()
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
-    const payload = body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : {}
+    const rawPayload =
+      body.payload && typeof body.payload === 'object'
+        ? (body.payload as Record<string, unknown>)
+        : undefined
+    const terminalId = String(
+      body.terminalId || rawPayload?.terminalId || process.env.KBANK_TERMINAL_ID || ''
+    ).trim()
+    const qrTypeInfo = normalizeSettlementQrType(body.qrType || rawPayload?.qrType)
+    const qrType = qrTypeInfo || 'THAI_QR'
+    const settlementPartnerTxnUid = buildSettlementPartnerTxnUid(
+      String(body.partnerTxnUid || rawPayload?.partnerTxnUid || '').trim()
+    )
 
-    const result = await settleKbankPayment({
-      partnerTransactionId: partnerTransactionId || undefined,
-      originalTransactionId: originalTransactionId || undefined,
-      refId: refId || undefined,
-      terminalId: terminalId || undefined,
-      qrType: qrType || undefined,
+    if (qrType === 'CREDIT_CARD') {
+      return withCorsHeaders(
+        NextResponse.json(
+          {
+            success: false,
+            statusCode: 'SETTLEMENT_NOT_SUPPORTED',
+            message:
+              'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
+          },
+          { status: 422 }
+        )
+      )
+    }
+    if (!terminalId) {
+      return withCorsHeaders(
+        NextResponse.json(
+          {
+            success: false,
+            statusCode: 'KBANK_TERMINAL_ID_REQUIRED',
+            message:
+              'terminalId is required for Settlement. Set it in the POS KBank panel or KBANK_TERMINAL_ID.',
+          },
+          { status: 422 }
+        )
+      )
+    }
+
+    const payload: KbankSettlementRequest = {
       orderId: orderId > 0 ? orderId : undefined,
       storeCode: storeCode || undefined,
+      terminalId,
+      qrType: 'THAI_QR',
       payload: {
-        ...payload,
-        ...(terminalId ? { terminalId } : {}),
-        ...(qrType ? { qrType } : {}),
+        ...(rawPayload || {}),
+        partnerTxnUid: settlementPartnerTxnUid,
+        terminalId,
+        qrType: 'THAI_QR',
       },
-    })
+    }
+
+    const result = await settleKbankPayment(payload)
+    const responseData =
+      result.response && typeof result.response === 'object'
+        ? (result.response as Record<string, unknown>)
+        : {}
+    const settlementAmount = result.ok ? parseSettlementAmount(responseData) : 0
 
     try {
       await supabaseInsert('pos_payment_attempts', {
         order_id: orderId > 0 ? orderId : null,
-        local_tx_id: `${String(result.requestId || partnerTransactionId || Date.now()).slice(0, 31)}:SETTLE`,
+        local_tx_id: `${String(result.requestId || settlementPartnerTxnUid).slice(0, 31)}:SETTLE`,
         provider: 'kbank_qr_api',
         mode: 'openapi',
         tx_code: 'SETTLEMENT',
         bank_id: 'KBANK',
         request_amount: 0,
-        approved_amount: 0,
+        approved_amount: settlementAmount,
         response_code: result.statusCode || null,
         response_text: result.statusMessage || null,
         status: result.ok ? 'approved' : 'failed',
-        error_reason: result.ok ? null : (result.statusMessage || 'settlement_failed'),
+        error_reason: result.ok ? null : result.statusMessage || 'settlement_failed',
         created_at: new Date().toISOString(),
       })
     } catch (e) {
@@ -70,9 +140,12 @@ export async function POST(req: NextRequest) {
       NextResponse.json(
         {
           success: result.ok,
-          partnerTransactionId: partnerTransactionId || null,
-          originalTransactionId: originalTransactionId || null,
-          refId: refId || null,
+          message: result.ok ? undefined : result.statusMessage || 'settlement_failed',
+          partnerTransactionId: settlementPartnerTxnUid,
+          settlementAmount: settlementAmount || null,
+          settlementCurrencyCode: String(responseData.settlementCurrencyCode || 'THB') || null,
+          accountNo: String(responseData.accountNo || '') || null,
+          accountName: String(responseData.accountName || '') || null,
           orderId: orderId > 0 ? orderId : null,
           storeCode: storeCode || null,
           statusCode: result.statusCode || null,

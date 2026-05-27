@@ -2,14 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { voidKbankPayment } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
+import type { KbankVoidPaymentRequest } from '@/lib/payments/kbank-types'
 
 export const dynamic = 'force-dynamic'
+
+const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
 
 function withCorsHeaders(res: NextResponse): NextResponse {
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   return res
+}
+
+function buildVoidPartnerTxnUid(seed?: string): string {
+  const s = String(seed || '').trim()
+  if (s) return s.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
+  const rand = Math.random().toString(36).slice(2, 8)
+  return `VOD${Date.now()}${rand}`.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
 }
 
 export async function OPTIONS() {
@@ -22,51 +32,65 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-    const partnerTransactionId = String(body.partnerTransactionId || '').trim()
-    const originalTransactionId = String(body.originalTransactionId || '').trim()
-    const origPartnerTxnUid = String(body.origPartnerTxnUid || '').trim()
-    const refId = String(body.refId || '').trim()
-    const terminalId = String(body.terminalId || '').trim()
-    const txnNo = String(body.txnNo || '').trim()
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
-    const payload = body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : {}
-    const payloadOrigPartnerTxnUid = String(payload.origPartnerTxnUid || '').trim()
+    const terminalId = String(body.terminalId || '').trim()
+    const txnNo = String(body.txnNo || '').trim()
+    const rawPayload =
+      body.payload && typeof body.payload === 'object'
+        ? (body.payload as Record<string, unknown>)
+        : undefined
+    const origPartnerTxnUid = String(
+      body.origPartnerTxnUid ||
+        body.originalTransactionId ||
+        rawPayload?.origPartnerTxnUid ||
+        ''
+    ).trim()
+    const voidPartnerTxnUid = buildVoidPartnerTxnUid(
+      String(body.partnerTxnUid || rawPayload?.partnerTxnUid || '').trim()
+    )
+    const resolvedTxnNo = String(txnNo || rawPayload?.txnNo || '').trim()
 
-    if (!partnerTransactionId && !originalTransactionId && !origPartnerTxnUid && !payloadOrigPartnerTxnUid) {
+    if (!origPartnerTxnUid) {
       return withCorsHeaders(
         NextResponse.json(
           {
             success: false,
             message:
-              'partnerTransactionId/originalTransactionId/origPartnerTxnUid/payload.origPartnerTxnUid 중 하나는 필요합니다.',
+              'origPartnerTxnUid is required for Void Payment (original Generate partnerTxnUid).',
           },
           { status: 400 }
         )
       )
     }
 
-    const result = await voidKbankPayment({
-      partnerTransactionId: partnerTransactionId || undefined,
-      originalTransactionId: originalTransactionId || undefined,
-      origPartnerTxnUid: origPartnerTxnUid || undefined,
-      refId: refId || undefined,
-      terminalId: terminalId || undefined,
-      txnNo: txnNo || undefined,
+    const payload: KbankVoidPaymentRequest = {
       orderId: orderId > 0 ? orderId : undefined,
       storeCode: storeCode || undefined,
+      origPartnerTxnUid,
+      originalTransactionId: origPartnerTxnUid,
+      terminalId: terminalId || undefined,
+      txnNo: resolvedTxnNo || undefined,
       payload: {
-        ...payload,
-        ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+        ...(rawPayload || {}),
+        partnerTxnUid: voidPartnerTxnUid,
+        origPartnerTxnUid,
         ...(terminalId ? { terminalId } : {}),
-        ...(txnNo ? { txnNo } : {}),
+        ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
       },
-    })
+    }
+
+    const result = await voidKbankPayment(payload)
+    const responseData =
+      result.response && typeof result.response === 'object'
+        ? (result.response as Record<string, unknown>)
+        : {}
+    const responseTxnNo = String(responseData.txnNo || resolvedTxnNo || '').trim()
 
     try {
       await supabaseInsert('pos_payment_attempts', {
         order_id: orderId > 0 ? orderId : null,
-        local_tx_id: `${String(result.requestId || partnerTransactionId || '').slice(0, 33)}:VOID`,
+        local_tx_id: `${String(result.requestId || voidPartnerTxnUid).slice(0, 33)}:VOID`,
         provider: 'kbank_qr_api',
         mode: 'openapi',
         tx_code: 'VOID',
@@ -76,7 +100,7 @@ export async function POST(req: NextRequest) {
         response_code: result.statusCode || null,
         response_text: result.statusMessage || null,
         status: result.ok ? 'approved' : 'failed',
-        error_reason: result.ok ? null : (result.statusMessage || 'void_payment_failed'),
+        error_reason: result.ok ? null : result.statusMessage || 'void_payment_failed',
         created_at: new Date().toISOString(),
       })
     } catch (e) {
@@ -87,9 +111,10 @@ export async function POST(req: NextRequest) {
       NextResponse.json(
         {
           success: result.ok,
-          partnerTransactionId: partnerTransactionId || null,
-          originalTransactionId: originalTransactionId || null,
-          refId: refId || null,
+          message: result.ok ? undefined : result.statusMessage || 'void_payment_failed',
+          partnerTransactionId: voidPartnerTxnUid,
+          origPartnerTxnUid,
+          txnNo: responseTxnNo || null,
           orderId: orderId > 0 ? orderId : null,
           storeCode: storeCode || null,
           statusCode: result.statusCode || null,

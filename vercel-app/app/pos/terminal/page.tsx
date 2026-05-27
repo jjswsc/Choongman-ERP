@@ -163,6 +163,9 @@ import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
+import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from '@/lib/pos-qr-brand-assets'
+import { encodeQR, renderCard } from 'thai-qr-payment'
+import { resolveKbankCreditCardBrandLabels } from '@/lib/payments/kbank-api-reference'
 import {
   subscribePosOrdersInsert,
   subscribePosOrdersUpdate,
@@ -257,6 +260,9 @@ function extractKbankGenerateResponseInfo(raw: unknown): {
   originalTxnId: string
   txnNo: string
   referenceId: string
+  sof: unknown
+  cardScheme: string
+  allowVoid: string
 } {
   const root = asPlainObject(raw)
   const data = asPlainObject(root?.data)
@@ -283,6 +289,31 @@ function extractKbankGenerateResponseInfo(raw: unknown): {
     ]),
     txnNo: pickFirstNonEmptyText(sources, ['txnNo', 'transactionNo']),
     referenceId: pickFirstNonEmptyText(sources, ['refId', 'referenceId']),
+    sof: (() => {
+      for (const src of sources) {
+        if (!src || src.sof == null) continue
+        return src.sof
+      }
+      return ''
+    })(),
+    cardScheme: pickFirstNonEmptyText(sources, ['cardScheme', 'card_scheme']),
+    allowVoid: pickFirstNonEmptyText(sources, ['allowVoid', 'allow_void']),
+  }
+}
+
+function svgToDataUrl(svg: string): string {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+function buildThaiQrGuidelineCardDataUrl(payload: string): string {
+  const raw = String(payload || '').trim()
+  if (!raw) return ''
+  try {
+    const matrix = encodeQR(raw, { errorCorrectionLevel: 'H' })
+    const svg = renderCard(matrix, { theme: 'color' })
+    return svgToDataUrl(svg)
+  } catch {
+    return ''
   }
 }
 
@@ -821,6 +852,7 @@ export default function PosTerminalPage() {
   const [kbankOpsTxnNo, setKbankOpsTxnNo] = useState('')
   const [kbankOpsTerminalId, setKbankOpsTerminalId] = useState('')
   const [kbankOpsLastResult, setKbankOpsLastResult] = useState('')
+  const [kbankOpsCardBrands, setKbankOpsCardBrands] = useState<string[]>([])
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
@@ -2581,6 +2613,31 @@ export default function PosTerminalPage() {
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId])
 
+  const kbankTerminalIdStorageKey = useMemo(() => {
+    const store = String(currentStoreId || '').trim().toUpperCase()
+    return store ? `pos.kbank.terminalId.${store}` : 'pos.kbank.terminalId'
+  }, [currentStoreId])
+
+  useEffect(() => {
+    if (!isKbankPilotStore) return
+    try {
+      const saved = String(localStorage.getItem(kbankTerminalIdStorageKey) || '').trim()
+      if (saved) setKbankOpsTerminalId(saved)
+    } catch {
+      /* ignore */
+    }
+  }, [isKbankPilotStore, kbankTerminalIdStorageKey])
+
+  useEffect(() => {
+    if (!isKbankPilotStore) return
+    const value = String(kbankOpsTerminalId || '').trim()
+    try {
+      if (value) localStorage.setItem(kbankTerminalIdStorageKey, value)
+    } catch {
+      /* ignore */
+    }
+  }, [isKbankPilotStore, kbankTerminalIdStorageKey, kbankOpsTerminalId])
+
   const demoKbankQrPayload = useMemo(() => {
     if (!isPosDemo || !tourPaymentModalOpen) return ''
     const amount = Math.max(0, Number(tourPaymentQrAmount || 0))
@@ -2605,6 +2662,11 @@ export default function PosTerminalPage() {
     const draftType = String(customerDisplayPaymentDraft?.paymentQrType || '').trim().toUpperCase()
     return draftType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
   }, [liveKbankQrPayload, liveKbankQrType, customerDisplayPaymentDraft?.paymentQrType])
+
+  const staffThaiQrCardDataUrl = useMemo(() => {
+    if (effectiveCustomerDisplayQrType !== 'THAI_QR') return ''
+    return buildThaiQrGuidelineCardDataUrl(effectiveStaffKbankQrPayload)
+  }, [effectiveCustomerDisplayQrType, effectiveStaffKbankQrPayload])
 
   useEffect(() => {
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
@@ -4986,7 +5048,8 @@ export default function PosTerminalPage() {
           : 'THAI_QR'
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
-      const partnerTransactionIdSeed = `POSQR${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 15)
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      const partnerTransactionIdSeed = `POSQR${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
       const generate = await executeKbankGenerateQr({
         amount: qrAmount,
         qrType: requestedQrType,
@@ -4995,6 +5058,7 @@ export default function PosTerminalPage() {
         partnerTransactionId: partnerTransactionIdSeed,
         reference1: String(context?.orderType || '').slice(0, 20),
         reference2: String(context?.orderLabel || '').slice(0, 20),
+        ...(terminalId ? { terminalId } : {}),
       })
       if (!generate.success) {
         setLiveKbankQrPayload('')
@@ -5003,14 +5067,18 @@ export default function PosTerminalPage() {
         setKbankOpsOrigTxnUid('')
         setKbankOpsTxnNo('')
         setCustomerDisplayPaymentMessage('')
-        const msg = (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
+        const msg =
+          generate.statusCode === 'KBANK_TERMINAL_ID_REQUIRED'
+            ? t('posKbankTerminalIdRequiredAlert') ||
+              'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel (e.g. 09000107) or set KBANK_TERMINAL_ID on the server.'
+            : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
 
       const partnerTransactionId = String(generate.partnerTransactionId || partnerTransactionIdSeed)
         .trim()
-        .slice(0, 15)
+        .slice(0, 32)
 
       const data = (generate.data || {}) as Record<string, unknown>
       const generatedInfo = extractKbankGenerateResponseInfo(data)
@@ -5018,17 +5086,23 @@ export default function PosTerminalPage() {
         generatedInfo.originalTxnId || partnerTransactionId
       )
         .trim()
-        .slice(0, 15)
+        .slice(0, 32)
       const resolvedTxnNo = String(generatedInfo.txnNo || '').trim().slice(0, 20)
       setKbankOpsTxnUid(partnerTransactionId)
       setKbankOpsOrigTxnUid(resolvedOrigTxnUid)
       if (resolvedTxnNo) setKbankOpsTxnNo(resolvedTxnNo)
       const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
+      setKbankOpsCardBrands(
+        resolveKbankCreditCardBrandLabels({
+          sof: generatedInfo.sof,
+          cardScheme: generatedInfo.cardScheme,
+        })
+      )
       if (!generatedQrPayload) {
         setCustomerDisplayPaymentMessage('')
         const msg =
           (t('posPaymentQr') || 'QR') +
-          ` 응답 파싱 실패(${requestedQrType}): qrPayload/qrCode 값을 찾지 못했습니다.`
+          ` response parse failed (${requestedQrType}): qrPayload/qrCode not found.`
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
@@ -5100,7 +5174,7 @@ export default function PosTerminalPage() {
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posManual') || '수동 처리'))
       return { ok: true as const, partnerTransactionId, pending: true as const }
     },
-    [isPosDemo, isKbankPilotStore, currentStoreId, t, sleepMs]
+    [isPosDemo, isKbankPilotStore, currentStoreId, kbankOpsTerminalId, t, sleepMs]
   )
 
   const runKbankFollowupAction = useCallback(
@@ -5111,10 +5185,10 @@ export default function PosTerminalPage() {
       }
       const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
       if (!partnerTxnUid) {
-        await appAlert(t('posKbankGenerateFirstAlert') || '먼저 QR 생성(Generate)을 실행해 주세요.')
+        await appAlert(t('posKbankGenerateFirstAlert') || 'Please run QR Generate first.')
         return
       }
-      const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 15)
+      const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 32)
       const terminalId = String(kbankOpsTerminalId || '').trim()
       const txnNo = String(kbankOpsTxnNo || '').trim()
       setKbankOpsBusy(true)
@@ -5136,17 +5210,26 @@ export default function PosTerminalPage() {
             const d = (out.data || {}) as Record<string, unknown>
             const nextTxnNo = String(d.txnNo || txnNo || '').trim().slice(0, 20)
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
+            const brands = resolveKbankCreditCardBrandLabels({
+              sof: d.sof,
+              cardScheme: d.cardScheme,
+            })
+            if (brands.length > 0) setKbankOpsCardBrands(brands)
           }
           setKbankOpsLastResult(`[INQUIRY] ${JSON.stringify(out)}`)
           return
         }
         if (action === 'cancel') {
+          const cancelPartnerTxnUid = `CCH${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
           const out = await executeKbankCancelQr({
             storeCode: currentStoreId,
-            partnerTransactionId: partnerTxnUid,
-            originalTransactionId: origPartnerTxnUid || undefined,
+            origPartnerTxnUid,
+            originalTransactionId: origPartnerTxnUid,
+            partnerTxnUid: cancelPartnerTxnUid,
+            terminalId: terminalId || undefined,
             payload: {
-              ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+              partnerTxnUid: cancelPartnerTxnUid,
+              origPartnerTxnUid,
               ...(terminalId ? { terminalId } : {}),
             },
           })
@@ -5158,18 +5241,26 @@ export default function PosTerminalPage() {
           return
         }
         if (action === 'void') {
+          const voidPartnerTxnUid = `VOD${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
           const out = await executeKbankVoidPayment({
             storeCode: currentStoreId,
-            partnerTransactionId: partnerTxnUid,
-            origPartnerTxnUid: origPartnerTxnUid || undefined,
+            origPartnerTxnUid,
+            originalTransactionId: origPartnerTxnUid,
+            partnerTxnUid: voidPartnerTxnUid,
             terminalId: terminalId || undefined,
             txnNo: txnNo || undefined,
             payload: {
-              ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+              partnerTxnUid: voidPartnerTxnUid,
+              origPartnerTxnUid,
               ...(terminalId ? { terminalId } : {}),
               ...(txnNo ? { txnNo } : {}),
             },
           })
+          if (out.success) {
+            const d = (out.data || {}) as Record<string, unknown>
+            const nextTxnNo = String(d.txnNo || txnNo || '').trim().slice(0, 20)
+            if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
+          }
           if (out.success) {
             setLiveKbankQrPayload('')
             setLiveKbankQrType('THAI_QR')
@@ -5177,14 +5268,30 @@ export default function PosTerminalPage() {
           setKbankOpsLastResult(`[VOID] ${JSON.stringify(out)}`)
           return
         }
+        if (liveKbankQrType === 'CREDIT_CARD') {
+          await appAlert(
+            t('posKbankSettlementThaiQrOnlyAlert') ||
+              'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.'
+          )
+          return
+        }
+        if (!terminalId) {
+          await appAlert(
+            t('posKbankTerminalIdRequiredAlert') ||
+              'terminalId is required for Settlement. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID.'
+          )
+          return
+        }
+        const settlementPartnerTxnUid = `STM${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
         const out = await executeKbankSettlement({
           storeCode: currentStoreId,
-          partnerTransactionId: partnerTxnUid,
-          terminalId: terminalId || undefined,
-          qrType: liveKbankQrType,
+          partnerTxnUid: settlementPartnerTxnUid,
+          terminalId,
+          qrType: 'THAI_QR',
           payload: {
-            ...(terminalId ? { terminalId } : {}),
-            qrType: liveKbankQrType,
+            partnerTxnUid: settlementPartnerTxnUid,
+            terminalId,
+            qrType: 'THAI_QR',
           },
         })
         setKbankOpsLastResult(`[SETTLEMENT] ${JSON.stringify(out)}`)
@@ -8354,22 +8461,48 @@ export default function PosTerminalPage() {
           </p>
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border">
-              <div className="bg-[#073763] px-3 py-2 text-center text-[13px] font-bold tracking-wide text-white">
-                THAI QR PAYMENT
-              </div>
-              <div className="border-b border-[#d8e1ef] bg-[#f4f7fc] px-2 py-1.5 text-center text-[10px] font-semibold tracking-[0.04em] text-[#073763]">
-                {effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? 'CREDIT CARD QR' : 'PROMPTPAY QR'}
-              </div>
-              <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
-                {(effectiveCustomerDisplayQrType === 'CREDIT_CARD'
-                  ? ['VISA', 'MASTERCARD', 'UNIONPAY']
-                  : ['PROMPTPAY']
-                ).map((label) => (
-                  <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
-                    {label}
-                  </span>
-                ))}
-              </div>
+              {effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? (
+                <>
+                  <div className="bg-[#073763] px-3 py-2 text-center text-[13px] font-bold tracking-wide text-white">
+                    CREDIT CARD QR
+                  </div>
+                  <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
+                    {(kbankOpsCardBrands.length > 0
+                      ? kbankOpsCardBrands
+                      : ['VISA', 'MASTERCARD', 'UNIONPAY']
+                    ).map((label) => (
+                      <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : staffThaiQrCardDataUrl ? (
+                <div className="flex items-center justify-center bg-white p-2">
+                  <img
+                    src={staffThaiQrCardDataUrl}
+                    alt="Thai QR Payment"
+                    className="h-auto w-[300px] max-w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div
+                    className="bg-[#00427A] px-3 py-2"
+                  >
+                    <div
+                      className="mx-auto w-[74%] max-w-[260px] [&_svg]:h-auto [&_svg]:w-full"
+                      dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
+                    />
+                  </div>
+                  <div className="border-t border-[#d8e1ef] bg-white px-3 py-2">
+                    <div
+                      className="mx-auto w-[52%] max-w-[190px] [&_svg]:h-auto [&_svg]:w-full"
+                      dangerouslySetInnerHTML={{ __html: PROMPTPAY_LOGO_SVG }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-2 flex min-h-[280px] items-center justify-center">
               {staffKbankQrDataUrl ? (
@@ -8410,7 +8543,7 @@ export default function PosTerminalPage() {
                   />
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <Label className="text-[11px]">{t('posKbankTerminalIdLabel') || 'terminalId (선택)'}</Label>
+                  <Label className="text-[11px]">{t('posKbankTerminalIdLabel') || 'terminalId (QR 카드 필수)'}</Label>
                   <Input
                     className="h-8 text-xs"
                     value={kbankOpsTerminalId}

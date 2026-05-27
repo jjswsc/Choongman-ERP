@@ -11,7 +11,7 @@ import {
 } from '@/lib/receivable-payable'
 import {
   assertPosRevenueDepositCategorySafe,
-  BankSettlementGuardError,
+  isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
                 : null,
           })
         } catch (e) {
-          if (e instanceof BankSettlementGuardError) {
+          if (isBankSettlementGuardError(e)) {
             if (e.code === 'POS_REVENUE_DEPOSIT_DOUBLE_RISK') {
               validCategory = 'receivable_receive'
               effectiveStoreNameForReceivable = isScopedRole
@@ -234,6 +234,16 @@ export async function POST(request: NextRequest) {
             }
           }
           throw e
+        }
+      }
+
+      if (transType === 'deposit' && validCategory === 'receivable_receive') {
+        effectiveStoreNameForReceivable =
+          effectiveStoreNameForReceivable || store || userStore
+        if (!effectiveStoreNameForReceivable) {
+          policySkipped++
+          skipped++
+          continue
         }
       }
 

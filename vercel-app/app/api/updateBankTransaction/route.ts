@@ -20,7 +20,7 @@ import {
 import {
   assertBankNotUsedByChannelSettlement,
   assertPosRevenueDepositCategorySafe,
-  BankSettlementGuardError,
+  isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
           })
         }
       } catch (e) {
-        if (e instanceof BankSettlementGuardError) {
+        if (isBankSettlementGuardError(e)) {
           return NextResponse.json({ success: false, message: e.message, code: e.code }, { status: 409, headers })
         }
         throw e

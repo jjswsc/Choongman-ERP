@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import type { KbankCheckStatusRequest } from '@/lib/payments/kbank-types'
+import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,13 +14,8 @@ function withCorsHeaders(res: NextResponse): NextResponse {
   return res
 }
 
-function normalizeStatusLabel(v: unknown): string {
-  const s = String(v || '').trim().toUpperCase()
-  if (!s) return ''
-  if (s.includes('PAID') || s.includes('SUCCESS')) return 'approved'
-  if (s.includes('VOID') || s.includes('CANCEL') || s.includes('FAIL') || s.includes('DECLINE')) return 'declined'
-  if (s.includes('PENDING') || s.includes('PROCESS')) return 'pending'
-  return 'pending'
+function normalizeStatusLabel(txnStatus: unknown, statusCode?: unknown): string {
+  return normalizeKbankTxnStatusToPos(txnStatus, statusCode)
 }
 
 function parseAmount(v: unknown): number {
@@ -30,6 +26,7 @@ function parseAmount(v: unknown): number {
 
 function extractApprovedAmount(json: Record<string, unknown>): number {
   const topCandidates = [
+    json.txnAmount,
     json.amount,
     json.transactionAmount,
     json.approvedAmount,
@@ -42,7 +39,7 @@ function extractApprovedAmount(json: Record<string, unknown>): number {
   const data = json.data
   if (data && typeof data === 'object') {
     const d = data as Record<string, unknown>
-    const nestedCandidates = [d.amount, d.transactionAmount, d.approvedAmount, d.totalAmount]
+    const nestedCandidates = [d.txnAmount, d.amount, d.transactionAmount, d.approvedAmount, d.totalAmount]
     for (const c of nestedCandidates) {
       const amount = parseAmount(c)
       if (amount > 0) return amount
@@ -52,26 +49,29 @@ function extractApprovedAmount(json: Record<string, unknown>): number {
 }
 
 function extractTxnStatus(json: Record<string, unknown>): string {
+  const statusCode = String(json.statusCode || '').trim()
   const topCandidates = [
+    json.txnStatus,
     json.transactionStatus,
     json.status,
     json.paymentStatus,
-    json.txnStatus,
   ]
   for (const c of topCandidates) {
-    const status = normalizeStatusLabel(c)
-    if (status) return status
+    if (String(c || '').trim()) {
+      return normalizeStatusLabel(c, statusCode)
+    }
   }
   const data = json.data
   if (data && typeof data === 'object') {
     const d = data as Record<string, unknown>
-    const nestedCandidates = [d.transactionStatus, d.status, d.paymentStatus, d.txnStatus]
+    const nestedCandidates = [d.txnStatus, d.transactionStatus, d.status, d.paymentStatus]
     for (const c of nestedCandidates) {
-      const status = normalizeStatusLabel(c)
-      if (status) return status
+      if (String(c || '').trim()) {
+        return normalizeStatusLabel(c, statusCode)
+      }
     }
   }
-  return 'pending'
+  return normalizeStatusLabel('', statusCode)
 }
 
 export async function OPTIONS() {
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             message:
-              'partnerTransactionId, originalTransactionId, refId, payload.origPartnerTxnUid 중 하나는 필요합니다.',
+              'origPartnerTxnUid is required for Inquire Payment. Pass originalTransactionId or payload.origPartnerTxnUid.',
           },
           { status: 400 }
         )

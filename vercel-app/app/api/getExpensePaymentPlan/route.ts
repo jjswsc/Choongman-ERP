@@ -3,6 +3,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
+import { buildExpenseAccrualPlanDateFilters } from '@/lib/expense-accrual-plan-filters'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function canViewExpensePaymentPlan(role: string): boolean {
@@ -97,6 +98,33 @@ function isPurchaseWithdrawalCategory(cat: string | undefined): boolean {
   return c === 'purchase_payment' || c === 'purchase_advance'
 }
 
+const ACCRUAL_PLAN_SELECT =
+  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls'
+
+async function fetchExpenseAccrualsForPlanRange(
+  startStr: string,
+  endStr: string
+): Promise<ExpenseAccrualRow[]> {
+  const filters = buildExpenseAccrualPlanDateFilters(startStr, endStr)
+  const batches = await Promise.all(
+    filters.map((filter) =>
+      supabaseSelectFilter('expense_accruals', filter, {
+        select: ACCRUAL_PLAN_SELECT,
+        order: 'due_date.asc,expense_date.asc,id.desc',
+        limit: 5000,
+      }) as Promise<ExpenseAccrualRow[]>
+    )
+  )
+  const byId = new Map<number, ExpenseAccrualRow>()
+  for (const rows of batches) {
+    for (const r of rows || []) {
+      const id = Number(r.id || 0)
+      if (id > 0) byId.set(id, r)
+    }
+  }
+  return [...byId.values()]
+}
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -135,22 +163,8 @@ export async function GET(request: NextRequest) {
     const canSeeAllStores = callerSeesAllAccrualStores(userRole)
     const scopedAllowedStores = canSeeAllStores ? [] : allowedStores
 
-    /** 기간이 있으면 DB에서 먼저 걸러 5000건 상한으로 당일 등록이 누락되지 않게 함 */
-    const accrualFilter =
-      startStr && endStr
-        ? `or=(and(expense_date.gte.${startStr},expense_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}))`
-        : startStr
-          ? `or=(expense_date.gte.${startStr},due_date.gte.${startStr})`
-          : endStr
-            ? `or=(expense_date.lte.${endStr},due_date.lte.${endStr})`
-            : 'id=gt.0'
-
     const [accrualRows, payableRows] = await Promise.all([
-      supabaseSelectFilter('expense_accruals', accrualFilter, {
-        select: 'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls',
-        order: 'due_date.asc,expense_date.asc,id.desc',
-        limit: 5000,
-      }) as Promise<ExpenseAccrualRow[]>,
+      fetchExpenseAccrualsForPlanRange(startStr, endStr),
       supabaseSelectFilter('payable_transactions', 'id=gt.0', {
         select: 'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,expense_accrual_id',
         order: 'trans_date.desc',

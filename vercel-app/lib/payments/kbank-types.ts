@@ -48,7 +48,9 @@ export type KbankCheckStatusResult = {
 export type KbankCancelQrRequest = {
   partnerTransactionId?: string
   originalTransactionId?: string
+  origPartnerTxnUid?: string
   refId?: string
+  terminalId?: string
   orderId?: number
   storeCode?: string
   payload?: Record<string, unknown>

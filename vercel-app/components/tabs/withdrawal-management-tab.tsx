@@ -509,6 +509,13 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     return Math.max(0, g - w)
   }, [isLaterPayment, categoryMain, amount, accrualWithholdingTax])
 
+  const sumInboundLinkAmounts = React.useCallback(() => {
+    return Object.values(inboundLinkAmounts).reduce((sum, raw) => {
+      const n = Number(String(raw).replace(/,/g, ""))
+      return sum + (Number.isFinite(n) && n > 0 ? n : 0)
+    }, 0)
+  }, [inboundLinkAmounts])
+
   const resolveWithdrawalCategory = React.useCallback((main: string, sub: string): string => {
     if (main === "purchase") return sub === "advance" ? "purchase_advance" : "purchase_payment"
     if (main === "expense") return sub === "advance" ? "expense_advance" : "expense"
@@ -545,7 +552,17 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
   }, [tt])
 
   const handleRegisterAccrual = async () => {
-    const amt = Number(String(amount).replace(/,/g, ""))
+    let amt = Number(String(amount).replace(/,/g, ""))
+    if (
+      categoryMain === "purchase" &&
+      (!Number.isFinite(amt) || amt <= 0)
+    ) {
+      const fromLinks = sumInboundLinkAmounts()
+      if (fromLinks > 0) {
+        amt = fromLinks
+        setAmount(String(fromLinks))
+      }
+    }
     const withdrawalCategory = resolveWithdrawalCategory(categoryMain, categorySub)
     let code = payeeCode.trim()
     let name = payeeName.trim()
@@ -571,7 +588,14 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       name = name || getAutoPayeeName(withdrawalCategory)
     }
     if (!amt || amt <= 0) {
-      await appAlert(tt("pettyAlertAmount", "Please enter amount."))
+      const msg =
+        categoryMain === "purchase" && sumInboundLinkAmounts() <= 0
+          ? tt(
+              "expenseAccrualPurchaseAmountRequired",
+              "Enter the total (incl. tax) or link amounts for inbound batches."
+            )
+          : tt("pettyAlertAmount", "Please enter amount.")
+      await appAlert(msg)
       return
     }
     if (!storeName) {
@@ -1282,7 +1306,15 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {tt("inboundLinkRegisterHelp", "Enter amounts by batch to match the withdrawal amount for auto-linking. Leave blank to link later in Bank tab.")}
+                        {isLaterPayment
+                          ? tt(
+                              "inboundLinkAccrualHelp",
+                              "For pay-later registration, linked batch amounts are used as the total when the total field is empty."
+                            )
+                          : tt(
+                              "inboundLinkRegisterHelp",
+                              "Enter amounts by batch to match the withdrawal amount for auto-linking. Leave blank to link later in Bank tab."
+                            )}
                       </p>
                     </>
                   )}

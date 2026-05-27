@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  coercePosStoreImportDepositCategory,
   isChannelRevenueAccountCode,
   isNonRetryableBankBusinessErrorMessage,
   isPosRevenueDepositCategory,
@@ -15,6 +16,23 @@ describe('bank-import-deposit-category', () => {
     expect(isChannelRevenueAccountCode('4111')).toBe(true)
     expect(isChannelRevenueAccountCode('4120')).toBe(true)
     expect(isChannelRevenueAccountCode('4110')).toBe(false)
+  })
+
+  it('coerces POS store import revenue_* to receivable_receive', () => {
+    expect(
+      coercePosStoreImportDepositCategory({
+        category: 'revenue_card',
+        accountStore: 'CM Union Mall',
+      })
+    ).toEqual({ category: 'receivable_receive', storeName: 'CM Union Mall' })
+    expect(
+      coercePosStoreImportDepositCategory({
+        category: 'revenue_card',
+        accountStore: 'CM Union Mall',
+        accountSubjectId: 9,
+        revenueSubjects: [{ id: 9, code: '4120' }],
+      })
+    ).toEqual({ category: 'revenue_card' })
   })
 
   it('flags non-retryable bank guard messages', () => {

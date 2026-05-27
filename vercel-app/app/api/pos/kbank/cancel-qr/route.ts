@@ -2,14 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { cancelKbankQr } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
+import type { KbankCancelQrRequest } from '@/lib/payments/kbank-types'
 
 export const dynamic = 'force-dynamic'
+
+const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
 
 function withCorsHeaders(res: NextResponse): NextResponse {
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   return res
+}
+
+function buildCancelPartnerTxnUid(seed?: string): string {
+  const s = String(seed || '').trim()
+  if (s) return s.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
+  const rand = Math.random().toString(36).slice(2, 8)
+  return `CCH${Date.now()}${rand}`.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
 }
 
 export async function OPTIONS() {
@@ -22,34 +32,56 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-    const partnerTransactionId = String(body.partnerTransactionId || '').trim()
-    const originalTransactionId = String(body.originalTransactionId || '').trim()
-    const refId = String(body.refId || '').trim()
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
+    const terminalId = String(body.terminalId || '').trim()
+    const rawPayload =
+      body.payload && typeof body.payload === 'object'
+        ? (body.payload as Record<string, unknown>)
+        : undefined
+    const origPartnerTxnUid = String(
+      body.origPartnerTxnUid ||
+        body.originalTransactionId ||
+        rawPayload?.origPartnerTxnUid ||
+        ''
+    ).trim()
+    const cancelPartnerTxnUid = buildCancelPartnerTxnUid(
+      String(body.partnerTxnUid || rawPayload?.partnerTxnUid || '').trim()
+    )
 
-    if (!partnerTransactionId && !originalTransactionId && !refId) {
+    if (!origPartnerTxnUid) {
       return withCorsHeaders(
         NextResponse.json(
-          { success: false, message: 'partnerTransactionId/originalTransactionId/refId 중 하나는 필요합니다.' },
+          {
+            success: false,
+            message:
+              'origPartnerTxnUid is required for Cancel QR (original Generate partnerTxnUid).',
+          },
           { status: 400 }
         )
       )
     }
 
-    const result = await cancelKbankQr({
-      partnerTransactionId: partnerTransactionId || undefined,
-      originalTransactionId: originalTransactionId || undefined,
-      refId: refId || undefined,
+    const payload: KbankCancelQrRequest = {
       orderId: orderId > 0 ? orderId : undefined,
       storeCode: storeCode || undefined,
-      payload: body.payload && typeof body.payload === 'object' ? (body.payload as Record<string, unknown>) : undefined,
-    })
+      origPartnerTxnUid,
+      originalTransactionId: origPartnerTxnUid,
+      terminalId: terminalId || undefined,
+      payload: {
+        ...(rawPayload || {}),
+        partnerTxnUid: cancelPartnerTxnUid,
+        origPartnerTxnUid,
+        ...(terminalId ? { terminalId } : {}),
+      },
+    }
+
+    const result = await cancelKbankQr(payload)
 
     try {
       await supabaseInsert('pos_payment_attempts', {
         order_id: orderId > 0 ? orderId : null,
-        local_tx_id: `${String(result.requestId || partnerTransactionId || '').slice(0, 34)}:CNL`,
+        local_tx_id: `${String(result.requestId || cancelPartnerTxnUid).slice(0, 34)}:CNL`,
         provider: 'kbank_qr_api',
         mode: 'openapi',
         tx_code: 'CANCEL',
@@ -59,7 +91,7 @@ export async function POST(req: NextRequest) {
         response_code: result.statusCode || null,
         response_text: result.statusMessage || null,
         status: result.ok ? 'approved' : 'failed',
-        error_reason: result.ok ? null : (result.statusMessage || 'cancel_qr_failed'),
+        error_reason: result.ok ? null : result.statusMessage || 'cancel_qr_failed',
         created_at: new Date().toISOString(),
       })
     } catch (e) {
@@ -70,9 +102,9 @@ export async function POST(req: NextRequest) {
       NextResponse.json(
         {
           success: result.ok,
-          partnerTransactionId: partnerTransactionId || null,
-          originalTransactionId: originalTransactionId || null,
-          refId: refId || null,
+          message: result.ok ? undefined : result.statusMessage || 'cancel_qr_failed',
+          partnerTransactionId: cancelPartnerTxnUid,
+          origPartnerTxnUid,
           orderId: orderId > 0 ? orderId : null,
           storeCode: storeCode || null,
           statusCode: result.statusCode || null,
