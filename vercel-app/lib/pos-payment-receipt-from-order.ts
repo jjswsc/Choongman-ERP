@@ -46,13 +46,17 @@ export function posOrderRowPaymentSum(row: Record<string, unknown>): number {
 }
 
 export function posOrderPaymentSum(order: PosOrder): number {
-  return (
+  const sum =
     Number(order.paymentCash ?? 0) +
     Number(order.paymentCard ?? 0) +
     Number(order.paymentQr ?? 0) +
     Number(order.paymentOther ?? 0) +
     Number(order.paymentDeliveryApp ?? 0)
-  )
+  if (sum > 0.005) return sum
+  if (isPosOrderPaidLikeStatus(String(order.status ?? ''))) {
+    return Math.max(0, Number(order.total ?? 0) || 0)
+  }
+  return 0
 }
 
 export function isPosOrderPaidLikeStatus(status: string): boolean {

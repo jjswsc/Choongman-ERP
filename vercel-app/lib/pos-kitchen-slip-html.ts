@@ -282,6 +282,25 @@ function filterKitchenOptionTokenList(
   return tokens.filter((token) => isKitchenOptionTokenAllowed(token, policy))
 }
 
+/**
+ * 세트 구성품(`promoComposeLines`)은 주방 라우팅(kitchen_printer)으로 이미 걸러진 메뉴다.
+ * 메뉴명에 kimchi 등이 들어가도 옵션 칩(side)으로 통째로 숨기지 않는다.
+ * 단일 단어·사이즈 라벨 등 옵션만 있는 줄은 기존처럼 옵션 그룹 정책을 따른다.
+ */
+function isLikelyPromoComposeMenuLineName(core: string): boolean {
+  const s = String(core ?? '').trim()
+  if (!s) return false
+  if (isLikelyPosMenuSkuCode(s) || isLikelyStandaloneSizeLabel(s)) return false
+  const words = s.split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return true
+  if (
+    /\b(soup|rice|chicken|set|combo|fried|bbq|bulgogi|dosirak|noodle|salad|drink|water)\b/i.test(s)
+  ) {
+    return true
+  }
+  return false
+}
+
 function filterKitchenPromoComposeLine(
   line: string,
   policy: KitchenSlipDesignResolved['optionGroupPrint']
@@ -299,11 +318,14 @@ function filterKitchenPromoComposeLine(
     const optPart = String(paren[2] ?? '').trim()
     const tokens = splitPrintOptionTokens(optPart)
     const kept = filterKitchenOptionTokenList(tokens, policy)
-    if (kept.length === 0) return []
+    if (kept.length === 0) {
+      return isLikelyPromoComposeMenuLineName(menu) ? [`${menu}${qtySuffix}`] : []
+    }
     if (kept.length === tokens.length) return [trimmed]
     if (kept.length === 1) return [`${menu} (${kept[0]})${qtySuffix}`]
     return kept.map((part) => `${part}${qtySuffix}`)
   }
+  if (isLikelyPromoComposeMenuLineName(core)) return [trimmed]
   if (!isKitchenOptionTokenAllowed(core, policy)) return []
   return [trimmed]
 }

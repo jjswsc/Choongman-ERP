@@ -103,7 +103,16 @@ function incomeStatementSalesBreakdown(data: IncomeStatementData | undefined): {
 }[] {
   if (!data) return []
   if ((data.salesByCustomer?.length ?? 0) > 0) return data.salesByCustomer!
-  if ((data.salesByDay?.length ?? 0) > 0) return data.salesByDay!
+  if ((data.salesByDay?.length ?? 0) > 0) {
+    const lo = String(data.startStr || "").slice(0, 10)
+    const hi = String(data.endStr || "").slice(0, 10)
+    const daily = /^\d{4}-\d{2}-\d{2}$/
+    return data.salesByDay!.filter((r) => {
+      const k = String(r.key || "").slice(0, 10)
+      if (!daily.test(k) || !daily.test(lo) || !daily.test(hi)) return true
+      return k >= lo && k <= hi
+    })
+  }
   return []
 }
 
@@ -3205,7 +3214,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                   <IncomePlDetailTableContent
                     data={data}
                     view={view}
-                    periodLine={`${data.yearMonth} · ${storeLabel}`}
+                    periodLine={
+                      data.startStr && data.endStr
+                        ? `${data.yearMonth} · ${storeLabel} · ${data.startStr}~${data.endStr} (방콕)`
+                        : `${data.yearMonth} · ${storeLabel}`
+                    }
                     showExpenseDetails={showExpenseDetails}
                     expandSales={expandSales}
                     onToggleSales={() => setExpandSales((v) => !v)}

@@ -5,7 +5,13 @@ import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+function callerSeesAllAccrualStores(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role)
+}
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
-    const authResult = await requireAuth(request, 'office')
+    const authResult = await requireAuth(request, 'manager')
     if (authResult.errorResponse) {
       authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
       authResult.errorResponse.headers.set('Content-Type', 'application/json')
@@ -115,6 +121,27 @@ export async function POST(request: NextRequest) {
     const memo = String(body.memo || '').trim()
     const storeName = String(body.storeName || body.store_name || '').trim()
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    const userRole = String(auth.role || '').trim()
+    const callerStore = String(auth.store || '').trim()
+    const allowedStores = (
+      Array.isArray(auth.allowedStores) ? auth.allowedStores : []
+    )
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(callerStore)
+
+    if (!callerSeesAllAccrualStores(userRole)) {
+      if (!storeName) {
+        return NextResponse.json({ success: false, message: '매장을 선택해 주세요.' }, { status: 400, headers })
+      }
+      const storeAllowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeName))
+      if (!storeAllowed) {
+        return NextResponse.json(
+          { success: false, message: '선택한 매장에 대한 등록 권한이 없습니다.' },
+          { status: 403, headers }
+        )
+      }
+    }
 
     if ((withdrawalCategory === 'purchase_payment' || withdrawalCategory === 'purchase_advance') && !inputPayeeCode) {
       return NextResponse.json({ success: false, message: '매입처를 입력해 주세요.' }, { status: 400, headers })

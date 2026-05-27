@@ -2,7 +2,11 @@
  * 손익 매장 매출 — 매출 관리 `posSalesByStore` 와 동일 집계(영업일·total·완료 건).
  */
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
-import { aggregatePosSalesByPeriod } from '@/lib/pos-sales-period-aggregate'
+import {
+  aggregatePosSalesByPeriod,
+  filterCompletedPosSalesRows,
+} from '@/lib/pos-sales-period-aggregate'
+import { isPosSalesBusinessYmdInInclusiveRange } from '@/lib/pos-sales-business-day-range'
 import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 
 export type PosSalesDayLine = { key: string; amount: number; label?: string }
@@ -34,15 +38,18 @@ export async function sumCompletedPosSalesTotal(params: {
 
   const resolveHours = (storeCode: string) =>
     resolvePosBusinessHoursFromContext(bizCtx, storeCode)
-  const byDay = aggregatePosSalesByPeriod(rows, 'day', null, undefined, resolveHours)
+  const completed = filterCompletedPosSalesRows(rows, null)
+  const byDay = aggregatePosSalesByPeriod(completed, 'day', null, undefined, resolveHours)
 
+  const salesByDay: PosSalesDayLine[] = []
   let total = 0
   let completedCount = 0
-  const salesByDay: PosSalesDayLine[] = byDay.map((d) => {
+  for (const d of byDay) {
+    if (!isPosSalesBusinessYmdInInclusiveRange(d.key, params.startStr, params.endStr)) continue
     total += d.total
     completedCount += d.count
-    return { key: d.key, amount: d.total, label: d.key }
-  })
+    salesByDay.push({ key: d.key, amount: d.total, label: d.key })
+  }
 
   return {
     total,

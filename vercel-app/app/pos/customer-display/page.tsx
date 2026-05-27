@@ -327,6 +327,9 @@ export default function PosCustomerDisplayPage() {
                   <div className="bg-[#073763] px-3 py-2 text-center text-sm font-bold tracking-wide text-white">
                     THAI QR PAYMENT
                   </div>
+                  <div className="border-b border-[#d8e1ef] bg-[#f4f7fc] px-2 py-1.5 text-center text-[10px] font-semibold tracking-[0.04em] text-[#073763]">
+                    {resolvedQrType === "CREDIT_CARD" ? "CREDIT CARD QR" : "PROMPTPAY QR"}
+                  </div>
                   <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
                     {(resolvedQrType === "CREDIT_CARD"
                       ? ["VISA", "MASTERCARD", "UNIONPAY"]

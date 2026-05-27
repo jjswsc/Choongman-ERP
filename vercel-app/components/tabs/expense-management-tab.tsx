@@ -74,11 +74,21 @@ export function ExpenseManagementTab() {
   React.useEffect(() => {
     const tabParam = searchParams.get("tab")
     if (tabParam === "expenseRegister") setTab("expenseRegister")
-    if (tabParam === "expenseSearch") setTab("expenseSearch")
-    if (tabParam === "card") setTab("card")
+    else if (tabParam === "expenseSearch") setTab("expenseSearch")
+    else if (tabParam === "card") setTab("card")
+    else if (tabParam === "plan") setTab("plan")
+  }, [searchParams])
+
+  React.useEffect(() => {
+    const s = searchParams.get("startStr")
+    const e = searchParams.get("endStr")
+    if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) setStartStr(s)
+    if (e && /^\d{4}-\d{2}-\d{2}$/.test(e)) setEndStr(e)
   }, [searchParams])
   const [startStr, setStartStr] = React.useState(todayStrBkk)
   const [endStr, setEndStr] = React.useState(todayStrBkk)
+  /** 지출 등록(지급 예정) 저장 후 지급예정 탭 강제 재조회 */
+  const [planRefreshToken, setPlanRefreshToken] = React.useState(0)
   const [loading, setLoading] = React.useState(false)
   const [expensePlans, setExpensePlans] = React.useState<ExpenseAccrualPlanItem[]>([])
   const [purchasePlans, setPurchasePlans] = React.useState<ExpenseAccrualPlanItem[]>([])
@@ -211,11 +221,30 @@ export function ExpenseManagementTab() {
   const loadPlansRef = React.useRef(loadPlans)
   loadPlansRef.current = loadPlans
 
-  /** 지급예정 탭 진입 시 자동 조회. auth.role이 늦게 채워지면 재조회. 기간 변경 후에는 [조회] 버튼으로 불러옵니다. */
+  const handleAccrualSaved = React.useCallback(
+    (opts: { expenseDate: string }) => {
+      const d = String(opts.expenseDate || "").slice(0, 10)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        setStartStr(d)
+        setEndStr(d)
+      }
+      setTab("plan")
+      setPlanRefreshToken((t) => t + 1)
+      const q = new URLSearchParams({ tab: "plan" })
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        q.set("startStr", d)
+        q.set("endStr", d)
+      }
+      router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
+    },
+    [router]
+  )
+
+  /** 지급예정 탭 진입·등록 저장·auth.role 확정 시 조회. 기간만 바꾼 뒤에는 [조회] 버튼. */
   React.useEffect(() => {
     if (tab !== "plan") return
     void loadPlansRef.current()
-  }, [tab, auth?.role])
+  }, [tab, auth?.role, planRefreshToken])
 
   const openLinkBank = async (row: ExpenseAccrualPlanItem) => {
     const accountId = payBankById[row.id]
@@ -1173,7 +1202,7 @@ export function ExpenseManagementTab() {
         </TabsContent>
 
         <TabsContent value="expenseRegister" className={adminTabsContentCn}>
-          <WithdrawalManagementTab />
+          <WithdrawalManagementTab onAccrualSaved={handleAccrualSaved} />
         </TabsContent>
 
         <TabsContent value="expenseSearch" className={adminTabsContentCn}>

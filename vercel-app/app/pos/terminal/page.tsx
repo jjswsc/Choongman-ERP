@@ -162,7 +162,16 @@ import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } fro
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
-import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
+import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
+import {
+  subscribePosOrdersInsert,
+  subscribePosOrdersUpdate,
+  type PosRealtimeSubscribeStatus,
+} from '@/lib/supabase-client'
+import {
+  isMainPosRealtimeRecentlyActive,
+  resolveMainPosPollIntervalMs,
+} from '@/lib/pos-main-poll-interval'
 import {
   applyGrabCancelWatchRealtimeRow,
   syncGrabCancelWatchSnapshot,
@@ -213,6 +222,68 @@ function buildCustomerDisplayPaymentLines(
     })
   }
   return lines
+}
+
+function resolveCardPaymentAmountForPricing(payment?: CartPanelPaymentPayload | null): number {
+  if (!payment) return 0
+  return normalizePosPaymentTender({
+    paymentCard: payment.paymentCard,
+    paymentQr: payment.paymentQr,
+    paymentQrType: payment.paymentQrType,
+  }).paymentCard
+}
+
+function asPlainObject(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return v as Record<string, unknown>
+}
+
+function pickFirstNonEmptyText(
+  sources: Array<Record<string, unknown> | null>,
+  keys: readonly string[]
+): string {
+  for (const src of sources) {
+    if (!src) continue
+    for (const key of keys) {
+      const value = String(src[key] ?? '').trim()
+      if (value) return value
+    }
+  }
+  return ''
+}
+
+function extractKbankGenerateResponseInfo(raw: unknown): {
+  qrPayload: string
+  originalTxnId: string
+  txnNo: string
+  referenceId: string
+} {
+  const root = asPlainObject(raw)
+  const data = asPlainObject(root?.data)
+  const result = asPlainObject(root?.result)
+  const payment = asPlainObject(root?.payment)
+  const paymentInfo = asPlainObject(root?.paymentInfo)
+  const sources = [root, data, result, payment, paymentInfo]
+  return {
+    qrPayload: pickFirstNonEmptyText(sources, [
+      'qrPayload',
+      'qrCode',
+      'qrString',
+      'qrData',
+      'payload',
+      'qrRawData',
+      'qrRaw',
+      'thaiQr',
+    ]),
+    originalTxnId: pickFirstNonEmptyText(sources, [
+      'origPartnerTxnUid',
+      'originalTransactionId',
+      'transactionId',
+      'partnerTxnUid',
+    ]),
+    txnNo: pickFirstNonEmptyText(sources, ['txnNo', 'transactionNo']),
+    referenceId: pickFirstNonEmptyText(sources, ['refId', 'referenceId']),
+  }
 }
 
 /** 1–99만 영수증·주방전표에 노출 */
@@ -284,7 +355,6 @@ const MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX = 'pos_main_last_seen_order_id:'
 const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
 const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
 const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
-const MAIN_POS_POLL_INTERVAL_MS = 6000
 const MAIN_POS_META_SCAN_INTERVAL_MS = 30000
 const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
 
@@ -1888,6 +1958,29 @@ export default function PosTerminalPage() {
     [currentStoreId, isMainPosDevice]
   )
 
+  const recomputeRealtimeChannelHealthyRef = useRef<() => void>(() => {})
+  const scheduleRealtimeResubscribeRef = useRef<() => void>(() => {})
+
+  const makeRealtimeStatusHandler = useCallback(
+    (channelKey: string) => (status: PosRealtimeSubscribeStatus, err?: Error) => {
+      realtimeChannelStateRef.current.set(channelKey, status)
+      recomputeRealtimeChannelHealthyRef.current()
+      if (status === 'SUBSCRIBED') {
+        lastRealtimeOrderEventAtRef.current = Date.now()
+      }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        logPosPrintDebug('realtime_channel_degraded', {
+          channelKey,
+          status,
+          message: err?.message,
+        })
+        triggerMainPosPollNowRef.current?.()
+        scheduleRealtimeResubscribeRef.current()
+      }
+    },
+    [logPosPrintDebug]
+  )
+
   const runAutoPrintForAcceptedDeliveryOrder = useCallback(
     async (params: {
       orderId: number
@@ -2683,6 +2776,40 @@ export default function PosTerminalPage() {
   const mainPosPollInFlightRef = useRef(false)
   const lastMetaScanAtRef = useRef(0)
   const lastRealtimeOrderEventAtRef = useRef(0)
+  const realtimeChannelStateRef = useRef<Map<string, PosRealtimeSubscribeStatus>>(new Map())
+  const realtimeChannelHealthyRef = useRef(false)
+  const pendingEmptyItemsOrderIdsRef = useRef<Set<number>>(new Set())
+  const mainPosPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const realtimeResubscribeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [realtimeResubscribeTick, setRealtimeResubscribeTick] = useState(0)
+
+  const recomputeRealtimeChannelHealthy = useCallback(() => {
+    const states = [...realtimeChannelStateRef.current.values()]
+    if (!states.length) {
+      realtimeChannelHealthyRef.current = false
+      return
+    }
+    realtimeChannelHealthyRef.current =
+      states.some((s) => s === 'SUBSCRIBED') &&
+      !states.some((s) => s === 'CHANNEL_ERROR' || s === 'TIMED_OUT')
+  }, [])
+
+  const scheduleRealtimeResubscribe = useCallback(() => {
+    if (realtimeResubscribeTimerRef.current) clearTimeout(realtimeResubscribeTimerRef.current)
+    realtimeResubscribeTimerRef.current = setTimeout(() => {
+      realtimeChannelStateRef.current.clear()
+      realtimeChannelHealthyRef.current = false
+      setRealtimeResubscribeTick((n) => n + 1)
+    }, 3000)
+  }, [])
+
+  useEffect(() => {
+    recomputeRealtimeChannelHealthyRef.current = recomputeRealtimeChannelHealthy
+  }, [recomputeRealtimeChannelHealthy])
+
+  useEffect(() => {
+    scheduleRealtimeResubscribeRef.current = scheduleRealtimeResubscribe
+  }, [scheduleRealtimeResubscribe])
 
   const bumpLastSeenOrderId = useCallback(
     (orderIdRaw: unknown) => {
@@ -3536,10 +3663,12 @@ export default function PosTerminalPage() {
       const items = parsedItems.items
       /* items_json이 Realtime에 비어 있으면 폴링이 다시 잡도록 seen에 넣지 않음 */
       if (items.length === 0) {
+        pendingEmptyItemsOrderIdsRef.current.add(orderId)
         logPosPrintDebug('realtime_insert_skip_empty_items', { orderId })
         triggerMainPosPollNowRef.current?.()
         return
       }
+      pendingEmptyItemsOrderIdsRef.current.delete(orderId)
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(orderId)
       autoFocusIncomingDeliveryOrder({
@@ -3693,16 +3822,51 @@ export default function PosTerminalPage() {
         }
       }
     }
-    const channels = currentStoreCodeVariants
-      .map((storeCode) => subscribePosOrdersInsert(onInsert, { store: storeCode }))
-      .filter(Boolean)
+    const onUpdatePendingItems = (payload: { new?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      if (!pendingEmptyItemsOrderIdsRef.current.has(orderId)) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
+      if (!isCurrentStoreOrder(row.store_code)) return
+      const parsed = parseRealtimePosOrderRowItemsJson(row)
+      if (!parsed.ok || parsed.items.length === 0) return
+      pendingEmptyItemsOrderIdsRef.current.delete(orderId)
+      logPosPrintDebug('realtime_update_items_filled', { orderId })
+      triggerMainPosPollNowRef.current?.()
+    }
+
+    realtimeChannelStateRef.current.clear()
+    realtimeChannelHealthyRef.current = false
+    const channels = currentStoreCodeVariants.flatMap((storeCode) => {
+      const insertKey = `insert:${storeCode}`
+      const updateKey = `insert-items:${storeCode}`
+      const list = []
+      const chInsert = subscribePosOrdersInsert(onInsert, {
+        store: storeCode,
+        onStatus: makeRealtimeStatusHandler(insertKey),
+      })
+      if (chInsert) list.push(chInsert)
+      const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
+        store: storeCode,
+        onStatus: makeRealtimeStatusHandler(updateKey),
+      })
+      if (chUpdate) list.push(chUpdate)
+      return list
+    })
     return () => {
       channels.forEach((channel) => channel?.unsubscribe())
+      if (realtimeResubscribeTimerRef.current) {
+        clearTimeout(realtimeResubscribeTimerRef.current)
+        realtimeResubscribeTimerRef.current = null
+      }
     }
   }, [
     isMainPosDevice,
     currentStoreId,
     currentStoreCodeVariants,
+    realtimeResubscribeTick,
     autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnOrder,
     autoPrintKitchenSlipOnOrder,
@@ -3718,6 +3882,8 @@ export default function PosTerminalPage() {
     shouldTreatAsIncomingOrder,
     parseRealtimePosOrderRowItemsJson,
     buildDineInQtySnapshot,
+    isCurrentStoreOrder,
+    makeRealtimeStatusHandler,
   ])
 
   useEffect(() => {
@@ -4180,6 +4346,7 @@ export default function PosTerminalPage() {
               statusPaidLike: true,
               limit: 800,
               orderBy: 'id.desc',
+              pollMinimal: true,
             })
             if (!paymentReceiptScanSeededRef.current) {
               for (const order of paidLikeRows) {
@@ -4207,10 +4374,25 @@ export default function PosTerminalPage() {
             for (const order of candidates) {
               const oid = Number(order.id)
               printedPaymentReceiptIdsRef.current.add(oid)
-              const snap = order
               const adj = pricingAdjustments
               setTimeout(() => {
-                setReceiptData(receiptModalDataFromPosOrderForPayment(snap, adj, posReceiptLineOpts))
+                void (async () => {
+                  try {
+                    const fullRows = await getPosOrders({
+                      orderId: oid,
+                      storeCode: currentStoreId,
+                      strictStore: true,
+                    })
+                    const full = fullRows[0]
+                    if (!full) return
+                    if (!isPosOrderPaidLikeStatus(String(full.status ?? ''))) return
+                    if (posOrderPaymentSum(full) <= 0) return
+                    if (!(full.items || []).length) return
+                    setReceiptData(receiptModalDataFromPosOrderForPayment(full, adj, posReceiptLineOpts))
+                  } catch {
+                    /* ignore */
+                  }
+                })()
               }, staggerMs)
               staggerMs += 900
             }
@@ -4226,6 +4408,7 @@ export default function PosTerminalPage() {
           posBizDayScope: true,
           storeCode: currentStoreId,
           strictStore: true,
+          pollMinimal: true,
           ...(sinceId != null ? { sinceId } : {}),
         })
         if (!hasInitializedMainPosPollRef.current) {
@@ -4468,6 +4651,7 @@ export default function PosTerminalPage() {
               strictStore: true,
               limit: 800,
               orderBy: 'id.desc',
+              pollMinimal: true,
             })
             const wantMetaDineInAddonReceipt =
               autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
@@ -4601,12 +4785,31 @@ export default function PosTerminalPage() {
     triggerMainPosPollNowRef.current = () => {
       void poll()
     }
-    poll()
-    /* Realtime 미동작·지연 시에도 수 초 내 폴백 (45초는 현장에서 “안 찍힘”으로 느껴짐) */
-    const id = setInterval(poll, MAIN_POS_POLL_INTERVAL_MS)
+
+    let pollLoopCancelled = false
+
+    const scheduleNextPoll = () => {
+      if (pollLoopCancelled) return
+      const delayMs = resolveMainPosPollIntervalMs({
+        realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+        realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(lastRealtimeOrderEventAtRef.current),
+      })
+      mainPosPollTimerRef.current = setTimeout(() => {
+        void poll().finally(() => {
+          if (!pollLoopCancelled) scheduleNextPoll()
+        })
+      }, delayMs)
+    }
+
+    void poll().finally(() => scheduleNextPoll())
+
     return () => {
+      pollLoopCancelled = true
       triggerMainPosPollNowRef.current = null
-      clearInterval(id)
+      if (mainPosPollTimerRef.current) {
+        clearTimeout(mainPosPollTimerRef.current)
+        mainPosPollTimerRef.current = null
+      }
     }
   }, [
     isMainPosDevice,
@@ -4631,6 +4834,25 @@ export default function PosTerminalPage() {
     enrichPromoItemsWithOptionName,
     printReceiptNow,
   ])
+
+  /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId) return
+    const onResume = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      logPosPrintDebug('realtime_resume_reconnect', {})
+      realtimeChannelStateRef.current.clear()
+      realtimeChannelHealthyRef.current = false
+      setRealtimeResubscribeTick((n) => n + 1)
+      triggerMainPosPollNowRef.current?.()
+    }
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('online', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('online', onResume)
+    }
+  }, [isMainPosDevice, currentStoreId, logPosPrintDebug])
 
   useEffect(() => {
     if (selectedTableId) {
@@ -4791,34 +5013,39 @@ export default function PosTerminalPage() {
         .slice(0, 15)
 
       const data = (generate.data || {}) as Record<string, unknown>
+      const generatedInfo = extractKbankGenerateResponseInfo(data)
       const resolvedOrigTxnUid = String(
-        data.origPartnerTxnUid || data.originalTransactionId || data.transactionId || partnerTransactionId
+        generatedInfo.originalTxnId || partnerTransactionId
       )
         .trim()
         .slice(0, 15)
-      const resolvedTxnNo = String(data.txnNo || '').trim().slice(0, 20)
+      const resolvedTxnNo = String(generatedInfo.txnNo || '').trim().slice(0, 20)
       setKbankOpsTxnUid(partnerTransactionId)
       setKbankOpsOrigTxnUid(resolvedOrigTxnUid)
       if (resolvedTxnNo) setKbankOpsTxnNo(resolvedTxnNo)
-      const generatedQrPayload = String(
-        data.qrPayload ?? data.qrCode ?? data.qrString ?? data.qrData ?? data.payload ?? ''
-      ).trim()
-      if (generatedQrPayload) {
-        setLiveKbankQrPayload(generatedQrPayload)
-        setLiveKbankQrType(requestedQrType)
-        void executeLinkposDisplayQr({
-          qrPayload: generatedQrPayload,
-          amount: qrAmount,
-          reference1: String(context?.orderType || '').slice(0, 20),
-          reference2: String(context?.orderLabel || '').slice(0, 20),
-          storeCode: currentStoreId,
-        })
+      const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
+      if (!generatedQrPayload) {
+        setCustomerDisplayPaymentMessage('')
+        const msg =
+          (t('posPaymentQr') || 'QR') +
+          ` 응답 파싱 실패(${requestedQrType}): qrPayload/qrCode 값을 찾지 못했습니다.`
+        await appAlert(msg)
+        return { ok: false as const, message: msg }
       }
+      setLiveKbankQrPayload(generatedQrPayload)
+      setLiveKbankQrType(requestedQrType)
+      void executeLinkposDisplayQr({
+        qrPayload: generatedQrPayload,
+        amount: qrAmount,
+        reference1: String(context?.orderType || '').slice(0, 20),
+        reference2: String(context?.orderLabel || '').slice(0, 20),
+        storeCode: currentStoreId,
+      })
       setCustomerDisplayPaymentMessage(
         (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )
-      let originalTransactionId = String(data.originalTransactionId || data.transactionId || '').trim()
-      let refId = String(data.refId || data.referenceId || '').trim()
+      let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
+      let refId = String(generatedInfo.referenceId || '').trim()
 
       for (let i = 0; i < 3; i += 1) {
         const st = await executeKbankCheckStatus({
@@ -5870,7 +6097,7 @@ export default function PosTerminalPage() {
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -5984,7 +6211,7 @@ export default function PosTerminalPage() {
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -6737,7 +6964,7 @@ export default function PosTerminalPage() {
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -6889,7 +7116,7 @@ export default function PosTerminalPage() {
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
@@ -8129,6 +8356,9 @@ export default function PosTerminalPage() {
             <div className="overflow-hidden rounded-md border">
               <div className="bg-[#073763] px-3 py-2 text-center text-[13px] font-bold tracking-wide text-white">
                 THAI QR PAYMENT
+              </div>
+              <div className="border-b border-[#d8e1ef] bg-[#f4f7fc] px-2 py-1.5 text-center text-[10px] font-semibold tracking-[0.04em] text-[#073763]">
+                {effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? 'CREDIT CARD QR' : 'PROMPTPAY QR'}
               </div>
               <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
                 {(effectiveCustomerDisplayQrType === 'CREDIT_CARD'

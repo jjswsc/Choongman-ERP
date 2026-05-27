@@ -186,6 +186,22 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('- S Boneless')
     })
 
+    it('sidedish 꺼도 세트 구성 메뉴명(KIMCHI SOUP 등)은 옵션 칩으로 숨기지 않는다', () => {
+      const policy = { side: false, sidedish: false, part: true, flavor: true, other: true, size: true }
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Choongman Festival Set 2',
+          qty: 1,
+          promoComposeLines: ['GOLDEN FRIED CHICKEN x1', 'KIMCHI SOUP With Rice x1'],
+        },
+        noEsc,
+        close,
+        { optionGroupPrint: policy }
+      )
+      expect(html).toContain('GOLDEN FRIED CHICKEN')
+      expect(html).toContain('KIMCHI SOUP With Rice')
+    })
+
     it('sidedish 끄면 Kimchi는 주방 줄에서 제외하고 part/size는 유지한다', () => {
       const policy = {
         option: true,

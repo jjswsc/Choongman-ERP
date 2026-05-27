@@ -42,7 +42,13 @@ Vercel 환경 변수에 위 두 개를 추가하세요. 기존 `SUPABASE_URL`, `
 
 ## 3. 동작 방식
 
-- **Realtime**: `pos_orders` INSERT 시 WebSocket으로 즉시 수신 → 인쇄
-- **폴링 보조**: 45초마다 증분 조회(`sinceId`)로 Realtime 누락 분 보완
+- **Realtime**: `pos_orders` INSERT/UPDATE 시 WebSocket으로 즉시 수신 → 인쇄
+- **폴링 보조**(메인 POS만):
+  - Realtime **정상 구독·최근 이벤트 있음** → 약 **45초**마다 `getPosOrders?pollMinimal=1&sinceId=…` (경량 select)
+  - **채널 오류·90초 이상 무이벤트·NEXT_PUBLIC 미설정** → 약 **8초** 간격으로 가속
+  - `items_json` 빈 INSERT → UPDATE로 채워지면 즉시 1회 폴링, 채널 끊김 시 3초 후 재구독
+  - 탭 복귀·`online` 이벤트 시 재구독 + 즉시 폴링
 
-NEXT_PUBLIC_ 변수가 없으면 Realtime 구독 없이 폴링만 동작합니다.
+NEXT_PUBLIC_ 변수가 없으면 Realtime 구독 없이 **8초 폴링만** 동작합니다.
+
+상수: `lib/pos-main-poll-interval.ts`

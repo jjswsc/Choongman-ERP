@@ -14,6 +14,23 @@ function normalizeYmd(s: string): string {
   return s.trim().slice(0, 10)
 }
 
+/** POS 영업일 라벨(YYYY-MM-DD)이 start~end(포함) 안인지 — 손익·매출 관리 월 조회 클램프용 */
+export function isPosSalesBusinessYmdInInclusiveRange(
+  ymd: string,
+  startYmd: string,
+  endYmd: string
+): boolean {
+  const d = normalizeYmd(ymd)
+  const lo = normalizeYmd(startYmd)
+  const hi = normalizeYmd(endYmd)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !/^\d{4}-\d{2}-\d{2}$/.test(lo) || !/^\d{4}-\d{2}-\d{2}$/.test(hi)) {
+    return false
+  }
+  const loEff = lo <= hi ? lo : hi
+  const hiEff = lo <= hi ? hi : lo
+  return d >= loEff && d <= hiEff
+}
+
 /**
  * 영업일 라벨 startYmd~endYmd(포함)에 속할 수 있는 주문의 created_at UTC 봉투.
  * 매장별 영업시간이 다를 수 있으므로, 가능한 모든 영업시간 설정에 대한 일별 봉투를 합친다.

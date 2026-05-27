@@ -9,6 +9,20 @@ import { createClient, type RealtimeChannel } from '@supabase/supabase-js'
 
 let _client: ReturnType<typeof createClient> | null = null
 
+export type PosRealtimeSubscribeStatus =
+  | 'SUBSCRIBED'
+  | 'TIMED_OUT'
+  | 'CLOSED'
+  | 'CHANNEL_ERROR'
+  | string
+
+export type PosOrdersRealtimeSubscribeOptions = {
+  store?: string
+  tenantId?: string
+  /** subscribe() 콜백 — SUBSCRIBED / CHANNEL_ERROR 등 */
+  onStatus?: (status: PosRealtimeSubscribeStatus, err?: Error) => void
+}
+
 export function getSupabaseClient() {
   if (typeof window === 'undefined') return null
   if (_client) return _client
@@ -19,39 +33,53 @@ export function getSupabaseClient() {
   return _client
 }
 
+function buildPosOrdersChannelFilter(options?: PosOrdersRealtimeSubscribeOptions): string | undefined {
+  if (options?.tenantId) return `tenant_id=eq.${options.tenantId}`
+  if (options?.store) return `store_code=eq.${options.store}`
+  return undefined
+}
+
+function attachSubscribeStatus(
+  channel: RealtimeChannel,
+  onStatus?: PosOrdersRealtimeSubscribeOptions['onStatus']
+): RealtimeChannel {
+  channel.subscribe((status, err) => {
+    onStatus?.(status, err ?? undefined)
+  })
+  return channel
+}
+
 export function subscribePosOrdersInsert(
   onInsert: (payload: { new: Record<string, unknown> }) => void,
-  options?: { store?: string; tenantId?: string }
+  options?: PosOrdersRealtimeSubscribeOptions
 ): RealtimeChannel | null {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-  const filter = options?.tenantId
-    ? `tenant_id=eq.${options.tenantId}`
-    : options?.store
-      ? `store_code=eq.${options.store}`
-      : undefined
+  const filter = buildPosOrdersChannelFilter(options)
   const channel = supabase
-    .channel(`pos-orders-insert-${options?.tenantId || options?.store || "all"}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) }, onInsert)
-    .subscribe()
-  return channel
+    .channel(`pos-orders-insert-${options?.tenantId || options?.store || 'all'}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) },
+      onInsert
+    )
+  return attachSubscribeStatus(channel, options?.onStatus)
 }
 
 /** 결제 반영 등 pos_orders UPDATE (메인 포스에서 결제 영수증 자동 인쇄용) */
 export function subscribePosOrdersUpdate(
   onUpdate: (payload: { new: Record<string, unknown>; old?: Record<string, unknown> }) => void,
-  options?: { store?: string; tenantId?: string }
+  options?: PosOrdersRealtimeSubscribeOptions
 ): RealtimeChannel | null {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-  const filter = options?.tenantId
-    ? `tenant_id=eq.${options.tenantId}`
-    : options?.store
-      ? `store_code=eq.${options.store}`
-      : undefined
+  const filter = buildPosOrdersChannelFilter(options)
   const channel = supabase
-    .channel(`pos-orders-update-${options?.tenantId || options?.store || "all"}`)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) }, onUpdate)
-    .subscribe()
-  return channel
+    .channel(`pos-orders-update-${options?.tenantId || options?.store || 'all'}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) },
+      onUpdate
+    )
+  return attachSubscribeStatus(channel, options?.onStatus)
 }

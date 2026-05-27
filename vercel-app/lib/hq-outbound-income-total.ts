@@ -6,6 +6,7 @@ import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } fr
 import { STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { buildStoreFieldOrIlikeFragment, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
+import { getBangkokDateRangeUtc } from '@/lib/bangkok-time'
 import {
   type OrderCartLine,
   formatDateBangkok,
@@ -83,8 +84,29 @@ export function buildHqWarehouseOutboundStockLogsFilter(params: {
   return f
 }
 
+/** stock_logs.log_date → 방콕 달력 YYYY-MM-DD 가 start~end(포함) 안인지 — 손익·출고 관리 공통 */
+export function isOutboundLogDateInBangkokYmdRange(
+  logDateRaw: string | null | undefined,
+  startYmd: string,
+  endYmd: string
+): boolean {
+  if (!logDateRaw) return false
+  const d = new Date(logDateRaw)
+  if (Number.isNaN(d.getTime())) return false
+  const ymd = formatDateBangkok(d)
+  const lo = startYmd.trim().slice(0, 10)
+  const hi = endYmd.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd) || !/^\d{4}-\d{2}-\d{2}$/.test(lo) || !/^\d{4}-\d{2}-\d{2}$/.test(hi)) {
+    return false
+  }
+  const loEff = lo <= hi ? lo : hi
+  const hiEff = lo <= hi ? hi : lo
+  return ymd >= loEff && ymd <= hiEff
+}
+
 function buildOutboundLogDateFilter(startStr: string, endStr: string, includeSoftDeleteFilter: boolean): string {
-  const base = `log_date=gte.${startStr}&log_date=lte.${endStr}T23:59:59.999`
+  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
+  const base = `log_date=gte.${encodeURIComponent(dayStartUtcIso)}&log_date=lt.${encodeURIComponent(nextDayStartUtcIso)}`
   return includeSoftDeleteFilter ? `${base}&is_deleted=is.false` : base
 }
 
@@ -223,19 +245,15 @@ export async function loadHqOutboundProcessedLines(params: {
   }
   const orderCartByOrderId = await loadOrderCartsById([...orderIds])
 
-  const startDate = new Date(startStr)
-  startDate.setHours(0, 0, 0, 0)
-  const endDate = new Date(endStr)
-  endDate.setHours(23, 59, 59, 999)
-
   const lines: HqOutboundProcessedLine[] = []
 
   for (const row of allLogs) {
     const type = String(row.log_type || '')
     if (type !== 'Outbound' && type !== 'ForceOutbound') continue
 
+    if (!isOutboundLogDateInBangkokYmdRange(row.log_date, startStr, endStr)) continue
     const rowDate = new Date(row.log_date || '')
-    if (isNaN(rowDate.getTime()) || rowDate < startDate || rowDate > endDate) continue
+    if (Number.isNaN(rowDate.getTime())) continue
 
     const target = String(row.vendor_target || '').trim()
     if (storeFilter && storeFilter !== 'All') {

@@ -19,16 +19,17 @@ import { expandGrabStoreMapLinkedCodes, parseGrabStoreMap } from '@/lib/grab-sto
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { POS_ORDER_FULL_SELECT, POS_ORDER_POLL_MINIMAL_SELECT } from '@/lib/pos-order-select'
 
 async function selectPosOrders(
   filter: string,
-  opts: { limit?: number; order?: string },
+  opts: { limit?: number; order?: string; select?: string },
   logLabel: string
 ): Promise<unknown> {
   return supabaseSelectFilterStrippingUnknownColumns(
     'pos_orders',
     filter,
-    { ...opts, select: POS_ORDER_SELECT },
+    { ...opts, select: opts.select ?? POS_ORDER_SELECT },
     logLabel
   )
 }
@@ -47,8 +48,7 @@ async function resolveBearerCaller(
   }
 }
 
-const POS_ORDER_SELECT =
-  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,card_fee_amt,card_fee_mode,card_rate,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
+const POS_ORDER_SELECT = POS_ORDER_FULL_SELECT
 
 function addStoreVariants(set: Set<string>, raw: string) {
   const v = String(raw || '').trim()
@@ -251,6 +251,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const debugPosOrders =
     searchParams.get('debugPosOrders') === '1' || searchParams.get('debugPosOrders') === 'true'
+  const pollMinimal =
+    searchParams.get('pollMinimal') === '1' || searchParams.get('pollMinimal') === 'true'
+  const orderIdParam = Number(searchParams.get('orderId') || searchParams.get('id') || 0)
+  const rowSelect =
+    orderIdParam > 0
+      ? POS_ORDER_SELECT
+      : pollMinimal
+        ? POS_ORDER_POLL_MINIMAL_SELECT
+        : POS_ORDER_SELECT
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
@@ -369,6 +378,7 @@ export async function GET(request: NextRequest) {
       let idRows = (await selectPosOrders(idFilters.join('&'), {
         order: 'created_at.desc',
         limit: 1,
+        select: rowSelect,
       }, 'getPosOrders/id')) as typeof rows
 
       if (!strictStore && !idRows?.length && storeFilterCandidates.length > 1) {
@@ -377,6 +387,7 @@ export async function GET(request: NextRequest) {
           idRows = (await selectPosOrders(altFilter, {
             order: 'created_at.desc',
             limit: 1,
+            select: rowSelect,
           }, 'getPosOrders/id-alt')) as typeof rows
           if (idRows?.length) break
         }
@@ -412,6 +423,7 @@ export async function GET(request: NextRequest) {
         rows = (await selectPosOrders(filterStr, {
           order: listOrder,
           limit: listLimit,
+          select: rowSelect,
         }, 'getPosOrders/list')) as typeof rows
 
         if (!strictStore && storeFilterCandidates.length > 1) {
@@ -427,6 +439,7 @@ export async function GET(request: NextRequest) {
               const altRows = (await selectPosOrders(altFilter, {
                 order: listOrder,
                 limit: listLimit,
+                select: rowSelect,
               }, 'getPosOrders/list-alt')) as typeof rows
               for (const row of altRows || []) {
                 const id = Number(row.id || 0)
@@ -441,6 +454,7 @@ export async function GET(request: NextRequest) {
           const fallbackRows = (await selectPosOrders(fallbackFilterNoStore, {
             order: listOrder,
             limit: listLimit,
+            select: rowSelect,
           }, 'getPosOrders/list-fallback')) as typeof rows
           const candidateKeys = new Set<string>()
           addStoreVariants(candidateKeys, primaryStoreFilter)
@@ -490,6 +504,7 @@ export async function GET(request: NextRequest) {
         rows = (await selectPosOrders('', {
           order: 'created_at.desc',
           limit: 10000,
+          select: rowSelect,
         }, 'getPosOrders/list-all')) as typeof rows
       }
     }

@@ -50,7 +50,7 @@ Supabase **PostgREST Egress**(DB → 앱으로 나가는 데이터량)를 줄이
 
 | 구간 | 원인 | 개선 아이디어 |
 |------|------|----------------|
-| **getPosOrders** | 모든 행에 `items_json` 포함 (주문별 메뉴 JSON이 큼) | 목록 전용 API는 `items_json` 제외, 상세/영수증용만 전체 조회 또는 단건 API로 분리 |
+| **getPosOrders** | 모든 행에 `items_json` 포함 (주문별 메뉴 JSON이 큼) | 메인 POS 폴링은 `pollMinimal=1`(linkpos 등 제외). 상세/영수증은 단건 `orderId` 조회 |
 | **posSalesByMenu** | `pos_orders`에서 `items_json` 1만 건 조회 후 파싱 | DB에서 메뉴별 집계 RPC로 대체 시 행 수·데이터량 대폭 감소 |
 | **getAppData** (stock_logs fallback) | 5만 행 `item_code,qty` | RPC `get_store_stock` 사용이 우선, fallback도 기간/장소 제한 강화 |
 | **getBankTransactions** | limit 50000, 많은 컬럼 | 기간·필터 필수 + 페이지네이션 또는 select 최소화 |

@@ -28,6 +28,7 @@ import {
 } from '@/lib/pos-coupon-server'
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
+import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
@@ -202,8 +203,14 @@ export async function POST(req: NextRequest) {
     const packagingFee = Math.max(0, Number(body.packagingFee ?? 0))
     const paymentCash = Math.max(0, Number(body.paymentCash ?? 0))
     const paymentCashTendered = Math.max(0, Number(body.paymentCashTendered ?? body.payment_cash_tendered ?? 0))
-    const paymentCard = Math.max(0, Number(body.paymentCard ?? 0))
-    const paymentQr = Math.max(0, Number(body.paymentQr ?? 0))
+    const paymentQrType = String(body.paymentQrType ?? body.payment_qr_type ?? '').trim()
+    const normalizedTender = normalizePosPaymentTender({
+      paymentCard: Number(body.paymentCard ?? 0),
+      paymentQr: Number(body.paymentQr ?? 0),
+      paymentQrType,
+    })
+    const paymentCard = normalizedTender.paymentCard
+    const paymentQr = normalizedTender.paymentQr
     const paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
     const paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
       paymentOther,

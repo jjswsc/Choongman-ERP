@@ -1,3 +1,5 @@
+import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
+
 /** 손님 영수증 — 현금 받은 금액·거스름돈 표시 */
 
 export type CashTenderReceiptLines = {
@@ -34,6 +36,7 @@ export type ReceiptPaymentSnapshotForPrint = {
   paymentCash?: number
   paymentCard?: number
   paymentQr?: number
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
   paymentOther?: number
   paymentOtherBreakdown?: import('@/lib/pos-payment-other-breakdown').PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
@@ -73,10 +76,16 @@ export function posOrderPaymentFieldsFromSnapshot(payment?: ReceiptPaymentSnapsh
     }
   }
   const tendered = Math.max(0, Number(payment.paymentCashTendered ?? 0) || 0)
+  const normalizedTender = normalizePosPaymentTender({
+    paymentCard: payment.paymentCard,
+    paymentQr: payment.paymentQr,
+    paymentQrType: payment.paymentQrType,
+  })
   return {
     paymentCash: Math.max(0, Number(payment.paymentCash ?? 0) || 0),
-    paymentCard: Math.max(0, Number(payment.paymentCard ?? 0) || 0),
-    paymentQr: Math.max(0, Number(payment.paymentQr ?? 0) || 0),
+    paymentCard: normalizedTender.paymentCard,
+    paymentQr: normalizedTender.paymentQr,
+    ...(payment.paymentQrType ? { paymentQrType: payment.paymentQrType } : {}),
     paymentOther: Math.max(0, Number(payment.paymentOther ?? 0) || 0),
     ...(payment.paymentOtherBreakdown ? { paymentOtherBreakdown: payment.paymentOtherBreakdown } : {}),
     paymentDeliveryApp: Math.max(0, Number(payment.paymentDeliveryApp ?? 0) || 0),

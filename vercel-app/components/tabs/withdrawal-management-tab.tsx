@@ -116,7 +116,12 @@ const CATEGORY_MAIN_OPTIONS = [
   { value: "dividend", labelKey: "wm_dividend", sub: [] },
 ] as const
 
-export function WithdrawalManagementTab() {
+type WithdrawalManagementTabProps = {
+  /** 지출 발생(지급 예정) 저장 후 상위에서 지급예정 탭·기간 동기화 */
+  onAccrualSaved?: (opts: { expenseDate: string }) => void
+}
+
+export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagementTabProps = {}) {
   const { lang } = useLang()
   const t = useT(lang)
   const tt = React.useCallback((key: string, fallback: string) => {
@@ -642,7 +647,7 @@ export function WithdrawalManagementTab() {
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
         hasAppliedParams.current = false
-        router.replace("/admin/expense-management?tab=plan")
+        onAccrualSaved?.({ expenseDate: transDate })
         await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
       } else {
         const res = await addExpenseAccrual({
@@ -667,6 +672,7 @@ export function WithdrawalManagementTab() {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
         }
+        const queued = (res as { queued?: boolean }).queued === true
         setAmount("")
         setMemo("")
         setPayeeCode("")
@@ -674,6 +680,16 @@ export function WithdrawalManagementTab() {
         setAccrualAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
+        if (queued) {
+          await appAlert(
+            tt(
+              "expenseAccrualQueuedOffline",
+              "Saved to this device offline queue. It will appear in the payment plan tab after the network syncs."
+            )
+          )
+          return
+        }
+        onAccrualSaved?.({ expenseDate: transDate })
         await appAlert(tt("wm_accrualSuccess", "Saved. Please check in the payment plan tab."))
       }
     } finally {

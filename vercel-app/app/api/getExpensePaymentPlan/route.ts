@@ -135,10 +135,20 @@ export async function GET(request: NextRequest) {
     const canSeeAllStores = callerSeesAllAccrualStores(userRole)
     const scopedAllowedStores = canSeeAllStores ? [] : allowedStores
 
+    /** 기간이 있으면 DB에서 먼저 걸러 5000건 상한으로 당일 등록이 누락되지 않게 함 */
+    const accrualFilter =
+      startStr && endStr
+        ? `or=(and(expense_date.gte.${startStr},expense_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}))`
+        : startStr
+          ? `or=(expense_date.gte.${startStr},due_date.gte.${startStr})`
+          : endStr
+            ? `or=(expense_date.lte.${endStr},due_date.lte.${endStr})`
+            : 'id=gt.0'
+
     const [accrualRows, payableRows] = await Promise.all([
-      supabaseSelectFilter('expense_accruals', 'id=gt.0', {
+      supabaseSelectFilter('expense_accruals', accrualFilter, {
         select: 'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls',
-        order: 'due_date.asc',
+        order: 'due_date.asc,expense_date.asc,id.desc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
       supabaseSelectFilter('payable_transactions', 'id=gt.0', {

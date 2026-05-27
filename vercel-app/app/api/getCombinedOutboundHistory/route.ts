@@ -14,7 +14,10 @@ import {
   unitPriceFromOutboundLogSnapshot,
 } from '@/lib/outbound-order-line-match'
 import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
-import { buildHqWarehouseOutboundStockLogsFilter } from '@/lib/hq-outbound-income-total'
+import {
+  buildHqWarehouseOutboundStockLogsFilter,
+  isOutboundLogDateInBangkokYmdRange,
+} from '@/lib/hq-outbound-income-total'
 
 export const dynamic = 'force-dynamic'
 
@@ -166,11 +169,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const startDate = new Date(startStr)
-    startDate.setHours(0, 0, 0, 0)
-    const endDate = new Date(endStr)
-    endDate.setHours(23, 59, 59, 999)
-
     const list: OutboundHistoryItem[] = []
 
     // 승인된 주문 중 아직 수령 전인 건도 목록에 포함 (주문 직후 인보이스 인쇄 가능)
@@ -261,8 +259,9 @@ export async function GET(request: NextRequest) {
       const type = String(row.log_type || '')
       if (type !== 'Outbound' && type !== 'ForceOutbound') continue
 
+      if (!isOutboundLogDateInBangkokYmdRange(row.log_date, startStr, endStr)) continue
       const rowDate = new Date(row.log_date || '')
-      if (isNaN(rowDate.getTime()) || rowDate < startDate || rowDate > endDate) continue
+      if (Number.isNaN(rowDate.getTime())) continue
 
       const target = String(row.vendor_target || '')
       if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처' && target !== vendorFilter) continue

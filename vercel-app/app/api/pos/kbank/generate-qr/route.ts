@@ -63,6 +63,11 @@ export async function POST(req: NextRequest) {
     )
     const qrTypeInfo = normalizeQrType(body.qrType)
     const qrType = qrTypeInfo.normalized || qrTypeInfo.raw || undefined
+    const payloadObj =
+      body.payload && typeof body.payload === 'object'
+        ? (body.payload as Record<string, unknown>)
+        : undefined
+    const terminalId = String(payloadObj?.terminalId || process.env.KBANK_TERMINAL_ID || '').trim()
 
     if (amount <= 0) {
       return withCorsHeaders(
@@ -84,6 +89,18 @@ export async function POST(req: NextRequest) {
         )
       )
     }
+    if (qrTypeInfo.normalized === 'CREDIT_CARD' && !terminalId) {
+      return withCorsHeaders(
+        NextResponse.json(
+          {
+            success: false,
+            statusCode: 'KBANK_TERMINAL_ID_REQUIRED',
+            message: 'Credit Card QR 생성에는 terminalId가 필요합니다. KBANK_TERMINAL_ID를 설정해 주세요.',
+          },
+          { status: 422 }
+        )
+      )
+    }
 
     const payload: KbankGenerateQrRequest = {
       amount,
@@ -95,10 +112,7 @@ export async function POST(req: NextRequest) {
       reference2: String(body.reference2 || '').trim() || undefined,
       reference3: String(body.reference3 || '').trim() || undefined,
       reference4: String(body.reference4 || '').trim() || undefined,
-      payload:
-        body.payload && typeof body.payload === 'object'
-          ? (body.payload as Record<string, unknown>)
-          : undefined,
+      payload: payloadObj,
     }
 
     const requestedAt = new Date().toISOString()

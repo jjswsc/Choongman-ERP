@@ -9547,6 +9547,7 @@ export interface PosOrder {
   paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
   paymentOther?: number
   /** payment_other 세부(트루머니·위챗·관리자 지갑 등). 합계는 payment_other 와 일치 */
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
@@ -9662,6 +9663,8 @@ export async function getPosOrders(params?: {
   orderBy?: 'created_at.desc' | 'id.desc'
   /** 목록 조회 시 행 수 상한(서버에서 최대 2000으로 캡) */
   limit?: number
+  /** 메인 POS 폴링용 — linkpos 등 대형 컬럼 제외 select */
+  pollMinimal?: boolean
 }): Promise<PosOrder[]> {
   const q = new URLSearchParams()
   if (params?.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
@@ -9676,6 +9679,7 @@ export async function getPosOrders(params?: {
   if (params?.statusPaidLike) q.set('statusPaidLike', '1')
   if (params?.orderBy) q.set('orderBy', params.orderBy)
   if (params?.limit != null && params.limit > 0) q.set('limit', String(params.limit))
+  if (params?.pollMinimal) q.set('pollMinimal', '1')
   const res = await apiFetchWithOffline('/api/getPosOrders?' + q.toString())
   const data = await res.json().catch(() => null)
   if (!Array.isArray(data)) return []
@@ -10128,6 +10132,7 @@ export async function updatePosOrder(params: {
   paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
   paymentOther?: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
