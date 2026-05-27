@@ -1,3 +1,4 @@
+import { isChannelRevenueAccountCode } from '@/lib/bank-import-deposit-category'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const POS_REVENUE_DEPOSIT_CATEGORIES = new Set([
@@ -57,15 +58,26 @@ export async function assertBankDepositAllowedForChannelSettlement(
   }
 }
 
-/** POS 매출 이중 위험: 해당 매장에 완료 POS 주문이 있으면 revenue_* 입금 분류 차단 */
+/** POS 매출 이중 위험: 해당 매장에 완료 POS 주문이 있으면 revenue_* 입금 분류 차단 (채널 세부 GL은 허용) */
 export async function assertPosRevenueDepositCategorySafe(params: {
   storeName: string
   category: string
+  accountSubjectId?: number | null
 }): Promise<void> {
   const cat = String(params.category || '').toLowerCase()
   if (!POS_REVENUE_DEPOSIT_CATEGORIES.has(cat)) return
   const store = String(params.storeName || '').trim()
   if (!store) return
+
+  const asid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
+  if (Number.isFinite(asid) && asid > 0) {
+    const subjectRows = (await supabaseSelectFilter('account_subjects', `id=eq.${Math.floor(asid)}`, {
+      select: 'code',
+      limit: 1,
+    })) as { code?: string }[] | null
+    const code = String(subjectRows?.[0]?.code ?? '').trim()
+    if (isChannelRevenueAccountCode(code)) return
+  }
 
   const orders = (await supabaseSelectFilter(
     'pos_orders',

@@ -85,6 +85,8 @@ export default function PosCustomerDisplayPage() {
   const t = useT(effectiveLang)
 
   const current = state?.kind || "idle"
+  const resolvedQrType: "THAI_QR" | "CREDIT_CARD" =
+    String(state?.qrType || "").trim().toUpperCase() === "CREDIT_CARD" ? "CREDIT_CARD" : "THAI_QR"
   const resolvedIdleMedia = React.useMemo(() => {
     const mtRaw = state?.idleMediaType ?? settingsIdleMediaType
     const mt = mtRaw === "image" || mtRaw === "video" ? mtRaw : "none"
@@ -320,11 +322,30 @@ export default function PosCustomerDisplayPage() {
             <h2 className="mb-2 text-3xl font-semibold">{state?.title || (t("posCustomerQrTitle") || "QR 코드")}</h2>
             {state?.message ? <p className="mb-4 max-w-lg text-lg text-white/85">{state.message}</p> : null}
             {String(state?.qrPayload || "").trim() ? (
-              <img
-                src={`https://quickchart.io/qr?text=${encodeURIComponent(String(state?.qrPayload || ""))}&size=360&margin=1`}
-                alt="Customer QR"
-                className="h-72 w-72 rounded-lg bg-white p-2"
-              />
+              <div className="w-full max-w-[520px] rounded-xl bg-white p-3">
+                <div className="overflow-hidden rounded-lg border">
+                  <div className="bg-[#073763] px-3 py-2 text-center text-sm font-bold tracking-wide text-white">
+                    THAI QR PAYMENT
+                  </div>
+                  <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
+                    {(resolvedQrType === "CREDIT_CARD"
+                      ? ["VISA", "MASTERCARD", "UNIONPAY"]
+                      : ["PROMPTPAY"]
+                    ).map((label) => (
+                      <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-center">
+                  <img
+                    src={`https://quickchart.io/qr?text=${encodeURIComponent(String(state?.qrPayload || ""))}&size=360&margin=1`}
+                    alt="Customer QR"
+                    className="h-72 w-72 rounded-lg bg-white p-2"
+                  />
+                </div>
+              </div>
             ) : (
               <p className="text-xl opacity-80">{t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}</p>
             )}

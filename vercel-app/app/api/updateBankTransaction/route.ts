@@ -159,7 +159,14 @@ export async function POST(request: NextRequest) {
             finalStoreName ||
             String(existing[0].store_name || '').trim() ||
             String(existing[0].store || '').trim()
-          await assertPosRevenueDepositCategorySafe({ storeName: posStore, category: nextCat })
+          await assertPosRevenueDepositCategorySafe({
+            storeName: posStore,
+            category: nextCat,
+            accountSubjectId:
+              finalAccountSubjectId != null && Number(finalAccountSubjectId) > 0
+                ? Number(finalAccountSubjectId)
+                : null,
+          })
         }
       } catch (e) {
         if (e instanceof BankSettlementGuardError) {

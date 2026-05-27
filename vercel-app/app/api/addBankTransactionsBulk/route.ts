@@ -211,7 +211,14 @@ export async function POST(request: NextRequest) {
       if (transType === 'deposit' && validCategory !== 'receivable_receive') {
         try {
           const posStore = effectiveStoreNameForReceivable || store || userStore
-          await assertPosRevenueDepositCategorySafe({ storeName: posStore, category: validCategory })
+          await assertPosRevenueDepositCategorySafe({
+            storeName: posStore,
+            category: validCategory,
+            accountSubjectId:
+              accountSubjectId != null && !isNaN(Number(accountSubjectId))
+                ? Number(accountSubjectId)
+                : null,
+          })
         } catch (e) {
           if (e instanceof BankSettlementGuardError) {
             if (e.code === 'POS_REVENUE_DEPOSIT_DOUBLE_RISK') {

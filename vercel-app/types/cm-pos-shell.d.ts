@@ -91,6 +91,7 @@ declare global {
         title?: string
         message?: string
         qrPayload?: string
+        qrType?: "THAI_QR" | "CREDIT_CARD"
         items?: Array<{ name: string; qty: number; amount: number }>
         totalAmount?: number
         breakdown?: {
@@ -126,6 +127,7 @@ declare global {
           title?: string
           message?: string
           qrPayload?: string
+          qrType?: "THAI_QR" | "CREDIT_CARD"
           items?: Array<{ name: string; qty: number; amount: number }>
           totalAmount?: number
           breakdown?: {

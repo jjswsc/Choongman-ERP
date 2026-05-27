@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isChannelRevenueAccountCode,
   isNonRetryableBankBusinessErrorMessage,
   isPosRevenueDepositCategory,
-  normalizeBulkImportDepositCategory,
 } from '@/lib/bank-import-deposit-category'
 
 describe('bank-import-deposit-category', () => {
@@ -11,13 +11,10 @@ describe('bank-import-deposit-category', () => {
     expect(isPosRevenueDepositCategory('receivable_receive')).toBe(false)
   })
 
-  it('normalizes revenue_* bulk import to receivable_receive with store', () => {
-    expect(
-      normalizeBulkImportDepositCategory({
-        category: 'revenue_delivery',
-        accountStore: 'CM Union Mall',
-      })
-    ).toEqual({ category: 'receivable_receive', storeName: 'CM Union Mall' })
+  it('allows channel GL codes used in statement import', () => {
+    expect(isChannelRevenueAccountCode('4111')).toBe(true)
+    expect(isChannelRevenueAccountCode('4120')).toBe(true)
+    expect(isChannelRevenueAccountCode('4110')).toBe(false)
   })
 
   it('flags non-retryable bank guard messages', () => {

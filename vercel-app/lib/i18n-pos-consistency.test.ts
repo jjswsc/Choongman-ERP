@@ -3,11 +3,41 @@ import { i18n } from '@/lib/i18n'
 
 const REQUIRED_POS_KEYS = ['posOptionDefault', 'posOptionGroupSize', 'posOptionGroupPart'] as const
 
+const REQUIRED_KBANK_POS_KEYS = [
+  'posQrTypeLabel',
+  'posQrTypeThai',
+  'posQrTypeCredit',
+  'posKbankFollowupTitle',
+  'posKbankOrigTxnUidHint',
+  'posKbankTxnNoHint',
+  'posKbankTerminalIdLabel',
+  'posKbankTerminalIdHint',
+  'posKbankGenerateFirstAlert',
+  'posKbankPartnerTxnUidLabel',
+  'posKbankOrigTxnUidLabel',
+  'posKbankTxnNoLabel',
+  'posKbankInquiry',
+  'posKbankCancel',
+  'posKbankVoid',
+  'posKbankSettlement',
+  'posStaffQrMonitor',
+] as const
+
 describe('POS i18n consistency', () => {
   it('all locales have required POS keys', () => {
     const locales = Object.entries(i18n) as Array<[string, Record<string, string>]>
     for (const [locale, dict] of locales) {
       for (const key of REQUIRED_POS_KEYS) {
+        const value = String(dict[key] ?? '').trim()
+        expect(value, `${locale}.${key} missing`).not.toBe('')
+      }
+    }
+  })
+
+  it('all locales have required KBank POS keys', () => {
+    const locales = Object.entries(i18n) as Array<[string, Record<string, string>]>
+    for (const [locale, dict] of locales) {
+      for (const key of REQUIRED_KBANK_POS_KEYS) {
         const value = String(dict[key] ?? '').trim()
         expect(value, `${locale}.${key} missing`).not.toBe('')
       }

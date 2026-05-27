@@ -1,10 +1,26 @@
-/** POS 자동분개 매장 입금 — revenue_* 는 4110 이중 위험, CSV·일괄 저장은 매출 수령으로 통일 */
+/** POS 자동분개 매장 입금 — revenue_* 는 4110 이중 위험(단, 채널 세부 계정 4111·4120 등은 예외) */
 export const POS_REVENUE_DEPOSIT_CATEGORIES = [
   'revenue_delivery',
   'revenue_card',
   'revenue_qr',
   'revenue_cash',
 ] as const
+
+/** suggest-deposit-from-memo·적요 규칙과 동일 — 통장 UI·가드에서 채널별 매출 계정 */
+export const CHANNEL_REVENUE_GL_CODES = new Set([
+  '4111',
+  '4112',
+  '4113',
+  '4114',
+  '4115',
+  '4120',
+  '4121',
+  '4122',
+  '4123',
+  '4124',
+  '4130',
+  '4140',
+])
 
 export type PosRevenueDepositCategory = (typeof POS_REVENUE_DEPOSIT_CATEGORIES)[number]
 
@@ -13,20 +29,9 @@ export function isPosRevenueDepositCategory(category: string | undefined | null)
   return (POS_REVENUE_DEPOSIT_CATEGORIES as readonly string[]).includes(c)
 }
 
-/**
- * Statement 일괄 저장: 입금이 revenue_* 이면 매출 수령 + 매장명으로 정규화(서버 정책과 동일).
- */
-export function normalizeBulkImportDepositCategory(params: {
-  category: string
-  storeName?: string
-  accountStore?: string
-}): { category: string; storeName?: string } {
-  const cat = String(params.category || '').trim().toLowerCase()
-  if (!isPosRevenueDepositCategory(cat)) {
-    return { category: cat, storeName: params.storeName }
-  }
-  const store = String(params.storeName || params.accountStore || '').trim() || undefined
-  return { category: 'receivable_receive', storeName: store }
+export function isChannelRevenueAccountCode(code: string | undefined | null): boolean {
+  const c = String(code || '').trim()
+  return CHANNEL_REVENUE_GL_CODES.has(c)
 }
 
 /** 오프라인 큐에 넣어도 재시도해도 성공하지 않는 통장 API 거절 메시지 */

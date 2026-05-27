@@ -43,8 +43,11 @@ import {
   getPosDeliveryApps,
   getPosBusinessDaySettings,
   getPosTaxInvoiceRecipients,
+  executeKbankCancelQr,
   executeKbankCheckStatus,
   executeKbankGenerateQr,
+  executeKbankSettlement,
+  executeKbankVoidPayment,
   executeLinkposDisplayQr,
   executeLinkposPayment,
   grabCancelOrderByStoreApi,
@@ -740,7 +743,14 @@ export default function PosTerminalPage() {
   const [customerDisplayPaymentMessage, setCustomerDisplayPaymentMessage] = useState('')
   const [customerDisplayQrPayload, setCustomerDisplayQrPayload] = useState('')
   const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
+  const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
   const [staffKbankQrDataUrl, setStaffKbankQrDataUrl] = useState('')
+  const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
+  const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
+  const [kbankOpsOrigTxnUid, setKbankOpsOrigTxnUid] = useState('')
+  const [kbankOpsTxnNo, setKbankOpsTxnNo] = useState('')
+  const [kbankOpsTerminalId, setKbankOpsTerminalId] = useState('')
+  const [kbankOpsLastResult, setKbankOpsLastResult] = useState('')
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
@@ -2470,6 +2480,11 @@ export default function PosTerminalPage() {
   useEffect(() => {
     if (isKbankPilotStore) return
     setLiveKbankQrPayload('')
+    setLiveKbankQrType('THAI_QR')
+    setKbankOpsTxnUid('')
+    setKbankOpsOrigTxnUid('')
+    setKbankOpsTxnNo('')
+    setKbankOpsLastResult('')
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId])
 
@@ -2492,6 +2507,11 @@ export default function PosTerminalPage() {
     if (live) return live
     return String(customerDisplayQrPayload || '').trim()
   }, [liveKbankQrPayload, customerDisplayQrPayload])
+  const effectiveCustomerDisplayQrType = useMemo<'THAI_QR' | 'CREDIT_CARD'>(() => {
+    if (String(liveKbankQrPayload || '').trim()) return liveKbankQrType
+    const draftType = String(customerDisplayPaymentDraft?.paymentQrType || '').trim().toUpperCase()
+    return draftType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
+  }, [liveKbankQrPayload, liveKbankQrType, customerDisplayPaymentDraft?.paymentQrType])
 
   useEffect(() => {
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
@@ -2522,10 +2542,14 @@ export default function PosTerminalPage() {
     window.setTimeout(() => {
       if (!dualMonitorEnabled) {
         setLiveKbankQrPayload('')
+        setLiveKbankQrType('THAI_QR')
         return
       }
       setPostPaymentQrUntil((prev) => {
-        if (prev === until) setLiveKbankQrPayload('')
+        if (prev === until) {
+          setLiveKbankQrPayload('')
+          setLiveKbankQrType('THAI_QR')
+        }
         return prev === until ? 0 : prev
       })
     }, 16000)
@@ -2578,6 +2602,7 @@ export default function PosTerminalPage() {
           title: customerDisplayT('posCustomerThankYou') || '감사합니다',
           message: customerDisplayT('posCustomerPostPaymentQrHint') || '아래 QR을 이용해 주세요.',
           qrPayload: effectiveCustomerDisplayQrPayload,
+          qrType: effectiveCustomerDisplayQrType,
         }
       : hasPendingPaymentFlow
         ? {
@@ -2604,6 +2629,7 @@ export default function PosTerminalPage() {
                 kind: 'qr',
                 title: customerDisplayT('posCustomerQrTitle') || 'QR 코드',
                 qrPayload: effectiveCustomerDisplayQrPayload,
+                qrType: effectiveCustomerDisplayQrType,
               }
             : {
                 ...base,
@@ -2631,6 +2657,7 @@ export default function PosTerminalPage() {
     customerDisplayQrPayload,
     liveKbankQrPayload,
     effectiveCustomerDisplayQrPayload,
+    effectiveCustomerDisplayQrType,
     customerDisplayIdleMessage,
     customerDisplayIdleMediaType,
     customerDisplayIdleMediaUrl,
@@ -4731,12 +4758,16 @@ export default function PosTerminalPage() {
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
+      const requestedQrType =
+        String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase() === 'CREDIT_CARD'
+          ? 'CREDIT_CARD'
+          : 'THAI_QR'
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
       const partnerTransactionIdSeed = `POSQR${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 15)
       const generate = await executeKbankGenerateQr({
         amount: qrAmount,
-        qrType: 'THAI_QR',
+        qrType: requestedQrType,
         storeCode: currentStoreId,
         orderId: context?.orderId,
         partnerTransactionId: partnerTransactionIdSeed,
@@ -4745,6 +4776,10 @@ export default function PosTerminalPage() {
       })
       if (!generate.success) {
         setLiveKbankQrPayload('')
+        setLiveKbankQrType('THAI_QR')
+        setKbankOpsTxnUid('')
+        setKbankOpsOrigTxnUid('')
+        setKbankOpsTxnNo('')
         setCustomerDisplayPaymentMessage('')
         const msg = (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
         await appAlert(msg)
@@ -4756,11 +4791,21 @@ export default function PosTerminalPage() {
         .slice(0, 15)
 
       const data = (generate.data || {}) as Record<string, unknown>
+      const resolvedOrigTxnUid = String(
+        data.origPartnerTxnUid || data.originalTransactionId || data.transactionId || partnerTransactionId
+      )
+        .trim()
+        .slice(0, 15)
+      const resolvedTxnNo = String(data.txnNo || '').trim().slice(0, 20)
+      setKbankOpsTxnUid(partnerTransactionId)
+      setKbankOpsOrigTxnUid(resolvedOrigTxnUid)
+      if (resolvedTxnNo) setKbankOpsTxnNo(resolvedTxnNo)
       const generatedQrPayload = String(
         data.qrPayload ?? data.qrCode ?? data.qrString ?? data.qrData ?? data.payload ?? ''
       ).trim()
       if (generatedQrPayload) {
         setLiveKbankQrPayload(generatedQrPayload)
+        setLiveKbankQrType(requestedQrType)
         void executeLinkposDisplayQr({
           qrPayload: generatedQrPayload,
           amount: qrAmount,
@@ -4791,12 +4836,19 @@ export default function PosTerminalPage() {
           }
           if (s === 'declined') {
             setLiveKbankQrPayload('')
+            setLiveKbankQrType('THAI_QR')
+            setKbankOpsTxnUid('')
+            setKbankOpsOrigTxnUid('')
+            setKbankOpsTxnNo('')
             setCustomerDisplayPaymentMessage('')
             const msg = t('posPaymentDeclined') || '결제가 거절되었습니다.'
             await appAlert(msg)
             return { ok: false as const, message: msg }
           }
         }
+        const stData = (st.data || {}) as Record<string, unknown>
+        const stTxnNo = String(stData.txnNo || '').trim().slice(0, 20)
+        if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
         if (!refId) refId = String(st.refId || '').trim()
         if (i < 2) await sleepMs(2000)
@@ -4811,6 +4863,10 @@ export default function PosTerminalPage() {
       const proceed = await appConfirm(pendingMsg)
       if (!proceed) {
         setLiveKbankQrPayload('')
+        setLiveKbankQrType('THAI_QR')
+        setKbankOpsTxnUid('')
+        setKbankOpsOrigTxnUid('')
+        setKbankOpsTxnNo('')
         setCustomerDisplayPaymentMessage('')
         return { ok: false as const, message: 'kbank_qr_pending' }
       }
@@ -4818,6 +4874,106 @@ export default function PosTerminalPage() {
       return { ok: true as const, partnerTransactionId, pending: true as const }
     },
     [isPosDemo, isKbankPilotStore, currentStoreId, t, sleepMs]
+  )
+
+  const runKbankFollowupAction = useCallback(
+    async (action: 'inquiry' | 'cancel' | 'void' | 'settlement') => {
+      if (!currentStoreId) {
+        await appAlert(t('posStoreRequired') || '매장 정보가 필요합니다.')
+        return
+      }
+      const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+      if (!partnerTxnUid) {
+        await appAlert(t('posKbankGenerateFirstAlert') || '먼저 QR 생성(Generate)을 실행해 주세요.')
+        return
+      }
+      const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 15)
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      const txnNo = String(kbankOpsTxnNo || '').trim()
+      setKbankOpsBusy(true)
+      try {
+        if (action === 'inquiry') {
+          const out = await executeKbankCheckStatus({
+            storeCode: currentStoreId,
+            partnerTransactionId: partnerTxnUid,
+            originalTransactionId: origPartnerTxnUid || undefined,
+            terminalId: terminalId || undefined,
+            txnNo: txnNo || undefined,
+            payload: {
+              ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+              ...(terminalId ? { terminalId } : {}),
+              ...(txnNo ? { txnNo } : {}),
+            },
+          })
+          if (out.success) {
+            const d = (out.data || {}) as Record<string, unknown>
+            const nextTxnNo = String(d.txnNo || txnNo || '').trim().slice(0, 20)
+            if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
+          }
+          setKbankOpsLastResult(`[INQUIRY] ${JSON.stringify(out)}`)
+          return
+        }
+        if (action === 'cancel') {
+          const out = await executeKbankCancelQr({
+            storeCode: currentStoreId,
+            partnerTransactionId: partnerTxnUid,
+            originalTransactionId: origPartnerTxnUid || undefined,
+            payload: {
+              ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+              ...(terminalId ? { terminalId } : {}),
+            },
+          })
+          if (out.success) {
+            setLiveKbankQrPayload('')
+            setLiveKbankQrType('THAI_QR')
+          }
+          setKbankOpsLastResult(`[CANCEL] ${JSON.stringify(out)}`)
+          return
+        }
+        if (action === 'void') {
+          const out = await executeKbankVoidPayment({
+            storeCode: currentStoreId,
+            partnerTransactionId: partnerTxnUid,
+            origPartnerTxnUid: origPartnerTxnUid || undefined,
+            terminalId: terminalId || undefined,
+            txnNo: txnNo || undefined,
+            payload: {
+              ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+              ...(terminalId ? { terminalId } : {}),
+              ...(txnNo ? { txnNo } : {}),
+            },
+          })
+          if (out.success) {
+            setLiveKbankQrPayload('')
+            setLiveKbankQrType('THAI_QR')
+          }
+          setKbankOpsLastResult(`[VOID] ${JSON.stringify(out)}`)
+          return
+        }
+        const out = await executeKbankSettlement({
+          storeCode: currentStoreId,
+          partnerTransactionId: partnerTxnUid,
+          terminalId: terminalId || undefined,
+          qrType: liveKbankQrType,
+          payload: {
+            ...(terminalId ? { terminalId } : {}),
+            qrType: liveKbankQrType,
+          },
+        })
+        setKbankOpsLastResult(`[SETTLEMENT] ${JSON.stringify(out)}`)
+      } finally {
+        setKbankOpsBusy(false)
+      }
+    },
+    [
+      currentStoreId,
+      kbankOpsTxnUid,
+      kbankOpsOrigTxnUid,
+      kbankOpsTerminalId,
+      kbankOpsTxnNo,
+      liveKbankQrType,
+      t,
+    ]
   )
 
   const applyKbankManualMemoTag = useCallback(
@@ -7948,12 +8104,14 @@ export default function PosTerminalPage() {
       </Dialog>
       {String(effectiveStaffKbankQrPayload || '').trim() ? (
         <div
-          className="pointer-events-none fixed right-4 top-20 z-[70] w-[320px] rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
+          className="pointer-events-auto fixed right-4 top-20 z-[70] w-[360px] rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
           data-tour={isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">{t('posPaymentQr') || 'QR 결제'} · 직원 모니터</p>
+              <p className="text-sm font-semibold">
+                {t('posPaymentQr') || 'QR 결제'} · {t('posStaffQrMonitor') || '직원 모니터'}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {String(liveKbankQrPayload || '').trim()
                   ? t('posScanToPayHint') || '고객이 스캔해서 결제할 수 있게 이 화면을 보여주세요.'
@@ -7967,16 +8125,121 @@ export default function PosTerminalPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             {`QR ${(t('amount') || '금액')}: ${Math.max(0, Number(tourPaymentQrAmount || 0)).toFixed(2)} ฿`}
           </p>
-          <div className="mt-3 flex min-h-[280px] items-center justify-center rounded-md border bg-white p-2">
-            {staffKbankQrDataUrl ? (
-              <img src={staffKbankQrDataUrl} alt="KBank QR" className="h-[260px] w-[260px] object-contain" />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
-                <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
-                <span>{t('posLoading') || '로딩 중'}</span>
+          <div className="mt-3 rounded-md border bg-white p-2">
+            <div className="overflow-hidden rounded-md border">
+              <div className="bg-[#073763] px-3 py-2 text-center text-[13px] font-bold tracking-wide text-white">
+                THAI QR PAYMENT
               </div>
-            )}
+              <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
+                {(effectiveCustomerDisplayQrType === 'CREDIT_CARD'
+                  ? ['VISA', 'MASTERCARD', 'UNIONPAY']
+                  : ['PROMPTPAY']
+                ).map((label) => (
+                  <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 flex min-h-[280px] items-center justify-center">
+              {staffKbankQrDataUrl ? (
+                <img src={staffKbankQrDataUrl} alt="KBank QR" className="h-[260px] w-[260px] object-contain" />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
+                  <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
+                  <span>{t('posLoading') || '로딩 중'}</span>
+                </div>
+              )}
+            </div>
           </div>
+          {!isPosDemo && isKbankPilotStore ? (
+            <div className="mt-3 rounded-md border border-border/70 bg-card p-2">
+              <p className="text-[11px] font-semibold text-muted-foreground">
+                {t('posKbankFollowupTitle') || 'KBank 후속 처리 (현재 POS)'}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {`${t('posKbankPartnerTxnUidLabel') || 'partnerTxnUid'}: ${kbankOpsTxnUid || '-'}`}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px]">{t('posKbankOrigTxnUidLabel') || 'origPartnerTxnUid'}</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={kbankOpsOrigTxnUid}
+                    onChange={(e) => setKbankOpsOrigTxnUid(e.target.value)}
+                    placeholder={t('posKbankOrigTxnUidHint') || 'QR 요청 TxnUid'}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]">{t('posKbankTxnNoLabel') || 'txnNo'}</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={kbankOpsTxnNo}
+                    onChange={(e) => setKbankOpsTxnNo(e.target.value)}
+                    placeholder={t('posKbankTxnNoHint') || '결제 txnNo'}
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-[11px]">{t('posKbankTerminalIdLabel') || 'terminalId (선택)'}</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={kbankOpsTerminalId}
+                    onChange={(e) => setKbankOpsTerminalId(e.target.value)}
+                    placeholder={t('posKbankTerminalIdHint') || '예: 09000107'}
+                  />
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  disabled={kbankOpsBusy}
+                  onClick={() => void runKbankFollowupAction('inquiry')}
+                >
+                  {t('posKbankInquiry') || 'Inquiry'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  disabled={kbankOpsBusy}
+                  onClick={() => void runKbankFollowupAction('settlement')}
+                >
+                  {t('posKbankSettlement') || 'Settlement'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  disabled={kbankOpsBusy}
+                  onClick={() => void runKbankFollowupAction('cancel')}
+                >
+                  {t('posKbankCancel') || 'Cancel'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  disabled={kbankOpsBusy}
+                  onClick={() => void runKbankFollowupAction('void')}
+                >
+                  {t('posKbankVoid') || 'Void'}
+                </Button>
+              </div>
+              {kbankOpsLastResult ? (
+                <Textarea
+                  readOnly
+                  value={kbankOpsLastResult}
+                  className="mt-2 h-20 resize-none text-[10px]"
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <LiveMenuSearchDialog

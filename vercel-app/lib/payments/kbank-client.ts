@@ -125,54 +125,93 @@ function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => v
   }
 }
 
+type CachedKbankToken = {
+  token: KbankTokenResponse
+  expiresAtMs: number
+}
+
+let cachedKbankToken: CachedKbankToken | null = null
+let inFlightKbankTokenPromise: Promise<KbankTokenResponse> | null = null
+
+function isUsableCachedToken(nowMs: number): boolean {
+  if (!cachedKbankToken) return false
+  const token = String(cachedKbankToken.token.access_token || '').trim()
+  if (!token) return false
+  return cachedKbankToken.expiresAtMs > nowMs
+}
+
 export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTokenResponse> {
-  const consumerId = mustEnv('KBANK_CONSUMER_ID')
-  const consumerSecret = mustEnv('KBANK_CONSUMER_SECRET')
-  const tokenUrl = buildUrl('KBANK_TOKEN_PATH', '/v2/oauth/token')
-  const scope = String(process.env.KBANK_TOKEN_SCOPE || '').trim()
+  const nowMs = Date.now()
+  if (isUsableCachedToken(nowMs)) {
+    return cachedKbankToken!.token
+  }
+  if (inFlightKbankTokenPromise) {
+    return inFlightKbankTokenPromise
+  }
 
-  const form = new URLSearchParams()
-  form.set('grant_type', 'client_credentials')
-  if (scope) form.set('scope', scope)
+  inFlightKbankTokenPromise = (async () => {
+    const consumerId = mustEnv('KBANK_CONSUMER_ID')
+    const consumerSecret = mustEnv('KBANK_CONSUMER_SECRET')
+    const tokenUrl = buildUrl('KBANK_TOKEN_PATH', '/v2/oauth/token')
+    const scope = String(process.env.KBANK_TOKEN_SCOPE || '').trim()
 
-  const basic = Buffer.from(`${consumerId}:${consumerSecret}`).toString('base64')
-  const { signal, clear } = timeoutSignal(timeoutMs)
-  try {
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: withProxySecret(
-        {
-          Authorization: `Basic ${basic}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        tokenUrl
-      ),
-      body: form.toString(),
-      cache: 'no-store',
-      signal,
-    })
-    const text = await res.text()
-    if (!res.ok) {
-      throw new Error(`kbank_token_http_${res.status}${buildProxyHint(tokenUrl, res.status)}: ${text.slice(0, 300)}`)
-    }
-    let json: Record<string, unknown>
+    const form = new URLSearchParams()
+    form.set('grant_type', 'client_credentials')
+    if (scope) form.set('scope', scope)
+
+    const basic = Buffer.from(`${consumerId}:${consumerSecret}`).toString('base64')
+    const { signal, clear } = timeoutSignal(timeoutMs)
     try {
-      json = JSON.parse(text) as Record<string, unknown>
-    } catch {
-      throw new Error('KBank 토큰 응답이 JSON 형식이 아닙니다.')
+      const res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: withProxySecret(
+          {
+            Authorization: `Basic ${basic}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          tokenUrl
+        ),
+        body: form.toString(),
+        cache: 'no-store',
+        signal,
+      })
+      const text = await res.text()
+      if (!res.ok) {
+        throw new Error(`kbank_token_http_${res.status}${buildProxyHint(tokenUrl, res.status)}: ${text.slice(0, 300)}`)
+      }
+      let json: Record<string, unknown>
+      try {
+        json = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        throw new Error('KBank 토큰 응답이 JSON 형식이 아닙니다.')
+      }
+      const accessToken = String(json.access_token || '').trim()
+      if (!accessToken) {
+        throw new Error(`KBank 토큰 응답에 access_token이 없습니다: ${text.slice(0, 300)}`)
+      }
+      const expiresInSec = Number(json.expires_in || 0) || 0
+      const token: KbankTokenResponse = {
+        access_token: accessToken,
+        token_type: String(json.token_type || '').trim() || undefined,
+        expires_in: expiresInSec || undefined,
+        scope: String(json.scope || '').trim() || undefined,
+      }
+      // 만료 직전의 토큰 재사용으로 인한 401을 피하기 위해, 30초 전에 갱신하도록 여유를 둔다.
+      const ttlMs = Math.max(60_000, (expiresInSec > 0 ? expiresInSec : 300) * 1000)
+      const safeExpiresAtMs = Date.now() + ttlMs - 30_000
+      cachedKbankToken = {
+        token,
+        expiresAtMs: safeExpiresAtMs,
+      }
+      return token
+    } finally {
+      clear()
     }
-    const accessToken = String(json.access_token || '').trim()
-    if (!accessToken) {
-      throw new Error(`KBank 토큰 응답에 access_token이 없습니다: ${text.slice(0, 300)}`)
-    }
-    return {
-      access_token: accessToken,
-      token_type: String(json.token_type || '').trim() || undefined,
-      expires_in: Number(json.expires_in || 0) || undefined,
-      scope: String(json.scope || '').trim() || undefined,
-    }
+  })()
+  try {
+    return await inFlightKbankTokenPromise
   } finally {
-    clear()
+    inFlightKbankTokenPromise = null
   }
 }
 

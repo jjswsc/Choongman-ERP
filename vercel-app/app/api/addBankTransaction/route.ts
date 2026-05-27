@@ -148,6 +148,10 @@ export async function POST(request: NextRequest) {
         await assertPosRevenueDepositCategorySafe({
           storeName: posStore,
           category: validCategory,
+          accountSubjectId:
+            accountSubjectId != null && !isNaN(Number(accountSubjectId))
+              ? Number(accountSubjectId)
+              : null,
         })
       } catch (e) {
         if (e instanceof BankSettlementGuardError) {

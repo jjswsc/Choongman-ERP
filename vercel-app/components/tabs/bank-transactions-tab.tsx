@@ -58,10 +58,7 @@ import {
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
-import {
-  isPosRevenueDepositCategory,
-  normalizeBulkImportDepositCategory,
-} from "@/lib/bank-import-deposit-category"
+import { isPosRevenueDepositCategory } from "@/lib/bank-import-deposit-category"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -980,26 +977,14 @@ export function BankTransactionsTab() {
           if (explicitCategory) return
           const sug = suggestDepositWithRules(r.memo, memoRules, revenueAccountOptions)
           if (sug) {
-            const normalized = normalizeBulkImportDepositCategory({
-              category: sug.category,
-              accountStore: selectedAccountStore || undefined,
-            })
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
             next[idx] = {
               ...next[idx],
-              category: normalized.category,
-              ...(normalized.storeName ? { storeName: normalized.storeName } : {}),
-              accountSubjectId:
-                normalized.category === "receivable_receive"
-                  ? undefined
-                  : sug.accountSubjectId
-                    ? String(sug.accountSubjectId)
-                    : undefined,
+              category: sug.category,
+              accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined,
               salesDate:
-                normalized.category === "receivable_receive"
-                  ? undefined
-                  : d.toISOString().slice(0, 10),
+                sug.category === "receivable_receive" ? undefined : d.toISOString().slice(0, 10),
             }
           }
         } else if (r.transType === "withdraw" && r.memo) {
@@ -1015,7 +1000,7 @@ export function BankTransactionsTab() {
       })
       return next
     })
-  }, [getDefaultImportCategory, importPreview, revenueAccountOptions, accountSubjectOptions, memoRules, selectedAccountStore])
+  }, [getDefaultImportCategory, importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
 
   React.useEffect(() => {
     if (!importPreview) importMemoFocusIdxRef.current = null
@@ -1575,29 +1560,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             ? "expense"
             : edit.category
           : undefined
-      let category =
+      const category =
         r.transType === "withdraw"
           ? (rawWithdrawCat && (withdrawCats as readonly string[]).includes(rawWithdrawCat) ? rawWithdrawCat : "unclassified")
           : edit?.category && (depositCats as readonly string[]).includes(edit.category)
             ? edit.category
             : "receivable_receive"
 
-      let storeName =
+      const storeName =
         r.transType === "deposit" && category === "receivable_receive"
           ? edit?.storeName?.trim() || selectedAccountStore || undefined
           : undefined
-
-      if (r.transType === "deposit") {
-        const normalized = normalizeBulkImportDepositCategory({
-          category,
-          storeName,
-          accountStore: selectedAccountStore || acc?.store,
-        })
-        category = normalized.category
-        if (normalized.category === "receivable_receive") {
-          storeName = normalized.storeName
-        }
-      }
 
       let accountSubjectId: number | undefined
       if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {

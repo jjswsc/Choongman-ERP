@@ -242,6 +242,7 @@ export type CartPanelPaymentPayload = {
   paymentCash: number
   paymentCard: number
   paymentQr: number
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
   paymentOther: number
   /** payment_other 합과 일치하는 세부(저장·검색·결산용) */
   paymentOtherBreakdown?: PosPaymentOtherBreakdown
@@ -266,6 +267,7 @@ function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[]): CartP
     paymentCash: 0,
     paymentCard: 0,
     paymentQr: 0,
+    paymentQrType: 'THAI_QR',
     paymentOther: 0,
     paymentDeliveryApp: 0,
     deliveryPaymentChannel: null,
@@ -275,6 +277,7 @@ function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[]): CartP
     merged.paymentCash += snap.paymentCash || 0
     merged.paymentCard += snap.paymentCard || 0
     merged.paymentQr += snap.paymentQr || 0
+    if (snap.paymentQrType) merged.paymentQrType = snap.paymentQrType
     merged.paymentOther += snap.paymentOther || 0
     merged.paymentDeliveryApp = (merged.paymentDeliveryApp || 0) + (snap.paymentDeliveryApp ?? 0)
     if (snap.deliveryPaymentChannel) merged.deliveryPaymentChannel = snap.deliveryPaymentChannel
@@ -951,6 +954,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payAlipay, setPayAlipay] = useState('')
   const [payUnionPay, setPayUnionPay] = useState('')
   const [payPromptPay, setPayPromptPay] = useState('')
+  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')
@@ -1545,6 +1549,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentCash: cashPay,
       paymentCard: parseFloat(payCard) || 0,
       paymentQr: parseFloat(payPromptPay) || 0,
+      paymentQrType: payQrType,
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
@@ -1554,6 +1559,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     payCash,
     payCard,
     payPromptPay,
+    payQrType,
     payDeliveryApp,
     deliveryPaymentChannel,
     deliveryAppProp,
@@ -2221,6 +2227,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setCashTendered('')
     setPayCard('0')
     setPayPromptPay('0')
+    setPayQrType('THAI_QR')
     setPayTrueMoney('0')
     setPayWeChat('0')
     setPayAlipay('0')
@@ -5031,6 +5038,31 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
                     </div>
                   </div>
+                  {key === 'qr' && (
+                    <div className="mt-3 rounded-xl border border-sky-200/70 bg-sky-50/60 p-2 dark:border-sky-700/50 dark:bg-sky-950/25">
+                      <p className="mb-2 text-[11px] font-semibold text-sky-800 dark:text-sky-300">
+                        {tr('posQrTypeLabel', 'QR 타입')}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={payQrType === 'THAI_QR' ? 'default' : 'outline'}
+                          className="h-9 rounded-lg text-xs"
+                          onClick={() => setPayQrType('THAI_QR')}
+                        >
+                          {tr('posQrTypeThai', 'Thai QR')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={payQrType === 'CREDIT_CARD' ? 'default' : 'outline'}
+                          className="h-9 rounded-lg text-xs"
+                          onClick={() => setPayQrType('CREDIT_CARD')}
+                        >
+                          {tr('posQrTypeCredit', 'Credit Card QR')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   {key === 'cash' && (
                     <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
                       <p className="text-xs font-semibold text-foreground">
