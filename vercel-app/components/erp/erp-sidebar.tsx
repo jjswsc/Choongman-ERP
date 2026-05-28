@@ -14,6 +14,7 @@ import {
   Building2,
   ClipboardCheck,
   BarChart3,
+  Layers,
   ArrowDownToLine,
   ArrowUpFromLine,
   Users,
@@ -112,6 +113,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminLiveStoreSales", icon: Radio, href: "/admin/live-store-sales" },
       { titleKey: "adminOpsCenter", icon: LayoutDashboard, href: "/admin/ops-center" },
       { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
+      { titleKey: "adminTotalSales", icon: Layers, href: "/admin/total-sales" },
     ],
   },
   {

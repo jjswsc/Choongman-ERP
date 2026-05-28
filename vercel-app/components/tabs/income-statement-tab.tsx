@@ -39,6 +39,10 @@ import {
 } from "@/lib/financial-statements-compare"
 import { isMaterialHqOutboundOrderDiff } from "@/lib/income-statement-hq-diff"
 import { useAuth } from "@/lib/auth-context"
+import {
+  buildFinancialStatementFranchiseStoreOptions,
+  resolveFinancialStatementStoreLabel,
+} from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
   readIncomeStatementBeginningInvOverride,
@@ -296,7 +300,7 @@ function yearlyExpenseSubjectAmount(
 function yearlyExpenseBreakdownField(
   rows: { ym: string; data: IncomeStatementData }[],
   year: string,
-  field: "pettyCash" | "bankWithdraw" | "fixedExpenses"
+  field: "pettyCash" | "bankWithdraw" | "deliveryAppFees" | "cardFees" | "fixedExpenses"
 ): number {
   let s = 0
   for (const { ym, data } of rows) {
@@ -1205,6 +1209,28 @@ function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className="border-b">
+                <td className="py-2 text-muted-foreground pl-4">
+                  - {t("pL_expenseSourceDeliveryApps")}
+                </td>
+                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                  {formatBath(data.expenseBreakdown?.deliveryAppFees ?? 0)}
+                </td>
+                <td className="py-2 text-right text-muted-foreground">
+                  {view.pct(data.expenseBreakdown?.deliveryAppFees ?? 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 text-muted-foreground pl-4">
+                  - {t("pL_expenseSourceCardFees")}
+                </td>
+                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                  {formatBath(data.expenseBreakdown?.cardFees ?? 0)}
+                </td>
+                <td className="py-2 text-right text-muted-foreground">
+                  {view.pct(data.expenseBreakdown?.cardFees ?? 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
                 <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceFixed") || "Fixed Cost"}</td>
                 <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                   {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
@@ -1313,7 +1339,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, storeLabels } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
   const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
@@ -1824,11 +1850,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     return { value, label: `${y}년 ${m}월` }
   })
 
-  const storeOptions = isOffice
-    ? ["본사", ...(storeList || []).filter((s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office"))]
-    : isManager
-      ? scopedStoreChoices
-      : []
+  const franchiseStoreOptions = React.useMemo(
+    () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
+    [storeList, storeLabels]
+  )
+  const managerStoreOptions = isManager ? scopedStoreChoices : []
 
   const view = React.useMemo(() => {
     if (!isIncomeStatementData(data) || data.error) return null
@@ -1865,12 +1891,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     }
   }, [data, manualEnabled, manualAmountStr, begInvManualEnabled, begInvAmountStr])
 
-  const storeLabel =
-    storeFilter === "All"
-      ? t("all") || "All"
-      : ["본사", "Office", "오피스", "본점"].includes(storeFilter) || storeFilter.toLowerCase().includes("office")
-        ? t("pettyScopeOffice") || "Office"
-        : storeFilter
+  const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t)
 
   const buildXlsxRows = React.useCallback((): IncomeStatementXlsxRow[] => {
     if (!data || !view) return []
@@ -1953,6 +1974,16 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       label: `    - ${t("pL_expenseSourceBank") || "Bank Withdrawal"}`,
       amount: q(data.expenseBreakdown?.bankWithdraw ?? 0),
       pct: view.pct(data.expenseBreakdown?.bankWithdraw ?? 0),
+    })
+    rows.push({
+      label: `    - ${t("pL_expenseSourceDeliveryApps")}`,
+      amount: q(data.expenseBreakdown?.deliveryAppFees ?? 0),
+      pct: view.pct(data.expenseBreakdown?.deliveryAppFees ?? 0),
+    })
+    rows.push({
+      label: `    - ${t("pL_expenseSourceCardFees")}`,
+      amount: q(data.expenseBreakdown?.cardFees ?? 0),
+      pct: view.pct(data.expenseBreakdown?.cardFees ?? 0),
     })
     rows.push({
       label: `    - ${t("pL_expenseSourceFixed") || "Fixed Cost"}`,
@@ -2180,18 +2211,28 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                   <Select
                     value={storeFilter}
                     onValueChange={setStoreFilter}
-                    disabled={isManager || !storeOptions.length}
+                    disabled={isManager ? managerStoreOptions.length === 0 : false}
                   >
                     <SelectTrigger className="w-[160px] h-9">
                       <SelectValue placeholder={t("pL_store")} />
                     </SelectTrigger>
                     <SelectContent>
                       {isOffice && <SelectItem value="All">{t("all") || "All"}</SelectItem>}
-                      {storeOptions.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
+                      {isOffice && (
+                        <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                      )}
+                      {isOffice &&
+                        franchiseStoreOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      {isManager &&
+                        managerStoreOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 )}
@@ -2691,6 +2732,46 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           </tr>
                                           <tr className="border-b bg-muted/10 last:border-0">
                                             <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                              - {t("pL_expenseSourceDeliveryApps")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "deliveryAppFees"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                              - {t("pL_expenseSourceCardFees")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "cardFees"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                               - {t("pL_expenseSourceFixed")}
                                             </td>
                                             {incomeCompareCols.map((c) => (
@@ -2989,6 +3070,36 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           {rowData.error
                                             ? "—"
                                             : formatBath(rowData.expenseBreakdown?.bankWithdraw ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        - {t("pL_expenseSourceDeliveryApps")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.deliveryAppFees ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        - {t("pL_expenseSourceCardFees")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.cardFees ?? 0)}
                                         </td>
                                       ))}
                                     </tr>

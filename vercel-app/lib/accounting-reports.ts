@@ -46,9 +46,35 @@ export {
 
 const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 const BASE_LIMIT = 20000
+const DELIVERY_APP_FEE_VENDOR_CODES = new Set([
+  'GRAB_FEE',
+  'LINEMAN_FEE',
+  'SHOPEE_FEE',
+  'ROBINHOOD_FEE',
+])
+const CARD_FEE_VENDOR_CODES = new Set([
+  'CARD_FEE',
+  'CARD_INSTALLMENT_FEE',
+])
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+function isDeliveryAppFeeWithdrawRow(row: { vendor_code?: string | null; memo?: string | null }): boolean {
+  const vendorCode = String(row.vendor_code || '').trim().toUpperCase()
+  if (vendorCode && DELIVERY_APP_FEE_VENDOR_CODES.has(vendorCode)) return true
+  const memo = String(row.memo || '').toLowerCase()
+  if (!memo) return false
+  return memo.includes('delivery app fee') || memo.includes('배달앱 수수료')
+}
+
+function isCardFeeWithdrawRow(row: { vendor_code?: string | null; memo?: string | null }): boolean {
+  const vendorCode = String(row.vendor_code || '').trim().toUpperCase()
+  if (vendorCode && CARD_FEE_VENDOR_CODES.has(vendorCode)) return true
+  const memo = String(row.memo || '').toLowerCase()
+  if (!memo) return false
+  return memo.includes('card fee') || memo.includes('카드 수수료')
 }
 
 export type IncomeScopeInput = {
@@ -86,6 +112,8 @@ export type IncomeStatementReport = {
   expenseBreakdown: {
     pettyCash: number
     bankWithdraw: number
+    deliveryAppFees: number
+    cardFees: number
     fixedExpenses: number
     total: number
   }
@@ -711,6 +739,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let purchases = 0
   let pettyCashExpense = 0
   let bankWithdrawExpense = 0
+  let deliveryAppFeeExpense = 0
+  let cardFeeExpense = 0
   let fixedExpenses = 0
   let beginningInventory = 0
   let endingInventory = 0
@@ -796,13 +826,15 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         const btRows = (await supabaseSelectFilter(
           'bank_transactions',
           `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-          { select: 'amount,category,trans_date,expense_date,account_subject_id', limit: BASE_LIMIT }
+          { select: 'amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo', limit: BASE_LIMIT }
         )) as {
           amount?: number
           category?: string
           trans_date?: string
           expense_date?: string
           account_subject_id?: number | null
+          vendor_code?: string | null
+          memo?: string | null
         }[] | null
         for (const r of btRows || []) {
           const cat = String(r.category || 'expense').toLowerCase()
@@ -813,6 +845,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
             const amt = Math.abs(Number(r.amount) || 0)
             bankWithdrawExpense += amt
+            if (isDeliveryAppFeeWithdrawRow(r)) deliveryAppFeeExpense += amt
+            if (isCardFeeWithdrawRow(r)) cardFeeExpense += amt
             addToSubjectMap(expenseBySubjectMap, r.account_subject_id, amt)
           }
         }
@@ -993,13 +1027,15 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         const btRows = (await supabaseSelectFilter(
           'bank_transactions',
           `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-          { select: 'amount,category,trans_date,expense_date,account_subject_id', limit: BASE_LIMIT }
+          { select: 'amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo', limit: BASE_LIMIT }
         )) as {
           amount?: number
           category?: string
           trans_date?: string
           expense_date?: string
           account_subject_id?: number | null
+          vendor_code?: string | null
+          memo?: string | null
         }[] | null
         for (const r of btRows || []) {
           const cat = String(r.category || 'expense').toLowerCase()
@@ -1010,6 +1046,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
             const amt = Math.abs(Number(r.amount) || 0)
             bankWithdrawExpense += amt
+            if (isDeliveryAppFeeWithdrawRow(r)) deliveryAppFeeExpense += amt
+            if (isCardFeeWithdrawRow(r)) cardFeeExpense += amt
             addToSubjectMap(expenseBySubjectMap, r.account_subject_id, amt)
           }
         }
@@ -1093,6 +1131,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     expenseBreakdown: {
       pettyCash: pettyCashExpense,
       bankWithdraw: bankWithdrawExpense,
+      deliveryAppFees: deliveryAppFeeExpense,
+      cardFees: cardFeeExpense,
       fixedExpenses,
       total: expenses,
     },

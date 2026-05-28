@@ -116,6 +116,29 @@ const CATEGORY_MAIN_OPTIONS = [
   { value: "dividend", labelKey: "wm_dividend", sub: [] },
 ] as const
 
+const DELIVERY_APP_FEE_PRESETS = [
+  { id: "grab", code: "GRAB_FEE", name: "Grab", memo: "Delivery App fee - Grab" },
+  { id: "lineman", code: "LINEMAN_FEE", name: "Line-man", memo: "Delivery App fee - Line-man" },
+  { id: "shopee", code: "SHOPEE_FEE", name: "Shopee", memo: "Delivery App fee - Shopee" },
+  { id: "robinhood", code: "ROBINHOOD_FEE", name: "Robinhood", memo: "Delivery App fee - Robinhood" },
+] as const
+
+const CARD_FEE_PRESETS = [
+  { id: "card", code: "CARD_FEE", name: "Card Fee", memo: "Card fee" },
+  { id: "card_installment", code: "CARD_INSTALLMENT_FEE", name: "Card Installment Fee", memo: "Card installment fee" },
+] as const
+
+function resolveMonthEndDate(month: string): string | null {
+  const src = String(month || "").trim()
+  if (!/^\d{4}-\d{2}$/.test(src)) return null
+  const [yRaw, mRaw] = src.split("-")
+  const year = Number(yRaw)
+  const monthNum = Number(mRaw)
+  if (!Number.isFinite(year) || !Number.isFinite(monthNum) || monthNum < 1 || monthNum > 12) return null
+  const last = new Date(year, monthNum, 0).getDate()
+  return `${src}-${String(last).padStart(2, "0")}`
+}
+
 type WithdrawalManagementTabProps = {
   /** 지출 발생(지급 예정) 저장 후 상위에서 지급예정 탭·기간 동기화 */
   onAccrualSaved?: (opts: { expenseDate: string }) => void
@@ -160,6 +183,16 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
   const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
   const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
   const [saving, setSaving] = React.useState(false)
+  const [deliveryFeeSaving, setDeliveryFeeSaving] = React.useState(false)
+  const [deliveryFeeMonth, setDeliveryFeeMonth] = React.useState(() => todayStrBkk().slice(0, 7))
+  const [deliveryFeeAmounts, setDeliveryFeeAmounts] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(DELIVERY_APP_FEE_PRESETS.map((preset) => [preset.id, ""]))
+  )
+  const [cardFeeSaving, setCardFeeSaving] = React.useState(false)
+  const [cardFeeMonth, setCardFeeMonth] = React.useState(() => todayStrBkk().slice(0, 7))
+  const [cardFeeAmounts, setCardFeeAmounts] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(CARD_FEE_PRESETS.map((preset) => [preset.id, ""]))
+  )
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
   const [payeeCode, setPayeeCode] = React.useState("")
   const [payeeName, setPayeeName] = React.useState("")
@@ -929,6 +962,224 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
   const effectivePaymentMethod = categoryMain === "transfer" ? paymentMethod : "bank"
   const showBankAccountForTransfer = effectivePaymentMethod === "bank" || effectivePaymentMethod === "card"
   const showAdvanceInstallments = categorySub === "advance" && (categoryMain === "purchase" || categoryMain === "expense")
+  const deliveryFeeAccountSubjectId = React.useMemo(() => {
+    const picked = subjects.find((s) => {
+      const txt = `${String(s.code || "")} ${String(s.name || "")} ${String(s.nameEn || "")}`.toLowerCase()
+      return txt.includes("delivery") || txt.includes("배달") || txt.includes("platform fee")
+    })
+    return picked?.id != null ? String(picked.id) : ""
+  }, [subjects])
+
+  const applyDeliveryFeePreset = React.useCallback((preset: (typeof DELIVERY_APP_FEE_PRESETS)[number]) => {
+    setCategoryMain("expense")
+    setCategorySub("normal")
+    setPayeeManual(true)
+    setPayeeCode(preset.code)
+    setPayeeName(preset.name)
+    setMemo((prev) => {
+      const cur = String(prev || "").trim()
+      return cur ? cur : preset.memo
+    })
+    if (deliveryFeeAccountSubjectId) {
+      setAccountSubjectId(deliveryFeeAccountSubjectId)
+    }
+  }, [deliveryFeeAccountSubjectId])
+  const cardFeeAccountSubjectId = React.useMemo(() => {
+    const picked = subjects.find((s) => {
+      const txt = `${String(s.code || "")} ${String(s.name || "")} ${String(s.nameEn || "")}`.toLowerCase()
+      return (
+        txt.includes("card fee") ||
+        txt.includes("카드 수수료") ||
+        txt.includes("credit card fee") ||
+        txt.includes("merchant fee")
+      )
+    })
+    return picked?.id != null ? String(picked.id) : ""
+  }, [subjects])
+
+  const applyCardFeePreset = React.useCallback((preset: (typeof CARD_FEE_PRESETS)[number]) => {
+    setCategoryMain("expense")
+    setCategorySub("normal")
+    setPayeeManual(true)
+    setPayeeCode(preset.code)
+    setPayeeName(preset.name)
+    setMemo((prev) => {
+      const cur = String(prev || "").trim()
+      return cur ? cur : preset.memo
+    })
+    if (cardFeeAccountSubjectId) {
+      setAccountSubjectId(cardFeeAccountSubjectId)
+    }
+  }, [cardFeeAccountSubjectId])
+  const handleDeliveryFeeAmountChange = React.useCallback((presetId: string, raw: string) => {
+    const cleaned = String(raw || "").replace(/[^\d.,]/g, "").replace(/,/g, "")
+    const parts = cleaned.split(".")
+    const normalized =
+      parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
+    setDeliveryFeeAmounts((prev) => ({ ...prev, [presetId]: normalized }))
+  }, [])
+
+  const handleCardFeeAmountChange = React.useCallback((presetId: string, raw: string) => {
+    const cleaned = String(raw || "").replace(/[^\d.,]/g, "").replace(/,/g, "")
+    const parts = cleaned.split(".")
+    const normalized =
+      parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
+    setCardFeeAmounts((prev) => ({ ...prev, [presetId]: normalized }))
+  }, [])
+
+  const handleRegisterDeliveryFeeBatch = React.useCallback(async () => {
+    const batchDate = resolveMonthEndDate(deliveryFeeMonth)
+    if (!batchDate) {
+      await appAlert(tt("deliveryFeeBatchMonthRequired", "월(YYYY-MM)을 확인해 주세요."))
+      return
+    }
+    if (!accountId) {
+      await appAlert(tt("bankAccount", "Please select an account."))
+      return
+    }
+    if (!storeName) {
+      await appAlert(tt("expenseStoreSelect", "Please select a store."))
+      return
+    }
+    const subjectId = Number(accountSubjectId || deliveryFeeAccountSubjectId || 0)
+    if (!subjectId) {
+      await appAlert(tt("wm_accountSubjectPlaceholder", "Please select an account subject."))
+      return
+    }
+    const rows = DELIVERY_APP_FEE_PRESETS
+      .map((preset) => {
+        const amount = Number(String(deliveryFeeAmounts[preset.id] || "").replace(/,/g, ""))
+        return { preset, amount: Number.isFinite(amount) ? amount : 0 }
+      })
+      .filter((row) => row.amount > 0)
+
+    if (rows.length === 0) {
+      await appAlert(tt("deliveryFeeBatchAmountRequired", "4개 앱 중 1개 이상 금액을 입력해 주세요."))
+      return
+    }
+
+    setDeliveryFeeSaving(true)
+    try {
+      for (const row of rows) {
+        const res = await executeWithdrawal({
+          paymentMethod: "bank",
+          amount: row.amount,
+          transDate: batchDate,
+          memo: `Delivery App fee ${deliveryFeeMonth} - ${row.preset.name}`,
+          storeName: storeName || undefined,
+          categoryMain: "expense",
+          categorySub: "normal",
+          vendorCode: row.preset.code,
+          accountSubjectId: subjectId,
+          accountId: Number(accountId),
+          userName: auth?.user,
+          userRole: auth?.role,
+          userStore: auth?.store,
+        })
+        if (!res.success) {
+          const fail = translateApiMessage(res.message, t) || res.message || t("processFail")
+          await appAlert(`${row.preset.name}: ${fail}`)
+          return
+        }
+      }
+      setDeliveryFeeAmounts(Object.fromEntries(DELIVERY_APP_FEE_PRESETS.map((preset) => [preset.id, ""])))
+      await appAlert(
+        tt("deliveryFeeBatchDone", "월별 배달앱 수수료가 등록되었습니다.")
+          + ` (${deliveryFeeMonth}, ${rows.length}${tt("receivPayCount", "건")})`
+      )
+    } finally {
+      setDeliveryFeeSaving(false)
+    }
+  }, [
+    accountId,
+    accountSubjectId,
+    auth?.role,
+    auth?.store,
+    auth?.user,
+    deliveryFeeAccountSubjectId,
+    deliveryFeeAmounts,
+    deliveryFeeMonth,
+    storeName,
+    t,
+    tt,
+  ])
+
+  const handleRegisterCardFeeBatch = React.useCallback(async () => {
+    const batchDate = resolveMonthEndDate(cardFeeMonth)
+    if (!batchDate) {
+      await appAlert(tt("cardFeeBatchMonthRequired", "월(YYYY-MM)을 확인해 주세요."))
+      return
+    }
+    if (!accountId) {
+      await appAlert(tt("bankAccount", "Please select an account."))
+      return
+    }
+    if (!storeName) {
+      await appAlert(tt("expenseStoreSelect", "Please select a store."))
+      return
+    }
+    const subjectId = Number(accountSubjectId || cardFeeAccountSubjectId || 0)
+    if (!subjectId) {
+      await appAlert(tt("wm_accountSubjectPlaceholder", "Please select an account subject."))
+      return
+    }
+    const rows = CARD_FEE_PRESETS
+      .map((preset) => {
+        const amount = Number(String(cardFeeAmounts[preset.id] || "").replace(/,/g, ""))
+        return { preset, amount: Number.isFinite(amount) ? amount : 0 }
+      })
+      .filter((row) => row.amount > 0)
+
+    if (rows.length === 0) {
+      await appAlert(tt("cardFeeBatchAmountRequired", "카드 수수료 금액을 1개 이상 입력해 주세요."))
+      return
+    }
+
+    setCardFeeSaving(true)
+    try {
+      for (const row of rows) {
+        const res = await executeWithdrawal({
+          paymentMethod: "bank",
+          amount: row.amount,
+          transDate: batchDate,
+          memo: `Card fee ${cardFeeMonth} - ${row.preset.name}`,
+          storeName: storeName || undefined,
+          categoryMain: "expense",
+          categorySub: "normal",
+          vendorCode: row.preset.code,
+          accountSubjectId: subjectId,
+          accountId: Number(accountId),
+          userName: auth?.user,
+          userRole: auth?.role,
+          userStore: auth?.store,
+        })
+        if (!res.success) {
+          const fail = translateApiMessage(res.message, t) || res.message || t("processFail")
+          await appAlert(`${row.preset.name}: ${fail}`)
+          return
+        }
+      }
+      setCardFeeAmounts(Object.fromEntries(CARD_FEE_PRESETS.map((preset) => [preset.id, ""])))
+      await appAlert(
+        tt("cardFeeBatchDone", "월별 카드 수수료가 등록되었습니다.")
+          + ` (${cardFeeMonth}, ${rows.length}${tt("receivPayCount", "건")})`
+      )
+    } finally {
+      setCardFeeSaving(false)
+    }
+  }, [
+    accountId,
+    accountSubjectId,
+    auth?.role,
+    auth?.store,
+    auth?.user,
+    cardFeeAccountSubjectId,
+    cardFeeAmounts,
+    cardFeeMonth,
+    storeName,
+    t,
+    tt,
+  ])
 
   React.useEffect(() => {
     if (showAdvanceInstallments && advanceInstallments && advanceInstallmentCurrent) {
@@ -1322,6 +1573,150 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
               )}
               {categoryMain === "expense" && (
                 <>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <div className="text-sm font-medium">
+                      {tt("deliveryFeePresetTitle", "Delivery App Fee (Quick Fill)")}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {DELIVERY_APP_FEE_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => applyDeliveryFeePreset(preset)}
+                        >
+                          {preset.name}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {tt(
+                        "deliveryFeePresetHint",
+                        "Click one app to auto-fill payee/memo, and account subject if a delivery fee subject exists."
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                    <div className="text-sm font-medium">
+                      {tt("deliveryFeeBatchTitle", "Delivery App Fee (Monthly Batch)")}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          {tt("deliveryFeeBatchMonth", "Month")}
+                        </Label>
+                        <Input
+                          type="month"
+                          value={deliveryFeeMonth}
+                          onChange={(e) => setDeliveryFeeMonth(e.target.value)}
+                          className="h-9 w-[140px] mt-1"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground pb-1">
+                        {tt("deliveryFeeBatchDateHint", "Posting date is month-end automatically.")}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {DELIVERY_APP_FEE_PRESETS.map((preset) => (
+                        <div key={`batch-${preset.id}`}>
+                          <Label className="text-xs text-muted-foreground">{preset.name}</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={deliveryFeeAmounts[preset.id] || ""}
+                            onChange={(e) => handleDeliveryFeeAmountChange(preset.id, e.target.value)}
+                            placeholder="0"
+                            className="h-9 mt-1"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        onClick={handleRegisterDeliveryFeeBatch}
+                        disabled={deliveryFeeSaving}
+                      >
+                        {deliveryFeeSaving
+                          ? tt("loading", "Processing...")
+                          : tt("deliveryFeeBatchRegister", "Register Monthly Delivery Fees")}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <div className="text-sm font-medium">
+                      {tt("cardFeePresetTitle", "Card Fee (Quick Fill)")}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {CARD_FEE_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => applyCardFeePreset(preset)}
+                        >
+                          {preset.name}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {tt(
+                        "cardFeePresetHint",
+                        "Click to auto-fill card-fee payee/memo, and account subject if a card-fee subject exists."
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                    <div className="text-sm font-medium">
+                      {tt("cardFeeBatchTitle", "Card Fee (Monthly Batch)")}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          {tt("cardFeeBatchMonth", "Month")}
+                        </Label>
+                        <Input
+                          type="month"
+                          value={cardFeeMonth}
+                          onChange={(e) => setCardFeeMonth(e.target.value)}
+                          className="h-9 w-[140px] mt-1"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground pb-1">
+                        {tt("cardFeeBatchDateHint", "Posting date is month-end automatically.")}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {CARD_FEE_PRESETS.map((preset) => (
+                        <div key={`card-batch-${preset.id}`}>
+                          <Label className="text-xs text-muted-foreground">{preset.name}</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={cardFeeAmounts[preset.id] || ""}
+                            onChange={(e) => handleCardFeeAmountChange(preset.id, e.target.value)}
+                            placeholder="0"
+                            className="h-9 mt-1"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        onClick={handleRegisterCardFeeBatch}
+                        disabled={cardFeeSaving}
+                      >
+                        {cardFeeSaving
+                          ? tt("loading", "Processing...")
+                          : tt("cardFeeBatchRegister", "Register Monthly Card Fees")}
+                      </Button>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
                     {expensePayMode === "immediate" && (
                       <>

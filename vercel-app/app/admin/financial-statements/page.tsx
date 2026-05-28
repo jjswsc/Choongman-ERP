@@ -17,6 +17,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useStoreList } from "@/lib/api-client"
+import {
+  buildFinancialStatementFranchiseStoreOptions,
+} from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
@@ -34,7 +37,7 @@ export default function FinancialStatementsPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, storeLabels } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
   const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
@@ -64,16 +67,11 @@ export default function FinancialStatementsPage() {
     if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
   }, [isManager, scopedStoreChoices])
 
-  const storeOptions = isOffice
-    ? [
-        "본사",
-        ...((storeList || []).filter(
-          (s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office")
-        ) || []),
-      ]
-    : isManager
-      ? scopedStoreChoices
-      : []
+  const franchiseStoreOptions = React.useMemo(
+    () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
+    [storeList, storeLabels]
+  )
+  const managerStoreOptions = isManager ? scopedStoreChoices : []
 
   const yearMonthOptions = getBangkokRecentYearMonths(60).map((value) => {
     const [y, m] = value.split("-").map(Number)
@@ -143,18 +141,28 @@ export default function FinancialStatementsPage() {
                 <Select
                   value={storeFilter}
                   onValueChange={setStoreFilter}
-                  disabled={isManager || !storeOptions.length}
+                  disabled={isManager ? managerStoreOptions.length === 0 : false}
                 >
                   <SelectTrigger className="w-[160px] h-9">
                     <SelectValue placeholder={t("pL_store")} />
                   </SelectTrigger>
                   <SelectContent>
                     {isOffice && <SelectItem value="All">{t("all")}</SelectItem>}
-                    {storeOptions.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
+                    {isOffice && (
+                      <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                    )}
+                    {isOffice &&
+                      franchiseStoreOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    {isManager &&
+                      managerStoreOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               )}

@@ -14,6 +14,10 @@ import { Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import {
+  buildFinancialStatementFranchiseStoreOptions,
+  resolveFinancialStatementStoreLabel,
+} from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
   useStoreList,
@@ -68,7 +72,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, storeLabels } = useStoreList()
   const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
   const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
   const managerStore = (auth?.store || "").trim()
@@ -289,23 +293,13 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
     return { value, label: `${y}년 ${m}월` }
   })
 
-  const storeOptions = isOffice
-    ? [
-        "본사",
-        ...(storeList || []).filter(
-          (s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office")
-        ),
-      ]
-    : isManager
-      ? scopedStoreChoices
-      : []
+  const franchiseStoreOptions = React.useMemo(
+    () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
+    [storeList, storeLabels]
+  )
+  const managerStoreOptions = isManager ? scopedStoreChoices : []
 
-  const storeLabel =
-    storeFilter === "All"
-      ? t("all") || "All"
-      : ["본사", "Office", "오피스", "본점"].includes(storeFilter) || storeFilter.toLowerCase().includes("office")
-        ? t("pettyScopeOffice") || "Office"
-        : storeFilter
+  const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t)
 
   return (
     <div className="space-y-4">
@@ -360,18 +354,28 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                   <Select
                     value={storeFilter}
                     onValueChange={setStoreFilter}
-                    disabled={isManager || !storeOptions.length}
+                    disabled={isManager ? managerStoreOptions.length === 0 : false}
                   >
                     <SelectTrigger className="w-[160px] h-9">
                       <SelectValue placeholder={t("pL_store")} />
                     </SelectTrigger>
                     <SelectContent>
                       {isOffice && <SelectItem value="All">{t("all") || "All"}</SelectItem>}
-                      {storeOptions.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
+                      {isOffice && (
+                        <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                      )}
+                      {isOffice &&
+                        franchiseStoreOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      {isManager &&
+                        managerStoreOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 )}

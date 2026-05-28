@@ -412,10 +412,6 @@ function buildCheckStatusPayload(
     ...(terminalId ? { terminalId } : {}),
     origPartnerTxnUid: resolvedOrigPartnerTxnUid,
     ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
-    // Backward-compatible keys
-    partnerTransactionId: req.partnerTransactionId || undefined,
-    originalTransactionId: req.originalTransactionId || undefined,
-    refId: req.refId || undefined,
   }
 }
 

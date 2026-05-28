@@ -2335,6 +2335,8 @@ export interface IncomeStatementData {
   expenseBreakdown?: {
     pettyCash: number
     bankWithdraw: number
+    deliveryAppFees: number
+    cardFees: number
     fixedExpenses: number
     total: number
   }
@@ -4971,6 +4973,55 @@ export async function getPosSalesByMenu(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
   return jsonAsArray<{ name: string; qty: number; sales: number }>(await res.json())
+}
+
+export type PosSalesHierarchyLevel = 'main' | 'category' | 'menu' | 'option'
+
+export type PosSalesHierarchyRow = {
+  key: string
+  label: string
+  qty: number
+  sales: number
+  categoryMain?: string
+  category?: string
+  menuId?: string
+}
+
+export type PosSalesByMenuHierarchyResult = {
+  levels: Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]>
+  totals: { qty: number; sales: number }
+  truncated?: boolean
+}
+
+export async function getPosSalesByMenuHierarchy(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  search?: string
+  searchMode?: 'or' | 'and'
+  orderTypes?: string[]
+}): Promise<PosSalesByMenuHierarchyResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.search) q.set('search', params.search)
+  if (params.searchMode === 'and') q.set('searchMode', 'and')
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  const res = await apiFetchWithOffline(`/api/posSalesByMenuHierarchy?${q}`)
+  const truncated = res.headers.get('X-Sales-Truncated') === '1'
+  const json = (await res.json()) as Partial<PosSalesByMenuHierarchyResult>
+  const emptyLevels: PosSalesByMenuHierarchyResult['levels'] = {
+    main: [],
+    category: [],
+    menu: [],
+    option: [],
+  }
+  return {
+    levels: json.levels ?? emptyLevels,
+    totals: json.totals ?? { qty: 0, sales: 0 },
+    truncated: truncated || !!json.truncated,
+  }
 }
 
 export async function getPosSalesByPayment(params: {
