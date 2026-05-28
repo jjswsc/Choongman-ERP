@@ -16,8 +16,6 @@ const CAMPAIGN_NAME_PREFIX = 'CM-POS-PROMO-'
 const GRAB_CAMPAIGN_QUOTAS = { totalCount: 9999, totalCountPerUser: 99 } as const
 /** Grab Create Campaign: 최소 지속 2시간 */
 const GRAB_CAMPAIGN_MIN_DURATION_MS = 2 * 60 * 60_000
-/** Grab Create Campaign: 최대 지속 2개월 (달력상 보수적으로 62일) */
-const GRAB_CAMPAIGN_MAX_DURATION_MS = 62 * 24 * 60 * 60_000
 /** startTime은 생성 시각보다 약 1시간 이후 (Grab 검증·기존 운영값) */
 const GRAB_CAMPAIGN_MIN_START_LEAD_MS = 65 * 60_000
 const ALL_DAY_WORKING_HOUR = {
@@ -90,6 +88,20 @@ export function buildGrabTargetPriceCampaignBody(params: {
   validFrom?: string | null
   validTo?: string | null
 }): Record<string, unknown> {
+  const addUtcCalendarMonths = (baseMs: number, months: number): number => {
+    const d = new Date(baseMs)
+    const day = d.getUTCDate()
+    const hh = d.getUTCHours()
+    const mm = d.getUTCMinutes()
+    const ss = d.getUTCSeconds()
+    const ms = d.getUTCMilliseconds()
+
+    const shifted = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1, hh, mm, ss, ms))
+    const lastDay = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate()
+    shifted.setUTCDate(Math.min(day, lastDay))
+    return shifted.getTime()
+  }
+
   const today = bangkokDateStrISO()
   const fromYmd = String(params.validFrom ?? '').trim() || today
   const toYmd = String(params.validTo ?? '').trim() || '2099-12-31'
@@ -97,7 +109,8 @@ export function buildGrabTargetPriceCampaignBody(params: {
   const minStartMs = Date.now() + GRAB_CAMPAIGN_MIN_START_LEAD_MS
   const startMs = Math.max(new Date(gteIso).getTime(), minStartMs)
   const promoEndMs = new Date(lteIso).getTime()
-  const grabMaxEndMs = startMs + GRAB_CAMPAIGN_MAX_DURATION_MS
+  /** Grab 규칙: 최대 2개월(고정 일수 62일이 아니라 달력 기준) */
+  const grabMaxEndMs = addUtcCalendarMonths(startMs, 2)
   const endMs = Math.max(
     Math.min(promoEndMs, grabMaxEndMs),
     startMs + GRAB_CAMPAIGN_MIN_DURATION_MS
