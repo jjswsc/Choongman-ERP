@@ -1,4 +1,5 @@
 import { bangkokDateStrISO, bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
+import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { grabJsonRequest } from '@/lib/grab-openapi'
 import {
@@ -190,6 +191,22 @@ export function classifyGrabCampaignApiError(err: unknown): GrabCampaignErrorCod
   if (msg.includes('invalid_quotas')) return 'INVALID_QUOTAS'
   if (msg.includes('exceed_active_campaign_max_limit')) return 'ACTIVE_LIMIT_EXCEEDED'
   return 'UNKNOWN'
+}
+
+function extractCampaignTimeDebug(body: Record<string, unknown>): {
+  startTimeUtc: string
+  endTimeUtc: string
+  startTimeBkk: string
+  endTimeBkk: string
+} {
+  const conditions = (body.conditions && typeof body.conditions === 'object'
+    ? body.conditions
+    : {}) as Record<string, unknown>
+  const startTimeUtc = String(conditions.startTime ?? '').trim()
+  const endTimeUtc = String(conditions.endTime ?? '').trim()
+  const startTimeBkk = startTimeUtc ? getBangkokRequestDtIso(new Date(startTimeUtc)) : ''
+  const endTimeBkk = endTimeUtc ? getBangkokRequestDtIso(new Date(endTimeUtc)) : ''
+  return { startTimeUtc, endTimeUtc, startTimeBkk, endTimeBkk }
 }
 
 function buildOptionsByMenuId(options: OptionRow[]): Record<string, PromoOptionLike[]> {
@@ -410,12 +427,14 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       skipped += 1
       const errorCode = classifyGrabCampaignApiError(e)
       const errorMessage = formatGrabCampaignApiError(e)
+      const timeDebug = extractCampaignTimeDebug(body)
       console.warn('[grab-promo-campaign] upsert_failed', {
         merchantID,
         promoId: target.promoId,
         grabItemId: target.grabItemId,
         salePriceMajor: target.salePrice,
         campaignName: fullName,
+        ...timeDebug,
         errorCode,
         error: errorMessage,
         actionHint:

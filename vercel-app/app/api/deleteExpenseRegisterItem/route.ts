@@ -7,6 +7,9 @@ import { requireAuth } from '@/lib/verify-auth'
 type LinkedPayableRow = {
   id?: number
   expense_accrual_id?: number | null
+  ref_type?: string | null
+  bank_transaction_id?: number | null
+  petty_cash_transaction_id?: number | null
 }
 
 type BankTransactionRow = {
@@ -16,6 +19,11 @@ type BankTransactionRow = {
   amount?: number
   memo?: string | null
   store_name?: string | null
+}
+
+type ExpenseAccrualRow = {
+  id?: number
+  status?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -39,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const [linkedPayables, linkedInbound, linkedCards] = await Promise.all([
       supabaseSelectFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, {
-        select: 'id,expense_accrual_id',
+        select: 'id,expense_accrual_id,ref_type,bank_transaction_id,petty_cash_transaction_id',
         limit: 100,
       }) as Promise<LinkedPayableRow[]>,
       supabaseSelectFilter('bank_transaction_inbound_links', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
@@ -57,11 +65,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '입금·출금 거래만 삭제할 수 있습니다.' }, { status: 400, headers })
     }
 
-    if ((linkedPayables || []).some((r) => Number(r.expense_accrual_id || 0) > 0)) {
-      return NextResponse.json(
-        { success: false, message: '지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.' },
-        { status: 400, headers }
-      )
+    const linkedAccrualIds = [...new Set(
+      (linkedPayables || [])
+        .map((r) => Number(r.expense_accrual_id || 0))
+        .filter((id) => id > 0)
+    )]
+    let deletableLinkedAccrualIds: number[] = []
+    if (linkedAccrualIds.length > 0) {
+      const accrualRows = (await supabaseSelectFilter(
+        'expense_accruals',
+        `id=in.(${linkedAccrualIds.join(',')})`,
+        { select: 'id,status', limit: 200 }
+      )) as ExpenseAccrualRow[] | null
+      const statusByAccrualId = new Map<number, string>()
+      for (const row of accrualRows || []) {
+        const id = Number(row.id || 0)
+        if (id > 0) statusByAccrualId.set(id, String(row.status || '').toLowerCase())
+      }
+
+      const allRowsByAccrual = (await supabaseSelectFilter(
+        'payable_transactions',
+        `expense_accrual_id=in.(${linkedAccrualIds.join(',')})`,
+        { select: 'id,expense_accrual_id,ref_type,bank_transaction_id,petty_cash_transaction_id', limit: 1000 }
+      )) as LinkedPayableRow[] | null
+      const payableRowsByAccrualId = new Map<number, LinkedPayableRow[]>()
+      for (const row of allRowsByAccrual || []) {
+        const id = Number(row.expense_accrual_id || 0)
+        if (id <= 0) continue
+        const list = payableRowsByAccrualId.get(id) || []
+        list.push(row)
+        payableRowsByAccrualId.set(id, list)
+      }
+
+      const isAutoLinkedDoneAccrual = (accrualId: number): boolean => {
+        const accrualStatus = statusByAccrualId.get(accrualId) || ''
+        if (accrualStatus !== 'done') return false
+        const rows = payableRowsByAccrualId.get(accrualId) || []
+        if (rows.length === 0) return false
+        let hasThisBankPayment = false
+        for (const row of rows) {
+          const refType = String(row.ref_type || '')
+          const rowBankId = Number(row.bank_transaction_id || 0)
+          const rowPettyId = Number(row.petty_cash_transaction_id || 0)
+          if (refType === 'Expense') {
+            if (rowBankId > 0 || rowPettyId > 0) return false
+            continue
+          }
+          if (refType === 'Payment') {
+            if (rowPettyId > 0) return false
+            if (rowBankId !== bankTransactionId) return false
+            hasThisBankPayment = true
+            continue
+          }
+          return false
+        }
+        return hasThisBankPayment
+      }
+
+      const blockedAccrual = linkedAccrualIds.some((id) => !isAutoLinkedDoneAccrual(id))
+      if (blockedAccrual) {
+        return NextResponse.json(
+          { success: false, message: '지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.' },
+          { status: 400, headers }
+        )
+      }
+      deletableLinkedAccrualIds = linkedAccrualIds
     }
     if ((linkedInbound || []).length > 0) {
       return NextResponse.json(
@@ -97,6 +165,19 @@ export async function POST(request: NextRequest) {
 
     await assertAccountingDateOpen(String(txRows[0].trans_date || '').slice(0, 10))
 
+    if (deletableLinkedAccrualIds.length > 0) {
+      await supabaseDeleteByFilter(
+        'payable_transactions',
+        `expense_accrual_id=in.(${deletableLinkedAccrualIds.join(',')})`
+      )
+      for (const accrualId of deletableLinkedAccrualIds) {
+        await deleteJournalEntriesBySource('expense_accrual', accrualId)
+      }
+      await supabaseDeleteByFilter(
+        'expense_accruals',
+        `id=in.(${deletableLinkedAccrualIds.join(',')})`
+      )
+    }
     await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
     if (transTypeLower === 'deposit') {
       const tx = txRows[0]
