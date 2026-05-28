@@ -21,6 +21,8 @@ describe('buildGrabTargetPriceCampaignBody', () => {
     expect((body.discount as { scope?: { objectIDs?: string[] } }).scope?.objectIDs).toEqual([
       'item-99-set1',
     ])
+    expect(body.quotas).toEqual({ totalCount: 9999, totalCountPerUser: 99 })
+    expect(body.customTag).toBeUndefined()
     expect(String(body.name)).toContain(buildGrabPromoCampaignName(12))
 
     const conditions = body.conditions as { startTime?: string; endTime?: string }

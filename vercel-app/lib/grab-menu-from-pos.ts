@@ -1,4 +1,5 @@
 import type { PosMenu } from '@/lib/api-client'
+import { buildGrabDeliveryAdvancedPricing } from '@/lib/grab-menu-advanced-pricing'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { loadGrabPromoCutPriceByPromoId } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
@@ -941,9 +942,15 @@ export async function buildGrabMenuFromPos(params: {
       const deliveryPrice = menu.price_delivery != null ? menu.price_delivery : menu.price
       const promoId = Number(menu.promo_id ?? 0)
       const promoCut = promoId > 0 ? promoCutByPromoId.get(promoId) : undefined
-      /** Grab Cut Price: 메뉴 정가 + fixPrice 캠페인(할인가). 일반 메뉴는 배달가 그대로. */
+      /**
+       * Grab Cut Price: item.price=정가, advancedPricing=배달 할인가(캠페인 실패 시 손님 화면용),
+       * fixPrice 캠페인=menu-sync SUCCESS 후(주문·Grab 프로모 연동).
+       */
       const grabListPriceMajor =
         promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)
+      const grabListPriceMinor = Math.max(1, toMinorUnit(grabListPriceMajor))
+      const grabSalePriceMinor =
+        promoCut?.showCutPrice ? Math.max(1, toMinorUnit(promoCut.salePrice)) : grabListPriceMinor
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
         ? policyImageUrl
@@ -960,8 +967,10 @@ export async function buildGrabMenuFromPos(params: {
         sequence: itemIndex + 1,
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
         ...(available ? {} : { maxStock: 0 }),
-        // Grab 메뉴 검증에서 item price=0 이 거절될 수 있어 최소 1 minor unit 보정
-        price: Math.max(1, toMinorUnit(grabListPriceMajor)),
+        price: grabListPriceMinor,
+        ...(promoCut?.showCutPrice
+          ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabSalePriceMinor) }
+          : {}),
         campaignInfo: null,
         description: menuDesc,
         photos: photoUrl ? [photoUrl] : [],

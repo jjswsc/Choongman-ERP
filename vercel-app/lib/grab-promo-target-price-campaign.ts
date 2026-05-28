@@ -12,6 +12,8 @@ import type { PromoOptionLike } from '@/lib/promo-economics'
 import { supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 const CAMPAIGN_NAME_PREFIX = 'CM-POS-PROMO-'
+/** Grab 샘플 수준 quotas (999999 등은 INVALID_QUOTAS → 5xx로 보고되는 사례 있음) */
+const GRAB_CAMPAIGN_QUOTAS = { totalCount: 9999, totalCountPerUser: 99 } as const
 /** Grab Create Campaign: 최소 지속 2시간 */
 const GRAB_CAMPAIGN_MIN_DURATION_MS = 2 * 60 * 60_000
 /** Grab Create Campaign: 최대 지속 2개월 (달력상 보수적으로 62일) */
@@ -101,10 +103,10 @@ export function buildGrabTargetPriceCampaignBody(params: {
     startMs + GRAB_CAMPAIGN_MIN_DURATION_MS
   )
 
-  return {
+  const body: Record<string, unknown> = {
     merchantID: params.merchantID,
     name: `${buildGrabPromoCampaignName(params.promoId)} ${String(params.promoName || '').trim()}`.slice(0, 256),
-    quotas: { totalCount: 999999, totalCountPerUser: 999 },
+    quotas: { ...GRAB_CAMPAIGN_QUOTAS },
     conditions: {
       startTime: new Date(startMs).toISOString(),
       endTime: new Date(endMs).toISOString(),
@@ -121,8 +123,30 @@ export function buildGrabTargetPriceCampaignBody(params: {
         objectIDs: [params.grabItemId],
       },
     },
-    customTag: '',
   }
+  return body
+}
+
+export function formatGrabCampaignApiError(err: unknown): string {
+  const raw = String(err ?? '')
+  const jsonStart = raw.indexOf('{')
+  if (jsonStart < 0) return raw
+  try {
+    const parsed = JSON.parse(raw.slice(jsonStart)) as {
+      message?: string
+      reason?: string
+      errors?: Array<{ message?: string; reason?: string }>
+    }
+    const parts = [
+      parsed.message,
+      parsed.reason,
+      ...(parsed.errors || []).map((e) => e.message || e.reason),
+    ].filter(Boolean)
+    if (parts.length) return parts.join(' | ')
+  } catch {
+    // ignore
+  }
+  return raw
 }
 
 function buildOptionsByMenuId(options: OptionRow[]): Record<string, PromoOptionLike[]> {
@@ -344,8 +368,10 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       console.warn('[grab-promo-campaign] upsert_failed', {
         merchantID,
         promoId: target.promoId,
+        grabItemId: target.grabItemId,
+        salePriceMajor: target.salePrice,
         campaignName: fullName,
-        error: String(e),
+        error: formatGrabCampaignApiError(e),
       })
     }
   }
