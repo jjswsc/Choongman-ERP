@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 
@@ -34,12 +35,33 @@ export async function POST(req: NextRequest) {
       logGrabWebhook('menu_sync_state', req, { requestID, jobID, duplicate: true })
       return new NextResponse(null, { status: 204 })
     }
+    const merchantID = String(body.merchantID ?? '').trim()
+    const status = String(body.status ?? '').trim().toUpperCase()
     logGrabWebhook('menu_sync_state', req, {
       requestID,
       jobID,
-      merchantID: String(body.merchantID ?? ''),
-      status: String(body.status ?? ''),
+      merchantID,
+      status,
     })
+    if (status === 'SUCCESS' && merchantID) {
+      void syncGrabPromoTargetPriceCampaigns({ merchantID })
+        .then((r) => {
+          console.info('[grab-menu-sync] promo_target_price_campaigns', {
+            merchantID,
+            requestID,
+            jobID,
+            ...r,
+          })
+        })
+        .catch((e) => {
+          console.warn('[grab-menu-sync] promo_target_price_campaigns_failed', {
+            merchantID,
+            requestID,
+            jobID,
+            error: String(e),
+          })
+        })
+    }
   } catch {
     logGrabWebhook('menu_sync_state', req, { error: 'invalid_json' })
     return new NextResponse(null, { status: 400 })

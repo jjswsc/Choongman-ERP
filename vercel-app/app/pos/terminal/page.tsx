@@ -899,6 +899,7 @@ export default function PosTerminalPage() {
   const [customerDisplayPaymentMessage, setCustomerDisplayPaymentMessage] = useState('')
   const [customerDisplayQrPayload, setCustomerDisplayQrPayload] = useState('')
   const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
+  const [liveKbankQrAmount, setLiveKbankQrAmount] = useState(0)
   const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
   const [staffKbankQrDataUrl, setStaffKbankQrDataUrl] = useState('')
   const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
@@ -2663,6 +2664,7 @@ export default function PosTerminalPage() {
   useEffect(() => {
     if (isKbankPilotStore) return
     setLiveKbankQrPayload('')
+    setLiveKbankQrAmount(0)
     setLiveKbankQrType('THAI_QR')
     setKbankOpsTxnUid('')
     setKbankOpsOrigTxnUid('')
@@ -2709,6 +2711,11 @@ export default function PosTerminalPage() {
     if (live) return live
     return String(demoKbankQrPayload || '').trim()
   }, [liveKbankQrPayload, demoKbankQrPayload])
+  const effectiveStaffKbankQrAmount = useMemo(() => {
+    const live = String(liveKbankQrPayload || '').trim()
+    if (live && liveKbankQrAmount > 0) return liveKbankQrAmount
+    return Math.max(0, Number(tourPaymentQrAmount || 0))
+  }, [liveKbankQrPayload, liveKbankQrAmount, tourPaymentQrAmount])
 
   const effectiveCustomerDisplayQrPayload = useMemo(() => {
     const live = String(liveKbankQrPayload || '').trim()
@@ -2725,6 +2732,11 @@ export default function PosTerminalPage() {
     if (effectiveCustomerDisplayQrType !== 'THAI_QR') return ''
     return buildThaiQrGuidelineCardDataUrl(effectiveStaffKbankQrPayload)
   }, [effectiveCustomerDisplayQrType, effectiveStaffKbankQrPayload])
+
+  useEffect(() => {
+    if (String(liveKbankQrPayload || '').trim()) return
+    setLiveKbankQrAmount(0)
+  }, [liveKbankQrPayload])
 
   useEffect(() => {
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
@@ -5203,6 +5215,7 @@ export default function PosTerminalPage() {
         return { ok: false as const, message: msg }
       }
       setLiveKbankQrPayload(generatedQrPayload)
+      setLiveKbankQrAmount(qrAmount)
       setLiveKbankQrType(requestedQrType)
       void executeLinkposDisplayQr({
         qrPayload: generatedQrPayload,
@@ -8608,7 +8621,7 @@ export default function PosTerminalPage() {
             </div>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {`QR ${(t('amount') || '금액')}: ${Math.max(0, Number(tourPaymentQrAmount || 0)).toFixed(2)} ฿`}
+            {`QR ${(t('amount') || '금액')}: ${effectiveStaffKbankQrAmount.toFixed(2)} ฿`}
           </p>
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border">

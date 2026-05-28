@@ -12,6 +12,12 @@ import type { PromoOptionLike } from '@/lib/promo-economics'
 import { supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 const CAMPAIGN_NAME_PREFIX = 'CM-POS-PROMO-'
+/** Grab Create Campaign: 최소 지속 2시간 */
+const GRAB_CAMPAIGN_MIN_DURATION_MS = 2 * 60 * 60_000
+/** Grab Create Campaign: 최대 지속 2개월 (달력상 보수적으로 62일) */
+const GRAB_CAMPAIGN_MAX_DURATION_MS = 62 * 24 * 60 * 60_000
+/** startTime은 생성 시각보다 약 1시간 이후 (Grab 검증·기존 운영값) */
+const GRAB_CAMPAIGN_MIN_START_LEAD_MS = 65 * 60_000
 const ALL_DAY_WORKING_HOUR = {
   sun: { periods: [{ startTime: '00:00', endTime: '23:59' }] },
   mon: { periods: [{ startTime: '00:00', endTime: '23:59' }] },
@@ -86,9 +92,14 @@ export function buildGrabTargetPriceCampaignBody(params: {
   const fromYmd = String(params.validFrom ?? '').trim() || today
   const toYmd = String(params.validTo ?? '').trim() || '2099-12-31'
   const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(fromYmd, toYmd)
-  const minStartMs = Date.now() + 65 * 60_000
+  const minStartMs = Date.now() + GRAB_CAMPAIGN_MIN_START_LEAD_MS
   const startMs = Math.max(new Date(gteIso).getTime(), minStartMs)
-  const endMs = Math.max(new Date(lteIso).getTime(), startMs + 60 * 60_000)
+  const promoEndMs = new Date(lteIso).getTime()
+  const grabMaxEndMs = startMs + GRAB_CAMPAIGN_MAX_DURATION_MS
+  const endMs = Math.max(
+    Math.min(promoEndMs, grabMaxEndMs),
+    startMs + GRAB_CAMPAIGN_MIN_DURATION_MS
+  )
 
   return {
     merchantID: params.merchantID,

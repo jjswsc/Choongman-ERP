@@ -1,5 +1,4 @@
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
-import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
   collectGrabPartnerStoreIds,
   isGrabFoodMerchantMapKey,
@@ -74,21 +73,6 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
         merchantID,
         reason: params.reason,
       })
-      void syncGrabPromoTargetPriceCampaigns({ merchantID })
-        .then((r) => {
-          console.info('[grab-menu-sync] promo_target_price_campaigns', {
-            merchantID,
-            reason: params.reason,
-            ...r,
-          })
-        })
-        .catch((e) => {
-          console.warn('[grab-menu-sync] promo_target_price_campaigns_failed', {
-            merchantID,
-            reason: params.reason,
-            error: String(e),
-          })
-        })
     } catch (e) {
       failed += 1
       console.error('[grab-menu-sync] notification_failed', {
