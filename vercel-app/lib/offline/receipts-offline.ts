@@ -4,7 +4,8 @@
  */
 
 import { isOnline } from './network'
-import { getFromCache, setCache, cacheKeyOrders } from './cache'
+import { deleteCache, getFromCache, setCache, cacheKeyOrders } from './cache'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { getPosOrders, type PosOrder } from '@/lib/api-client'
 import { getPendingSavePosOrdersMerged, getQueuedPosOrderStatusById } from './pending-pos-orders-from-queue'
 
@@ -37,6 +38,19 @@ async function mergePendingIntoRows(
   return applyQueuedOrderStatusOverrides(merged)
 }
 
+/** 주문 저장 직후 당일 목록 캐시 무효화(refetch가 구 스냅샷으로 덮는 것 방지) */
+export async function invalidatePosOrdersDayCache(storeCode: string): Promise<void> {
+  const sc = String(storeCode || '').trim()
+  if (!sc) return
+  const day = getPosBusinessDateStr()
+  const key = cacheKeyOrders(sc, day, day, { posBizDay: true })
+  try {
+    await deleteCache('pos_orders_cache', key)
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function getPosOrdersWithCache(params: {
   startStr: string
   endStr: string
@@ -45,8 +59,10 @@ export async function getPosOrdersWithCache(params: {
   debugPosOrders?: boolean
   /** POS 단말 당일 스냅샷 — 영업일 경계 UTC 구간 */
   posBizDayScope?: boolean
+  /** true: API 실패 시 IndexedDB 캐시 폴백 생략(저장 직후 refetch용) */
+  fresh?: boolean
 }): Promise<PosOrder[]> {
-  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope } = params
+  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope, fresh } = params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
@@ -72,6 +88,7 @@ export async function getPosOrdersWithCache(params: {
       await setCache('pos_orders_cache', key, data)
       return mergePendingIntoRows(data, range)
     } catch {
+      if (fresh) throw new Error('getPosOrders failed (fresh)')
       const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
       const merged = await mergePendingIntoRows(cached ?? [], range)
       return applyStatus(merged)

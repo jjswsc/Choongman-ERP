@@ -60,6 +60,8 @@ export interface Order {
   appliedCoupons?: PosAppliedCouponLine[]
   pointUsed?: number
   pointEarned?: number
+  /** 저장 직후 목록 refetch에 아직 안 잡힐 때 UI 유지(서버 id 확정 건) */
+  pendingListSync?: boolean
 }
 
 export interface OrderItem {

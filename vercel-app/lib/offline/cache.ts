@@ -95,6 +95,19 @@ export async function getFromCache<T>(
   })
 }
 
+export async function deleteCache(
+  storeName: 'pos_orders_cache' | 'pos_sales_cache',
+  cacheKey: string
+): Promise<void> {
+  const db = await getDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const req = tx.objectStore(storeName).delete(cacheKey)
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
+}
+
 export async function setCache<T>(
   storeName: 'pos_orders_cache' | 'pos_sales_cache',
   cacheKey: string,

@@ -14,7 +14,7 @@ import {
   type PosOrderItem,
 } from '@/lib/api-client'
 import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
-import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
+import { getPosOrdersWithCache, invalidatePosOrdersDayCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
@@ -284,10 +284,14 @@ type RefetchStoresOptions = {
   storeCode?: string
   /** true: 헤더 새로고침 등 사용자가 즉시 반영을 기대할 때(디바운스 생략) */
   immediate?: boolean
+  /** true: 주문 저장 직후 — 당일 목록 캐시 무효·API 실패 시 구 캐시 폴백 생략 */
+  fresh?: boolean
 }
 
 type OptimisticOrderInput = {
   storeCode: string
+  /** DB pos_orders.id — 있으면 배달/포장 바·목록 id와 일치 */
+  serverOrderId?: number
   orderNo?: string
   orderType?: string
   tableName?: string
@@ -314,16 +318,28 @@ function isLocalOfflineOrder(order: Order | undefined | null): boolean {
   return no.startsWith('LOCAL-') || id.startsWith('local-')
 }
 
+function isPendingListSyncOrder(order: Order | undefined | null): boolean {
+  return Boolean(order?.pendingListSync)
+}
+
+function orderListMergeKey(order: Order): string {
+  const id = String(order.id ?? '').trim()
+  const no = String(order.orderNo ?? '').trim()
+  if (id) return `id:${id}`
+  if (no) return `no:${no}`
+  return ''
+}
+
 function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
   const out = [...fetched]
   const seen = new Set<string>()
   for (const row of fetched) {
-    const key = String(row.orderNo ?? '').trim() || `id:${String(row.id ?? '').trim()}`
+    const key = orderListMergeKey(row)
     if (key) seen.add(key)
   }
   for (const row of prev) {
-    if (!isLocalOfflineOrder(row)) continue
-    const key = String(row.orderNo ?? '').trim() || `id:${String(row.id ?? '').trim()}`
+    if (!isLocalOfflineOrder(row) && !isPendingListSyncOrder(row)) continue
+    const key = orderListMergeKey(row)
     if (!key || seen.has(key)) continue
     out.unshift(row)
     seen.add(key)
@@ -339,7 +355,7 @@ function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): S
     const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
     const local = prevStore.tables.find((pt) => {
       const o = pt.order
-      if (!isLocalOfflineOrder(o)) return false
+      if (!isLocalOfflineOrder(o) && !isPendingListSyncOrder(o)) return false
       const pn = normalizePosTableNameForMatch(String(pt.name ?? ''))
       const pid = normalizePosTableNameForMatch(String(pt.id ?? ''))
       return Boolean((nameNorm && (pn === nameNorm || pid === nameNorm)) || (idNorm && (pn === idNorm || pid === idNorm)))
@@ -400,7 +416,11 @@ export function usePosStore() {
     }
   }, [])
 
-  const fetchStoreSnapshot = useCallback(async (storeCode: string, businessDate: string): Promise<StoreSnapshot> => {
+  const fetchStoreSnapshot = useCallback(async (
+    storeCode: string,
+    businessDate: string,
+    opts?: { fresh?: boolean }
+  ): Promise<StoreSnapshot> => {
     const candidates = new Set<string>()
     const primary = String(storeCode || '').trim()
     if (primary) candidates.add(primary)
@@ -443,6 +463,7 @@ export function usePosStore() {
             startStr: businessDate,
             endStr: businessDate,
             posBizDayScope: true,
+            ...(opts?.fresh ? { fresh: true } : {}),
           }).catch(() => [])
         )
       ),
@@ -624,7 +645,7 @@ export function usePosStore() {
   }, [])
 
   const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const refetchStoresImmediate = useCallback((options?: RefetchStoresOptions) => {
+  const refetchStoresImmediate = useCallback(async (options?: RefetchStoresOptions) => {
     if (!effectiveStoreCodes?.length) return Promise.resolve()
     const requestedStore = String(options?.storeCode ?? '').trim()
     const targetStoreCodes =
@@ -641,7 +662,11 @@ export function usePosStore() {
       setLoading(true)
     }
     const businessDate = getPosBusinessDateStr()
-    return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
+    const fresh = Boolean(options?.fresh)
+    if (fresh) {
+      await Promise.all(targetStoreCodes.map((sc) => invalidatePosOrdersDayCache(sc).catch(() => {})))
+    }
+    return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate, { fresh })))
       .then((results) => {
         const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
         const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
@@ -694,6 +719,7 @@ export function usePosStore() {
     const pass: RefetchStoresOptions = {
       scope: options?.scope,
       storeCode: options?.storeCode,
+      fresh: options?.fresh,
     }
     if (immediate) {
       return refetchStoresImmediate(pass)
@@ -774,7 +800,11 @@ export function usePosStore() {
     const orderNo = String(input.orderNo || '').trim()
     const sumTotal = safeItems.reduce((acc, it) => acc + Number(it.price || 0) * Number(it.quantity || 1), 0)
     const total = Number(input.total ?? sumTotal) || 0
-    const orderId = orderNo || `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const serverOrderId = Number(input.serverOrderId ?? 0)
+    const hasServerId = Number.isFinite(serverOrderId) && serverOrderId > 0
+    const orderId = hasServerId
+      ? String(serverOrderId)
+      : orderNo || `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const optimistic: Order = {
       id: orderId,
       type,
@@ -785,11 +815,13 @@ export function usePosStore() {
       ...(tableName ? { tableName, customerName: tableName } : {}),
       ...(String(input.memo || '').trim() ? { memo: String(input.memo).trim() } : {}),
       ...(orderNo ? { orderNo } : {}),
+      ...(hasServerId ? { pendingListSync: true } : {}),
     }
 
     setOrdersByStoreId((prev) => {
       const list = Array.isArray(prev[storeCode]) ? [...prev[storeCode]] : []
       const next = list.filter((o) => {
+        if (hasServerId && String(o.id ?? '').trim() === String(serverOrderId)) return false
         if (orderNo && String(o.orderNo ?? '').trim() === orderNo) return false
         if (!orderNo && tableName && type === 'dine-in') {
           const t1 = normalizePosTableNameForMatch(String(o.tableName ?? ''))

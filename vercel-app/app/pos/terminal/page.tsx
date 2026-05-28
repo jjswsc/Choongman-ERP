@@ -742,6 +742,49 @@ export default function PosTerminalPage() {
     return refetchStores({ scope: 'current', immediate: true })
   }, [refetchStores])
 
+  /** 주문 저장 직후 — 목록에 즉시 반영 후 서버 스냅샷 동기화(구 캐시·빈 refetch로 사라지는 현상 방지) */
+  const refreshStoreListAfterOrderSave = useCallback(
+    async (input: {
+      orderType: string
+      tableName?: string
+      memo?: string
+      status?: Order['status']
+      total?: number
+      orderNo?: string
+      serverOrderId?: number | null
+      items: Array<{
+        id?: string
+        name?: string
+        quantity?: number
+        price?: number
+        menuId?: string
+        optionId?: string
+        note?: string
+      }>
+      queuedWithoutServerId?: boolean
+    }) => {
+      const serverId =
+        input.serverOrderId != null && input.serverOrderId > 0 ? Number(input.serverOrderId) : null
+      if (serverId != null) {
+        upsertOptimisticOrder({
+          storeCode: currentStoreId,
+          serverOrderId: serverId,
+          orderNo: input.orderNo,
+          orderType: input.orderType,
+          tableName: input.tableName,
+          memo: input.memo,
+          status: input.status ?? 'pending',
+          total: input.total,
+          items: input.items,
+        })
+      }
+      if (!input.queuedWithoutServerId) {
+        await refetchStores({ scope: 'current', immediate: true, fresh: true })
+      }
+    },
+    [currentStoreId, refetchStores, upsertOptimisticOrder]
+  )
+
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [servingTableId, setServingTableId] = useState<string | null>(null)
   /** 데모 홀: 저장 API 없이 서빙 패널용 주문만 오버레이 */
@@ -6602,7 +6645,7 @@ export default function PosTerminalPage() {
                   await notifyQueuedSave(savedOrderNo, queued)
                   if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
                   queuedWithoutServerId = queued && !(savedOrderId != null && savedOrderId > 0)
-                  if (!(savedOrderId != null && savedOrderId > 0)) {
+                  if (queuedWithoutServerId) {
                     upsertOptimisticOrder({
                       storeCode: currentStoreId,
                       orderNo: savedOrderNo,
@@ -6926,9 +6969,23 @@ export default function PosTerminalPage() {
                 }
                 setServingTableId(null)
                 setSelectedTableId(null)
-                if (!queuedWithoutServerId) {
-                  await refetchCurrentStore()
-                }
+                await refreshStoreListAfterOrderSave({
+                  orderType: 'dine_in',
+                  tableName: payload.tableName,
+                  memo: payload.memo,
+                  status: 'pending',
+                  orderNo: savedOrderNo,
+                  serverOrderId: savedOrderId,
+                  total: mergeSubtotal - (payload.discountAmt ?? 0),
+                  items: receiptPrintItems.map((it) => ({
+                    id: it.id,
+                    name: it.name,
+                    quantity: it.qty,
+                    price: it.price,
+                    ...(it.note ? { note: it.note } : {}),
+                  })),
+                  queuedWithoutServerId,
+                })
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
               } finally {
@@ -7234,7 +7291,7 @@ export default function PosTerminalPage() {
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
                   skipAutoOpen: Boolean(payload.splitReceipts?.length),
                 })
-                if (!(newOrderId != null && newOrderId > 0)) {
+                if (queuedWithoutServerId) {
                   upsertOptimisticOrder({
                     storeCode: currentStoreId,
                     orderNo,
@@ -7441,9 +7498,31 @@ export default function PosTerminalPage() {
                     })
                   }
                 }
-                if (!queuedWithoutServerId) {
-                  await refetchCurrentStore()
-                }
+                await refreshStoreListAfterOrderSave({
+                  orderType: payload.orderType,
+                  tableName: payload.orderLabel,
+                  memo: memoWithKbank,
+                  status: hasPayment ? 'paid' : 'pending',
+                  orderNo,
+                  serverOrderId: newOrderId,
+                  total: pricing.finalTotal,
+                  items: payloadItemsNormalized.map((it) => ({
+                    id: String(it.id ?? ''),
+                    name: String(it.name ?? ''),
+                    quantity: resolveCartLineQuantityForSave(it),
+                    price: Number(it.price ?? 0),
+                    ...(String((it as { menuId?: string }).menuId ?? '').trim()
+                      ? { menuId: String((it as { menuId?: string }).menuId).trim() }
+                      : {}),
+                    ...(String((it as { optionId?: string }).optionId ?? '').trim()
+                      ? { optionId: String((it as { optionId?: string }).optionId).trim() }
+                      : {}),
+                    ...(String((it as { note?: string }).note ?? '').trim()
+                      ? { note: String((it as { note?: string }).note).trim() }
+                      : {}),
+                  })),
+                  queuedWithoutServerId,
+                })
                 /** 배달·포장「주문」만 저장 시: 목록에서 다시 누르지 않도록 방금 저장한 건 자동 선택 */
                 if (payload.orderType === 'delivery') {
                   if (!hasPayment && newOrderId != null && newOrderId > 0) {
