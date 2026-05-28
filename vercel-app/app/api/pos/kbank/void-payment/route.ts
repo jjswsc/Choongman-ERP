@@ -63,6 +63,19 @@ export async function POST(req: NextRequest) {
         )
       )
     }
+    if (!resolvedTxnNo) {
+      return withCorsHeaders(
+        NextResponse.json(
+          {
+            success: false,
+            statusCode: 'KBANK_TXN_NO_REQUIRED',
+            message:
+              'txnNo is required for Void Payment. Run Inquiry after payment or use the value from the payment callback.',
+          },
+          { status: 400 }
+        )
+      )
+    }
 
     const payload: KbankVoidPaymentRequest = {
       orderId: orderId > 0 ? orderId : undefined,
@@ -70,13 +83,13 @@ export async function POST(req: NextRequest) {
       origPartnerTxnUid,
       originalTransactionId: origPartnerTxnUid,
       terminalId: terminalId || undefined,
-      txnNo: resolvedTxnNo || undefined,
+      txnNo: resolvedTxnNo,
       payload: {
         ...(rawPayload || {}),
         partnerTxnUid: voidPartnerTxnUid,
         origPartnerTxnUid,
+        txnNo: resolvedTxnNo,
         ...(terminalId ? { terminalId } : {}),
-        ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
       },
     }
 

@@ -205,6 +205,17 @@ export function isKbankBusinessSuccess(statusCode: unknown): boolean {
   return String(statusCode || '').trim() === KBANK_STATUS_CODE_SUCCESS
 }
 
+/** Prefer body statusCode; on HTTP 2xx with no code, assume 00 (avoid treating http 200 as code "200"). */
+export function readKbankResponseStatusCode(
+  json: Record<string, unknown>,
+  httpStatus: number
+): string {
+  const fromBody = String(json.statusCode || json.code || '').trim()
+  if (fromBody) return fromBody
+  if (httpStatus >= 200 && httpStatus < 300) return KBANK_STATUS_CODE_SUCCESS
+  return String(httpStatus)
+}
+
 export function normalizeKbankTxnStatusToPos(
   txnStatus: unknown,
   statusCode?: unknown

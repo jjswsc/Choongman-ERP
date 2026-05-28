@@ -18,6 +18,7 @@ import {
   isKbankAccessTokenAuthError,
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
+  readKbankResponseStatusCode,
   resolveKbankQrTypeCode,
 } from '@/lib/payments/kbank-api-reference'
 
@@ -358,13 +359,13 @@ export async function generateKbankQr(
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
 
-    if (!res.ok) {
-      const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
-      const statusMessage = extractKbankErrorMessage(
-        json,
-        `kbank_generate_qr_failed_http_${res.status}`,
-        res.status
-      )
+    const statusCode = readKbankResponseStatusCode(json, res.status)
+    const statusMessage = extractKbankErrorMessage(
+      json,
+      String(json.statusMessage || json.message || '').trim() || `kbank_generate_qr_failed_http_${res.status}`,
+      res.status
+    )
+    if (!res.ok || !isKbankBusinessSuccess(statusCode)) {
       return {
         ok: false,
         requestId: req.partnerTransactionId,
@@ -377,8 +378,8 @@ export async function generateKbankQr(
     return {
       ok: true,
       requestId: req.partnerTransactionId,
-      statusCode: String(json.statusCode || json.code || '').trim() || '200',
-      statusMessage: String(json.statusMessage || json.message || '').trim() || 'ok',
+      statusCode,
+      statusMessage: statusMessage || 'ok',
       response: json,
     }
   } finally {
@@ -464,13 +465,13 @@ export async function checkKbankQrStatus(
       throw new Error(`KBank inquiry response is not valid JSON. status=${res.status}`)
     }
 
-    if (!res.ok) {
-      const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
-      const statusMessage = extractKbankErrorMessage(
-        json,
-        `kbank_check_status_failed_http_${res.status}`,
-        res.status
-      )
+    const statusCode = readKbankResponseStatusCode(json, res.status)
+    const statusMessage = extractKbankErrorMessage(
+      json,
+      String(json.statusMessage || json.message || '').trim() || `kbank_check_status_failed_http_${res.status}`,
+      res.status
+    )
+    if (!res.ok || !isKbankBusinessSuccess(statusCode)) {
       return {
         ok: false,
         requestId,
@@ -483,8 +484,8 @@ export async function checkKbankQrStatus(
     return {
       ok: true,
       requestId,
-      statusCode: String(json.statusCode || json.code || '').trim() || '200',
-      statusMessage: String(json.statusMessage || json.message || '').trim() || 'ok',
+      statusCode,
+      statusMessage: statusMessage || 'ok',
       response: json,
     }
   } finally {
@@ -646,7 +647,7 @@ async function callKbankActionApi(
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
 
-    const statusCode = String(json.statusCode || json.code || '').trim() || String(res.status)
+    const statusCode = readKbankResponseStatusCode(json, res.status)
     const statusMessage = extractKbankErrorMessage(
       json,
       String(json.statusMessage || json.message || '').trim() || 'kbank_action_failed',

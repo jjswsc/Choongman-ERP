@@ -224,6 +224,14 @@ function sumDenomCountsRecord(counts: Record<number, string>): number {
   )
 }
 
+function patchDenomCount(
+  prev: Record<number, string>,
+  denomValue: number,
+  raw: string
+): Record<number, string> {
+  return { ...prev, [denomValue]: toIntegerInput(raw) }
+}
+
 export type PosSettlementFormProps = {
   t: (key: string) => string
   /** POS 전용 모드 (레이아웃/패딩 최소화) */
@@ -360,6 +368,25 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     !(isOfficeRole(auth?.role || '') || isAccountingRole(auth?.role || ''))
   const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
 
+  /** loadData는 결제 키 로드 후 재실행되면 권종 입력을 덮어쓰므로 ref로 최신 키만 참조 */
+  const cardKeysRef = React.useRef(cardKeys)
+  cardKeysRef.current = cardKeys
+  const qrKeysRef = React.useRef(qrKeys)
+  qrKeysRef.current = qrKeys
+  const otherKeysRef = React.useRef(otherKeys)
+  otherKeysRef.current = otherKeys
+  const deliveryAppKeysRef = React.useRef(deliveryAppKeys)
+  deliveryAppKeysRef.current = deliveryAppKeys
+  const deliveryAppsRef = React.useRef(deliveryApps)
+  deliveryAppsRef.current = deliveryApps
+  /** 매장·날짜 변경 전까지 사용자 권종 입력 유지 (백그라운드 refresh 시 초기화 방지) */
+  const denomCountsUserEditedRef = React.useRef(false)
+  const denomContextRef = React.useRef('')
+  React.useEffect(() => {
+    denomCountsUserEditedRef.current = false
+    denomContextRef.current = `${effectiveStore}:${settleDate}`
+  }, [effectiveStore, settleDate])
+
   /** 결산 인쇄 직후 await 최소화(웹에서 print 제스처 만료 완화) + 수동 인쇄 재사용 */
   const settlementPrinterHwRef = React.useRef<Awaited<ReturnType<typeof getPosPrinterSettings>> | null | undefined>(
     undefined
@@ -417,9 +444,44 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       })
   }, [effectiveStore])
 
-  const loadData = React.useCallback(() => {
+  const applyDenomCountsFromSettlement = React.useCallback(
+    (single: PosSettlement, force = false) => {
+      const ctx = `${effectiveStore}:${settleDate}`
+      if (!force && denomCountsUserEditedRef.current && denomContextRef.current === ctx) return
+      denomContextRef.current = ctx
+      if (force) denomCountsUserEditedRef.current = false
+      const savedDenoms =
+        single.cashActualDenoms && typeof single.cashActualDenoms === 'object'
+          ? denomCountsFromSavedDenoms(single.cashActualDenoms as Record<string, number>)
+          : null
+      const cashActNum = single.cashActual != null ? Number(single.cashActual) : NaN
+      const cashActOk = Number.isFinite(cashActNum)
+      if (savedDenoms && cashActOk) {
+        const sumSaved = sumDenomCountsRecord(savedDenoms)
+        if (Math.abs(sumSaved - cashActNum) > 0.5) {
+          setDenomCounts(denomStringsFromCashActualBaht(cashActNum))
+        } else {
+          setDenomCounts(savedDenoms)
+        }
+      } else if (cashActOk && cashActNum > 0) {
+        setDenomCounts(denomStringsFromCashActualBaht(cashActNum))
+      } else {
+        setDenomCounts(emptyDenomCountRecord())
+      }
+    },
+    [effectiveStore, settleDate]
+  )
+
+  const loadData = React.useCallback((opts?: { forceDenoms?: boolean }) => {
     if (!effectiveStore) return
+    if (opts?.forceDenoms) denomCountsUserEditedRef.current = false
     setLoading(true)
+    const activeCardKeys =
+      cardKeysRef.current.length > 0 ? cardKeysRef.current : ['Visa', 'Master', 'Amex', 'JCB', 'Other']
+    const activeQrKeys = qrKeysRef.current.length > 0 ? qrKeysRef.current : [...DEFAULT_QR_KEYS]
+    const activeOtherKeys = otherKeysRef.current.length > 0 ? otherKeysRef.current : [...DEFAULT_OTHER_KEYS]
+    const activeDeliveryAppKeys = deliveryAppKeysRef.current
+    const activeDeliveryApps = deliveryAppsRef.current
     const fetcher = offlineAware ? getPosSettlementWithCache : getPosSettlement
     const mainPromise = fetcher({
       settleDate,
@@ -433,7 +495,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       : Promise.resolve(null)
     Promise.all([mainPromise, prevDayPromise])
       .then(([main, prev]) => {
-        const { platformKeys, dineInKeys } = computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps)
+        const { platformKeys, dineInKeys } = computeSettlementDeliveryKeys(
+          activeDeliveryAppKeys,
+          activeDeliveryApps
+        )
         const {
           systemTotal: st,
           systemSubtotal: sub,
@@ -503,10 +568,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setDeliveryAppAmt(formatBahtAmountForField(nextDeliveryAmt))
           setOtherAmt(formatBahtAmountForField(nextOtherAmt))
           const cb: Record<string, string> = {}
-          CARD_KEYS.forEach((k) => {
+          activeCardKeys.forEach((k) => {
             cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
           })
-          const autoCb = buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
+          const autoCb = buildAutoBreakdown(autoCardMap, activeCardKeys, { allowExtra: false })
           const cardBreakdownEmpty = isBreakdownEmpty(cb)
           const cardAutoApplied = (preferLiveAuto || cardBreakdownEmpty) && autoCardTotal > 0
           setCardBreakdown(
@@ -515,10 +580,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           if ((Number(single.cardAmt ?? 0) || 0) <= 0 && cardAmtFallbackFromPos > 0) {
             setCardAmt(formatBahtAmountForField(cardAmtFallbackFromPos))
           }
-          const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
-          const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
-          const hydrated = hydrateSettlementQrOtherBreakdowns(single, qk, ok)
-          const autoQb = buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
+          const hydrated = hydrateSettlementQrOtherBreakdowns(single, activeQrKeys, activeOtherKeys)
+          const autoQb = buildAutoBreakdown(autoQrMap, activeQrKeys, { allowExtra: true })
           const qrBreakdownEmpty = isBreakdownEmpty(hydrated.qrBreakdown)
           const qrAutoApplied = (preferLiveAuto || qrBreakdownEmpty) && autoQrTotal > 0
           setQrBreakdown(
@@ -529,7 +592,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           }
           setOtherBreakdown(mapBreakdownStringsToBahtDisplay(hydrated.otherBreakdown))
           const hydratedOtherEmpty = isBreakdownEmpty(hydrated.otherBreakdown)
-          const autoOtherBreakdownNext = buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true })
+          const autoOtherBreakdownNext = buildAutoBreakdown(autoOtherMap, activeOtherKeys, { allowExtra: true })
           const otherAutoApplied = (preferLiveAuto || hydratedOtherEmpty) && autoOtherTotal > 0
           if (otherAutoApplied) {
             setOtherBreakdown(mapBreakdownStringsToBahtDisplay(autoOtherBreakdownNext))
@@ -560,7 +623,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           }
           let extraDine = 0
           for (const [k, v] of Object.entries(oldDel)) {
-            if (deliverySettlementKeyIsDineIn(k, deliveryApps) && !dineInKeys.includes(k)) {
+            if (deliverySettlementKeyIsDineIn(k, activeDeliveryApps) && !dineInKeys.includes(k)) {
               extraDine += Number(v) || 0
             }
           }
@@ -604,24 +667,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             other: otherAutoApplied,
             cash: openMode ? cashAutoApplied : autoCashTotal > 0,
           })
-          const savedDenoms =
-            single.cashActualDenoms && typeof single.cashActualDenoms === 'object'
-              ? denomCountsFromSavedDenoms(single.cashActualDenoms as Record<string, number>)
-              : null
-          const cashActNum = single.cashActual != null ? Number(single.cashActual) : NaN
-          const cashActOk = Number.isFinite(cashActNum)
-          if (savedDenoms && cashActOk) {
-            const sumSaved = sumDenomCountsRecord(savedDenoms)
-            if (Math.abs(sumSaved - cashActNum) > 0.5) {
-              setDenomCounts(denomStringsFromCashActualBaht(cashActNum))
-            } else {
-              setDenomCounts(savedDenoms)
-            }
-          } else if (cashActOk && cashActNum > 0) {
-            setDenomCounts(denomStringsFromCashActualBaht(cashActNum))
-          } else {
-            setDenomCounts(emptyDenomCountRecord())
-          }
+          applyDenomCountsFromSettlement(single, Boolean(opts?.forceDenoms))
         } else {
           setSettlement(null)
           setSystemSubtotal(0)
@@ -634,23 +680,19 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setOtherAmt(formatBahtAmountForField(autoOtherTotal || 0))
           setCardBreakdown(
             mapBreakdownStringsToBahtDisplay(
-              buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
+              buildAutoBreakdown(autoCardMap, activeCardKeys, { allowExtra: false })
             )
           )
-          {
-            const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
-            const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
-            setQrBreakdown(
-              mapBreakdownStringsToBahtDisplay(
-                buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
-              )
+          setQrBreakdown(
+            mapBreakdownStringsToBahtDisplay(
+              buildAutoBreakdown(autoQrMap, activeQrKeys, { allowExtra: true })
             )
-            setOtherBreakdown(
-              mapBreakdownStringsToBahtDisplay(
-                buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true })
-              )
+          )
+          setOtherBreakdown(
+            mapBreakdownStringsToBahtDisplay(
+              buildAutoBreakdown(autoOtherMap, activeOtherKeys, { allowExtra: true })
             )
-          }
+          )
           setDeliveryAppBreakdown(
             mapBreakdownStringsToBahtDisplay(
               buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true })
@@ -672,7 +714,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             other: autoOtherTotal > 0,
             cash: autoCashTotal > 0,
           })
-          setDenomCounts(emptyDenomCountRecord())
+          if (!denomCountsUserEditedRef.current || opts?.forceDenoms) {
+            denomCountsUserEditedRef.current = false
+            setDenomCounts(emptyDenomCountRecord())
+          }
         }
         if (openMode && prev) {
           const prevS = Array.isArray(prev.settlement) ? prev.settlement[0] : prev.settlement
@@ -694,20 +739,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setDineInDeliveryBreakdown({})
         setOpeningCashActual(null)
         setAutoFilledFlags({ card: false, qr: false, delivery: false, other: false, cash: false })
-        setDenomCounts(emptyDenomCountRecord())
+        if (!denomCountsUserEditedRef.current) {
+          setDenomCounts(emptyDenomCountRecord())
+        }
       })
       .finally(() => setLoading(false))
-  }, [
-    settleDate,
-    effectiveStore,
-    deliveryAppKeys,
-    deliveryApps,
-    cardKeys,
-    qrKeys,
-    otherKeys,
-    openMode,
-    offlineAware,
-  ])
+  }, [settleDate, effectiveStore, openMode, offlineAware, applyDenomCountsFromSettlement])
 
   React.useEffect(() => {
     if (canSearchAll) {
@@ -823,6 +860,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
   /** 서버 확정(또는 이번 세션 즉시 확정) 마감은 저장/수정 재시도 차단 */
   const inputsLocked = (Boolean(settlement?.closed) || closedSavedOnce) && !canUnclose
+
+  const handleDenomCountChange = React.useCallback((denomValue: number, raw: string) => {
+    denomCountsUserEditedRef.current = true
+    setDenomCounts((prev) => patchDenomCount(prev, denomValue, raw))
+  }, [])
 
   const composeSettlementReceiptFullHtml = (): string => {
     const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
@@ -1063,7 +1105,7 @@ ${footerStamp}
           webKioskPrintPopup = null
         }
         await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
-        loadData()
+        loadData({ forceDenoms: true })
       } else {
         closePrintPopup(webKioskPrintPopup)
         webKioskPrintPopup = null
@@ -1138,7 +1180,7 @@ ${footerStamp}
       <div className={paddingClass}>
         <OfflineBanner
           offlineOnly={offlineAware}
-          onSyncComplete={loadData}
+          onSyncComplete={() => loadData({ forceDenoms: true })}
           offlineMsg={t('posSettlementOfflineSaved') || '오프라인 모드 - 결산이 로컬에 저장됩니다. 복구 후 자동 전송됩니다.'}
           syncingMsg={t('posSyncing') || '동기화 중...'}
           retryLabel={t('posRetrySync') || '재시도'}
@@ -1197,7 +1239,7 @@ ${footerStamp}
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
+          <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={() => loadData({ forceDenoms: true })} disabled={loading}>
             <RotateCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             {t('posRefresh') || '새로고침'}
           </Button>
@@ -1271,17 +1313,14 @@ ${footerStamp}
                         ×
                       </span>
                       <Input
-                        type="number"
-                        min={0}
-                        step={1}
+                        type="text"
                         inputMode="numeric"
+                        autoComplete="off"
                         placeholder="0"
                         aria-label={`${d.label} ${qtyLabel}`}
                         className="h-9 w-[3.25rem] shrink-0 border-input/80 px-2 text-center text-sm font-semibold tabular-nums shadow-inner sm:w-14 sm:text-base"
                         value={denomCounts[d.value] ?? ''}
-                        onChange={(e) =>
-                          setDenomCounts((prev) => ({ ...prev, [d.value]: toIntegerInput(e.target.value) }))
-                        }
+                        onChange={(e) => handleDenomCountChange(d.value, e.target.value)}
                         disabled={inputsLocked}
                       />
                       <span className="mx-0.5 shrink-0 text-muted-foreground/50 sm:mx-1" aria-hidden>
@@ -1401,6 +1440,11 @@ ${footerStamp}
                 {/* 돈통 시제: 화폐 단위 입력 (영업시작과 동일) */}
                 <div data-tour="pos-tour-close-cash-actual">
                   <p className="mb-2 text-sm font-medium">{t('posCashActual') || '돈통 시제'}</p>
+                  {inputsLocked && (
+                    <p className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                      {t('posClosedByAdminOnly') || '마감 해제는 본사 관리자만 가능합니다.'}
+                    </p>
+                  )}
                   {settlement?.cashActual != null && Number(settlement.cashActual) > 0 && (
                     <p className="mb-2 text-xs text-muted-foreground">
                       {t('posSavedCashActual') || '저장된 시제'}: {formatBahtNum(Number(settlement.cashActual))} ฿
@@ -1424,20 +1468,14 @@ ${footerStamp}
                             ×
                           </span>
                           <Input
-                            type="number"
-                            min={0}
-                            step={1}
+                            type="text"
                             inputMode="numeric"
+                            autoComplete="off"
                             placeholder="0"
                             aria-label={`${d.label} ${qtyLabel}`}
                             className="h-8 w-[3rem] shrink-0 px-1.5 text-center text-sm font-semibold tabular-nums sm:h-9 sm:w-[3.25rem]"
                             value={denomCounts[d.value] ?? ''}
-                            onChange={(e) =>
-                              setDenomCounts((prev) => ({
-                                ...prev,
-                                [d.value]: toIntegerInput(e.target.value),
-                              }))
-                            }
+                            onChange={(e) => handleDenomCountChange(d.value, e.target.value)}
                             disabled={inputsLocked}
                           />
                           <span className="mx-0.5 shrink-0 text-muted-foreground/50 sm:mx-1" aria-hidden>

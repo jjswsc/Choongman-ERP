@@ -5241,6 +5241,13 @@ export default function PosTerminalPage() {
           return
         }
         if (action === 'void') {
+          if (!txnNo) {
+            await appAlert(
+              t('posKbankTxnNoRequiredAlert') ||
+                'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.'
+            )
+            return
+          }
           const voidPartnerTxnUid = `VOD${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
           const out = await executeKbankVoidPayment({
             storeCode: currentStoreId,

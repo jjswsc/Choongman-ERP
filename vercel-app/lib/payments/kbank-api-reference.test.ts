@@ -3,6 +3,7 @@ import {
   formatKbankHttpErrorMessage,
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
+  readKbankResponseStatusCode,
   normalizeKbankTxnStatusToPos,
   resolveKbankCreditCardBrandLabels,
   resolveKbankOpenApiErrorMessage,
@@ -27,6 +28,13 @@ describe('kbank-api-reference', () => {
   it('detects business success code 00', () => {
     expect(isKbankBusinessSuccess('00')).toBe(true)
     expect(isKbankBusinessSuccess('10')).toBe(false)
+    expect(isKbankBusinessSuccess('200')).toBe(false)
+  })
+
+  it('reads statusCode from body or assumes 00 on HTTP 2xx', () => {
+    expect(readKbankResponseStatusCode({ statusCode: '10' }, 200)).toBe('10')
+    expect(readKbankResponseStatusCode({}, 200)).toBe('00')
+    expect(readKbankResponseStatusCode({}, 502)).toBe('502')
   })
 
   it('resolves card brands from cardScheme/sof', () => {

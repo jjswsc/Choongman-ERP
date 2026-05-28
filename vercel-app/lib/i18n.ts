@@ -6132,6 +6132,8 @@ export const i18n = {
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
+    posKbankTxnNoRequiredAlert:
+      'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -14736,6 +14738,8 @@ orderItemQty: 'Qty',
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
+    posKbankTxnNoRequiredAlert:
+      'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -40502,6 +40506,8 @@ orderItemQty: 'ຈຳນວນ',
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
+    posKbankTxnNoRequiredAlert:
+      'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
