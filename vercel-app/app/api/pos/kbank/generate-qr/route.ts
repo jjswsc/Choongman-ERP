@@ -44,6 +44,50 @@ function buildPartnerTransactionId(seed?: string): string {
   return `P${Date.now()}${rand}`.slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
 }
 
+function pickPrimitiveText(v: unknown): string {
+  if (typeof v === 'string') return v.trim()
+  if (typeof v === 'number' || typeof v === 'bigint') return String(v).trim()
+  return ''
+}
+
+function extractQrPayloadMeta(raw: unknown): {
+  payload: string
+  sourceKey: string
+  length: number
+  startsWith000201: boolean
+} {
+  const keys = ['qrPayload', 'qrCode', 'qrString', 'qrData', 'payload', 'qrRawData', 'qrRaw', 'thaiQr']
+  const sources: Record<string, unknown>[] = []
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const root = raw as Record<string, unknown>
+    sources.push(root)
+    for (const nestedKey of ['data', 'result', 'payment', 'paymentInfo']) {
+      const nested = root[nestedKey]
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        sources.push(nested as Record<string, unknown>)
+      }
+    }
+  }
+  for (const obj of sources) {
+    for (const key of keys) {
+      const value = pickPrimitiveText(obj[key])
+      if (!value) continue
+      return {
+        payload: value,
+        sourceKey: key,
+        length: value.length,
+        startsWith000201: value.startsWith('000201'),
+      }
+    }
+  }
+  return {
+    payload: '',
+    sourceKey: '',
+    length: 0,
+    startsWith000201: false,
+  }
+}
+
 export async function OPTIONS() {
   return withCorsHeaders(new NextResponse(null, { status: 204 }))
 }
@@ -146,6 +190,15 @@ export async function POST(req: NextRequest) {
     const responseData = result.response && typeof result.response === 'object'
       ? (result.response as Record<string, unknown>)
       : {}
+    const qrMeta = extractQrPayloadMeta(responseData)
+    if (result.ok) {
+      console.info('kbank/generate-qr meta:', {
+        partnerTransactionId,
+        sourceKey: qrMeta.sourceKey || null,
+        payloadLength: qrMeta.length,
+        startsWith000201: qrMeta.startsWith000201,
+      })
+    }
     const responseCode = String(responseData.code || '').trim()
     const responseMessage = String(responseData.message || '').trim()
     const failureMessage =
@@ -165,6 +218,13 @@ export async function POST(req: NextRequest) {
           storeCode: storeCode || null,
           statusCode: result.statusCode || responseCode || null,
           statusMessage: result.statusMessage || responseMessage || null,
+          qrPayloadMeta: result.ok
+            ? {
+                sourceKey: qrMeta.sourceKey || null,
+                payloadLength: qrMeta.length,
+                startsWith000201: qrMeta.startsWith000201,
+              }
+            : null,
           data: result.response,
         },
         { status }

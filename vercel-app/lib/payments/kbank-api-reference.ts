@@ -161,6 +161,20 @@ export function formatKbankHttpErrorMessage(
   return String(fallback || '').trim() || `kbank_http_${httpStatus}`
 }
 
+/** KBank Open API rate-limit / quota exceeded (English message from bank). */
+export function isKbankRateLimitError(message: unknown): boolean {
+  const key = String(message || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  return (
+    key.includes('rate limit') ||
+    key.includes('quota violation') ||
+    key.includes('quota limit exceeded') ||
+    key.includes('the rate limit is exceeded')
+  )
+}
+
 /** Credit Card QR 미등록·미사용(EMQRNCC 등) — Thai QR로 안내 가능 */
 export function isKbankCreditCardQrUnavailableError(
   errorCode: unknown,

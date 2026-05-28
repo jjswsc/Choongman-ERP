@@ -14,7 +14,7 @@ import {
   type PosOrderItem,
 } from '@/lib/api-client'
 import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
-import { getPosOrdersWithCache, invalidatePosOrdersDayCache } from '@/lib/offline/receipts-offline'
+import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
@@ -284,8 +284,6 @@ type RefetchStoresOptions = {
   storeCode?: string
   /** true: 헤더 새로고침 등 사용자가 즉시 반영을 기대할 때(디바운스 생략) */
   immediate?: boolean
-  /** true: 주문 저장 직후 — 당일 목록 캐시 무효·API 실패 시 구 캐시 폴백 생략 */
-  fresh?: boolean
 }
 
 type OptimisticOrderInput = {
@@ -416,11 +414,7 @@ export function usePosStore() {
     }
   }, [])
 
-  const fetchStoreSnapshot = useCallback(async (
-    storeCode: string,
-    businessDate: string,
-    opts?: { fresh?: boolean }
-  ): Promise<StoreSnapshot> => {
+  const fetchStoreSnapshot = useCallback(async (storeCode: string, businessDate: string): Promise<StoreSnapshot> => {
     const candidates = new Set<string>()
     const primary = String(storeCode || '').trim()
     if (primary) candidates.add(primary)
@@ -463,7 +457,6 @@ export function usePosStore() {
             startStr: businessDate,
             endStr: businessDate,
             posBizDayScope: true,
-            ...(opts?.fresh ? { fresh: true } : {}),
           }).catch(() => [])
         )
       ),
@@ -662,11 +655,7 @@ export function usePosStore() {
       setLoading(true)
     }
     const businessDate = getPosBusinessDateStr()
-    const fresh = Boolean(options?.fresh)
-    if (fresh) {
-      await Promise.all(targetStoreCodes.map((sc) => invalidatePosOrdersDayCache(sc).catch(() => {})))
-    }
-    return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate, { fresh })))
+    return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
       .then((results) => {
         const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
         const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
@@ -719,7 +708,6 @@ export function usePosStore() {
     const pass: RefetchStoresOptions = {
       scope: options?.scope,
       storeCode: options?.storeCode,
-      fresh: options?.fresh,
     }
     if (immediate) {
       return refetchStoresImmediate(pass)

@@ -167,6 +167,7 @@ import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from '@/lib/pos-qr-brand
 import { encodeQR, renderCard } from 'thai-qr-payment'
 import {
   isKbankCreditCardQrUnavailableError,
+  isKbankRateLimitError,
   resolveKbankCreditCardBrandLabels,
 } from '@/lib/payments/kbank-api-reference'
 import {
@@ -251,8 +252,16 @@ function pickFirstNonEmptyText(
   for (const src of sources) {
     if (!src) continue
     for (const key of keys) {
-      const value = String(src[key] ?? '').trim()
-      if (value) return value
+      const raw = src[key]
+      if (typeof raw === 'string') {
+        const value = raw.trim()
+        if (value) return value
+        continue
+      }
+      if (typeof raw === 'number' || typeof raw === 'bigint') {
+        const value = String(raw).trim()
+        if (value) return value
+      }
     }
   }
   return ''
@@ -782,7 +791,7 @@ export default function PosTerminalPage() {
         })
       }
       if (!input.queuedWithoutServerId) {
-        await refetchStores({ scope: 'current', immediate: true, fresh: true })
+        await refetchStores({ scope: 'current', immediate: true })
       }
     },
     [currentStoreId, refetchStores, upsertOptimisticOrder]
@@ -899,6 +908,9 @@ export default function PosTerminalPage() {
   const [kbankOpsTerminalId, setKbankOpsTerminalId] = useState('')
   const [kbankOpsLastResult, setKbankOpsLastResult] = useState('')
   const [kbankOpsCardBrands, setKbankOpsCardBrands] = useState<string[]>([])
+  const kbankGenerateLastAtRef = useRef(0)
+  const kbankInquiryLastAtRef = useRef(0)
+  const kbankFollowupLastAtRef = useRef(0)
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
@@ -5073,6 +5085,33 @@ export default function PosTerminalPage() {
   )
 
   const sleepMs = useCallback((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), [])
+  const enforceKbankCooldown = useCallback(
+    async (
+      bucket: 'generate' | 'inquiry' | 'followup',
+      minIntervalMs: number,
+      label: string
+    ): Promise<boolean> => {
+      const targetRef =
+        bucket === 'generate'
+          ? kbankGenerateLastAtRef
+          : bucket === 'inquiry'
+            ? kbankInquiryLastAtRef
+            : kbankFollowupLastAtRef
+      const now = Date.now()
+      const elapsed = now - targetRef.current
+      const remainingMs = minIntervalMs - elapsed
+      if (remainingMs > 0) {
+        const waitSec = Math.ceil(remainingMs / 1000)
+        await appAlert(
+          `KBank rate-limit protection: wait about ${waitSec}s before ${label}.`
+        )
+        return false
+      }
+      targetRef.current = now
+      return true
+    },
+    []
+  )
 
   const runKbankQrPaymentIfNeeded = useCallback(
     async (
@@ -5087,6 +5126,10 @@ export default function PosTerminalPage() {
         const msg = t('posStoreRequired') || '매장 정보가 필요합니다.'
         await appAlert(msg)
         return { ok: false as const, message: msg }
+      }
+      const canGenerate = await enforceKbankCooldown('generate', 5000, 'Generate QR')
+      if (!canGenerate) {
+        return { ok: false as const, message: 'kbank_generate_cooldown' }
       }
       const requestedQrType =
         String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase() === 'CREDIT_CARD'
@@ -5113,15 +5156,18 @@ export default function PosTerminalPage() {
         setKbankOpsOrigTxnUid('')
         setKbankOpsTxnNo('')
         setCustomerDisplayPaymentMessage('')
+        const rateLimited = isKbankRateLimitError(generate.message || generate.statusMessage)
         const msg =
           generate.statusCode === 'KBANK_TERMINAL_ID_REQUIRED'
             ? t('posKbankTerminalIdRequiredAlert') ||
               'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel (e.g. 09000107) or set KBANK_TERMINAL_ID on the server.'
-            : requestedQrType === 'CREDIT_CARD' &&
-                isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
-              ? t('posKbankCreditCardQrNotRegisteredAlert') ||
-                'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'
-              : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
+            : rateLimited
+              ? 'KBank rate limit exceeded. Wait 2–5 minutes, then try Generate QR again (do not tap repeatedly).'
+              : requestedQrType === 'CREDIT_CARD' &&
+                  isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
+                ? t('posKbankCreditCardQrNotRegisteredAlert') ||
+                  'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'
+                : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
@@ -5171,7 +5217,10 @@ export default function PosTerminalPage() {
       let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
       let refId = String(generatedInfo.referenceId || '').trim()
 
-      for (let i = 0; i < 3; i += 1) {
+      // Rate-limit safe: wait before first inquiry; at most 2 checks (not 3 back-to-back).
+      await sleepMs(5000)
+      for (let i = 0; i < 2; i += 1) {
+        kbankInquiryLastAtRef.current = Date.now()
         const st = await executeKbankCheckStatus({
           storeCode: currentStoreId,
           orderId: context?.orderId,
@@ -5202,7 +5251,7 @@ export default function PosTerminalPage() {
         if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
         if (!refId) refId = String(st.refId || '').trim()
-        if (i < 2) await sleepMs(2000)
+        if (i < 1) await sleepMs(5000)
       }
 
       const pendingMsg =
@@ -5224,7 +5273,7 @@ export default function PosTerminalPage() {
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posManual') || '수동 처리'))
       return { ok: true as const, partnerTransactionId, pending: true as const }
     },
-    [isPosDemo, isKbankPilotStore, currentStoreId, kbankOpsTerminalId, t, sleepMs]
+    [isPosDemo, isKbankPilotStore, currentStoreId, kbankOpsTerminalId, t, sleepMs, enforceKbankCooldown]
   )
 
   const runKbankFollowupAction = useCallback(
@@ -5241,9 +5290,17 @@ export default function PosTerminalPage() {
       const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 32)
       const terminalId = String(kbankOpsTerminalId || '').trim()
       const txnNo = String(kbankOpsTxnNo || '').trim()
+      if (action === 'inquiry') {
+        const canInquiry = await enforceKbankCooldown('inquiry', 5000, 'Inquiry')
+        if (!canInquiry) return
+      } else {
+        const canFollowup = await enforceKbankCooldown('followup', 3000, action)
+        if (!canFollowup) return
+      }
       setKbankOpsBusy(true)
       try {
         if (action === 'inquiry') {
+          kbankInquiryLastAtRef.current = Date.now()
           const out = await executeKbankCheckStatus({
             storeCode: currentStoreId,
             partnerTransactionId: partnerTxnUid,
@@ -5364,6 +5421,7 @@ export default function PosTerminalPage() {
       kbankOpsTxnNo,
       liveKbankQrType,
       t,
+      enforceKbankCooldown,
     ]
   )
 

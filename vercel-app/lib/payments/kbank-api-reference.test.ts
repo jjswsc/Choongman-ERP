@@ -5,6 +5,7 @@ import {
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
   isKbankCreditCardQrUnavailableError,
+  isKbankRateLimitError,
   readKbankResponseStatusCode,
   normalizeKbankTxnStatusToPos,
   resolveKbankCreditCardBrandLabels,
@@ -64,5 +65,13 @@ describe('kbank-api-reference', () => {
     expect(
       formatKbankApiErrorMessage('', 'This merchant has not registered for QR credit card. (EMQRNCC)')
     ).toContain('not registered')
+  })
+
+  it('detects rate limit quota messages', () => {
+    expect(
+      isKbankRateLimitError(
+        'Rate limit quota violation. Quota limit exceeded. Identifier : ChoongmanTest-UAT3.1.70.209'
+      )
+    ).toBe(true)
   })
 })
