@@ -97,32 +97,40 @@ export async function POST(request: NextRequest) {
         payableRowsByAccrualId.set(id, list)
       }
 
-      const isAutoLinkedDoneAccrual = (accrualId: number): boolean => {
+      const isAutoLinkedSingleBankPaymentAccrual = (accrualId: number): boolean => {
         const accrualStatus = statusByAccrualId.get(accrualId) || ''
-        if (accrualStatus !== 'done') return false
+        if (!['done', 'paid'].includes(accrualStatus)) return false
         const rows = payableRowsByAccrualId.get(accrualId) || []
         if (rows.length === 0) return false
-        let hasThisBankPayment = false
+        const paymentRows = rows.filter((row) => String(row.ref_type || '') === 'Payment')
+        if (paymentRows.length !== 1) return false
+        const targetPayment = paymentRows[0]
+        if (!targetPayment) return false
+        const targetPaymentBankId = Number(targetPayment.bank_transaction_id || 0)
+        const targetPaymentPettyId = Number(targetPayment.petty_cash_transaction_id || 0)
+        if (targetPaymentPettyId > 0) return false
+        if (targetPaymentBankId !== bankTransactionId) return false
+
+        let hasExpenseRow = false
         for (const row of rows) {
           const refType = String(row.ref_type || '')
           const rowBankId = Number(row.bank_transaction_id || 0)
           const rowPettyId = Number(row.petty_cash_transaction_id || 0)
           if (refType === 'Expense') {
             if (rowBankId > 0 || rowPettyId > 0) return false
+            hasExpenseRow = true
             continue
           }
           if (refType === 'Payment') {
-            if (rowPettyId > 0) return false
-            if (rowBankId !== bankTransactionId) return false
-            hasThisBankPayment = true
+            if (row.id !== targetPayment.id) return false
             continue
           }
           return false
         }
-        return hasThisBankPayment
+        return hasExpenseRow
       }
 
-      const blockedAccrual = linkedAccrualIds.some((id) => !isAutoLinkedDoneAccrual(id))
+      const blockedAccrual = linkedAccrualIds.some((id) => !isAutoLinkedSingleBankPaymentAccrual(id))
       if (blockedAccrual) {
         return NextResponse.json(
           { success: false, message: '지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.' },

@@ -158,6 +158,10 @@ interface PosReceiptModalProps {
   onAutoPrintComplete?: () => void
   /** 보조 POS 등 자동 인쇄 생략 시 — 큐를 비우지 않고 현재 장만 닫음 */
   onSuppressDismiss?: () => void
+  /** 결제 영수증 모달에서 KBank Void 후속 처리 */
+  onPaymentVoidClick?: () => void | Promise<void>
+  paymentVoidEnabled?: boolean
+  paymentVoidBusy?: boolean
 }
 
 export function PosReceiptModal({
@@ -198,6 +202,9 @@ export function PosReceiptModal({
   kitchenPromoLineEnrich,
   onAutoPrintComplete,
   onSuppressDismiss,
+  onPaymentVoidClick,
+  paymentVoidEnabled = false,
+  paymentVoidBusy = false,
 }: PosReceiptModalProps) {
   const { lang } = useLang()
   const autoPrintedKeyRef = useRef<string>('')
@@ -500,6 +507,8 @@ export function PosReceiptModal({
   const showManualPrintDialog = !autoReceiptManual && !autoKitchenSlipManual
   const showKitchenButton =
     (ctxManual === 'order' || ctxManual === 'add_order') && receiptData.items.length > 0
+  const showPaymentVoidButton =
+    ctxManual === 'payment' && Boolean(onPaymentVoidClick) && paymentVoidEnabled
 
   if (showManualPrintDialog) {
     return (
@@ -535,6 +544,17 @@ export function PosReceiptModal({
                 onClick={() => void handlePrintKitchenSlip(true)}
               >
                 {tr('posPrintKitchenOnly', '주방 주문서 인쇄')}
+              </Button>
+            )}
+            {showPaymentVoidButton && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full sm:w-auto"
+                disabled={paymentVoidBusy}
+                onClick={() => void onPaymentVoidClick?.()}
+              >
+                {tr('posKbankVoid', 'Void')}
               </Button>
             )}
             <Button

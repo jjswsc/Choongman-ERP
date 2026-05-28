@@ -43,6 +43,7 @@ import {
   getPosDeliveryApps,
   getPosBusinessDaySettings,
   getPosTaxInvoiceRecipients,
+  getPosPaymentAttempts,
   executeKbankCancelQr,
   executeKbankCheckStatus,
   executeKbankGenerateQr,
@@ -63,6 +64,7 @@ import {
   type PosTableItem,
   type PosPrinterSettings,
   type PosPromoWithItems,
+  type PosPaymentAttempt,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
@@ -935,6 +937,8 @@ export default function PosTerminalPage() {
   const [kbankOpsTerminalId, setKbankOpsTerminalId] = useState('')
   const [kbankOpsLastResult, setKbankOpsLastResult] = useState('')
   const [kbankOpsCardBrands, setKbankOpsCardBrands] = useState<string[]>([])
+  const [kbankCallbackState, setKbankCallbackState] = useState<'idle' | 'waiting' | 'received' | 'failed'>('idle')
+  const kbankCallbackNotifiedTxRef = useRef('')
   const kbankGenerateLastAtRef = useRef(0)
   const kbankInquiryLastAtRef = useRef(0)
   const kbankFollowupLastAtRef = useRef(0)
@@ -2696,6 +2700,8 @@ export default function PosTerminalPage() {
     setKbankOpsOrigTxnUid('')
     setKbankOpsTxnNo('')
     setKbankOpsLastResult('')
+    setKbankCallbackState('idle')
+    kbankCallbackNotifiedTxRef.current = ''
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId])
 
@@ -5194,6 +5200,7 @@ export default function PosTerminalPage() {
       if (!generate.success) {
         setLiveKbankQrPayload('')
         setLiveKbankQrType('THAI_QR')
+        setKbankCallbackState('idle')
         setKbankOpsTxnUid('')
         setKbankOpsOrigTxnUid('')
         setKbankOpsTxnNo('')
@@ -5229,6 +5236,7 @@ export default function PosTerminalPage() {
       setKbankOpsTxnUid(partnerTransactionId)
       setKbankOpsOrigTxnUid(resolvedOrigTxnUid)
       if (resolvedTxnNo) setKbankOpsTxnNo(resolvedTxnNo)
+      setKbankCallbackState('waiting')
       const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
       setKbankOpsCardBrands(
         resolveKbankCreditCardBrandLabels({
@@ -5274,12 +5282,14 @@ export default function PosTerminalPage() {
         if (st.success) {
           const s = String(st.status || '').trim().toLowerCase()
           if (s === 'approved') {
+            setKbankCallbackState('received')
             setCustomerDisplayPaymentMessage('')
             return { ok: true as const, partnerTransactionId }
           }
           if (s === 'declined') {
             setLiveKbankQrPayload('')
             setLiveKbankQrType('THAI_QR')
+            setKbankCallbackState('failed')
             setKbankOpsTxnUid('')
             setKbankOpsOrigTxnUid('')
             setKbankOpsTxnNo('')
@@ -5307,6 +5317,7 @@ export default function PosTerminalPage() {
       if (!proceed) {
         setLiveKbankQrPayload('')
         setLiveKbankQrType('THAI_QR')
+        setKbankCallbackState('idle')
         setKbankOpsTxnUid('')
         setKbankOpsOrigTxnUid('')
         setKbankOpsTxnNo('')
@@ -5386,6 +5397,7 @@ export default function PosTerminalPage() {
           if (out.success) {
             setLiveKbankQrPayload('')
             setLiveKbankQrType('THAI_QR')
+            setKbankCallbackState('idle')
           }
           setKbankOpsLastResult(`[CANCEL] ${JSON.stringify(out)}`)
           return
@@ -5421,6 +5433,7 @@ export default function PosTerminalPage() {
           if (out.success) {
             setLiveKbankQrPayload('')
             setLiveKbankQrType('THAI_QR')
+            setKbankCallbackState('idle')
           }
           setKbankOpsLastResult(`[VOID] ${JSON.stringify(out)}`)
           return
@@ -5484,6 +5497,72 @@ export default function PosTerminalPage() {
     },
     []
   )
+
+  useEffect(() => {
+    if (!isKbankPilotStore || !currentStoreId) return
+    const localTxId = String(kbankOpsTxnUid || '').trim()
+    if (!localTxId) {
+      setKbankCallbackState('idle')
+      return
+    }
+    if (kbankCallbackState === 'idle') {
+      setKbankCallbackState('waiting')
+    }
+    let cancelled = false
+    const applyCallbackAttempt = async () => {
+      const businessDate = getPosBusinessDateStr()
+      const rows = await getPosPaymentAttempts({
+        startStr: businessDate,
+        endStr: businessDate,
+        storeCode: currentStoreId,
+        status: 'all',
+        localTxId,
+        limit: 1,
+      })
+      if (cancelled || !Array.isArray(rows) || rows.length === 0) return
+      const hit = rows[0] as PosPaymentAttempt | undefined
+      if (!hit) return
+      const status = String(hit.status || '').trim().toLowerCase()
+      const lowerText = String(hit.responseText || '').trim().toLowerCase()
+      const txnNoFromTextMatch =
+        lowerText.match(/(?:txnno|transactionno)\s*[:=]\s*([a-z0-9-]{4,30})/i) ||
+        lowerText.match(/\btxnno\b.*?\b([a-z0-9-]{4,30})\b/i)
+      const txnNoFromText = String(txnNoFromTextMatch?.[1] || '').trim()
+      if (txnNoFromText && !String(kbankOpsTxnNo || '').trim()) {
+        setKbankOpsTxnNo(txnNoFromText.slice(0, 20))
+      }
+      if (status === 'approved') {
+        setKbankCallbackState('received')
+        setKbankOpsLastResult(
+          `[CALLBACK] ${JSON.stringify({
+            localTxId,
+            status: hit.status,
+            responseCode: hit.responseCode,
+            responseText: hit.responseText,
+            createdAt: hit.createdAt,
+          })}`
+        )
+        if (kbankCallbackNotifiedTxRef.current !== localTxId) {
+          kbankCallbackNotifiedTxRef.current = localTxId
+          await appAlert(
+            'KBank callback received: payment approved. You can continue without Inquiry rate-limit retries.'
+          )
+        }
+        return
+      }
+      if (status === 'declined' || status === 'failed' || status === 'timeout' || status === 'error') {
+        setKbankCallbackState('failed')
+      }
+    }
+    void applyCallbackAttempt().catch(() => {})
+    const timerId = window.setInterval(() => {
+      void applyCallbackAttempt().catch(() => {})
+    }, 8000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timerId)
+    }
+  }, [isKbankPilotStore, currentStoreId, kbankOpsTxnUid, kbankOpsTxnNo, kbankCallbackState])
 
   const applyTaxInvoiceProfile = useCallback((profile: PosTaxInvoiceData) => {
     setTiCustomerType(profile.customerType === 'company' ? 'company' : 'person')
@@ -8719,6 +8798,17 @@ export default function PosTerminalPage() {
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {`${t('posKbankPartnerTxnUidLabel') || 'partnerTxnUid'}: ${kbankOpsTxnUid || '-'}`}
               </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {`Callback: ${
+                  kbankCallbackState === 'received'
+                    ? 'received'
+                    : kbankCallbackState === 'failed'
+                      ? 'failed'
+                      : kbankCallbackState === 'waiting'
+                        ? 'waiting'
+                        : 'idle'
+                }`}
+              </p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[11px]">{t('posKbankOrigTxnUidLabel') || 'origPartnerTxnUid'}</Label>
@@ -8868,6 +8958,15 @@ export default function PosTerminalPage() {
         }
         printerSettingsRef={posPrinterSettingsRef}
         kitchenPromoLineEnrich={posReceiptLineOpts}
+        onPaymentVoidClick={() => void runKbankFollowupAction('void')}
+        paymentVoidEnabled={
+          Boolean(
+            isKbankPilotStore &&
+            receiptData?.receiptAutoPrintContext === 'payment' &&
+            String(kbankOpsTxnUid || '').trim()
+          )
+        }
+        paymentVoidBusy={kbankOpsBusy}
       />
       <DeliveryEditOrderNoDialog
         open={deliveryEditOrderNoOpen}

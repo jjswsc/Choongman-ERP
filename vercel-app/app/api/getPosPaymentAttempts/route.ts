@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const localTxId = String(searchParams.get('localTxId') || '').trim()
   const caller = await resolveBearerCaller(request)
   let effectiveStoreCode = requestedStore
   if (caller && !isOfficeRole(caller.role)) {
@@ -67,6 +68,9 @@ export async function GET(request: NextRequest) {
       } else {
         filters.push(`status=eq.${encodeURIComponent(status)}`)
       }
+    }
+    if (localTxId) {
+      filters.push(`local_tx_id=eq.${encodeURIComponent(localTxId)}`)
     }
 
     const selectFields =
