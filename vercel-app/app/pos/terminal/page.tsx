@@ -165,7 +165,10 @@ import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from '@/lib/pos-qr-brand-assets'
 import { encodeQR, renderCard } from 'thai-qr-payment'
-import { resolveKbankCreditCardBrandLabels } from '@/lib/payments/kbank-api-reference'
+import {
+  isKbankCreditCardQrUnavailableError,
+  resolveKbankCreditCardBrandLabels,
+} from '@/lib/payments/kbank-api-reference'
 import {
   subscribePosOrdersInsert,
   subscribePosOrdersUpdate,
@@ -5114,7 +5117,11 @@ export default function PosTerminalPage() {
           generate.statusCode === 'KBANK_TERMINAL_ID_REQUIRED'
             ? t('posKbankTerminalIdRequiredAlert') ||
               'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel (e.g. 09000107) or set KBANK_TERMINAL_ID on the server.'
-            : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
+            : requestedQrType === 'CREDIT_CARD' &&
+                isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
+              ? t('posKbankCreditCardQrNotRegisteredAlert') ||
+                'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'
+              : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
@@ -8590,16 +8597,18 @@ export default function PosTerminalPage() {
                 </>
               )}
             </div>
-            <div className="mt-2 flex min-h-[280px] items-center justify-center">
-              {staffKbankQrDataUrl ? (
-                <img src={staffKbankQrDataUrl} alt="KBank QR" className="h-[260px] w-[260px] object-contain" />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
-                  <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
-                  <span>{t('posLoading') || '로딩 중'}</span>
-                </div>
-              )}
-            </div>
+            {effectiveCustomerDisplayQrType === 'CREDIT_CARD' || !staffThaiQrCardDataUrl ? (
+              <div className="mt-2 flex min-h-[280px] items-center justify-center">
+                {staffKbankQrDataUrl ? (
+                  <img src={staffKbankQrDataUrl} alt="KBank QR" className="h-[260px] w-[260px] object-contain" />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
+                    <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
+                    <span>{t('posLoading') || '로딩 중'}</span>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
           {!isPosDemo && isKbankPilotStore ? (
             <div className="mt-3 rounded-md border border-border/70 bg-card p-2">

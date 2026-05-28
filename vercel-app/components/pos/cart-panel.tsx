@@ -5061,6 +5061,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           {tr('posQrTypeCredit', 'Credit Card QR')}
                         </Button>
                       </div>
+                      <p className="mt-2 text-[10px] leading-snug text-sky-700/90 dark:text-sky-300/90">
+                        {tr(
+                          'posKbankCreditCardQrHint',
+                          'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.'
+                        )}
+                      </p>
                     </div>
                   )}
                   {key === 'cash' && (

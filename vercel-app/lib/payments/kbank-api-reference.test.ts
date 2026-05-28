@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatKbankApiErrorMessage,
   formatKbankHttpErrorMessage,
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
+  isKbankCreditCardQrUnavailableError,
   readKbankResponseStatusCode,
   normalizeKbankTxnStatusToPos,
   resolveKbankCreditCardBrandLabels,
@@ -54,5 +56,13 @@ describe('kbank-api-reference', () => {
 
   it('detects expired access token message', () => {
     expect(isKbankAccessTokenExpiredError('Access Token expired')).toBe(true)
+  })
+
+  it('maps EMQRNCC credit card QR registration errors', () => {
+    expect(isKbankCreditCardQrUnavailableError('EMQRNCC', '')).toBe(true)
+    expect(formatKbankApiErrorMessage('EMQRNCC', '')).toContain('not registered')
+    expect(
+      formatKbankApiErrorMessage('', 'This merchant has not registered for QR credit card. (EMQRNCC)')
+    ).toContain('not registered')
   })
 })

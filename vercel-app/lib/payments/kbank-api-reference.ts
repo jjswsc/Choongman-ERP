@@ -47,6 +47,9 @@ const KBANK_ERROR_CODE_MESSAGES: Record<string, string> = {
   qr_void: 'QR void is not allowed.',
   qr_no_credit_card: 'Merchant has not registered for QR credit card.',
   qr_not_enable_credit_card: 'Merchant has not enabled QR credit card.',
+  /** KBank API — credit card QR product not enabled for merchant */
+  EMQRNCC: 'Merchant has not registered for QR credit card.',
+  EMQRNECC: 'Merchant has not enabled QR credit card.',
   settlement_error: 'Settlement error.',
   callback_error: 'Callback error.',
   payment_exceed_limit: 'Payment exceeds limit.',
@@ -158,13 +161,30 @@ export function formatKbankHttpErrorMessage(
   return String(fallback || '').trim() || `kbank_http_${httpStatus}`
 }
 
+/** Credit Card QR 미등록·미사용(EMQRNCC 등) — Thai QR로 안내 가능 */
+export function isKbankCreditCardQrUnavailableError(
+  errorCode: unknown,
+  errorDesc?: unknown
+): boolean {
+  const code = String(errorCode || '').trim().toUpperCase()
+  if (code === 'EMQRNCC' || code === 'EMQRNECC' || code === 'QR_NO_CREDIT_CARD' || code === 'QR_NOT_ENABLE_CREDIT_CARD') {
+    return true
+  }
+  const blob = `${String(errorDesc || '')} ${String(errorCode || '')}`.toUpperCase()
+  return blob.includes('EMQRNCC') || blob.includes('EMQRNECC') || blob.includes('NOT REGISTERED FOR QR CREDIT')
+}
+
 export function formatKbankApiErrorMessage(
   errorCode: unknown,
   errorDesc: unknown,
   fallback?: string,
   httpContext?: { httpStatus?: number; json?: Record<string, unknown> }
 ): string {
+  const code = String(errorCode || '').trim()
+  if (code && KBANK_ERROR_CODE_MESSAGES[code]) return KBANK_ERROR_CODE_MESSAGES[code]
   const desc = String(errorDesc || '').trim()
+  const parenCode = /\(([A-Z0-9_]+)\)\s*$/.exec(desc)?.[1]
+  if (parenCode && KBANK_ERROR_CODE_MESSAGES[parenCode]) return KBANK_ERROR_CODE_MESSAGES[parenCode]
   if (desc) return desc
 
   if (httpContext?.json && (httpContext.httpStatus ?? 0) >= 400) {
@@ -176,8 +196,6 @@ export function formatKbankApiErrorMessage(
     if (httpMsg && !httpMsg.startsWith('kbank_http_')) return httpMsg
   }
 
-  const code = String(errorCode || '').trim()
-  if (code && KBANK_ERROR_CODE_MESSAGES[code]) return KBANK_ERROR_CODE_MESSAGES[code]
   return String(fallback || '').trim() || code || 'kbank_api_error'
 }
 

@@ -386,13 +386,15 @@ export default function PosCustomerDisplayPage() {
                     </>
                   )}
                 </div>
-                <div className="mt-3 flex items-center justify-center">
-                  <img
-                    src={`https://quickchart.io/qr?text=${encodeURIComponent(String(state?.qrPayload || ""))}&size=360&margin=1`}
-                    alt="Customer QR"
-                    className="h-72 w-72 rounded-lg bg-white p-2"
-                  />
-                </div>
+                {resolvedQrType === "CREDIT_CARD" || !thaiQrCardDataUrl ? (
+                  <div className="mt-3 flex items-center justify-center">
+                    <img
+                      src={`https://quickchart.io/qr?text=${encodeURIComponent(String(state?.qrPayload || ""))}&size=360&margin=1`}
+                      alt="Customer QR"
+                      className="h-72 w-72 rounded-lg bg-white p-2"
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : (
               <p className="text-xl opacity-80">{t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}</p>

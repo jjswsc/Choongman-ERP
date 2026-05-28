@@ -6130,6 +6130,10 @@ export const i18n = {
     posKbankTerminalIdHint: '예: 09000107 — KBank에서 발급한 단말 ID',
     posKbankTerminalIdRequiredAlert:
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
+    posKbankCreditCardQrNotRegisteredAlert:
+      'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
+    posKbankCreditCardQrHint:
+      'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
@@ -14736,6 +14740,10 @@ orderItemQty: 'Qty',
     posKbankTerminalIdHint: 'e.g. 09000107 — terminal ID from KBank',
     posKbankTerminalIdRequiredAlert:
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
+    posKbankCreditCardQrNotRegisteredAlert:
+      'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
+    posKbankCreditCardQrHint:
+      'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
@@ -40504,6 +40512,10 @@ orderItemQty: 'ຈຳນວນ',
     posKbankTerminalIdHint: 'e.g. 09000107 — terminal ID from KBank',
     posKbankTerminalIdRequiredAlert:
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
+    posKbankCreditCardQrNotRegisteredAlert:
+      'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
+    posKbankCreditCardQrHint:
+      'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
