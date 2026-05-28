@@ -29,6 +29,13 @@ import {
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
 
+function isGrabAdvancedPricingFallbackEnabled(): boolean {
+  const raw = String(process.env.GRAB_MENU_ADVANCED_PRICING_FALLBACK || '')
+    .trim()
+    .toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
+}
+
 type MenuRow = {
   id?: number
   code?: string
@@ -951,6 +958,7 @@ export async function buildGrabMenuFromPos(params: {
       const grabListPriceMinor = Math.max(1, toMinorUnit(grabListPriceMajor))
       const grabSalePriceMinor =
         promoCut?.showCutPrice ? Math.max(1, toMinorUnit(promoCut.salePrice)) : grabListPriceMinor
+      const enableAdvancedPricingFallback = isGrabAdvancedPricingFallbackEnabled()
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
         ? policyImageUrl
@@ -968,7 +976,7 @@ export async function buildGrabMenuFromPos(params: {
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
         ...(available ? {} : { maxStock: 0 }),
         price: grabListPriceMinor,
-        ...(promoCut?.showCutPrice
+        ...(promoCut?.showCutPrice && enableAdvancedPricingFallback
           ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabSalePriceMinor) }
           : {}),
         campaignInfo: null,

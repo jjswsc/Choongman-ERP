@@ -91,6 +91,7 @@ function todayStr() {
 type BankImportRowEdit = {
   category?: string
   accountSubjectId?: string
+  autoAssigned?: boolean
   note?: string
   salesDate?: string
   expenseDate?: string
@@ -977,7 +978,11 @@ export function BankTransactionsTab() {
       importPreview.rows.forEach((r, idx) => {
         if (r.transType === "deposit" && r.memo) {
           const explicitCategory = String(next[idx]?.category ?? "").trim().toLowerCase()
-          if (explicitCategory) return
+          const defaultCategory = getDefaultImportCategory(r)
+          const hasUserSelectedNonDefaultCategory = Boolean(
+            explicitCategory && explicitCategory !== defaultCategory
+          )
+          if (hasUserSelectedNonDefaultCategory) return
           const sug = suggestDepositWithRules(r.memo, memoRules, revenueAccountOptions)
           if (sug) {
             const d = new Date(r.transDate)
@@ -992,17 +997,25 @@ export function BankTransactionsTab() {
               ...next[idx],
               category: coerced.category,
               accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined,
+              autoAssigned: true,
               storeName: coerced.storeName ?? next[idx]?.storeName,
               salesDate:
                 coerced.category === "receivable_receive" ? undefined : d.toISOString().slice(0, 10),
             }
           }
         } else if (r.transType === "withdraw" && r.memo) {
+          const explicitCategory = String(next[idx]?.category ?? "").trim().toLowerCase()
+          const defaultCategory = getDefaultImportCategory(r)
+          const hasUserSelectedNonDefaultCategory = Boolean(
+            explicitCategory && explicitCategory !== defaultCategory
+          )
+          if (hasUserSelectedNonDefaultCategory) return
           const sug = suggestWithdrawWithRules(r.memo, memoRules, accountSubjectOptions)
           if (sug) {
             next[idx] = {
               ...next[idx],
               category: sug.category,
+              autoAssigned: true,
               ...(sug.accountSubjectId ? { accountSubjectId: String(sug.accountSubjectId) } : {}),
             }
           }
@@ -1482,10 +1495,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
   }
 
   const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId" | "note" | "salesDate" | "expenseDate" | "vendorCode" | "storeName", value: string) => {
-    setImportRowEdits((prev) => ({
-      ...prev,
-      [idx]: { ...prev[idx], [field]: value || undefined },
-    }))
+    setImportRowEdits((prev) => {
+      const isManualClassificationEdit = field === "category" || field === "accountSubjectId"
+      return {
+        ...prev,
+        [idx]: {
+          ...prev[idx],
+          [field]: value || undefined,
+          ...(isManualClassificationEdit ? { autoAssigned: false } : {}),
+        },
+      }
+    })
   }
 
   const applyImportQuickMemo = React.useCallback(
@@ -2514,49 +2534,64 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     {importPreview.rows.map((r, idx) => {
                       const impRaw = importRowEdits[idx]?.category || getDefaultImportCategory(r)
                       const impCat = r.transType === "withdraw" && impRaw === "fixed" ? "expense" : impRaw
+                      const isAutoAssigned = importRowEdits[idx]?.autoAssigned === true
                       return (
                       <tr key={idx} className={`border-t ${importRowEdits[idx]?.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
                         <td className="p-2 whitespace-nowrap">{r.transDate}</td>
                         <td className="p-2 text-center whitespace-nowrap">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                         <td className="p-2">
                           {r.transType === "withdraw" ? (
-                            <Select
-                              value={impCat}
-                              onValueChange={(v) => setImportRowEdit(idx, "category", v)}
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
-                                <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                                <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
-                                <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
-                                <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="space-y-1">
+                              <Select
+                                value={impCat}
+                                onValueChange={(v) => setImportRowEdit(idx, "category", v)}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
+                                  <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                  <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
+                                  <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                  <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                  <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                  <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {isAutoAssigned ? (
+                                <div className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                                  {tt("bankAutoAssignedBadge", "Auto")}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : (
-                            <Select
-                              value={impRaw}
-                              onValueChange={(v) => setImportRowEdit(idx, "category", v)}
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
-                                <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
-                                <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
-                                <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
-                                <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
-                                <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="space-y-1">
+                              <Select
+                                value={impRaw}
+                                onValueChange={(v) => setImportRowEdit(idx, "category", v)}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
+                                  <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
+                                  <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
+                                  <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
+                                  <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
+                                  <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                  <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                  <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                  <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {isAutoAssigned ? (
+                                <div className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                                  {tt("bankAutoAssignedBadge", "Auto")}
+                                </div>
+                              ) : null}
+                            </div>
                           )}
                         </td>
                         <td className="p-2">
