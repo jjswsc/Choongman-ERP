@@ -329,6 +329,32 @@ function buildThaiQrGuidelineCardDataUrl(payload: string): string {
   }
 }
 
+function readEmvTagValue(payload: string, wantedTag: string): string {
+  let i = 0
+  while (i + 4 <= payload.length) {
+    const tag = payload.slice(i, i + 2)
+    const lenText = payload.slice(i + 2, i + 4)
+    if (!/^\d{2}$/.test(lenText)) return ''
+    const len = Number(lenText)
+    const valueStart = i + 4
+    const valueEnd = valueStart + len
+    if (valueEnd > payload.length) return ''
+    if (tag === wantedTag) return payload.slice(valueStart, valueEnd).trim()
+    i = valueEnd
+  }
+  return ''
+}
+
+function extractAmountFromEmvQrPayload(payload: string): number {
+  const raw = String(payload || '').trim()
+  if (!raw) return 0
+  const amountText = readEmvTagValue(raw, '54')
+  if (!amountText) return 0
+  const amount = Number(amountText.replace(/,/g, '').trim())
+  if (!Number.isFinite(amount) || amount <= 0) return 0
+  return Math.round(amount * 100) / 100
+}
+
 /** 1–99만 영수증·주방전표에 노출 */
 function posGuestCountForThermalPrint(n: unknown): number | undefined {
   const g = Math.max(0, Math.min(99, Math.trunc(Number(n) || 0)))
@@ -2714,6 +2740,10 @@ export default function PosTerminalPage() {
   const effectiveStaffKbankQrAmount = useMemo(() => {
     const live = String(liveKbankQrPayload || '').trim()
     if (live && liveKbankQrAmount > 0) return liveKbankQrAmount
+    if (live) {
+      const fromPayload = extractAmountFromEmvQrPayload(live)
+      if (fromPayload > 0) return fromPayload
+    }
     return Math.max(0, Number(tourPaymentQrAmount || 0))
   }, [liveKbankQrPayload, liveKbankQrAmount, tourPaymentQrAmount])
 
