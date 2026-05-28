@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGrabPromoCampaignName,
   buildGrabTargetPriceCampaignBody,
+  classifyGrabCampaignApiError,
 } from '@/lib/grab-promo-target-price-campaign'
 
 describe('buildGrabTargetPriceCampaignBody', () => {
@@ -30,5 +31,19 @@ describe('buildGrabTargetPriceCampaignBody', () => {
     const endMs = new Date(String(conditions.endTime)).getTime()
     expect(endMs - startMs).toBeGreaterThanOrEqual(2 * 60 * 60_000)
     expect(endMs - startMs).toBeLessThanOrEqual(62 * 24 * 60 * 60_000 + 1000)
+  })
+})
+
+describe('classifyGrabCampaignApiError', () => {
+  it('classifies items-not-found errors', () => {
+    const err = new Error('Grab API error: 400 {"message":"items not found"}')
+    expect(classifyGrabCampaignApiError(err)).toBe('ITEMS_NOT_FOUND')
+  })
+
+  it('classifies start-time-too-close errors', () => {
+    const err = new Error(
+      'Grab API error: 400 {"message":"CAMPAIGN_START_TIME_TOO_CLOSE_TO_NOW:failed to create MFC:"}'
+    )
+    expect(classifyGrabCampaignApiError(err)).toBe('START_TIME_INVALID')
   })
 })

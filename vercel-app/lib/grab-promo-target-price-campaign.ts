@@ -149,6 +149,31 @@ export function formatGrabCampaignApiError(err: unknown): string {
   return raw
 }
 
+type GrabCampaignErrorCode =
+  | 'ITEMS_NOT_FOUND'
+  | 'START_TIME_INVALID'
+  | 'EFFECTIVE_DATE_OVERLAP'
+  | 'INVALID_DISCOUNT_VALUE'
+  | 'INVALID_QUOTAS'
+  | 'ACTIVE_LIMIT_EXCEEDED'
+  | 'UNKNOWN'
+
+export function classifyGrabCampaignApiError(err: unknown): GrabCampaignErrorCode {
+  const msg = formatGrabCampaignApiError(err).toLowerCase()
+  if (msg.includes('items not found')) return 'ITEMS_NOT_FOUND'
+  if (
+    msg.includes('starttime has to be after now') ||
+    msg.includes('campaign_start_time_too_close_to_now')
+  ) {
+    return 'START_TIME_INVALID'
+  }
+  if (msg.includes('effective_date_overlap')) return 'EFFECTIVE_DATE_OVERLAP'
+  if (msg.includes('invalid_discount_value')) return 'INVALID_DISCOUNT_VALUE'
+  if (msg.includes('invalid_quotas')) return 'INVALID_QUOTAS'
+  if (msg.includes('exceed_active_campaign_max_limit')) return 'ACTIVE_LIMIT_EXCEEDED'
+  return 'UNKNOWN'
+}
+
 function buildOptionsByMenuId(options: OptionRow[]): Record<string, PromoOptionLike[]> {
   const out: Record<string, PromoOptionLike[]> = {}
   for (const opt of options) {
@@ -365,13 +390,24 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       }
     } catch (e) {
       skipped += 1
+      const errorCode = classifyGrabCampaignApiError(e)
+      const errorMessage = formatGrabCampaignApiError(e)
       console.warn('[grab-promo-campaign] upsert_failed', {
         merchantID,
         promoId: target.promoId,
         grabItemId: target.grabItemId,
         salePriceMajor: target.salePrice,
         campaignName: fullName,
-        error: formatGrabCampaignApiError(e),
+        errorCode,
+        error: errorMessage,
+        actionHint:
+          errorCode === 'ITEMS_NOT_FOUND'
+            ? 'check_menu_sync_success_and_merchant_match'
+            : errorCode === 'START_TIME_INVALID'
+              ? 'regenerate_payload_with_fresh_start_time'
+              : errorCode === 'EFFECTIVE_DATE_OVERLAP'
+                ? 'delete_or_adjust_existing_campaign_period'
+                : undefined,
       })
     }
   }
