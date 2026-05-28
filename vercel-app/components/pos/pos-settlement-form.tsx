@@ -749,6 +749,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   React.useEffect(() => {
     if (canSearchAll) {
       if (storeFilter) return
+      const authStoreRaw = String(auth?.store || '').trim()
+      const authStoreMatched =
+        stores.find((s) => s.toLowerCase() === authStoreRaw.toLowerCase()) || authStoreRaw
+      if (authStoreMatched) {
+        setStoreFilter(authStoreMatched)
+        return
+      }
       const branches = filterNonOfficeStores(stores)
       const first = branches[0] || stores[0]
       if (first) setStoreFilter(first)
