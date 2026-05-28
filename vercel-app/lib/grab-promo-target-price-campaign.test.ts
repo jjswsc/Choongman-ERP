@@ -30,7 +30,7 @@ describe('buildGrabTargetPriceCampaignBody', () => {
     const startMs = new Date(String(conditions.startTime)).getTime()
     const endMs = new Date(String(conditions.endTime)).getTime()
     expect(endMs - startMs).toBeGreaterThanOrEqual(2 * 60 * 60_000)
-    expect(endMs - startMs).toBeLessThanOrEqual(62 * 24 * 60 * 60_000 + 1000)
+    expect(endMs - startMs).toBeLessThanOrEqual(59 * 24 * 60 * 60_000 + 1000)
   })
 })
 

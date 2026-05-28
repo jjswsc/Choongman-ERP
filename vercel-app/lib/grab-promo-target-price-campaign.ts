@@ -16,6 +16,8 @@ const CAMPAIGN_NAME_PREFIX = 'CM-POS-PROMO-'
 const GRAB_CAMPAIGN_QUOTAS = { totalCount: 9999, totalCountPerUser: 99 } as const
 /** Grab Create Campaign: 최소 지속 2시간 */
 const GRAB_CAMPAIGN_MIN_DURATION_MS = 2 * 60 * 60_000
+/** Grab Create Campaign: 운영 안전 상한(보수적 59일; "too long" 회피) */
+const GRAB_CAMPAIGN_SAFE_MAX_DURATION_MS = 59 * 24 * 60 * 60_000
 /** startTime은 생성 시각보다 약 1시간 이후 (Grab 검증·기존 운영값) */
 const GRAB_CAMPAIGN_MIN_START_LEAD_MS = 65 * 60_000
 const ALL_DAY_WORKING_HOUR = {
@@ -109,8 +111,11 @@ export function buildGrabTargetPriceCampaignBody(params: {
   const minStartMs = Date.now() + GRAB_CAMPAIGN_MIN_START_LEAD_MS
   const startMs = Math.max(new Date(gteIso).getTime(), minStartMs)
   const promoEndMs = new Date(lteIso).getTime()
-  /** Grab 규칙: 최대 2개월(고정 일수 62일이 아니라 달력 기준) */
-  const grabMaxEndMs = addUtcCalendarMonths(startMs, 2)
+  /** Grab 규칙 "2개월" 해석 차이로 거절되는 케이스 회피: 달력 2개월과 59일 중 더 이른 시각 사용 */
+  const grabMaxEndMs = Math.min(
+    addUtcCalendarMonths(startMs, 2),
+    startMs + GRAB_CAMPAIGN_SAFE_MAX_DURATION_MS
+  )
   const endMs = Math.max(
     Math.min(promoEndMs, grabMaxEndMs),
     startMs + GRAB_CAMPAIGN_MIN_DURATION_MS
