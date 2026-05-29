@@ -353,55 +353,26 @@ export function resolveKbankDisplayQrTypeFromResponse(input: {
   qrType?: unknown
   sof?: unknown
   requested?: KbankDisplayQrType
+  emvPayload?: unknown
 }): KbankDisplayQrType {
-  const rawType = String(input.qrType ?? '').trim().toUpperCase()
-  if (
-    rawType === KBANK_QR_TYPE_CREDIT_CARD ||
-    rawType === '4' ||
-    rawType === 'CREDIT_CARD' ||
-    rawType === 'QRCC' ||
-    rawType === 'CARD'
-  ) {
-    return 'CREDIT_CARD'
-  }
-  if (
-    rawType === KBANK_QR_TYPE_THAI ||
-    rawType === '3' ||
-    rawType === 'THAI_QR' ||
-    rawType === 'THQR' ||
-    rawType === 'THAI'
-  ) {
-    return 'THAI_QR'
-  }
-  if (
-    rawType === KBANK_QR_TYPE_COMBO ||
-    rawType === '5' ||
-    rawType === 'THAI_QR_AND_CARD' ||
-    rawType === 'COMBO' ||
-    rawType === 'BOTH'
-  ) {
-    return 'THAI_QR'
-  }
-
-  const sofParts = (Array.isArray(input.sof) ? input.sof : String(input.sof ?? '').split(/[,|]/))
-    .map((v) => String(v).trim().toUpperCase())
-    .filter(Boolean)
-  if (sofParts.some((p) => p === KBANK_SOF_CREDIT_CARD || p === 'CC' || p.includes('CREDIT'))) {
-    return 'CREDIT_CARD'
-  }
-  if (sofParts.some((p) => p === KBANK_SOF_THAI_QR || p === 'PP' || p.includes('PROMPT'))) {
-    return 'THAI_QR'
-  }
-
-  return input.requested === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
+  return resolveKbankDisplayQrTypeDetails(input).displayType
 }
 
-export type KbankDisplayQrTypeSource = 'bank_qr_type' | 'bank_sof' | 'requested'
+export type KbankDisplayQrTypeSource = 'bank_qr_type' | 'bank_sof' | 'emv_payload' | 'requested'
+
+export function inferKbankQrTypeFromEmvPayload(payload: unknown): KbankDisplayQrType | null {
+  const raw = String(payload || '').trim()
+  if (!raw.startsWith('000201')) return null
+  // Thai QR / PromptPay AID (BOT standard)
+  if (/A0000006770101/i.test(raw)) return 'THAI_QR'
+  return null
+}
 
 export function resolveKbankDisplayQrTypeDetails(input: {
   qrType?: unknown
   sof?: unknown
   requested?: KbankDisplayQrType
+  emvPayload?: unknown
 }): {
   displayType: KbankDisplayQrType
   source: KbankDisplayQrTypeSource
@@ -447,6 +418,11 @@ export function resolveKbankDisplayQrTypeDetails(input: {
   }
   if (sofParts.some((p) => p === KBANK_SOF_THAI_QR || p === 'PP' || p.includes('PROMPT'))) {
     return { displayType: 'THAI_QR', source: 'bank_sof', bankQrTypeCode, bankSof }
+  }
+
+  const emvInferred = inferKbankQrTypeFromEmvPayload(input.emvPayload)
+  if (emvInferred) {
+    return { displayType: emvInferred, source: 'emv_payload', bankQrTypeCode, bankSof }
   }
 
   return {

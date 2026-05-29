@@ -10452,7 +10452,7 @@ export type KbankQrGenerateResult = {
   bankQrTypeCode?: string | null
   bankSof?: string | null
   displayQrType?: 'THAI_QR' | 'CREDIT_CARD' | null
-  displayQrTypeSource?: 'bank_qr_type' | 'bank_sof' | 'requested' | null
+  displayQrTypeSource?: 'bank_qr_type' | 'bank_sof' | 'emv_payload' | 'requested' | null
   qrTypeMismatch?: boolean
   terminalIdIncluded?: boolean
   requestMessage?: Record<string, unknown> | null
@@ -10647,8 +10647,9 @@ export async function executeKbankGenerateQr(params: {
     displayQrTypeSource:
       data.displayQrTypeSource === 'bank_qr_type' ||
       data.displayQrTypeSource === 'bank_sof' ||
+      data.displayQrTypeSource === 'emv_payload' ||
       data.displayQrTypeSource === 'requested'
-        ? (data.displayQrTypeSource as 'bank_qr_type' | 'bank_sof' | 'requested')
+        ? (data.displayQrTypeSource as 'bank_qr_type' | 'bank_sof' | 'emv_payload' | 'requested')
         : null,
     qrTypeMismatch: data.qrTypeMismatch === true,
     terminalIdIncluded: data.terminalIdIncluded === true,

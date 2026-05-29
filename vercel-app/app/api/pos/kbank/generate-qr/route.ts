@@ -160,26 +160,6 @@ export async function POST(req: NextRequest) {
     const requestedAt = new Date().toISOString()
     const result = await generateKbankQr(payload)
 
-    try {
-      await supabaseInsert('pos_payment_attempts', {
-        order_id: orderId > 0 ? orderId : null,
-        local_tx_id: partnerTransactionId,
-        provider: 'kbank_qr_api',
-        mode: 'openapi',
-        tx_code: 'QR',
-        bank_id: 'KBANK',
-        request_amount: amount,
-        approved_amount: 0,
-        response_code: result.statusCode || null,
-        response_text: result.statusMessage || null,
-        status: result.ok ? 'pending' : 'failed',
-        error_reason: result.ok ? null : result.statusMessage || 'generate_qr_failed',
-        created_at: requestedAt,
-      })
-    } catch (insertErr) {
-      console.error('pos/kbank/generate-qr attempt insert:', insertErr)
-    }
-
     const status = result.ok ? 200 : 422
     const responseData = result.response && typeof result.response === 'object'
       ? (result.response as Record<string, unknown>)
@@ -190,12 +170,50 @@ export async function POST(req: NextRequest) {
       qrType: bankQrMeta.qrTypeCode,
       sof: bankQrMeta.sof,
       requested: qrTypeInfo.normalized || 'THAI_QR',
+      emvPayload: qrMeta.payload,
     })
     const displayQrType = qrTypeDetails.displayType
     const qrTypeMismatch =
       qrTypeInfo.normalized === 'CREDIT_CARD' && displayQrType === 'THAI_QR'
     const requestMessage = result.requestBodyMasked || null
     const bankResponseMessage = result.responseBodyMasked || maskKbankMessageForLog(responseData)
+    const auditBundle = {
+      partnerTransactionId,
+      storeCode: storeCode || null,
+      requestedQrType: qrTypeInfo.normalized || qrTypeInfo.raw || null,
+      sentQrTypeCode: result.sentQrTypeCode || sentQrTypeCode,
+      terminalIdIncluded: Boolean(terminalId),
+      bankQrTypeCode: bankQrMeta.qrTypeCode || null,
+      bankSof: bankQrMeta.sof || null,
+      displayQrType,
+      displayQrTypeSource: qrTypeDetails.source,
+      qrTypeMismatch,
+      requestMessage,
+      responseMessage: bankResponseMessage,
+    }
+
+    try {
+      await supabaseInsert('pos_payment_attempts', {
+        order_id: orderId > 0 ? orderId : null,
+        local_tx_id: partnerTransactionId,
+        provider: 'kbank_qr_api',
+        mode: 'openapi',
+        tx_code: 'QR',
+        bank_id: 'KBANK',
+        request_amount: amount,
+        approved_amount: 0,
+        request_raw: JSON.stringify(requestMessage || {}),
+        response_raw: JSON.stringify(bankResponseMessage || {}),
+        response_code: result.statusCode || null,
+        response_text: result.statusMessage || null,
+        status: result.ok ? 'pending' : 'failed',
+        error_reason: result.ok ? null : result.statusMessage || 'generate_qr_failed',
+        created_at: requestedAt,
+      })
+    } catch (insertErr) {
+      console.error('pos/kbank/generate-qr attempt insert:', insertErr)
+    }
+
     if (result.ok) {
       console.info('kbank/generate-qr meta:', {
         partnerTransactionId,
@@ -211,6 +229,18 @@ export async function POST(req: NextRequest) {
         sourceKey: qrMeta.sourceKey || null,
         payloadLength: qrMeta.length,
         startsWith000201: qrMeta.startsWith000201,
+      })
+      console.info('kbank/generate-qr audit:', {
+        partnerTxnUid: partnerTransactionId,
+        ok: true,
+        ...auditBundle,
+      })
+    } else {
+      console.info('kbank/generate-qr audit:', {
+        partnerTxnUid: partnerTransactionId,
+        ok: false,
+        ...auditBundle,
+        statusCode: result.statusCode || null,
       })
     }
     const responseCode = String(responseData.code || '').trim()

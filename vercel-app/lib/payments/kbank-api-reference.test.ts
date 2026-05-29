@@ -14,6 +14,7 @@ import {
   resolveKbankOpenApiErrorMessage,
   resolveKbankQrTypeCode,
   maskKbankMessageForLog,
+  inferKbankQrTypeFromEmvPayload,
 } from './kbank-api-reference'
 
 describe('kbank-api-reference', () => {
@@ -94,6 +95,22 @@ describe('kbank-api-reference', () => {
         requested: 'CREDIT_CARD',
       }).source
     ).toBe('requested')
+  })
+
+  it('infers Thai QR from PromptPay EMV when bank omits qrType', () => {
+    const emv = '000201010212' + 'A000000677010112' + 'x'.repeat(40)
+    expect(inferKbankQrTypeFromEmvPayload(emv)).toBe('THAI_QR')
+    expect(
+      resolveKbankDisplayQrTypeDetails({
+        requested: 'CREDIT_CARD',
+        emvPayload: emv,
+      })
+    ).toEqual({
+      displayType: 'THAI_QR',
+      source: 'emv_payload',
+      bankQrTypeCode: '',
+      bankSof: '',
+    })
   })
 
   it('masks secrets and qr payload for logs', () => {

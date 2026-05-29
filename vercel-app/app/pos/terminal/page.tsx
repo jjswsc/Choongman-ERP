@@ -2803,7 +2803,9 @@ export default function PosTerminalPage() {
 
   const staffKbankQrTypeLabel = useMemo(() => {
     const fromBank =
-      liveKbankQrTypeSource === 'bank_qr_type' || liveKbankQrTypeSource === 'bank_sof'
+      liveKbankQrTypeSource === 'bank_qr_type' ||
+      liveKbankQrTypeSource === 'bank_sof' ||
+      liveKbankQrTypeSource === 'emv_payload'
     if (effectiveCustomerDisplayQrType === 'CREDIT_CARD') {
       return fromBank
         ? t('posKbankQrTypeCreditFromBank') || 'Credit Card QR (from bank)'
@@ -5256,8 +5258,24 @@ export default function PosTerminalPage() {
         setLiveKbankQrPayload('')
         setLiveKbankQrType('THAI_QR')
         setLiveKbankQrTypeSource('requested')
-        setKbankSentQrTypeCode('')
-        setKbankGenerateAuditText('')
+        setKbankSentQrTypeCode(String(generate.sentQrTypeCode || '').trim())
+        setKbankGenerateAuditText(
+          generate.requestMessage
+            ? buildKbankGenerateAuditPaste({
+                partnerTxnUid: String(
+                  generate.partnerTransactionId || partnerTransactionIdSeed
+                ),
+                amount: qrAmount,
+                requestedQrType,
+                sentQrTypeCode: generate.sentQrTypeCode || undefined,
+                bankQrTypeCode: generate.bankQrTypeCode,
+                bankSof: generate.bankSof,
+                requestMessage: generate.requestMessage,
+                responseMessage: generate.responseMessage,
+                storeCode: currentStoreId,
+              })
+            : ''
+        )
         setKbankCallbackState('idle')
         setKbankOpsTxnUid('')
         setKbankOpsOrigTxnUid('')
@@ -5265,16 +5283,13 @@ export default function PosTerminalPage() {
         setCustomerDisplayPaymentMessage('')
         const rateLimited = isKbankRateLimitError(generate.message || generate.statusMessage)
         const msg =
-          generate.statusCode === 'KBANK_TERMINAL_ID_REQUIRED'
-            ? t('posKbankTerminalIdRequiredAlert') ||
-              'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel (e.g. 09000107) or set KBANK_TERMINAL_ID on the server.'
-            : rateLimited
-              ? 'KBank rate limit exceeded. Wait 2–5 minutes, then try Generate QR again (do not tap repeatedly).'
-              : requestedQrType === 'CREDIT_CARD' &&
-                  isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
-                ? t('posKbankCreditCardQrNotRegisteredAlert') ||
-                  'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'
-                : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
+          rateLimited
+            ? 'KBank rate limit exceeded. Wait 2–5 minutes, then try Generate QR again (do not tap repeatedly).'
+            : requestedQrType === 'CREDIT_CARD' &&
+                isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
+              ? t('posKbankCreditCardQrNotRegisteredAlert') ||
+                'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'
+              : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
         await appAlert(msg)
         return { ok: false as const, message: msg }
       }
@@ -5325,6 +5340,7 @@ export default function PosTerminalPage() {
               qrType: bankQrMeta.qrTypeCode,
               sof: generatedInfo.sof,
               requested: requestedQrType,
+              emvPayload: generatedQrPayload,
             })
       setLiveKbankQrType(qrTypeDetails.displayType)
       setLiveKbankQrTypeSource(qrTypeDetails.source)
@@ -5342,19 +5358,18 @@ export default function PosTerminalPage() {
           storeCode: currentStoreId,
         })
       )
-      const qrTypeMismatch =
-        generate.qrTypeMismatch === true ||
-        (requestedQrType === 'CREDIT_CARD' &&
-          qrTypeDetails.displayType === 'THAI_QR' &&
-          qrTypeDetails.source !== 'requested')
-      if (requestedQrType === 'CREDIT_CARD' && (qrTypeMismatch || qrTypeDetails.source === 'requested')) {
-        await appAlert(
-          qrTypeDetails.source === 'requested'
-            ? t('posKbankQrBankTypeUnknownAlert') ||
-                'Credit Card QR was requested (qrType 4). KBank did not return qrType in the response; the QR image shows PromptPay. Please send the audit message below to KBank.'
-            : t('posKbankQrReturnedThaiAlert') ||
-                'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.'
-        )
+      if (requestedQrType === 'CREDIT_CARD') {
+        if (qrTypeDetails.displayType === 'THAI_QR') {
+          await appAlert(
+            t('posKbankQrReturnedThaiAlert') ||
+              'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.'
+          )
+        } else if (qrTypeDetails.source === 'requested') {
+          await appAlert(
+            t('posKbankQrBankTypeUnknownAlert') ||
+              'Credit Card QR was requested (qrType 4). KBank did not return qrType in the response. Please send the audit message below to KBank.'
+          )
+        }
       }
       void executeLinkposDisplayQr({
         qrPayload: generatedQrPayload,
@@ -5409,6 +5424,7 @@ export default function PosTerminalPage() {
             qrType: inquiryMeta.qrTypeCode,
             sof: inquiryMeta.sof,
             requested: requestedQrType,
+            emvPayload: String(liveKbankQrPayload || '').trim(),
           })
           setLiveKbankQrType(inquiryDetails.displayType)
           setLiveKbankQrTypeSource(inquiryDetails.source)
@@ -8868,7 +8884,7 @@ export default function PosTerminalPage() {
                   void navigator.clipboard
                     .writeText(kbankGenerateAuditText)
                     .then(() => appAlert(t('posKbankAuditCopied') || 'Copied KBank message for support.'))
-                    .catch(() => appAlert(t('posCopyFailed') || 'Copy failed'))
+                    .catch(() => appAlert(t('posTerminalDeviceIdCopyFail') || 'Copy failed'))
                 }}
               >
                 {t('posKbankCopyAuditMessage') || 'Copy request/response for KBank'}

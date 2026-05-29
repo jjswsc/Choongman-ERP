@@ -370,15 +370,6 @@ export async function generateKbankQr(
     )
     if (!res.ok || !isKbankBusinessSuccess(statusCode)) {
       const responseBodyMasked = maskKbankMessageForLog(json) as Record<string, unknown>
-      console.info('kbank/generate-qr audit:', {
-        partnerTxnUid: req.partnerTransactionId,
-        ok: false,
-        sentQrTypeCode,
-        requestBody: requestBodyMasked,
-        responseBody: responseBodyMasked,
-        httpStatus: res.status,
-        statusCode,
-      })
       return {
         ok: false,
         requestId: req.partnerTransactionId,
@@ -392,14 +383,6 @@ export async function generateKbankQr(
     }
 
     const responseBodyMasked = maskKbankMessageForLog(json) as Record<string, unknown>
-    console.info('kbank/generate-qr audit:', {
-      partnerTxnUid: req.partnerTransactionId,
-      ok: true,
-      sentQrTypeCode,
-      requestBody: requestBodyMasked,
-      responseBody: responseBodyMasked,
-      statusCode,
-    })
 
     return {
       ok: true,
