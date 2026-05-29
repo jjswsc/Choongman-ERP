@@ -5,10 +5,24 @@ import QRCode from 'qrcode'
 import { cn } from '@/lib/utils'
 import { POS_QR_BRAND, type PosQrDisplayKind } from '@/lib/pos-qr-brand-paths'
 
-/** Center logo ≈ 16% of QR module area (same ratio as `renderCard`). */
-const QR_DISPLAY_PX = 248
+/**
+ * BOT / KBank guideline card proportions (reference slip layout).
+ * - Header band: full card width, ~16% visual height
+ * - PromptPay mark: ~28% card width
+ * - QR modules: ~82% card width
+ * - Center logo: ~14% of QR module area
+ */
+const GUIDELINE_CARD_WIDTH_PX = 280
+const QR_WIDTH_RATIO = 0.82
+const PROMPTPAY_WIDTH_RATIO = 0.28
+const CARD_BRAND_ROW_WIDTH_RATIO = 0.72
+const HEADER_BAND_HEIGHT_RATIO = 0.22
 const CENTER_LOGO_RATIO = 0.14
-const HEADER_TO_QR_RATIO = 0.98
+
+const QR_DISPLAY_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * QR_WIDTH_RATIO)
+const PROMPTPAY_WIDTH_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * PROMPTPAY_WIDTH_RATIO)
+const CARD_BRAND_ROW_WIDTH_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * CARD_BRAND_ROW_WIDTH_RATIO)
+const HEADER_BAND_MAX_HEIGHT_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * HEADER_BAND_HEIGHT_RATIO)
 
 type Props = {
   payload: string
@@ -17,16 +31,10 @@ type Props = {
   qrClassName?: string
 }
 
-function ThaiQrHeaderBand({
-  className,
-  widthPx,
-}: {
-  className?: string
-  widthPx: number
-}) {
+function ThaiQrHeaderBand({ className }: { className?: string }) {
   return (
     <div
-      className={cn('w-full bg-white px-4 pb-2 pt-3', className)}
+      className={cn('w-full bg-white px-2 pb-1 pt-2', className)}
       role="img"
       aria-label="THAI QR PAYMENT"
     >
@@ -34,7 +42,10 @@ function ThaiQrHeaderBand({
         src={POS_QR_BRAND.thaiQrHeader}
         alt="THAI QR PAYMENT"
         className="mx-auto block h-auto w-full object-contain"
-        style={{ maxWidth: widthPx }}
+        style={{
+          maxWidth: GUIDELINE_CARD_WIDTH_PX,
+          maxHeight: HEADER_BAND_MAX_HEIGHT_PX,
+        }}
       />
     </div>
   )
@@ -44,7 +55,6 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
   const [qrUrl, setQrUrl] = React.useState('')
   const [failed, setFailed] = React.useState(false)
   const centerLogoPx = Math.round(QR_DISPLAY_PX * CENTER_LOGO_RATIO)
-  const headerWidthPx = Math.round(QR_DISPLAY_PX * HEADER_TO_QR_RATIO)
 
   React.useEffect(() => {
     const raw = String(payload || '').trim()
@@ -103,24 +113,31 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
   }
 
   return (
-    <div className={cn('overflow-hidden rounded-md border bg-white', className)}>
-      <ThaiQrHeaderBand widthPx={headerWidthPx} />
-      <div className="border-t border-[#d8e1ef] bg-white px-3 py-2.5">
+    <div
+      className={cn('mx-auto overflow-hidden rounded-md border bg-white', className)}
+      style={{ maxWidth: GUIDELINE_CARD_WIDTH_PX }}
+    >
+      <ThaiQrHeaderBand />
+      <div className="bg-white px-2 py-2">
         {kind === 'CREDIT_CARD' ? (
-          <div className="mx-auto flex w-full max-w-[320px] items-center justify-center gap-2 sm:gap-3">
-            <img src={POS_QR_BRAND.visa} alt="Visa" className="h-7 max-h-8 flex-1 object-contain" />
-            <img src={POS_QR_BRAND.mastercard} alt="Mastercard" className="h-8 max-h-9 flex-1 object-contain" />
-            <img src={POS_QR_BRAND.unionpay} alt="UnionPay" className="h-7 max-h-8 flex-1 object-contain" />
+          <div
+            className="mx-auto flex items-center justify-center gap-1.5"
+            style={{ width: CARD_BRAND_ROW_WIDTH_PX }}
+          >
+            <img src={POS_QR_BRAND.visa} alt="Visa" className="h-5 max-h-6 flex-1 object-contain" />
+            <img src={POS_QR_BRAND.mastercard} alt="Mastercard" className="h-6 max-h-7 flex-1 object-contain" />
+            <img src={POS_QR_BRAND.unionpay} alt="UnionPay" className="h-5 max-h-6 flex-1 object-contain" />
           </div>
         ) : (
           <img
             src={POS_QR_BRAND.promptpay}
             alt="PromptPay"
-            className="mx-auto block h-auto w-[72%] max-w-[270px] object-contain"
+            className="mx-auto block h-auto object-contain"
+            style={{ width: PROMPTPAY_WIDTH_PX, maxWidth: '100%' }}
           />
         )}
       </div>
-      <div className="flex items-center justify-center bg-white px-3 pb-4 pt-2">
+      <div className="flex items-center justify-center bg-white px-2 pb-3 pt-1">
         <div className="relative inline-flex" style={{ width: QR_DISPLAY_PX, height: QR_DISPLAY_PX }}>
           <img
             src={qrUrl}
