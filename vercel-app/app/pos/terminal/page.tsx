@@ -2817,11 +2817,10 @@ export default function PosTerminalPage() {
   }, [effectiveCustomerDisplayQrType, liveKbankQrTypeSource, t])
 
   const staffKbankGuidelineCardDataUrl = useMemo(() => {
-    if (effectiveCustomerDisplayQrType !== 'THAI_QR') return ''
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
     if (!payload.startsWith('000201')) return ''
     return buildThaiQrGuidelineCardDataUrl(payload)
-  }, [effectiveCustomerDisplayQrType, effectiveStaffKbankQrPayload])
+  }, [effectiveStaffKbankQrPayload])
 
   useEffect(() => {
     if (String(liveKbankQrPayload || '').trim()) return
@@ -8882,70 +8881,21 @@ export default function PosTerminalPage() {
           ) : null}
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border bg-white">
-              {effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? (
-                <>
-                  <div className="bg-[#003b74] px-3 py-1.5">
-                    <div
-                      className="mx-auto w-[70%] max-w-[245px] [&_svg]:h-auto [&_svg]:w-full"
-                      dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
-                    />
-                  </div>
-                  <div className="border-t border-[#d8e1ef] bg-white px-2.5 py-1.5">
-                    <div className="mx-auto flex w-fit items-center gap-2">
-                    {(kbankOpsCardBrands.length > 0
-                      ? kbankOpsCardBrands
-                      : ['VISA', 'MASTERCARD', 'UNIONPAY']
-                    ).map((label) => (
-                      <span
-                        key={label}
-                        className="inline-flex h-5 items-center gap-1 rounded-sm border border-[#d8e1ef] bg-white px-1.5 text-[9px] font-semibold text-[#173f95]"
-                      >
-                        {label === 'MASTERCARD' ? (
-                          <>
-                            <span className="inline-flex items-center">
-                              <span className="h-2 w-2 rounded-full bg-[#eb001b]" />
-                              <span className="-ml-1 h-2 w-2 rounded-full bg-[#f79e1b]" />
-                            </span>
-                            <span className="text-[8px] tracking-tight">MC</span>
-                          </>
-                        ) : label === 'UNIONPAY' ? (
-                          <>
-                            <span className="inline-flex overflow-hidden rounded-sm border border-[#c9d3e8]">
-                              <span className="h-2 w-1 bg-[#d71920]" />
-                              <span className="h-2 w-1 bg-[#005bac]" />
-                              <span className="h-2 w-1 bg-[#00a650]" />
-                            </span>
-                            <span className="text-[8px] tracking-tight">UP</span>
-                          </>
-                        ) : (
-                          <span className="text-[9px] italic tracking-tight text-[#1a1f71]">VISA</span>
-                        )}
-                      </span>
-                    ))}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex min-h-[248px] items-center justify-center">
-                    {staffKbankQrFallbackDataUrl ? (
-                      <img
-                        src={staffKbankQrFallbackDataUrl}
-                        alt="Credit Card QR"
-                        className="h-[218px] w-[218px] object-contain"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
-                        <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
-                        <span>{t('posLoading') || '로딩 중'}</span>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : staffKbankGuidelineCardDataUrl ? (
+              {staffKbankGuidelineCardDataUrl ? (
                 <div className="flex items-center justify-center bg-white p-2">
                   <img
                     src={staffKbankGuidelineCardDataUrl}
-                    alt="Thai QR Payment"
+                    alt={effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'Thai QR Payment'}
                     className="h-auto w-[300px] max-w-full object-contain"
                   />
+                </div>
+              ) : effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? (
+                <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-rose-700">
+                  <QrCodeIcon className="h-10 w-10 text-rose-600" aria-hidden />
+                  <span>{t('posPaymentQr') || 'QR'} render failed.</span>
+                  <span className="text-muted-foreground">
+                    Credit Card guideline card was not generated. Please retry Generate QR.
+                  </span>
                 </div>
               ) : staffKbankQrFallbackDataUrl ? (
                 <>
