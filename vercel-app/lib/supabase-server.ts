@@ -9,11 +9,13 @@ import "server-only"
  *
  * UND_ERR_HEADERS_TIMEOUT 방지: Node.js fetch(undici) 대신 https 모듈 사용.
  * 일시적 장애 대응: 5xx/429/네트워크 오류 시 최대 2회 재시도 (exponential backoff).
+ * PostgREST egress 절감: Accept-Encoding gzip — 응답 JSON은 동일, 전송 바이트만 감소.
  *
  * `node:https`는 Webpack 클라이언트 그래프에서 UnhandledSchemeError를 유발할 수 있어 `https` 사용.
  */
 
 import https from "https"
+import { decodeHttpResponseBody } from '@/lib/supabase-http-body'
 import { resolveSupabaseProjectConfig } from '@/lib/supabase-project-resolver'
 import { SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES } from '@/lib/supabase-storage-limits'
 import type { TenantContext } from '@/lib/tenant-context'
@@ -36,13 +38,17 @@ function httpsRequest(
     // #region agent log
     _log('httpsRequest start', { hostname: url.hostname, path: url.pathname.slice(0, 80), hypothesisId: 'H2' })
     // #endregion
+    const reqHeaders: Record<string, string> = {
+      'Accept-Encoding': 'gzip',
+      ...options.headers,
+    }
     const req = https.request(
       {
         hostname: url.hostname,
         port: 443,
         path: url.pathname + url.search,
         method: options.method || 'GET',
-        headers: options.headers,
+        headers: reqHeaders,
         timeout: 15_000,
       },
       (res) => {
@@ -56,10 +62,12 @@ function httpsRequest(
           Object.entries(res.headers).forEach(([k, v]) => {
             headers[k.toLowerCase()] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
           })
+          const raw = Buffer.concat(chunks)
+          const body = decodeHttpResponseBody(raw, headers['content-encoding'])
           resolve({
             status: res.statusCode || 0,
             headers,
-            body: Buffer.concat(chunks).toString('utf8'),
+            body,
           })
         })
       }

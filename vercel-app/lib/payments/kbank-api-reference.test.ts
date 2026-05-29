@@ -9,6 +9,7 @@ import {
   readKbankResponseStatusCode,
   normalizeKbankTxnStatusToPos,
   resolveKbankCreditCardBrandLabels,
+  resolveKbankDisplayQrTypeFromResponse,
   resolveKbankOpenApiErrorMessage,
   resolveKbankQrTypeCode,
 } from './kbank-api-reference'
@@ -73,5 +74,18 @@ describe('kbank-api-reference', () => {
         'Rate limit quota violation. Quota limit exceeded. Identifier : ChoongmanTest-UAT3.1.70.209'
       )
     ).toBe(true)
+  })
+
+  it('resolves display qr type from bank qrType or sof', () => {
+    expect(resolveKbankDisplayQrTypeFromResponse({ qrType: '3' })).toBe('THAI_QR')
+    expect(resolveKbankDisplayQrTypeFromResponse({ qrType: '4' })).toBe('CREDIT_CARD')
+    expect(resolveKbankDisplayQrTypeFromResponse({ sof: 'PP' })).toBe('THAI_QR')
+    expect(resolveKbankDisplayQrTypeFromResponse({ sof: 'CC' })).toBe('CREDIT_CARD')
+    expect(
+      resolveKbankDisplayQrTypeFromResponse({
+        qrType: '3',
+        requested: 'CREDIT_CARD',
+      })
+    ).toBe('THAI_QR')
   })
 })

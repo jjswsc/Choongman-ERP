@@ -6187,6 +6187,10 @@ export const i18n = {
       'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
     posKbankCreditCardQrHint:
       'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
+    posKbankQrReturnedThaiAlert:
+      'Credit Card QR를 선택했지만 KBank가 Thai QR(PromptPay)을 반환했습니다. 가맹점 Credit Card QR 등록·terminalId를 KBank에 확인하세요.',
+    posKbankQrTypeThaiActual: 'Thai QR · PromptPay (은행 응답)',
+    posKbankQrTypeCreditActual: 'Credit Card QR (은행 응답)',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
@@ -14854,6 +14858,10 @@ orderItemQty: 'Qty',
       'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
     posKbankCreditCardQrHint:
       'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
+    posKbankQrReturnedThaiAlert:
+      'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant and confirm terminalId.',
+    posKbankQrTypeThaiActual: 'Thai QR · PromptPay (from bank)',
+    posKbankQrTypeCreditActual: 'Credit Card QR (from bank)',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
@@ -40630,6 +40638,10 @@ orderItemQty: 'ຈຳນວນ',
       'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
     posKbankCreditCardQrHint:
       'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
+    posKbankQrReturnedThaiAlert:
+      'เลือก Credit Card QR แต่ธนาคารตอบกลับเป็น Thai QR (PromptPay) กรุณาตรวจสอบการเปิดใช้งาน QR Credit Card ที่ธนาคารและ terminalId',
+    posKbankQrTypeThaiActual: 'Thai QR · PromptPay (จากธนาคาร)',
+    posKbankQrTypeCreditActual: 'Credit Card QR (จากธนาคาร)',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:

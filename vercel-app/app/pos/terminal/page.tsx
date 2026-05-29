@@ -168,9 +168,11 @@ import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from '@/lib/pos-qr-brand-assets'
 import { encodeQR, renderCard } from 'thai-qr-payment'
 import {
+  extractKbankQrResponseMeta,
   isKbankCreditCardQrUnavailableError,
   isKbankRateLimitError,
   resolveKbankCreditCardBrandLabels,
+  resolveKbankDisplayQrTypeFromResponse,
 } from '@/lib/payments/kbank-api-reference'
 import {
   subscribePosOrdersInsert,
@@ -5259,7 +5261,19 @@ export default function PosTerminalPage() {
       }
       setLiveKbankQrPayload(generatedQrPayload)
       setLiveKbankQrAmount(qrAmount)
-      setLiveKbankQrType(requestedQrType)
+      const bankQrMeta = extractKbankQrResponseMeta(data)
+      const actualQrType = resolveKbankDisplayQrTypeFromResponse({
+        qrType: bankQrMeta.qrTypeCode,
+        sof: generatedInfo.sof,
+        requested: requestedQrType,
+      })
+      setLiveKbankQrType(actualQrType)
+      if (requestedQrType === 'CREDIT_CARD' && actualQrType === 'THAI_QR') {
+        await appAlert(
+          t('posKbankQrReturnedThaiAlert') ||
+            'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant and confirm terminalId.'
+        )
+      }
       void executeLinkposDisplayQr({
         qrPayload: generatedQrPayload,
         amount: qrAmount,
@@ -5307,6 +5321,16 @@ export default function PosTerminalPage() {
         const stData = (st.data || {}) as Record<string, unknown>
         const stTxnNo = String(stData.txnNo || '').trim().slice(0, 20)
         if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
+        const inquiryMeta = extractKbankQrResponseMeta(stData)
+        if (inquiryMeta.qrTypeCode || inquiryMeta.sof) {
+          setLiveKbankQrType(
+            resolveKbankDisplayQrTypeFromResponse({
+              qrType: inquiryMeta.qrTypeCode,
+              sof: inquiryMeta.sof,
+              requested: requestedQrType,
+            })
+          )
+        }
         if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
         if (!refId) refId = String(st.refId || '').trim()
         if (i < 1) await sleepMs(5000)
@@ -8736,6 +8760,17 @@ export default function PosTerminalPage() {
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {`QR ${(t('amount') || '금액')}: ${effectiveStaffKbankQrAmount.toFixed(2)} ฿`}
+          </p>
+          <p
+            className={`mt-1 text-xs font-semibold ${
+              effectiveCustomerDisplayQrType === 'CREDIT_CARD'
+                ? 'text-indigo-800 dark:text-indigo-300'
+                : 'text-sky-800 dark:text-sky-300'
+            }`}
+          >
+            {effectiveCustomerDisplayQrType === 'CREDIT_CARD'
+              ? t('posKbankQrTypeCreditActual') || 'Credit Card QR (from bank)'
+              : t('posKbankQrTypeThaiActual') || 'Thai QR · PromptPay (from bank)'}
           </p>
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border bg-white">

@@ -46,7 +46,21 @@ export type ErpStoreMasterRow = {
   is_active?: boolean | null
 }
 
+/** getPosOrders 등 — erp_stores 마스터는 자주 안 바뀌므로 짧게 캐시(동일 프로세스) */
+const ERP_STORES_MASTER_CACHE_MS = 5 * 60 * 1000
+let erpStoresMasterCache: { at: number; rows: ErpStoreMasterRow[] } | null = null
+
 export async function fetchErpStoresMaster(): Promise<ErpStoreMasterRow[]> {
+  const cachedAt = erpStoresMasterCache?.at ?? 0
+  if (erpStoresMasterCache && Date.now() - cachedAt < ERP_STORES_MASTER_CACHE_MS) {
+    return erpStoresMasterCache.rows
+  }
+  const rows = await fetchErpStoresMasterFromDb()
+  erpStoresMasterCache = { at: Date.now(), rows }
+  return rows
+}
+
+async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
   try {
     const rows = (await supabaseSelect('erp_stores', {
       select: 'store_code,display_name,aliases,sort_order,is_active',

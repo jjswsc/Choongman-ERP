@@ -307,3 +307,91 @@ export function parseKbankAllowVoid(value: unknown): boolean | null {
   if (s === 'N') return false
   return null
 }
+
+export type KbankDisplayQrType = 'THAI_QR' | 'CREDIT_CARD'
+
+function asKbankPlainObject(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  return v as Record<string, unknown>
+}
+
+function collectKbankNestedSources(raw: unknown): Record<string, unknown>[] {
+  const root = asKbankPlainObject(raw)
+  if (!root) return []
+  const sources = [root]
+  for (const nestedKey of ['data', 'result', 'payment', 'paymentInfo']) {
+    const nested = asKbankPlainObject(root[nestedKey])
+    if (nested) sources.push(nested)
+  }
+  return sources
+}
+
+function pickKbankPrimitiveField(sources: Record<string, unknown>[], keys: string[]): string {
+  for (const src of sources) {
+    for (const key of keys) {
+      const v = src[key]
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint') {
+        const s = String(v).trim()
+        if (s) return s
+      }
+    }
+  }
+  return ''
+}
+
+/** qrType / sof from Generate or Inquiry response (nested data.*). */
+export function extractKbankQrResponseMeta(raw: unknown): { qrTypeCode: string; sof: string } {
+  const sources = collectKbankNestedSources(raw)
+  return {
+    qrTypeCode: pickKbankPrimitiveField(sources, ['qrType', 'qr_type']),
+    sof: pickKbankPrimitiveField(sources, ['sof']),
+  }
+}
+
+/** UI display type from bank fields; falls back to requested when bank omits qrType. */
+export function resolveKbankDisplayQrTypeFromResponse(input: {
+  qrType?: unknown
+  sof?: unknown
+  requested?: KbankDisplayQrType
+}): KbankDisplayQrType {
+  const rawType = String(input.qrType ?? '').trim().toUpperCase()
+  if (
+    rawType === KBANK_QR_TYPE_CREDIT_CARD ||
+    rawType === '4' ||
+    rawType === 'CREDIT_CARD' ||
+    rawType === 'QRCC' ||
+    rawType === 'CARD'
+  ) {
+    return 'CREDIT_CARD'
+  }
+  if (
+    rawType === KBANK_QR_TYPE_THAI ||
+    rawType === '3' ||
+    rawType === 'THAI_QR' ||
+    rawType === 'THQR' ||
+    rawType === 'THAI'
+  ) {
+    return 'THAI_QR'
+  }
+  if (
+    rawType === KBANK_QR_TYPE_COMBO ||
+    rawType === '5' ||
+    rawType === 'THAI_QR_AND_CARD' ||
+    rawType === 'COMBO' ||
+    rawType === 'BOTH'
+  ) {
+    return 'THAI_QR'
+  }
+
+  const sofParts = (Array.isArray(input.sof) ? input.sof : String(input.sof ?? '').split(/[,|]/))
+    .map((v) => String(v).trim().toUpperCase())
+    .filter(Boolean)
+  if (sofParts.some((p) => p === KBANK_SOF_CREDIT_CARD || p === 'CC' || p.includes('CREDIT'))) {
+    return 'CREDIT_CARD'
+  }
+  if (sofParts.some((p) => p === KBANK_SOF_THAI_QR || p === 'PP' || p.includes('PROMPT'))) {
+    return 'THAI_QR'
+  }
+
+  return input.requested === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
+}

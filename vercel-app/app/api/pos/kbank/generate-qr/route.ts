@@ -3,6 +3,10 @@ import { requireAuth } from '@/lib/verify-auth'
 import { generateKbankQr } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankGenerateQrRequest } from '@/lib/payments/kbank-types'
+import {
+  extractKbankQrResponseMeta,
+  resolveKbankDisplayQrTypeFromResponse,
+} from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -191,9 +195,22 @@ export async function POST(req: NextRequest) {
       ? (result.response as Record<string, unknown>)
       : {}
     const qrMeta = extractQrPayloadMeta(responseData)
+    const bankQrMeta = extractKbankQrResponseMeta(responseData)
+    const displayQrType = resolveKbankDisplayQrTypeFromResponse({
+      qrType: bankQrMeta.qrTypeCode,
+      sof: bankQrMeta.sof,
+      requested: qrTypeInfo.normalized || 'THAI_QR',
+    })
+    const qrTypeMismatch =
+      qrTypeInfo.normalized === 'CREDIT_CARD' && displayQrType === 'THAI_QR'
     if (result.ok) {
       console.info('kbank/generate-qr meta:', {
         partnerTransactionId,
+        requestedQrType: qrTypeInfo.normalized || qrTypeInfo.raw || null,
+        bankQrTypeCode: bankQrMeta.qrTypeCode || null,
+        bankSof: bankQrMeta.sof || null,
+        displayQrType,
+        qrTypeMismatch,
         sourceKey: qrMeta.sourceKey || null,
         payloadLength: qrMeta.length,
         startsWith000201: qrMeta.startsWith000201,
@@ -212,6 +229,10 @@ export async function POST(req: NextRequest) {
           success: result.ok,
           message: result.ok ? undefined : failureMessage,
           partnerTransactionId,
+          requestedQrType: qrTypeInfo.normalized || qrTypeInfo.raw || null,
+          bankQrTypeCode: bankQrMeta.qrTypeCode || null,
+          displayQrType,
+          qrTypeMismatch,
           qrType: qrType || null,
           amount,
           orderId: orderId > 0 ? orderId : null,

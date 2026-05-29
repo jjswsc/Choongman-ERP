@@ -87,6 +87,21 @@ type PosOrderServiceColumnsRow = {
   service_reason?: string
 }
 
+/** 메인 select에 service 컬럼이 없거나(PGRST204 strip) 응답에 빠진 행만 보조 조회 */
+function orderIdsMissingServiceColumns(
+  rows: { id?: number; service_amt?: number; service_reason?: string }[]
+): number[] {
+  const ids: number[] = []
+  for (const r of rows || []) {
+    const id = Number(r.id || 0)
+    if (id <= 0) continue
+    const hasAmt = Object.prototype.hasOwnProperty.call(r, 'service_amt')
+    const hasReason = Object.prototype.hasOwnProperty.call(r, 'service_reason')
+    if (!hasAmt || !hasReason) ids.push(id)
+  }
+  return ids
+}
+
 async function loadServiceColumnsByOrderId(orderIds: number[]): Promise<Map<number, PosOrderServiceColumnsRow>> {
   const byId = new Map<number, PosOrderServiceColumnsRow>()
   const ids = Array.from(new Set(orderIds.filter((id) => Number.isFinite(id) && id > 0)))
@@ -531,11 +546,14 @@ export async function GET(request: NextRequest) {
     }
 
     let serviceById = new Map<number, PosOrderServiceColumnsRow>()
-    try {
-      serviceById = await loadServiceColumnsByOrderId((rows || []).map((r) => Number(r.id || 0)))
-    } catch {
-      // DB에 service_amt/service_reason 컬럼이 아직 없으면 무시하고 진행
-      serviceById = new Map<number, PosOrderServiceColumnsRow>()
+    const serviceFetchIds = orderIdsMissingServiceColumns(rows || [])
+    if (serviceFetchIds.length > 0) {
+      try {
+        serviceById = await loadServiceColumnsByOrderId(serviceFetchIds)
+      } catch {
+        // DB에 service_amt/service_reason 컬럼이 아직 없으면 무시하고 진행
+        serviceById = new Map<number, PosOrderServiceColumnsRow>()
+      }
     }
 
     const list = (rows || [])
@@ -549,6 +567,8 @@ export async function GET(request: NextRequest) {
       })
       .map((r) => {
         const serviceRow = serviceById.get(Number(r.id || 0))
+        const rowServiceAmt = (r as { service_amt?: number }).service_amt
+        const rowServiceReason = (r as { service_reason?: string }).service_reason
         const paymentOtherBreakdown = parsePaymentOtherBreakdown(r.payment_other_breakdown)
         const dbOrderType = coercePosOrderTypeForDb(r.order_type)
         const inferredOrderType = inferOrderTypeForResponse({
@@ -568,8 +588,8 @@ export async function GET(request: NextRequest) {
           memo: String(r.memo ?? ''),
           discountAmt: Number(r.discount_amt) ?? 0,
           discountReason: String(r.discount_reason ?? ''),
-          serviceAmt: Number(serviceRow?.service_amt) || 0,
-          serviceReason: String(serviceRow?.service_reason ?? ''),
+          serviceAmt: Number(serviceRow?.service_amt ?? rowServiceAmt) || 0,
+          serviceReason: String(serviceRow?.service_reason ?? rowServiceReason ?? ''),
           deliveryFee: Number(r.delivery_fee) ?? 0,
           packagingFee: Number(r.packaging_fee) ?? 0,
           cardFeeAmt: Math.max(0, Number((r as { card_fee_amt?: number }).card_fee_amt) || 0),
