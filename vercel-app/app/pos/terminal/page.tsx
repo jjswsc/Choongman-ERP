@@ -929,7 +929,7 @@ export default function PosTerminalPage() {
   const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
   const [liveKbankQrAmount, setLiveKbankQrAmount] = useState(0)
   const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
-  const [staffKbankQrDataUrl, setStaffKbankQrDataUrl] = useState('')
+  const [staffKbankQrFallbackDataUrl, setStaffKbankQrFallbackDataUrl] = useState('')
   const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
   const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
   const [kbankOpsOrigTxnUid, setKbankOpsOrigTxnUid] = useState('')
@@ -2764,10 +2764,11 @@ export default function PosTerminalPage() {
     return draftType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
   }, [liveKbankQrPayload, liveKbankQrType, customerDisplayPaymentDraft?.paymentQrType])
 
-  const staffThaiQrCardDataUrl = useMemo(() => {
-    if (effectiveCustomerDisplayQrType !== 'THAI_QR') return ''
-    return buildThaiQrGuidelineCardDataUrl(effectiveStaffKbankQrPayload)
-  }, [effectiveCustomerDisplayQrType, effectiveStaffKbankQrPayload])
+  const staffKbankGuidelineCardDataUrl = useMemo(() => {
+    const payload = String(effectiveStaffKbankQrPayload || '').trim()
+    if (!payload.startsWith('000201')) return ''
+    return buildThaiQrGuidelineCardDataUrl(payload)
+  }, [effectiveStaffKbankQrPayload])
 
   useEffect(() => {
     if (String(liveKbankQrPayload || '').trim()) return
@@ -2776,22 +2777,26 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
-    if (!payload) {
-      setStaffKbankQrDataUrl('')
+    if (!payload || staffKbankGuidelineCardDataUrl) {
+      setStaffKbankQrFallbackDataUrl('')
+      return
+    }
+    if (effectiveCustomerDisplayQrType === 'CREDIT_CARD') {
+      setStaffKbankQrFallbackDataUrl('')
       return
     }
     let cancelled = false
     QRCode.toDataURL(payload, { width: 280, margin: 2 })
       .then((url) => {
-        if (!cancelled) setStaffKbankQrDataUrl(url)
+        if (!cancelled) setStaffKbankQrFallbackDataUrl(url)
       })
       .catch(() => {
-        if (!cancelled) setStaffKbankQrDataUrl('')
+        if (!cancelled) setStaffKbankQrFallbackDataUrl('')
       })
     return () => {
       cancelled = true
     }
-  }, [effectiveStaffKbankQrPayload])
+  }, [effectiveStaffKbankQrPayload, staffKbankGuidelineCardDataUrl, effectiveCustomerDisplayQrType])
 
   const schedulePostPaymentCustomerQr = useCallback(() => {
     const q = String(effectiveCustomerDisplayQrPayload || '').trim()
@@ -8733,63 +8738,22 @@ export default function PosTerminalPage() {
             {`QR ${(t('amount') || '금액')}: ${effectiveStaffKbankQrAmount.toFixed(2)} ฿`}
           </p>
           <div className="mt-3 rounded-md border bg-white p-2">
-            <div className="overflow-hidden rounded-md border">
-              {effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? (
-                <>
-                  <div className="bg-[#003b74] px-3 py-1.5">
-                    <div
-                      className="mx-auto w-[70%] max-w-[245px] [&_svg]:h-auto [&_svg]:w-full"
-                      dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
-                    />
-                  </div>
-                  <div className="border-t border-[#d8e1ef] bg-white px-2.5 py-1.5">
-                    <div className="mx-auto flex w-fit items-center gap-2">
-                    {(kbankOpsCardBrands.length > 0
-                      ? kbankOpsCardBrands
-                      : ['VISA', 'MASTERCARD', 'UNIONPAY']
-                    ).map((label) => (
-                      <span
-                        key={label}
-                        className="inline-flex h-5 items-center gap-1 rounded-sm border border-[#d8e1ef] bg-white px-1.5 text-[9px] font-semibold text-[#173f95]"
-                      >
-                        {label === 'MASTERCARD' ? (
-                          <>
-                            <span className="inline-flex items-center">
-                              <span className="h-2 w-2 rounded-full bg-[#eb001b]" />
-                              <span className="-ml-1 h-2 w-2 rounded-full bg-[#f79e1b]" />
-                            </span>
-                            <span className="text-[8px] tracking-tight">MC</span>
-                          </>
-                        ) : label === 'UNIONPAY' ? (
-                          <>
-                            <span className="inline-flex overflow-hidden rounded-sm border border-[#c9d3e8]">
-                              <span className="h-2 w-1 bg-[#d71920]" />
-                              <span className="h-2 w-1 bg-[#005bac]" />
-                              <span className="h-2 w-1 bg-[#00a650]" />
-                            </span>
-                            <span className="text-[8px] tracking-tight">UP</span>
-                          </>
-                        ) : (
-                            <span className="text-[9px] italic tracking-tight text-[#1a1f71]">VISA</span>
-                        )}
-                      </span>
-                    ))}
-                    </div>
-                  </div>
-                </>
-              ) : staffThaiQrCardDataUrl ? (
+            <div className="overflow-hidden rounded-md border bg-white">
+              {staffKbankGuidelineCardDataUrl ? (
                 <div className="flex items-center justify-center bg-white p-2">
                   <img
-                    src={staffThaiQrCardDataUrl}
-                    alt="Thai QR Payment"
+                    src={staffKbankGuidelineCardDataUrl}
+                    alt={
+                      effectiveCustomerDisplayQrType === 'CREDIT_CARD'
+                        ? 'Credit Card QR'
+                        : 'Thai QR Payment'
+                    }
                     className="h-auto w-[300px] max-w-full object-contain"
                   />
                 </div>
-              ) : (
+              ) : staffKbankQrFallbackDataUrl ? (
                 <>
-                  <div
-                    className="bg-[#00427A] px-3 py-2"
-                  >
+                  <div className="bg-[#00427A] px-3 py-2">
                     <div
                       className="mx-auto w-[74%] max-w-[260px] [&_svg]:h-auto [&_svg]:w-full"
                       dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
@@ -8801,21 +8765,21 @@ export default function PosTerminalPage() {
                       dangerouslySetInnerHTML={{ __html: PROMPTPAY_LOGO_SVG }}
                     />
                   </div>
+                  <div className="mt-2 flex min-h-[248px] items-center justify-center">
+                    <img
+                      src={staffKbankQrFallbackDataUrl}
+                      alt="KBank QR"
+                      className="h-[218px] w-[218px] object-contain"
+                    />
+                  </div>
                 </>
+              ) : (
+                <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
+                  <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
+                  <span>{t('posLoading') || '로딩 중'}</span>
+                </div>
               )}
             </div>
-            {effectiveCustomerDisplayQrType === 'CREDIT_CARD' || !staffThaiQrCardDataUrl ? (
-              <div className="mt-2 flex min-h-[248px] items-center justify-center">
-                {staffKbankQrDataUrl ? (
-                  <img src={staffKbankQrDataUrl} alt="KBank QR" className="h-[218px] w-[218px] object-contain" />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
-                    <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
-                    <span>{t('posLoading') || '로딩 중'}</span>
-                  </div>
-                )}
-              </div>
-            ) : null}
           </div>
           {!isPosDemo && isKbankPilotStore ? (
             <div className="mt-3 rounded-md border border-border/70 bg-card p-2">

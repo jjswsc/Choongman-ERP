@@ -105,10 +105,11 @@ export default function PosCustomerDisplayPage() {
   const current = state?.kind || "idle"
   const resolvedQrType: "THAI_QR" | "CREDIT_CARD" =
     String(state?.qrType || "").trim().toUpperCase() === "CREDIT_CARD" ? "CREDIT_CARD" : "THAI_QR"
-  const thaiQrCardDataUrl = React.useMemo(
-    () => (resolvedQrType === "THAI_QR" ? buildThaiQrGuidelineCardDataUrl(String(state?.qrPayload || "")) : ""),
-    [resolvedQrType, state?.qrPayload]
-  )
+  const qrPayloadText = String(state?.qrPayload || "").trim()
+  const kbankGuidelineCardDataUrl = React.useMemo(() => {
+    if (!qrPayloadText.startsWith("000201")) return ""
+    return buildThaiQrGuidelineCardDataUrl(qrPayloadText)
+  }, [qrPayloadText])
   const resolvedIdleMedia = React.useMemo(() => {
     const mtRaw = state?.idleMediaType ?? settingsIdleMediaType
     const mt = mtRaw === "image" || mtRaw === "video" ? mtRaw : "none"
@@ -343,62 +344,20 @@ export default function PosCustomerDisplayPage() {
             ) : null}
             <h2 className="mb-2 text-3xl font-semibold">{state?.title || (t("posCustomerQrTitle") || "QR 코드")}</h2>
             {state?.message ? <p className="mb-4 max-w-lg text-lg text-white/85">{state.message}</p> : null}
-            {String(state?.qrPayload || "").trim() ? (
+            {qrPayloadText ? (
               <div className="w-full max-w-[520px] rounded-xl bg-white p-3">
-                <div className="overflow-hidden rounded-lg border">
-                  {resolvedQrType === "CREDIT_CARD" ? (
-                    <>
-                      <div className="bg-[#003b74] px-3 py-1.5">
-                        <div
-                          className="mx-auto w-[70%] max-w-[300px] [&_svg]:h-auto [&_svg]:w-full"
-                          dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
-                        />
-                      </div>
-                      <div className="border-t border-[#d8e1ef] bg-white px-3 py-1.5">
-                        <div className="mx-auto flex w-fit items-center gap-2">
-                        {["VISA", "MASTERCARD", "UNIONPAY"].map((label) => (
-                          <span
-                            key={label}
-                            className="inline-flex h-6 items-center gap-1 rounded-sm border border-[#d8e1ef] bg-white px-2 text-[10px] font-semibold text-[#173f95]"
-                          >
-                            {label === "MASTERCARD" ? (
-                              <>
-                                <span className="inline-flex items-center">
-                                  <span className="h-2.5 w-2.5 rounded-full bg-[#eb001b]" />
-                                  <span className="-ml-1 h-2.5 w-2.5 rounded-full bg-[#f79e1b]" />
-                                </span>
-                                <span className="text-[9px] tracking-tight">MC</span>
-                              </>
-                            ) : label === "UNIONPAY" ? (
-                              <>
-                                <span className="inline-flex overflow-hidden rounded-sm border border-[#c9d3e8]">
-                                  <span className="h-2.5 w-1.5 bg-[#d71920]" />
-                                  <span className="h-2.5 w-1.5 bg-[#005bac]" />
-                                  <span className="h-2.5 w-1.5 bg-[#00a650]" />
-                                </span>
-                                <span className="text-[9px] tracking-tight">UP</span>
-                              </>
-                            ) : (
-                              <span className="text-[10px] italic tracking-tight text-[#1a1f71]">VISA</span>
-                            )}
-                          </span>
-                        ))}
-                        </div>
-                      </div>
-                    </>
-                  ) : thaiQrCardDataUrl ? (
+                <div className="overflow-hidden rounded-lg border bg-white">
+                  {kbankGuidelineCardDataUrl ? (
                     <div className="flex items-center justify-center bg-white p-2">
                       <img
-                        src={thaiQrCardDataUrl}
-                        alt="Thai QR Payment"
+                        src={kbankGuidelineCardDataUrl}
+                        alt={resolvedQrType === "CREDIT_CARD" ? "Credit Card QR" : "Thai QR Payment"}
                         className="h-auto w-[360px] max-w-full object-contain"
                       />
                     </div>
-                  ) : (
+                  ) : resolvedQrType === "THAI_QR" ? (
                     <>
-                      <div
-                        className="bg-[#00427A] px-3 py-2"
-                      >
+                      <div className="bg-[#00427A] px-3 py-2">
                         <div
                           className="mx-auto w-[74%] max-w-[320px] [&_svg]:h-auto [&_svg]:w-full"
                           dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
@@ -410,18 +369,20 @@ export default function PosCustomerDisplayPage() {
                           dangerouslySetInnerHTML={{ __html: PROMPTPAY_LOGO_SVG }}
                         />
                       </div>
+                      <div className="mt-3 flex items-center justify-center">
+                        <img
+                          src={`https://quickchart.io/qr?text=${encodeURIComponent(qrPayloadText)}&size=360&margin=1`}
+                          alt="Customer QR"
+                          className="h-60 w-60 rounded-lg bg-white p-2"
+                        />
+                      </div>
                     </>
+                  ) : (
+                    <p className="p-6 text-lg text-black/70">
+                      {t("posLoading") || "로딩 중"}
+                    </p>
                   )}
                 </div>
-                {resolvedQrType === "CREDIT_CARD" || !thaiQrCardDataUrl ? (
-                  <div className="mt-3 flex items-center justify-center">
-                    <img
-                      src={`https://quickchart.io/qr?text=${encodeURIComponent(String(state?.qrPayload || ""))}&size=360&margin=1`}
-                      alt="Customer QR"
-                      className="h-60 w-60 rounded-lg bg-white p-2"
-                    />
-                  </div>
-                ) : null}
               </div>
             ) : (
               <p className="text-xl opacity-80">{t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}</p>

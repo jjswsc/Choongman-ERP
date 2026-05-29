@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getAppData, getStockUsageAggregate, type AppItem } from "@/lib/api-client"
+import { getAppData, getItemCategories, getStockUsageAggregate, type AppItem } from "@/lib/api-client"
 import { isManagerRole } from "@/lib/permissions"
 
 export interface StockReorderAssistProps {
@@ -75,15 +75,28 @@ export function StockReorderAssist({
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
   const [suggestOnly, setSuggestOnly] = React.useState(false)
+  const [itemCategories, setItemCategories] = React.useState<string[]>([])
+
+  React.useEffect(() => {
+    let cancelled = false
+    getItemCategories()
+      .then((res) => {
+        if (!cancelled && res.categories?.length) setItemCategories(res.categories)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const categoryOptions = React.useMemo(() => {
-    const s = new Set<string>()
+    const s = new Set<string>(itemCategories)
     for (const r of rows) {
       const c = (r.category || "").trim()
       if (c) s.add(c)
     }
     return Array.from(s).sort()
-  }, [rows])
+  }, [itemCategories, rows])
 
   const load = React.useCallback(async () => {
     const store = storeFilter.trim()
@@ -230,6 +243,22 @@ export function StockReorderAssist({
             className="h-9 w-36 text-xs"
           />
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold whitespace-nowrap">{t("itemsCategory")}</label>
+          <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="h-9 w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("stockReorderFilterAll")}</SelectItem>
+              {categoryOptions.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Button size="sm" className="h-9 px-3 text-xs font-semibold" onClick={load} disabled={loading || !storeFilter.trim()}>
           <Search className="mr-1 h-3 w-3" />
           {t("stockReorderBtnLoad")}
@@ -268,22 +297,6 @@ export function StockReorderAssist({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold whitespace-nowrap">{t("itemsCategory")}</label>
-          <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
-            <SelectTrigger className="h-9 w-32 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">{t("stockReorderFilterAll")}</SelectItem>
-              {categoryOptions.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs">
           <input
             type="checkbox"

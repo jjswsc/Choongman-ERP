@@ -399,12 +399,10 @@ export function TotalSalesTab() {
     }
   }, [compareChannels, byOrderTypeLevels, compareChannelsList])
 
-  const compareTableColSpan = React.useMemo(() => {
-    let n = 2
-    if (level !== "main") n += 1
-    if (level === "menu" || level === "option") n += 1
-    return n + compareChannelsList.length * 2 + 2
-  }, [level, compareChannelsList])
+  const compareTableColSpan = React.useMemo(
+    () => 2 + compareChannelsList.length * 2 + 2,
+    [compareChannelsList]
+  )
 
   const categoryPieRows = React.useMemo(
     () =>
@@ -438,7 +436,7 @@ export function TotalSalesTab() {
       })
       const metaRows: string[][] = [
         [tr("totalSalesTitle", "Total Sales")],
-        [`${tr("salesStartDate", "시작일")}: ${startStr}`, `${tr("salesEndDate", "종료일")}: ${endStr}`],
+        [`${tr("totalSalesDateFrom", "시작일")}: ${startStr}`, `${tr("totalSalesDateTo", "종료일")}: ${endStr}`],
         [`${tr("salesStore", "매장")}: ${storeLabelForExport}`],
         [`${tr("salesAmountKindLabel", "주문 유형")}: ${orderTypesSummaryLabel}`],
       ]
@@ -511,7 +509,7 @@ export function TotalSalesTab() {
 
       <Card>
         <CardContent className="space-y-4 pt-6">
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -540,27 +538,26 @@ export function TotalSalesTab() {
             </div>
             {periodPreset === "custom" ? (
               <>
-                <label className="text-sm">
-                  <span className="mb-1 block text-muted-foreground">{tr("salesStartDate", "시작일")}</span>
-                  <Input
-                    type="date"
-                    value={startStr}
-                    onChange={(e) => setStartStr(e.target.value)}
-                    className="w-[11rem]"
-                  />
-                </label>
-                <label className="text-sm">
-                  <span className="mb-1 block text-muted-foreground">{tr("salesEndDate", "종료일")}</span>
-                  <Input
-                    type="date"
-                    value={endStr}
-                    onChange={(e) => setEndStr(e.target.value)}
-                    className="w-[11rem]"
-                  />
-                </label>
+                <Input
+                  type="date"
+                  value={startStr}
+                  onChange={(e) => setStartStr(e.target.value)}
+                  className="h-9 w-[11rem]"
+                  aria-label={tr("totalSalesDateFrom", "시작일")}
+                />
+                <span className="text-sm text-muted-foreground" aria-hidden>
+                  ~
+                </span>
+                <Input
+                  type="date"
+                  value={endStr}
+                  onChange={(e) => setEndStr(e.target.value)}
+                  className="h-9 w-[11rem]"
+                  aria-label={tr("totalSalesDateTo", "종료일")}
+                />
               </>
             ) : (
-              <p className="pb-2 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {startStr} ~ {endStr} ({tr("totalSalesBangkokBizDay", "방콕 영업일")})
               </p>
             )}
@@ -617,10 +614,9 @@ export function TotalSalesTab() {
             </p>
           ) : null}
 
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {canSearchAll ? (
               <div className="relative" ref={storePickerRef}>
-                <span className="mb-1 block text-sm text-muted-foreground">{tr("salesSelectStore", "매장")}</span>
                 <Button
                   id={storePickerBtnId}
                   type="button"
@@ -715,19 +711,18 @@ export function TotalSalesTab() {
                 ) : null}
               </div>
             ) : (
-              <p className="pb-2 text-sm">
-                {tr("salesStore", "매장")}: {posStoreDisplayName(selectedStores[0] ?? auth?.store ?? "")}
+              <p className="text-sm text-muted-foreground">
+                {posStoreDisplayName(selectedStores[0] ?? auth?.store ?? "")}
               </p>
             )}
-            <label className="min-w-[12rem] flex-1 text-sm">
-              <span className="mb-1 block text-muted-foreground">{tr("totalSalesSearch", "메뉴 검색")}</span>
-              <Input
-                placeholder={tr("totalSalesSearchPh", "예: Snow Onion")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm">
+            <Input
+              className="min-w-[12rem] flex-1"
+              placeholder={tr("totalSalesSearchPh", "예: Snow Onion")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label={tr("totalSalesSearch", "메뉴 검색")}
+            />
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox checked={searchAnd} onCheckedChange={(c) => setSearchAnd(c === true)} />
               <span>{tr("salesMenuSearchAndMode", "검색어 모두 포함 (AND)")}</span>
             </label>
@@ -932,32 +927,49 @@ export function TotalSalesTab() {
           </div>
 
           <div className="overflow-auto max-h-[calc(100vh-520px)] rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+            <table
+              className={
+                compareChannels
+                  ? "w-full min-w-[52rem] table-fixed text-sm"
+                  : "w-full text-sm"
+              }
+            >
+              {compareChannels ? (
+                <colgroup>
+                  <col className="w-10" />
+                  <col className="w-48 sm:w-56" />
+                  {compareChannelsList.map((ch) => (
+                    <React.Fragment key={`col-${ch}`}>
+                      <col className="w-14" />
+                      <col className="w-[5.75rem]" />
+                    </React.Fragment>
+                  ))}
+                  <col className="w-14" />
+                  <col className="w-24" />
+                </colgroup>
+              ) : null}
+              <thead className="sticky top-0 z-[1] bg-muted/80 backdrop-blur">
                 {compareChannels ? (
                   <tr className="border-b text-muted-foreground">
-                    <th className="w-12 py-2 pl-3 text-left" rowSpan={2}>
+                    <th className="py-2 pl-3 text-left" rowSpan={2}>
                       #
                     </th>
-                    <th className="py-2 text-left" rowSpan={2}>
+                    <th className="py-2 pr-2 text-left" rowSpan={2}>
                       {tr("totalSalesColName", "명칭")}
                     </th>
-                    {level !== "main" ? (
-                      <th className="hidden py-2 text-left md:table-cell" rowSpan={2}>
-                        {tr("totalSalesLevelMain", "대분류")}
-                      </th>
-                    ) : null}
-                    {level === "option" || level === "menu" ? (
-                      <th className="hidden py-2 text-left lg:table-cell" rowSpan={2}>
-                        {tr("totalSalesLevelCategory", "카테고리")}
-                      </th>
-                    ) : null}
                     {compareChannelsList.map((ch) => (
-                      <th key={ch} className="py-1 pr-2 text-center" colSpan={2}>
+                      <th
+                        key={ch}
+                        className="border-l border-border/60 px-1 py-1 text-center text-xs font-semibold"
+                        colSpan={2}
+                      >
                         {channelLabels[ch]}
                       </th>
                     ))}
-                    <th className="py-1 pr-3 text-center" colSpan={2}>
+                    <th
+                      className="border-l border-border/60 px-1 py-1 pr-2 text-center text-xs font-semibold"
+                      colSpan={2}
+                    >
                       {tr("totalSalesCompareTotal", "합계")}
                     </th>
                   </tr>
@@ -984,12 +996,20 @@ export function TotalSalesTab() {
                     <>
                       {compareChannelsList.map((ch) => (
                         <React.Fragment key={`${ch}-sub`}>
-                          <th className="py-1 pr-2 text-right text-xs">{tr("salesQuantity", "수량")}</th>
-                          <th className="py-1 pr-2 text-right text-xs">{tr("pL_sales", "매출")}</th>
+                          <th className="border-l border-border/60 px-1.5 py-1 text-right text-[11px] font-normal">
+                            {tr("salesQuantity", "수량")}
+                          </th>
+                          <th className="px-1.5 py-1 text-right text-[11px] font-normal">
+                            {tr("pL_sales", "매출")}
+                          </th>
                         </React.Fragment>
                       ))}
-                      <th className="py-1 pr-2 text-right text-xs">{tr("salesQuantity", "수량")}</th>
-                      <th className="py-1 pr-3 text-right text-xs">{tr("pL_sales", "매출")}</th>
+                      <th className="border-l border-border/60 px-1.5 py-1 text-right text-[11px] font-normal">
+                        {tr("salesQuantity", "수량")}
+                      </th>
+                      <th className="px-1.5 py-1 pr-2 text-right text-[11px] font-normal">
+                        {tr("pL_sales", "매출")}
+                      </th>
                     </>
                   )}
                 </tr>
@@ -1011,35 +1031,32 @@ export function TotalSalesTab() {
                   ) : (
                     compareRows.map((row, idx) => (
                       <tr key={row.key} className="border-b hover:bg-muted/30">
-                        <td className="py-1.5 pl-3 text-muted-foreground">{idx + 1}</td>
-                        <td className="py-1.5 pr-2">{row.label}</td>
-                        {level !== "main" ? (
-                          <td className="hidden py-1.5 md:table-cell text-muted-foreground">
-                            {row.categoryMain || "—"}
-                          </td>
-                        ) : null}
-                        {level === "option" || level === "menu" ? (
-                          <td className="hidden py-1.5 lg:table-cell text-muted-foreground">
-                            {row.category || "—"}
-                          </td>
-                        ) : null}
+                        <td className="py-2 pl-3 text-muted-foreground tabular-nums">{idx + 1}</td>
+                        <td className="max-w-0 py-2 pr-2" title={row.label}>
+                          <span className="block truncate">{row.label}</span>
+                          {level !== "main" && (row.categoryMain || row.category) ? (
+                            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                              {[row.categoryMain, row.category].filter(Boolean).join(" · ")}
+                            </span>
+                          ) : null}
+                        </td>
                         {compareChannelsList.map((ch) => {
                           const c = row.channels[ch]
                           return (
                             <React.Fragment key={`${row.key}-${ch}`}>
-                              <td className="py-1.5 pr-2 text-right font-erp-numeric text-muted-foreground">
+                              <td className="border-l border-border/40 py-2 px-1.5 text-right font-erp-numeric text-muted-foreground tabular-nums">
                                 {(c?.qty ?? 0).toLocaleString()}
                               </td>
-                              <td className="py-1.5 pr-2 text-right font-erp-numeric">
+                              <td className="py-2 px-1.5 text-right font-erp-numeric tabular-nums whitespace-nowrap">
                                 {formatSalesAmount(c?.sales ?? 0)}
                               </td>
                             </React.Fragment>
                           )
                         })}
-                        <td className="py-1.5 pr-2 text-right font-erp-numeric font-medium">
+                        <td className="border-l border-border/40 bg-muted/20 py-2 px-1.5 text-right font-erp-numeric font-medium tabular-nums">
                           {row.totalQty.toLocaleString()}
                         </td>
-                        <td className="py-1.5 pr-3 text-right font-erp-numeric font-medium">
+                        <td className="bg-muted/20 py-2 px-1.5 pr-2 text-right font-erp-numeric font-medium tabular-nums whitespace-nowrap">
                           {formatSalesAmount(row.totalSales)}
                         </td>
                       </tr>
