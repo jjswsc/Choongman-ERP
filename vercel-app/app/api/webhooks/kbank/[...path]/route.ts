@@ -46,6 +46,22 @@ function parseAmount(raw: unknown): number {
   return Math.round(n * 100) / 100
 }
 
+function normalizeLocalTxId(value: unknown): string {
+  return String(value ?? '').trim().slice(0, 40)
+}
+
+function buildLocalTxCandidates(...values: unknown[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const value of values) {
+    const normalized = normalizeLocalTxId(value)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push(normalized)
+  }
+  return out
+}
+
 function normalizeSignatureInput(v: string): string {
   const s = String(v || '').trim()
   if (!s) return ''
@@ -170,12 +186,17 @@ export async function POST(
     'data.transactionAmount',
   ])
 
-  const partnerTransactionId = pickFirst(body, partnerTransactionIdPaths).slice(0, 40)
+  const partnerTransactionId = pickFirst(body, partnerTransactionIdPaths)
   const originalTransactionId = pickFirst(body, originalTransactionIdPaths)
   const refId = pickFirst(body, refIdPaths)
   const statusCode = pickFirst(body, statusCodePaths)
   const statusMessage = pickFirst(body, statusMessagePaths)
   const transactionStatusRaw = pickFirst(body, transactionStatusPaths)
+  const localTxCandidates = buildLocalTxCandidates(
+    partnerTransactionId,
+    originalTransactionId
+  )
+  const primaryLocalTxId = localTxCandidates[0] || ''
   const normalized = normalizeStatus(transactionStatusRaw, statusCode)
   const amountRawPath = amountPaths.find((p) => String(getPathValue(body, p) ?? '').trim() !== '')
   const amount = parseAmount(amountRawPath ? getPathValue(body, amountRawPath) : undefined)
@@ -183,19 +204,24 @@ export async function POST(
   const safeBodyForLog = rawBody.length > 50000 ? `${rawBody.slice(0, 50000)}...` : rawBody
 
   try {
-    if (partnerTransactionId) {
-      await supabaseUpdateByFilter(
-        'pos_payment_attempts',
-        `local_tx_id=eq.${encodeURIComponent(partnerTransactionId)}`,
-        {
-          status: normalized,
-          response_code: statusCode || null,
-          response_text: statusMessage || transactionStatusRaw || null,
-          approved_amount: normalized === 'approved' ? amount : 0,
-          response_raw: safeBodyForLog || null,
-          error_reason: normalized === 'declined' || normalized === 'failed' ? (statusMessage || transactionStatusRaw || 'kbank_webhook_declined') : null,
-        }
-      )
+    if (localTxCandidates.length > 0) {
+      for (const candidate of localTxCandidates) {
+        await supabaseUpdateByFilter(
+          'pos_payment_attempts',
+          `local_tx_id=eq.${encodeURIComponent(candidate)}`,
+          {
+            status: normalized,
+            response_code: statusCode || null,
+            response_text: statusMessage || transactionStatusRaw || null,
+            approved_amount: normalized === 'approved' ? amount : 0,
+            response_raw: safeBodyForLog || null,
+            error_reason:
+              normalized === 'declined' || normalized === 'failed'
+                ? (statusMessage || transactionStatusRaw || 'kbank_webhook_declined')
+                : null,
+          }
+        )
+      }
     } else {
       const fallbackLocalTxId = `kbank-webhook-${Date.now()}`
       await supabaseInsert('pos_payment_attempts', {
@@ -223,15 +249,20 @@ export async function POST(
 
   let matchedAttemptId: string | null = null
   let matchedOrderId: number | null = null
+  let matchedLocalTxId: string | null = null
   try {
-    if (partnerTransactionId) {
+    for (const candidate of localTxCandidates) {
       const hit = (await supabaseSelectFilter(
         'pos_payment_attempts',
-        `local_tx_id=eq.${encodeURIComponent(partnerTransactionId)}`,
+        `local_tx_id=eq.${encodeURIComponent(candidate)}`,
         { limit: 1, order: 'created_at.desc', select: 'id,order_id' }
       )) as { id?: number; order_id?: number | null }[]
-      if (hit?.[0]?.id != null) matchedAttemptId = String(hit[0].id)
+      if (hit?.[0]?.id != null) {
+        matchedAttemptId = String(hit[0].id)
+        matchedLocalTxId = candidate
+      }
       if (hit?.[0]?.order_id != null) matchedOrderId = Number(hit[0].order_id)
+      if (matchedAttemptId) break
     }
   } catch {
     /* noop */
@@ -251,11 +282,12 @@ export async function POST(
     statusCode: '00',
     errorCode: null,
     errorDesc: null,
-    partnerTxnUid: partnerTransactionId || null,
+    partnerTxnUid: normalizeLocalTxId(partnerTransactionId) || null,
     originalTransactionId: originalTransactionId || null,
     refId: refId || null,
     status: normalized,
     matchedAttemptId,
     matchedOrderId,
+    matchedLocalTxId: matchedLocalTxId || primaryLocalTxId || null,
   })
 }
