@@ -350,15 +350,42 @@ export default function PosCustomerDisplayPage() {
                 <div className="overflow-hidden rounded-lg border bg-white">
                   {resolvedQrType === "CREDIT_CARD" ? (
                     <>
-                      <div className="bg-[#073763] px-3 py-2 text-center text-sm font-bold tracking-wide text-white">
-                        CREDIT CARD QR
+                      <div className="bg-[#003b74] px-3 py-1.5">
+                        <div
+                          className="mx-auto w-[70%] max-w-[300px] [&_svg]:h-auto [&_svg]:w-full"
+                          dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
+                        />
                       </div>
-                      <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
-                        {["VISA", "MASTERCARD", "UNIONPAY"].map((label) => (
-                          <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
-                            {label}
-                          </span>
-                        ))}
+                      <div className="border-t border-[#d8e1ef] bg-white px-3 py-1.5">
+                        <div className="mx-auto flex w-fit items-center gap-2">
+                          {["VISA", "MASTERCARD", "UNIONPAY"].map((label) => (
+                            <span
+                              key={label}
+                              className="inline-flex h-6 items-center gap-1 rounded-sm border border-[#d8e1ef] bg-white px-2 text-[10px] font-semibold text-[#173f95]"
+                            >
+                              {label === "MASTERCARD" ? (
+                                <>
+                                  <span className="inline-flex items-center">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-[#eb001b]" />
+                                    <span className="-ml-1 h-2.5 w-2.5 rounded-full bg-[#f79e1b]" />
+                                  </span>
+                                  <span className="text-[9px] tracking-tight">MC</span>
+                                </>
+                              ) : label === "UNIONPAY" ? (
+                                <>
+                                  <span className="inline-flex overflow-hidden rounded-sm border border-[#c9d3e8]">
+                                    <span className="h-2.5 w-1.5 bg-[#d71920]" />
+                                    <span className="h-2.5 w-1.5 bg-[#005bac]" />
+                                    <span className="h-2.5 w-1.5 bg-[#00a650]" />
+                                  </span>
+                                  <span className="text-[9px] tracking-tight">UP</span>
+                                </>
+                              ) : (
+                                <span className="text-[10px] italic tracking-tight text-[#1a1f71]">VISA</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                       <div className="mt-3 flex items-center justify-center">
                         <img
