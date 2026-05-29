@@ -963,9 +963,17 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
   const showBankAccountForTransfer = effectivePaymentMethod === "bank" || effectivePaymentMethod === "card"
   const showAdvanceInstallments = categorySub === "advance" && (categoryMain === "purchase" || categoryMain === "expense")
   const deliveryFeeAccountSubjectId = React.useMemo(() => {
+    const byCode = subjects.find((s) => String(s.code || "").trim() === "5528")
+    if (byCode?.id != null) return String(byCode.id)
     const picked = subjects.find((s) => {
       const txt = `${String(s.code || "")} ${String(s.name || "")} ${String(s.nameEn || "")}`.toLowerCase()
-      return txt.includes("delivery") || txt.includes("배달") || txt.includes("platform fee")
+      return (
+        txt.includes("delivery fee") ||
+        txt.includes("delivery platform") ||
+        txt.includes("배달앱수수료") ||
+        txt.includes("배달") ||
+        txt.includes("platform fee")
+      )
     })
     return picked?.id != null ? String(picked.id) : ""
   }, [subjects])
@@ -985,10 +993,13 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     }
   }, [deliveryFeeAccountSubjectId])
   const cardFeeAccountSubjectId = React.useMemo(() => {
+    const byCode = subjects.find((s) => String(s.code || "").trim() === "5529")
+    if (byCode?.id != null) return String(byCode.id)
     const picked = subjects.find((s) => {
       const txt = `${String(s.code || "")} ${String(s.name || "")} ${String(s.nameEn || "")}`.toLowerCase()
       return (
         txt.includes("card fee") ||
+        txt.includes("카드수수료") ||
         txt.includes("카드 수수료") ||
         txt.includes("credit card fee") ||
         txt.includes("merchant fee")

@@ -52,6 +52,12 @@ export function suggestWithdrawFromMemo(
   if (/\b(광고|advertising)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5525'] }
   if (/\b(프로모션|promo)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5526'] }
   if (/\b(sns|마케팅|marketing)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5527'] }
+  if (/\b(grab|lineman|shopee|robinhood|delivery app|배달앱|delivery fee|platform fee)\b/i.test(m)) {
+    return { category: 'expense', accountSubjectId: byCode['5528'] }
+  }
+  if (/\b(card fee|카드수수료|credit card fee|merchant fee)\b/i.test(m)) {
+    return { category: 'expense', accountSubjectId: byCode['5529'] }
+  }
   if (/\b(용역|service)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5521'] }
   if (/\b(연구|rnd|r&d)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5522'] }
   if (/\b(수리|repair)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5523'] }

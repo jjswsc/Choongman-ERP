@@ -163,18 +163,18 @@ export const CHART_OF_ACCOUNTS_BY_CODE: Record<string, AccountMeta> = {
     statement: 'pl',
     normalSide: 'debit',
   },
-  '5521': {
-    code: '5521',
-    nameKo: '카드정산수수료',
-    nameEn: 'Card settlement fees',
+  '5528': {
+    code: '5528',
+    nameKo: '배달앱수수료',
+    nameEn: 'Delivery Fee',
     tfrsNpaesGroupKo: '판관비/경비',
     statement: 'pl',
     normalSide: 'debit',
   },
-  '5522': {
-    code: '5522',
-    nameKo: '배달플랫폼수수료',
-    nameEn: 'Delivery platform fees',
+  '5529': {
+    code: '5529',
+    nameKo: '카드수수료',
+    nameEn: 'Card Fee',
     tfrsNpaesGroupKo: '판관비/경비',
     statement: 'pl',
     normalSide: 'debit',

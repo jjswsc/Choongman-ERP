@@ -5352,9 +5352,40 @@ export default function PosTerminalPage() {
       let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
       let refId = String(generatedInfo.referenceId || '').trim()
 
+      const finalizeKbankQrFailureWithManualOption = async (
+        failureHint: string
+      ): Promise<
+        | { ok: true; partnerTransactionId: string; pending: true }
+        | { ok: false; message: string }
+      > => {
+        const manualMsg =
+          (t('posPaymentQr') || 'QR') +
+          ' ' +
+          failureHint +
+          '. ' +
+          (t('posProceedQuestion') || '수동 처리로 주문 저장을 계속할까요?')
+        const proceed = await appConfirm(manualMsg)
+        if (!proceed) {
+          setLiveKbankQrPayload('')
+          setLiveKbankQrType('THAI_QR')
+          setKbankCallbackState('idle')
+          setKbankOpsTxnUid('')
+          setKbankOpsOrigTxnUid('')
+          setKbankOpsTxnNo('')
+          setCustomerDisplayPaymentMessage('')
+          return { ok: false as const, message: failureHint }
+        }
+        setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posManual') || '수동 처리'))
+        return { ok: true as const, partnerTransactionId, pending: true as const }
+      }
+
       // Rate-limit safe: wait before first inquiry; at most 2 checks (not 3 back-to-back).
       await sleepMs(5000)
+      if (kbankManualCancelPendingRef.current) {
+        return { ok: false as const, message: 'kbank_qr_cancelled' }
+      }
       for (let i = 0; i < 2; i += 1) {
+        if (kbankManualCancelPendingRef.current) break
         kbankInquiryLastAtRef.current = Date.now()
         const st = await executeKbankCheckStatus({
           storeCode: currentStoreId,
@@ -5387,7 +5418,7 @@ export default function PosTerminalPage() {
             )
             return { ok: true as const, partnerTransactionId }
           }
-          if (s === 'declined') {
+          if (s === 'declined' || s === 'failed') {
             const txnStatusRaw = String(
               stData.txnStatus || stData.transactionStatus || stData.status || stData.paymentStatus || ''
             )
@@ -5416,17 +5447,19 @@ export default function PosTerminalPage() {
               )
               return { ok: false as const, message: 'kbank_qr_cancelled' }
             }
-            setLiveKbankQrPayload('')
-            setLiveKbankQrType('THAI_QR')
             setKbankCallbackState('failed')
-            setKbankOpsTxnUid('')
-            setKbankOpsOrigTxnUid('')
-            setKbankOpsTxnNo('')
-            setCustomerDisplayPaymentMessage('')
-            const msg = t('posPaymentDeclined') || '결제가 거절되었습니다.'
-            await appAlert(msg)
-            return { ok: false as const, message: msg }
+            const failureHint =
+              s === 'failed'
+                ? String(st.statusMessage || st.message || t('processFail') || '결제 실패').trim()
+                : t('posPaymentDeclined') || '결제가 거절되었습니다.'
+            return finalizeKbankQrFailureWithManualOption(failureHint)
           }
+        }
+        if (!st.success && i === 1) {
+          const failureHint = String(
+            st.statusMessage || st.message || t('processFail') || 'kbank_check_status_failed'
+          ).trim()
+          return finalizeKbankQrFailureWithManualOption(failureHint)
         }
         if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         const inquiryMeta = extractKbankQrResponseMeta(stData)
@@ -5442,28 +5475,25 @@ export default function PosTerminalPage() {
         }
         if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
         if (!refId) refId = String(st.refId || '').trim()
-        if (i < 1) await sleepMs(5000)
+        if (i < 1) {
+          await sleepMs(5000)
+          if (kbankManualCancelPendingRef.current) break
+        }
       }
 
-      const pendingMsg =
-        (t('posPaymentQr') || 'QR') +
-        ' ' +
-        (t('posPending') || '대기') +
-        '. ' +
-        (t('posProceedQuestion') || '수동 처리로 주문 저장을 계속할까요?')
-      const proceed = await appConfirm(pendingMsg)
-      if (!proceed) {
-        setLiveKbankQrPayload('')
-        setLiveKbankQrType('THAI_QR')
-        setKbankCallbackState('idle')
-        setKbankOpsTxnUid('')
-        setKbankOpsOrigTxnUid('')
-        setKbankOpsTxnNo('')
-        setCustomerDisplayPaymentMessage('')
-        return { ok: false as const, message: 'kbank_qr_pending' }
+      if (kbankManualCancelPendingRef.current) {
+        return { ok: false as const, message: 'kbank_qr_cancelled' }
       }
-      setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posManual') || '수동 처리'))
-      return { ok: true as const, partnerTransactionId, pending: true as const }
+
+      // Still pending after inquiry: keep QR visible and wait for callback / manual Inquiry.
+      setCustomerDisplayPaymentMessage(
+        (t('posPaymentQr') || 'QR') +
+          ' ' +
+          (t('posPending') || '대기') +
+          ' — ' +
+          (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+      )
+      return { ok: false as const, message: 'kbank_qr_pending' }
     },
     [isPosDemo, isKbankPilotStore, currentStoreId, kbankOpsTerminalId, t, sleepMs, enforceKbankCooldown, openKbankOutcomeModal, lang]
   )
@@ -5713,9 +5743,6 @@ export default function PosTerminalPage() {
         )
         if (kbankCallbackNotifiedTxRef.current !== localTxId) {
           kbankCallbackNotifiedTxRef.current = localTxId
-          await appAlert(
-            'KBank callback received: payment approved. You can continue without Inquiry rate-limit retries.'
-          )
         }
         return
       }

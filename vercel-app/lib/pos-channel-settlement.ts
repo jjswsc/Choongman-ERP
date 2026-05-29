@@ -23,11 +23,11 @@ export function normalizePosChannelSettlementChannel(raw: unknown): PosChannelSe
 }
 
 export function feeAccountCodeForChannel(channel: PosChannelSettlementChannel): string {
-  return channel === 'card' ? '5521' : '5522'
+  return channel === 'card' ? '5529' : '5528'
 }
 
 export function feeAccountNameForChannel(channel: PosChannelSettlementChannel): string {
-  return channel === 'card' ? '카드정산수수료' : '배달플랫폼수수료'
+  return channel === 'card' ? '카드수수료' : '배달앱수수료'
 }
 
 export function roundSettlementMoney(n: number): number {

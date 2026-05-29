@@ -492,8 +492,8 @@ export async function postPosOrderJournal(params: {
 export type PosChannelSettlementChannel = 'card' | 'grab' | 'lineman' | 'shopee' | 'delivery_all'
 
 function feeLineForChannel(channel: PosChannelSettlementChannel, amount: number): JournalLineInput {
-  const code = channel === 'card' ? '5521' : '5522'
-  const name = channel === 'card' ? '카드정산수수료' : '배달플랫폼수수료'
+  const code = channel === 'card' ? '5529' : '5528'
+  const name = channel === 'card' ? '카드수수료' : '배달앱수수료'
   return {
     ...accountLine(code, { nameKo: name }),
     side: 'debit',

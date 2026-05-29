@@ -77,6 +77,8 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5525', '광고비', 'Advertising', 'expense', 'expense', 141),
   ('5526', '프로모션비', 'Promo Campaign', 'expense', 'expense', 142),
   ('5527', 'SNS마케팅', 'SNS Marketing', 'expense', 'expense', 143),
+  ('5528', '배달앱수수료', 'Delivery Fee', 'expense', 'expense', 137),
+  ('5529', '카드수수료', 'Card Fee', 'expense', 'expense', 138),
   ('5521', '용역비', 'Service costs', 'expense', 'expense', 144),
   ('5522', '연구개발비', 'R&D', 'expense', 'expense', 145),
   ('5523', '수리비', 'Repair fee', 'expense', 'expense', 146)
