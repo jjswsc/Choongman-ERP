@@ -5,7 +5,9 @@ import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankGenerateQrRequest } from '@/lib/payments/kbank-types'
 import {
   extractKbankQrResponseMeta,
-  resolveKbankDisplayQrTypeFromResponse,
+  maskKbankMessageForLog,
+  resolveKbankDisplayQrTypeDetails,
+  resolveKbankQrTypeCode,
 } from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
@@ -140,19 +142,7 @@ export async function POST(req: NextRequest) {
         )
       )
     }
-    if (qrTypeInfo.normalized === 'CREDIT_CARD' && !terminalId) {
-      return withCorsHeaders(
-        NextResponse.json(
-          {
-            success: false,
-            statusCode: 'KBANK_TERMINAL_ID_REQUIRED',
-            message:
-              'terminalId is required for Credit Card QR. Set KBANK_TERMINAL_ID on the server or enter terminalId in the POS KBank panel.',
-          },
-          { status: 422 }
-        )
-      )
-    }
+    const sentQrTypeCode = resolveKbankQrTypeCode(qrType)
 
     const payload: KbankGenerateQrRequest = {
       amount,
@@ -196,20 +186,27 @@ export async function POST(req: NextRequest) {
       : {}
     const qrMeta = extractQrPayloadMeta(responseData)
     const bankQrMeta = extractKbankQrResponseMeta(responseData)
-    const displayQrType = resolveKbankDisplayQrTypeFromResponse({
+    const qrTypeDetails = resolveKbankDisplayQrTypeDetails({
       qrType: bankQrMeta.qrTypeCode,
       sof: bankQrMeta.sof,
       requested: qrTypeInfo.normalized || 'THAI_QR',
     })
+    const displayQrType = qrTypeDetails.displayType
     const qrTypeMismatch =
       qrTypeInfo.normalized === 'CREDIT_CARD' && displayQrType === 'THAI_QR'
+    const requestMessage = result.requestBodyMasked || null
+    const bankResponseMessage = result.responseBodyMasked || maskKbankMessageForLog(responseData)
     if (result.ok) {
       console.info('kbank/generate-qr meta:', {
         partnerTransactionId,
+        storeCode: storeCode || null,
         requestedQrType: qrTypeInfo.normalized || qrTypeInfo.raw || null,
+        sentQrTypeCode: result.sentQrTypeCode || sentQrTypeCode,
+        terminalIdIncluded: Boolean(terminalId),
         bankQrTypeCode: bankQrMeta.qrTypeCode || null,
         bankSof: bankQrMeta.sof || null,
         displayQrType,
+        displayQrTypeSource: qrTypeDetails.source,
         qrTypeMismatch,
         sourceKey: qrMeta.sourceKey || null,
         payloadLength: qrMeta.length,
@@ -230,9 +227,15 @@ export async function POST(req: NextRequest) {
           message: result.ok ? undefined : failureMessage,
           partnerTransactionId,
           requestedQrType: qrTypeInfo.normalized || qrTypeInfo.raw || null,
+          sentQrTypeCode: result.sentQrTypeCode || sentQrTypeCode,
           bankQrTypeCode: bankQrMeta.qrTypeCode || null,
+          bankSof: bankQrMeta.sof || null,
           displayQrType,
+          displayQrTypeSource: qrTypeDetails.source,
           qrTypeMismatch,
+          terminalIdIncluded: Boolean(terminalId),
+          requestMessage,
+          responseMessage: bankResponseMessage,
           qrType: qrType || null,
           amount,
           orderId: orderId > 0 ? orderId : null,

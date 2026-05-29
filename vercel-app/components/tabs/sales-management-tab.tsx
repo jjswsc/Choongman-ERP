@@ -7,7 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useAuth } from "@/lib/auth-context"
-import { isFranchiseeRole, isManagerRole, isOfficeRole } from "@/lib/permissions"
+import {
+  isFranchiseeRole,
+  isManagerRole,
+  canSelectAllStoresForPosSalesManagement,
+} from "@/lib/permissions"
 import {
   parseOrderTypesParam,
   normalizeOrderTypesQueryString,
@@ -385,7 +389,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const searchParams = useSearchParams()
   const isHoursPanel = searchParams.get("hours") === "1"
   const { auth } = useAuth()
-  const canSearchAll = isOfficeRole(auth?.role || "")
+  const canSearchAll = canSelectAllStoresForPosSalesManagement(
+    auth?.role || "",
+    auth?.store || ""
+  )
   const canEditPosBizDayStore = React.useMemo(() => {
     const r = String(auth?.role || "").toLowerCase()
     return isManagerRole(r) || isFranchiseeRole(r)
@@ -399,6 +406,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [endStr, setEndStr] = React.useState(today)
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [posOptions, setPosOptions] = React.useState<string[]>([])
+  const [posOptionsLoading, setPosOptionsLoading] = React.useState(false)
+  const [posOptionsLoadFailed, setPosOptionsLoadFailed] = React.useState(false)
   const posBizDayStoreChoices = React.useMemo(() => {
     const raw = canSearchAll
       ? posOptions
@@ -1432,24 +1441,55 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedTopic?.id,
   ])
 
+  const posOptionsLoadIdRef = React.useRef(0)
+
   const loadPosOptions = React.useCallback(() => {
     if (!startStr || !endStr) return
-    if (!canSearchAll && auth?.store) {
-      setPosOptions([auth.store])
-      return
-    }
+    if (!canSearchAll) return
+    const id = ++posOptionsLoadIdRef.current
+    setPosOptionsLoading(true)
+    setPosOptionsLoadFailed(false)
     const fetcher = offlineAware ? getPosSalesFilterOptionsWithCache : getPosSalesFilterOptions
-    fetcher({ startStr, endStr }).then((r) =>
-      setPosOptions(r.posOptions || [])
-    )
-  }, [startStr, endStr, offlineAware, canSearchAll, auth?.store])
+    fetcher({ startStr, endStr })
+      .then((r) => {
+        if (posOptionsLoadIdRef.current !== id) return
+        setPosOptions(r.posOptions || [])
+      })
+      .catch(() => {
+        if (posOptionsLoadIdRef.current !== id) return
+        setPosOptions([])
+        setPosOptionsLoadFailed(true)
+      })
+      .finally(() => {
+        if (posOptionsLoadIdRef.current !== id) return
+        setPosOptionsLoading(false)
+      })
+  }, [startStr, endStr, offlineAware, canSearchAll])
+
+  const storePickerPlaceholder = React.useMemo(() => {
+    if (posBizDayStoreChoices.length > 0) return tr("salesSelectStorePrompt", "매장 선택")
+    if (canSearchAll && posOptionsLoading) return tr("salesStorePickerLoading", "매장 목록 불러오는 중…")
+    if (posOptionsLoadFailed) return tr("salesStorePickerLoadFailed", "매장 목록을 불러오지 못했습니다")
+    if (canSearchAll) return tr("salesStorePickerEmpty", "표시할 매장이 없습니다")
+    return tr("salesSelectStorePrompt", "매장 선택")
+  }, [posBizDayStoreChoices.length, posOptionsLoading, posOptionsLoadFailed, canSearchAll, tr])
 
   React.useEffect(() => {
+    if (!canSearchAll) {
+      posOptionsLoadIdRef.current += 1
+      setPosOptionsLoading(false)
+      setPosOptionsLoadFailed(false)
+      return
+    }
+    setPosOptionsLoading(true)
     const tid = window.setTimeout(() => {
       loadPosOptions()
     }, 250)
-    return () => clearTimeout(tid)
-  }, [loadPosOptions])
+    return () => {
+      clearTimeout(tid)
+      posOptionsLoadIdRef.current += 1
+    }
+  }, [loadPosOptions, canSearchAll])
 
   React.useEffect(() => {
     if (!canSearchAll && auth?.store) {
@@ -1849,9 +1889,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   >
                     <span className="truncate text-left">
                       {selectedStores.length === 0
-                        ? posBizDayStoreChoices.length === 0
-                          ? tr("salesStorePickerLoading", "매장 목록 불러오는 중…")
-                          : tr("salesSelectStorePrompt", "매장 선택")
+                        ? storePickerPlaceholder
                         : selectedStores.length === 1
                           ? posStoreDisplayName(selectedStores[0])
                           : `${selectedStores.length}${tr("selected", "개 선택")}`}

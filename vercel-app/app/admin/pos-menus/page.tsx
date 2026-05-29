@@ -1375,12 +1375,6 @@ export default function PosMenusPage() {
 
   const handleSave = async () => {
     const wasEditingExisting = Boolean(editingId)
-    if (editingMenuLinkedPromoId) {
-      await appAlert(
-        t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요."
-      )
-      return
-    }
     let code = formData.code.trim()
     const name = formData.name.trim()
     /** 자동 코드 대분류인데 아직 code가 비어 있으면(비동기 실패·오프라인 등) 저장 직전에 한 번 더 발급 시도 */
@@ -4161,7 +4155,7 @@ export default function PosMenusPage() {
               {editingMenuLinkedPromoId && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   {t("posMenuPromoLinkedBanner") ||
-                    "프로모션 연동 메뉴입니다. 이름·가격·분류·활성은 마케팅 > 프로모션 관리에서 수정하세요."}
+                    "프로모션 연동 메뉴입니다. 이름·가격·분류·활성은 마케팅 > 프로모션 관리에서 수정하고, 설명은 이 화면 설명 탭에서 수정할 수 있습니다."}
                 </div>
               )}
               {editingId ? (
@@ -4712,7 +4706,6 @@ export default function PosMenusPage() {
                           onChange={(e) =>
                             setFormData((p) => ({ ...p, descriptionDefault: e.target.value }))
                           }
-                          disabled={!!editingMenuLinkedPromoId}
                         />
                       </div>
                       <div>
@@ -4726,7 +4719,6 @@ export default function PosMenusPage() {
                           onChange={(e) =>
                             setFormData((p) => ({ ...p, descriptionDelivery: e.target.value }))
                           }
-                          disabled={!!editingMenuLinkedPromoId}
                         />
                       </div>
                       <div>
@@ -4740,7 +4732,6 @@ export default function PosMenusPage() {
                           onChange={(e) =>
                             setFormData((p) => ({ ...p, descriptionTable: e.target.value }))
                           }
-                          disabled={!!editingMenuLinkedPromoId}
                         />
                       </div>
                     </div>

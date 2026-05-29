@@ -9,9 +9,11 @@ import {
   readKbankResponseStatusCode,
   normalizeKbankTxnStatusToPos,
   resolveKbankCreditCardBrandLabels,
+  resolveKbankDisplayQrTypeDetails,
   resolveKbankDisplayQrTypeFromResponse,
   resolveKbankOpenApiErrorMessage,
   resolveKbankQrTypeCode,
+  maskKbankMessageForLog,
 } from './kbank-api-reference'
 
 describe('kbank-api-reference', () => {
@@ -87,5 +89,22 @@ describe('kbank-api-reference', () => {
         requested: 'CREDIT_CARD',
       })
     ).toBe('THAI_QR')
+    expect(
+      resolveKbankDisplayQrTypeDetails({
+        requested: 'CREDIT_CARD',
+      }).source
+    ).toBe('requested')
+  })
+
+  it('masks secrets and qr payload for logs', () => {
+    const masked = maskKbankMessageForLog({
+      partnerSecret: 'top-secret',
+      qrType: '4',
+      qrCode: '000201010212' + 'x'.repeat(80),
+      nested: { access_token: 'abc' },
+    }) as Record<string, unknown>
+    expect(masked.partnerSecret).toBe('***')
+    expect(String(masked.qrCode)).toContain('[qr:')
+    expect((masked.nested as Record<string, unknown>).access_token).toBe('***')
   })
 })

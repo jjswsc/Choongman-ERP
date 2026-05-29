@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { canSelectAllStoresForPosSalesManagement } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -124,7 +124,10 @@ export function TotalSalesTab() {
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => t(key) || fallback, [t])
 
-  const canSearchAll = isOfficeRole(auth?.role || "")
+  const canSearchAll = canSelectAllStoresForPosSalesManagement(
+    auth?.role || "",
+    auth?.store || ""
+  )
   const today = todayStrBangkok()
   const monthRange = getBangkokMonthRange()
 
@@ -149,6 +152,8 @@ export function TotalSalesTab() {
   const [snapshotMonth, setSnapshotMonth] = React.useState<{ qty: number; sales: number } | null>(null)
 
   const [posOptions, setPosOptions] = React.useState<string[]>([])
+  const [posOptionsLoading, setPosOptionsLoading] = React.useState(false)
+  const [posOptionsLoadFailed, setPosOptionsLoadFailed] = React.useState(false)
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
@@ -257,12 +262,44 @@ export function TotalSalesTab() {
     }
   }, [])
 
+  React.useLayoutEffect(() => {
+    if (canSearchAll) setPosOptionsLoading(true)
+  }, [canSearchAll])
+
   React.useEffect(() => {
-    if (!today) return
-    getPosSalesFilterOptions({ startStr: monthRange.startStr, endStr: today }).then((r) => {
-      setPosOptions(r.posOptions || [])
-    })
-  }, [today, monthRange.startStr])
+    if (!canSearchAll || !today) {
+      setPosOptionsLoading(false)
+      setPosOptionsLoadFailed(false)
+      return
+    }
+    let cancel = false
+    setPosOptionsLoading(true)
+    setPosOptionsLoadFailed(false)
+    getPosSalesFilterOptions({ startStr: monthRange.startStr, endStr: today })
+      .then((r) => {
+        if (!cancel) setPosOptions(r.posOptions || [])
+      })
+      .catch(() => {
+        if (!cancel) {
+          setPosOptions([])
+          setPosOptionsLoadFailed(true)
+        }
+      })
+      .finally(() => {
+        if (!cancel) setPosOptionsLoading(false)
+      })
+    return () => {
+      cancel = true
+    }
+  }, [canSearchAll, today, monthRange.startStr])
+
+  const storePickerPlaceholder = React.useMemo(() => {
+    if (storeChoices.length > 0) return tr("salesSelectStorePrompt", "매장 선택")
+    if (canSearchAll && posOptionsLoading) return tr("salesStorePickerLoading", "매장 목록 불러오는 중…")
+    if (posOptionsLoadFailed) return tr("salesStorePickerLoadFailed", "매장 목록을 불러오지 못했습니다")
+    if (canSearchAll) return tr("salesStorePickerEmpty", "표시할 매장이 없습니다")
+    return tr("salesSelectStorePrompt", "매장 선택")
+  }, [storeChoices.length, posOptionsLoading, posOptionsLoadFailed, canSearchAll, tr])
 
   React.useEffect(() => {
     if (!canSearchAll && auth?.store) {
@@ -630,9 +667,7 @@ export function TotalSalesTab() {
                 >
                   <span className="truncate text-left">
                     {selectedStores.length === 0
-                      ? storeChoices.length === 0
-                        ? tr("salesStorePickerLoading", "매장 목록 불러오는 중…")
-                        : tr("salesSelectStorePrompt", "매장 선택")
+                      ? storePickerPlaceholder
                       : selectedStores.length === storeChoices.length && storeChoices.length > 1
                         ? tr("salesSelectStoreAll", "전체 매장")
                         : selectedStores.length === 1

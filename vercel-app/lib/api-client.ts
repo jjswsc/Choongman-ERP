@@ -10447,6 +10447,16 @@ export type KbankQrGenerateResult = {
   partnerTransactionId?: string
   statusCode?: string | null
   statusMessage?: string | null
+  requestedQrType?: string | null
+  sentQrTypeCode?: string | null
+  bankQrTypeCode?: string | null
+  bankSof?: string | null
+  displayQrType?: 'THAI_QR' | 'CREDIT_CARD' | null
+  displayQrTypeSource?: 'bank_qr_type' | 'bank_sof' | 'requested' | null
+  qrTypeMismatch?: boolean
+  terminalIdIncluded?: boolean
+  requestMessage?: Record<string, unknown> | null
+  responseMessage?: unknown
   data?: Record<string, unknown>
   message?: string
 }
@@ -10625,6 +10635,29 @@ export async function executeKbankGenerateQr(params: {
     }),
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  const meta = {
+    requestedQrType: data.requestedQrType != null ? String(data.requestedQrType) : null,
+    sentQrTypeCode: data.sentQrTypeCode != null ? String(data.sentQrTypeCode) : null,
+    bankQrTypeCode: data.bankQrTypeCode != null ? String(data.bankQrTypeCode) : null,
+    bankSof: data.bankSof != null ? String(data.bankSof) : null,
+    displayQrType:
+      data.displayQrType === 'CREDIT_CARD' || data.displayQrType === 'THAI_QR'
+        ? (data.displayQrType as 'THAI_QR' | 'CREDIT_CARD')
+        : null,
+    displayQrTypeSource:
+      data.displayQrTypeSource === 'bank_qr_type' ||
+      data.displayQrTypeSource === 'bank_sof' ||
+      data.displayQrTypeSource === 'requested'
+        ? (data.displayQrTypeSource as 'bank_qr_type' | 'bank_sof' | 'requested')
+        : null,
+    qrTypeMismatch: data.qrTypeMismatch === true,
+    terminalIdIncluded: data.terminalIdIncluded === true,
+    requestMessage:
+      data.requestMessage && typeof data.requestMessage === 'object'
+        ? (data.requestMessage as Record<string, unknown>)
+        : null,
+    responseMessage: data.responseMessage ?? null,
+  }
   if (!res.ok || !data.success) {
     return {
       success: false,
@@ -10633,6 +10666,7 @@ export async function executeKbankGenerateQr(params: {
       statusMessage: String(data.statusMessage || data.message || ''),
       data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
       message: String(data.message || data.statusMessage || `HTTP ${res.status}`),
+      ...meta,
     }
   }
   return {
@@ -10641,6 +10675,7 @@ export async function executeKbankGenerateQr(params: {
     statusCode: String(data.statusCode || ''),
     statusMessage: String(data.statusMessage || ''),
     data: (data.data && typeof data.data === 'object') ? (data.data as Record<string, unknown>) : undefined,
+    ...meta,
   }
 }
 

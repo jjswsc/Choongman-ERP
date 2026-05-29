@@ -24,6 +24,11 @@ export type KbankGenerateQrResult = {
   statusCode?: string
   statusMessage?: string
   response: Record<string, unknown>
+  /** Masked JSON body sent to KBank (for support / Vercel logs). */
+  requestBodyMasked?: Record<string, unknown>
+  /** Masked JSON response from KBank (QR payload truncated). */
+  responseBodyMasked?: Record<string, unknown>
+  sentQrTypeCode?: string
 }
 
 export type KbankCheckStatusRequest = {

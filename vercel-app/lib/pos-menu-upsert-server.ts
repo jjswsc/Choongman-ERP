@@ -637,7 +637,8 @@ export async function upsertPosMenuFromBody(
           const normNum = (v: unknown) => String(asNumberOrNull(v))
           const normBool = (v: unknown) => String(asBool(v))
           const normStrArr = (v: unknown) => JSON.stringify(asStringArray(v))
-          const sameFieldsExceptImage =
+          /** 프로모션 연동 메뉴: 설명·이미지는 메뉴 화면에서, 나머지는 프로모션 관리에서 */
+          const promoManagedFieldsUnchanged =
             fieldUnchanged('name', normStr) &&
             fieldUnchanged('category_main', normStr) &&
             fieldUnchanged('category', normStr) &&
@@ -649,16 +650,13 @@ export async function upsertPosMenuFromBody(
             fieldUnchanged('kitchen_printer', normNum) &&
             fieldUnchanged('cooking_time_min', normNum) &&
             fieldUnchanged('is_banban', normBool) &&
-            fieldUnchanged('description_default', normStr) &&
-            fieldUnchanged('description_delivery', normStr) &&
-            fieldUnchanged('description_table', normStr) &&
             fieldUnchanged('delivery_app_fee_percent', normNum) &&
             fieldUnchanged('sell_hall', normBool) &&
             fieldUnchanged('sell_delivery', normBool) &&
             fieldUnchanged('sell_packaging', normBool) &&
             fieldUnchanged('option_selection_groups', normStrArr) &&
             fieldUnchanged('option_selection_config', normalizeOptionConfig)
-          if (!sameFieldsExceptImage) {
+          if (!promoManagedFieldsUnchanged) {
             return {
               success: false,
               message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
@@ -703,6 +701,21 @@ export async function upsertPosMenuFromBody(
         if ('sell_packaging' in row) {
           const nextSellPackaging = row.sell_packaging !== false
           if (nextSellPackaging !== (prev.sell_packaging !== false)) changedFields.push('sell_packaging')
+        }
+        if ('description_default' in row) {
+          const next = String(row.description_default ?? '').trim()
+          if (next !== String(prev.description_default ?? '').trim()) changedFields.push('description_default')
+        }
+        if ('description_delivery' in row) {
+          const next = row.description_delivery == null ? '' : String(row.description_delivery).trim()
+          const prevVal =
+            prev.description_delivery == null ? '' : String(prev.description_delivery).trim()
+          if (next !== prevVal) changedFields.push('description_delivery')
+        }
+        if ('description_table' in row) {
+          const next = row.description_table == null ? '' : String(row.description_table).trim()
+          const prevVal = prev.description_table == null ? '' : String(prev.description_table).trim()
+          if (next !== prevVal) changedFields.push('description_table')
         }
         const catMain = (prev.category_main || '').trim()
         const cat = (prev.category || '').trim()

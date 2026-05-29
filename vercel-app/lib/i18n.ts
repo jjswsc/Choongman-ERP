@@ -3577,6 +3577,8 @@ export const i18n = {
     salesTotal: '합계',
     salesSelectStoreAll: '매장(전체)',
     salesStorePickerLoading: '매장 목록 불러오는 중…',
+    salesStorePickerEmpty: '표시할 매장이 없습니다',
+    salesStorePickerLoadFailed: '매장 목록을 불러오지 못했습니다',
     salesSelectStoreDefault: '매장(기본)',
     salesSelectStorePrompt: '매장 선택',
     salesSelectStoreBeforeQuery:
@@ -6188,9 +6190,16 @@ export const i18n = {
     posKbankCreditCardQrHint:
       'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankQrReturnedThaiAlert:
-      'Credit Card QR를 선택했지만 KBank가 Thai QR(PromptPay)을 반환했습니다. 가맹점 Credit Card QR 등록·terminalId를 KBank에 확인하세요.',
-    posKbankQrTypeThaiActual: 'Thai QR · PromptPay (은행 응답)',
-    posKbankQrTypeCreditActual: 'Credit Card QR (은행 응답)',
+      'Credit Card QR를 선택했지만 KBank가 Thai QR(PromptPay)을 반환했습니다. 가맹점 Credit Card QR 등록을 KBank에 확인하세요.',
+    posKbankQrBankTypeUnknownAlert:
+      'Credit Card QR(qrType 4)로 요청했으나 응답에 qrType이 없고 QR 화면은 PromptPay입니다. 아래 「KBank용 복사」로 전체 message를 보내주세요.',
+    posKbankQrTypeThaiFromBank: 'Thai QR · PromptPay (은행 응답)',
+    posKbankQrTypeCreditFromBank: 'Credit Card QR (은행 응답)',
+    posKbankQrTypeThaiRequested: 'Thai QR · PromptPay (요청)',
+    posKbankQrTypeCreditRequested: 'Credit Card QR (요청 · 은행 qrType 미반환)',
+    posKbankSentQrTypeCode: '전송 qrType',
+    posKbankCopyAuditMessage: 'KBank용 request/response 복사',
+    posKbankAuditCopied: 'KBank 지원용 message를 복사했습니다.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
@@ -8591,7 +8600,7 @@ export const i18n = {
     posPromoListTitle: '프로모션 리스트',
     posMenuPromoLinkedEdit: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
     posMenuPromoLinkedBanner:
-      '프로모션 연동 메뉴입니다. 이름·가격·분류·활성은 마케팅 > 프로모션 관리에서 수정하세요.',
+      '프로모션 연동 메뉴입니다. 이름·가격·분류·활성은 마케팅 > 프로모션 관리에서 수정하고, 설명은 이 화면 설명 탭에서 수정할 수 있습니다.',
     posIngredientHint: '판매 시 해당 재료가 자동 차감됩니다.',
     posSelectOption: '옵션 선택',
     posSelect: '선택',
@@ -12246,6 +12255,8 @@ Only matters the employee must handle personally on a working day:
     salesTotal: 'Total',
     salesSelectStoreAll: 'Store (All)',
     salesStorePickerLoading: 'Loading store list…',
+    salesStorePickerEmpty: 'No stores to show',
+    salesStorePickerLoadFailed: 'Could not load store list',
     salesSelectStoreDefault: 'Store (default)',
     salesSelectStorePrompt: 'Select store(s)',
     salesSelectStoreBeforeQuery:
@@ -14859,9 +14870,16 @@ orderItemQty: 'Qty',
     posKbankCreditCardQrHint:
       'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankQrReturnedThaiAlert:
-      'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant and confirm terminalId.',
-    posKbankQrTypeThaiActual: 'Thai QR · PromptPay (from bank)',
-    posKbankQrTypeCreditActual: 'Credit Card QR (from bank)',
+      'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.',
+    posKbankQrBankTypeUnknownAlert:
+      'Credit Card QR was requested (qrType 4). KBank did not return qrType; the QR shows PromptPay. Copy the audit message below and send it to KBank.',
+    posKbankQrTypeThaiFromBank: 'Thai QR · PromptPay (from bank)',
+    posKbankQrTypeCreditFromBank: 'Credit Card QR (from bank)',
+    posKbankQrTypeThaiRequested: 'Thai QR · PromptPay (requested)',
+    posKbankQrTypeCreditRequested: 'Credit Card QR (requested · bank qrType not returned)',
+    posKbankSentQrTypeCode: 'Sent qrType',
+    posKbankCopyAuditMessage: 'Copy request/response for KBank',
+    posKbankAuditCopied: 'Copied KBank support message.',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
@@ -17135,7 +17153,7 @@ orderItemQty: 'Qty',
     posPromoListTitle: 'Promo list',
     posMenuPromoLinkedEdit: 'Promo-linked menus are edited under Marketing > Promos.',
     posMenuPromoLinkedBanner:
-      'Promo-linked menu. Edit name, price, category, and active status under Marketing > Promos.',
+      'Promo-linked menu. Edit name, price, category, and active status under Marketing > Promos; edit descriptions on this screen’s Description tab.',
     posIngredientHint: 'Stock is automatically deducted on sale.',
     posSelectOption: 'Select option',
     posSelect: 'Select',
@@ -22791,7 +22809,7 @@ orderItemQty: 'จำนวน',
     posPromoListTitle: 'รายการโปรโมชัน',
     posMenuPromoLinkedEdit: 'เมนูที่เชื่อมโปรโมชัน แก้ไขที่ การตลาด > จัดการโปรโมชัน',
     posMenuPromoLinkedBanner:
-      'เมนูเชื่อมโปรโมชัน แก้ไขชื่อ ราคา หมวด และสถานะใช้งานที่ การตลาด > จัดการโปรโมชัน',
+      'เมนูเชื่อมโปรโมชัน แก้ไขชื่อ ราคา หมวด และสถานะใช้งานที่ การตลาด > จัดการโปรโมชัน ส่วนคำอธิบายแก้ได้ที่แท็บคำอธิบายในหน้านี้',
     posSave: 'บันทึก',
     posEdit: 'แก้ไข',
     posPercent: 'เปอร์เซ็นต์',
@@ -40639,9 +40657,16 @@ orderItemQty: 'ຈຳນວນ',
     posKbankCreditCardQrHint:
       'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankQrReturnedThaiAlert:
-      'เลือก Credit Card QR แต่ธนาคารตอบกลับเป็น Thai QR (PromptPay) กรุณาตรวจสอบการเปิดใช้งาน QR Credit Card ที่ธนาคารและ terminalId',
-    posKbankQrTypeThaiActual: 'Thai QR · PromptPay (จากธนาคาร)',
-    posKbankQrTypeCreditActual: 'Credit Card QR (จากธนาคาร)',
+      'เลือก Credit Card QR แต่ธนาคารตอบกลับเป็น Thai QR (PromptPay) กรุณาตรวจสอบการเปิดใช้งาน QR Credit Card ที่ธนาคาร',
+    posKbankQrBankTypeUnknownAlert:
+      'ขอ Credit Card QR (qrType 4) แต่ธนาคารไม่ส่ง qrType กลับมา และ QR แสดงเป็น PromptPay กรุณากดปุ่มคัดลอกด้านล่างแล้วส่ง message ให้ KBank',
+    posKbankQrTypeThaiFromBank: 'Thai QR · PromptPay (จากธนาคาร)',
+    posKbankQrTypeCreditFromBank: 'Credit Card QR (จากธนาคาร)',
+    posKbankQrTypeThaiRequested: 'Thai QR · PromptPay (ที่ขอ)',
+    posKbankQrTypeCreditRequested: 'Credit Card QR (ที่ขอ · ธนาคารไม่ส่ง qrType)',
+    posKbankSentQrTypeCode: 'ส่ง qrType',
+    posKbankCopyAuditMessage: 'คัดลอก request/response ส่ง KBank',
+    posKbankAuditCopied: 'คัดลอก message สำหรับ KBank แล้ว',
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:

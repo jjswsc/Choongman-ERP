@@ -395,3 +395,97 @@ export function resolveKbankDisplayQrTypeFromResponse(input: {
 
   return input.requested === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 }
+
+export type KbankDisplayQrTypeSource = 'bank_qr_type' | 'bank_sof' | 'requested'
+
+export function resolveKbankDisplayQrTypeDetails(input: {
+  qrType?: unknown
+  sof?: unknown
+  requested?: KbankDisplayQrType
+}): {
+  displayType: KbankDisplayQrType
+  source: KbankDisplayQrTypeSource
+  bankQrTypeCode: string
+  bankSof: string
+} {
+  const bankQrTypeCode = String(input.qrType ?? '').trim()
+  const bankSof = String(input.sof ?? '').trim()
+  const rawType = bankQrTypeCode.toUpperCase()
+  if (
+    rawType === KBANK_QR_TYPE_CREDIT_CARD ||
+    rawType === '4' ||
+    rawType === 'CREDIT_CARD' ||
+    rawType === 'QRCC' ||
+    rawType === 'CARD'
+  ) {
+    return { displayType: 'CREDIT_CARD', source: 'bank_qr_type', bankQrTypeCode, bankSof }
+  }
+  if (
+    rawType === KBANK_QR_TYPE_THAI ||
+    rawType === '3' ||
+    rawType === 'THAI_QR' ||
+    rawType === 'THQR' ||
+    rawType === 'THAI'
+  ) {
+    return { displayType: 'THAI_QR', source: 'bank_qr_type', bankQrTypeCode, bankSof }
+  }
+  if (
+    rawType === KBANK_QR_TYPE_COMBO ||
+    rawType === '5' ||
+    rawType === 'THAI_QR_AND_CARD' ||
+    rawType === 'COMBO' ||
+    rawType === 'BOTH'
+  ) {
+    return { displayType: 'THAI_QR', source: 'bank_qr_type', bankQrTypeCode, bankSof }
+  }
+
+  const sofParts = (Array.isArray(input.sof) ? input.sof : String(input.sof ?? '').split(/[,|]/))
+    .map((v) => String(v).trim().toUpperCase())
+    .filter(Boolean)
+  if (sofParts.some((p) => p === KBANK_SOF_CREDIT_CARD || p === 'CC' || p.includes('CREDIT'))) {
+    return { displayType: 'CREDIT_CARD', source: 'bank_sof', bankQrTypeCode, bankSof }
+  }
+  if (sofParts.some((p) => p === KBANK_SOF_THAI_QR || p === 'PP' || p.includes('PROMPT'))) {
+    return { displayType: 'THAI_QR', source: 'bank_sof', bankQrTypeCode, bankSof }
+  }
+
+  return {
+    displayType: input.requested === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR',
+    source: 'requested',
+    bankQrTypeCode,
+    bankSof,
+  }
+}
+
+const KBANK_LOG_SENSITIVE_KEY =
+  /secret|password|authorization|access_token|access-token|consumer_secret|api_?key/i
+const KBANK_LOG_QR_PAYLOAD_KEY =
+  /^(qrpayload|qrcode|qrstring|qrdata|qrrawdata|qrraw|thaiqr|payload)$/i
+
+function maskKbankQrPayloadValue(value: string): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (raw.length <= 24) return `[qr:${raw.length}chars]`
+  return `[qr:${raw.length}chars,head:${raw.slice(0, 16)}…]`
+}
+
+/** Mask secrets and truncate QR strings for Vercel logs / KBank support paste. */
+export function maskKbankMessageForLog(input: unknown): unknown {
+  if (input == null) return input
+  if (Array.isArray(input)) return input.map((item) => maskKbankMessageForLog(item))
+  if (typeof input !== 'object') return input
+
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (KBANK_LOG_SENSITIVE_KEY.test(key)) {
+      out[key] = '***'
+      continue
+    }
+    if (typeof value === 'string' && KBANK_LOG_QR_PAYLOAD_KEY.test(key)) {
+      out[key] = maskKbankQrPayloadValue(value)
+      continue
+    }
+    out[key] = maskKbankMessageForLog(value)
+  }
+  return out
+}

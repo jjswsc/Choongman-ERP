@@ -78,6 +78,41 @@ type GrabCampaignListRow = {
   discount?: { type?: string; value?: number; scope?: { objectIDs?: string[] } }
 }
 
+type IndexedGrabCampaign = {
+  row: GrabCampaignListRow
+  section: 'ongoing' | 'upcoming'
+}
+
+export function grabCampaignDiscountMatchesTarget(
+  row: GrabCampaignListRow,
+  target: { grabItemId: string; salePriceMajor: number }
+): boolean {
+  const discount = row.discount
+  if (!discount || String(discount.type ?? '').trim() !== 'fixPrice') return false
+  if (Math.round(Number(discount.value ?? 0)) !== Math.round(target.salePriceMajor)) return false
+  const objectIDs = discount.scope?.objectIDs || []
+  return objectIDs.length === 1 && objectIDs[0] === target.grabItemId
+}
+
+function indexManagedCampaigns(payload: unknown): Map<string, IndexedGrabCampaign> {
+  const out = new Map<string, IndexedGrabCampaign>()
+  if (!payload || typeof payload !== 'object') return out
+  const o = payload as Record<string, unknown>
+  for (const section of ['ongoing', 'upcoming'] as const) {
+    const rows = Array.isArray(o[section]) ? o[section] : []
+    for (const raw of rows) {
+      if (!raw || typeof raw !== 'object') continue
+      const row = raw as GrabCampaignListRow
+      const name = String(row.name ?? '').trim()
+      if (!name.startsWith(CAMPAIGN_NAME_PREFIX)) continue
+      const prefix = name.split(' ')[0]
+      if (!prefix || out.has(prefix)) continue
+      out.set(prefix, { row, section })
+    }
+  }
+  return out
+}
+
 export function buildGrabPromoCampaignName(promoId: string | number): string {
   return `${CAMPAIGN_NAME_PREFIX}${String(promoId).trim()}`
 }
@@ -366,6 +401,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   }
 
   let existing: GrabCampaignListRow[] = []
+  let existingByPrefix = new Map<string, IndexedGrabCampaign>()
   try {
     const listed = await grabJsonRequest<unknown>({
       path: '/partner/v1/campaigns',
@@ -373,6 +409,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       query: { merchantID },
     })
     existing = listCampaignRows(listed)
+    existingByPrefix = indexManagedCampaigns(listed)
   } catch (e) {
     console.warn('[grab-promo-campaign] list_failed', { merchantID, error: String(e) })
     return { created: 0, updated: 0, skipped: targets.length, deleted: 0 }
@@ -402,12 +439,42 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       validTo: target.validTo,
     })
     const fullName = String(body.name ?? '')
-    const hit =
-      existingByName.get(campaignName) ||
-      existing.find((row) => String(row.name ?? '').startsWith(campaignName))
+    const indexed =
+      existingByPrefix.get(campaignName) ||
+      (() => {
+        const row =
+          existingByName.get(campaignName) ||
+          existing.find((r) => String(r.name ?? '').startsWith(campaignName))
+        if (!row) return undefined
+        return { row, section: 'upcoming' as const }
+      })()
+    const hit = indexed?.row
 
     try {
       if (hit?.id) {
+        if (
+          grabCampaignDiscountMatchesTarget(hit, {
+            grabItemId: target.grabItemId,
+            salePriceMajor: target.salePrice,
+          })
+        ) {
+          skipped += 1
+          continue
+        }
+        if (indexed?.section === 'ongoing') {
+          await grabJsonRequest({
+            path: `/partner/v1/campaigns/${encodeURIComponent(String(hit.id))}`,
+            method: 'DELETE',
+            expectNoContentOk: true,
+          })
+          await grabJsonRequest({
+            path: '/partner/v1/campaigns',
+            method: 'POST',
+            body,
+          })
+          created += 1
+          continue
+        }
         await grabJsonRequest({
           path: `/partner/v1/campaigns/${encodeURIComponent(String(hit.id))}`,
           method: 'PUT',

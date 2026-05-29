@@ -18,6 +18,7 @@ import {
   isKbankAccessTokenAuthError,
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
+  maskKbankMessageForLog,
   readKbankResponseStatusCode,
   resolveKbankQrTypeCode,
 } from '@/lib/payments/kbank-api-reference'
@@ -307,6 +308,8 @@ export async function generateKbankQr(
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
   const body = buildQrPayload(req)
+  const sentQrTypeCode = String(body.qrType || '').trim()
+  const requestBodyMasked = maskKbankMessageForLog(body) as Record<string, unknown>
 
   const timeoutMs = opts?.timeoutMs ?? 12000
   const { signal, clear } = timeoutSignal(timeoutMs)
@@ -366,14 +369,37 @@ export async function generateKbankQr(
       res.status
     )
     if (!res.ok || !isKbankBusinessSuccess(statusCode)) {
+      const responseBodyMasked = maskKbankMessageForLog(json) as Record<string, unknown>
+      console.info('kbank/generate-qr audit:', {
+        partnerTxnUid: req.partnerTransactionId,
+        ok: false,
+        sentQrTypeCode,
+        requestBody: requestBodyMasked,
+        responseBody: responseBodyMasked,
+        httpStatus: res.status,
+        statusCode,
+      })
       return {
         ok: false,
         requestId: req.partnerTransactionId,
         statusCode,
         statusMessage,
         response: json,
+        requestBodyMasked,
+        responseBodyMasked,
+        sentQrTypeCode,
       }
     }
+
+    const responseBodyMasked = maskKbankMessageForLog(json) as Record<string, unknown>
+    console.info('kbank/generate-qr audit:', {
+      partnerTxnUid: req.partnerTransactionId,
+      ok: true,
+      sentQrTypeCode,
+      requestBody: requestBodyMasked,
+      responseBody: responseBodyMasked,
+      statusCode,
+    })
 
     return {
       ok: true,
@@ -381,6 +407,9 @@ export async function generateKbankQr(
       statusCode,
       statusMessage: statusMessage || 'ok',
       response: json,
+      requestBodyMasked,
+      responseBodyMasked,
+      sentQrTypeCode,
     }
   } finally {
     clear()

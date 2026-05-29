@@ -154,6 +154,11 @@ export function canManageReceivablePayableAllStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
 }
 
+/** 매출 관리·전체 매출에서 API 전체 매장 목록·다중 매장 필터 (본사·회계·본사 소속) */
+export function canSelectAllStoresForPosSalesManagement(role: string, store: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role) || isOfficeStore(store)
+}
+
 /** 물류(창고/배송) 담당 역할인지 — 미수금 동기화·품목 발주 일시중지 등 */
 export function isLogisticsStaffRole(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()

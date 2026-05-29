@@ -172,7 +172,8 @@ import {
   isKbankCreditCardQrUnavailableError,
   isKbankRateLimitError,
   resolveKbankCreditCardBrandLabels,
-  resolveKbankDisplayQrTypeFromResponse,
+  resolveKbankDisplayQrTypeDetails,
+  type KbankDisplayQrTypeSource,
 } from '@/lib/payments/kbank-api-reference'
 import {
   subscribePosOrdersInsert,
@@ -319,6 +320,36 @@ function extractKbankGenerateResponseInfo(raw: unknown): {
 
 function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+function buildKbankGenerateAuditPaste(input: {
+  partnerTxnUid: string
+  amount: number
+  requestedQrType: string
+  sentQrTypeCode?: string
+  bankQrTypeCode?: string | null
+  bankSof?: string | null
+  requestMessage?: Record<string, unknown> | null
+  responseMessage?: unknown
+  storeCode?: string
+}): string {
+  const lines = [
+    'KBank Generate QR',
+    `store: ${String(input.storeCode || '').trim() || '-'}`,
+    `partnerTxnUid: ${input.partnerTxnUid}`,
+    `amount: ${input.amount.toFixed(2)} THB`,
+    `requestedQrType: ${input.requestedQrType}`,
+    `sentQrType: ${String(input.sentQrTypeCode || '-').trim() || '-'}`,
+    `bankQrType: ${String(input.bankQrTypeCode || '-').trim() || '-'}`,
+    `bankSof: ${String(input.bankSof || '-').trim() || '-'}`,
+    '',
+    '=== Request Body (masked) ===',
+    JSON.stringify(input.requestMessage || {}, null, 2),
+    '',
+    '=== Response Body (masked) ===',
+    JSON.stringify(input.responseMessage || {}, null, 2),
+  ]
+  return lines.join('\n')
 }
 
 function buildThaiQrGuidelineCardDataUrl(payload: string): string {
@@ -931,6 +962,10 @@ export default function PosTerminalPage() {
   const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
   const [liveKbankQrAmount, setLiveKbankQrAmount] = useState(0)
   const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
+  const [liveKbankQrTypeSource, setLiveKbankQrTypeSource] =
+    useState<KbankDisplayQrTypeSource>('requested')
+  const [kbankSentQrTypeCode, setKbankSentQrTypeCode] = useState('')
+  const [kbankGenerateAuditText, setKbankGenerateAuditText] = useState('')
   const [staffKbankQrFallbackDataUrl, setStaffKbankQrFallbackDataUrl] = useState('')
   const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
   const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
@@ -2765,6 +2800,19 @@ export default function PosTerminalPage() {
     const draftType = String(customerDisplayPaymentDraft?.paymentQrType || '').trim().toUpperCase()
     return draftType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
   }, [liveKbankQrPayload, liveKbankQrType, customerDisplayPaymentDraft?.paymentQrType])
+
+  const staffKbankQrTypeLabel = useMemo(() => {
+    const fromBank =
+      liveKbankQrTypeSource === 'bank_qr_type' || liveKbankQrTypeSource === 'bank_sof'
+    if (effectiveCustomerDisplayQrType === 'CREDIT_CARD') {
+      return fromBank
+        ? t('posKbankQrTypeCreditFromBank') || 'Credit Card QR (from bank)'
+        : t('posKbankQrTypeCreditRequested') || 'Credit Card QR (requested · bank type not returned)'
+    }
+    return fromBank
+      ? t('posKbankQrTypeThaiFromBank') || 'Thai QR · PromptPay (from bank)'
+      : t('posKbankQrTypeThaiRequested') || 'Thai QR · PromptPay (requested)'
+  }, [effectiveCustomerDisplayQrType, liveKbankQrTypeSource, t])
 
   const staffKbankGuidelineCardDataUrl = useMemo(() => {
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
@@ -5207,6 +5255,9 @@ export default function PosTerminalPage() {
       if (!generate.success) {
         setLiveKbankQrPayload('')
         setLiveKbankQrType('THAI_QR')
+        setLiveKbankQrTypeSource('requested')
+        setKbankSentQrTypeCode('')
+        setKbankGenerateAuditText('')
         setKbankCallbackState('idle')
         setKbankOpsTxnUid('')
         setKbankOpsOrigTxnUid('')
@@ -5262,16 +5313,47 @@ export default function PosTerminalPage() {
       setLiveKbankQrPayload(generatedQrPayload)
       setLiveKbankQrAmount(qrAmount)
       const bankQrMeta = extractKbankQrResponseMeta(data)
-      const actualQrType = resolveKbankDisplayQrTypeFromResponse({
-        qrType: bankQrMeta.qrTypeCode,
-        sof: generatedInfo.sof,
-        requested: requestedQrType,
-      })
-      setLiveKbankQrType(actualQrType)
-      if (requestedQrType === 'CREDIT_CARD' && actualQrType === 'THAI_QR') {
+      const qrTypeDetails =
+        generate.displayQrType && generate.displayQrTypeSource
+          ? {
+              displayType: generate.displayQrType,
+              source: generate.displayQrTypeSource,
+              bankQrTypeCode: String(generate.bankQrTypeCode || bankQrMeta.qrTypeCode || ''),
+              bankSof: String(generate.bankSof || bankQrMeta.sof || ''),
+            }
+          : resolveKbankDisplayQrTypeDetails({
+              qrType: bankQrMeta.qrTypeCode,
+              sof: generatedInfo.sof,
+              requested: requestedQrType,
+            })
+      setLiveKbankQrType(qrTypeDetails.displayType)
+      setLiveKbankQrTypeSource(qrTypeDetails.source)
+      setKbankSentQrTypeCode(String(generate.sentQrTypeCode || '').trim())
+      setKbankGenerateAuditText(
+        buildKbankGenerateAuditPaste({
+          partnerTxnUid: partnerTransactionId,
+          amount: qrAmount,
+          requestedQrType: requestedQrType,
+          sentQrTypeCode: generate.sentQrTypeCode || undefined,
+          bankQrTypeCode: qrTypeDetails.bankQrTypeCode || generate.bankQrTypeCode,
+          bankSof: qrTypeDetails.bankSof || generate.bankSof,
+          requestMessage: generate.requestMessage,
+          responseMessage: generate.responseMessage,
+          storeCode: currentStoreId,
+        })
+      )
+      const qrTypeMismatch =
+        generate.qrTypeMismatch === true ||
+        (requestedQrType === 'CREDIT_CARD' &&
+          qrTypeDetails.displayType === 'THAI_QR' &&
+          qrTypeDetails.source !== 'requested')
+      if (requestedQrType === 'CREDIT_CARD' && (qrTypeMismatch || qrTypeDetails.source === 'requested')) {
         await appAlert(
-          t('posKbankQrReturnedThaiAlert') ||
-            'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant and confirm terminalId.'
+          qrTypeDetails.source === 'requested'
+            ? t('posKbankQrBankTypeUnknownAlert') ||
+                'Credit Card QR was requested (qrType 4). KBank did not return qrType in the response; the QR image shows PromptPay. Please send the audit message below to KBank.'
+            : t('posKbankQrReturnedThaiAlert') ||
+                'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.'
         )
       }
       void executeLinkposDisplayQr({
@@ -5323,13 +5405,13 @@ export default function PosTerminalPage() {
         if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         const inquiryMeta = extractKbankQrResponseMeta(stData)
         if (inquiryMeta.qrTypeCode || inquiryMeta.sof) {
-          setLiveKbankQrType(
-            resolveKbankDisplayQrTypeFromResponse({
-              qrType: inquiryMeta.qrTypeCode,
-              sof: inquiryMeta.sof,
-              requested: requestedQrType,
-            })
-          )
+          const inquiryDetails = resolveKbankDisplayQrTypeDetails({
+            qrType: inquiryMeta.qrTypeCode,
+            sof: inquiryMeta.sof,
+            requested: requestedQrType,
+          })
+          setLiveKbankQrType(inquiryDetails.displayType)
+          setLiveKbankQrTypeSource(inquiryDetails.source)
         }
         if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
         if (!refId) refId = String(st.refId || '').trim()
@@ -8768,10 +8850,31 @@ export default function PosTerminalPage() {
                 : 'text-sky-800 dark:text-sky-300'
             }`}
           >
-            {effectiveCustomerDisplayQrType === 'CREDIT_CARD'
-              ? t('posKbankQrTypeCreditActual') || 'Credit Card QR (from bank)'
-              : t('posKbankQrTypeThaiActual') || 'Thai QR · PromptPay (from bank)'}
+            {staffKbankQrTypeLabel}
           </p>
+          {kbankSentQrTypeCode ? (
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {(t('posKbankSentQrTypeCode') || 'Sent qrType')}: {kbankSentQrTypeCode}
+            </p>
+          ) : null}
+          {kbankGenerateAuditText ? (
+            <div className="mt-2 space-y-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 w-full text-[10px]"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(kbankGenerateAuditText)
+                    .then(() => appAlert(t('posKbankAuditCopied') || 'Copied KBank message for support.'))
+                    .catch(() => appAlert(t('posCopyFailed') || 'Copy failed'))
+                }}
+              >
+                {t('posKbankCopyAuditMessage') || 'Copy request/response for KBank'}
+              </Button>
+            </div>
+          ) : null}
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border bg-white">
               {staffKbankGuidelineCardDataUrl ? (

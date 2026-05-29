@@ -130,7 +130,10 @@ export async function POST(req: NextRequest) {
         changed.includes('price') ||
         changed.includes('price_delivery') ||
         changed.includes('image') ||
-        changed.includes('sell_delivery')
+        changed.includes('sell_delivery') ||
+        changed.includes('description_default') ||
+        changed.includes('description_delivery') ||
+        changed.includes('description_table')
       if (hasMenuImpact) {
         const reason = result.syncHint?.imageChanged ? 'menu_image_changed' : 'menu_updated'
         void triggerGrabMenuNotification({
