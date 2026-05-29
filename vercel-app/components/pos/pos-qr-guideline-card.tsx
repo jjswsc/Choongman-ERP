@@ -5,16 +5,6 @@ import QRCode from 'qrcode'
 import { cn } from '@/lib/utils'
 import { POS_QR_BRAND, type PosQrDisplayKind } from '@/lib/pos-qr-brand-paths'
 
-/** `thai-qr-payment` renderCard header crop (viewBox 88 75 750 210 on Logo-01). */
-const THAI_QR_HEADER_CROP = {
-  imageWidth: 913,
-  imageHeight: 376,
-  x: 88,
-  y: 75,
-  width: 750,
-  height: 210,
-} as const
-
 /** Center logo ≈ 16% of QR module area (same ratio as `renderCard`). */
 const QR_DISPLAY_PX = 248
 const CENTER_LOGO_RATIO = 0.16
@@ -27,26 +17,16 @@ type Props = {
 }
 
 function ThaiQrHeaderBand({ className }: { className?: string }) {
-  const { imageWidth, imageHeight, x, y, width, height } = THAI_QR_HEADER_CROP
-  const bgWidthPct = (imageWidth / width) * 100
-  const bgHeightPct = (imageHeight / height) * 100
-  const posXPct = (x / (imageWidth - width)) * 100
-  const posYPct = (y / (imageHeight - height)) * 100
-
   return (
     <div
-      className={cn('w-full overflow-hidden bg-[#00427A]', className)}
-      style={{ aspectRatio: `${width} / ${height}` }}
+      className={cn('w-full bg-white px-4 pb-2 pt-3', className)}
       role="img"
       aria-label="THAI QR PAYMENT"
     >
-      <div
-        className="h-full w-full bg-no-repeat"
-        style={{
-          backgroundImage: `url(${POS_QR_BRAND.thaiQrHeader})`,
-          backgroundSize: `${bgWidthPct}% ${bgHeightPct}%`,
-          backgroundPosition: `${posXPct}% ${posYPct}%`,
-        }}
+      <img
+        src={POS_QR_BRAND.thaiQrHeader}
+        alt="THAI QR PAYMENT"
+        className="mx-auto block h-auto w-[84%] max-w-[270px] object-contain"
       />
     </div>
   )
@@ -138,21 +118,13 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
             alt={kind === 'CREDIT_CARD' ? 'Credit Card QR' : 'Thai QR Payment'}
             className={cn('h-full w-full object-contain', qrClassName)}
           />
-          <div
-            className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded bg-white"
-            style={{
-              width: centerLogoPx + 8,
-              height: centerLogoPx + 8,
-            }}
+          <img
+            src={POS_QR_BRAND.thaiQrCenterLogo}
+            alt=""
             aria-hidden
-          >
-            <img
-              src={POS_QR_BRAND.thaiQrCenterLogo}
-              alt=""
-              className="object-contain"
-              style={{ width: centerLogoPx, height: centerLogoPx }}
-            />
-          </div>
+            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
+            style={{ width: centerLogoPx, height: centerLogoPx }}
+          />
         </div>
       </div>
     </div>
