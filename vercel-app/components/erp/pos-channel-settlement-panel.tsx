@@ -40,6 +40,13 @@ export type PosChannelSettlementPanelProps = {
   storeCode: string
   settleDate: string
   className?: string
+  /** 통장 입금 행에서 열 때 NET 프리필 */
+  initialNet?: number
+  /** 정산 저장 시 연결할 통장 거래 ID */
+  bankTransactionId?: number
+  /** 다이얼로그 등 좁은 UI에서는 CSV 일괄 숨김 */
+  hideCsv?: boolean
+  onPosted?: () => void
 }
 
 export function PosChannelSettlementPanel({
@@ -47,6 +54,10 @@ export function PosChannelSettlementPanel({
   storeCode,
   settleDate,
   className,
+  initialNet,
+  bankTransactionId,
+  hideCsv = false,
+  onPosted,
 }: PosChannelSettlementPanelProps) {
   const [channel, setChannel] = React.useState<PosChannelSettlementChannel>('card')
   const [gross, setGross] = React.useState(0)
@@ -103,12 +114,26 @@ export function PosChannelSettlementPanel({
   }, [loadGross, loadPosted])
 
   React.useEffect(() => {
+    if (initialNet != null && initialNet > 0) return
     setNet('')
     setFee('')
     setSuggestedFee(null)
     setPlatformFeePct(null)
     setFeeSourceKey(null)
-  }, [channel, settleDate, storeCode])
+  }, [channel, settleDate, storeCode, initialNet])
+
+  React.useEffect(() => {
+    if (initialNet == null || initialNet <= 0) return
+    const netNum = roundSettlementMoney(initialNet)
+    setNet(String(netNum))
+  }, [initialNet])
+
+  React.useEffect(() => {
+    if (initialNet == null || initialNet <= 0 || gross <= 0) return
+    const netNum = roundSettlementMoney(initialNet)
+    const feeNum = deriveFeeFromGrossNet(gross, netNum)
+    setFee(feeNum > 0 ? String(feeNum) : '')
+  }, [initialNet, gross])
 
   const onNetChange = (raw: string) => {
     setNet(raw)
@@ -156,6 +181,8 @@ export function PosChannelSettlementPanel({
             ? feeSourceKey || 'platform_policy_pct'
             : 'manual',
         memo: memo.trim() || undefined,
+        bankTransactionId:
+          bankTransactionId != null && bankTransactionId > 0 ? bankTransactionId : undefined,
         repost,
       })
       if (res.success) {
@@ -165,6 +192,7 @@ export function PosChannelSettlementPanel({
             : t('posChannelSettlePosted') || '채널 정산 분개가 생성되었습니다.'
         )
         void loadPosted()
+        onPosted?.()
       } else {
         await appAlert(res.message || t('msg_save_fail') || '저장 실패')
       }
@@ -248,6 +276,12 @@ export function PosChannelSettlementPanel({
             {t('posChannelSettleGpPoLink') || '본사 PO 배달 GP % (청구 비율)'}
           </Link>
         </p>
+        {bankTransactionId != null && bankTransactionId > 0 ? (
+          <p className="text-[11px] text-sky-700 dark:text-sky-400 mt-1">
+            {t('posChannelSettleBankLinkedHint') ||
+              `통장 입금 #${bankTransactionId}과 연결됩니다. 분개 생성 시 자동 연결.`}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-2 items-end">
@@ -355,29 +389,31 @@ export function PosChannelSettlementPanel({
         </ul>
       ) : null}
 
-      <div className="border-t border-dashed pt-3 space-y-2">
-        <p className="text-xs font-semibold">{t('posChannelSettleCsvTitle') || '정산서 CSV 일괄'}</p>
-        <p className="text-[11px] text-muted-foreground whitespace-pre-line">
-          {t('posChannelSettleCsvHint') ||
-            '열: settle_date, channel, gross, net, fee(선택). 매장·날짜는 화면 선택값이 기본.'}
-        </p>
-        <input
-          ref={csvInputRef}
-          type="file"
-          accept=".csv,.txt,text/csv"
-          className="hidden"
-          onChange={(e) => void handleCsvFile(e.target.files?.[0] ?? null)}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={csvImporting}
-          onClick={() => csvInputRef.current?.click()}
-        >
-          {csvImporting ? '...' : t('posChannelSettleCsvImport') || 'CSV 가져와 분개'}
-        </Button>
-      </div>
+      {!hideCsv ? (
+        <div className="border-t border-dashed pt-3 space-y-2">
+          <p className="text-xs font-semibold">{t('posChannelSettleCsvTitle') || '정산서 CSV 일괄'}</p>
+          <p className="text-[11px] text-muted-foreground whitespace-pre-line">
+            {t('posChannelSettleCsvHint') ||
+              '열: settle_date, channel, gross, net, fee(선택). 매장·날짜는 화면 선택값이 기본.'}
+          </p>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,.txt,text/csv"
+            className="hidden"
+            onChange={(e) => void handleCsvFile(e.target.files?.[0] ?? null)}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={csvImporting}
+            onClick={() => csvInputRef.current?.click()}
+          >
+            {csvImporting ? '...' : t('posChannelSettleCsvImport') || 'CSV 가져와 분개'}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

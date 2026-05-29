@@ -81,11 +81,21 @@ import {
   saveBankQuickMemos,
 } from "@/lib/bank-quick-memos"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
-import { PosChannelSettlementPanel } from "@/components/erp/pos-channel-settlement-panel"
+import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 function todayStr() {
   return getBangkokTodayDateString()
+}
+
+function bankRowSettleDate(r: { transDate: string; salesDate?: string }): string {
+  if (r.salesDate?.trim()) return r.salesDate.slice(0, 10)
+  const d = new Date(r.transDate)
+  if (!Number.isNaN(d.getTime())) {
+    d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  }
+  return r.transDate.slice(0, 10)
 }
 
 type BankImportRowEdit = {
@@ -337,6 +347,7 @@ export function BankTransactionsTab() {
   const queryMemoFocusIdRef = React.useRef<number | null>(null)
   const [bankQuickMemos, setBankQuickMemos] = React.useState<string[]>(() => [...BANK_QUICK_MEMO_DEFAULTS])
   const [bankQuickMemosEditOpen, setBankQuickMemosEditOpen] = React.useState(false)
+  const [channelSettleRow, setChannelSettleRow] = React.useState<(typeof list)[0] | null>(null)
   const [bankQuickMemosDraft, setBankQuickMemosDraft] = React.useState<string[]>([])
   const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
@@ -1782,17 +1793,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         <p className="text-[11px] text-muted-foreground leading-snug">
           {tt(
             "bankPosReceivableDepositBody",
-            "Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 사용하세요. 배달앱정산/카드매출(revenue_*)는 매출(4110) 이중 인식 위험이 있습니다. 수수료는 아래 채널 정산으로 NET+FEE 분개하세요."
-          )}
+            "Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 사용하세요. revenue_* 입금은 매출 이중 위험입니다."
+          )}{" "}
+          {tt(
+            "bankPosChannelSettleHint",
+            "수수료(GROSS−NET) 분개는 POS 결산에서 처리하거나, 아래 목록의 입금 행에서 「채널 정산」을 누르세요."
+          )}{" "}
+          <Link href="/admin/pos-settlement" className="text-primary underline underline-offset-2 font-medium">
+            {tt("bankPosChannelSettlePosLink", "POS 결산 →")}
+          </Link>
         </p>
       </div>
-      {selectedAccountStore ? (
-        <PosChannelSettlementPanel
-          t={(key) => tt(key, key)}
-          storeCode={selectedAccountStore}
-          settleDate={startStr || getBangkokTodayDateString()}
-        />
-      ) : null}
       <div className="rounded-md border border-sky-200/80 dark:border-sky-800/50 bg-sky-50/60 dark:bg-sky-950/25 px-3 py-2.5 space-y-1.5">
         <p className="text-xs font-medium text-foreground">{tt("bankExpenseMgmtCoexistTitle", "지출 관리와 같은 출금 줄을 쓸 때 (출금 용도)")}</p>
         <p className="text-[11px] text-muted-foreground whitespace-pre-line leading-snug">
@@ -2280,6 +2291,34 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     }}
                                   >
                                     {t("bankRegisterEdit") || "수정"}
+                                  </Button>
+                                ) : r.transType === "deposit" && cat === "receivable_receive" && r.id ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className={ADMIN_BTN_XS_CN}
+                                    onClick={() => {
+                                      const rowEdits = r.id ? queryRowEdits[r.id] : undefined
+                                      const store = (
+                                        rowEdits?.storeName ??
+                                        r.storeName ??
+                                        selectedAccountStore ??
+                                        ""
+                                      ).trim()
+                                      if (!store) {
+                                        void appAlert(
+                                          tt(
+                                            "bankPosChannelSettleNeedStore",
+                                            "매장을 선택한 뒤 채널 정산을 진행하세요."
+                                          )
+                                        )
+                                        return
+                                      }
+                                      setChannelSettleRow(r)
+                                    }}
+                                    title={tt("bankPosChannelSettleRowBtn", "채널 정산 (수수료 분개)")}
+                                  >
+                                    {tt("bankPosChannelSettleRowBtn", "채널 정산")}
                                   </Button>
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
@@ -3658,6 +3697,38 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           </div>
         </DialogContent>
       </Dialog>
+      {(() => {
+        if (!channelSettleRow?.id) return null
+        const csEdits = queryRowEdits[channelSettleRow.id]
+        const csStore = (
+          csEdits?.storeName ??
+          channelSettleRow.storeName ??
+          selectedAccountStore ??
+          ""
+        ).trim()
+        if (!csStore) return null
+        const csSettleDate = bankRowSettleDate({
+          transDate: channelSettleRow.transDate,
+          salesDate: csEdits?.salesDate ?? channelSettleRow.salesDate,
+        })
+        return (
+          <PosChannelSettlementDialog
+            open={!!channelSettleRow}
+            onOpenChange={(open) => {
+              if (!open) setChannelSettleRow(null)
+            }}
+            t={(key) => tt(key, key)}
+            storeCode={csStore}
+            settleDate={csSettleDate}
+            initialNet={Math.abs(channelSettleRow.amount ?? 0)}
+            bankTransactionId={channelSettleRow.id}
+            onPosted={() => {
+              setChannelSettleRow(null)
+              void loadData()
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

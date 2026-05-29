@@ -107,9 +107,10 @@ export default function PosCustomerDisplayPage() {
     String(state?.qrType || "").trim().toUpperCase() === "CREDIT_CARD" ? "CREDIT_CARD" : "THAI_QR"
   const qrPayloadText = String(state?.qrPayload || "").trim()
   const kbankGuidelineCardDataUrl = React.useMemo(() => {
+    if (resolvedQrType !== "THAI_QR") return ""
     if (!qrPayloadText.startsWith("000201")) return ""
     return buildThaiQrGuidelineCardDataUrl(qrPayloadText)
-  }, [qrPayloadText])
+  }, [resolvedQrType, qrPayloadText])
   const resolvedIdleMedia = React.useMemo(() => {
     const mtRaw = state?.idleMediaType ?? settingsIdleMediaType
     const mt = mtRaw === "image" || mtRaw === "video" ? mtRaw : "none"
@@ -347,15 +348,35 @@ export default function PosCustomerDisplayPage() {
             {qrPayloadText ? (
               <div className="w-full max-w-[520px] rounded-xl bg-white p-3">
                 <div className="overflow-hidden rounded-lg border bg-white">
-                  {kbankGuidelineCardDataUrl ? (
+                  {resolvedQrType === "CREDIT_CARD" ? (
+                    <>
+                      <div className="bg-[#073763] px-3 py-2 text-center text-sm font-bold tracking-wide text-white">
+                        CREDIT CARD QR
+                      </div>
+                      <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
+                        {["VISA", "MASTERCARD", "UNIONPAY"].map((label) => (
+                          <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex items-center justify-center">
+                        <img
+                          src={`https://quickchart.io/qr?text=${encodeURIComponent(qrPayloadText)}&size=360&margin=1`}
+                          alt="Customer QR"
+                          className="h-60 w-60 rounded-lg bg-white p-2"
+                        />
+                      </div>
+                    </>
+                  ) : kbankGuidelineCardDataUrl ? (
                     <div className="flex items-center justify-center bg-white p-2">
                       <img
                         src={kbankGuidelineCardDataUrl}
-                        alt={resolvedQrType === "CREDIT_CARD" ? "Credit Card QR" : "Thai QR Payment"}
+                        alt="Thai QR Payment"
                         className="h-auto w-[360px] max-w-full object-contain"
                       />
                     </div>
-                  ) : resolvedQrType === "THAI_QR" ? (
+                  ) : (
                     <>
                       <div className="bg-[#00427A] px-3 py-2">
                         <div
@@ -377,10 +398,6 @@ export default function PosCustomerDisplayPage() {
                         />
                       </div>
                     </>
-                  ) : (
-                    <p className="p-6 text-lg text-black/70">
-                      {t("posLoading") || "로딩 중"}
-                    </p>
                   )}
                 </div>
               </div>

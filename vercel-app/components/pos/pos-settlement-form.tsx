@@ -1820,11 +1820,22 @@ ${footerStamp}
               </div>
 
               {!openMode && effectiveStore && settleDate && !offlineAware ? (
-                <PosChannelSettlementPanel
-                  t={t}
-                  storeCode={effectiveStore}
-                  settleDate={settleDate}
-                />
+                <div className="space-y-1.5" data-tour="pos-channel-settlement-section">
+                  <p className="text-xs font-medium text-foreground px-0.5">
+                    {t('posSettlementChannelSettleLead') ||
+                      '카드·배달 수수료 — 채널 정산 (1130 소거)'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground px-0.5 leading-snug">
+                    {t('posSettlementChannelSettleLeadHint') ||
+                      'GROSS=위 결제수단 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금은 「매출 수령」만 사용.'}
+                  </p>
+                  <PosChannelSettlementPanel
+                    t={t}
+                    storeCode={effectiveStore}
+                    settleDate={settleDate}
+                    className="border-primary/35 bg-primary/[0.04]"
+                  />
+                </div>
               ) : null}
 
               <div className="space-y-1 rounded-lg border px-4 py-2 text-sm" data-tour="pos-tour-close-input-totals">

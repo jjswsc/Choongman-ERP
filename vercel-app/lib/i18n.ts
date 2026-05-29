@@ -3253,12 +3253,24 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급과 맞물립니다. 지출 관리와 겹칠 때는 출금 용도에 따라 자동분개 유무가 갈립니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, 배달앱정산/카드매출(revenue_*) 입금 분류는 쓰지 마세요(매출 이중 위험). 채널 정산 분개는 POS 결산·통장 「채널 정산」 패널을 우선합니다.\n③ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요.\n④ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n③ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요.\n④ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
     bankPosReceivableDepositBody:
-      'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. revenue_* 입금은 매출 이중 위험입니다. 수수료는 채널 정산 패널에서 NET+FEE 분개하세요.',
+      'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. revenue_* 입금은 매출 이중 위험입니다.',
+    bankPosChannelSettleHint:
+      '수수료(GROSS−NET) 분개는 POS 결산에서 처리하거나, 아래 목록의 입금 행에서 「채널 정산」을 누르세요.',
+    bankPosChannelSettlePosLink: 'POS 결산 →',
+    bankPosChannelSettleRowBtn: '채널 정산',
+    bankPosChannelSettleNeedStore: '매장을 선택한 뒤 채널 정산을 진행하세요.',
+    bankPosChannelSettleDialogTitle: '채널 정산 (수수료 분개)',
+    bankPosChannelSettleDialogDesc:
+      'NET=이 입금액, FEE=GROSS−NET. 일 마감·CSV 일괄은 POS 결산에서도 가능합니다.',
+    posChannelSettleBankLinkedHint: '선택한 통장 입금과 연결됩니다. 분개 생성 시 자동 연결.',
+    posSettlementChannelSettleLead: '카드·배달 수수료 — 채널 정산 (1130 소거)',
+    posSettlementChannelSettleLeadHint:
+      'GROSS=위 결제수단 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금은 「매출 수령」만 사용.',
     posChannelSettleTitle: '채널 정산 (회계)',
     posChannelSettleHint:
       '배달: 플랫폼(Grab/LINE 등)이 매출 GROSS에서 수수료를 빼고 익일 NET을 입금합니다(본사 PO 배달 GP와 별도).\nGROSS(1130)=POS 결제 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금 분류는 「매출 수령」만.',
@@ -6192,7 +6204,7 @@ export const i18n = {
     posKbankQrReturnedThaiAlert:
       'Credit Card QR를 선택했지만 KBank가 Thai QR(PromptPay)을 반환했습니다. 가맹점 Credit Card QR 등록을 KBank에 확인하세요.',
     posKbankQrBankTypeUnknownAlert:
-      'Credit Card QR(qrType 4)로 요청했으나 응답에 qrType이 없고 QR 화면은 PromptPay입니다. 아래 「KBank용 복사」로 전체 message를 보내주세요.',
+      'Credit Card QR(qrType 4)로 요청했으나 응답에 qrType/sof가 없습니다. 아래 「KBank용 복사」로 전체 message를 보내주세요.',
     posKbankQrTypeThaiFromBank: 'Thai QR · PromptPay (은행 응답)',
     posKbankQrTypeCreditFromBank: 'Credit Card QR (은행 응답)',
     posKbankQrTypeThaiRequested: 'Thai QR · PromptPay (요청)',
@@ -11931,12 +11943,24 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables. Overlap with Expense Management depends on the withdraw category.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_delivery/revenue_card (double revenue risk). Prefer Channel settlement on POS settlement or Bank.\n③ If the same line will be paid from Expense Management, follow help detail step ⑤ for safe categories.\n④ If balances disagree, check period, duplicates, and category mistakes.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n③ If the same line will be paid from Expense Management, follow help detail step ⑤ for safe categories.\n④ If balances disagree, check period, duplicates, and category mistakes.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
     bankPosReceivableDepositBody:
-      'Use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements. revenue_* risks double revenue. Post fees via Channel settlement (NET+FEE).',
+      'Use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements. revenue_* risks double revenue.',
+    bankPosChannelSettleHint:
+      'Post fees (GROSS−NET) on POS settlement, or click Channel settlement on a deposit row below.',
+    bankPosChannelSettlePosLink: 'POS settlement →',
+    bankPosChannelSettleRowBtn: 'Channel settlement',
+    bankPosChannelSettleNeedStore: 'Select a store before channel settlement.',
+    bankPosChannelSettleDialogTitle: 'Channel settlement (fee journal)',
+    bankPosChannelSettleDialogDesc:
+      'NET = this deposit; FEE = GROSS − NET. Daily close and CSV batch are also on POS settlement.',
+    posChannelSettleBankLinkedHint: 'Links to the selected bank deposit when you post the journal.',
+    posSettlementChannelSettleLead: 'Card / delivery fees — channel settlement (clear 1130)',
+    posSettlementChannelSettleLeadHint:
+      'GROSS = payment totals above; NET = bank deposit; FEE = GROSS − NET. Bank category: Sales collection only.',
     posChannelSettleTitle: 'Channel settlement (accounting)',
     posChannelSettleHint:
       'Delivery: the platform deducts a % from GROSS and deposits NET next day (not HQ PO delivery GP).\nGROSS=1130 receivable, NET=bank deposit, FEE=GROSS−NET. Bank category: Sales collection only.',
@@ -14872,7 +14896,7 @@ orderItemQty: 'Qty',
     posKbankQrReturnedThaiAlert:
       'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.',
     posKbankQrBankTypeUnknownAlert:
-      'Credit Card QR was requested (qrType 4). KBank did not return qrType; the QR shows PromptPay. Copy the audit message below and send it to KBank.',
+      'Credit Card QR was requested (qrType 4). KBank did not return qrType/sof in the response. Copy the audit message below and send it to KBank.',
     posKbankQrTypeThaiFromBank: 'Thai QR · PromptPay (from bank)',
     posKbankQrTypeCreditFromBank: 'Credit Card QR (from bank)',
     posKbankQrTypeThaiRequested: 'Thai QR · PromptPay (requested)',
@@ -40659,7 +40683,7 @@ orderItemQty: 'ຈຳນວນ',
     posKbankQrReturnedThaiAlert:
       'เลือก Credit Card QR แต่ธนาคารตอบกลับเป็น Thai QR (PromptPay) กรุณาตรวจสอบการเปิดใช้งาน QR Credit Card ที่ธนาคาร',
     posKbankQrBankTypeUnknownAlert:
-      'ขอ Credit Card QR (qrType 4) แต่ธนาคารไม่ส่ง qrType กลับมา และ QR แสดงเป็น PromptPay กรุณากดปุ่มคัดลอกด้านล่างแล้วส่ง message ให้ KBank',
+      'ขอ Credit Card QR (qrType 4) แต่ธนาคารไม่ส่ง qrType/sof กลับมา กรุณากดปุ่มคัดลอกด้านล่างแล้วส่ง message ให้ KBank',
     posKbankQrTypeThaiFromBank: 'Thai QR · PromptPay (จากธนาคาร)',
     posKbankQrTypeCreditFromBank: 'Credit Card QR (จากธนาคาร)',
     posKbankQrTypeThaiRequested: 'Thai QR · PromptPay (ที่ขอ)',

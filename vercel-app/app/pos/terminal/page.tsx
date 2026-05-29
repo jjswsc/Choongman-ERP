@@ -2817,10 +2817,11 @@ export default function PosTerminalPage() {
   }, [effectiveCustomerDisplayQrType, liveKbankQrTypeSource, t])
 
   const staffKbankGuidelineCardDataUrl = useMemo(() => {
+    if (effectiveCustomerDisplayQrType !== 'THAI_QR') return ''
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
     if (!payload.startsWith('000201')) return ''
     return buildThaiQrGuidelineCardDataUrl(payload)
-  }, [effectiveStaffKbankQrPayload])
+  }, [effectiveCustomerDisplayQrType, effectiveStaffKbankQrPayload])
 
   useEffect(() => {
     if (String(liveKbankQrPayload || '').trim()) return
@@ -2830,10 +2831,6 @@ export default function PosTerminalPage() {
   useEffect(() => {
     const payload = String(effectiveStaffKbankQrPayload || '').trim()
     if (!payload || staffKbankGuidelineCardDataUrl) {
-      setStaffKbankQrFallbackDataUrl('')
-      return
-    }
-    if (effectiveCustomerDisplayQrType === 'CREDIT_CARD') {
       setStaffKbankQrFallbackDataUrl('')
       return
     }
@@ -5328,20 +5325,12 @@ export default function PosTerminalPage() {
       setLiveKbankQrPayload(generatedQrPayload)
       setLiveKbankQrAmount(qrAmount)
       const bankQrMeta = extractKbankQrResponseMeta(data)
-      const qrTypeDetails =
-        generate.displayQrType && generate.displayQrTypeSource
-          ? {
-              displayType: generate.displayQrType,
-              source: generate.displayQrTypeSource,
-              bankQrTypeCode: String(generate.bankQrTypeCode || bankQrMeta.qrTypeCode || ''),
-              bankSof: String(generate.bankSof || bankQrMeta.sof || ''),
-            }
-          : resolveKbankDisplayQrTypeDetails({
-              qrType: bankQrMeta.qrTypeCode,
-              sof: generatedInfo.sof,
-              requested: requestedQrType,
-              emvPayload: generatedQrPayload,
-            })
+      const qrTypeDetails = resolveKbankDisplayQrTypeDetails({
+        qrType: String(generate.bankQrTypeCode || bankQrMeta.qrTypeCode || '').trim(),
+        sof: generatedInfo.sof ?? generate.bankSof,
+        requested: requestedQrType,
+        emvPayload: generatedQrPayload,
+      })
       setLiveKbankQrType(qrTypeDetails.displayType)
       setLiveKbankQrTypeSource(qrTypeDetails.source)
       setKbankSentQrTypeCode(String(generate.sentQrTypeCode || '').trim())
@@ -8893,15 +8882,41 @@ export default function PosTerminalPage() {
           ) : null}
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border bg-white">
-              {staffKbankGuidelineCardDataUrl ? (
+              {effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? (
+                <>
+                  <div className="bg-[#073763] px-3 py-2 text-center text-[13px] font-bold tracking-wide text-white">
+                    CREDIT CARD QR
+                  </div>
+                  <div className="flex items-center justify-center gap-2 bg-white px-2 py-2 text-[11px] font-semibold text-[#073763]">
+                    {(kbankOpsCardBrands.length > 0
+                      ? kbankOpsCardBrands
+                      : ['VISA', 'MASTERCARD', 'UNIONPAY']
+                    ).map((label) => (
+                      <span key={label} className="rounded border border-[#b9c7da] px-2 py-0.5">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex min-h-[248px] items-center justify-center">
+                    {staffKbankQrFallbackDataUrl ? (
+                      <img
+                        src={staffKbankQrFallbackDataUrl}
+                        alt="Credit Card QR"
+                        className="h-[218px] w-[218px] object-contain"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
+                        <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
+                        <span>{t('posLoading') || '로딩 중'}</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : staffKbankGuidelineCardDataUrl ? (
                 <div className="flex items-center justify-center bg-white p-2">
                   <img
                     src={staffKbankGuidelineCardDataUrl}
-                    alt={
-                      effectiveCustomerDisplayQrType === 'CREDIT_CARD'
-                        ? 'Credit Card QR'
-                        : 'Thai QR Payment'
-                    }
+                    alt="Thai QR Payment"
                     className="h-auto w-[300px] max-w-full object-contain"
                   />
                 </div>
