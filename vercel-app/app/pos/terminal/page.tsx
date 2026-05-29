@@ -3,7 +3,6 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, type ComponentProps } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import QRCode from 'qrcode'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
@@ -165,8 +164,7 @@ import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
-import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from '@/lib/pos-qr-brand-assets'
-import { encodeQR, renderCard } from 'thai-qr-payment'
+import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import {
   extractKbankQrResponseMeta,
   isKbankCreditCardQrUnavailableError,
@@ -318,10 +316,6 @@ function extractKbankGenerateResponseInfo(raw: unknown): {
   }
 }
 
-function svgToDataUrl(svg: string): string {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
-}
-
 function buildKbankGenerateAuditPaste(input: {
   partnerTxnUid: string
   amount: number
@@ -350,18 +344,6 @@ function buildKbankGenerateAuditPaste(input: {
     JSON.stringify(input.responseMessage || {}, null, 2),
   ]
   return lines.join('\n')
-}
-
-function buildThaiQrGuidelineCardDataUrl(payload: string): string {
-  const raw = String(payload || '').trim()
-  if (!raw) return ''
-  try {
-    const matrix = encodeQR(raw, { errorCorrectionLevel: 'H' })
-    const svg = renderCard(matrix, { theme: 'color' })
-    return svgToDataUrl(svg)
-  } catch {
-    return ''
-  }
 }
 
 function readEmvTagValue(payload: string, wantedTag: string): string {
@@ -966,7 +948,6 @@ export default function PosTerminalPage() {
     useState<KbankDisplayQrTypeSource>('requested')
   const [kbankSentQrTypeCode, setKbankSentQrTypeCode] = useState('')
   const [kbankGenerateAuditText, setKbankGenerateAuditText] = useState('')
-  const [staffKbankQrFallbackDataUrl, setStaffKbankQrFallbackDataUrl] = useState('')
   const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
   const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
   const [kbankOpsOrigTxnUid, setKbankOpsOrigTxnUid] = useState('')
@@ -2816,35 +2797,10 @@ export default function PosTerminalPage() {
       : t('posKbankQrTypeThaiRequested') || 'Thai QR · PromptPay (requested)'
   }, [effectiveCustomerDisplayQrType, liveKbankQrTypeSource, t])
 
-  const staffKbankGuidelineCardDataUrl = useMemo(() => {
-    const payload = String(effectiveStaffKbankQrPayload || '').trim()
-    if (!payload.startsWith('000201')) return ''
-    return buildThaiQrGuidelineCardDataUrl(payload)
-  }, [effectiveStaffKbankQrPayload])
-
   useEffect(() => {
     if (String(liveKbankQrPayload || '').trim()) return
     setLiveKbankQrAmount(0)
   }, [liveKbankQrPayload])
-
-  useEffect(() => {
-    const payload = String(effectiveStaffKbankQrPayload || '').trim()
-    if (!payload || staffKbankGuidelineCardDataUrl) {
-      setStaffKbankQrFallbackDataUrl('')
-      return
-    }
-    let cancelled = false
-    QRCode.toDataURL(payload, { width: 280, margin: 2 })
-      .then((url) => {
-        if (!cancelled) setStaffKbankQrFallbackDataUrl(url)
-      })
-      .catch(() => {
-        if (!cancelled) setStaffKbankQrFallbackDataUrl('')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [effectiveStaffKbankQrPayload, staffKbankGuidelineCardDataUrl, effectiveCustomerDisplayQrType])
 
   const schedulePostPaymentCustomerQr = useCallback(() => {
     const q = String(effectiveCustomerDisplayQrPayload || '').trim()
@@ -8881,44 +8837,11 @@ export default function PosTerminalPage() {
           ) : null}
           <div className="mt-3 rounded-md border bg-white p-2">
             <div className="overflow-hidden rounded-md border bg-white">
-              {staffKbankGuidelineCardDataUrl ? (
-                <div className="flex items-center justify-center bg-white p-2">
-                  <img
-                    src={staffKbankGuidelineCardDataUrl}
-                    alt={effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'Thai QR Payment'}
-                    className="h-auto w-[300px] max-w-full object-contain"
-                  />
-                </div>
-              ) : effectiveCustomerDisplayQrType === 'CREDIT_CARD' ? (
-                <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-rose-700">
-                  <QrCodeIcon className="h-10 w-10 text-rose-600" aria-hidden />
-                  <span>{t('posPaymentQr') || 'QR'} render failed.</span>
-                  <span className="text-muted-foreground">
-                    Credit Card guideline card was not generated. Please retry Generate QR.
-                  </span>
-                </div>
-              ) : staffKbankQrFallbackDataUrl ? (
-                <>
-                  <div className="bg-[#00427A] px-3 py-2">
-                    <div
-                      className="mx-auto w-[74%] max-w-[260px] [&_svg]:h-auto [&_svg]:w-full"
-                      dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
-                    />
-                  </div>
-                  <div className="border-t border-[#d8e1ef] bg-white px-3 py-2">
-                    <div
-                      className="mx-auto w-[52%] max-w-[190px] [&_svg]:h-auto [&_svg]:w-full"
-                      dangerouslySetInnerHTML={{ __html: PROMPTPAY_LOGO_SVG }}
-                    />
-                  </div>
-                  <div className="mt-2 flex min-h-[248px] items-center justify-center">
-                    <img
-                      src={staffKbankQrFallbackDataUrl}
-                      alt="KBank QR"
-                      className="h-[218px] w-[218px] object-contain"
-                    />
-                  </div>
-                </>
+              {String(effectiveStaffKbankQrPayload || '').trim().startsWith('000201') ? (
+                <PosQrGuidelineCard
+                  payload={String(effectiveStaffKbankQrPayload || '').trim()}
+                  kind={effectiveCustomerDisplayQrType}
+                />
               ) : (
                 <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
                   <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />

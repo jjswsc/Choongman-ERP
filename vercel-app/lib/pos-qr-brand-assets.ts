@@ -1,4 +1,7 @@
-import { colorLogo } from 'thai-qr-payment/assets'
+import { POS_QR_BRAND } from '@/lib/pos-qr-brand-paths'
 
-export const THAI_QR_PAYMENT_LOGO_SVG = colorLogo('Thai_QR_Payment_Logo-01')
-export const PROMPTPAY_LOGO_SVG = colorLogo('PromptPay1')
+/** @deprecated Prefer `<PosQrGuidelineCard />` and `POS_QR_BRAND` image paths. */
+export const THAI_QR_PAYMENT_LOGO_IMG = POS_QR_BRAND.thaiQrHeader
+
+/** @deprecated Prefer `<PosQrGuidelineCard />` and `POS_QR_BRAND` image paths. */
+export const PROMPTPAY_LOGO_IMG = POS_QR_BRAND.promptpay

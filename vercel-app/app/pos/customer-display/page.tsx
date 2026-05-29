@@ -5,8 +5,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isLangCode, useLang, type LangCode } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosPrinterSettings } from "@/lib/api-client"
-import { PROMPTPAY_LOGO_SVG, THAI_QR_PAYMENT_LOGO_SVG } from "@/lib/pos-qr-brand-assets"
-import { encodeQR, renderCard } from "thai-qr-payment"
+import { PosQrGuidelineCard } from "@/components/pos/pos-qr-guideline-card"
 import {
   readPosCustomerDisplayState,
   subscribePosCustomerDisplayState,
@@ -15,22 +14,6 @@ import {
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from "@/lib/pos-pricing"
 
 type DisplayTheme = "dark" | "light" | "brand"
-
-function svgToDataUrl(svg: string): string {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
-}
-
-function buildThaiQrGuidelineCardDataUrl(payload: string): string {
-  const raw = String(payload || "").trim()
-  if (!raw) return ""
-  try {
-    const matrix = encodeQR(raw, { errorCorrectionLevel: "H" })
-    const svg = renderCard(matrix, { theme: "color" })
-    return svgToDataUrl(svg)
-  } catch {
-    return ""
-  }
-}
 
 export default function PosCustomerDisplayPage() {
   const { auth } = useAuth()
@@ -106,10 +89,6 @@ export default function PosCustomerDisplayPage() {
   const resolvedQrType: "THAI_QR" | "CREDIT_CARD" =
     String(state?.qrType || "").trim().toUpperCase() === "CREDIT_CARD" ? "CREDIT_CARD" : "THAI_QR"
   const qrPayloadText = String(state?.qrPayload || "").trim()
-  const kbankGuidelineCardDataUrl = React.useMemo(() => {
-    if (!qrPayloadText.startsWith("000201")) return ""
-    return buildThaiQrGuidelineCardDataUrl(qrPayloadText)
-  }, [qrPayloadText])
   const resolvedIdleMedia = React.useMemo(() => {
     const mtRaw = state?.idleMediaType ?? settingsIdleMediaType
     const mt = mtRaw === "image" || mtRaw === "video" ? mtRaw : "none"
@@ -347,43 +326,16 @@ export default function PosCustomerDisplayPage() {
             {qrPayloadText ? (
               <div className="w-full max-w-[520px] rounded-xl bg-white p-3">
                 <div className="overflow-hidden rounded-lg border bg-white">
-                  {kbankGuidelineCardDataUrl ? (
-                    <div className="flex items-center justify-center bg-white p-2">
-                      <img
-                        src={kbankGuidelineCardDataUrl}
-                        alt={resolvedQrType === "CREDIT_CARD" ? "Credit Card QR" : "Thai QR Payment"}
-                        className="h-auto w-[360px] max-w-full object-contain"
-                      />
-                    </div>
-                  ) : resolvedQrType === "CREDIT_CARD" ? (
-                    <div className="p-6 text-center text-lg text-rose-700">
-                      {(t("posPaymentQr") || "QR")} render failed.
-                      <div className="mt-2 text-sm text-black/60">
-                        Credit Card guideline card was not generated. Please retry Generate QR.
-                      </div>
-                    </div>
+                  {qrPayloadText.startsWith("000201") ? (
+                    <PosQrGuidelineCard
+                      payload={qrPayloadText}
+                      kind={resolvedQrType}
+                      qrClassName="h-[280px] w-[280px]"
+                    />
                   ) : (
-                    <>
-                      <div className="bg-[#00427A] px-3 py-2">
-                        <div
-                          className="mx-auto w-[74%] max-w-[320px] [&_svg]:h-auto [&_svg]:w-full"
-                          dangerouslySetInnerHTML={{ __html: THAI_QR_PAYMENT_LOGO_SVG }}
-                        />
-                      </div>
-                      <div className="border-t border-[#d8e1ef] bg-white px-3 py-2">
-                        <div
-                          className="mx-auto w-[52%] max-w-[230px] [&_svg]:h-auto [&_svg]:w-full"
-                          dangerouslySetInnerHTML={{ __html: PROMPTPAY_LOGO_SVG }}
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center justify-center">
-                        <img
-                          src={`https://quickchart.io/qr?text=${encodeURIComponent(qrPayloadText)}&size=360&margin=1`}
-                          alt="Customer QR"
-                          className="h-60 w-60 rounded-lg bg-white p-2"
-                        />
-                      </div>
-                    </>
+                    <div className="p-6 text-center text-lg text-black/60">
+                      {t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}
+                    </div>
                   )}
                 </div>
               </div>
