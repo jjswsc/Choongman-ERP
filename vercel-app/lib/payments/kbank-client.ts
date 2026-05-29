@@ -564,10 +564,6 @@ function buildTxnPayload(
     ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
     ...(qrType ? { qrType } : {}),
     ...(resolvedTxnNo ? { txnNo: resolvedTxnNo } : {}),
-    // Backward-compatible keys
-    partnerTransactionId: req.partnerTransactionId || undefined,
-    originalTransactionId: req.originalTransactionId || undefined,
-    refId: req.refId || undefined,
   }
 }
 

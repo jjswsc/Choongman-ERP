@@ -7,7 +7,8 @@ import { POS_QR_BRAND, type PosQrDisplayKind } from '@/lib/pos-qr-brand-paths'
 
 /** Center logo ≈ 16% of QR module area (same ratio as `renderCard`). */
 const QR_DISPLAY_PX = 248
-const CENTER_LOGO_RATIO = 0.16
+const CENTER_LOGO_RATIO = 0.14
+const HEADER_TO_QR_RATIO = 0.98
 
 type Props = {
   payload: string
@@ -16,7 +17,13 @@ type Props = {
   qrClassName?: string
 }
 
-function ThaiQrHeaderBand({ className }: { className?: string }) {
+function ThaiQrHeaderBand({
+  className,
+  widthPx,
+}: {
+  className?: string
+  widthPx: number
+}) {
   return (
     <div
       className={cn('w-full bg-white px-4 pb-2 pt-3', className)}
@@ -26,7 +33,8 @@ function ThaiQrHeaderBand({ className }: { className?: string }) {
       <img
         src={POS_QR_BRAND.thaiQrHeader}
         alt="THAI QR PAYMENT"
-        className="mx-auto block h-auto w-[84%] max-w-[270px] object-contain"
+        className="mx-auto block h-auto w-full object-contain"
+        style={{ maxWidth: widthPx }}
       />
     </div>
   )
@@ -36,6 +44,7 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
   const [qrUrl, setQrUrl] = React.useState('')
   const [failed, setFailed] = React.useState(false)
   const centerLogoPx = Math.round(QR_DISPLAY_PX * CENTER_LOGO_RATIO)
+  const headerWidthPx = Math.round(QR_DISPLAY_PX * HEADER_TO_QR_RATIO)
 
   React.useEffect(() => {
     const raw = String(payload || '').trim()
@@ -95,7 +104,7 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
 
   return (
     <div className={cn('overflow-hidden rounded-md border bg-white', className)}>
-      <ThaiQrHeaderBand />
+      <ThaiQrHeaderBand widthPx={headerWidthPx} />
       <div className="border-t border-[#d8e1ef] bg-white px-3 py-2.5">
         {kind === 'CREDIT_CARD' ? (
           <div className="mx-auto flex w-full max-w-[320px] items-center justify-center gap-2 sm:gap-3">
