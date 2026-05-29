@@ -24,6 +24,7 @@ export type PosOptionCatalogRow = {
   menu_id?: number | string
   name?: string
   option_code?: string
+  option_step_values?: Record<string, string> | null
 }
 
 type Bucket = { qty: number; sales: number }
@@ -128,6 +129,87 @@ function resolveOptionMeta(
   return undefined
 }
 
+function composeOptionNameFromStepValues(step: Record<string, unknown>): string {
+  const vals = Object.values(step)
+    .map((v) => str(v))
+    .filter(Boolean)
+  return vals.join(' - ')
+}
+
+/** `Snow Onion (S - Boneless)` 등 줄 표시명에서 괄호·접미 옵션 문자열 추출 */
+export function extractOptionSuffixFromOrderLineName(
+  lineName: string,
+  catalogMenuName: string
+): string {
+  const raw = str(lineName)
+  const base = str(catalogMenuName)
+  if (!raw) return ''
+  if (base) {
+    const baseLower = base.toLowerCase()
+    const rawLower = raw.toLowerCase()
+    if (rawLower.startsWith(`${baseLower} (`) && raw.endsWith(')')) {
+      return raw.slice(base.length).replace(/^\s*\(/, '').replace(/\)\s*$/, '').trim()
+    }
+    if (rawLower.startsWith(`${baseLower} -`)) {
+      return raw.slice(base.length).replace(/^\s*-\s*/, '').trim()
+    }
+  }
+  const paren = raw.match(/\(([^)]+)\)\s*$/)
+  if (paren?.[1]) return paren[1].trim()
+  if (raw.includes(' / ')) {
+    const slash = raw.match(/\(([^)]*\/[^)]*)\)\s*$/)
+    if (slash?.[1]) return slash[1].trim()
+  }
+  return ''
+}
+
+function resolveCatalogOptionDisplayName(meta: PosOptionCatalogRow | undefined): string {
+  if (!meta) return ''
+  const name = str(meta.name)
+  const step = meta.option_step_values
+  if (step && typeof step === 'object' && !Array.isArray(step)) {
+    const composed = composeOptionNameFromStepValues(step as Record<string, unknown>)
+    if (composed && (!name || name.toLowerCase() === composed.toLowerCase())) return composed
+    if (composed && name && !name.toLowerCase().includes(composed.toLowerCase().split(' - ')[0] ?? '')) {
+      return composed
+    }
+  }
+  return name
+}
+
+function resolveLineOptionDisplayName(
+  row: Record<string, unknown>,
+  menuId: string,
+  catalogMenuName: string,
+  optionId: string,
+  optionCode: string,
+  optionCatalog: ReturnType<typeof buildOptionCatalog>
+): string {
+  const optionMeta = resolveOptionMeta(menuId, optionId, optionCode, optionCatalog)
+  const fromCatalog = resolveCatalogOptionDisplayName(optionMeta)
+  if (fromCatalog) return fromCatalog
+
+  const optionNameField = str(row.optionName ?? row.option_name)
+  if (optionNameField) return optionNameField
+
+  const optionsArr = row.options ?? row.option_names
+  if (Array.isArray(optionsArr)) {
+    const parts = optionsArr.map((v) => str(v)).filter(Boolean)
+    if (parts.length > 0) return parts.join(' - ')
+  }
+
+  const stepRaw = row.optionStepValues ?? row.option_step_values
+  if (stepRaw && typeof stepRaw === 'object' && !Array.isArray(stepRaw)) {
+    const composed = composeOptionNameFromStepValues(stepRaw as Record<string, unknown>)
+    if (composed) return composed
+  }
+
+  const fromLineName = extractOptionSuffixFromOrderLineName(str(row.name), catalogMenuName)
+  if (fromLineName) return fromLineName
+
+  return DEFAULT_OPTION_LABEL
+}
+
 function promoChildLines(row: Record<string, unknown>): LineContribution[] {
   const raw = row.promoItems ?? row.promo_items
   if (!Array.isArray(raw) || raw.length === 0) return []
@@ -140,7 +222,7 @@ function promoChildLines(row: Record<string, unknown>): LineContribution[] {
     const qty = Math.max(0, resolveItemsJsonLineQty(c))
     if (qty <= 0) continue
     const menuName = str(c.menuName ?? c.menu_name) || EMPTY_MENU
-    const optionName = str(c.optionName ?? c.option_name) || DEFAULT_OPTION_LABEL
+    const optionName = str(c.optionName ?? c.option_name)
     out.push({
       menuId,
       optionId,
@@ -168,16 +250,29 @@ function lineToContributions(
   if (promoChildren.length > 0) {
     const parentSales = resolveLineSales(row, qty)
     const childQtySum = promoChildren.reduce((s, c) => s + c.qty, 0)
-    return promoChildren.map((child) => {
+    const promoRaw = (row.promoItems ?? row.promo_items) as unknown[]
+    return promoChildren.map((child, idx) => {
+      const rawChild =
+        Array.isArray(promoRaw) && promoRaw[idx] && typeof promoRaw[idx] === 'object'
+          ? (promoRaw[idx] as Record<string, unknown>)
+          : ({
+              optionName: child.optionName,
+              optionId: child.optionId,
+              optionCode: child.optionCode,
+              menuId: child.menuId,
+            } as Record<string, unknown>)
       const menuMeta = resolveMenuMeta(child.menuId, child.menuName, menuCatalog)
-      const optionMeta = resolveOptionMeta(
-        child.menuId,
-        child.optionId,
-        child.optionCode,
-        optionCatalog
-      )
       const menuName = str(menuMeta?.name) || child.menuName || EMPTY_MENU
-      const optionName = str(optionMeta?.name) || child.optionName || DEFAULT_OPTION_LABEL
+      const optionName =
+        str(child.optionName) ||
+        resolveLineOptionDisplayName(
+          rawChild,
+          child.menuId,
+          menuName,
+          child.optionId,
+          child.optionCode,
+          optionCatalog
+        )
       const sales =
         childQtySum > 0 ? (parentSales * child.qty) / childQtySum : 0
       return {
@@ -196,9 +291,15 @@ function lineToContributions(
   const optionId = resolveLineOptionId(row)
   const optionCode = resolveLineOptionCode(row)
   const menuMeta = resolveMenuMeta(menuId, lineName, menuCatalog)
-  const optionMeta = resolveOptionMeta(menuId, optionId, optionCode, optionCatalog)
   const menuName = str(menuMeta?.name) || lineName
-  const optionName = str(optionMeta?.name) || DEFAULT_OPTION_LABEL
+  const optionName = resolveLineOptionDisplayName(
+    row,
+    menuId,
+    menuName,
+    optionId,
+    optionCode,
+    optionCatalog
+  )
   const sales = resolveLineSales(row, qty)
 
   return [

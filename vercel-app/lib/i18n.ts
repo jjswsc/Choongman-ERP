@@ -2912,7 +2912,7 @@ export const i18n = {
     totalSalesTitle: 'Total Sales',
     totalSalesSubtitle: '메뉴 판매량·판매액 (대분류·카테고리·메뉴·옵션)',
     totalSalesIntro:
-      'POS 완료 주문 기준으로 대분류·카테고리·메인 메뉴·옵션별 수량·판매액을 봅니다. 메인 메뉴는 카탈로그명 기준, 옵션은 사이즈·맛 등 옵션별로 집계됩니다.',
+      'POS 완료 주문 기준으로 대분류·카테고리·메인 메뉴·옵션별 수량·판매액을 봅니다. 홀·포장·배달로 범위를 좁힐 수 있고, 메인 메뉴는 카탈로그명·옵션은 사이즈·부위 등 최종 선택 기준으로 집계됩니다.',
     totalSalesLevelMain: '대분류',
     totalSalesLevelCategory: '카테고리',
     totalSalesLevelMenu: '메인 메뉴',
@@ -2933,6 +2933,11 @@ export const i18n = {
     totalSalesChartItems: '품목',
     totalSalesChartOther: '기타',
     totalSalesBangkokBizDay: '방콕 영업일',
+    totalSalesCompareChannels: '채널별 비교',
+    totalSalesCompareChannelsHint:
+      '같은 품목을 홀·포장·배달 열로 나란히 봅니다. 주문 유형을 고르면 선택한 채널만 비교합니다.',
+    totalSalesCompareTotal: '합계',
+    totalSalesChartChannelCompare: '채널별 매출 비교',
     adminLiveStoreSales: '실시간 매출',
     adminOpsCenter: '운영센터',
     adminOpsCenterTitle: '운영센터',
@@ -7354,9 +7359,9 @@ export const i18n = {
     helpHow_admin_pos_cost_analysis:
       '① 목록: 대분류·카테고리·검색어를 정한 뒤「조회」로 불러옵니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다. 행을 누르면「원가 계산기」탭으로 이동해 그 메뉴(옵션)가 열립니다.\n② 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다. 상단 요약의 평균 원가율은 원가율이 0%인 메뉴는 홀/배달 각각 평균에서 제외될 수 있습니다.\n③ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 관리하고, 재계산으로 메뉴 원가에 쓰이는 배합비를 갱신합니다.\n④ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 수량·로스를 수정하고 저장하면 POS 메뉴 원가에 반영됩니다. 편집은 본사(오피스) 등 권한이 있는 역할만 가능할 수 있습니다.\n⑤ 자세한 단계는「도움말」본문을 참고하고, 끝나면「화면으로 돌아가기」로 목록으로 돌아오세요.',
     helpSum_admin_total_sales:
-      '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. Snow Onion 등 메뉴명 검색과 오늘·이번 달 요약을 함께 볼 수 있습니다.',
+      '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
-      '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 필요하면 메뉴 검색어를 입력하고 「조회」합니다.\n② 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다. 옵션 탭에서 사이즈·맛별 판매를 확인합니다.\n③ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n④ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
+      '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 「주문 유형」(전체·홀·포장·배달)으로 범위를 맞추고, 필요하면 메뉴 검색어를 입력한 뒤 「조회」합니다.\n② 「채널별 비교」를 켜면 같은 품목을 홀·포장·배달 열로 나란히 비교합니다(주문 유형 선택 시 해당 채널만).\n③ 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다.\n④ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n⑤ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
     helpSum_admin_live_store_sales:
       '본사는 기본「전체 매장」당일 매출·운영 차트 대시보드입니다. 지점 선택 시 해당 매장만 집계합니다.',
     helpHow_admin_live_store_sales:
@@ -11570,7 +11575,7 @@ Only matters the employee must handle personally on a working day:
     totalSalesTitle: 'Total Sales',
     totalSalesSubtitle: 'Menu qty & amount (main / category / menu / option)',
     totalSalesIntro:
-      'Completed POS orders rolled up by main category, category, main menu (catalog name), and option (size/flavor).',
+      'Completed POS orders by main category, category, main menu, and option. Filter by dine-in, takeout, or delivery; options use final size/part selections.',
     totalSalesLevelMain: 'Main category',
     totalSalesLevelCategory: 'Category',
     totalSalesLevelMenu: 'Main menu',
@@ -11591,6 +11596,11 @@ Only matters the employee must handle personally on a working day:
     totalSalesChartItems: 'Items',
     totalSalesChartOther: 'Other',
     totalSalesBangkokBizDay: 'Bangkok business day',
+    totalSalesCompareChannels: 'Compare channels',
+    totalSalesCompareChannelsHint:
+      'View the same items side by side for dine-in, takeout, and delivery. Order-type buttons limit which columns appear.',
+    totalSalesCompareTotal: 'Total',
+    totalSalesChartChannelCompare: 'Sales by channel',
     adminLiveStoreSales: 'Live sales',
     adminOpsCenter: 'Ops Center',
     adminOpsCenterTitle: 'Ops Center',
@@ -16017,9 +16027,9 @@ orderItemQty: 'Qty',
     helpHow_admin_pos_cost_analysis:
       '① List: set main category, category, and search text, then press Query to load. Click column headers to sort; use the row chevron to expand ingredient breakdown. Click a row to jump to the Cost calculator tab with that menu/option.\n② Costs and ratios shown include a default mise / en place factor (3%). Summary averages may exclude rows whose cost ratio is 0% for hall or delivery separately.\n③ Blend (sauce) costs: maintain blend recipes and unit costs, then recalculate so menus pick up updated blend values.\n④ Cost calculator: pick menu/option, edit food vs packaging ingredients, quantities, and loss, then save to update POS menu costs. Editing may be limited to head-office roles.\n⑤ Open Help for the full step-by-step guide, then Back to screen when you are done.',
     helpSum_admin_total_sales:
-      'View menu sales quantity and amount in four levels: main category, category, main menu, and option. Includes today/this-month summary and menu name search.',
+      'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:
-      '① Choose store (HQ), period (today / this month / custom), optional menu search, then Query.\n② Switch tabs for main category, category, main menu, or option breakdown.\n③ With a search term, cards show today vs this-month totals at main-menu level (Bangkok business day).\n④ If orders are truncated, split the date range and query again.',
+      '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑤ If orders are truncated, split the date range and query again.',
     helpSum_admin_live_store_sales:
       'POS business-day dashboard: today’s sales charts (store, hall/takeout/delivery, delivery apps), realtime ops KPIs, and table/order status for HQ and stores.',
     helpHow_admin_live_store_sales:

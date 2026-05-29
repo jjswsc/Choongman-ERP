@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx'
 import type { PosSalesHierarchyLevel, PosSalesHierarchyRow } from '@/lib/api-client'
 import { sanitizeFilenamePart } from '@/lib/income-statement-export'
+import type { PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
+import type { TotalSalesChannelCompareRow } from '@/lib/pos-sales-menu-hierarchy-compare'
 
 const LEVEL_ORDER: PosSalesHierarchyLevel[] = ['main', 'category', 'menu', 'option']
 
@@ -66,6 +68,55 @@ export function downloadTotalSalesHierarchyXlsx(params: {
     const ws = XLSX.utils.aoa_to_sheet(aoa)
     ws['!cols'] = [{ wch: 6 }, { wch: 36 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 14 }]
     XLSX.utils.book_append_sheet(wb, ws, params.sheetNames[level].slice(0, 31))
+  }
+
+  XLSX.writeFile(wb, params.filename)
+}
+
+export function downloadTotalSalesChannelCompareXlsx(params: {
+  filename: string
+  metaRows: string[][]
+  sheetNames: Record<PosSalesHierarchyLevel, string>
+  col: {
+    no: string
+    name: string
+    main: string
+    category: string
+    qty: string
+    sales: string
+  }
+  channelLabels: Record<PosOrderTypeValue, string>
+  channels: PosOrderTypeValue[]
+  compareByLevel: Record<PosSalesHierarchyLevel, TotalSalesChannelCompareRow[]>
+}): void {
+  const wb = XLSX.utils.book_new()
+
+  for (const level of LEVEL_ORDER) {
+    const rows = params.compareByLevel[level] ?? []
+    const header: string[] = [params.col.no, params.col.name]
+    if (level !== 'main') header.push(params.col.main)
+    if (level === 'menu' || level === 'option') header.push(params.col.category)
+    for (const ch of params.channels) {
+      const label = params.channelLabels[ch]
+      header.push(`${label} ${params.col.qty}`, `${label} ${params.col.sales}`)
+    }
+    header.push(`Σ ${params.col.qty}`, `Σ ${params.col.sales}`)
+
+    const aoa: (string | number)[][] = [...params.metaRows, [], header]
+    rows.forEach((r, i) => {
+      const line: (string | number)[] = [i + 1, r.label]
+      if (level !== 'main') line.push(r.categoryMain ?? '')
+      if (level === 'menu' || level === 'option') line.push(r.category ?? '')
+      for (const ch of params.channels) {
+        const c = r.channels[ch]
+        line.push(c?.qty ?? 0, Math.round(c?.sales ?? 0))
+      }
+      line.push(r.totalQty, Math.round(r.totalSales))
+      aoa.push(line)
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    XLSX.utils.book_append_sheet(wb, ws, `${params.sheetNames[level]}`.slice(0, 31))
   }
 
   XLSX.writeFile(wb, params.filename)

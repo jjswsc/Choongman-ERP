@@ -4987,10 +4987,16 @@ export type PosSalesHierarchyRow = {
   menuId?: string
 }
 
+export type PosSalesHierarchyByOrderType = {
+  levels: Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]>
+  totals: { qty: number; sales: number }
+}
+
 export type PosSalesByMenuHierarchyResult = {
   levels: Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]>
   totals: { qty: number; sales: number }
   truncated?: boolean
+  byOrderType?: Partial<Record<'dine_in' | 'takeout' | 'delivery', PosSalesHierarchyByOrderType>>
 }
 
 export async function getPosSalesByMenuHierarchy(params: {
@@ -5001,6 +5007,7 @@ export async function getPosSalesByMenuHierarchy(params: {
   search?: string
   searchMode?: 'or' | 'and'
   orderTypes?: string[]
+  splitByOrderType?: boolean
 }): Promise<PosSalesByMenuHierarchyResult> {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.stores?.length) q.set('stores', params.stores.join(','))
@@ -5008,6 +5015,7 @@ export async function getPosSalesByMenuHierarchy(params: {
   if (params.search) q.set('search', params.search)
   if (params.searchMode === 'and') q.set('searchMode', 'and')
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  if (params.splitByOrderType) q.set('splitByOrderType', '1')
   const res = await apiFetchWithOffline(`/api/posSalesByMenuHierarchy?${q}`)
   const truncated = res.headers.get('X-Sales-Truncated') === '1'
   const json = (await res.json()) as Partial<PosSalesByMenuHierarchyResult>
@@ -5021,6 +5029,7 @@ export async function getPosSalesByMenuHierarchy(params: {
     levels: json.levels ?? emptyLevels,
     totals: json.totals ?? { qty: 0, sales: 0 },
     truncated: truncated || !!json.truncated,
+    byOrderType: json.byOrderType,
   }
 }
 

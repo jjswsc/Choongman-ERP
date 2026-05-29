@@ -13,12 +13,23 @@ import {
   getAdminVendors,
   getPosSalesByMenuHierarchy,
   getPosSalesFilterOptions,
+  type PosSalesByMenuHierarchyResult,
   type PosSalesHierarchyLevel,
   type PosSalesHierarchyRow,
 } from "@/lib/api-client"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
+import {
+  normalizeOrderTypesQueryString,
+  parseOrderTypesParam,
+  type PosOrderTypeValue,
+} from "@/lib/pos-sales-order-type-filter"
+import {
+  buildHierarchyChannelCompareRows,
+  topChannelCompareChartRows,
+  type HierarchyLevelsByOrderType,
+} from "@/lib/pos-sales-menu-hierarchy-compare"
 import { sumHierarchyRows } from "@/lib/pos-sales-menu-hierarchy-aggregate"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import {
@@ -27,10 +38,12 @@ import {
 } from "@/lib/pos-store-display-name"
 import {
   buildTotalSalesExportFilename,
+  downloadTotalSalesChannelCompareXlsx,
   downloadTotalSalesHierarchyXlsx,
 } from "@/lib/total-sales-export"
 import {
   Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   ComposedChart,
@@ -57,6 +70,12 @@ const CHART_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#e
 
 const CHART_TOP_N = 12
 const PIE_TOP_N = 8
+
+const SALES_ORDER_TYPE_TOGGLES: { type: PosOrderTypeValue; labelKey: string; fallback: string }[] = [
+  { type: "dine_in", labelKey: "salesAmountKindDineIn", fallback: "홀" },
+  { type: "takeout", labelKey: "salesAmountKindTakeout", fallback: "포장" },
+  { type: "delivery", labelKey: "salesAmountKindDelivery", fallback: "배달" },
+]
 
 function formatSalesAmount(n: number) {
   const v = Number(n ?? 0)
@@ -114,6 +133,8 @@ export function TotalSalesTab() {
   const [periodPreset, setPeriodPreset] = React.useState<PeriodPreset>("today")
   const [search, setSearch] = React.useState("")
   const [searchAnd, setSearchAnd] = React.useState(false)
+  const [orderTypesKey, setOrderTypesKey] = React.useState("")
+  const [compareChannels, setCompareChannels] = React.useState(false)
   const [level, setLevel] = React.useState<PosSalesHierarchyLevel>("menu")
   const [loading, setLoading] = React.useState(false)
   const [exporting, setExporting] = React.useState(false)
@@ -121,12 +142,14 @@ export function TotalSalesTab() {
   const [levelsData, setLevelsData] = React.useState<
     Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]> | null
   >(null)
+  const [byOrderTypeLevels, setByOrderTypeLevels] = React.useState<HierarchyLevelsByOrderType | null>(
+    null
+  )
   const [snapshotToday, setSnapshotToday] = React.useState<{ qty: number; sales: number } | null>(null)
   const [snapshotMonth, setSnapshotMonth] = React.useState<{ qty: number; sales: number } | null>(null)
 
   const [posOptions, setPosOptions] = React.useState<string[]>([])
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
-  const didAutoLoadRef = React.useRef(false)
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
   const storePickerRef = React.useRef<HTMLDivElement | null>(null)
@@ -169,6 +192,56 @@ export function TotalSalesTab() {
     const normalized = normalizeStoreCodes(selectedStores)
     return normalized.length > 0 ? normalized : undefined
   }, [selectedStores])
+
+  const orderTypesParam = React.useMemo(
+    () => parseOrderTypesParam(orderTypesKey || null) ?? undefined,
+    [orderTypesKey]
+  )
+
+  const compareChannelsList = React.useMemo((): PosOrderTypeValue[] => {
+    if (orderTypesParam?.length) return orderTypesParam
+    return SALES_ORDER_TYPE_TOGGLES.map((x) => x.type)
+  }, [orderTypesParam])
+
+  const channelLabels = React.useMemo(() => {
+    const out = {} as Record<PosOrderTypeValue, string>
+    for (const row of SALES_ORDER_TYPE_TOGGLES) {
+      out[row.type] = tr(row.labelKey, row.fallback)
+    }
+    return out
+  }, [tr])
+
+  const orderTypesSummaryLabel = React.useMemo(() => {
+    if (orderTypesKey === "") return tr("salesAmountKindAll", "전체")
+    return orderTypesKey
+      .split(",")
+      .filter(Boolean)
+      .map((type) => {
+        const hit = SALES_ORDER_TYPE_TOGGLES.find((x) => x.type === type)
+        return hit ? tr(hit.labelKey, hit.fallback) : type
+      })
+      .join(", ")
+  }, [orderTypesKey, tr])
+
+  const setAllOrderTypes = React.useCallback(() => {
+    setOrderTypesKey("")
+  }, [])
+
+  const toggleOrderTypeChannel = React.useCallback((t: PosOrderTypeValue) => {
+    setOrderTypesKey((prev) => {
+      const normalized = normalizeOrderTypesQueryString(prev)
+      const parts = normalized ? normalized.split(",") : []
+      const nextSet = new Set(parts as PosOrderTypeValue[])
+      if (nextSet.size === 0) {
+        nextSet.add(t)
+      } else if (nextSet.has(t)) {
+        nextSet.delete(t)
+      } else {
+        nextSet.add(t)
+      }
+      return [...nextSet].sort().join(",")
+    })
+  }, [])
 
   const canQuery = canSearchAll ? (salesFetchStores?.length ?? 0) > 0 : true
 
@@ -217,17 +290,31 @@ export function TotalSalesTab() {
     }
   }
 
+  const mapByOrderTypeLevels = React.useCallback(
+    (byOrderType: PosSalesByMenuHierarchyResult["byOrderType"]): HierarchyLevelsByOrderType => {
+      const out: HierarchyLevelsByOrderType = {}
+      for (const ch of compareChannelsList) {
+        const hit = byOrderType?.[ch]?.levels
+        if (hit) out[ch] = hit
+      }
+      return out
+    },
+    [compareChannelsList]
+  )
+
   const fetchHierarchy = React.useCallback(
-    async (range: { startStr: string; endStr: string }) => {
+    async (range: { startStr: string; endStr: string }, withSplit: boolean) => {
       return getPosSalesByMenuHierarchy({
         startStr: range.startStr,
         endStr: range.endStr,
         stores: salesFetchStores,
         search: search.trim() || undefined,
         searchMode: searchAnd ? "and" : "or",
+        orderTypes: orderTypesParam,
+        splitByOrderType: withSplit,
       })
     },
-    [salesFetchStores, search, searchAnd]
+    [salesFetchStores, search, searchAnd, orderTypesParam]
   )
 
   const loadData = React.useCallback(async () => {
@@ -235,34 +322,89 @@ export function TotalSalesTab() {
     setLoading(true)
     try {
       const [mainRes, todayRes, monthRes] = await Promise.all([
-        fetchHierarchy({ startStr, endStr }),
-        fetchHierarchy({ startStr: today, endStr: today }),
-        fetchHierarchy({ startStr: monthRange.startStr, endStr: today }),
+        fetchHierarchy({ startStr, endStr }, compareChannels),
+        fetchHierarchy({ startStr: today, endStr: today }, false),
+        fetchHierarchy({ startStr: monthRange.startStr, endStr: today }, false),
       ])
       setLevelsData(mainRes.levels)
+      setByOrderTypeLevels(
+        compareChannels && mainRes.byOrderType ? mapByOrderTypeLevels(mainRes.byOrderType) : null
+      )
       setTruncated(!!mainRes.truncated)
       setSnapshotToday(sumHierarchyRows(todayRes.levels.menu))
       setSnapshotMonth(sumHierarchyRows(monthRes.levels.menu))
     } catch {
       setLevelsData(null)
+      setByOrderTypeLevels(null)
       setSnapshotToday(null)
       setSnapshotMonth(null)
       setTruncated(false)
     } finally {
       setLoading(false)
     }
-  }, [canQuery, startStr, endStr, fetchHierarchy, today, monthRange.startStr])
+  }, [
+    canQuery,
+    startStr,
+    endStr,
+    fetchHierarchy,
+    compareChannels,
+    mapByOrderTypeLevels,
+    today,
+    monthRange.startStr,
+  ])
+
+  const loadDataRef = React.useRef(loadData)
+  loadDataRef.current = loadData
 
   React.useEffect(() => {
     if (canQuery && periodPreset === "today") {
-      void loadData()
+      void loadDataRef.current()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트·매장 확정 시 1회
-  }, [canQuery])
+  }, [canQuery, periodPreset])
+
+  const prevCompareChannelsRef = React.useRef(compareChannels)
+  React.useEffect(() => {
+    if (prevCompareChannelsRef.current === compareChannels) return
+    prevCompareChannelsRef.current = compareChannels
+    if (!levelsData || !canQuery || !startStr || !endStr) return
+    void loadDataRef.current()
+  }, [compareChannels, levelsData, canQuery, startStr, endStr])
 
   const activeRows = levelsData?.[level] ?? []
-  const totals = sumHierarchyRows(activeRows)
+  const compareRows = React.useMemo(() => {
+    if (!compareChannels || !byOrderTypeLevels) return []
+    return buildHierarchyChannelCompareRows(level, byOrderTypeLevels, compareChannelsList)
+  }, [compareChannels, byOrderTypeLevels, level, compareChannelsList])
+
+  const totals = compareChannels
+    ? compareRows.reduce(
+        (acc, r) => ({ qty: acc.qty + r.totalQty, sales: acc.sales + r.totalSales }),
+        { qty: 0, sales: 0 }
+      )
+    : sumHierarchyRows(activeRows)
   const levelLabel = LEVELS.find((l) => l.id === level)?.fallback ?? level
+
+  const compareChartRows = React.useMemo(() => {
+    if (!compareChannels || compareRows.length === 0) return []
+    return topChannelCompareChartRows(compareRows, compareChannelsList, channelLabels, CHART_TOP_N)
+  }, [compareChannels, compareRows, compareChannelsList, channelLabels])
+
+  const compareByLevel = React.useMemo(() => {
+    if (!compareChannels || !byOrderTypeLevels) return null
+    return {
+      main: buildHierarchyChannelCompareRows("main", byOrderTypeLevels, compareChannelsList),
+      category: buildHierarchyChannelCompareRows("category", byOrderTypeLevels, compareChannelsList),
+      menu: buildHierarchyChannelCompareRows("menu", byOrderTypeLevels, compareChannelsList),
+      option: buildHierarchyChannelCompareRows("option", byOrderTypeLevels, compareChannelsList),
+    }
+  }, [compareChannels, byOrderTypeLevels, compareChannelsList])
+
+  const compareTableColSpan = React.useMemo(() => {
+    let n = 2
+    if (level !== "main") n += 1
+    if (level === "menu" || level === "option") n += 1
+    return n + compareChannelsList.length * 2 + 2
+  }, [level, compareChannelsList])
 
   const categoryPieRows = React.useMemo(
     () =>
@@ -298,40 +440,72 @@ export function TotalSalesTab() {
         [tr("totalSalesTitle", "Total Sales")],
         [`${tr("salesStartDate", "시작일")}: ${startStr}`, `${tr("salesEndDate", "종료일")}: ${endStr}`],
         [`${tr("salesStore", "매장")}: ${storeLabelForExport}`],
+        [`${tr("salesAmountKindLabel", "주문 유형")}: ${orderTypesSummaryLabel}`],
       ]
+      if (compareChannels) {
+        metaRows.push([
+          `${tr("totalSalesCompareChannels", "채널별 비교")}: ${compareChannelsList.map((c) => channelLabels[c]).join(", ")}`,
+        ])
+      }
       if (search.trim()) {
         metaRows.push([`${tr("totalSalesSearch", "메뉴 검색")}: ${search.trim()}`])
       }
-      downloadTotalSalesHierarchyXlsx({
-        filename,
-        metaRows,
-        sheetNames: {
-          main: tr("totalSalesLevelMain", "대분류"),
-          category: tr("totalSalesLevelCategory", "카테고리"),
-          menu: tr("totalSalesLevelMenu", "메인 메뉴"),
-          option: tr("totalSalesLevelOption", "옵션"),
-        },
-        col: {
-          no: "#",
-          name: tr("totalSalesColName", "명칭"),
-          main: tr("totalSalesLevelMain", "대분류"),
-          category: tr("totalSalesLevelCategory", "카테고리"),
-          qty: tr("salesQuantity", "수량"),
-          sales: tr("pL_sales", "매출"),
-        },
-        levels: levelsData,
-      })
+      const sheetNames = {
+        main: tr("totalSalesLevelMain", "대분류"),
+        category: tr("totalSalesLevelCategory", "카테고리"),
+        menu: tr("totalSalesLevelMenu", "메인 메뉴"),
+        option: tr("totalSalesLevelOption", "옵션"),
+      }
+      const col = {
+        no: "#",
+        name: tr("totalSalesColName", "명칭"),
+        main: tr("totalSalesLevelMain", "대분류"),
+        category: tr("totalSalesLevelCategory", "카테고리"),
+        qty: tr("salesQuantity", "수량"),
+        sales: tr("pL_sales", "매출"),
+      }
+      if (compareChannels && compareByLevel) {
+        downloadTotalSalesChannelCompareXlsx({
+          filename,
+          metaRows,
+          sheetNames,
+          col,
+          channelLabels,
+          channels: compareChannelsList,
+          compareByLevel,
+        })
+      } else {
+        downloadTotalSalesHierarchyXlsx({
+          filename,
+          metaRows,
+          sheetNames,
+          col,
+          levels: levelsData,
+        })
+      }
     } finally {
       setExporting(false)
     }
-  }, [levelsData, startStr, endStr, storeLabelForExport, search, tr])
+  }, [
+    levelsData,
+    compareChannels,
+    compareByLevel,
+    compareChannelsList,
+    channelLabels,
+    startStr,
+    endStr,
+    storeLabelForExport,
+    search,
+    orderTypesSummaryLabel,
+    tr,
+  ])
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground leading-relaxed">
         {tr(
           "totalSalesIntro",
-          "POS 완료 주문 기준으로 대분류·카테고리·메인 메뉴·옵션별 수량·판매액을 봅니다. 메인 메뉴는 카탈로그명 기준, 옵션은 사이즈·맛 등 옵션별로 집계됩니다."
+          "POS 완료 주문 기준으로 대분류·카테고리·메인 메뉴·옵션별 수량·판매액을 봅니다. 홀·포장·배달로 범위를 좁힐 수 있고, 메인 메뉴는 카탈로그명·옵션은 사이즈·부위 등 최종 선택 기준으로 집계됩니다."
         )}
       </p>
 
@@ -391,6 +565,57 @@ export function TotalSalesTab() {
               </p>
             )}
           </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+            <span className="shrink-0 text-sm font-medium">
+              {tr("salesAmountKindLabel", "주문 유형")}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={orderTypesKey === "" ? "default" : "outline"}
+                onClick={setAllOrderTypes}
+              >
+                {tr("salesAmountKindAll", "전체")}
+              </Button>
+              {SALES_ORDER_TYPE_TOGGLES.map(({ type, labelKey, fallback }) => {
+                const active = orderTypesKey !== "" && orderTypesKey.split(",").includes(type)
+                return (
+                  <Button
+                    key={type}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    onClick={() => toggleOrderTypeChannel(type)}
+                  >
+                    {tr(labelKey, fallback)}
+                  </Button>
+                )
+              })}
+            </div>
+            {orderTypesKey !== "" ? (
+              <span className="text-xs text-muted-foreground">
+                {orderTypesSummaryLabel}
+              </span>
+            ) : null}
+            <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={compareChannels}
+                onCheckedChange={(c) => setCompareChannels(c === true)}
+              />
+              <span>{tr("totalSalesCompareChannels", "채널별 비교")}</span>
+            </label>
+          </div>
+          {compareChannels ? (
+            <p className="text-xs text-muted-foreground">
+              {tr(
+                "totalSalesCompareChannelsHint",
+                "같은 품목을 홀·포장·배달 열로 나란히 봅니다. 주문 유형을 고르면 선택한 채널만 비교합니다."
+              )}
+            </p>
+          ) : null}
 
           <div className="flex flex-wrap items-end gap-3">
             {canSearchAll ? (
@@ -512,7 +737,12 @@ export function TotalSalesTab() {
             <Button
               type="button"
               variant="outline"
-              disabled={!levelsData || exporting || loading}
+              disabled={
+                !levelsData ||
+                exporting ||
+                loading ||
+                (compareChannels && !compareByLevel)
+              }
               onClick={handleExportExcel}
             >
               {exporting ? tr("exporting", "보내는 중…") : tr("totalSalesExportExcel", "엑셀보내기")}
@@ -552,7 +782,41 @@ export function TotalSalesTab() {
             </div>
           ) : null}
 
-          {levelsData && (categoryPieRows.length > 0 || itemChartRows.length > 0) ? (
+          {levelsData && compareChannels && compareChartRows.length > 0 ? (
+            <div className="rounded-lg border p-3">
+              <h3 className="mb-2 text-sm font-semibold">
+                {tr("totalSalesChartChannelCompare", "채널별 매출 비교")} (
+                {tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
+              </h3>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={compareChartRows} margin={{ top: 8, right: 16, left: 0, bottom: 48 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-32} textAnchor="end" height={56} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      formatter={(v: number) => [`฿${formatSalesAmount(v)}`, tr("pL_sales", "매출")]}
+                      labelFormatter={(_, payload) =>
+                        String((payload?.[0]?.payload as { fullName?: string })?.fullName ?? "")
+                      }
+                    />
+                    <Legend />
+                    {compareChannelsList.map((ch, i) => (
+                      <Bar
+                        key={ch}
+                        dataKey={channelLabels[ch]}
+                        fill={CHART_COLORS[i % CHART_COLORS.length]}
+                        name={channelLabels[ch]}
+                        radius={[4, 4, 0, 0]}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : null}
+
+          {levelsData && !compareChannels && (categoryPieRows.length > 0 || itemChartRows.length > 0) ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border p-3">
                 <h3 className="mb-2 text-sm font-semibold">
@@ -670,28 +934,117 @@ export function TotalSalesTab() {
           <div className="overflow-auto max-h-[calc(100vh-520px)] rounded-lg border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-muted/80 backdrop-blur">
-                <tr className="border-b text-muted-foreground">
-                  <th className="w-12 py-2 pl-3 text-left">#</th>
-                  <th className="py-2 text-left">{tr("totalSalesColName", "명칭")}</th>
-                  {level !== "main" ? (
-                    <th className="hidden py-2 text-left md:table-cell">{tr("totalSalesLevelMain", "대분류")}</th>
-                  ) : null}
-                  {level === "option" || level === "menu" ? (
-                    <th className="hidden py-2 text-left lg:table-cell">
-                      {tr("totalSalesLevelCategory", "카테고리")}
+                {compareChannels ? (
+                  <tr className="border-b text-muted-foreground">
+                    <th className="w-12 py-2 pl-3 text-left" rowSpan={2}>
+                      #
                     </th>
-                  ) : null}
-                  <th className="py-2 pr-3 text-right">{tr("salesQuantity", "수량")}</th>
-                  <th className="py-2 pr-3 text-right">{tr("pL_sales", "매출")}</th>
+                    <th className="py-2 text-left" rowSpan={2}>
+                      {tr("totalSalesColName", "명칭")}
+                    </th>
+                    {level !== "main" ? (
+                      <th className="hidden py-2 text-left md:table-cell" rowSpan={2}>
+                        {tr("totalSalesLevelMain", "대분류")}
+                      </th>
+                    ) : null}
+                    {level === "option" || level === "menu" ? (
+                      <th className="hidden py-2 text-left lg:table-cell" rowSpan={2}>
+                        {tr("totalSalesLevelCategory", "카테고리")}
+                      </th>
+                    ) : null}
+                    {compareChannelsList.map((ch) => (
+                      <th key={ch} className="py-1 pr-2 text-center" colSpan={2}>
+                        {channelLabels[ch]}
+                      </th>
+                    ))}
+                    <th className="py-1 pr-3 text-center" colSpan={2}>
+                      {tr("totalSalesCompareTotal", "합계")}
+                    </th>
+                  </tr>
+                ) : null}
+                <tr className="border-b text-muted-foreground">
+                  {!compareChannels ? (
+                    <>
+                      <th className="w-12 py-2 pl-3 text-left">#</th>
+                      <th className="py-2 text-left">{tr("totalSalesColName", "명칭")}</th>
+                      {level !== "main" ? (
+                        <th className="hidden py-2 text-left md:table-cell">
+                          {tr("totalSalesLevelMain", "대분류")}
+                        </th>
+                      ) : null}
+                      {level === "option" || level === "menu" ? (
+                        <th className="hidden py-2 text-left lg:table-cell">
+                          {tr("totalSalesLevelCategory", "카테고리")}
+                        </th>
+                      ) : null}
+                      <th className="py-2 pr-3 text-right">{tr("salesQuantity", "수량")}</th>
+                      <th className="py-2 pr-3 text-right">{tr("pL_sales", "매출")}</th>
+                    </>
+                  ) : (
+                    <>
+                      {compareChannelsList.map((ch) => (
+                        <React.Fragment key={`${ch}-sub`}>
+                          <th className="py-1 pr-2 text-right text-xs">{tr("salesQuantity", "수량")}</th>
+                          <th className="py-1 pr-2 text-right text-xs">{tr("pL_sales", "매출")}</th>
+                        </React.Fragment>
+                      ))}
+                      <th className="py-1 pr-2 text-right text-xs">{tr("salesQuantity", "수량")}</th>
+                      <th className="py-1 pr-3 text-right text-xs">{tr("pL_sales", "매출")}</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={compareChannels ? compareTableColSpan : 6} className="py-10 text-center text-muted-foreground">
                       {tr("loading", "불러오는 중…")}
                     </td>
                   </tr>
+                ) : compareChannels ? (
+                  compareRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={compareTableColSpan} className="py-10 text-center text-muted-foreground">
+                        {tr("salesDataNone", "데이터 없음")}
+                      </td>
+                    </tr>
+                  ) : (
+                    compareRows.map((row, idx) => (
+                      <tr key={row.key} className="border-b hover:bg-muted/30">
+                        <td className="py-1.5 pl-3 text-muted-foreground">{idx + 1}</td>
+                        <td className="py-1.5 pr-2">{row.label}</td>
+                        {level !== "main" ? (
+                          <td className="hidden py-1.5 md:table-cell text-muted-foreground">
+                            {row.categoryMain || "—"}
+                          </td>
+                        ) : null}
+                        {level === "option" || level === "menu" ? (
+                          <td className="hidden py-1.5 lg:table-cell text-muted-foreground">
+                            {row.category || "—"}
+                          </td>
+                        ) : null}
+                        {compareChannelsList.map((ch) => {
+                          const c = row.channels[ch]
+                          return (
+                            <React.Fragment key={`${row.key}-${ch}`}>
+                              <td className="py-1.5 pr-2 text-right font-erp-numeric text-muted-foreground">
+                                {(c?.qty ?? 0).toLocaleString()}
+                              </td>
+                              <td className="py-1.5 pr-2 text-right font-erp-numeric">
+                                {formatSalesAmount(c?.sales ?? 0)}
+                              </td>
+                            </React.Fragment>
+                          )
+                        })}
+                        <td className="py-1.5 pr-2 text-right font-erp-numeric font-medium">
+                          {row.totalQty.toLocaleString()}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right font-erp-numeric font-medium">
+                          {formatSalesAmount(row.totalSales)}
+                        </td>
+                      </tr>
+                    ))
+                  )
                 ) : activeRows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-10 text-center text-muted-foreground">

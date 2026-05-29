@@ -462,12 +462,13 @@ export async function checkKbankQrStatus(
     }
 
     const statusCode = readKbankResponseStatusCode(json, res.status)
-    const statusMessage = extractKbankErrorMessage(
-      json,
-      String(json.statusMessage || json.message || '').trim() || `kbank_check_status_failed_http_${res.status}`,
-      res.status
-    )
+    const successMessage = String(json.statusMessage || json.message || json.errorDesc || '').trim()
     if (!res.ok || !isKbankBusinessSuccess(statusCode)) {
+      const statusMessage = extractKbankErrorMessage(
+        json,
+        successMessage || `kbank_check_status_failed_http_${res.status}`,
+        res.status
+      )
       return {
         ok: false,
         requestId,
@@ -481,7 +482,7 @@ export async function checkKbankQrStatus(
       ok: true,
       requestId,
       statusCode,
-      statusMessage: statusMessage || 'ok',
+      statusMessage: successMessage || 'ok',
       response: json,
     }
   } finally {

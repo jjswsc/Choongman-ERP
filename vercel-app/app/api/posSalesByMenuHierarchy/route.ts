@@ -4,7 +4,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
-import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
+import {
+  POS_ORDER_TYPE_DB_VALUES,
+  parseOrderTypesParam,
+  rowMatchesOrderFilter,
+  type PosOrderTypeValue,
+} from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
 import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
@@ -14,6 +19,7 @@ import {
   filterHierarchyRows,
   type PosSalesHierarchyLevel,
 } from '@/lib/pos-sales-menu-hierarchy-aggregate'
+import { loadPosSalesOptionCatalog } from '@/lib/pos-sales-option-catalog-server'
 
 const ORDER_FETCH_LIMIT = 10000
 const HIERARCHY_LEVELS: PosSalesHierarchyLevel[] = ['main', 'category', 'menu', 'option']
@@ -23,6 +29,24 @@ function parseSearchTokens(raw: string | null): string[] {
     .split(/[,\n]+/)
     .map((v) => v.trim().toLowerCase())
     .filter(Boolean)
+}
+
+function applySearchSliceLevels(
+  levels: Record<PosSalesHierarchyLevel, import('@/lib/pos-sales-menu-hierarchy-aggregate').PosSalesHierarchyRow[]>,
+  searchTokens: string[],
+  searchAnd: boolean,
+  sliceLimit: number
+) {
+  const out = { ...levels }
+  if (searchTokens.length > 0) {
+    for (const lv of HIERARCHY_LEVELS) {
+      out[lv] = filterHierarchyRows(out[lv], searchTokens, searchAnd)
+    }
+  }
+  for (const lv of HIERARCHY_LEVELS) {
+    out[lv] = out[lv].slice(0, sliceLimit)
+  }
+  return out
 }
 
 export async function GET(request: NextRequest) {
@@ -40,6 +64,9 @@ export async function GET(request: NextRequest) {
     const searchMode = String(searchParams.get('searchMode') ?? 'or').toLowerCase()
     const searchAnd = searchMode === 'and' || searchMode === 'all'
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
+    const splitByOrderType =
+      searchParams.get('splitByOrderType') === '1' ||
+      searchParams.get('splitByOrderType') === 'true'
     const levelRaw = String(searchParams.get('level') ?? 'all').toLowerCase()
     const level: PosSalesHierarchyLevel | 'all' = HIERARCHY_LEVELS.includes(
       levelRaw as PosSalesHierarchyLevel
@@ -70,7 +97,6 @@ export async function GET(request: NextRequest) {
     let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
     rows = excludePosSalesTestOfficeRows(rows)
     rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
-    rows = rows.filter((r) => rowMatchesOrderFilter(r.order_type, orderTypesAllowed))
 
     const truncated = rowsRaw.length >= ORDER_FETCH_LIMIT
     if (truncated) headers.set('X-Sales-Truncated', '1')
@@ -80,48 +106,69 @@ export async function GET(request: NextRequest) {
       select: 'id,name,category,category_main',
     })) as { id?: number | string; name?: string; category?: string; category_main?: string }[] | null
 
-    let options: { id?: number | string; menu_id?: number | string; name?: string; option_code?: string }[] =
-      []
+    let options: Awaited<ReturnType<typeof loadPosSalesOptionCatalog>> = []
     try {
-      options =
-        ((await supabaseSelect('pos_menu_options', {
-          limit: 8000,
-          select: 'id,menu_id,name,option_code',
-        })) as typeof options | null) ?? []
-    } catch {
-      try {
-        options =
-          ((await supabaseSelect('pos_menu_options', {
-            limit: 8000,
-            select: 'id,menu_id,name',
-          })) as typeof options | null) ?? []
-      } catch {
-        options = []
-      }
+      options = await loadPosSalesOptionCatalog()
+    } catch (catalogErr) {
+      console.error('loadPosSalesOptionCatalog:', catalogErr)
     }
+    const menuList = Array.isArray(menus) ? menus : []
+    const sliceLimit = 500
+
+    const rowsForMain = orderTypesAllowed
+      ? rows.filter((r) => rowMatchesOrderFilter(r.order_type, orderTypesAllowed))
+      : rows
 
     const aggregated = aggregatePosSalesMenuHierarchy({
-      orderRows: rows,
-      menus: Array.isArray(menus) ? menus : [],
+      orderRows: rowsForMain,
+      menus: menuList,
       options: Array.isArray(options) ? options : [],
     })
 
-    const levels = { ...aggregated.levels }
-    if (searchTokens.length > 0) {
-      for (const lv of HIERARCHY_LEVELS) {
-        levels[lv] = filterHierarchyRows(levels[lv], searchTokens, searchAnd)
-      }
-    }
+    const levels = applySearchSliceLevels(
+      { ...aggregated.levels },
+      searchTokens,
+      searchAnd,
+      sliceLimit
+    )
 
-    const sliceLimit = 500
-    for (const lv of HIERARCHY_LEVELS) {
-      levels[lv] = levels[lv].slice(0, sliceLimit)
+    let byOrderType:
+      | Record<
+          PosOrderTypeValue,
+          {
+            levels: Record<PosSalesHierarchyLevel, import('@/lib/pos-sales-menu-hierarchy-aggregate').PosSalesHierarchyRow[]>
+            totals: { qty: number; sales: number }
+          }
+        >
+      | undefined
+
+    if (splitByOrderType) {
+      const channels: PosOrderTypeValue[] = orderTypesAllowed ?? [...POS_ORDER_TYPE_DB_VALUES]
+      byOrderType = {} as NonNullable<typeof byOrderType>
+      for (const ch of channels) {
+        const chRows = rows.filter((r) => rowMatchesOrderFilter(r.order_type, [ch]))
+        const chAgg = aggregatePosSalesMenuHierarchy({
+          orderRows: chRows,
+          menus: menuList,
+          options: Array.isArray(options) ? options : [],
+        })
+        byOrderType[ch] = {
+          levels: applySearchSliceLevels({ ...chAgg.levels }, searchTokens, searchAnd, sliceLimit),
+          totals: chAgg.totals,
+        }
+      }
     }
 
     const body =
       level === 'all'
-        ? { levels, totals: aggregated.totals, truncated }
-        : { level, rows: levels[level], totals: aggregated.totals, truncated }
+        ? { levels, totals: aggregated.totals, truncated, ...(byOrderType ? { byOrderType } : {}) }
+        : {
+            level,
+            rows: levels[level],
+            totals: aggregated.totals,
+            truncated,
+            ...(byOrderType ? { byOrderType } : {}),
+          }
 
     return NextResponse.json(body, { headers })
   } catch (e) {
@@ -131,6 +178,7 @@ export async function GET(request: NextRequest) {
         levels: { main: [], category: [], menu: [], option: [] },
         totals: { qty: 0, sales: 0 },
         truncated: false,
+        byOrderType: undefined,
       },
       { headers }
     )
