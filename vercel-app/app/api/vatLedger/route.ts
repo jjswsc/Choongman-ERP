@@ -302,10 +302,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ entries: enrichVatLedgerEntries(initialEntries), period }, { headers })
     }
     try {
-      await syncTaxVatLedgersFromStockAndExpenses({
-        months: period.months,
-        storeFilter,
-      })
+      await runVatAutoSync()
     } catch (e) {
       console.warn('vatLedger GET auto-sync skipped:', e)
     }

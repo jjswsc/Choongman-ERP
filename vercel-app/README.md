@@ -95,7 +95,9 @@ npm run dev
 2. **스키마 적용**:
    - `supabase_schema.sql` → Supabase SQL Editor에서 실행
    - `supabase_migration_consolidated.sql` → 동일하게 실행 (중복 제거, 유니크 제약, 추가 테이블)
-   - **운영 DB 일괄**: `sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql` (회계·세무·POS 주문 컬럼·쿠폰·프린터·치킨 옵션 UI)
+   - **한 번에 붙여넣기(추천)**: `sql/supabase_one_paste_all_in_one.sql` — 회계·POS·결산·CRM·RPC 전체
+   - **실행 가이드(증상별)**: `sql/SUPABASE_EDITOR_RUNBOOK.md` — Editor에 쌓인 SQL 정리·필요한 파일만 복사
+   - **운영 DB 일괄(구버전)**: `sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql`
    - POS 리스트만: `sql/supabase_one_paste_pos_orders_list.sql` (§3 축약)
    - K/T 메뉴 코드 복구(확인 후): `sql/supabase_one_paste_optional_menu_code_recovery.sql`
    - 기존 메뉴 백필 필요 시 `sql/pos_menu_store_scope_backfill.sql` 실행

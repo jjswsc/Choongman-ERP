@@ -14,6 +14,14 @@ export type MemberPortalKey =
   | 'loginBtn'
   | 'loginChecking'
   | 'footerPrivacy'
+  | 'footerContactUs'
+  | 'footerLegalIntro'
+  | 'footerTerms'
+  | 'footerPrivacyPolicy'
+  | 'contactMenuTitle'
+  | 'contactViaFacebook'
+  | 'contactViaInstagram'
+  | 'contactMenuClose'
   | 'memberLounge'
   | 'logout'
   | 'tierNext'
@@ -33,9 +41,31 @@ export type MemberPortalKey =
   | 'recentPoints'
   | 'noRecords'
   | 'tabHome'
-  | 'tabCoupons'
-  | 'tabHistory'
-  | 'tabProfile'
+  | 'tabOrder'
+  | 'tabLocation'
+  | 'tabPrivilege'
+  | 'tabMe'
+  | 'orderTitle'
+  | 'orderDesc'
+  | 'orderPickupBtn'
+  | 'orderDeliveryBtn'
+  | 'locationTitle'
+  | 'locationDesc'
+  | 'locationComing'
+  | 'locationSearchPh'
+  | 'locationNoResult'
+  | 'locationOpenMap'
+  | 'locationCode'
+  | 'locationFavorite'
+  | 'locationFavoriteSet'
+  | 'locationFavoriteSaved'
+  | 'quickOrderTitle'
+  | 'quickOrderDesc'
+  | 'quickOrderPickup'
+  | 'quickOrderDelivery'
+  | 'quickOrderStoreHint'
+  | 'privilegeTitle'
+  | 'privilegeDesc'
   | 'couponsTitle'
   | 'couponsSub'
   | 'noCoupons'
@@ -154,12 +184,52 @@ const MS: Record<MemberPortalKey, Dict> = {
   },
   phoneLabel: { en: 'Phone number', th: 'เบอร์โทรศัพท์', ko: '전화번호' },
   birthDateLabel: { en: 'Birth date', th: 'วันเกิด', ko: '생년월일' },
-  loginBtn: { en: 'Sign in', th: 'เข้าสู่ระบบ', ko: '로그인' },
+  loginBtn: { en: 'Login', th: 'เข้าสู่ระบบ', ko: '로그인' },
   loginChecking: { en: 'Verifying…', th: 'กำลังตรวจสอบ...', ko: '확인 중…' },
   footerPrivacy: {
     en: 'Your data is stored securely · Choongman Chicken Thailand',
     th: 'ข้อมูลสมาชิกถูกเก็บรักษาอย่างปลอดภัย · Choongman Chicken Thailand',
     ko: '회원 정보는 안전하게 보관됩니다 · Choongman Chicken Thailand',
+  },
+  footerContactUs: {
+    en: 'Contact us',
+    th: 'ติดต่อเรา',
+    ko: '문의하기',
+  },
+  footerLegalIntro: {
+    en: "By using this app, you confirm that you're at least 18 and accept our",
+    th: 'การใช้แอปนี้ถือว่าคุณมีอายุอย่างน้อย 18 ปี และยอมรับ',
+    ko: '이 앱을 사용하면 만 18세 이상이며 다음 내용에 동의하는 것으로 간주됩니다:',
+  },
+  footerTerms: {
+    en: 'Terms',
+    th: 'ข้อกำหนดการใช้งาน',
+    ko: '이용약관',
+  },
+  footerPrivacyPolicy: {
+    en: 'Privacy Policy',
+    th: 'นโยบายความเป็นส่วนตัว',
+    ko: '개인정보처리방침',
+  },
+  contactMenuTitle: {
+    en: 'Choose contact channel',
+    th: 'เลือกช่องทางติดต่อ',
+    ko: '문의 채널 선택',
+  },
+  contactViaFacebook: {
+    en: 'Contact via Facebook',
+    th: 'ติดต่อผ่าน Facebook',
+    ko: 'Facebook으로 문의',
+  },
+  contactViaInstagram: {
+    en: 'Contact via Instagram',
+    th: 'ติดต่อผ่าน Instagram',
+    ko: 'Instagram으로 문의',
+  },
+  contactMenuClose: {
+    en: 'Close',
+    th: 'ปิด',
+    ko: '닫기',
   },
   memberLounge: { en: 'Member Lounge', th: 'Member Lounge', ko: 'Member Lounge' },
   logout: { en: 'Logout', th: 'ออกจากระบบ', ko: '로그아웃' },
@@ -188,9 +258,95 @@ const MS: Record<MemberPortalKey, Dict> = {
   recentPoints: { en: 'Recent points', th: 'ประวัติแต้มล่าสุด', ko: '최근 포인트' },
   noRecords: { en: 'No records yet', th: 'ยังไม่มีรายการ', ko: '내역 없음' },
   tabHome: { en: 'Home', th: 'หน้าแรก', ko: '홈' },
-  tabCoupons: { en: 'Coupons', th: 'คูปอง', ko: '쿠폰' },
-  tabHistory: { en: 'History', th: 'ประวัติ', ko: '내역' },
-  tabProfile: { en: 'Profile', th: 'โปรไฟล์', ko: '프로필' },
+  tabOrder: { en: 'Order', th: 'สั่งซื้อ', ko: '주문' },
+  tabLocation: { en: 'Location', th: 'สาขา', ko: '매장' },
+  tabPrivilege: { en: 'Privilege', th: 'สิทธิพิเศษ', ko: '혜택' },
+  tabMe: { en: 'Me', th: 'ฉัน', ko: '내정보' },
+  orderTitle: { en: 'Order now', th: 'สั่งซื้อเลย', ko: '지금 주문' },
+  orderDesc: {
+    en: 'Start order flow with pickup or delivery.',
+    th: 'เริ่มสั่งซื้อได้ทั้งรับที่ร้านและเดลิเวอรี',
+    ko: '픽업 또는 배달 주문을 시작하세요.',
+  },
+  orderPickupBtn: { en: 'Pickup order', th: 'รับที่ร้าน', ko: '픽업 주문' },
+  orderDeliveryBtn: { en: 'Delivery order', th: 'เดลิเวอรี', ko: '배달 주문' },
+  locationTitle: { en: 'Store locations', th: 'ที่ตั้งสาขา', ko: '매장 위치' },
+  locationDesc: {
+    en: 'Find nearby stores and choose your favorite branch.',
+    th: 'ค้นหาสาขาใกล้คุณและเลือกสาขาประจำ',
+    ko: '가까운 매장을 찾아 단골 지점을 선택하세요.',
+  },
+  locationComing: {
+    en: 'Map view will be enabled in the next phase.',
+    th: 'แผนที่จะเปิดใช้งานในเฟสถัดไป',
+    ko: '지도 보기 기능은 다음 단계에서 제공됩니다.',
+  },
+  locationSearchPh: {
+    en: 'Search store name',
+    th: 'ค้นหาชื่อสาขา',
+    ko: '매장명 검색',
+  },
+  locationNoResult: {
+    en: 'No matching store found.',
+    th: 'ไม่พบสาขาที่ตรงกับคำค้นหา',
+    ko: '검색 결과가 없습니다.',
+  },
+  locationOpenMap: {
+    en: 'Open in map',
+    th: 'เปิดแผนที่',
+    ko: '지도에서 보기',
+  },
+  locationCode: {
+    en: 'Store code',
+    th: 'รหัสสาขา',
+    ko: '매장코드',
+  },
+  locationFavorite: {
+    en: 'Favorite',
+    th: 'สาขาประจำ',
+    ko: '즐겨찾기',
+  },
+  locationFavoriteSet: {
+    en: 'Set as favorite',
+    th: 'ตั้งเป็นสาขาประจำ',
+    ko: '단골 매장으로 설정',
+  },
+  locationFavoriteSaved: {
+    en: 'Favorite store saved.',
+    th: 'บันทึกสาขาประจำแล้ว',
+    ko: '즐겨찾는 매장을 저장했습니다.',
+  },
+  quickOrderTitle: {
+    en: 'Quick order',
+    th: 'สั่งซื้อด่วน',
+    ko: '빠른 주문',
+  },
+  quickOrderDesc: {
+    en: 'Jump straight to POS order with one tap.',
+    th: 'ไปหน้าสั่งซื้อได้ทันทีในคลิกเดียว',
+    ko: '한 번에 POS 주문으로 이동하세요.',
+  },
+  quickOrderPickup: {
+    en: 'Quick pickup',
+    th: 'รับที่ร้านทันที',
+    ko: '픽업 바로주문',
+  },
+  quickOrderDelivery: {
+    en: 'Quick delivery',
+    th: 'เดลิเวอรีทันที',
+    ko: '배달 바로주문',
+  },
+  quickOrderStoreHint: {
+    en: 'Favorite store: {store}',
+    th: 'สาขาประจำ: {store}',
+    ko: '즐겨찾는 매장: {store}',
+  },
+  privilegeTitle: { en: 'My privilege', th: 'สิทธิพิเศษของฉัน', ko: '내 혜택' },
+  privilegeDesc: {
+    en: 'Coupons, points, and visit history in one place.',
+    th: 'รวมคูปอง แต้ม และประวัติการใช้บริการไว้ในหน้าเดียว',
+    ko: '쿠폰, 포인트, 이용 내역을 한 화면에서 확인하세요.',
+  },
   couponsTitle: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
   couponsSub: {
     en: 'Show the code at the counter when ordering',
@@ -341,9 +497,9 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '이름',
   },
   signupBtn: {
-    en: 'Start membership',
-    th: 'เริ่มสมาชิกกับเรา',
-    ko: '멤버십 시작하기',
+    en: 'Create a New Account',
+    th: 'สร้างบัญชีใหม่',
+    ko: '새 계정 만들기',
   },
   signupChecking: {
     en: 'Creating account…',
@@ -376,9 +532,9 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '해당 번호는 이미 등록되어 있으나 생년월일이 다릅니다. 기존 로그인으로 진행해 주세요.',
   },
   lineBtnWithLogo: {
-    en: 'Continue with LINE',
-    th: 'เข้าสู่ระบบด้วย LINE',
-    ko: 'LINE으로 시작하기',
+    en: 'Log in or sign up with LINE',
+    th: 'เข้าสู่ระบบหรือสมัครด้วย LINE',
+    ko: 'LINE으로 로그인/회원가입',
   },
   bgPresetLabel: {
     en: 'Mood',

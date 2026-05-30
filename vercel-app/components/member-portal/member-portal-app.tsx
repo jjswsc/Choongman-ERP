@@ -7,18 +7,23 @@ import {
   Award,
   ChevronRight,
   Copy,
+  ExternalLink,
   Gift,
   History,
   Home,
   Loader2,
   LogOut,
+  MapPin,
   QrCode,
+  Search,
   Share2,
+  ShoppingCart,
   Sparkles,
+  Star,
   Ticket,
   UserRound,
-  UserPlus,
   Wallet,
+  X,
 } from "lucide-react"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { Button } from "@/components/ui/button"
@@ -35,6 +40,7 @@ import {
   memberPortalPointKindLabel,
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
+import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import {
   formatBaht,
   formatDateTime,
@@ -48,6 +54,12 @@ import {
   type PortalTab,
   type PortalVisitRow,
 } from "@/components/member-portal/portal-ui"
+
+type MemberPortalStoreRow = {
+  storeCode: string
+  displayName: string
+  mapQuery: string
+}
 
 async function postJson<T>(url: string, body: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(url, {
@@ -189,13 +201,14 @@ function BottomNav({ tab, onChange }: { tab: PortalTab; onChange: (tab: PortalTa
   const { t } = useMemberPortalLang()
   const items: Array<{ id: PortalTab; label: string; icon: React.ElementType }> = [
     { id: "home", label: t("tabHome"), icon: Home },
-    { id: "coupons", label: t("tabCoupons"), icon: Ticket },
-    { id: "history", label: t("tabHistory"), icon: History },
-    { id: "profile", label: t("tabProfile"), icon: UserRound },
+    { id: "order", label: t("tabOrder"), icon: ShoppingCart },
+    { id: "location", label: t("tabLocation"), icon: MapPin },
+    { id: "privilege", label: t("tabPrivilege"), icon: Ticket },
+    { id: "me", label: t("tabMe"), icon: UserRound },
   ]
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0d]/95 backdrop-blur-xl">
-      <div className="mx-auto grid max-w-lg grid-cols-4 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="mx-auto grid max-w-lg grid-cols-5 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
         {items.map(({ id, label, icon: Icon }) => {
           const active = tab === id
           return (
@@ -229,12 +242,18 @@ export function MemberPortalApp() {
   const [signupName, setSignupName] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState(false)
+  const [authPanel, setAuthPanel] = React.useState<"signup" | "login" | null>(null)
   const [error, setError] = React.useState("")
   const [notice, setNotice] = React.useState("")
   const [lineLoginEnabled, setLineLoginEnabled] = React.useState(false)
+  const [contactMenuOpen, setContactMenuOpen] = React.useState(false)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
   const [visits, setVisits] = React.useState<PortalVisitRow[]>([])
+  const [stores, setStores] = React.useState<MemberPortalStoreRow[]>([])
+  const [contentItems, setContentItems] = React.useState<MemberPortalContentItem[]>([])
+  const [locationSearch, setLocationSearch] = React.useState("")
+  const [favoriteStoreCode, setFavoriteStoreCode] = React.useState("")
   const [showQr, setShowQr] = React.useState(false)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const [profile, setProfile] = React.useState<PortalProfileForm>({
@@ -296,7 +315,34 @@ export function MemberPortalApp() {
     getJson<{ lineLoginEnabled?: boolean }>("/api/member-portal/auth/phone-birth")
       .then((r) => setLineLoginEnabled(Boolean(r.lineLoginEnabled)))
       .catch(() => {})
+    getJson<{ success: boolean; stores?: MemberPortalStoreRow[] }>("/api/member-portal/stores")
+      .then((r) => setStores(r.success ? r.stores || [] : []))
+      .catch(() => setStores([]))
+    getJson<{ success: boolean; items?: MemberPortalContentItem[] }>("/api/member-portal/content")
+      .then((r) => setContentItems(r.success ? r.items || [] : []))
+      .catch(() => setContentItems([]))
+    getJson<{ success: boolean; favoriteStoreCode?: string }>("/api/member-portal/preferences/favorite-store")
+      .then((r) => {
+        const code = String(r.favoriteStoreCode || "").trim()
+        if (r.success && code) {
+          setFavoriteStoreCode(code)
+          try {
+            localStorage.setItem("cm_member_favorite_store", code)
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+      .catch(() => {})
   }, [loadSession])
+
+  React.useEffect(() => {
+    try {
+      setFavoriteStoreCode(localStorage.getItem("cm_member_favorite_store") || "")
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -385,6 +431,58 @@ export function MemberPortalApp() {
     }
   }
 
+  const filteredStores = React.useMemo(() => {
+    const q = locationSearch.trim().toLowerCase()
+    if (!q) return stores
+    return stores.filter((s) =>
+      `${s.displayName} ${s.storeCode}`.toLowerCase().includes(q)
+    )
+  }, [locationSearch, stores])
+
+  const favoriteStore = React.useMemo(
+    () => stores.find((s) => s.storeCode === favoriteStoreCode) || null,
+    [stores, favoriteStoreCode]
+  )
+
+  const homePopup = React.useMemo(
+    () =>
+      contentItems.find(
+        (x) =>
+          x.contentType === "popup" &&
+          (!x.targetTab || x.targetTab === "home")
+      ) || null,
+    [contentItems]
+  )
+
+  const homeInfoItems = React.useMemo(
+    () =>
+      contentItems
+        .filter((x) => x.contentType === "info" && (!x.targetTab || x.targetTab === "home"))
+        .slice(0, 4),
+    [contentItems]
+  )
+
+  const storePhotoMap = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of contentItems) {
+      if (item.contentType !== "store_photo") continue
+      const code = String(item.storeCode || "").trim()
+      const imageUrl = String(item.imageUrl || "").trim()
+      if (!code || !imageUrl || map.has(code)) continue
+      map.set(code, imageUrl)
+    }
+    return map
+  }, [contentItems])
+
+  const buildPosHref = React.useCallback(
+    (mode: "pickup" | "delivery") => {
+      const q = new URLSearchParams({ mode, from: "member" })
+      if (favoriteStoreCode) q.set("store", favoriteStoreCode)
+      return `/pos?${q.toString()}`
+    },
+    [favoriteStoreCode]
+  )
+
   const logout = async () => {
     await postJson("/api/member-portal/auth/logout", {})
     setMember(null)
@@ -408,132 +506,221 @@ export function MemberPortalApp() {
   if (!member || !dashboard) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
     return (
-      <div className="min-h-[100dvh] bg-[#08080a] text-white">
-        <div
-          className="pointer-events-none absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage:
-              "url(https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2070&auto=format&fit=crop)",
-          }}
-        />
-        <div className="pointer-events-none absolute inset-0 bg-black/55" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,185,120,0.16),transparent_44%)]" />
-        <div className="relative mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 py-8">
-          <div className="mb-6 flex justify-end">
+      <div className="min-h-[100dvh] bg-white text-[#191919]">
+        <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 py-7">
+          <div className="mb-8 flex items-center justify-between">
+            <button
+              type="button"
+              aria-label="close"
+              onClick={() => {
+                setAuthPanel(null)
+                setError("")
+                setNotice("")
+              }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e6e6e6] text-[#555] hover:bg-[#f5f5f5]"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <MemberPortalLangSelect />
           </div>
-          <div className="mb-10 flex flex-col items-center text-center">
-            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5 p-3 shadow-2xl">
-              <Image src={brand.logoSymbolSrc} alt={brand.logoAlt} width={56} height={56} className="h-14 w-14 object-contain" />
+          <div className="mb-11 flex flex-col items-center text-center">
+            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-white p-2">
+              <Image src={brand.logoSymbolSrc} alt={brand.logoAlt} width={62} height={62} className="h-16 w-16 object-contain" />
             </div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-amber-300/80">{t("premiumMembership")}</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">{brand.headerWordmark}</h1>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/55">
-              {t("loginSubtitle")}
-            </p>
+            <h1 className="mt-1 text-[42px] font-extrabold tracking-tight text-[#ef233c]">{brand.headerWordmark}</h1>
+            <p className="mt-1 max-w-sm text-[17px] leading-relaxed text-[#333]">{t("memberLounge")}</p>
           </div>
 
           {!!notice && (
-          <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-            {notice}
-          </div>
-        )}
+            <div className="mb-4 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {notice}
+            </div>
+          )}
 
-        {!!error && (
-            <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          {!!error && (
+            <div className="mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-pink-200/20 bg-white/[0.06] p-5 backdrop-blur-md">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#06C755]/15 text-[#06C755]">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="font-medium">{t("lineLoginTitle")}</h2>
-                  <p className="text-xs text-white/45">{t("lineLoginDesc")}</p>
-                </div>
-              </div>
-              <Button
-                className="h-12 w-full rounded-2xl bg-[#06C755] text-base font-semibold text-white hover:bg-[#05b34c]"
-                disabled={!lineLoginEnabled}
-                onClick={() => {
-                  window.location.href = "/api/member-portal/auth/line/start"
-                }}
-              >
-                <span className="inline-flex items-center gap-2">
+          <div className="space-y-3.5">
+            <Button
+              className="h-[52px] w-full rounded-md bg-[#2563eb] text-base font-semibold text-white hover:bg-[#1d4ed8]"
+              disabled={!lineLoginEnabled}
+              onClick={() => {
+                window.location.href = "/api/member-portal/auth/line/start"
+              }}
+            >
+              <span className="inline-flex items-center gap-2 text-[15px]">
+                <span className="scale-90">
                   <LineLogo />
-                  {lineLoginEnabled ? t("lineBtnWithLogo") : t("lineLoginPreparing")}
                 </span>
-              </Button>
-            </div>
+                {lineLoginEnabled ? t("lineBtnWithLogo") : t("lineLoginPreparing")}
+              </span>
+            </Button>
 
-            <div className="rounded-3xl border border-pink-200/20 bg-white/[0.05] p-5 backdrop-blur-md">
-              <div className="mb-2 flex items-center gap-2">
-                <UserPlus className="h-4 w-4 text-pink-200" />
-                <h2 className="font-medium">{t("signupTitle")}</h2>
-              </div>
-              <p className="mt-1 text-xs text-white/45">{t("signupDesc")}</p>
-              <div className="mt-4 space-y-3">
+            <button
+              type="button"
+              onClick={() => setAuthPanel((prev) => (prev === "signup" ? null : "signup"))}
+              className="h-[52px] w-full rounded-md bg-[#ef233c] px-4 text-base font-semibold text-white transition hover:bg-[#d90429]"
+            >
+              {t("signupBtn")}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAuthPanel((prev) => (prev === "login" ? null : "login"))}
+              className="h-[52px] w-full rounded-md border border-[#d9d9d9] bg-white px-4 text-base font-medium text-[#222] transition hover:bg-[#f8f8f8]"
+            >
+              {t("loginBtn")}
+            </button>
+          </div>
+
+          {authPanel === "signup" ? (
+            <div className="mt-4 rounded-2xl border border-[#ececec] bg-white p-4">
+              <p className="mb-3 text-sm font-medium text-[#333]">{t("signupTitle")}</p>
+              <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("signupNameLabel")}</Label>
+                  <Label className="text-[#555]">{t("signupNameLabel")}</Label>
                   <Input
                     value={signupName}
                     onChange={(e) => setSignupName(e.target.value)}
                     placeholder={t("signupNameLabel")}
-                    className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-white/30"
+                    className="h-11 rounded-xl border-[#ddd] bg-white text-[#222] placeholder:text-[#999]"
                   />
                 </div>
-                <Button
-                  onClick={signupWithPhoneBirth}
-                  disabled={actionLoading || !signupName.trim() || !normalizeMemberPhone(phone) || !birthDateReady}
-                  className="h-12 w-full rounded-2xl bg-pink-300 text-base font-medium text-[#2c1022] hover:bg-pink-200"
-                >
-                  {actionLoading ? t("signupChecking") : t("signupBtn")}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 px-2 text-xs text-white/35">
-              <span className="h-px flex-1 bg-white/10" />
-              <span>{t("signup_or")}</span>
-              <span className="h-px flex-1 bg-white/10" />
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
-              <h2 className="font-medium">{t("phoneBirthTitle")}</h2>
-              <p className="mt-1 text-xs text-white/45">{t("phoneBirthDesc")}</p>
-              <div className="mt-4 space-y-3">
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("phoneLabel")}</Label>
+                  <Label className="text-[#555]">{t("phoneLabel")}</Label>
                   <Input
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="0812345678"
                     inputMode="tel"
-                    className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-white/30"
+                    className="h-11 rounded-xl border-[#ddd] bg-white text-[#222] placeholder:text-[#999]"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("birthDateLabel")}</Label>
+                  <Label className="text-[#555]">{t("birthDateLabel")}</Label>
+                  <BirthDateFields value={birthDate} onChange={setBirthDate} />
+                </div>
+                <Button
+                  onClick={signupWithPhoneBirth}
+                  disabled={actionLoading || !signupName.trim() || !normalizeMemberPhone(phone) || !birthDateReady}
+                  className="h-11 w-full rounded-lg bg-[#ef233c] text-base font-semibold text-white hover:bg-[#d90429]"
+                >
+                  {actionLoading ? t("signupChecking") : t("signupBtn")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {authPanel === "login" ? (
+            <div className="mt-4 rounded-2xl border border-[#ececec] bg-white p-4">
+              <p className="mb-3 text-sm font-medium text-[#333]">{t("phoneBirthTitle")}</p>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[#555]">{t("phoneLabel")}</Label>
+                  <Input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="0812345678"
+                    inputMode="tel"
+                    className="h-11 rounded-xl border-[#ddd] bg-white text-[#222] placeholder:text-[#999]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[#555]">{t("birthDateLabel")}</Label>
                   <BirthDateFields value={birthDate} onChange={setBirthDate} />
                 </div>
                 <Button
                   onClick={loginWithPhoneBirth}
                   disabled={actionLoading || !normalizeMemberPhone(phone) || !birthDateReady}
-                  className="h-12 w-full rounded-2xl bg-amber-400 text-base font-medium text-black hover:bg-amber-300"
+                  className="h-11 w-full rounded-lg border border-[#d9d9d9] bg-white text-base font-semibold text-[#222] hover:bg-[#f8f8f8]"
                 >
                   {actionLoading ? t("loginChecking") : t("loginBtn")}
                 </Button>
               </div>
             </div>
+          ) : null}
+
+          <div className="mt-auto pt-12 text-center">
+            <button
+              type="button"
+              className="text-[18px] font-medium text-[#d72c47] transition hover:opacity-80"
+              onClick={() => {
+                setContactMenuOpen(true)
+              }}
+            >
+              {t("footerContactUs")}
+            </button>
+            <p className="mt-4 text-[12px] leading-relaxed text-[#8a8a8a]">
+              {t("footerLegalIntro")}{" "}
+              <button
+                type="button"
+                className="text-[#d72c47] underline underline-offset-2"
+                onClick={() => {
+                  window.location.href = "/m/terms"
+                }}
+              >
+                {t("footerTerms")}
+              </button>{" "}
+              /{" "}
+              <button
+                type="button"
+                className="text-[#d72c47] underline underline-offset-2"
+                onClick={() => {
+                  window.location.href = "/m/privacy"
+                }}
+              >
+                {t("footerPrivacyPolicy")}
+              </button>
+              .
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-[#9a9a9a]">{t("footerPrivacy")}</p>
           </div>
 
-          <p className="mt-auto pt-10 text-center text-[11px] leading-relaxed text-white/30">
-            {t("footerPrivacy")}
-          </p>
+          {contactMenuOpen ? (
+            <div className="fixed inset-0 z-50 flex items-end bg-black/35">
+              <button
+                type="button"
+                className="absolute inset-0"
+                aria-label="close contact menu"
+                onClick={() => setContactMenuOpen(false)}
+              />
+              <div className="relative w-full rounded-t-3xl bg-white px-5 pb-8 pt-5 shadow-2xl">
+                <p className="mb-4 text-center text-sm font-medium text-[#333]">{t("contactMenuTitle")}</p>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    className="h-12 w-full rounded-lg bg-[#1877F2] text-sm font-semibold text-white"
+                    onClick={() => {
+                      window.open(brand.memberContactFacebookUrl, "_blank")
+                      setContactMenuOpen(false)
+                    }}
+                  >
+                    {t("contactViaFacebook")}
+                  </button>
+                  <button
+                    type="button"
+                    className="h-12 w-full rounded-lg bg-[#E1306C] text-sm font-semibold text-white"
+                    onClick={() => {
+                      window.open(brand.memberContactInstagramUrl, "_blank")
+                      setContactMenuOpen(false)
+                    }}
+                  >
+                    {t("contactViaInstagram")}
+                  </button>
+                  <button
+                    type="button"
+                    className="h-11 w-full rounded-lg border border-[#ddd] bg-white text-sm font-medium text-[#222]"
+                    onClick={() => setContactMenuOpen(false)}
+                  >
+                    {t("contactMenuClose")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     )
@@ -629,6 +816,56 @@ export function MemberPortalApp() {
               <StatTile icon={Gift} label={t("statPointsEarned")} value={formatPoints(dashboard.stats.pointsEarnedTotal)} />
             </div>
 
+            {homePopup ? (
+              <div className="rounded-3xl border border-fuchsia-300/25 bg-fuchsia-400/10 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-fuchsia-100">{homePopup.title || t("memberLounge")}</p>
+                    {homePopup.body ? <p className="mt-1 text-xs text-fuchsia-50/85">{homePopup.body}</p> : null}
+                  </div>
+                  <Sparkles className="h-5 w-5 text-fuchsia-200" />
+                </div>
+                {homePopup.imageUrl ? (
+                  <img
+                    src={homePopup.imageUrl}
+                    alt={homePopup.title || "popup"}
+                    className="mt-3 h-32 w-full rounded-2xl object-cover"
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+              <div className="mb-3">
+                <p className="text-sm font-medium">{t("quickOrderTitle")}</p>
+                <p className="mt-1 text-xs text-white/45">{t("quickOrderDesc")}</p>
+                {favoriteStore ? (
+                  <p className="mt-2 text-xs text-amber-300/90">
+                    {t("quickOrderStoreHint", { store: favoriteStore.displayName })}
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => {
+                    window.location.href = buildPosHref("pickup")
+                  }}
+                  className="h-11 rounded-2xl bg-amber-400 text-sm font-medium text-black hover:bg-amber-300"
+                >
+                  {t("quickOrderPickup")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    window.location.href = buildPosHref("delivery")
+                  }}
+                  className="h-11 rounded-2xl border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                >
+                  {t("quickOrderDelivery")}
+                </Button>
+              </div>
+            </div>
+
             <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-amber-400/10 to-transparent p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -649,7 +886,7 @@ export function MemberPortalApp() {
 
             <button
               type="button"
-              onClick={() => setTab("history")}
+              onClick={() => setTab("privilege")}
               className="flex w-full items-center justify-between rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-4 text-left transition hover:bg-white/[0.05]"
             >
               <div>
@@ -660,14 +897,162 @@ export function MemberPortalApp() {
               </div>
               <ChevronRight className="h-5 w-5 text-white/35" />
             </button>
+
+            {homeInfoItems.length > 0 ? (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+                <p className="mb-3 text-sm font-medium">업데이트</p>
+                <div className="space-y-2">
+                  {homeInfoItems.map((item) => (
+                    <div key={item.contentKey} className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                      <p className="text-sm text-white/90">{item.title || "안내"}</p>
+                      {item.body ? <p className="mt-0.5 text-xs text-white/55">{item.body}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
-        {tab === "coupons" && (
+        {tab === "order" && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">{t("orderTitle")}</h2>
+              <p className="text-sm text-white/45">{t("orderDesc")}</p>
+            </div>
+            <div className="grid gap-3">
+              <Button
+                onClick={() => {
+                  window.location.href = buildPosHref("pickup")
+                }}
+                className="h-12 rounded-2xl bg-amber-400 text-base font-medium text-black hover:bg-amber-300"
+              >
+                {t("orderPickupBtn")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.href = buildPosHref("delivery")
+                }}
+                className="h-12 rounded-2xl border-white/20 bg-white/5 text-white hover:bg-white/10"
+              >
+                {t("orderDeliveryBtn")}
+              </Button>
+            </div>
+            {favoriteStore ? (
+              <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+                {t("quickOrderStoreHint", { store: favoriteStore.displayName })}
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {tab === "location" && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">{t("locationTitle")}</h2>
+              <p className="text-sm text-white/45">{t("locationDesc")}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-white/45" />
+                <Input
+                  value={locationSearch}
+                  onChange={(e) => setLocationSearch(e.target.value)}
+                  placeholder={t("locationSearchPh")}
+                  className="h-8 border-0 bg-transparent px-0 text-sm text-white placeholder:text-white/40 focus-visible:ring-0"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              {filteredStores.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-white/20 bg-white/[0.03] px-5 py-14 text-center">
+                  <MapPin className="mx-auto mb-3 h-7 w-7 text-amber-300/80" />
+                  <p className="text-sm text-white/70">
+                    {stores.length > 0 ? t("locationNoResult") : t("locationComing")}
+                  </p>
+                </div>
+              ) : (
+                filteredStores.map((s) => (
+                  <div
+                    key={s.storeCode}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                  >
+                    {storePhotoMap.get(s.storeCode) ? (
+                      <img
+                        src={storePhotoMap.get(s.storeCode)}
+                        alt={s.displayName}
+                        className="mb-3 h-28 w-full rounded-xl object-cover"
+                      />
+                    ) : null}
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{s.displayName}</p>
+                        <p className="text-xs text-white/45">
+                          {t("locationCode")} · {s.storeCode}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const q = encodeURIComponent(s.mapQuery || s.displayName)
+                          window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank")
+                        }}
+                        className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {t("locationOpenMap")}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFavoriteStoreCode(s.storeCode)
+                        try {
+                          localStorage.setItem("cm_member_favorite_store", s.storeCode)
+                        } catch {
+                          /* ignore */
+                        }
+                        void postJson<{ success: boolean }>("/api/member-portal/preferences/favorite-store", {
+                          storeCode: s.storeCode,
+                        }).catch(() => {})
+                        setNotice(t("locationFavoriteSaved"))
+                      }}
+                      className={`mt-2 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
+                        favoriteStoreCode === s.storeCode
+                          ? "border-amber-300/40 bg-amber-300/15 text-amber-100"
+                          : "border-white/15 bg-white/5 text-white/80 hover:bg-white/10"
+                      }`}
+                    >
+                      <Star className={`h-3.5 w-3.5 ${favoriteStoreCode === s.storeCode ? "fill-current" : ""}`} />
+                      {favoriteStoreCode === s.storeCode ? t("locationFavorite") : t("locationFavoriteSet")}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === "privilege" && (
           <div className="space-y-3">
             <div className="mb-1">
-              <h2 className="text-lg font-semibold">{t("couponsTitle")}</h2>
-              <p className="text-sm text-white/45">{t("couponsSub")}</p>
+              <h2 className="text-lg font-semibold">{t("privilegeTitle")}</h2>
+              <p className="text-sm text-white/45">{t("privilegeDesc")}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
+                <p className="text-xs text-white/45">{t("statCoupons")}</p>
+                <p className="mt-1 text-lg font-semibold">{dashboard.stats.availableCoupons}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
+                <p className="text-xs text-white/45">{t("points")}</p>
+                <p className="mt-1 text-lg font-semibold">{formatPoints(member.pointBalance || 0)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
+                <p className="text-xs text-white/45">{t("statVisits")}</p>
+                <p className="mt-1 text-lg font-semibold">{dashboard.stats.visitCount}</p>
+              </div>
             </div>
             {coupons.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-white/10 px-5 py-12 text-center text-white/45">
@@ -704,11 +1089,6 @@ export function MemberPortalApp() {
                 </div>
               ))
             )}
-          </div>
-        )}
-
-        {tab === "history" && (
-          <div className="space-y-5">
             <div>
               <h2 className="text-lg font-semibold">{t("historyTitle")}</h2>
               <p className="text-sm text-white/45">{t("historySub")}</p>
@@ -767,7 +1147,7 @@ export function MemberPortalApp() {
           </div>
         )}
 
-        {tab === "profile" && (
+        {tab === "me" && (
           <div className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold">{t("profileTitle")}</h2>

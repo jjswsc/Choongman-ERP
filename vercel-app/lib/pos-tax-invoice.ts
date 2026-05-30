@@ -1,3 +1,5 @@
+import { stripPosSplitReceiptsMarker } from '@/lib/pos-split-receipt-memo'
+
 /** POS 세금계산서 수취인 마스터 DB `store_code` — 전 매장 공유 풀 */
 export const POS_TAX_INVOICE_SHARED_STORE_CODE = '__shared__'
 
@@ -113,7 +115,7 @@ function stripInternalMemoLine(line: string): string {
 }
 
 function stripPosInternalMemoTokens(input: string): string {
-  let text = String(input || '').trim()
+  let text = stripPosSplitReceiptsMarker(String(input || '').trim())
   if (!text) return ''
   // 플랫폼·POS 내부 추적 토큰은 손님 메모에서 숨긴다.
   text = text

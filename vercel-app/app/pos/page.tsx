@@ -69,6 +69,11 @@ function POSMainPageInner() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const preferredStoreFromQuery = useMemo(
+    () => String(searchParams.get('store') || '').trim(),
+    [searchParams]
+  )
+  const queryStoreAppliedRef = useRef('')
 
   const selectableStoreCodes = useMemo(() => {
     const list = stores
@@ -180,6 +185,19 @@ function POSMainPageInner() {
     return found || list[0] || a || ''
   }, [selectableStoreCodes, auth?.store, stores, resolveStoreKey])
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
+
+  useEffect(() => {
+    const preferred = preferredStoreFromQuery
+    if (!auth || !preferred) return
+    if (queryStoreAppliedRef.current === preferred) return
+    const targetStore = selectableStoreCodes.find(
+      (s) => s === preferred || resolveStoreKey(s) === resolveStoreKey(preferred)
+    )
+    if (!targetStore) return
+    queryStoreAppliedRef.current = preferred
+    if ((auth.store || '').trim() === targetStore) return
+    setAuth({ ...auth, store: targetStore })
+  }, [auth, preferredStoreFromQuery, selectableStoreCodes, resolveStoreKey, setAuth])
 
   const handlePosHomeStoreChange = useCallback(
     (nextId: string) => {

@@ -1,4 +1,4 @@
-import { buildLegacyToCanonicalMap, fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { buildLegacyToCanonicalMap, fetchErpStoresMaster, type ErpStoreMasterRow } from '@/lib/erp-store-master'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
@@ -104,6 +104,33 @@ function isOfficeEquivalentStore(a: string, b: string): boolean {
   return isHeadOfficeLikeStoreName(aa) && isHeadOfficeLikeStoreName(bb)
 }
 
+/** store_code 기준 display_name·별칭·레거시 키 — VAT 원장 store_name(표시명·location) 매칭용 */
+export function buildStoreScopeAliasKeys(
+  storeCode: string,
+  masters: ErpStoreMasterRow[],
+  legacyToCanonical: Record<string, string>
+): string[] {
+  const code = String(storeCode || '').trim()
+  if (!code) return []
+  const keys = new Set<string>([code])
+  for (const row of masters || []) {
+    if (String(row.store_code || '').trim() !== code) continue
+    const dn = String(row.display_name || '').trim()
+    if (dn) keys.add(dn)
+    for (const alias of row.aliases || []) {
+      const a = String(alias || '').trim()
+      if (a) keys.add(a)
+    }
+  }
+  for (const [legacy, canon] of Object.entries(legacyToCanonical || {})) {
+    if (String(canon || '').trim() === code) {
+      const leg = String(legacy || '').trim()
+      if (leg) keys.add(leg)
+    }
+  }
+  return Array.from(keys)
+}
+
 export async function createAccountingStoreScopeMatcher(storeFilter?: string | null) {
   const requested = normalizeStoreFilter(storeFilter)
   if (!requested) {
@@ -115,14 +142,17 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
   }
 
   let legacyToCanonical: Record<string, string> = {}
+  let masters: ErpStoreMasterRow[] = []
   try {
-    const masters = await fetchErpStoresMaster()
+    masters = await fetchErpStoresMaster()
     legacyToCanonical = buildLegacyToCanonicalMap(masters || [])
   } catch {
     legacyToCanonical = {}
+    masters = []
   }
 
   const requestedCanonical = canonicalizeStoreName(requested, legacyToCanonical)
+  const aliasKeys = buildStoreScopeAliasKeys(requestedCanonical || requested, masters, legacyToCanonical)
 
   return {
     requested,
@@ -138,6 +168,9 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
       if (storesMatchForGradeLookup(rowStore, requested)) return true
       if (requestedCanonical && storesMatchForGradeLookup(rowStore, requestedCanonical)) return true
       if (rowCanonical && storesMatchForGradeLookup(rowCanonical, requested)) return true
+      for (const key of aliasKeys) {
+        if (storesMatchForGradeLookup(rowStore, key)) return true
+      }
       return false
     },
   }

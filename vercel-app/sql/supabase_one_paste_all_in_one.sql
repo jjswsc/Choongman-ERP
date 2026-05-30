@@ -1,4 +1,20 @@
 -- ============================================================
+-- supabase_one_paste_all_in_one.sql  (auto-generated)
+-- Supabase SQL Editor: paste entire file and Run (UTF-8)
+--
+-- Regenerate: vercel-app/scripts/build-supabase-one-paste-all-in-one.ps1
+-- Guide: vercel-app/sql/SUPABASE_EDITOR_RUNBOOK.md
+--
+-- Includes: accounting, tax, POS, settlements, CRM, member portal, RPCs
+-- Excludes: diagnostic SELECTs, K/T menu code recovery (run separately)
+-- ============================================================
+
+-- ============================================================
+-- 1 accounting pos core
+-- source: sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql
+-- ============================================================
+
+-- ============================================================
 -- supabase_one_paste_accounting_and_pos_printer_cut_clean.sql
 -- Supabase SQL Editor에서 이 파일 전체를 한 번에 실행 (UTF-8)
 --
@@ -1156,3 +1172,1167 @@ UPDATE public.pos_menu_options o
 SET option_code = nc.next_option_code
 FROM new_codes nc
 WHERE o.id = nc.id;
+
+
+-- ============================================================
+-- 8 pos_settlements
+-- source: sql/pos_settlements_bootstrap.sql
+-- ============================================================
+
+-- ============================================================
+-- pos_settlements_bootstrap.sql
+-- POS 일별 결산 테이블 + RLS + upsert 인덱스
+-- Supabase SQL Editor에서 이 파일만 실행 (재실행 가능)
+--
+-- 컬럼 누락(PGRST204 cash_amt 등): pos_settlements_align_app_columns.sql 추가 실행
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.pos_settlements (
+  id BIGSERIAL PRIMARY KEY,
+  store_code TEXT NOT NULL DEFAULT '',
+  settle_date DATE NOT NULL,
+  cash_actual NUMERIC(12,2) DEFAULT NULL,
+  cash_actual_denoms JSONB DEFAULT NULL,
+  cash_amt NUMERIC(12,2) DEFAULT 0,
+  card_amt NUMERIC(12,2) DEFAULT 0,
+  card_breakdown JSONB DEFAULT '{}'::jsonb,
+  qr_amt NUMERIC(12,2) DEFAULT 0,
+  qr_breakdown JSONB DEFAULT '{}'::jsonb,
+  delivery_app_amt NUMERIC(12,2) DEFAULT 0,
+  delivery_app_breakdown JSONB DEFAULT '{}'::jsonb,
+  dine_in_delivery_amt NUMERIC(12,2) DEFAULT 0,
+  dine_in_delivery_breakdown JSONB DEFAULT '{}'::jsonb,
+  other_amt NUMERIC(12,2) DEFAULT 0,
+  other_breakdown JSONB DEFAULT '{}'::jsonb,
+  memo TEXT DEFAULT '',
+  closed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (store_code, settle_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_settlements_store ON public.pos_settlements(store_code);
+CREATE INDEX IF NOT EXISTS idx_pos_settlements_date ON public.pos_settlements(settle_date);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_settlements_store_date
+  ON public.pos_settlements (store_code, settle_date);
+
+ALTER TABLE public.pos_settlements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for pos_settlements" ON public.pos_settlements;
+DROP POLICY IF EXISTS "Allow all for anon" ON public.pos_settlements;
+CREATE POLICY "Allow all for pos_settlements"
+  ON public.pos_settlements
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS idx_pos_orders_store_created_at
+  ON public.pos_orders (store_code, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_pos_orders_status_store_created_at
+  ON public.pos_orders (status, store_code, created_at);
+
+
+-- ============================================================
+-- 9 pos_orders RLS
+-- source: sql/pos_orders_rls_bootstrap.sql
+-- ============================================================
+
+-- ============================================================
+-- pos_orders_rls_bootstrap.sql
+-- RLS가 켜져 있는데 정책이 없어 POS 조회/저장이 막힐 때 실행
+-- (증상: 주문·테이블·메뉴 목록이 빈 배열, INSERT/UPDATE 실패)
+-- 재실행 가능
+-- ============================================================
+
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'pos_orders', 'pos_table_layouts', 'pos_menus', 'pos_menu_options',
+    'pos_menu_ingredients', 'pos_promos', 'pos_promo_items'
+  ] LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    END IF;
+  END LOOP;
+END $$;
+
+DROP POLICY IF EXISTS "Allow select pos_orders" ON public.pos_orders;
+CREATE POLICY "Allow select pos_orders" ON public.pos_orders
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow insert pos_orders" ON public.pos_orders;
+CREATE POLICY "Allow insert pos_orders" ON public.pos_orders
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow update pos_orders" ON public.pos_orders;
+CREATE POLICY "Allow update pos_orders" ON public.pos_orders
+  FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow select pos_table_layouts" ON public.pos_table_layouts;
+CREATE POLICY "Allow select pos_table_layouts" ON public.pos_table_layouts
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow select pos_menus" ON public.pos_menus;
+CREATE POLICY "Allow select pos_menus" ON public.pos_menus
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow select pos_menu_options" ON public.pos_menu_options;
+CREATE POLICY "Allow select pos_menu_options" ON public.pos_menu_options
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow select pos_menu_ingredients" ON public.pos_menu_ingredients;
+CREATE POLICY "Allow select pos_menu_ingredients" ON public.pos_menu_ingredients
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow select pos_promos" ON public.pos_promos;
+CREATE POLICY "Allow select pos_promos" ON public.pos_promos
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow select pos_promo_items" ON public.pos_promo_items;
+CREATE POLICY "Allow select pos_promo_items" ON public.pos_promo_items
+  FOR SELECT USING (true);
+
+
+-- ============================================================
+-- 10 account_subjects 5528 5529
+-- source: sql/account_subjects_delivery_card_fee.sql
+-- ============================================================
+
+-- 지출관리: 배달앱 수수료 / 카드 수수료 계정과목 (없을 때만 삽입)
+-- Supabase SQL Editor에서 실행
+
+INSERT INTO public.account_subjects (code, name, name_en, type, p_and_l_section, sort_order) VALUES
+  ('5528', '배달앱수수료', 'Delivery Fee', 'expense', 'expense', 137),
+  ('5529', '카드수수료', 'Card Fee', 'expense', 'expense', 138)
+ON CONFLICT (code) DO NOTHING;
+
+-- 기존 DB에 코드만 있고 영문명이 다를 때 표시명 정리 (선택)
+UPDATE public.account_subjects
+SET
+  name = '배달앱수수료',
+  name_en = 'Delivery Fee',
+  type = 'expense',
+  p_and_l_section = 'expense',
+  sort_order = 137
+WHERE code = '5528'
+  AND (name_en IS DISTINCT FROM 'Delivery Fee' OR p_and_l_section IS DISTINCT FROM 'expense');
+
+UPDATE public.account_subjects
+SET
+  name = '카드수수료',
+  name_en = 'Card Fee',
+  type = 'expense',
+  p_and_l_section = 'expense',
+  sort_order = 138
+WHERE code = '5529'
+  AND (name_en IS DISTINCT FROM 'Card Fee' OR p_and_l_section IS DISTINCT FROM 'expense');
+
+
+-- ============================================================
+-- 11 channel settlement
+-- source: sql/pos_channel_settlement_deploy_one_paste.sql
+-- ============================================================
+
+-- 채널 정산·플랫폼 % 배포 (Supabase SQL Editor에 이 파일만 순서대로 실행)
+-- 오류 "column o.card_fee_amt does not exist" → 아래 1)을 먼저 실행하지 않은 경우
+
+-- 1) POS 주문 카드 수수료 스냅샷 컬럼
+ALTER TABLE IF EXISTS public.pos_orders
+  ADD COLUMN IF NOT EXISTS card_fee_amt NUMERIC(14, 2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS card_fee_mode TEXT NULL,
+  ADD COLUMN IF NOT EXISTS card_rate NUMERIC(8, 4) DEFAULT 0;
+
+-- 2) 배달앱 플랫폼 정산 % 컬럼
+ALTER TABLE IF EXISTS public.pos_delivery_app_policies
+  ADD COLUMN IF NOT EXISTS settlement_fee_pct NUMERIC(5, 2) NULL;
+
+-- 3) 전 매장 Grab 20% / LINE MAN 18% / Shopee 13%
+WITH store_list AS (
+  SELECT DISTINCT trim(store_code) AS store_code
+  FROM (
+    SELECT store_code FROM public.erp_stores WHERE coalesce(is_active, true)
+    UNION ALL
+    SELECT store_code FROM public.pos_delivery_app_policies
+    UNION ALL
+    SELECT store_code FROM public.pos_orders WHERE trim(coalesce(store_code, '')) <> ''
+    UNION ALL
+    SELECT trim(store) AS store_code
+    FROM public.employees
+    WHERE trim(coalesce(store, '')) <> ''
+  ) u
+  WHERE trim(store_code) <> ''
+    AND lower(trim(store_code)) NOT IN ('all', '전체')
+),
+app_rates (app_code, settlement_fee_pct) AS (
+  VALUES
+    ('grab', 20.00::numeric),
+    ('lineman', 18.00::numeric),
+    ('shopee', 13.00::numeric)
+)
+INSERT INTO public.pos_delivery_app_policies (
+  store_code,
+  app_code,
+  enabled,
+  order_acceptance_mode,
+  settlement_fee_pct,
+  updated_at
+)
+SELECT
+  s.store_code,
+  r.app_code,
+  true,
+  'manual',
+  r.settlement_fee_pct,
+  now()
+FROM store_list s
+CROSS JOIN app_rates r
+ON CONFLICT (store_code, app_code)
+DO UPDATE SET
+  settlement_fee_pct = EXCLUDED.settlement_fee_pct,
+  updated_at = now();
+
+-- 4) 채널 정산 테이블
+CREATE TABLE IF NOT EXISTS public.pos_channel_settlements (
+  id BIGSERIAL PRIMARY KEY,
+  store_code TEXT NOT NULL,
+  settle_date DATE NOT NULL,
+  channel TEXT NOT NULL,
+  gross_amt NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (gross_amt >= 0),
+  fee_amt NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (fee_amt >= 0),
+  net_amt NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (net_amt >= 0),
+  fee_source TEXT NULL,
+  memo TEXT NULL,
+  bank_transaction_id BIGINT NULL,
+  journal_entry_id BIGINT NULL,
+  posted_by TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (store_code, settle_date, channel)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_channel_settlements_store_date
+  ON public.pos_channel_settlements (store_code, settle_date);
+
+-- 5) GROSS RPC (card_fee_amt 컬럼 필요 → 1) 선행)
+CREATE OR REPLACE FUNCTION public.get_pos_channel_settlement_gross(
+  p_store_code TEXT,
+  p_settle_date DATE,
+  p_channel TEXT
+)
+RETURNS TABLE (
+  gross NUMERIC,
+  order_count BIGINT,
+  card_fee_total NUMERIC
+)
+LANGUAGE sql
+STABLE
+AS $$
+  WITH orders AS (
+    SELECT
+      o.payment_card,
+      o.payment_delivery_app,
+      o.delivery_app_code,
+      COALESCE(o.card_fee_amt, 0)::numeric AS card_fee_amt
+    FROM public.pos_orders o
+    WHERE o.store_code = p_store_code
+      AND (o.created_at AT TIME ZONE 'Asia/Bangkok')::date = p_settle_date
+      AND lower(coalesce(o.status, '')) IN ('paid', 'preparing', 'cooking', 'ready', 'completed')
+  )
+  SELECT
+    CASE lower(trim(coalesce(p_channel, '')))
+      WHEN 'card' THEN COALESCE(SUM(GREATEST(payment_card, 0)), 0)::numeric
+      WHEN 'grab' THEN COALESCE(SUM(
+        CASE
+          WHEN GREATEST(payment_delivery_app, 0) > 0
+            AND lower(coalesce(delivery_app_code, '')) LIKE '%grab%'
+          THEN GREATEST(payment_delivery_app, 0)
+          ELSE 0
+        END
+      ), 0)::numeric
+      WHEN 'lineman' THEN COALESCE(SUM(
+        CASE
+          WHEN GREATEST(payment_delivery_app, 0) > 0
+            AND (
+              lower(coalesce(delivery_app_code, '')) LIKE '%line%'
+              OR lower(coalesce(delivery_app_code, '')) LIKE '%lineman%'
+            )
+          THEN GREATEST(payment_delivery_app, 0)
+          ELSE 0
+        END
+      ), 0)::numeric
+      WHEN 'shopee' THEN COALESCE(SUM(
+        CASE
+          WHEN GREATEST(payment_delivery_app, 0) > 0
+            AND lower(coalesce(delivery_app_code, '')) LIKE '%shopee%'
+          THEN GREATEST(payment_delivery_app, 0)
+          ELSE 0
+        END
+      ), 0)::numeric
+      WHEN 'delivery_all' THEN COALESCE(SUM(GREATEST(payment_delivery_app, 0)), 0)::numeric
+      ELSE 0::numeric
+    END AS gross,
+    COUNT(*)::bigint AS order_count,
+    CASE lower(trim(coalesce(p_channel, '')))
+      WHEN 'card' THEN COALESCE(SUM(GREATEST(card_fee_amt, 0)), 0)::numeric
+      ELSE 0::numeric
+    END AS card_fee_total
+  FROM orders;
+$$;
+
+
+-- ============================================================
+-- 12 sell_hall delivery packaging
+-- source: sql/pos_menus_sell_channels.sql
+-- ============================================================
+
+-- POS 메뉴 채널 노출 플래그(홀/배달/포장)
+-- 메뉴 정보 체크박스 + 메뉴 화면 구성 유형 필터 연동용
+
+alter table if exists public.pos_menus
+  add column if not exists sell_hall boolean not null default true;
+
+alter table if exists public.pos_menus
+  add column if not exists sell_delivery boolean not null default true;
+
+alter table if exists public.pos_menus
+  add column if not exists sell_packaging boolean not null default true;
+
+comment on column public.pos_menus.sell_hall is '메뉴를 홀(매장 주문)에서 노출/판매할지 여부';
+comment on column public.pos_menus.sell_delivery is '메뉴를 배달 주문에서 노출/판매할지 여부';
+comment on column public.pos_menus.sell_packaging is '메뉴를 포장 주문에서 노출/판매할지 여부';
+
+
+-- ============================================================
+-- 13 drawer pin
+-- source: sql/pos_printer_settings_drawer_pin.sql
+-- ============================================================
+
+-- 금전 서랍(돈통) 6자리 PIN — 매장별 pos_printer_settings
+-- Supabase SQL Editor에서 실행 (idempotent).
+
+ALTER TABLE IF EXISTS public.pos_printer_settings
+  ADD COLUMN IF NOT EXISTS drawer_pin_hash TEXT NULL;
+
+COMMENT ON COLUMN public.pos_printer_settings.drawer_pin_hash IS '금전 서랍 수동/업무 오픈용 6자리 PIN bcrypt 해시. NULL이면 PIN 미설정(기존 동작).';
+
+
+-- ============================================================
+-- 13b customer display lang
+-- source: sql/pos_dual_monitor_language_override.sql
+-- ============================================================
+
+-- 고객화면 언어: POS 언어 따라감 / 고객화면만 별도 고정
+ALTER TABLE public.pos_printer_settings
+  ADD COLUMN IF NOT EXISTS customer_display_lang_mode TEXT DEFAULT 'follow-pos',
+  ADD COLUMN IF NOT EXISTS customer_display_lang_override TEXT DEFAULT '';
+
+COMMENT ON COLUMN public.pos_printer_settings.customer_display_lang_mode IS 'follow-pos | custom';
+COMMENT ON COLUMN public.pos_printer_settings.customer_display_lang_override IS 'ko | en | th | mm | la | kh | vi | ms';
+
+
+-- ============================================================
+-- 14 banban flavor links
+-- source: sql/pos_banban_flavor_links.sql
+-- ============================================================
+
+-- 반반 메뉴별 허용 맛(메뉴) whitelist
+-- - 반반 메뉴와 일반 맛 메뉴를 직접 연결한다.
+-- - 실제 반반 맛은 옵션 문자열이 아니라 pos_menus 행을 참조한다.
+
+create table if not exists public.pos_banban_flavor_links (
+  id bigserial primary key,
+  banban_menu_id bigint not null references public.pos_menus(id) on delete cascade,
+  flavor_menu_id bigint not null references public.pos_menus(id) on delete cascade,
+  sort_order integer not null default 0,
+  enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint pos_banban_flavor_links_unique unique (banban_menu_id, flavor_menu_id),
+  constraint pos_banban_flavor_links_not_self check (banban_menu_id <> flavor_menu_id)
+);
+
+create index if not exists idx_pos_banban_flavor_links_banban_sort
+  on public.pos_banban_flavor_links (banban_menu_id, sort_order asc, flavor_menu_id asc);
+
+create index if not exists idx_pos_banban_flavor_links_flavor
+  on public.pos_banban_flavor_links (flavor_menu_id, banban_menu_id);
+
+create or replace function public.set_row_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_pos_banban_flavor_links_updated_at on public.pos_banban_flavor_links;
+create trigger trg_pos_banban_flavor_links_updated_at
+before update on public.pos_banban_flavor_links
+for each row execute function public.set_row_updated_at();
+
+alter table public.pos_banban_flavor_links enable row level security;
+
+drop policy if exists "pos_banban_flavor_links_allow_public" on public.pos_banban_flavor_links;
+create policy "pos_banban_flavor_links_allow_public"
+  on public.pos_banban_flavor_links
+  as permissive
+  for all
+  to public
+  using (true)
+  with check (true);
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on table public.pos_banban_flavor_links to anon, authenticated;
+grant usage, select on sequence public.pos_banban_flavor_links_id_seq to anon, authenticated;
+
+
+-- ============================================================
+-- 15 payment method items
+-- source: scripts/pos_payment_method_items.sql
+-- ============================================================
+
+-- POS 결제 수단 항목 (카드수기입력 항목관리)
+-- 관리자 > POS 화면 구성 > 결제 기능에서 추가/수정/숨김
+-- store_code null = 전역(모든 매장 공통)
+create table if not exists public.pos_payment_method_items (
+  id bigint generated by default as identity primary key,
+  store_code text,
+  category text not null default 'other' check (category in ('card', 'qr', 'delivery', 'other')),
+  name text not null,
+  hidden boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_pos_payment_method_items_store on public.pos_payment_method_items(store_code);
+create index if not exists idx_pos_payment_method_items_category on public.pos_payment_method_items(category);
+
+-- 시드: 기본 항목 (글로벌) - 테이블 비어있을 때만
+insert into public.pos_payment_method_items (store_code, category, name, hidden, sort_order)
+select * from (values
+  (null::text, 'card', 'Visa', false, 1),
+  (null, 'card', 'Master', false, 2),
+  (null, 'card', 'Amex', false, 3),
+  (null, 'card', 'JCB', false, 4),
+  (null, 'card', 'Other', false, 99),
+  (null, 'qr', 'TrueMoney', false, 1),
+  (null, 'qr', 'WeChat', false, 2),
+  (null, 'qr', 'Alipay', false, 3),
+  (null, 'qr', 'UnionPay', false, 4),
+  (null, 'qr', 'PromptPay', false, 5),
+  (null, 'qr', 'LINE Pay', false, 6),
+  (null, 'qr', 'Shopee Pay', false, 7),
+  (null, 'qr', 'Other', false, 99),
+  (null, 'delivery', 'Grab', false, 1),
+  (null, 'delivery', 'Line Man', false, 2),
+  (null, 'delivery', 'Shopee', false, 3),
+  (null, 'delivery', 'Other', false, 99),
+  (null, 'other', 'Gift Voucher', false, 1),
+  (null, 'other', 'Online Banking', false, 2),
+  (null, 'other', 'Other', false, 99)
+) v(store_code, category, name, hidden, sort_order)
+where not exists (select 1 from public.pos_payment_method_items limit 1);
+
+
+-- ============================================================
+-- 16 wechat alipay unionpay
+-- source: sql/pos_payment_method_items_wechat_alipay_unionpay.sql
+-- ============================================================
+
+-- POS 결제 수단: WeChat / Alipay / UnionPay (기존 DB에 없을 때만 추가)
+-- The Street 등 pos_payment_method_items 전환 매장에서 「기타」탭 누락 복구용
+
+insert into public.pos_payment_method_items (store_code, category, name, hidden, sort_order)
+select v.store_code, v.category, v.name, v.hidden, v.sort_order
+from (values
+  (null::text, 'qr', 'WeChat', false, 2),
+  (null, 'qr', 'Alipay', false, 3),
+  (null, 'qr', 'UnionPay', false, 4)
+) as v(store_code, category, name, hidden, sort_order)
+where not exists (
+  select 1 from public.pos_payment_method_items p
+  where p.store_code is null and p.category = v.category and p.name = v.name
+);
+
+
+-- ============================================================
+-- 17 delivery apps payment settings
+-- source: scripts/pos_delivery_apps_schema.sql
+-- ============================================================
+
+-- POS 배달앱 설정 테이블
+-- 실행 대상: Supabase SQL Editor (PostgreSQL)
+-- 관리자 화면 "배달앱 관리" 탭에서 설정 저장
+
+create table if not exists public.pos_delivery_apps (
+  id bigint generated by default as identity primary key,
+  code text not null,
+  name text not null,
+  match_keywords text[] not null default '{}',
+  display_order integer not null default 0,
+  enabled boolean not null default true,
+  dine_out_enabled boolean not null default true,
+  accent_color text,
+  store_code text,
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok'),
+  updated_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create unique index if not exists idx_pos_delivery_apps_code_store on public.pos_delivery_apps (code, coalesce(store_code, ''));
+create index if not exists idx_pos_delivery_apps_store_code on public.pos_delivery_apps(store_code);
+create index if not exists idx_pos_delivery_apps_enabled on public.pos_delivery_apps(enabled) where enabled = true;
+
+-- 시드: Grab, Line Man, Shopee, Other (store_code null = 전역) - 테이블 비어있을 때만
+insert into public.pos_delivery_apps (code, name, match_keywords, display_order, enabled, dine_out_enabled, accent_color, store_code)
+select 'grab', 'Grab', array['grab', '그랩', 'grab food'], 1, true, true, 'lime', null
+where not exists (select 1 from public.pos_delivery_apps limit 1)
+union all select 'lineman', 'Line Man', array['lineman', 'line man', '라인맨', 'lineman wongnai'], 2, true, true, 'sky', null
+where not exists (select 1 from public.pos_delivery_apps limit 1)
+union all select 'shopee', 'Shopee', array['shopee', '쇼피', 'shopee food'], 3, true, true, 'amber', null
+where not exists (select 1 from public.pos_delivery_apps limit 1)
+union all select 'other', 'Other', array['other', '기타'], 99, true, true, 'slate', null
+where not exists (select 1 from public.pos_delivery_apps limit 1);
+
+-- POS 결제 수단 설정 (카드/QR breakdown 키) - store_code당 1행
+create table if not exists public.pos_payment_settings (
+  store_code text primary key,
+  card_keys text[] not null default array['Visa', 'Master', 'Amex', 'JCB', 'Other'],
+  qr_keys text[] not null default array['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'],
+  updated_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+
+-- ============================================================
+-- 18 menu screen config
+-- source: scripts/pos_menu_screen_config_schema.sql
+-- ============================================================
+
+create table if not exists public.pos_menu_screen_configs (
+  id bigserial primary key,
+  store_code text null,
+  main_category_font_size integer not null default 14,
+  category_font_size integer not null default 13,
+  menu_tile_font_size integer not null default 13,
+  menu_tile_cols integer not null default 4,
+  menu_list_font_size integer not null default 12,
+  menu_list_page_size integer not null default 14,
+  kiosk_group_font_size integer not null default 13,
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists pos_menu_screen_configs_store_code_uidx
+  on public.pos_menu_screen_configs ((coalesce(store_code, '')));
+
+
+-- ============================================================
+-- 19 stock receivable RPCs
+-- source: sql/supabase_rpc_egress_helpers_deploy.sql
+-- ============================================================
+
+-- =============================================================================
+-- Supabase SQL Editor 전용 (앱 배포 불필요)
+-- 앱은 RPC 실패 시 기존 PostgREST select fallback — 화면·집계 로직 변경 없음.
+-- 배포 후: Query Performance에서 get_store_stock / get_receivable_summary 등 calls 확인.
+-- =============================================================================
+
+-- 1) 재고 합계 · location 목록 (accounting-reports, getAppData, getStockStores)
+CREATE OR REPLACE FUNCTION public.get_store_stock(
+  p_location_patterns text[],
+  p_as_of_date timestamptz DEFAULT NULL
+)
+RETURNS TABLE(item_code text, total_qty numeric)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT sl.item_code::text, SUM(sl.qty)::numeric
+  FROM public.stock_logs sl
+  WHERE
+    (p_as_of_date IS NULL OR sl.log_date <= p_as_of_date)
+    AND (
+      p_location_patterns IS NULL
+      OR cardinality(p_location_patterns) = 0
+      OR EXISTS (
+        SELECT 1 FROM unnest(p_location_patterns) AS pat
+        WHERE sl.location ILIKE pat
+      )
+    )
+  GROUP BY sl.item_code;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_distinct_stock_locations()
+RETURNS TABLE(location text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT DISTINCT sl.location::text
+  FROM public.stock_logs sl
+  WHERE sl.location IS NOT NULL AND btrim(sl.location) <> '';
+$$;
+
+-- 2) 미수 · 미지급 요약 (getReceivablePayableSummary)
+CREATE OR REPLACE FUNCTION public.get_receivable_summary(
+  p_store_filter text DEFAULT NULL,
+  p_end_str text DEFAULT NULL
+)
+RETURNS TABLE(store_name text, balance numeric, item_count bigint)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    r.store_name::text,
+    SUM(r.amount)::numeric AS balance,
+    COUNT(*)::bigint AS item_count
+  FROM public.receivable_transactions r
+  WHERE
+    (p_store_filter IS NULL OR p_store_filter = '' OR r.store_name ILIKE p_store_filter)
+    AND (p_end_str IS NULL OR p_end_str = '' OR r.trans_date::date <= p_end_str::date)
+  GROUP BY r.store_name;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_payable_summary(
+  p_vendor_filter text DEFAULT NULL,
+  p_end_str text DEFAULT NULL
+)
+RETURNS TABLE(vendor_code text, balance numeric, item_count bigint)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    p.vendor_code::text,
+    SUM(p.amount)::numeric AS balance,
+    COUNT(*)::bigint AS item_count
+  FROM public.payable_transactions p
+  WHERE
+    (p_vendor_filter IS NULL OR p_vendor_filter = '' OR p.vendor_code ILIKE p_vendor_filter)
+    AND (p_end_str IS NULL OR p_end_str = '' OR p.trans_date::date <= p_end_str::date)
+  GROUP BY p.vendor_code;
+$$;
+
+-- 3) 매출 관리 매장 필터 DISTINCT (posSalesFilterOptions)
+CREATE OR REPLACE FUNCTION public.get_pos_sales_filter_store_codes(
+  p_start_utc timestamptz,
+  p_end_utc_exclusive timestamptz
+)
+RETURNS TABLE (store_code text)
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT DISTINCT btrim(COALESCE(o.store_code, ''))::text AS store_code
+  FROM public.pos_orders o
+  WHERE o.created_at >= p_start_utc
+    AND o.created_at < p_end_utc_exclusive
+    AND COALESCE(btrim(o.store_code), '') <> ''
+  ORDER BY 1;
+$$;
+
+COMMENT ON FUNCTION public.get_store_stock(text[], timestamptz) IS
+  '매장별 재고 합계. location ILIKE. p_as_of_date 상한(<=).';
+COMMENT ON FUNCTION public.get_distinct_stock_locations() IS
+  'stock_logs DISTINCT location.';
+COMMENT ON FUNCTION public.get_receivable_summary(text, text) IS
+  '미수금 store별 잔액 요약.';
+COMMENT ON FUNCTION public.get_payable_summary(text, text) IS
+  '미지급금 vendor별 잔액 요약.';
+COMMENT ON FUNCTION public.get_pos_sales_filter_store_codes(timestamptz, timestamptz) IS
+  '매출 관리 매장 필터 DISTINCT store_code.';
+
+GRANT EXECUTE ON FUNCTION public.get_store_stock(text[], timestamptz) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_distinct_stock_locations() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_receivable_summary(text, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_payable_summary(text, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_pos_sales_filter_store_codes(timestamptz, timestamptz) TO anon, authenticated, service_role;
+
+
+-- ============================================================
+-- 20 pos sales summary RPC
+-- source: sql/get_pos_sales_period_summary_deploy.sql
+-- ============================================================
+
+-- POS 기간 매출 요약 RPC (완료/대기 건수·합계·현금)
+-- Supabase SQL Editor에서 실행. 미배포 시 getPosTodaySales 는 기존 select 경로만 사용합니다.
+-- 본문 정의: vercel-app/sql/pos_hardening_phase2.sql (섹션 get_pos_sales_period_summary)
+
+CREATE OR REPLACE FUNCTION public.get_pos_sales_period_summary(
+  p_start_utc TIMESTAMPTZ,
+  p_end_utc_exclusive TIMESTAMPTZ,
+  p_store_codes TEXT[] DEFAULT NULL
+)
+RETURNS TABLE (
+  completed_count BIGINT,
+  completed_total NUMERIC,
+  completed_cash NUMERIC,
+  pending_count BIGINT
+)
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_has_total boolean;
+  v_has_total_amount boolean;
+  v_has_payment_cash boolean;
+  v_has_store_code boolean;
+  v_has_store_name boolean;
+  v_has_status boolean;
+  v_total_expr text;
+  v_cash_expr text;
+  v_store_expr text;
+  v_status_expr text;
+  v_sql text;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'total'
+  ) INTO v_has_total;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'total_amount'
+  ) INTO v_has_total_amount;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'payment_cash'
+  ) INTO v_has_payment_cash;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'store_code'
+  ) INTO v_has_store_code;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'store_name'
+  ) INTO v_has_store_name;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'status'
+  ) INTO v_has_status;
+
+  v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
+  IF v_has_total THEN
+    v_total_expr := 'COALESCE(o.total, ' || v_total_expr || ')';
+  ELSIF v_has_total_amount THEN
+    v_total_expr := 'COALESCE(o.total_amount, ' || v_total_expr || ')';
+  END IF;
+
+  v_cash_expr := 'COALESCE((o.payload->>''paymentCash'')::numeric, (o.payload->>''payment_cash'')::numeric, 0)';
+  IF v_has_payment_cash THEN
+    v_cash_expr := 'COALESCE(o.payment_cash, ' || v_cash_expr || ')';
+  END IF;
+
+  IF v_has_store_code THEN
+    v_store_expr := 'COALESCE(o.store_code, '''')';
+  ELSIF v_has_store_name THEN
+    v_store_expr := 'COALESCE(o.store_name, '''')';
+  ELSE
+    v_store_expr := 'COALESCE((o.payload->>''storeCode''), (o.payload->>''store_code''), '''')';
+  END IF;
+
+  IF v_has_status THEN
+    v_status_expr := 'LOWER(COALESCE(o.status, ''''))';
+  ELSE
+    v_status_expr := 'LOWER(COALESCE((o.payload->>''status''), ''''))';
+  END IF;
+
+  v_sql := '
+    WITH base AS (
+      SELECT
+        ' || v_status_expr || ' AS status,
+        (' || v_total_expr || ')::numeric AS total,
+        (' || v_cash_expr || ')::numeric AS payment_cash
+      FROM public.pos_orders o
+      WHERE o.created_at >= $1
+        AND o.created_at < $2
+        AND (
+          $3 IS NULL
+          OR COALESCE(array_length($3, 1), 0) = 0
+          OR (' || v_store_expr || ') = ANY ($3)
+        )
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE status IN (''completed'', ''paid'', ''ready''))::bigint AS completed_count,
+      COALESCE(SUM(total) FILTER (WHERE status IN (''completed'', ''paid'', ''ready'')), 0)::numeric AS completed_total,
+      COALESCE(SUM(payment_cash) FILTER (WHERE status IN (''completed'', ''paid'', ''ready'')), 0)::numeric AS completed_cash,
+      COUNT(*) FILTER (WHERE status IN (''pending'', ''cooking''))::bigint AS pending_count
+    FROM base
+  ';
+
+  RETURN QUERY EXECUTE v_sql USING p_start_utc, p_end_utc_exclusive, p_store_codes;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_pos_sales_period_summary(timestamptz, timestamptz, text[]) IS
+  'POS 매출 요약: 완료/대기 건수·합계·현금. getPosTodaySales RPC 경로(단일 매장·단일 영업일)용.';
+
+GRANT EXECUTE ON FUNCTION public.get_pos_sales_period_summary(timestamptz, timestamptz, text[]) TO anon, authenticated, service_role;
+
+
+-- ============================================================
+-- 21 members CRM
+-- source: sql/members_crm_scale_phase1_to_4.sql
+-- ============================================================
+
+-- 회원/CRM 30만 확장 공통 마이그레이션
+-- 목적:
+-- 1) 회원 필수 필드 확장(국적/가입경로/추천인)
+-- 2) 회원 포털 OTP/세션 테이블
+-- 3) 포인트 원장 멱등 인덱스
+-- 4) CRM 요약/세그먼트/RFM RPC
+-- 실행: Supabase SQL Editor
+
+alter table public.members
+  add column if not exists full_name text,
+  add column if not exists birth_date text,
+  add column if not exists gender text,
+  add column if not exists tier_code text default 'BRONZE',
+  add column if not exists point_balance integer not null default 0,
+  add column if not exists lifetime_amount numeric(14,2) not null default 0,
+  add column if not exists nationality text,
+  add column if not exists join_channel text default 'store',
+  add column if not exists referred_by_member_id bigint references public.members(id) on delete set null,
+  add column if not exists referral_code text,
+  add column if not exists last_visited_at timestamp without time zone;
+
+-- LINE Customer report 원본 컬럼 보존용
+alter table public.members
+  add column if not exists line_member_type text,
+  add column if not exists line_first_name text,
+  add column if not exists line_last_name text,
+  add column if not exists line_address text,
+  add column if not exists line_subdistrict text,
+  add column if not exists line_district text,
+  add column if not exists line_province text,
+  add column if not exists line_postcode text,
+  add column if not exists line_membership_tier text,
+  add column if not exists line_member_tag text,
+  add column if not exists line_member_branch text,
+  add column if not exists line_current_points integer,
+  add column if not exists line_total_points integer,
+  add column if not exists line_tier_points integer,
+  add column if not exists line_usage_count integer,
+  add column if not exists line_last_active_at timestamp without time zone,
+  add column if not exists line_last_active_days integer,
+  add column if not exists line_member_status text,
+  add column if not exists line_registered_at timestamp without time zone,
+  add column if not exists line_exported_at timestamp without time zone;
+
+create unique index if not exists uq_members_referral_code
+  on public.members (referral_code)
+  where referral_code is not null;
+
+create index if not exists idx_members_join_channel on public.members(join_channel);
+create index if not exists idx_members_last_visited_at on public.members(last_visited_at desc);
+create index if not exists idx_members_referred_by on public.members(referred_by_member_id);
+
+-- 전화번호 정규화 검색/중복 방지(값이 있을 때만)
+create unique index if not exists uq_members_phone_digits
+  on public.members ((regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g')))
+  where nullif(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), '') is not null;
+
+-- 선행 스키마가 없는 환경에서도 실행되도록 최소 로열티 테이블 보장
+create table if not exists public.member_points_ledger (
+  id bigint generated by default as identity primary key,
+  member_id bigint not null references public.members(id) on delete cascade,
+  order_id bigint,
+  kind text not null, -- earn/use/adjust/reverse
+  points integer not null,
+  amount numeric(14,2) not null default 0,
+  note text,
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create index if not exists idx_member_points_ledger_member_id on public.member_points_ledger(member_id);
+create index if not exists idx_member_points_ledger_order_id on public.member_points_ledger(order_id);
+
+-- 포인트 원장 멱등성: 동일 주문에서 같은 kind 1회만 반영
+create unique index if not exists uq_member_points_ledger_member_order_kind
+  on public.member_points_ledger(member_id, order_id, kind)
+  where order_id is not null;
+
+create table if not exists public.member_login_otps (
+  id bigint generated by default as identity primary key,
+  phone text not null,
+  otp_hash text not null,
+  expires_at timestamp without time zone not null,
+  verified_at timestamp without time zone,
+  tries integer not null default 0,
+  status text not null default 'issued', -- issued/verified/expired/blocked
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create index if not exists idx_member_login_otps_phone_created_at
+  on public.member_login_otps(phone, created_at desc);
+
+create table if not exists public.member_sessions (
+  id bigint generated by default as identity primary key,
+  member_id bigint not null references public.members(id) on delete cascade,
+  session_token_hash text not null unique,
+  device_label text,
+  user_agent text,
+  ip text,
+  expires_at timestamp without time zone not null,
+  revoked_at timestamp without time zone,
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok'),
+  last_seen_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create index if not exists idx_member_sessions_member_id on public.member_sessions(member_id);
+create index if not exists idx_member_sessions_expires_at on public.member_sessions(expires_at);
+
+create table if not exists public.member_notes (
+  id bigint generated by default as identity primary key,
+  member_id bigint not null references public.members(id) on delete cascade,
+  note text not null,
+  tags text[] not null default '{}',
+  created_by text,
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create index if not exists idx_member_notes_member_id on public.member_notes(member_id);
+
+create table if not exists public.member_referral_events (
+  id bigint generated by default as identity primary key,
+  referrer_member_id bigint not null references public.members(id) on delete cascade,
+  referred_member_id bigint not null references public.members(id) on delete cascade,
+  referrer_points integer not null default 0,
+  referred_points integer not null default 0,
+  status text not null default 'approved', -- pending/approved/rejected
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok'),
+  unique(referrer_member_id, referred_member_id)
+);
+
+create index if not exists idx_member_referral_events_referrer on public.member_referral_events(referrer_member_id);
+create index if not exists idx_member_referral_events_referred on public.member_referral_events(referred_member_id);
+
+create table if not exists public.line_import_jobs (
+  id text primary key,
+  report_type text not null, -- customer / point / coupon
+  file_name text not null,
+  row_count integer not null default 0,
+  success_count integer not null default 0,
+  failed_count integer not null default 0,
+  created_by text,
+  exported_at timestamp without time zone,
+  shop_name text,
+  menu_name text,
+  period_start date,
+  period_end date,
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create table if not exists public.line_import_rows (
+  id bigint generated by default as identity primary key,
+  job_id text not null references public.line_import_jobs(id) on delete cascade,
+  row_no integer not null,
+  report_type text not null,
+  line_display_name text,
+  phone text,
+  full_name text,
+  transaction_id text,
+  coupon_code text,
+  points integer,
+  status text not null, -- success / failed / skipped
+  message text,
+  raw_payload jsonb,
+  created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
+);
+
+create index if not exists idx_line_import_rows_job_id on public.line_import_rows(job_id);
+create index if not exists idx_line_import_rows_phone on public.line_import_rows(phone);
+
+create or replace function public.get_member_list_cursor(
+  p_after_id bigint default null,
+  p_limit integer default 100,
+  p_q text default null
+)
+returns table (
+  id bigint,
+  member_no text,
+  name text,
+  full_name text,
+  phone text,
+  email text,
+  birth_date text,
+  gender text,
+  nationality text,
+  tier_code text,
+  point_balance integer,
+  lifetime_amount numeric,
+  join_channel text,
+  created_at timestamp without time zone
+)
+language sql
+stable
+as $$
+  select
+    m.id,
+    m.member_no,
+    m.name,
+    m.full_name,
+    m.phone,
+    m.email,
+    m.birth_date,
+    m.gender,
+    m.nationality,
+    m.tier_code,
+    m.point_balance,
+    m.lifetime_amount,
+    m.join_channel,
+    m.created_at
+  from public.members m
+  where
+    (p_after_id is null or m.id < p_after_id)
+    and (
+      coalesce(trim(p_q), '') = ''
+      or m.name ilike ('%' || p_q || '%')
+      or coalesce(m.full_name, '') ilike ('%' || p_q || '%')
+      or coalesce(m.phone, '') ilike ('%' || p_q || '%')
+      or coalesce(m.member_no, '') ilike ('%' || p_q || '%')
+      or coalesce(m.email, '') ilike ('%' || p_q || '%')
+    )
+  order by m.id desc
+  limit greatest(1, least(coalesce(p_limit, 100), 500));
+$$;
+
+create or replace function public.get_member_crm_summary(
+  p_recent_days integer default 30,
+  p_dormant_days integer default 90
+)
+returns table (
+  total_members bigint,
+  recent_active_members bigint,
+  dormant_members bigint,
+  total_lifetime_amount numeric,
+  avg_order_amount numeric
+)
+language sql
+stable
+as $$
+  with orders as (
+    select
+      o.member_id,
+      o.total,
+      o.created_at
+    from public.pos_orders o
+    where coalesce(o.member_id, 0) > 0
+  ),
+  recent_active as (
+    select count(distinct member_id) as c
+    from orders
+    where created_at >= ((now() at time zone 'Asia/Bangkok') - make_interval(days => greatest(p_recent_days, 1)))
+  ),
+  dormant as (
+    select count(*) as c
+    from public.members m
+    where not exists (
+      select 1
+      from orders o
+      where o.member_id = m.id
+        and o.created_at >= ((now() at time zone 'Asia/Bangkok') - make_interval(days => greatest(p_dormant_days, 1)))
+    )
+  )
+  select
+    (select count(*) from public.members) as total_members,
+    coalesce((select c from recent_active), 0) as recent_active_members,
+    coalesce((select c from dormant), 0) as dormant_members,
+    coalesce((select sum(lifetime_amount) from public.members), 0) as total_lifetime_amount,
+    coalesce((select avg(total) from orders), 0) as avg_order_amount;
+$$;
+
+create or replace function public.get_member_rfm_scores(
+  p_limit integer default 5000
+)
+returns table (
+  member_id bigint,
+  recency_days integer,
+  frequency_count integer,
+  monetary_amount numeric,
+  r_score integer,
+  f_score integer,
+  m_score integer,
+  rfm_score text
+)
+language sql
+stable
+as $$
+  with base as (
+    select
+      m.id as member_id,
+      coalesce(
+        floor(extract(epoch from ((now() at time zone 'Asia/Bangkok') - max(o.created_at))) / 86400)::int,
+        9999
+      ) as recency_days,
+      coalesce(count(o.id), 0)::int as frequency_count,
+      coalesce(sum(o.total), 0)::numeric as monetary_amount
+    from public.members m
+    left join public.pos_orders o
+      on o.member_id = m.id
+    group by m.id
+  ),
+  scored as (
+    select
+      b.*,
+      ntile(5) over (order by b.recency_days asc) as r_score,
+      ntile(5) over (order by b.frequency_count desc) as f_score,
+      ntile(5) over (order by b.monetary_amount desc) as m_score
+    from base b
+  )
+  select
+    s.member_id,
+    s.recency_days,
+    s.frequency_count,
+    s.monetary_amount,
+    s.r_score,
+    s.f_score,
+    s.m_score,
+    (s.r_score::text || s.f_score::text || s.m_score::text) as rfm_score
+  from scored s
+  order by s.r_score desc, s.f_score desc, s.m_score desc, s.member_id desc
+  limit greatest(1, least(coalesce(p_limit, 5000), 20000));
+$$;
+
+
+-- ============================================================
+-- 22 member portal CMS
+-- source: sql/member_portal_content_cms.sql
+-- ============================================================
+
+-- Member Portal CMS content (popup / info / store photo)
+create table if not exists public.member_portal_content (
+  id bigserial primary key,
+  content_key text not null unique,
+  content_type text not null check (content_type in ('popup', 'info', 'store_photo')),
+  store_code text,
+  title text,
+  body text,
+  image_url text,
+  target_tab text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+create index if not exists idx_member_portal_content_type_active
+  on public.member_portal_content (content_type, is_active, sort_order, updated_at desc);
+
+create index if not exists idx_member_portal_content_store
+  on public.member_portal_content (store_code);
+
+
+-- ============================================================
+-- END supabase_one_paste_all_in_one.sql
+-- ============================================================

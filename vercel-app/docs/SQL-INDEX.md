@@ -3,6 +3,8 @@
 이 문서는 `vercel-app/sql` 아래 SQL 파일을 **빠르게 찾기 위한 인덱스**입니다.
 기존 SQL 파일을 이동/개명하지 않고, 탐색성과 유지보수성을 높이는 목적입니다.
 
+**Supabase SQL Editor에 무엇을 붙여넣을지** → [`../sql/SUPABASE_EDITOR_RUNBOOK.md`](../sql/SUPABASE_EDITOR_RUNBOOK.md) (증상별·일괄 실행 순서)
+
 ## 1) 빠른 탐색 순서
 
 1. 먼저 도메인(회계/인사/POS/마케팅/SaaS/물류)을 정합니다.

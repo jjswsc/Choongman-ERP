@@ -12,7 +12,7 @@ import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
-import { backfillPosVatLedgerStoreNames, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
+import { backfillVatLedgerStoreNames, resolveStoreDisplayNameForVatLedger, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
 import { syncInvoiceBackedBankInputVatLedgers } from '@/lib/invoice-backed-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import {
@@ -309,9 +309,9 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   let bankInvoiceUpserted = 0
 
   try {
-    await backfillPosVatLedgerStoreNames(validMonths)
+    await backfillVatLedgerStoreNames(validMonths)
   } catch (e) {
-    console.warn('syncTaxVatLedgersFromStockAndExpenses pos store_name backfill:', e)
+    console.warn('syncTaxVatLedgersFromStockAndExpenses vat store_name backfill:', e)
   }
 
   try {
@@ -478,17 +478,29 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
 
   const seenStockIds = new Set<number>()
   let stockUpserted = 0
+  const vatStoreNameCache = new Map<string, string>()
+  const resolveVatStoreName = async (raw: string): Promise<string> => {
+    const key = String(raw || '').trim()
+    if (!key) return ''
+    const cached = vatStoreNameCache.get(key)
+    if (cached !== undefined) return cached
+    const resolved = await resolveStoreDisplayNameForVatLedger(key)
+    vatStoreNameCache.set(key, resolved)
+    return resolved
+  }
 
   for (const log of stockLogs || []) {
     const stockLogId = Math.floor(Number(log.id) || 0)
     if (stockLogId <= 0) continue
     const logType = String(log.log_type || '').trim()
-    const scopedStore = taxScopeStoreFromStockLog(log)
+    const scopedStoreRaw = taxScopeStoreFromStockLog(log)
     const loc = String(log.location || '').trim()
     const target = String(log.vendor_target || '').trim()
+    const scopedStore = scopedStoreRaw ? await resolveVatStoreName(scopedStoreRaw) : ''
     const inScope =
       !storeFilter ||
       storeScope.matches(scopedStore) ||
+      (scopedStoreRaw ? storeScope.matches(scopedStoreRaw) : false) ||
       (loc ? storeScope.matches(loc) : false) ||
       (target ? storeScope.matches(target) : false)
     if (!inScope) continue
@@ -571,7 +583,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
         filing_status: 'draft',
         submitted_at: null,
         submitted_by: null,
-        store_name: scopedStore || null,
+        store_name: scopedStore || scopedStoreRaw || null,
         updated_at: new Date().toISOString(),
       },
       evidenceStatus,

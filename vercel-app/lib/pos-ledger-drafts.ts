@@ -44,24 +44,58 @@ export async function resolveStoreDisplayNameForVatLedger(storeKey: string): Pro
   return key
 }
 
-/** 과거 POS 자동 매출 행의 store_name(store_code) → display_name 백필 */
-export async function backfillPosVatLedgerStoreNames(validMonths: string[]): Promise<number> {
+/** 과거·자동 VAT 원장 store_name → erp_stores.display_name 백필 (POS·입고·지출 공통) */
+export async function backfillVatLedgerStoreNames(validMonths: string[]): Promise<number> {
   const months = (validMonths || []).map((m) => String(m || '').slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (!months.length) return 0
   const monthFilter = buildTaxMonthPostgrestFilter(months)
-  const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', `${monthFilter}&direction=eq.output`, {
+  const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
     select: 'id,store_name,memo',
     order: 'id.asc',
     pageSize: 4000,
     maxRows: 100000,
   })) as { id?: number; store_name?: string | null; memo?: string | null }[]
+
+  const posOrderIds = new Set<number>()
+  for (const row of rows || []) {
+    if (String(row.store_name || '').trim()) continue
+    const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
+    if (!m) continue
+    const oid = Math.floor(Number(m[1]) || 0)
+    if (oid > 0) posOrderIds.add(oid)
+  }
+
+  const posStoreByOrderId = new Map<number, string>()
+  const idList = Array.from(posOrderIds)
+  const chunkSize = 200
+  for (let i = 0; i < idList.length; i += chunkSize) {
+    const chunk = idList.slice(i, i + chunkSize)
+    const orderRows = (await supabaseSelectFilter('pos_orders', `id=in.(${chunk.join(',')})`, {
+      select: 'id,store_code',
+      limit: chunk.length,
+    })) as { id?: number; store_code?: string | null }[] | null
+    for (const o of orderRows || []) {
+      const oid = Math.floor(Number(o.id) || 0)
+      const sc = String(o.store_code || '').trim()
+      if (oid > 0 && sc) posStoreByOrderId.set(oid, sc)
+    }
+  }
+
   let updated = 0
   for (const row of rows || []) {
-    if (!/\[AUTO:POS_ORDER:/i.test(String(row.memo || ''))) continue
     const id = Math.floor(Number(row.id) || 0)
     if (id <= 0) continue
     const current = String(row.store_name || '').trim()
-    const resolved = await resolveStoreDisplayNameForVatLedger(current)
+    let sourceKey = current
+    if (!sourceKey) {
+      const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
+      if (m) {
+        const oid = Math.floor(Number(m[1]) || 0)
+        sourceKey = (oid > 0 ? posStoreByOrderId.get(oid) : '') || ''
+      }
+    }
+    if (!sourceKey) continue
+    const resolved = await resolveStoreDisplayNameForVatLedger(sourceKey)
     if (!resolved || resolved === current) continue
     await supabaseUpdate('vat_ledger_entries', id, {
       store_name: resolved.slice(0, 500),
@@ -70,6 +104,11 @@ export async function backfillPosVatLedgerStoreNames(validMonths: string[]): Pro
     updated += 1
   }
   return updated
+}
+
+/** @deprecated backfillVatLedgerStoreNames 사용 */
+export async function backfillPosVatLedgerStoreNames(validMonths: string[]): Promise<number> {
+  return backfillVatLedgerStoreNames(validMonths)
 }
 
 function monthStartYmd(ym: string): string {
@@ -150,9 +189,13 @@ export async function syncPosOrdersOutputVatLedger(params: {
     const status = String(order.status || '').trim().toLowerCase()
     const storeCode = String(order.store_code || '').trim()
     const storeName = storeCode ? await resolveStoreDisplayNameForVatLedger(storeCode) : ''
-    if (storeFilter && storeName && !storeScope.matches(storeName)) {
-      skipped += 1
-      continue
+    if (storeFilter) {
+      const inScope =
+        (storeCode && storeScope.matches(storeCode)) || (storeName && storeScope.matches(storeName))
+      if (!inScope) {
+        skipped += 1
+        continue
+      }
     }
 
     const docDate = toBangkokYmd(String(order.created_at || ''))

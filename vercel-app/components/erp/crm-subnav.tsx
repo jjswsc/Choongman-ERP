@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-const items = [
+const items: Array<{ href: string; key: string; label?: string }> = [
   { href: "/admin/crm", key: "adminCrmDashboard" },
   { href: "/admin/members", key: "memberList" },
   { href: "/admin/members/points", key: "memberPoints" },
@@ -15,6 +15,7 @@ const items = [
   { href: "/admin/members/tiers", key: "memberTiers" },
   { href: "/admin/crm/segments", key: "adminCrmSegments" },
   { href: "/admin/crm/rfm", key: "adminCrmRfm" },
+  { href: "/admin/crm/member-app", key: "memberAppContent", label: "회원앱 운영" },
 ]
 
 export function CrmSubnav() {
@@ -32,7 +33,7 @@ export function CrmSubnav() {
             pathname === item.href ? "bg-primary text-primary-foreground" : "hover:bg-muted"
           )}
         >
-          {t(item.key)}
+          {item.label || t(item.key)}
         </Link>
       ))}
     </div>

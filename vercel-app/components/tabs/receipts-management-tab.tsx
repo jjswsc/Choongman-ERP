@@ -79,6 +79,7 @@ import {
   receiptModalDataFromPosOrderReprint,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { buildSplitPaymentReceiptBatchFromOrder } from '@/lib/pos-split-payment-receipt-batch'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
@@ -724,39 +725,44 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
-      const receiptData = receiptModalDataFromPosOrderReprint(o, { promoCatalogById, menus })
       const paidAt = o.linkposRespondedAt
         ? new Date(o.linkposRespondedAt)
         : o.createdAt
           ? new Date(o.createdAt)
           : new Date()
-      const fullHtml = buildPosPaymentReceiptDocumentHtml({
-        receiptData,
-        menus,
-        orderTypeLabels,
-        t,
-        lang,
-        origin: typeof window !== 'undefined' ? window.location.origin : '',
-        printedAt: paidAt,
-        printerSettings: settings,
-        forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(store),
-      })
-      printPosHtmlDocument(fullHtml, {
-        title: t('posReceipt') || '영수증',
-        printDelayMs: 0,
-        fallbackCleanupMs: 120_000,
-        focusIframeBeforePrint: false,
-        printRole: 'receipt',
-        printReceiptKind: 'payment',
-        escPosCutOverride: resolveEscPosCutOverride(settings, {
+      const lineOpts: PosOrderReceiptLineOptions = { promoCatalogById, menus }
+      const splitBatch = buildSplitPaymentReceiptBatchFromOrder(o, lineOpts)
+      const receiptRows = splitBatch ?? [receiptModalDataFromPosOrderReprint(o, lineOpts)]
+      for (let idx = 0; idx < receiptRows.length; idx += 1) {
+        const receiptData = receiptRows[idx]
+        const fullHtml = buildPosPaymentReceiptDocumentHtml({
+          receiptData,
+          menus,
+          orderTypeLabels,
+          t,
+          lang,
+          origin: typeof window !== 'undefined' ? window.location.origin : '',
+          printedAt: paidAt,
+          printerSettings: settings,
+          forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(store),
+        })
+        await printHtmlWithPosEngine(fullHtml, t('posReceipt') || '영수증', {
           printRole: 'receipt',
           printReceiptKind: 'payment',
-        }),
-        onPrintUnavailable: () => {
-          void appAlert(t('posPrintUnavailable'))
-        },
-      })
+          escPosCutOverride: resolveEscPosCutOverride(settings, {
+            printRole: 'receipt',
+            printReceiptKind: 'payment',
+          }),
+        })
+        if (idx < receiptRows.length - 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+        }
+      }
     } catch (e) {
+      if (String(e).includes(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE)) {
+        await appAlert(t('posPrintUnavailable'))
+        return
+      }
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }

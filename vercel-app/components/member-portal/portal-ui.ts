@@ -1,6 +1,6 @@
 import type { MemberSummary } from '@/lib/members-server'
 
-export type PortalTab = 'home' | 'coupons' | 'history' | 'profile'
+export type PortalTab = 'home' | 'order' | 'location' | 'privilege' | 'me'
 
 export type PortalPointRow = {
   id: number

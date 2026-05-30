@@ -160,6 +160,11 @@ import {
   posOrderPaymentFieldsFromSnapshot,
   receiptPaymentFieldsFromSnapshot,
 } from '@/lib/pos-receipt-cash-tender'
+import {
+  normalizePosSplitReceiptSnapshots,
+  upsertPosSplitReceiptsInMemo,
+} from '@/lib/pos-split-receipt-memo'
+import { buildSplitPaymentReceiptBatch } from '@/lib/pos-split-payment-receipt-batch'
 import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
@@ -1255,42 +1260,9 @@ export default function PosTerminalPage() {
       splitReceipts: CartPanelSplitReceiptPayload[] | undefined,
       suppressReceiptModalAutoPrint: boolean
     ): ReceiptModalData[] => {
-      if (!Array.isArray(splitReceipts) || splitReceipts.length === 0) return []
-      const out: ReceiptModalData[] = []
-      splitReceipts.forEach((split, idx) => {
-        const items = split.items
-          .map((it) => ({
-            id: String(it.id ?? ''),
-            name: String(it.name ?? '').trim(),
-            price: Number(it.price ?? 0),
-            qty: Math.max(0, Number(it.quantity ?? 0) || 0),
-            ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-          }))
-          .filter((it) => it.qty > 0 && it.name)
-        const subtotal = Math.max(0, Number(split.subtotal ?? 0) || 0)
-        const total = Math.max(0, Number(split.total ?? 0) || 0)
-        if (items.length === 0 && total <= 0.0001) return
-        const splitMemoTag = `[DUTCH_SPLIT] ${String(split.label || `${idx + 1}/${splitReceipts.length}`)}`
-        const memoCombined = [String(base.memo ?? '').trim(), splitMemoTag].filter(Boolean).join('\n')
-        out.push({
-          orderNo: base.orderNo,
-          storeCode: base.storeCode,
-          orderType: base.orderType,
-          tableName: base.tableName,
-          memo: memoCombined,
-          discountReason: base.discountReason,
-          items,
-          subtotal,
-          discountAmt: Math.max(0, Number(split.discountAmt ?? 0) || 0),
-          total: total > 0 ? total : subtotal,
-          vatFeeMode: base.vatFeeMode,
-          ...(split.payment ? receiptPaymentFieldsFromSnapshot(split.payment) : {}),
-          receiptAutoPrintContext: 'payment',
-          suppressReceiptModalAutoPrint,
-          printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
-        })
-      })
-      return out
+      const splits = normalizePosSplitReceiptSnapshots(splitReceipts)
+      if (!splits) return []
+      return buildSplitPaymentReceiptBatch(base, splits, { suppressReceiptModalAutoPrint })
     },
     []
   )
@@ -5678,6 +5650,19 @@ export default function PosTerminalPage() {
     []
   )
 
+  const posOrderMemoForPaymentSave = useCallback(
+    (
+      memo: string | null | undefined,
+      splitReceipts: CartPanelSplitReceiptPayload[] | undefined,
+      kbankResult: { pending?: boolean; partnerTransactionId?: string } | { ok?: boolean }
+    ) =>
+      upsertPosSplitReceiptsInMemo(
+        applyKbankManualMemoTag(memo, kbankResult),
+        normalizePosSplitReceiptSnapshots(splitReceipts)
+      ),
+    [applyKbankManualMemoTag]
+  )
+
   useEffect(() => {
     if (!isKbankPilotStore || !currentStoreId) return
     const localTxId = String(kbankOpsTxnUid || '').trim()
@@ -6600,7 +6585,10 @@ export default function PosTerminalPage() {
                 }
                 if (!(await ensureBusinessOpenForOrder())) return
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
-                let memoWithKbank = String(payload.memo ?? '')
+                let memoWithKbank = upsertPosSplitReceiptsInMemo(
+                  String(payload.memo ?? ''),
+                  normalizePosSplitReceiptSnapshots(payload.splitReceipts)
+                )
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return
@@ -6610,7 +6598,7 @@ export default function PosTerminalPage() {
                     orderId: existingOrderId,
                   })
                   if (!kbankQr.ok) return
-                  memoWithKbank = applyKbankManualMemoTag(payload.memo, kbankQr)
+                  memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                   await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -6714,7 +6702,10 @@ export default function PosTerminalPage() {
                 }
                 if (!(await ensureBusinessOpenForOrder())) return
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
-                let memoWithKbank = String(payload.memo ?? '')
+                let memoWithKbank = upsertPosSplitReceiptsInMemo(
+                  String(payload.memo ?? ''),
+                  normalizePosSplitReceiptSnapshots(payload.splitReceipts)
+                )
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return
@@ -6724,7 +6715,7 @@ export default function PosTerminalPage() {
                     orderId: existingOrderId,
                   })
                   if (!kbankQr.ok) return
-                  memoWithKbank = applyKbankManualMemoTag(payload.memo, kbankQr)
+                  memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                   await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -7408,7 +7399,7 @@ export default function PosTerminalPage() {
                     })
                   : { ok: true as const }
                 if (!kbankQr.ok) return
-                const memoWithKbank = applyKbankManualMemoTag(payload.memo, kbankQr)
+                const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
@@ -7611,7 +7602,7 @@ export default function PosTerminalPage() {
                   orderLabel: payload.orderLabel,
                 })
                 if (!kbankQr.ok) return
-                const memoWithKbank = applyKbankManualMemoTag(payload.memo, kbankQr)
+                const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const paymentSumBeforeSave =
                   Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
