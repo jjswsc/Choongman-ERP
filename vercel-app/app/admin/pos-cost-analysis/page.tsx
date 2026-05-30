@@ -52,9 +52,8 @@ import {
   isCostAnalysisBaseRow,
   posCostAnalysisRowKey,
 } from "@/lib/pos-cost-analysis-keys"
+import { posCostListRowCostsAndRatios } from "@/lib/pos-cost-analysis-display"
 import { useSearchParams } from "next/navigation"
-
-const MISE_RATE_DEFAULT = 3
 
 type PosCostListSortKey =
   | "code"
@@ -68,23 +67,6 @@ type PosCostListSortKey =
   | "costDel"
   | "ratioH"
   | "ratioD"
-
-function posCostListRowMiseAndRatios(r: PosMenuCostAnalysisRow) {
-  const miseMult = 1 + MISE_RATE_DEFAULT / 100
-  const m = (c: number) => Math.round(c * miseMult * 10) / 10
-  const priceH = Number(r.priceHall ?? 0)
-  const priceD = Number(r.priceDelivery ?? r.priceHall ?? 0)
-  const costHMise = m(r.costHall ?? 0)
-  const costDMise = m(r.costDelivery ?? 0)
-  return {
-    priceH,
-    priceD,
-    costHMise,
-    costDMise,
-    costRatioH: priceH > 0 ? (costHMise / priceH) * 100 : 0,
-    costRatioD: priceD > 0 ? (costDMise / priceD) * 100 : 0,
-  }
-}
 
 /**
  * React Strict Mode(dev)에서 마운트→언마운트→재마운트 시,
@@ -314,8 +296,8 @@ export default function PosCostAnalysisPage() {
       `${r.menuName ?? ""}\0${r.optionName ?? ""}`
     return [...flatList].sort((a, b) => {
       const cmp = (n: number) => dir * n
-      const ma = posCostListRowMiseAndRatios(a)
-      const mb = posCostListRowMiseAndRatios(b)
+      const ma = posCostListRowCostsAndRatios(a)
+      const mb = posCostListRowCostsAndRatios(b)
       switch (listSort.key) {
         case "code":
           return cmp(a.displayCode.localeCompare(b.displayCode, "ko", { numeric: true }))
@@ -340,9 +322,9 @@ export default function PosCostAnalysisPage() {
             (a.priceDelivery ?? a.priceHall ?? 0) - (b.priceDelivery ?? b.priceHall ?? 0)
           )
         case "costHall":
-          return cmp(ma.costHMise - mb.costHMise)
+          return cmp(ma.costH - mb.costH)
         case "costDel":
-          return cmp(ma.costDMise - mb.costDMise)
+          return cmp(ma.costD - mb.costD)
         case "ratioH":
           return cmp(ma.costRatioH - mb.costRatioH)
         case "ratioD":
@@ -359,7 +341,7 @@ export default function PosCostAnalysisPage() {
     const rowsH: PosMenuCostAnalysisRow[] = []
     const rowsD: PosMenuCostAnalysisRow[] = []
     for (const r of flatList) {
-      const m = posCostListRowMiseAndRatios(r)
+      const m = posCostListRowCostsAndRatios(r)
       if (m.costRatioH > 0) rowsH.push(r)
       if (m.costRatioD > 0) rowsD.push(r)
     }
@@ -367,22 +349,22 @@ export default function PosCostAnalysisPage() {
     const nD = rowsD.length
     let sumPriceH = 0
     let sumPriceD = 0
-    let sumCostHMise = 0
-    let sumCostDMise = 0
+    let sumCostH = 0
+    let sumCostD = 0
     for (const r of rowsH) {
       sumPriceH += r.priceHall ?? 0
-      const m = posCostListRowMiseAndRatios(r)
-      sumCostHMise += m.costHMise
+      const m = posCostListRowCostsAndRatios(r)
+      sumCostH += m.costH
     }
     for (const r of rowsD) {
       sumPriceD += r.priceDelivery ?? r.priceHall ?? 0
-      const m = posCostListRowMiseAndRatios(r)
-      sumCostDMise += m.costDMise
+      const m = posCostListRowCostsAndRatios(r)
+      sumCostD += m.costD
     }
     const avgPriceH = nH > 0 ? sumPriceH / nH : 0
-    const avgCostH = nH > 0 ? sumCostHMise / nH : 0
+    const avgCostH = nH > 0 ? sumCostH / nH : 0
     const avgPriceD = nD > 0 ? sumPriceD / nD : 0
-    const avgCostD = nD > 0 ? sumCostDMise / nD : 0
+    const avgCostD = nD > 0 ? sumCostD / nD : 0
     const avgRatioH = avgPriceH > 0 ? (avgCostH / avgPriceH) * 100 : 0
     const avgRatioD = avgPriceD > 0 ? (avgCostD / avgPriceD) * 100 : 0
     return {
@@ -716,9 +698,9 @@ export default function PosCostAnalysisPage() {
                   const key = rowKey(r)
                   const expanded = expandedIds.has(key)
                   const hasBreakdown = (r.breakdown ?? []).length > 0
-                  const m = posCostListRowMiseAndRatios(r)
-                  const costHMise = m.costHMise
-                  const costDMise = m.costDMise
+                  const m = posCostListRowCostsAndRatios(r)
+                  const costH = m.costH
+                  const costD = m.costD
                   const costRatioH = m.costRatioH
                   const costRatioD = m.costRatioD
                   const menuLabel =
@@ -766,8 +748,8 @@ export default function PosCostAnalysisPage() {
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{(r.priceHall ?? 0).toFixed(0)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{(r.priceDelivery ?? r.priceHall ?? 0).toFixed(0)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-medium">{costHMise.toFixed(1)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-medium">{costDMise.toFixed(1)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium">{costH.toFixed(1)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium">{costD.toFixed(1)}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-amber-600 font-medium">{costRatioH.toFixed(1)}%</td>
                         <td className="px-3 py-2 text-right tabular-nums text-amber-600 font-medium">{costRatioD.toFixed(1)}%</td>
                       </tr>

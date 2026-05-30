@@ -37,6 +37,12 @@ export interface MenuItem {
 
 export const MISE_DEFAULT = 3
 
+export function resolveMisePercent(value: unknown): number {
+  if (value === null || value === undefined || value === "") return MISE_DEFAULT
+  const n = Number(value)
+  return Number.isFinite(n) ? n : MISE_DEFAULT
+}
+
 /** 원가 계산기·DB 미설정 시 배달앱 수수료 기본값(%) */
 export const DELIVERY_APP_FEE_PERCENT_DEFAULT = 25
 
@@ -451,7 +457,7 @@ export function calculateItemCost(item: RecipeItem): number {
   const ingredient = getIngredient(item.ingredientCode)
   if (!ingredient) return 0
   const baseCost = ingredient.bahtPerUnit * item.quantity
-  const mise = item.misePercent ?? 3
+  const mise = resolveMisePercent(item.misePercent)
   return Math.round(baseCost * (1 + mise / 100) * 100) / 100
 }
 
