@@ -37,6 +37,14 @@ type SessionRow = {
   revoked_at?: string | null
 }
 
+function isMissingColumnError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error || '')
+  return (
+    /PGRST204/i.test(msg) ||
+    (/column/i.test(msg) && (/does not exist/i.test(msg) || /could not find/i.test(msg)))
+  )
+}
+
 type MemberRow = {
   id?: number
   member_no?: string | null
@@ -151,16 +159,28 @@ export async function createMemberPortalSession(params: {
   const rawToken = crypto.randomBytes(32).toString('hex')
   const tokenHash = hashToken(rawToken)
   const expiresAt = addDaysBangkok(new Date(), SESSION_EXPIRE_DAYS)
-  await supabaseInsert('member_sessions', {
-    member_id: memberId,
-    session_token_hash: tokenHash,
-    device_label: toText(params.deviceLabel) || null,
-    user_agent: toText(params.userAgent) || null,
-    ip: toText(params.ip) || null,
-    expires_at: expiresAt,
-    created_at: getBangkokDateTimeString(),
-    last_seen_at: getBangkokDateTimeString(),
-  })
+  const now = getBangkokDateTimeString()
+  try {
+    await supabaseInsert('member_sessions', {
+      member_id: memberId,
+      session_token_hash: tokenHash,
+      device_label: toText(params.deviceLabel) || null,
+      user_agent: toText(params.userAgent) || null,
+      ip: toText(params.ip) || null,
+      expires_at: expiresAt,
+      created_at: now,
+      last_seen_at: now,
+    })
+  } catch (e) {
+    // 구(舊) 스키마 호환: 일부 컬럼이 없어도 로그인 세션 생성은 계속 진행
+    if (!isMissingColumnError(e)) throw e
+    await supabaseInsert('member_sessions', {
+      member_id: memberId,
+      session_token_hash: tokenHash,
+      expires_at: expiresAt,
+      created_at: now,
+    })
+  }
   return { sessionToken: rawToken, expiresAt }
 }
 
@@ -492,9 +512,13 @@ export async function getMemberBySessionToken(tokenRaw: string): Promise<MemberS
   const memberId = Number(session?.member_id || 0)
   if (!sessionId || !memberId) return null
   if (toText(session?.revoked_at) || isExpired(toText(session?.expires_at))) return null
-  await supabaseUpdateByFilter('member_sessions', `id=eq.${sessionId}`, {
-    last_seen_at: getBangkokDateTimeString(),
-  })
+  try {
+    await supabaseUpdateByFilter('member_sessions', `id=eq.${sessionId}`, {
+      last_seen_at: getBangkokDateTimeString(),
+    })
+  } catch (e) {
+    if (!isMissingColumnError(e)) throw e
+  }
   return getMemberSummaryById(memberId)
 }
 

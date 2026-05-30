@@ -65,9 +65,17 @@ async function getJson<T>(url: string): Promise<T> {
 
 function LineLogo() {
   return (
-    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[9px] font-extrabold tracking-tight text-[#06C755]">
-      LINE
-    </span>
+    <svg viewBox="0 0 64 64" className="h-6 w-6" aria-hidden>
+      <rect x="2" y="2" width="60" height="60" rx="14" fill="#06C755" />
+      <path
+        d="M14 24.8C14 17.73 19.73 12 26.8 12h10.4C44.27 12 50 17.73 50 24.8c0 6.63-5.06 12.07-11.52 12.69l-4.77 6.1a1.4 1.4 0 0 1-2.5-.86v-5.15H26.8C19.73 37.58 14 31.87 14 24.8Z"
+        fill="#fff"
+      />
+      <path
+        d="M24.1 21.4c.5 0 .9.4.9.9v4.6h2.1c.5 0 .9.4.9.9s-.4.9-.9.9h-3c-.5 0-.9-.4-.9-.9v-5.5c0-.5.4-.9.9-.9Zm5.6 0c.5 0 .9.4.9.9v5.5c0 .5-.4.9-.9.9s-.9-.4-.9-.9v-5.5c0-.5.4-.9.9-.9Zm2.9 0c.4 0 .7.2.8.5l2.3 3.6v-3.2c0-.5.4-.9.9-.9s.9.4.9.9v5.5c0 .4-.2.7-.6.9-.4.1-.8 0-1-.3l-2.5-3.9v3.3c0 .5-.4.9-.9.9s-.9-.4-.9-.9v-5.5c0-.4.2-.7.6-.8.1-.1.2-.1.4-.1Zm9.7 0c.5 0 .9.4.9.9s-.4.9-.9.9h-2.1v1.1h2.1c.5 0 .9.4.9.9s-.4.9-.9.9h-2.1v1.1h2.1c.5 0 .9.4.9.9s-.4.9-.9.9h-3c-.5 0-.9-.4-.9-.9v-5.5c0-.5.4-.9.9-.9h3Z"
+        fill="#06C755"
+      />
+    </svg>
   )
 }
 
@@ -213,7 +221,6 @@ export function MemberPortalApp() {
   const brand = useAppBrandConfig()
   const { lang, t } = useMemberPortalLang()
   const dateLocale = memberPortalDateLocale(lang)
-  const [bgPreset, setBgPreset] = React.useState<"soft" | "chic">("soft")
   const [member, setMember] = React.useState<MemberSummary | null>(null)
   const [dashboard, setDashboard] = React.useState<PortalDashboard | null>(null)
   const [phone, setPhone] = React.useState("")
@@ -290,15 +297,6 @@ export function MemberPortalApp() {
       .then((r) => setLineLoginEnabled(Boolean(r.lineLoginEnabled)))
       .catch(() => {})
   }, [loadSession])
-
-  React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem("cm_member_bg_preset")
-      if (saved === "soft" || saved === "chic") setBgPreset(saved)
-    } catch {
-      /* ignore */
-    }
-  }, [])
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -409,52 +407,19 @@ export function MemberPortalApp() {
 
   if (!member || !dashboard) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
-    const bgGradientClass =
-      bgPreset === "chic"
-        ? "bg-[radial-gradient(circle_at_80%_8%,rgba(255,229,236,0.16),transparent_34%),radial-gradient(circle_at_20%_14%,rgba(209,168,255,0.14),transparent_36%),radial-gradient(circle_at_52%_85%,rgba(255,255,255,0.06),transparent_40%),linear-gradient(180deg,#140d1f_0%,#1d1226_46%,#0e0a14_100%)]"
-        : "bg-[radial-gradient(circle_at_20%_15%,rgba(255,175,208,0.28),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(255,209,178,0.18),transparent_36%),radial-gradient(circle_at_50%_80%,rgba(255,255,255,0.08),transparent_42%),linear-gradient(180deg,#1c1223_0%,#231427_42%,#120d16_100%)]"
     return (
-      <div className="min-h-[100dvh] bg-[#120d16] text-white">
-        <div className={`pointer-events-none absolute inset-0 ${bgGradientClass}`} />
-        <div className="pointer-events-none absolute inset-0 opacity-25 [background:radial-gradient(rgba(255,255,255,0.18)_0.8px,transparent_0.8px)] [background-size:22px_22px]" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-white/10 to-transparent" />
+      <div className="min-h-[100dvh] bg-[#08080a] text-white">
+        <div
+          className="pointer-events-none absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage:
+              "url(https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2070&auto=format&fit=crop)",
+          }}
+        />
+        <div className="pointer-events-none absolute inset-0 bg-black/55" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,185,120,0.16),transparent_44%)]" />
         <div className="relative mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 py-8">
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-black/20 px-2 py-1">
-              <span className="px-1 text-[11px] text-white/60">{t("bgPresetLabel")}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setBgPreset("soft")
-                  try {
-                    localStorage.setItem("cm_member_bg_preset", "soft")
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                className={`rounded-lg px-2 py-1 text-[11px] transition ${
-                  bgPreset === "soft" ? "bg-pink-300 text-[#2c1022]" : "text-white/70 hover:bg-white/10"
-                }`}
-              >
-                {t("bgPresetSoft")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setBgPreset("chic")
-                  try {
-                    localStorage.setItem("cm_member_bg_preset", "chic")
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                className={`rounded-lg px-2 py-1 text-[11px] transition ${
-                  bgPreset === "chic" ? "bg-violet-300 text-[#251236]" : "text-white/70 hover:bg-white/10"
-                }`}
-              >
-                {t("bgPresetChic")}
-              </button>
-            </div>
+          <div className="mb-6 flex justify-end">
             <MemberPortalLangSelect />
           </div>
           <div className="mb-10 flex flex-col items-center text-center">
