@@ -5,6 +5,7 @@ import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MemberSubnav } from "@/components/erp/member-subnav"
 import { adjustMemberPoints, getMemberPoints, getMembers } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -35,6 +36,7 @@ export default function MemberPointsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <MemberSubnav />
         <Card className="mb-4">
           <CardHeader>
             <CardTitle>{t("memberPointsAdjustTitle")}</CardTitle>

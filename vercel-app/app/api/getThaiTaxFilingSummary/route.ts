@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import {
@@ -182,13 +182,17 @@ export async function GET(request: NextRequest) {
 
     const monthBase = buildTaxMonthPostgrestFilter(period.months)
     const [vatRows, whtRows] = await Promise.all([
-      supabaseSelectFilter('vat_ledger_entries', monthBase, {
+      supabaseSelectFilterAllPages('vat_ledger_entries', monthBase, {
         select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number,store_name',
-        limit: 20000,
+        order: 'id.asc',
+        pageSize: 4000,
+        maxRows: 100000,
       }) as Promise<VatRow[] | null>,
-      supabaseSelectFilter('withholding_tax_ledger_entries', monthBase, {
+      supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthBase, {
         select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name',
-        limit: 20000,
+        order: 'id.asc',
+        pageSize: 4000,
+        maxRows: 100000,
       }) as Promise<WhtRow[] | null>,
     ])
 

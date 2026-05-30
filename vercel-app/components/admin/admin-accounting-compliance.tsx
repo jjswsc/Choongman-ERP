@@ -3191,6 +3191,20 @@ export function AdminAccountingCompliance({
       summaryPayableVat: Number(taxSummary?.vat?.payableVat || 0),
     }
   }, [vatOutputRowsFiltered, vatInputRowsFiltered, taxSummary?.vat?.payableVat])
+  const vatFilteredStats = React.useMemo(() => {
+    const all = [...vatOutputRowsFiltered, ...vatInputRowsFiltered]
+    let missingTaxIdCount = 0
+    let missingInvoiceCount = 0
+    for (const row of all) {
+      if (!String(row.counterparty_tax_id || "").trim()) missingTaxIdCount += 1
+      if (!String(row.invoice_number || "").trim()) missingInvoiceCount += 1
+    }
+    return {
+      rowCount: all.length,
+      missingTaxIdCount,
+      missingInvoiceCount,
+    }
+  }, [vatOutputRowsFiltered, vatInputRowsFiltered])
   const vatSettlementHeadline = React.useMemo(() => {
     if (vatSettlement.payableVat > 0) {
       return {
@@ -3209,15 +3223,9 @@ export function AdminAccountingCompliance({
       className: "border-emerald-300/50 bg-emerald-50/85 dark:bg-emerald-950/25",
     }
   }, [vatSettlement.payableVat, t])
-  const outputSummaryNet = isHeadOfficeLedgerStore
-    ? vatSettlement.outputNet
-    : Number(taxSummary?.vat.outputNet || 0)
-  const outputSummaryVat = isHeadOfficeLedgerStore
-    ? vatSettlement.outputVat
-    : Number(taxSummary?.vat.outputVat || 0)
-  const outputSummaryPayable = isHeadOfficeLedgerStore
-    ? vatSettlement.payableVat
-    : Number(taxSummary?.vat.payableVat || 0)
+  const outputSummaryNet = vatSettlement.outputNet
+  const outputSummaryVat = vatSettlement.outputVat
+  const outputSummaryPayable = vatSettlement.payableVat
   const whtRowsFiltered = React.useMemo(
     () => whtRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [whtRows, ledgerStatusFilter]
@@ -5692,8 +5700,7 @@ export function AdminAccountingCompliance({
                       {posFilingOutputSummaries.length > 0
                         ? ` · ${tr(t, "accCompPosAutoFilingLinesNote", { n: posFilingOutputSummaries.length.toLocaleString() })}`
                         : ""}{" "}
-                      / {t("accCompVatTotalRows")}:{" "}
-                      {(isHeadOfficeLedgerStore ? vatOutputRowsFiltered.length : Number(taxSummary?.vat.rowCount || 0)).toLocaleString()}
+                      / {t("accCompVatTotalRows")}: {vatFilteredStats.rowCount.toLocaleString()}
                     </div>
                     {isHeadOfficeLedgerStore ? (
                       <div className="md:col-span-2 text-[11px] text-muted-foreground">
@@ -5701,10 +5708,10 @@ export function AdminAccountingCompliance({
                       </div>
                     ) : null}
                     <div>
-                      {t("accCompMissingTin")}: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}
+                      {t("accCompMissingTin")}: {vatFilteredStats.missingTaxIdCount.toLocaleString()}
                     </div>
                     <div>
-                      {t("accCompMissingInvoice")}: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}
+                      {t("accCompMissingInvoice")}: {vatFilteredStats.missingInvoiceCount.toLocaleString()}
                     </div>
                   </div>
                   {taxSummary && allowedPp30Views.includes("wht") ? (
@@ -6056,17 +6063,17 @@ export function AdminAccountingCompliance({
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>
-                      {t("accCompVatInputNet")}: {(taxSummary?.vat.inputNet || 0).toLocaleString()}
+                      {t("accCompVatInputNet")}: {Math.round(vatSettlement.inputNet).toLocaleString()}
                     </div>
                     <div>
-                      {t("accCompVatInputVat")}: {(taxSummary?.vat.inputVat || 0).toLocaleString()}
+                      {t("accCompVatInputVat")}: {Math.round(vatSettlement.inputVat).toLocaleString()}
                     </div>
                     <div>
-                      {t("accCompVatPayable")}: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
+                      {t("accCompVatPayable")}: {Math.round(vatSettlement.payableVat).toLocaleString()}
                     </div>
                     <div>
                       {t("accCompVatRowsPurchase")}: {vatInputRowsFiltered.length.toLocaleString()} / {t("accCompVatTotalRows")}:{" "}
-                      {(taxSummary?.vat.rowCount || 0).toLocaleString()}
+                      {vatFilteredStats.rowCount.toLocaleString()}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs rounded-md border border-dashed border-border/70 bg-muted/10 p-2">

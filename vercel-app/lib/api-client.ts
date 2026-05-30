@@ -11211,6 +11211,22 @@ export async function importLineCrmFile(params: { file: File }) {
   }>
 }
 
+export async function resetLineMemberList() {
+  const res = await apiFetchWithOffline('/api/members/line-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    deactivatedLineIdentities?: number
+    deactivatedLineMembers?: number
+    deletedImportRows?: number
+    deletedImportJobs?: number
+  }>
+}
+
 export async function getMemberPoints(params?: { memberId?: number; limit?: number }) {
   const q = new URLSearchParams()
   if (params?.memberId) q.set('memberId', String(params.memberId))

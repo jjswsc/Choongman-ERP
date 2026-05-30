@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
-import { createMember, type MemberSummary } from '@/lib/members-server'
+import { createMember, getMemberSummaryById, type MemberSummary } from '@/lib/members-server'
 import {
   supabaseInsert,
   supabaseSelectFilter,
@@ -9,9 +9,10 @@ import {
 } from '@/lib/supabase-server'
 
 export const MEMBER_SESSION_COOKIE = 'cm_member_session'
-const OTP_EXPIRE_MINUTES = 5
 const SESSION_EXPIRE_DAYS = 90
 const OTP_MAX_TRIES = 5
+const BIRTH_LOGIN_MAX_TRIES = 5
+const BIRTH_LOGIN_WINDOW_MINUTES = 15
 
 type OtpRow = {
   id?: number
@@ -58,6 +59,15 @@ function normalizePhone(phone: string): string {
   return toText(phone).replace(/[^\d+]/g, '')
 }
 
+function phoneLookupVariants(phone: string): string[] {
+  const raw = normalizePhone(phone)
+  if (!raw) return []
+  const out = new Set<string>([raw])
+  if (raw.startsWith('0')) out.add(`66${raw.slice(1)}`)
+  if (raw.startsWith('66')) out.add(`0${raw.slice(2)}`)
+  return [...out]
+}
+
 function isProdLike(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
 }
@@ -75,16 +85,161 @@ function hashToken(raw: string): string {
   return crypto.createHash('sha256').update(`${otpPepper()}:${raw}`).digest('hex')
 }
 
-function genOtpCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000))
-}
-
 function addMinutesBangkok(now: Date, mins: number): string {
   return getBangkokDateTimeString(new Date(now.getTime() + mins * 60 * 1000))
 }
 
 function addDaysBangkok(now: Date, days: number): string {
   return getBangkokDateTimeString(new Date(now.getTime() + days * 24 * 60 * 60 * 1000))
+}
+
+function normalizeBirthDateInput(raw: string): string {
+  const v = toText(raw)
+  if (!v) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+  const m = v.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
+  if (m) {
+    const dd = m[1].padStart(2, '0')
+    const mm = m[2].padStart(2, '0')
+    return `${m[3]}-${mm}-${dd}`
+  }
+  return v.slice(0, 10)
+}
+
+function birthDatesMatch(stored: string, input: string): boolean {
+  const a = normalizeBirthDateInput(stored)
+  const b = normalizeBirthDateInput(input)
+  if (!a || !b) return false
+  return a === b
+}
+
+async function countRecentBirthLoginFailures(phone: string): Promise<number> {
+  const since = addMinutesBangkok(new Date(Date.now() - BIRTH_LOGIN_WINDOW_MINUTES * 60 * 1000), 0)
+  const rows = (await supabaseSelectFilter(
+    'member_login_otps',
+    `phone=eq.${encodeURIComponent(phone)}&status=eq.birth_fail&created_at=gte.${encodeURIComponent(since)}`,
+    { limit: 20 }
+  )) as OtpRow[]
+  return rows?.length || 0
+}
+
+async function recordBirthLoginFailure(phone: string): Promise<void> {
+  await supabaseInsert('member_login_otps', {
+    phone,
+    otp_hash: 'birth_fail',
+    expires_at: addMinutesBangkok(new Date(), BIRTH_LOGIN_WINDOW_MINUTES),
+    status: 'birth_fail',
+    tries: 1,
+    created_at: getBangkokDateTimeString(),
+  })
+}
+
+export async function createMemberPortalSession(params: {
+  memberId: number
+  deviceLabel?: string
+  userAgent?: string
+  ip?: string
+}): Promise<{ sessionToken: string; expiresAt: string }> {
+  const memberId = Number(params.memberId || 0)
+  if (!memberId) throw new Error('회원 ID가 필요합니다.')
+  const rawToken = crypto.randomBytes(32).toString('hex')
+  const tokenHash = hashToken(rawToken)
+  const expiresAt = addDaysBangkok(new Date(), SESSION_EXPIRE_DAYS)
+  await supabaseInsert('member_sessions', {
+    member_id: memberId,
+    session_token_hash: tokenHash,
+    device_label: toText(params.deviceLabel) || null,
+    user_agent: toText(params.userAgent) || null,
+    ip: toText(params.ip) || null,
+    expires_at: expiresAt,
+    created_at: getBangkokDateTimeString(),
+    last_seen_at: getBangkokDateTimeString(),
+  })
+  return { sessionToken: rawToken, expiresAt }
+}
+
+export async function verifyMemberByPhoneBirthDate(params: {
+  phone: string
+  birthDate: string
+  deviceLabel?: string
+  userAgent?: string
+  ip?: string
+}): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string }> {
+  const phone = normalizePhone(params.phone)
+  const birthDate = normalizeBirthDateInput(params.birthDate)
+  if (!phone) throw new Error('전화번호를 입력해 주세요.')
+  if (!birthDate) throw new Error('생년월일을 입력해 주세요.')
+
+  const failCount = await countRecentBirthLoginFailures(phone)
+  if (failCount >= BIRTH_LOGIN_MAX_TRIES) {
+    throw new Error('로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해 주세요.')
+  }
+
+  const variants = phoneLookupVariants(phone)
+  let rows: MemberRow[] = []
+  for (const candidate of variants) {
+    const found = (await supabaseSelectFilter(
+      'members',
+      `phone=eq.${encodeURIComponent(candidate)}`,
+      { order: 'id.desc', limit: 5 }
+    )) as MemberRow[]
+    if (found?.length) {
+      rows = found
+      break
+    }
+  }
+  const matched = (rows || []).find((row) => birthDatesMatch(toText(row.birth_date), birthDate))
+  if (!matched?.id) {
+    await recordBirthLoginFailure(phone)
+    throw new Error('등록된 회원 정보와 일치하지 않습니다. 전화번호와 생년월일을 확인해 주세요.')
+  }
+  if (toText(matched.status) === 'inactive') {
+    throw new Error('비활성화된 회원입니다. 매장에 문의해 주세요.')
+  }
+
+  const member: MemberSummary = {
+    id: Number(matched.id),
+    memberNo: toText(matched.member_no),
+    name: toText(matched.name),
+    fullName: toText(matched.full_name) || toText(matched.name),
+    birthDate: toText(matched.birth_date),
+    gender: toText(matched.gender),
+    nationality: toText(matched.nationality),
+    phone: toText(matched.phone),
+    email: toText(matched.email),
+    joinChannel: toText(matched.join_channel),
+    source: toText(matched.source) || 'app',
+    status: toText(matched.status) || 'active',
+    lineLinked: false,
+    tierCode: toText(matched.tier_code) || 'BRONZE',
+    pointBalance: Number(matched.point_balance || 0),
+    lifetimeAmount: Number(matched.lifetime_amount || 0),
+    createdAt: toText(matched.created_at),
+    updatedAt: toText(matched.updated_at),
+  }
+
+  const session = await createMemberPortalSession({
+    memberId: member.id,
+    deviceLabel: params.deviceLabel,
+    userAgent: params.userAgent,
+    ip: params.ip,
+  })
+  return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt }
+}
+
+export async function createMemberPortalSessionForMember(params: {
+  member: MemberSummary
+  deviceLabel?: string
+  userAgent?: string
+  ip?: string
+}): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string }> {
+  const session = await createMemberPortalSession({
+    memberId: params.member.id,
+    deviceLabel: params.deviceLabel,
+    userAgent: params.userAgent,
+    ip: params.ip,
+  })
+  return { member: params.member, sessionToken: session.sessionToken, expiresAt: session.expiresAt }
 }
 
 function buildAnonymousName(phone: string): string {
@@ -163,22 +318,8 @@ export async function ensureMemberForPortal(params: {
   })
 }
 
-export async function issueMemberOtp(phoneRaw: string): Promise<{ expiresAt: string; debugCode?: string }> {
-  const phone = normalizePhone(phoneRaw)
-  if (!phone) throw new Error('전화번호 형식이 올바르지 않습니다.')
-  const code = genOtpCode()
-  const now = new Date()
-  const expiresAt = addMinutesBangkok(now, OTP_EXPIRE_MINUTES)
-  await supabaseInsert('member_login_otps', {
-    phone,
-    otp_hash: hashToken(code),
-    expires_at: expiresAt,
-    status: 'issued',
-    tries: 0,
-    created_at: getBangkokDateTimeString(),
-  })
-  const debugCode = isProdLike() ? undefined : code
-  return { expiresAt, debugCode }
+export async function issueMemberOtp(_phoneRaw: string): Promise<never> {
+  throw new Error('SMS OTP 로그인은 사용하지 않습니다. LINE 로그인 또는 전화번호+생년월일을 이용해 주세요.')
 }
 
 async function latestOtp(phone: string): Promise<OtpRow | null> {
@@ -234,20 +375,13 @@ export async function verifyMemberOtp(params: {
     tries: tries + 1,
   })
   const member = await ensureMemberForPortal({ phone })
-  const rawToken = crypto.randomBytes(32).toString('hex')
-  const tokenHash = hashToken(rawToken)
-  const expiresAt = addDaysBangkok(new Date(), SESSION_EXPIRE_DAYS)
-  await supabaseInsert('member_sessions', {
-    member_id: member.id,
-    session_token_hash: tokenHash,
-    device_label: toText(params.deviceLabel) || null,
-    user_agent: toText(params.userAgent) || null,
-    ip: toText(params.ip) || null,
-    expires_at: expiresAt,
-    created_at: getBangkokDateTimeString(),
-    last_seen_at: getBangkokDateTimeString(),
+  const session = await createMemberPortalSession({
+    memberId: member.id,
+    deviceLabel: params.deviceLabel,
+    userAgent: params.userAgent,
+    ip: params.ip,
   })
-  return { member, sessionToken: rawToken, expiresAt }
+  return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt }
 }
 
 export function buildMemberSessionCookie(token: string): string {
@@ -281,29 +415,7 @@ export async function getMemberBySessionToken(tokenRaw: string): Promise<MemberS
   await supabaseUpdateByFilter('member_sessions', `id=eq.${sessionId}`, {
     last_seen_at: getBangkokDateTimeString(),
   })
-  const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
-  const row = rows?.[0]
-  if (!row?.id) return null
-  return {
-    id: Number(row.id),
-    memberNo: toText(row.member_no),
-    name: toText(row.name),
-    fullName: toText(row.full_name) || toText(row.name),
-    birthDate: toText(row.birth_date),
-    gender: toText(row.gender),
-    nationality: toText(row.nationality),
-    phone: toText(row.phone),
-    email: toText(row.email),
-    joinChannel: toText(row.join_channel) || 'homepage',
-    source: toText(row.source) || 'app',
-    status: toText(row.status) || 'active',
-    lineLinked: false,
-    tierCode: toText(row.tier_code) || 'BRONZE',
-    pointBalance: Number(row.point_balance || 0),
-    lifetimeAmount: Number(row.lifetime_amount || 0),
-    createdAt: toText(row.created_at),
-    updatedAt: toText(row.updated_at),
-  }
+  return getMemberSummaryById(memberId)
 }
 
 export async function revokeMemberSession(tokenRaw: string): Promise<void> {

@@ -3,18 +3,24 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 const items = [
-  { href: "/admin/members", label: "회원 마스터" },
-  { href: "/admin/members#line-tools", label: "LINE 연동" },
-  { href: "/admin/members/points", label: "포인트" },
-  { href: "/admin/members/coupons", label: "쿠폰" },
-  { href: "/admin/members/visits", label: "방문 기록" },
-  { href: "/admin/members/tiers", label: "등급 관리" },
+  { href: "/admin/members", key: "memberList" },
+  { href: "/admin/members/points", key: "memberPoints" },
+  { href: "/admin/members/coupons", key: "memberCoupons" },
+  { href: "/admin/members/visits", key: "memberVisits" },
+  { href: "/admin/members/tiers", key: "memberTiers" },
+  { href: "/admin/crm", key: "adminCrmDashboard" },
+  { href: "/admin/crm/segments", key: "adminCrmSegments" },
+  { href: "/admin/crm/rfm", key: "adminCrmRfm" },
 ]
 
 export function MemberSubnav() {
   const pathname = usePathname()
+  const { lang } = useLang()
+  const t = useT(lang)
   return (
     <div className="mb-4 flex flex-wrap gap-2">
       {items.map((item) => (
@@ -26,7 +32,7 @@ export function MemberSubnav() {
             pathname === item.href ? "bg-primary text-primary-foreground" : "hover:bg-muted"
           )}
         >
-          {item.label}
+          {t(item.key)}
         </Link>
       ))}
     </div>

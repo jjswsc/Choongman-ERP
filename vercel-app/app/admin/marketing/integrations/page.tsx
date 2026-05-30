@@ -109,6 +109,16 @@ export default function MarketingIntegrationsPage() {
             <ul className="text-sm text-muted-foreground space-y-1 mb-3">
               <li>• 메시징: LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN (기존 /api/line/webhook)</li>
               <li>
+                • 회원 포털 LINE 로그인: LINE_LOGIN_CHANNEL_ID, LINE_LOGIN_CHANNEL_SECRET (미설정 시 LINE_CHANNEL_SECRET
+                폴백). LINE Developers → 채널 → LINE Login 활성화 후 Callback URL에{' '}
+                <code className="text-xs">/api/member-portal/auth/line/callback</code> 등록. Basic settings → Linked LINE
+                Official Account에서 OA 연결 후 로그인 동의 화면에 친구 추가 옵션 표시
+              </li>
+              <li>
+                • (선택) LINE_LOGIN_BOT_PROMPT — <code className="text-xs">normal</code>(기본, 동의 화면에 친구 추가
+                체크) / <code className="text-xs">aggressive</code>(별도 친구 추가 화면) / <code className="text-xs">off</code>
+              </li>
+              <li>
                 • OAPlus Public API: 베이스 <code className="text-xs">https://developers-oaplus.line.biz</code> —
                 아래 URL env에 경로 포함. 키는 OAPlus 관리자 Settings → API keys에서 발급 →{' '}
                 <code className="text-xs">X-API-KEY</code> 로 전송 (서버 프록시가 대신 붙임)

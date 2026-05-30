@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { issueMemberOtp } from '@/lib/member-portal-auth'
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = (await req.json()) as { phone?: string }
-    const phone = String(body.phone || '').trim()
-    const issued = await issueMemberOtp(phone)
-    return NextResponse.json({ success: true, expiresAt: issued.expiresAt, debugCode: issued.debugCode })
-  } catch (e) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: e instanceof Error ? e.message : '인증번호 요청에 실패했습니다.',
-      },
-      { status: 400 }
-    )
-  }
+/** @deprecated SMS OTP — LINE 로그인 / 전화번호+생년월일 사용 */
+export async function POST(_req: NextRequest) {
+  return NextResponse.json(
+    {
+      success: false,
+      message: 'SMS OTP 로그인은 종료되었습니다. LINE 로그인 또는 전화번호+생년월일을 이용해 주세요.',
+    },
+    { status: 410 }
+  )
 }
-

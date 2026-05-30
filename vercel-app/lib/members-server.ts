@@ -1,4 +1,7 @@
+import crypto from 'crypto'
 import {
+  supabaseCountFilter,
+  supabaseDeleteByFilter,
   supabaseInsert,
   supabaseRpc,
   supabaseSelect,
@@ -36,6 +39,8 @@ export type MemberSummary = {
   lastLineEventAt?: string
   lastUpdateReason?: string
   lastVisitedAt?: string
+  lineOaFriend?: boolean
+  lineOaFriendAt?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -56,6 +61,8 @@ type MemberRow = {
   consent_marketing?: boolean | null
   consent_privacy?: boolean | null
   consent_at?: string | null
+  line_oa_friend?: boolean | null
+  line_oa_friend_at?: string | null
   phone?: string | null
   email?: string | null
   source?: string | null
@@ -200,6 +207,8 @@ function toMemberSummary(
     lastLineEventAt,
     lastUpdateReason: deriveLastUpdateReason({ source, lastLineEventType }),
     lastVisitedAt: toText(member.last_visited_at),
+    lineOaFriend: Boolean(member.line_oa_friend),
+    lineOaFriendAt: toText(member.line_oa_friend_at),
     createdAt: toText(member.created_at),
     updatedAt: toText(member.updated_at),
   }
@@ -442,6 +451,64 @@ export async function findMemberByReferralCode(codeRaw: string): Promise<MemberS
   return toMemberSummary(row, lineMap.get(id))
 }
 
+export async function getMemberSummaryById(memberId: number): Promise<MemberSummary | null> {
+  const id = Number(memberId || 0)
+  if (!id) return null
+  const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, { limit: 1 })) as MemberRow[]
+  const row = rows?.[0]
+  if (!row?.id) return null
+  const lineMap = await getLineIdentities([id])
+  return toMemberSummary(row, lineMap.get(id))
+}
+
+function buildReferralCode(memberNo: string, memberId: number): string {
+  const digits = toText(memberNo).replace(/[^\d]/g, '')
+  const suffix = digits.slice(-6) || String(memberId).padStart(6, '0')
+  return `CM${suffix}`
+}
+
+export async function ensureMemberReferralCode(memberId: number): Promise<string> {
+  const member = await getMemberSummaryById(memberId)
+  if (!member) throw new Error('회원을 찾을 수 없습니다.')
+  if (toText(member.referralCode)) return toText(member.referralCode)
+  const code = buildReferralCode(member.memberNo, member.id)
+  await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
+    referral_code: code,
+    updated_at: getBangkokDateTimeString(),
+  })
+  return code
+}
+
+export async function updateMemberLineOaFriend(params: {
+  memberId: number
+  friendFlag: boolean
+  friendshipStatusChanged?: boolean
+}): Promise<void> {
+  const memberId = Number(params.memberId || 0)
+  if (!memberId) return
+  const now = getBangkokDateTimeString()
+  const patch: Record<string, unknown> = {
+    line_oa_friend: Boolean(params.friendFlag),
+    updated_at: now,
+  }
+  if (params.friendFlag) patch.line_oa_friend_at = now
+  try {
+    await supabaseUpdateByFilter('members', `id=eq.${memberId}`, patch)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e || '')
+    if (!/column/i.test(msg)) throw e
+  }
+  await createMemberEvent({
+    memberId,
+    eventId: `line_oa_friend:${memberId}:${crypto.randomUUID()}`,
+    eventType: params.friendshipStatusChanged ? 'line_oa_friend_changed' : 'line_oa_friend_sync',
+    payload: {
+      friendFlag: Boolean(params.friendFlag),
+      friendshipStatusChanged: Boolean(params.friendshipStatusChanged),
+    },
+  }).catch(() => {})
+}
+
 export async function createMember(input: CreateMemberInput): Promise<MemberSummary> {
   const name = toText(input.name)
   if (!name) throw new Error('회원 이름이 필요합니다.')
@@ -532,6 +599,39 @@ export async function registerLineMember(input: {
     const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
     const lineMap = await getLineIdentities([memberId])
     return toMemberSummary(rows[0], lineMap.get(memberId))
+  }
+
+  const displayName = toText(input.displayName)
+  if (displayName) {
+    const crmMatches = (await supabaseSelectFilter(
+      'members',
+      `line_display_name=eq.${encodeURIComponent(displayName)}`,
+      { order: 'id.asc', limit: 5 }
+    )) as MemberRow[]
+    for (const row of crmMatches || []) {
+      const memberId = Number(row.id || 0)
+      if (!memberId) continue
+      const linked = (await supabaseSelectFilter(
+        'member_identities',
+        `member_id=eq.${memberId}&provider=eq.line`,
+        { limit: 1 }
+      )) as MemberIdentityRow[]
+      if (linked?.length) continue
+      const now = getBangkokDateTimeString()
+      await ensureLineIdentity({
+        memberId,
+        lineUserId,
+        lineDisplayName: displayName,
+        linePictureUrl: toText(input.pictureUrl),
+      })
+      await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
+        join_channel: 'line',
+        updated_at: now,
+      })
+      const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
+      const lineMap = await getLineIdentities([memberId])
+      return toMemberSummary(rows[0], lineMap.get(memberId))
+    }
   }
 
   const created = await createMember({
@@ -972,5 +1072,64 @@ export async function createMemberEvent(params: {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.toLowerCase().includes('duplicate key')) return false
     throw e
+  }
+}
+
+export async function resetLineMemberList(): Promise<{
+  deactivatedLineIdentities: number
+  deactivatedLineMembers: number
+  deletedImportRows: number
+  deletedImportJobs: number
+}> {
+  let deactivatedLineIdentities = 0
+  let deactivatedLineMembers = 0
+  let deletedImportRows = 0
+  let deletedImportJobs = 0
+
+  try {
+    deactivatedLineIdentities = await supabaseCountFilter('member_identities', 'provider=eq.line')
+    await supabaseUpdateByFilter('member_identities', 'provider=eq.line', {
+      status: 'inactive',
+      display_name: null,
+      picture_url: null,
+      last_seen_at: getBangkokDateTimeString(),
+    })
+  } catch {
+    deactivatedLineIdentities = 0
+  }
+
+  try {
+    deactivatedLineMembers = await supabaseCountFilter(
+      'members',
+      'or=(source=eq.line,source=eq.line_import)'
+    )
+    await supabaseUpdateByFilter('members', 'or=(source=eq.line,source=eq.line_import)', {
+      status: 'inactive',
+      line_display_name: null,
+      updated_at: getBangkokDateTimeString(),
+    })
+  } catch {
+    deactivatedLineMembers = 0
+  }
+
+  try {
+    deletedImportRows = await supabaseCountFilter('line_import_rows', 'id=gt.0')
+    await supabaseDeleteByFilter('line_import_rows', 'id=gt.0')
+  } catch {
+    deletedImportRows = 0
+  }
+
+  try {
+    deletedImportJobs = await supabaseCountFilter('line_import_jobs', 'id=gt.0')
+    await supabaseDeleteByFilter('line_import_jobs', 'id=gt.0')
+  } catch {
+    deletedImportJobs = 0
+  }
+
+  return {
+    deactivatedLineIdentities,
+    deactivatedLineMembers,
+    deletedImportRows,
+    deletedImportJobs,
   }
 }

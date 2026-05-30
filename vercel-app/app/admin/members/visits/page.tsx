@@ -4,6 +4,7 @@ import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MemberSubnav } from "@/components/erp/member-subnav"
 import { getMemberVisits } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -92,20 +93,34 @@ export default function MemberVisitsPage() {
   const [memberId, setMemberId] = React.useState("")
   const [rows, setRows] = React.useState<VisitRow[]>([])
   const analysisRows = React.useMemo(() => buildMemberVisitAnalysis(rows), [rows])
+  const kpi = React.useMemo(() => {
+    const memberCount = analysisRows.length
+    const totalContribution = analysisRows.reduce((sum, row) => sum + Number(row.totalContribution || 0), 0)
+    const totalVisits = analysisRows.reduce((sum, row) => sum + Number(row.visitCount || 0), 0)
+    const avgTicketAmount = totalVisits > 0 ? totalContribution / totalVisits : 0
+    const cycleRows = analysisRows.filter((x) => x.avgVisitCycleDays != null)
+    const avgVisitCycleDays =
+      cycleRows.length > 0
+        ? cycleRows.reduce((sum, x) => sum + Number(x.avgVisitCycleDays || 0), 0) / cycleRows.length
+        : null
+    const topContributor = analysisRows[0] || null
+    return { memberCount, totalContribution, avgTicketAmount, avgVisitCycleDays, topContributor }
+  }, [analysisRows])
 
   const load = React.useCallback(async () => {
     const id = Number(memberId || 0)
-    if (!id) {
-      setRows([])
-      return
-    }
-    const list = await getMemberVisits({ memberId: id, limit: 500 })
+    const list = await getMemberVisits({ memberId: id || undefined, limit: 500 })
     setRows(list)
   }, [memberId])
+
+  React.useEffect(() => {
+    load().catch(() => {})
+  }, [load])
 
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <MemberSubnav />
         <Card className="mb-4">
           <CardHeader><CardTitle>{t("memberVisitsSearchTitle")}</CardTitle></CardHeader>
           <CardContent className="flex gap-2">
@@ -113,6 +128,39 @@ export default function MemberVisitsPage() {
             <Button variant="outline" onClick={() => load()}>{t("btn_query")}</Button>
           </CardContent>
         </Card>
+
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm">{t("memberVisitsKpiMembers")}</CardTitle></CardHeader>
+            <CardContent><p className="text-2xl font-semibold">{kpi.memberCount.toLocaleString()}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgTicketAmount")}</CardTitle></CardHeader>
+            <CardContent><p className="text-2xl font-semibold">{Number(kpi.avgTicketAmount || 0).toLocaleString()}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgVisitCycleDays")}</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">
+                {kpi.avgVisitCycleDays == null ? "-" : `${kpi.avgVisitCycleDays.toFixed(1)} ${t("days")}`}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm">{t("memberVisitsTotalContribution")}</CardTitle></CardHeader>
+            <CardContent><p className="text-2xl font-semibold">{Number(kpi.totalContribution || 0).toLocaleString()}</p></CardContent>
+          </Card>
+        </div>
+
+        {kpi.topContributor && (
+          <Card className="mb-4">
+            <CardHeader><CardTitle className="text-sm">{t("memberVisitsTopContributor")}</CardTitle></CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              memberId {kpi.topContributor.memberId} ({kpi.topContributor.memberNo || "-"}) ·
+              {` ${t("memberVisitsVisitCount")} ${kpi.topContributor.visitCount.toLocaleString()} / ${t("memberVisitsTotalContribution")} ${Number(kpi.topContributor.totalContribution || 0).toLocaleString()}`}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader><CardTitle>{t("memberVisitsHistoryTitle")}</CardTitle></CardHeader>

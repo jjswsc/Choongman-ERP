@@ -3,7 +3,7 @@
 
 import { defaultCache } from "@serwist/next/worker"
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist"
-import { ExpirationPlugin, NetworkFirst, NetworkOnly, Serwist } from "serwist"
+import { ExpirationPlugin, CacheFirst, NetworkFirst, NetworkOnly, Serwist } from "serwist"
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -267,7 +267,36 @@ const loginPagesGetNetworkOnly = {
 }
 
 /**
- * 메뉴 썸네일 동일 출처 프록시: fetch/img가 defaultCache에 걸리면 SW(sw.js) 경유 시
+ * KBank QR 결제 가이드카드 브랜드 PNG — `public/pos/qr-brands/`.
+ * posMenuImageProxy 와 달리 정적 자산이라 CDN·브라우저 장기 캐시 가능.
+ */
+const posQrBrandAssetsCacheFirst = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && request.method === "GET" && pathname.startsWith("/pos/qr-brands/")
+  },
+  method: "GET" as const,
+  handler: new CacheFirst({
+    cacheName: "pos-qr-brand-assets-v1",
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 16,
+        maxAgeSeconds: 365 * 24 * 60 * 60,
+        maxAgeFrom: "last-used",
+      }),
+    ],
+  }),
+}
+
+/**
  * (canceled)/ERR_FAILED·빈 타일이 난다. 캐시하지 않고 항상 네트워크만 사용.
  */
 const posMenuImageProxyGetNetworkOnly = {
@@ -328,6 +357,7 @@ const serwist = new Serwist({
   /** posMenuImageProxy 는 href가 `...png`로 끝나 defaultCache 이미지 RegExp에도 걸릴 수 있어 반드시 최우선 등록 */
   runtimeCaching: [
     posMenuImageProxyGetNetworkOnly,
+    posQrBrandAssetsCacheFirst,
     authLoginApisGetNetworkOnly,
     authLoginPostNetworkOnly,
     posLoginDocumentNetworkFirst,

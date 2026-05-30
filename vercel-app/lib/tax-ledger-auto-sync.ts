@@ -12,6 +12,8 @@ import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { backfillPosVatLedgerStoreNames, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
+import { syncInvoiceBackedBankInputVatLedgers } from '@/lib/invoice-backed-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import {
   isAccountingPurchaseOrderByCartJson,
@@ -56,6 +58,15 @@ type StockLogRow = {
   invoice_unit_price?: number | string | null
   unit_cost?: number | string | null
   reference_no?: string | null
+  inbound_batch_id?: number | null
+}
+
+type InboundBatchMeta = {
+  id?: number
+  invoice_received?: boolean | null
+  invoice_no?: string | null
+  vendor_code?: string | null
+  vendor_name?: string | null
 }
 
 type ExistingAutoRow = {
@@ -159,12 +170,6 @@ function parseExpenseAccrualWhtIdFromMemo(memo: string): number {
 
 function parsePayrollRecordIdFromMemo(memo: string): number {
   const m = memo.match(/\[AUTO:PAYROLL_RECORD_WHT:(\d+)\]/)
-  if (!m) return 0
-  return Math.floor(Number(m[1]) || 0)
-}
-
-function parsePurchaseOrderIdFromMemo(memo: string): number {
-  const m = memo.match(/\[AUTO:PURCHASE_ORDER_WHT:(\d+)\]/)
   if (!m) return 0
   return Math.floor(Number(m[1]) || 0)
 }
@@ -286,11 +291,48 @@ function pickEmployeeTin(row?: EmployeeTaxRow | null): string | null {
 export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   months: string[]
   storeFilter?: string
-}): Promise<{ stockUpserted: number; stockDeleted: number; expenseSynced: number }> {
+}): Promise<{
+  stockUpserted: number
+  stockDeleted: number
+  expenseSynced: number
+  posUpserted: number
+  bankInvoiceUpserted: number
+}> {
   const validMonths = (params.months || [])
     .map((m) => String(m || '').slice(0, 7))
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
-  if (validMonths.length === 0) return { stockUpserted: 0, stockDeleted: 0, expenseSynced: 0 }
+  if (validMonths.length === 0) {
+    return { stockUpserted: 0, stockDeleted: 0, expenseSynced: 0, posUpserted: 0, bankInvoiceUpserted: 0 }
+  }
+
+  let posUpserted = 0
+  let bankInvoiceUpserted = 0
+
+  try {
+    await backfillPosVatLedgerStoreNames(validMonths)
+  } catch (e) {
+    console.warn('syncTaxVatLedgersFromStockAndExpenses pos store_name backfill:', e)
+  }
+
+  try {
+    const posSync = await syncPosOrdersOutputVatLedger({
+      months: validMonths,
+      storeFilter: params.storeFilter,
+    })
+    posUpserted = posSync.upserted
+  } catch (e) {
+    console.warn('syncTaxVatLedgersFromStockAndExpenses pos output sync:', e)
+  }
+
+  try {
+    const bankSync = await syncInvoiceBackedBankInputVatLedgers({
+      months: validMonths,
+      storeFilter: params.storeFilter,
+    })
+    bankInvoiceUpserted = bankSync.upserted
+  } catch (e) {
+    console.warn('syncTaxVatLedgersFromStockAndExpenses bank invoice sync:', e)
+  }
 
   const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
@@ -337,7 +379,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   try {
     stockLogs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
       select:
-        'id,log_type,log_date,location,vendor_target,item_code,item_name,qty,order_id,invoice_unit_price,unit_cost,reference_no',
+        'id,log_type,log_date,location,vendor_target,item_code,item_name,qty,order_id,invoice_unit_price,unit_cost,reference_no,inbound_batch_id',
       order: 'id.asc',
       pageSize: 8000,
       maxRows: 200000,
@@ -363,6 +405,34 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     .map((r) => Math.floor(Number(r.order_id) || 0))
     .filter((n) => n > 0)
   const orderCartById = await loadOrderCartByIds(orderIds)
+
+  const inboundBatchById = new Map<number, InboundBatchMeta>()
+  const batchIds = [
+    ...new Set(
+      (stockLogs || [])
+        .map((r) => Math.floor(Number(r.inbound_batch_id) || 0))
+        .filter((id) => id > 0)
+    ),
+  ]
+  if (batchIds.length) {
+    const chunkSize = 200
+    for (let i = 0; i < batchIds.length; i += chunkSize) {
+      const chunk = batchIds.slice(i, i + chunkSize)
+      try {
+        const batches = (await supabaseSelectFilter(
+          'inbound_batches',
+          `id=in.(${chunk.join(',')})`,
+          { select: 'id,invoice_received,invoice_no,vendor_code,vendor_name', limit: chunk.length }
+        )) as InboundBatchMeta[] | null
+        for (const b of batches || []) {
+          const id = Math.floor(Number(b.id) || 0)
+          if (id > 0) inboundBatchById.set(id, b)
+        }
+      } catch {
+        /* inbound_batches 미배포 환경 */
+      }
+    }
+  }
 
   const autoFilter = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:STOCK_LOG:%')}`
   const existingAutoRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', autoFilter, {
@@ -472,8 +542,19 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     const total = round2(net + vat)
 
     const memoTag = `[AUTO:STOCK_LOG:${stockLogId}]`
+    const batchId = Math.floor(Number(log.inbound_batch_id) || 0)
+    const batchMeta = batchId > 0 ? inboundBatchById.get(batchId) : undefined
+    const batchInvoiceReceived = Boolean(batchMeta?.invoice_received)
+    const batchInvoiceNo = String(batchMeta?.invoice_no || '').trim()
     const evidenceStatus: InvoiceEvidenceStatus =
-      isInputLog && isInternalHqMove ? 'received' : issuedRef ? 'received' : 'required_pending'
+      isInputLog && isInternalHqMove
+        ? 'received'
+        : issuedRef
+          ? 'received'
+          : batchInvoiceReceived
+            ? 'received'
+            : 'required_pending'
+    const invoiceNumber = (issuedRef || batchInvoiceNo || `SL-${stockLogId}`).slice(0, 128)
     const row = mergeEvidenceIntoVatLedgerRow(
       {
         doc_date: docDate,
@@ -481,7 +562,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
         direction: isInputLog ? ('input' as const) : ('output' as const),
         counterparty_name: vendor.slice(0, 500),
         counterparty_tax_id: null,
-        invoice_number: (issuedRef || `SL-${stockLogId}`).slice(0, 128),
+        invoice_number: invoiceNumber,
         net_amount: net,
         vat_amount: vat,
         total_amount: total,
@@ -571,7 +652,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     expenseSynced += 1
   }
 
-  return { stockUpserted, stockDeleted, expenseSynced }
+  return { stockUpserted, stockDeleted, expenseSynced, posUpserted, bankInvoiceUpserted }
 }
 
 export async function syncTaxWithholdingLedgersFromExpenses(params: {

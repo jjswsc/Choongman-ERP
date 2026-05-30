@@ -6,9 +6,31 @@ alter table public.members
   add column if not exists birth_date date,
   add column if not exists gender text,
   add column if not exists line_display_name text,
+  add column if not exists line_member_type text,
+  add column if not exists line_first_name text,
+  add column if not exists line_last_name text,
+  add column if not exists line_address text,
+  add column if not exists line_subdistrict text,
+  add column if not exists line_district text,
+  add column if not exists line_province text,
+  add column if not exists line_postcode text,
+  add column if not exists line_membership_tier text,
+  add column if not exists line_member_tag text,
+  add column if not exists line_member_branch text,
+  add column if not exists line_current_points integer,
+  add column if not exists line_total_points integer,
+  add column if not exists line_tier_points integer,
+  add column if not exists line_usage_count integer,
+  add column if not exists line_last_active_at timestamp without time zone,
+  add column if not exists line_last_active_days integer,
+  add column if not exists line_member_status text,
+  add column if not exists line_registered_at timestamp without time zone,
+  add column if not exists line_exported_at timestamp without time zone,
   add column if not exists consent_marketing boolean,
   add column if not exists consent_privacy boolean,
-  add column if not exists consent_at timestamp without time zone;
+  add column if not exists consent_at timestamp without time zone,
+  add column if not exists line_oa_friend boolean,
+  add column if not exists line_oa_friend_at timestamp without time zone;
 
 create table if not exists public.line_import_jobs (
   id text primary key,
@@ -18,6 +40,11 @@ create table if not exists public.line_import_jobs (
   success_count integer not null default 0,
   failed_count integer not null default 0,
   created_by text,
+  exported_at timestamp without time zone,
+  shop_name text,
+  menu_name text,
+  period_start date,
+  period_end date,
   created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
 );
 
@@ -34,6 +61,7 @@ create table if not exists public.line_import_rows (
   points integer,
   status text not null, -- success / failed / skipped
   message text,
+  raw_payload jsonb,
   created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
 );
 

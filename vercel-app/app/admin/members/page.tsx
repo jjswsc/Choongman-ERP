@@ -1,5 +1,6 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
+import { appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Users } from "lucide-react"
@@ -9,13 +10,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   createMember,
-  getLineMessagingStatus,
   getMembers,
   importLineCrmFile,
-  syncLineMembers,
+  resetLineMemberList,
   updateMember,
   type Member,
 } from "@/lib/api-client"
+import { MemberSubnav } from "@/components/erp/member-subnav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -23,7 +24,6 @@ type MemberForm = {
   id?: number
   name: string
   fullName: string
-  lineDisplayName: string
   birthDate: string
   gender: string
   nationality: string
@@ -41,7 +41,6 @@ type MemberForm = {
 const emptyForm: MemberForm = {
   name: "",
   fullName: "",
-  lineDisplayName: "",
   birthDate: "",
   gender: "",
   nationality: "",
@@ -82,60 +81,21 @@ function toDateTimeLocalInput(value: string): string {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
 }
 
-function lineSyncErrorHint(errors?: string[]): string {
-  const list = Array.isArray(errors) ? errors.map((x) => String(x || "").trim()).filter(Boolean) : []
-  if (!list.length) return ""
-  const preview = list.slice(0, 3).join(" · ")
-  const more = list.length > 3 ? ` +${list.length - 3} more` : ""
-  return ` (${preview}${more})`
-}
-
 export default function MembersPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const [members, setMembers] = React.useState<Member[]>([])
   const [loading, setLoading] = React.useState(true)
   const [searching, setSearching] = React.useState(false)
-  const [syncing, setSyncing] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
+  const [resettingLine, setResettingLine] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState("")
   const [query, setQuery] = React.useState("")
   const [form, setForm] = React.useState<MemberForm>({ ...emptyForm })
-  const [syncMessage, setSyncMessage] = React.useState("")
-  /** loaded 전에는 자동 동기화 대기. token/secret null 이면 상태 API 실패로 미확인 → 동기화는 시도함. */
-  const [lineMessagingStatus, setLineMessagingStatus] = React.useState<{
-    loaded: boolean
-    channelAccessTokenConfigured: boolean | null
-    channelSecretConfigured: boolean | null
-  }>({ loaded: false, channelAccessTokenConfigured: null, channelSecretConfigured: null })
+  const [actionMessage, setActionMessage] = React.useState("")
   const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
   const importFileRef = React.useRef<HTMLInputElement | null>(null)
-  const reasonLabelLocalized = React.useCallback((reason?: string) => {
-    const key = String(reason || "").trim()
-    if (!key) return t("memberUpdateReasonUnknown")
-    if (key.startsWith("line_webhook:")) {
-      const event = key.replace("line_webhook:", "")
-      if (event === "follow") return t("memberUpdateReasonWebhookFollow")
-      if (event === "message") return t("memberUpdateReasonWebhookMessage")
-      if (event === "postback") return t("memberUpdateReasonWebhookPostback")
-      if (event === "unfollow") return t("memberUpdateReasonWebhookUnfollow")
-      return `${t("memberUpdateReasonWebhook")}(${event})`
-    }
-    if (key === "crm_import") return t("memberUpdateReasonCrmImport")
-    if (key === "line_sync_or_register") return t("memberUpdateReasonLineSync")
-    if (key === "erp_manual") return t("memberUpdateReasonErpManual")
-    if (key === "app_master") return t("memberUpdateReasonAppMaster")
-    return key
-  }, [t])
-  const sourceLabelLocalized = React.useCallback((source?: string) => {
-    const s = String(source || "").trim()
-    if (s === "app") return t("memberSourceApp")
-    if (s === "line") return "LINE"
-    if (s === "line_import") return t("memberSourceCrm")
-    if (s === "manual") return t("memberSourceManual")
-    return s || "—"
-  }, [t])
 
   const load = React.useCallback(async (q?: string, isSearch = false) => {
     if (isSearch) setSearching(true)
@@ -171,63 +131,6 @@ export default function MembersPage() {
     load("")
   }, [load])
 
-  React.useEffect(() => {
-    getLineMessagingStatus()
-      .then((r) =>
-        setLineMessagingStatus({
-          loaded: true,
-          channelAccessTokenConfigured: r.channelAccessTokenConfigured,
-          channelSecretConfigured: r.channelSecretConfigured,
-        })
-      )
-      .catch(() =>
-        setLineMessagingStatus({
-          loaded: true,
-          channelAccessTokenConfigured: null,
-          channelSecretConfigured: null,
-        })
-      )
-  }, [])
-
-  React.useEffect(() => {
-    const runAutoSync = async () => {
-      if (!lineMessagingStatus.loaded) return
-      if (lineMessagingStatus.channelAccessTokenConfigured === false) {
-        setSyncMessage(
-          t("memberLineSyncSkippedNoToken")
-        )
-        return
-      }
-
-      const todayKey = new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)
-      const storageKey = "members-line-last-sync-day"
-      try {
-        const doneDay = localStorage.getItem(storageKey)
-        if (doneDay === todayKey) return
-      } catch {
-        // ignore storage failure
-      }
-      setSyncing(true)
-      try {
-        const res = await syncLineMembers({ limit: 10000 })
-        if (res.success) {
-          try {
-            localStorage.setItem(storageKey, todayKey)
-          } catch {
-            // ignore storage failure
-          }
-          setSyncMessage(
-            `${t("memberAutoSyncDone")}: ${t("memberSyncScanned")} ${Number(res.scanned || 0).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncApplied")} ${Number(res.synced || 0).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncFailed")} ${Number(res.failed || 0).toLocaleString()}${t("memberCountUnit")}${lineSyncErrorHint(res.errors)}`
-          )
-          await load(query)
-        }
-      } finally {
-        setSyncing(false)
-      }
-    }
-    runAutoSync().catch(() => {})
-  }, [load, query, lineMessagingStatus])
-
   const onSave = async () => {
     const name = form.name.trim()
     if (!name) {
@@ -258,7 +161,6 @@ export default function MembersPage() {
           id: newId,
           name,
           fullName: form.fullName.trim(),
-          lineDisplayName: form.lineDisplayName.trim(),
           birthDate: form.birthDate.trim(),
           gender: form.gender.trim(),
           nationality: form.nationality.trim(),
@@ -284,7 +186,6 @@ export default function MembersPage() {
         id: form.id,
         name,
         fullName: form.fullName.trim(),
-        lineDisplayName: form.lineDisplayName.trim(),
         birthDate: form.birthDate.trim(),
         gender: form.gender.trim(),
         nationality: form.nationality.trim(),
@@ -323,23 +224,7 @@ export default function MembersPage() {
             </p>
           </div>
         </div>
-
-        {lineMessagingStatus.loaded && lineMessagingStatus.channelAccessTokenConfigured === false && (
-          <div
-            className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
-            role="status"
-          >
-            <p className="font-medium text-amber-900 dark:text-amber-100">{t("memberLineApiMissingTitle")}</p>
-            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-              {t("memberLineApiMissingBody")}
-            </p>
-            {lineMessagingStatus.channelSecretConfigured === false && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("memberLineSecretMissing")}
-              </p>
-            )}
-          </div>
-        )}
+        <MemberSubnav />
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <div className="lg:sticky lg:top-0 lg:self-start">
@@ -356,10 +241,6 @@ export default function MembersPage() {
               <div className="space-y-1.5">
                 <Label>{t("memberFullName")}</Label>
                 <Input value={form.fullName ?? ""} onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("memberLineDisplayName")}</Label>
-                <Input value={form.lineDisplayName ?? ""} onChange={(e) => setForm((p) => ({ ...p, lineDisplayName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>{t("memberPhone")}</Label>
@@ -444,7 +325,7 @@ export default function MembersPage() {
           </Card>
           </div>
 
-          <Card id="line-tools">
+          <Card>
             <CardHeader className="space-y-3">
               <CardTitle className="text-base">{t("memberListMasterTitle")}</CardTitle>
               <div className="flex gap-2">
@@ -458,32 +339,6 @@ export default function MembersPage() {
                 />
                 <Button variant="outline" onClick={() => load(query, true)} disabled={searching}>
                   {searching ? t("loading") : t("search")}
-                </Button>
-                <Button
-                  variant="outline"
-                  title={t("memberLineSyncTitle")}
-                  disabled={syncing}
-                  onClick={async () => {
-                    setSyncing(true)
-                    setSyncMessage("")
-                    try {
-                      const res = await syncLineMembers({ limit: 10000 })
-                      if (!res.success) {
-                        await appAlert(res.message || t("memberLineSyncFail"))
-                      } else {
-                        setSyncMessage(
-                          `${t("memberSyncDone")}: ${t("memberSyncScanned")} ${Number(res.scanned || 0).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncApplied")} ${Number(
-                            res.synced || 0
-                          ).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncFailed")} ${Number(res.failed || 0).toLocaleString()}${t("memberCountUnit")}${lineSyncErrorHint(res.errors)}`
-                        )
-                        await load(query)
-                      }
-                    } finally {
-                      setSyncing(false)
-                    }
-                  }}
-                >
-                  {syncing ? t("memberSyncing") : t("memberLineSyncBtn")}
                 </Button>
                 <input
                   ref={importFileRef}
@@ -518,7 +373,7 @@ export default function MembersPage() {
                         await appAlert(res.message || t("memberCrmImportFail"))
                         return
                       }
-                      setSyncMessage(
+                      setActionMessage(
                         `${t("memberCrmImportDone")}: ${t("memberTotal")} ${Number(res.rowCount || 0).toLocaleString()}${t("posCount")} / ${t("memberSuccess")} ${Number(
                           res.successCount || 0
                         ).toLocaleString()}${t("posCount")} / ${t("memberFail")} ${Number(res.failedCount || 0).toLocaleString()}${t("posCount")}`
@@ -533,6 +388,30 @@ export default function MembersPage() {
                 >
                   {importing ? t("memberImporting") : t("memberCrmImportBtn")}
                 </Button>
+                <Button
+                  variant="outline"
+                  disabled={resettingLine}
+                  onClick={async () => {
+                    const ok = await appConfirm(t("memberLineResetConfirm"))
+                    if (!ok) return
+                    setResettingLine(true)
+                    try {
+                      const res = await resetLineMemberList()
+                      if (!res.success) {
+                        await appAlert(res.message || t("memberLineResetFail"))
+                        return
+                      }
+                      setActionMessage(
+                        `${t("memberLineResetDone")}: identity ${Number(res.deactivatedLineIdentities || 0).toLocaleString()} / members ${Number(res.deactivatedLineMembers || 0).toLocaleString()} / importRows ${Number(res.deletedImportRows || 0).toLocaleString()} / importJobs ${Number(res.deletedImportJobs || 0).toLocaleString()}`
+                      )
+                      await load(query)
+                    } finally {
+                      setResettingLine(false)
+                    }
+                  }}
+                >
+                  {resettingLine ? t("loading") : t("memberLineResetBtn")}
+                </Button>
               </div>
               {errorMessage ? (
                 <p className="text-xs text-destructive">{errorMessage}</p>
@@ -543,7 +422,7 @@ export default function MembersPage() {
                   <p className="text-[11px] text-muted-foreground">
                     {t("memberCrmColumnHint")}
                   </p>
-                  {!!syncMessage && <p className="text-xs text-emerald-700">{syncMessage}</p>}
+                  {!!actionMessage && <p className="text-xs text-emerald-700">{actionMessage}</p>}
                 </div>
               )}
             </CardHeader>
@@ -556,18 +435,13 @@ export default function MembersPage() {
                     <thead className="bg-muted/40">
                       <tr>
                         <th className="p-2 text-left">{t("name")}</th>
-                        <th className="p-2 text-left">{t("memberSource")}</th>
-                        <th className="p-2 text-left">{t("memberLineLinked")}</th>
-                        <th className="p-2 text-left">{t("memberLineDisplayName")}</th>
                         <th className="p-2 text-left">{t("memberPhone")}</th>
                         <th className="p-2 text-left">{t("memberFullName")}</th>
                         <th className="p-2 text-left">{t("birthDate")}</th>
                         <th className="p-2 text-left">{t("memberNationality")}</th>
                         <th className="p-2 text-left">{t("age")}</th>
-                        <th className="p-2 text-left">LINE User ID</th>
                         <th className="p-2 text-left">{t("memberNo")}</th>
                         <th className="p-2 text-left">{t("memberTier")}</th>
-                        <th className="p-2 text-left">{t("memberUpdateReason")}</th>
                         <th className="p-2 text-left">{t("status")}</th>
                       </tr>
                     </thead>
@@ -579,9 +453,8 @@ export default function MembersPage() {
                           onClick={() =>
                             setForm({
                               id: m.id,
-                              name: String(m.name || m.lineDisplayName || ""),
+                              name: String(m.name || ""),
                               fullName: m.fullName || "",
-                              lineDisplayName: m.lineDisplayName || "",
                               birthDate: toDateInput(m.birthDate || ""),
                               gender: m.gender || "",
                               nationality: m.nationality || "",
@@ -598,18 +471,13 @@ export default function MembersPage() {
                           }
                         >
                           <td className="p-2">{m.name || "—"}</td>
-                          <td className="p-2">{sourceLabelLocalized(m.source)}</td>
-                          <td className="p-2">{m.lineLinked ? t("yes") : t("no")}</td>
-                          <td className="p-2">{m.lineDisplayName || "—"}</td>
                           <td className="p-2">{m.phone || "—"}</td>
                           <td className="p-2">{m.fullName || "-"}</td>
                           <td className="p-2">{m.birthDate || "-"}</td>
                           <td className="p-2">{m.nationality || "-"}</td>
                           <td className="p-2">{calcAge(m.birthDate)}</td>
-                          <td className="p-2">{m.lineUserId || "-"}</td>
                           <td className="p-2">{m.memberNo || "-"}</td>
                           <td className="p-2">{m.tierCode || "-"}</td>
-                          <td className="p-2">{reasonLabelLocalized(m.lastUpdateReason)}</td>
                           <td className="p-2">{m.status}</td>
                         </tr>
                       ))}

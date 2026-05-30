@@ -948,6 +948,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [activePaymentTab, setActivePaymentTab] = useState<PaymentMethodTab>('cash')
   const [payCash, setPayCash] = useState('')
   const [cashTendered, setCashTendered] = useState('')
+  /** capture/스냅샷 시 setState 직후 값 누락 방지(더치·일부결제) */
+  const cashTenderedRef = useRef('')
   const [payCard, setPayCard] = useState('')
   const [payTrueMoney, setPayTrueMoney] = useState('')
   const [payWeChat, setPayWeChat] = useState('')
@@ -1537,7 +1539,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
     const ob = buildPaymentOtherBreakdownSnapshot()
     const cashPay = parseFloat(payCash) || 0
-    const tenderedRaw = parseFloat(cashTendered) || 0
+    const tenderedRaw =
+      parseFloat(cashTenderedRef.current) || parseFloat(cashTendered) || 0
     const nonCashPay =
       (parseFloat(payCard) || 0) +
       (parseFloat(payPromptPay) || 0) +
@@ -1754,6 +1757,54 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       round2(Math.max(0, Number(amountSplitDueByPerson[i] || 0) - Number(amountSplitPaidByPerson[i] || 0)))
     )
   }, [amountSplitDueByPerson, amountSplitPaidByPerson, splitCount])
+
+  /** 더치: 현재 손님 결제 입력을 영수증용 스냅샷에 반영(인원 탭 전환·일부 결제 공통) */
+  const tryCommitCurrentSplitGuestPaymentCapture = useCallback((): boolean => {
+    if (!showSplit || !showPaymentModal) return false
+    const count = Math.max(1, Number(splitCount) || 1)
+    const idx =
+      splitMode === 'menu' ? menuSplitTargetPersonIndex : amountSplitTargetPersonIndex
+    const remaining =
+      splitMode === 'menu'
+        ? Math.max(0, Number(menuSplitRemainingByPerson[idx] || 0))
+        : Math.max(0, Number(amountSplitRemainingByPerson[idx] || 0))
+    if (remaining <= SPLIT_AMOUNT_EPS) return false
+    if (splitMode === 'menu' && menuSplitPendingQtyTotal > 0.009) return false
+    const snap = buildPaymentSnapshot()
+    if (!paymentSnapshotHasAmount(snap)) return false
+    const snapSum = round2(sumCartPanelPaymentSnapshot(snap))
+    if (snapSum < remaining - SPLIT_AMOUNT_EPS) return false
+    const paidThisStep = round2(Math.min(remaining, snapSum))
+    captureSplitPaymentForPerson(idx)
+    if (splitMode === 'menu') {
+      setMenuSplitPaidByPerson((prev) => {
+        const next = Array.from({ length: count }, (_, i) => Math.max(0, Number(prev[i] || 0)))
+        next[idx] = round2(Number(prev[idx] || 0) + paidThisStep)
+        return next
+      })
+    } else {
+      setAmountSplitPaidByPerson((prev) => {
+        const next = Array.from({ length: count }, (_, i) => Math.max(0, Number(prev[i] || 0)))
+        next[idx] = round2(Number(prev[idx] || 0) + paidThisStep)
+        return next
+      })
+    }
+    setSplitCaptureTick((t) => t + 1)
+    return true
+  }, [
+    showSplit,
+    showPaymentModal,
+    splitCount,
+    splitMode,
+    menuSplitTargetPersonIndex,
+    amountSplitTargetPersonIndex,
+    menuSplitRemainingByPerson,
+    amountSplitRemainingByPerson,
+    menuSplitPendingQtyTotal,
+    buildPaymentSnapshot,
+    captureSplitPaymentForPerson,
+  ])
+
   const amountSplitPersonStatuses = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     return Array.from({ length: count }, (_, idx) => {
@@ -2222,8 +2273,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setTaxSearchMessage(t('posTaxSearchLoaded').replace('{no}', displayNo))
   }
 
+  useEffect(() => {
+    cashTenderedRef.current = cashTendered
+  }, [cashTendered])
+
   const resetPaymentInputs = () => {
     setPayCash('0')
+    cashTenderedRef.current = ''
     setCashTendered('')
     setPayCard('0')
     setPayPromptPay('0')
@@ -2245,6 +2301,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (!showSplit || splitMode !== 'menu') return
       const count = Math.max(1, Number(splitCount) || 1)
       const safeIdx = Math.min(Math.max(0, personIdx), count - 1)
+      tryCommitCurrentSplitGuestPaymentCapture()
       const fillAmount = Math.max(0, Number(menuSplitRemainingByPerson[safeIdx] || 0))
       setMenuSplitTargetPerson(safeIdx)
       resetPaymentInputs()
@@ -2263,6 +2320,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       menuSplitRemainingByPerson,
       activePaymentTab,
       scrollToPaymentMethods,
+      tryCommitCurrentSplitGuestPaymentCapture,
     ]
   )
 
@@ -2271,6 +2329,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (!showSplit || splitMode !== 'amount') return
       const count = Math.max(1, Number(splitCount) || 1)
       const safeIdx = Math.min(Math.max(0, personIdx), count - 1)
+      tryCommitCurrentSplitGuestPaymentCapture()
       const fillAmount = Math.max(0, Number(amountSplitRemainingByPerson[safeIdx] || 0))
       setAmountSplitTargetPerson(safeIdx)
       resetPaymentInputs()
@@ -2288,6 +2347,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       amountSplitRemainingByPerson,
       activePaymentTab,
       scrollToPaymentMethods,
+      tryCommitCurrentSplitGuestPaymentCapture,
     ]
   )
 
@@ -2807,6 +2867,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const finalizeSplitPaymentForPerson = (personIdx: number) => {
     const count = Math.max(1, Number(splitCount) || 1)
     const safeIdx = Math.min(Math.max(0, personIdx), count - 1)
+    const existing = splitPaymentsByPersonRef.current[safeIdx]
+    if (existing && paymentSnapshotHasAmount(existing)) return false
     const snap = buildPaymentSnapshot()
     if (!paymentSnapshotHasAmount(snap)) return false
     const remaining =
