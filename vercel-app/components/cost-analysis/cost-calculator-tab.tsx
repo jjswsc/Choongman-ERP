@@ -23,6 +23,7 @@ import {
   getIngredientCodeByItemCode,
   getIngredient,
   MISE_DEFAULT,
+  resolveMisePercent,
   resolveDeliveryAppFeePercent,
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
@@ -57,7 +58,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
     const item: RecipeItem = {
       ingredientCode: code,
       quantity: b.quantity,
-      misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
+      misePercent: resolveMisePercent(b.lossRate),
       savedItemCode: String(b.itemCode ?? "").trim() || undefined,
     }
     if (cat === "packaging") packaging.push(item)
@@ -88,7 +89,7 @@ function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: Rec
     const item: RecipeItem = {
       ingredientCode: code,
       quantity: Number(ing.quantity) || 0,
-      misePercent: (ing.lossRate ?? 0) || MISE_DEFAULT,
+      misePercent: resolveMisePercent(ing.lossRate),
       savedItemCode: itemCode,
     }
     if (cat === "packaging") packaging.push(item)
