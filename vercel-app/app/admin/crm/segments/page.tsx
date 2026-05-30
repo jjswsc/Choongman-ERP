@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { apiFetch } from "@/lib/api/fetch"
 
 type SegmentKey = "recent30" | "dormant90" | "new30" | "vip" | "atRisk"
@@ -51,6 +52,7 @@ export default function CrmSegmentsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <CrmSubnav />
         <Card>
           <CardHeader><CardTitle>고객 세그먼트</CardTitle></CardHeader>
           <CardContent className="space-y-3">

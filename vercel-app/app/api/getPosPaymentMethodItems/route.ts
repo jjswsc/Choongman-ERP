@@ -5,6 +5,17 @@ import {
   syntheticPaymentMethodItemsFromKeys,
 } from '@/lib/pos-payment-settings-resolve'
 
+/** POS 기타·QR 탭에 항상 노출할 지갑(레거시 DEFAULT_OTHER_KEYS와 동일) */
+const ENSURE_WALLET_PAYMENT_METHODS: Array<{
+  category: 'qr' | 'other'
+  name: string
+  sortOrder: number
+}> = [
+  { category: 'qr', name: 'WeChat', sortOrder: 2 },
+  { category: 'qr', name: 'Alipay', sortOrder: 3 },
+  { category: 'qr', name: 'UnionPay', sortOrder: 4 },
+]
+
 type MergedRow = {
   id: number
   store_code: string | null
@@ -64,6 +75,29 @@ function augmentMissingCategoriesWithSynthetic(
   return sortPaymentMethodApiRows(mapped)
 }
 
+/** DB에 qr/other 행은 있으나 WeChat·Alipay·UnionPay 등 레거시 지갑이 빠진 경우 syn: 행으로 보강 */
+function ensureWalletPaymentMethods<T extends { category: string; name: string; hidden: boolean; sortOrder: number; id: string; storeCode: string | null }>(
+  rows: T[],
+  storeCode: string
+): T[] {
+  const out = [...rows]
+  for (const ensure of ENSURE_WALLET_PAYMENT_METHODS) {
+    const exists = out.some(
+      (r) => r.category === ensure.category && r.name.toLowerCase() === ensure.name.toLowerCase() && !r.hidden
+    )
+    if (exists) continue
+    out.push({
+      id: `syn:${ensure.category}:ensure:${ensure.name.toLowerCase()}`,
+      storeCode: storeCode || null,
+      category: ensure.category,
+      name: ensure.name,
+      hidden: false,
+      sortOrder: ensure.sortOrder,
+    } as T)
+  }
+  return sortPaymentMethodApiRows(out)
+}
+
 /** POS 결제 수단 항목 조회 (매장별 or 전역) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -104,18 +138,27 @@ export async function GET(request: NextRequest) {
 
     if (merged.length > 0) {
       const keys = await resolvePosPaymentKeysForStore(storeCode)
-      const payload = augmentMissingCategoriesWithSynthetic(merged, storeCode || '', keys)
+      const payload = ensureWalletPaymentMethods(
+        augmentMissingCategoriesWithSynthetic(merged, storeCode || '', keys),
+        storeCode || ''
+      )
       return NextResponse.json(payload, { headers })
     }
 
     const keys = await resolvePosPaymentKeysForStore(storeCode)
-    const synthetic = syntheticPaymentMethodItemsFromKeys(keys, storeCode ? storeCode : null)
+    const synthetic = ensureWalletPaymentMethods(
+      syntheticPaymentMethodItemsFromKeys(keys, storeCode ? storeCode : null),
+      storeCode || ''
+    )
     return NextResponse.json(synthetic, { headers })
   } catch (e) {
     console.error('getPosPaymentMethodItems:', e)
     try {
       const keys = await resolvePosPaymentKeysForStore(storeCode)
-      const synthetic = syntheticPaymentMethodItemsFromKeys(keys, storeCode ? storeCode : null)
+      const synthetic = ensureWalletPaymentMethods(
+        syntheticPaymentMethodItemsFromKeys(keys, storeCode ? storeCode : null),
+        storeCode || ''
+      )
       return NextResponse.json(synthetic, { headers })
     } catch {
       return NextResponse.json([], { headers })

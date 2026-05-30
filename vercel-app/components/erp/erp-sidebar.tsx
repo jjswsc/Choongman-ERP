@@ -98,13 +98,16 @@ const mainItems: MenuItem[] = [
 
 const menuSections: MenuSection[] = [
   {
-    titleKey: "posMemberManage",
+    titleKey: "adminSectionCustomerCrm",
     items: [
+      { titleKey: "adminCrmDashboard", icon: LayoutDashboard, href: "/admin/crm" },
       { titleKey: "memberList", icon: Users, href: "/admin/members" },
       { titleKey: "memberPoints", icon: Wallet, href: "/admin/members/points" },
       { titleKey: "memberCoupons", icon: Tag, href: "/admin/members/coupons" },
       { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
       { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/tiers" },
+      { titleKey: "adminCrmSegments", icon: Users, href: "/admin/crm/segments" },
+      { titleKey: "adminCrmRfm", icon: TrendingUp, href: "/admin/crm/rfm" },
     ],
   },
   {
@@ -128,14 +131,6 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
       { titleKey: "adminMarketingReport", icon: FileText, href: "/admin/marketing/report" },
       { titleKey: "adminMarketingIntegrations", icon: Settings2, href: "/admin/marketing/integrations" },
-    ],
-  },
-  {
-    titleKey: "adminSectionCrm",
-    items: [
-      { titleKey: "adminCrmDashboard", icon: LayoutDashboard, href: "/admin/crm" },
-      { titleKey: "adminCrmSegments", icon: Users, href: "/admin/crm/segments" },
-      { titleKey: "adminCrmRfm", icon: TrendingUp, href: "/admin/crm/rfm" },
     ],
   },
   {
@@ -312,8 +307,12 @@ export function ErpSidebar() {
       setExpandedSections((prev) => {
         const next = { ...prev }
         for (const s of menuSections) {
-          const v = (parsed as Record<string, unknown>)[s.titleKey]
-          next[s.titleKey] = v === true
+          const stored = parsed as Record<string, unknown>
+          const v = stored[s.titleKey]
+          const legacyExpanded =
+            s.titleKey === "adminSectionCustomerCrm" &&
+            (stored.posMemberManage === true || stored.adminSectionCrm === true)
+          next[s.titleKey] = v === true || legacyExpanded
         }
         return next
       })
@@ -321,6 +320,21 @@ export function ErpSidebar() {
       /* ignore */
     }
   }, [])
+
+  /** 고객 CRM 화면에 있을 때 해당 섹션을 펼침 */
+  React.useEffect(() => {
+    if (!pathname.startsWith("/admin/members") && !pathname.startsWith("/admin/crm")) return
+    setExpandedSections((prev) => {
+      if (prev.adminSectionCustomerCrm === true) return prev
+      const next = { ...prev, adminSectionCustomerCrm: true }
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [pathname])
 
   /** 인테리어 화면에 있을 때 사이드바 인테리어 섹션을 펼쳐 하위 항목이 보이게 함 */
   React.useEffect(() => {

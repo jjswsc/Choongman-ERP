@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
+import { CrmSubnav } from "@/components/erp/crm-subnav"
+
 import { apiFetch } from "@/lib/api/fetch"
 
 type Summary = {
@@ -56,6 +58,7 @@ export default function CrmDashboardPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <CrmSubnav />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">CRM 대시보드</h1>

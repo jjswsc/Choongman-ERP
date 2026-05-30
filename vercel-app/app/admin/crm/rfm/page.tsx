@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { apiFetch } from "@/lib/api/fetch"
 
 type RfmRow = {
@@ -41,7 +42,8 @@ export default function CrmRfmPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <CrmSubnav />
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>RFM 점수</CardTitle>

@@ -16,7 +16,7 @@ import {
   updateMember,
   type Member,
 } from "@/lib/api-client"
-import { MemberSubnav } from "@/components/erp/member-subnav"
+import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -224,7 +224,7 @@ export default function MembersPage() {
             </p>
           </div>
         </div>
-        <MemberSubnav />
+        <CrmSubnav />
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <div className="lg:sticky lg:top-0 lg:self-start">

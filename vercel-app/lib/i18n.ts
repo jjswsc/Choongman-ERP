@@ -6547,6 +6547,7 @@ export const i18n = {
     posFilterComplete: '결제 완료',
     adminSectionSales: '매출 관리',
     adminSectionMarketing: '마케팅 관리',
+    adminSectionCustomerCrm: '고객 CRM',
     adminSectionCrm: 'CRM 관리',
     adminCrmDashboard: 'CRM 대시보드',
     adminCrmSegments: '고객 세그먼트',
@@ -7434,6 +7435,26 @@ export const i18n = {
       '직원 명단을 매장·직무·등급·재직 상태로 조회하고, 좌측 폼에서 인적·급여·은행·세무 정보를 등록·수정하며, 인원 이동·적정 인원·평가·경고장 등 HR 보조 탭을 한 화면에서 다룹니다.',
     helpHow_admin_employees:
       '① 직원 목록: 매장·직무·등급·재직(근무/휴직/퇴사 등)·검색어로 좁힌 뒤「조회」를 누릅니다. 표에서 행을 고르면 왼쪽 폼에 그 직원이 채워지고,「신규」로 빈 폼을 열 수 있습니다. 저장 전 필수(※)와 날짜·숫자 형식을 확인합니다.\n② 권한: 매장 매니저·가맹점주는 보통 자기 매장 위주이며 Officer/Director 역할 부여 등은 본사(디렉터) 정책에 따릅니다. 가맹 복수 매장이 켜져 있으면 본사에서 허용한 경우에만「추가 매장」을 편집할 수 있습니다.\n③ 인원 이동·적정 인원: 기간·매장 기준으로 이동·편성·목표 인원을 봅니다.\n④ 직무 목록·평가·경고장·평가 분석·평가 목록·평가 항목 설정: 역할에 따라 탭이 보이며, 평가·항목 설정은 본사 위주입니다.\n⑤ 급여·근태 등 다른 메뉴에서 직원 링크로 들어온 경우에도 목록을 조회한 뒤 같은 폼으로 수정합니다.\n⑥ 자세한 단계는「도움말」본문을 보고, 끝나면「화면으로 돌아가기」로 목록으로 돌아옵니다.',
+    helpSum_admin_members:
+      '회원 마스터를 조회·등록·수정하고 LINE·앱 가입 정보를 ERP 기준으로 관리하는 화면입니다.',
+    helpHow_admin_members:
+      '① 목록에서 회원을 검색·선택합니다.\n② 좌측 폼에서 이름·전화·등급 등을 등록·수정합니다.\n③ 상단 탭에서 포인트·쿠폰·방문·등급·세그먼트·RFM으로 이동합니다.',
+    helpSum_admin_members_points:
+      '회원 포인트 잔액과 원장을 조회하고 수기 조정하는 화면입니다.',
+    helpHow_admin_members_points:
+      '① 회원을 선택해 잔액을 확인합니다.\n② +/- 포인트로 수기 조정합니다.\n③ 원장에서 적립·사용 이력을 확인합니다.',
+    helpSum_admin_members_coupons:
+      '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다.',
+    helpHow_admin_members_coupons:
+      '① 쿠폰 코드와 대상 회원을 지정해 발급합니다.\n② 마스터 쿠폰과 회원별 사용 이력을 확인합니다.\n③ 세그먼트·캠페인과 연계할 때 발급 전 대상 수를 먼저 확인합니다.',
+    helpSum_admin_members_visits:
+      '회원 방문·주문 이력과 방문 분석 KPI를 보는 화면입니다.',
+    helpHow_admin_members_visits:
+      '① memberId 또는 기간으로 방문·주문 이력을 조회합니다.\n② 방문 횟수·객단가·최근 방문일 등 분석 KPI를 확인합니다.\n③ VIP·휴면 판단은 CRM 세그먼트·RFM과 함께 봅니다.',
+    helpSum_admin_members_tiers:
+      '회원 등급 기준과 등급별 회원 분포를 관리하는 화면입니다.',
+    helpHow_admin_members_tiers:
+      '① 등급 코드·혜택 기준을 확인·수정합니다.\n② 등급별 회원 수와 전환 조건을 점검합니다.\n③ 등급 변경 후 포인트·쿠폰 정책과 맞는지 확인합니다.',
     helpSum_admin_crm:
       'CRM KPI를 한눈에 보고 휴면/신규/VIP 운영 우선순위를 정하는 화면입니다.',
     helpHow_admin_crm:
@@ -15274,6 +15295,7 @@ orderItemQty: 'Qty',
     posFilterComplete: 'Paid',
     adminSectionSales: 'Sales',
     adminSectionMarketing: 'Marketing',
+    adminSectionCustomerCrm: 'Customer CRM',
     adminSectionCrm: 'CRM',
     adminCrmDashboard: 'CRM Dashboard',
     adminCrmSegments: 'Customer Segments',
@@ -16162,6 +16184,26 @@ orderItemQty: 'Qty',
       'Look up staff by store, job, grade, and employment status; edit HR, payroll, bank, and tax fields in the left form; and use satellite tabs for movement, headcount, evaluations, and warning letters in one place.',
     helpHow_admin_employees:
       '① Employee list: narrow with store, job, grade, employment status, and search text, then press Query. Selecting a row fills the left form; use New to open a blank profile. Check required fields (※) and date/number formats before Save.\n② Roles: store managers and franchisees usually work within their store scope; assigning Officer/Director follows head-office policy. If multi-store franchise is enabled, edit Extra stores only when head office allows it.\n③ Movement & headcount: review transfers and staffing targets by period and store.\n④ Job catalog, evaluations, warning letters, analytics, evaluation list, and item settings: tabs appear by role; evaluation setup is mostly head-office.\n⑤ Deep links from Payroll or Attendance still load the list first—then edit in the same form.\n⑥ Open Help for the long guide, then Back to screen when you are done.',
+    helpSum_admin_members:
+      'Look up, register, and edit member master data; manage app and LINE-linked profiles in ERP.',
+    helpHow_admin_members:
+      '① Search and select a member in the list.\n② Register or edit name, phone, tier, and other fields in the left form.\n③ Use the top tabs for points, coupons, visits, tiers, segments, and RFM.',
+    helpSum_admin_members_points:
+      'View member point balances and ledger entries; apply manual adjustments.',
+    helpHow_admin_members_points:
+      '① Select a member to view the balance.\n② Adjust with +/- points when needed.\n③ Review earn and redeem history in the ledger.',
+    helpSum_admin_members_coupons:
+      'Issue member coupons and review master and redemption history.',
+    helpHow_admin_members_coupons:
+      '① Issue coupons with a code and target member.\n② Review POS coupon masters and per-member history.\n③ Confirm segment size before campaign-linked issuance.',
+    helpSum_admin_members_visits:
+      'Review member visit and order history plus visit analytics KPIs.',
+    helpHow_admin_members_visits:
+      '① Query visits and orders by memberId or date range.\n② Review visit count, average ticket, and last visit KPIs.\n③ Combine with CRM segments and RFM for VIP or dormant decisions.',
+    helpSum_admin_members_tiers:
+      'Manage tier rules and review members by tier.',
+    helpHow_admin_members_tiers:
+      '① Review or edit tier codes and benefit thresholds.\n② Check member counts and upgrade conditions per tier.\n③ Align point and coupon policies after tier changes.',
     helpSum_admin_crm:
       'CRM KPI dashboard for prioritizing dormant/new/VIP customer operations.',
     helpHow_admin_crm:

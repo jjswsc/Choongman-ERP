@@ -7,17 +7,17 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
 const items = [
+  { href: "/admin/crm", key: "adminCrmDashboard" },
   { href: "/admin/members", key: "memberList" },
   { href: "/admin/members/points", key: "memberPoints" },
   { href: "/admin/members/coupons", key: "memberCoupons" },
   { href: "/admin/members/visits", key: "memberVisits" },
   { href: "/admin/members/tiers", key: "memberTiers" },
-  { href: "/admin/crm", key: "adminCrmDashboard" },
   { href: "/admin/crm/segments", key: "adminCrmSegments" },
   { href: "/admin/crm/rfm", key: "adminCrmRfm" },
 ]
 
-export function MemberSubnav() {
+export function CrmSubnav() {
   const pathname = usePathname()
   const { lang } = useLang()
   const t = useT(lang)
