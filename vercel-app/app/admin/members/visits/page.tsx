@@ -1,10 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { apiFetch } from "@/lib/api/fetch"
 import { getMemberVisits } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -27,6 +30,17 @@ type MemberVisitAnalysisRow = {
   avgTicketAmount: number
   totalContribution: number
   lastVisitedAt: string
+}
+
+type RfmRow = {
+  memberId: number
+  recencyDays: number
+  frequencyCount: number
+  monetaryAmount: number
+  rScore: number
+  fScore: number
+  mScore: number
+  rfmScore: string
 }
 
 function parseDateSafe(value: string): Date | null {
@@ -88,10 +102,14 @@ function buildMemberVisitAnalysis(rows: VisitRow[]): MemberVisitAnalysisRow[] {
 }
 
 export default function MemberVisitsPage() {
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
+  const [tab, setTab] = React.useState<"history" | "analysis" | "rfm">("history")
   const [memberId, setMemberId] = React.useState("")
   const [rows, setRows] = React.useState<VisitRow[]>([])
+  const [rfmRows, setRfmRows] = React.useState<RfmRow[]>([])
+  const [rfmLoading, setRfmLoading] = React.useState(false)
   const analysisRows = React.useMemo(() => buildMemberVisitAnalysis(rows), [rows])
   const kpi = React.useMemo(() => {
     const memberCount = analysisRows.length
@@ -113,9 +131,32 @@ export default function MemberVisitsPage() {
     setRows(list)
   }, [memberId])
 
+  const loadRfm = React.useCallback(async () => {
+    setRfmLoading(true)
+    try {
+      const res = await apiFetch("/api/crm/rfm?limit=500", { cache: "no-store" })
+      if (!res.ok) {
+        setRfmRows([])
+        return
+      }
+      const data = (await res.json()) as { success: boolean; rows?: RfmRow[] }
+      setRfmRows(data.rows || [])
+    } finally {
+      setRfmLoading(false)
+    }
+  }, [])
+
   React.useEffect(() => {
     load().catch(() => {})
   }, [load])
+
+  React.useEffect(() => {
+    if (searchParams.get("tab") === "rfm") setTab("rfm")
+  }, [searchParams])
+
+  React.useEffect(() => {
+    if (tab === "rfm") loadRfm().catch(() => {})
+  }, [loadRfm, tab])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -162,73 +203,131 @@ export default function MemberVisitsPage() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader><CardTitle>{t("memberVisitsHistoryTitle")}</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="p-2 text-left">{t("posOrderDateTime")}</th>
-                    <th className="p-2 text-left">{t("memberId")}</th>
-                    <th className="p-2 text-left">{t("memberNo")}</th>
-                    <th className="p-2 text-left">{t("store")}</th>
-                    <th className="p-2 text-left">{t("posOrderNo")}</th>
-                    <th className="p-2 text-left">{t("memberVisitsPaymentAmount")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.orderId} className="border-t">
-                      <td className="p-2">{r.visitedAt}</td>
-                      <td className="p-2">{r.memberId}</td>
-                      <td className="p-2">{r.memberNo}</td>
-                      <td className="p-2">{r.storeCode}</td>
-                      <td className="p-2">{r.orderNo}</td>
-                      <td className="p-2">{Number(r.total || 0).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "history" | "analysis" | "rfm")} className="mt-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="history">방문 기록</TabsTrigger>
+            <TabsTrigger value="analysis">방문 분석</TabsTrigger>
+            <TabsTrigger value="rfm">RFM 점수</TabsTrigger>
+          </TabsList>
 
-        <Card className="mt-4">
-          <CardHeader><CardTitle>{t("memberVisitsAnalysisTitle")}</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="p-2 text-left">{t("memberId")}</th>
-                    <th className="p-2 text-left">{t("memberNo")}</th>
-                    <th className="p-2 text-left">{t("memberVisitsVisitCount")}</th>
-                    <th className="p-2 text-left">{t("memberVisitsAvgVisitCycleDays")}</th>
-                    <th className="p-2 text-left">{t("memberVisitsAvgTicketAmount")}</th>
-                    <th className="p-2 text-left">{t("memberVisitsTotalContribution")}</th>
-                    <th className="p-2 text-left">{t("memberVisitsLastVisitedAt")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analysisRows.map((r) => (
-                    <tr key={r.memberId} className="border-t">
-                      <td className="p-2">{r.memberId}</td>
-                      <td className="p-2">{r.memberNo || "-"}</td>
-                      <td className="p-2">{r.visitCount.toLocaleString()}</td>
-                      <td className="p-2">
-                        {r.avgVisitCycleDays == null ? "-" : `${r.avgVisitCycleDays.toLocaleString()} ${t("days")}`}
-                      </td>
-                      <td className="p-2">{Number(r.avgTicketAmount || 0).toLocaleString()}</td>
-                      <td className="p-2">{Number(r.totalContribution || 0).toLocaleString()}</td>
-                      <td className="p-2">{r.lastVisitedAt || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+          <TabsContent value="history">
+            <Card>
+              <CardHeader><CardTitle>{t("memberVisitsHistoryTitle")}</CardTitle></CardHeader>
+              <CardContent>
+                <div className="overflow-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="p-2 text-left">{t("posOrderDateTime")}</th>
+                        <th className="p-2 text-left">{t("memberId")}</th>
+                        <th className="p-2 text-left">{t("memberNo")}</th>
+                        <th className="p-2 text-left">{t("store")}</th>
+                        <th className="p-2 text-left">{t("posOrderNo")}</th>
+                        <th className="p-2 text-left">{t("memberVisitsPaymentAmount")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => (
+                        <tr key={r.orderId} className="border-t">
+                          <td className="p-2">{r.visitedAt}</td>
+                          <td className="p-2">{r.memberId}</td>
+                          <td className="p-2">{r.memberNo}</td>
+                          <td className="p-2">{r.storeCode}</td>
+                          <td className="p-2">{r.orderNo}</td>
+                          <td className="p-2">{Number(r.total || 0).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analysis">
+            <Card>
+              <CardHeader><CardTitle>{t("memberVisitsAnalysisTitle")}</CardTitle></CardHeader>
+              <CardContent>
+                <div className="overflow-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="p-2 text-left">{t("memberId")}</th>
+                        <th className="p-2 text-left">{t("memberNo")}</th>
+                        <th className="p-2 text-left">{t("memberVisitsVisitCount")}</th>
+                        <th className="p-2 text-left">{t("memberVisitsAvgVisitCycleDays")}</th>
+                        <th className="p-2 text-left">{t("memberVisitsAvgTicketAmount")}</th>
+                        <th className="p-2 text-left">{t("memberVisitsTotalContribution")}</th>
+                        <th className="p-2 text-left">{t("memberVisitsLastVisitedAt")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analysisRows.map((r) => (
+                        <tr key={r.memberId} className="border-t">
+                          <td className="p-2">{r.memberId}</td>
+                          <td className="p-2">{r.memberNo || "-"}</td>
+                          <td className="p-2">{r.visitCount.toLocaleString()}</td>
+                          <td className="p-2">
+                            {r.avgVisitCycleDays == null ? "-" : `${r.avgVisitCycleDays.toLocaleString()} ${t("days")}`}
+                          </td>
+                          <td className="p-2">{Number(r.avgTicketAmount || 0).toLocaleString()}</td>
+                          <td className="p-2">{Number(r.totalContribution || 0).toLocaleString()}</td>
+                          <td className="p-2">{r.lastVisitedAt || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="rfm">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>RFM 점수</CardTitle>
+                <Button variant="outline" onClick={() => loadRfm()} disabled={rfmLoading}>
+                  {rfmLoading ? "계산 중..." : "새로고침"}
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  R(최근성) / F(방문빈도) / M(구매금액)을 같은 화면에서 함께 보고 고객군을 운영합니다.
+                </p>
+                <div className="overflow-auto rounded border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="p-2 text-left">memberId</th>
+                        <th className="p-2 text-left">Recency(day)</th>
+                        <th className="p-2 text-left">Frequency</th>
+                        <th className="p-2 text-left">Monetary</th>
+                        <th className="p-2 text-left">R</th>
+                        <th className="p-2 text-left">F</th>
+                        <th className="p-2 text-left">M</th>
+                        <th className="p-2 text-left">RFM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rfmRows.map((r) => (
+                        <tr key={r.memberId} className="border-t">
+                          <td className="p-2">{r.memberId}</td>
+                          <td className="p-2">{r.recencyDays}</td>
+                          <td className="p-2">{r.frequencyCount}</td>
+                          <td className="p-2">{Number(r.monetaryAmount || 0).toLocaleString()}</td>
+                          <td className="p-2">{r.rScore}</td>
+                          <td className="p-2">{r.fScore}</td>
+                          <td className="p-2">{r.mScore}</td>
+                          <td className="p-2 font-semibold">{r.rfmScore}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

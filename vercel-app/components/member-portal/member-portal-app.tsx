@@ -247,6 +247,20 @@ export function MemberPortalApp() {
   const [notice, setNotice] = React.useState("")
   const [lineLoginEnabled, setLineLoginEnabled] = React.useState(false)
   const [contactMenuOpen, setContactMenuOpen] = React.useState(false)
+  const [contactUrls, setContactUrls] = React.useState<{
+    facebookUrl: string
+    instagramUrl: string
+  }>({
+    facebookUrl: brand.memberContactFacebookUrl,
+    instagramUrl: brand.memberContactInstagramUrl,
+  })
+  const [designBackgrounds, setDesignBackgrounds] = React.useState<{
+    loginBackgroundUrl: string
+    appBackgroundUrl: string
+  }>({
+    loginBackgroundUrl: "",
+    appBackgroundUrl: "",
+  })
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
   const [visits, setVisits] = React.useState<PortalVisitRow[]>([])
@@ -321,6 +335,35 @@ export function MemberPortalApp() {
     getJson<{ success: boolean; items?: MemberPortalContentItem[] }>("/api/member-portal/content")
       .then((r) => setContentItems(r.success ? r.items || [] : []))
       .catch(() => setContentItems([]))
+    getJson<{
+      success: boolean
+      facebookUrl?: string
+      instagramUrl?: string
+      loginBackgroundUrl?: string
+      appBackgroundUrl?: string
+    }>("/api/member-portal/public-config")
+      .then((r) =>
+        {
+          setContactUrls({
+            facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
+            instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
+          })
+          setDesignBackgrounds({
+            loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
+            appBackgroundUrl: String(r.appBackgroundUrl || "").trim(),
+          })
+        }
+      )
+      .catch(() => {
+        setContactUrls({
+          facebookUrl: brand.memberContactFacebookUrl,
+          instagramUrl: brand.memberContactInstagramUrl,
+        })
+        setDesignBackgrounds({
+          loginBackgroundUrl: "",
+          appBackgroundUrl: "",
+        })
+      })
     getJson<{ success: boolean; favoriteStoreCode?: string }>("/api/member-portal/preferences/favorite-store")
       .then((r) => {
         const code = String(r.favoriteStoreCode || "").trim()
@@ -334,7 +377,7 @@ export function MemberPortalApp() {
         }
       })
       .catch(() => {})
-  }, [loadSession])
+  }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, loadSession])
 
   React.useEffect(() => {
     try {
@@ -506,7 +549,18 @@ export function MemberPortalApp() {
   if (!member || !dashboard) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
     return (
-      <div className="min-h-[100dvh] bg-white text-[#191919]">
+      <div
+        className="min-h-[100dvh] bg-white text-[#191919]"
+        style={
+          designBackgrounds.loginBackgroundUrl
+            ? {
+                backgroundImage: `linear-gradient(rgba(255,255,255,0.82), rgba(255,255,255,0.9)), url(${designBackgrounds.loginBackgroundUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
+      >
         <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 py-7">
           <div className="mb-8 flex items-center justify-between">
             <button
@@ -694,7 +748,7 @@ export function MemberPortalApp() {
                     type="button"
                     className="h-12 w-full rounded-lg bg-[#1877F2] text-sm font-semibold text-white"
                     onClick={() => {
-                      window.open(brand.memberContactFacebookUrl, "_blank")
+                      window.open(contactUrls.facebookUrl, "_blank")
                       setContactMenuOpen(false)
                     }}
                   >
@@ -704,7 +758,7 @@ export function MemberPortalApp() {
                     type="button"
                     className="h-12 w-full rounded-lg bg-[#E1306C] text-sm font-semibold text-white"
                     onClick={() => {
-                      window.open(brand.memberContactInstagramUrl, "_blank")
+                      window.open(contactUrls.instagramUrl, "_blank")
                       setContactMenuOpen(false)
                     }}
                   >
@@ -729,7 +783,18 @@ export function MemberPortalApp() {
   const tier = tierVisual(dashboard.tierProgress.currentTierCode)
 
   return (
-    <div className="min-h-[100dvh] bg-[#08080a] pb-24 text-white">
+    <div
+      className="min-h-[100dvh] bg-[#08080a] pb-24 text-white"
+      style={
+        designBackgrounds.appBackgroundUrl
+          ? {
+              backgroundImage: `linear-gradient(rgba(8,8,10,0.78), rgba(8,8,10,0.86)), url(${designBackgrounds.appBackgroundUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }
+          : undefined
+      }
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.10),transparent_40%)]" />
 
       <div className="relative mx-auto max-w-lg px-4 pb-6 pt-5">

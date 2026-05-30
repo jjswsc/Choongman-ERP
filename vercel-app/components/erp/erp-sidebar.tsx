@@ -107,7 +107,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
       { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/tiers" },
       { titleKey: "adminCrmSegments", icon: Users, href: "/admin/crm/segments" },
-      { titleKey: "adminCrmRfm", icon: TrendingUp, href: "/admin/crm/rfm" },
+      { titleKey: "memberAppContent", icon: LayoutPanelTop, href: "/admin/crm/member-app" },
     ],
   },
   {
