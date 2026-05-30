@@ -57,12 +57,6 @@ export type PortalProfileForm = {
   consentMarketing: boolean
 }
 
-export const LOGIN_ERROR_MESSAGES: Record<string, string> = {
-  line_not_configured: 'LINE Login ยังไม่พร้อมใช้งาน กรุณาติดต่อร้านค้า',
-  line_state_mismatch: 'LINE Login หมดอายุ กรุณาลองใหม่อีกครั้ง',
-  access_denied: 'ยกเลิกการเข้าสู่ระบบ LINE',
-}
-
 export type TierVisual = {
   label: string
   gradient: string
@@ -117,12 +111,12 @@ export function formatPoints(n: number): string {
   return `${Math.round(Number(n || 0)).toLocaleString('en-US')} P`
 }
 
-export function formatDateTime(raw: string): string {
+export function formatDateTime(raw: string, locale = 'th-TH'): string {
   const v = String(raw || '').trim()
   if (!v) return '-'
   const d = new Date(v.includes('T') ? v : v.replace(' ', 'T'))
   if (Number.isNaN(d.getTime())) return v.slice(0, 16)
-  return d.toLocaleString('th-TH', {
+  return d.toLocaleString(locale, {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
     month: 'short',
@@ -130,23 +124,6 @@ export function formatDateTime(raw: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-export function pointKindLabel(kind: string): string {
-  const k = String(kind || '').toLowerCase()
-  if (k === 'earn') return 'สะสม'
-  if (k === 'use') return 'ใช้'
-  if (k === 'adjust') return 'ปรับ'
-  if (k === 'expire') return 'หมดอายุ'
-  return kind || '-'
-}
-
-export function couponStatusLabel(status: string): string {
-  const s = String(status || '').toLowerCase()
-  if (s === 'issued') return 'พร้อมใช้'
-  if (s === 'used') return 'ใช้แล้ว'
-  if (s === 'expired') return 'หมดอายุ'
-  return status || '-'
 }
 
 export function maskPhone(phone: string): string {

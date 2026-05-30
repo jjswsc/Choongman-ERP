@@ -5,6 +5,25 @@ function toText(v: unknown): string {
   return String(v || '').trim()
 }
 
+/** LINE Login Channel ID는 숫자만 (Messaging API Channel ID와 동일 형식). U… 는 사용자 ID라 거부 */
+export function isValidLineLoginChannelId(channelId: string): boolean {
+  const id = toText(channelId)
+  if (!id) return false
+  if (/^U[a-f0-9]{32}$/i.test(id)) return false
+  return /^\d{6,12}$/.test(id)
+}
+
+export function getLineLoginConfigIssue(): string | null {
+  const channelId = toText(process.env.LINE_LOGIN_CHANNEL_ID)
+  const channelSecret =
+    toText(process.env.LINE_LOGIN_CHANNEL_SECRET) || toText(process.env.LINE_CHANNEL_SECRET)
+  if (!channelId && !channelSecret) return 'missing'
+  if (!channelId) return 'missing_channel_id'
+  if (!channelSecret) return 'missing_channel_secret'
+  if (!isValidLineLoginChannelId(channelId)) return 'invalid_channel_id'
+  return null
+}
+
 export type LineBotPrompt = 'normal' | 'aggressive'
 
 export type LineLoginConfig = {
@@ -21,10 +40,10 @@ export function resolveLineLoginBotPrompt(): LineBotPrompt | null {
 }
 
 export function getLineLoginConfig(): LineLoginConfig | null {
+  if (getLineLoginConfigIssue()) return null
   const channelId = toText(process.env.LINE_LOGIN_CHANNEL_ID)
   const channelSecret =
     toText(process.env.LINE_LOGIN_CHANNEL_SECRET) || toText(process.env.LINE_CHANNEL_SECRET)
-  if (!channelId || !channelSecret) return null
   return { channelId, channelSecret, botPrompt: resolveLineLoginBotPrompt() }
 }
 

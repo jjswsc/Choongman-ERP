@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isLineLoginConfigured } from '@/lib/member-line-login'
-import { buildMemberSessionCookie, verifyMemberByPhoneBirthDate } from '@/lib/member-portal-auth'
+import { isLineLoginConfigured, getLineLoginConfigIssue } from '@/lib/member-line-login'
+import {
+  buildMemberSessionCookie,
+  PhoneBirthLoginError,
+  verifyMemberByPhoneBirthDate,
+} from '@/lib/member-portal-auth'
 
 function clientIp(req: NextRequest): string {
   return (
@@ -11,9 +15,11 @@ function clientIp(req: NextRequest): string {
 }
 
 export async function GET() {
+  const issue = getLineLoginConfigIssue()
   return NextResponse.json({
     success: true,
     lineLoginEnabled: isLineLoginConfigured(),
+    lineLoginConfigIssue: issue,
     phoneBirthLoginEnabled: true,
   })
 }
@@ -36,9 +42,11 @@ export async function POST(req: NextRequest) {
     res.headers.append('Set-Cookie', buildMemberSessionCookie(verified.sessionToken))
     return res
   } catch (e) {
+    const code = e instanceof PhoneBirthLoginError ? e.code : 'not_found'
     return NextResponse.json(
       {
         success: false,
+        code,
         message: e instanceof Error ? e.message : '로그인에 실패했습니다.',
       },
       { status: 400 }

@@ -110,7 +110,11 @@ export default function MarketingIntegrationsPage() {
               <li>• 메시징: LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN (기존 /api/line/webhook)</li>
               <li>
                 • 회원 포털 LINE 로그인: LINE_LOGIN_CHANNEL_ID, LINE_LOGIN_CHANNEL_SECRET (미설정 시 LINE_CHANNEL_SECRET
-                폴백). LINE Developers → 채널 → LINE Login 활성화 후 Callback URL에{' '}
+                폴백). <strong className="text-foreground">Channel ID는 숫자만</strong> (예: 2004403638) — LINE Login
+                채널 Basic settings 값. <strong className="text-destructive">U로 시작하는 사용자 ID는 사용 불가</strong>
+              </li>
+              <li>
+                • LINE Developers → LINE Login 채널 → Callback URL에{' '}
                 <code className="text-xs">/api/member-portal/auth/line/callback</code> 등록. Basic settings → Linked LINE
                 Official Account에서 OA 연결 후 로그인 동의 화면에 친구 추가 옵션 표시
               </li>

@@ -3,7 +3,7 @@ import {
   buildLineAuthorizeUrl,
   buildLineOAuthStateCookie,
   createLineOAuthState,
-  isLineLoginConfigured,
+  getLineLoginConfigIssue,
   resolveMemberPortalOrigin,
 } from '@/lib/member-line-login'
 
@@ -12,8 +12,10 @@ function isProdLike(): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isLineLoginConfigured()) {
-    return NextResponse.redirect(new URL('/m?error=line_not_configured', req.url))
+  const issue = getLineLoginConfigIssue()
+  if (issue) {
+    const code = issue === 'invalid_channel_id' ? 'line_bad_channel_id' : 'line_not_configured'
+    return NextResponse.redirect(new URL(`/m?error=${code}`, req.url))
   }
   const origin = resolveMemberPortalOrigin(req.nextUrl.origin)
   const state = createLineOAuthState()

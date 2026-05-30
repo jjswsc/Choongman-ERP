@@ -1,6 +1,12 @@
 import crypto from 'crypto'
 import { NextRequest } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import {
+  memberBirthDatesMatch,
+  memberPhoneLookupVariants,
+  normalizeMemberBirthDateInput,
+  normalizeMemberPhone,
+} from '@/lib/member-phone-lookup'
 import { createMember, getMemberSummaryById, type MemberSummary } from '@/lib/members-server'
 import {
   supabaseInsert,
@@ -55,19 +61,6 @@ function toText(v: unknown): string {
   return String(v || '').trim()
 }
 
-function normalizePhone(phone: string): string {
-  return toText(phone).replace(/[^\d+]/g, '')
-}
-
-function phoneLookupVariants(phone: string): string[] {
-  const raw = normalizePhone(phone)
-  if (!raw) return []
-  const out = new Set<string>([raw])
-  if (raw.startsWith('0')) out.add(`66${raw.slice(1)}`)
-  if (raw.startsWith('66')) out.add(`0${raw.slice(2)}`)
-  return [...out]
-}
-
 function isProdLike(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
 }
@@ -94,38 +87,51 @@ function addDaysBangkok(now: Date, days: number): string {
 }
 
 function normalizeBirthDateInput(raw: string): string {
-  const v = toText(raw)
-  if (!v) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
-  const m = v.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
-  if (m) {
-    const dd = m[1].padStart(2, '0')
-    const mm = m[2].padStart(2, '0')
-    return `${m[3]}-${mm}-${dd}`
-  }
-  return v.slice(0, 10)
+  return normalizeMemberBirthDateInput(raw)
 }
 
 function birthDatesMatch(stored: string, input: string): boolean {
-  const a = normalizeBirthDateInput(stored)
-  const b = normalizeBirthDateInput(input)
-  if (!a || !b) return false
-  return a === b
+  return memberBirthDatesMatch(stored, input)
+}
+
+async function findMembersByPhoneVariants(phone: string): Promise<MemberRow[]> {
+  const variants = memberPhoneLookupVariants(phone)
+  const seen = new Set<number>()
+  const out: MemberRow[] = []
+  for (const candidate of variants) {
+    const found = (await supabaseSelectFilter(
+      'members',
+      `phone=eq.${encodeURIComponent(candidate)}`,
+      { order: 'id.desc', limit: 5 }
+    )) as MemberRow[]
+    for (const row of found || []) {
+      const id = Number(row.id || 0)
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      out.push(row)
+    }
+  }
+  return out
 }
 
 async function countRecentBirthLoginFailures(phone: string): Promise<number> {
   const since = addMinutesBangkok(new Date(Date.now() - BIRTH_LOGIN_WINDOW_MINUTES * 60 * 1000), 0)
-  const rows = (await supabaseSelectFilter(
-    'member_login_otps',
-    `phone=eq.${encodeURIComponent(phone)}&status=eq.birth_fail&created_at=gte.${encodeURIComponent(since)}`,
-    { limit: 20 }
-  )) as OtpRow[]
-  return rows?.length || 0
+  let total = 0
+  for (const candidate of memberPhoneLookupVariants(phone)) {
+    const rows = (await supabaseSelectFilter(
+      'member_login_otps',
+      `phone=eq.${encodeURIComponent(candidate)}&status=eq.birth_fail&created_at=gte.${encodeURIComponent(since)}`,
+      { limit: 20 }
+    )) as OtpRow[]
+    total += rows?.length || 0
+  }
+  return total
 }
 
 async function recordBirthLoginFailure(phone: string): Promise<void> {
+  const canonical = memberPhoneLookupVariants(phone)[0] || normalizeMemberPhone(phone)
   await supabaseInsert('member_login_otps', {
-    phone,
+    phone: canonical,
     otp_hash: 'birth_fail',
     expires_at: addMinutesBangkok(new Date(), BIRTH_LOGIN_WINDOW_MINUTES),
     status: 'birth_fail',
@@ -158,6 +164,37 @@ export async function createMemberPortalSession(params: {
   return { sessionToken: rawToken, expiresAt }
 }
 
+export type PhoneBirthLoginErrorCode =
+  | 'missing_phone'
+  | 'missing_birth'
+  | 'rate_limited'
+  | 'not_found'
+  | 'inactive'
+
+export class PhoneBirthLoginError extends Error {
+  code: PhoneBirthLoginErrorCode
+  constructor(code: PhoneBirthLoginErrorCode, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+export type PhoneBirthSignupErrorCode =
+  | 'missing_name'
+  | 'missing_phone'
+  | 'missing_birth'
+  | 'rate_limited'
+  | 'exists_other_birth'
+  | 'inactive'
+
+export class PhoneBirthSignupError extends Error {
+  code: PhoneBirthSignupErrorCode
+  constructor(code: PhoneBirthSignupErrorCode, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
 export async function verifyMemberByPhoneBirthDate(params: {
   phone: string
   birthDate: string
@@ -165,36 +202,39 @@ export async function verifyMemberByPhoneBirthDate(params: {
   userAgent?: string
   ip?: string
 }): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string }> {
-  const phone = normalizePhone(params.phone)
+  const phone = normalizeMemberPhone(params.phone)
   const birthDate = normalizeBirthDateInput(params.birthDate)
-  if (!phone) throw new Error('전화번호를 입력해 주세요.')
-  if (!birthDate) throw new Error('생년월일을 입력해 주세요.')
+  if (!phone) throw new PhoneBirthLoginError('missing_phone', '전화번호를 입력해 주세요.')
+  if (!birthDate) throw new PhoneBirthLoginError('missing_birth', '생년월일을 입력해 주세요.')
 
   const failCount = await countRecentBirthLoginFailures(phone)
   if (failCount >= BIRTH_LOGIN_MAX_TRIES) {
-    throw new Error('로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해 주세요.')
+    throw new PhoneBirthLoginError('rate_limited', '로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해 주세요.')
   }
 
-  const variants = phoneLookupVariants(phone)
-  let rows: MemberRow[] = []
-  for (const candidate of variants) {
-    const found = (await supabaseSelectFilter(
-      'members',
-      `phone=eq.${encodeURIComponent(candidate)}`,
-      { order: 'id.desc', limit: 5 }
-    )) as MemberRow[]
-    if (found?.length) {
-      rows = found
-      break
-    }
+  const rows = await findMembersByPhoneVariants(phone)
+  let matched =
+    (rows || []).find((row) => birthDatesMatch(toText(row.birth_date), birthDate)) || null
+
+  // CRM/LINE 이관 회원: 전화번호만 있고 생년월일이 비어 있으면 첫 로그인 시 저장
+  if (!matched && rows.length === 1 && !normalizeBirthDateInput(toText(rows[0].birth_date))) {
+    matched = rows[0]
+    await supabaseUpdateByFilter('members', `id=eq.${Number(matched.id)}`, {
+      birth_date: birthDate,
+      updated_at: getBangkokDateTimeString(),
+    })
+    matched = { ...matched, birth_date: birthDate }
   }
-  const matched = (rows || []).find((row) => birthDatesMatch(toText(row.birth_date), birthDate))
+
   if (!matched?.id) {
     await recordBirthLoginFailure(phone)
-    throw new Error('등록된 회원 정보와 일치하지 않습니다. 전화번호와 생년월일을 확인해 주세요.')
+    throw new PhoneBirthLoginError(
+      'not_found',
+      '등록된 회원 정보와 일치하지 않습니다. 전화번호와 생년월일을 확인해 주세요.'
+    )
   }
   if (toText(matched.status) === 'inactive') {
-    throw new Error('비활성화된 회원입니다. 매장에 문의해 주세요.')
+    throw new PhoneBirthLoginError('inactive', '비활성화된 회원입니다. 매장에 문의해 주세요.')
   }
 
   const member: MemberSummary = {
@@ -227,6 +267,68 @@ export async function verifyMemberByPhoneBirthDate(params: {
   return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt }
 }
 
+export async function registerMemberByPhoneBirthDate(params: {
+  name: string
+  phone: string
+  birthDate: string
+  userAgent?: string
+  deviceLabel?: string
+  ip?: string
+}): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string; created: boolean }> {
+  const name = toText(params.name)
+  const phone = normalizeMemberPhone(params.phone)
+  const birthDate = normalizeBirthDateInput(params.birthDate)
+  if (!name) throw new PhoneBirthSignupError('missing_name', '이름을 입력해 주세요.')
+  if (!phone) throw new PhoneBirthSignupError('missing_phone', '전화번호를 입력해 주세요.')
+  if (!birthDate) throw new PhoneBirthSignupError('missing_birth', '생년월일을 입력해 주세요.')
+
+  const failCount = await countRecentBirthLoginFailures(phone)
+  if (failCount >= BIRTH_LOGIN_MAX_TRIES) {
+    throw new PhoneBirthSignupError('rate_limited', '로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해 주세요.')
+  }
+
+  const rows = await findMembersByPhoneVariants(phone)
+  const matched = rows.find((row) => birthDatesMatch(toText(row.birth_date), birthDate))
+
+  if (matched?.id) {
+    if (toText(matched.status) === 'inactive') {
+      throw new PhoneBirthSignupError('inactive', '비활성화된 회원입니다. 매장에 문의해 주세요.')
+    }
+    const member = await getMemberSummaryById(Number(matched.id))
+    if (!member) throw new PhoneBirthSignupError('inactive', '회원 정보를 찾을 수 없습니다.')
+    const session = await createMemberPortalSession({
+      memberId: member.id,
+      deviceLabel: params.deviceLabel || 'member-signup',
+      userAgent: params.userAgent,
+      ip: params.ip,
+    })
+    return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, created: false }
+  }
+
+  if (rows.length > 0) {
+    await recordBirthLoginFailure(phone)
+    throw new PhoneBirthSignupError(
+      'exists_other_birth',
+      '등록된 회원 정보와 일치하지 않습니다. 전화번호와 생년월일을 확인해 주세요.'
+    )
+  }
+
+  const member = await createMember({
+    name,
+    phone,
+    birthDate,
+    source: 'app',
+    joinChannel: 'homepage',
+  })
+  const session = await createMemberPortalSession({
+    memberId: member.id,
+    deviceLabel: params.deviceLabel || 'member-signup',
+    userAgent: params.userAgent,
+    ip: params.ip,
+  })
+  return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, created: true }
+}
+
 export async function createMemberPortalSessionForMember(params: {
   member: MemberSummary
   deviceLabel?: string
@@ -249,30 +351,8 @@ function buildAnonymousName(phone: string): string {
 }
 
 async function findMemberByPhone(phone: string): Promise<MemberSummary | null> {
-  const rows = (await supabaseSelectFilter(
-    'members',
-    `phone=eq.${encodeURIComponent(phone)}`,
-    { order: 'id.desc', limit: 1 }
-  )) as Array<{
-    id?: number
-    member_no?: string
-    name?: string
-    full_name?: string
-    birth_date?: string
-    gender?: string
-    nationality?: string
-    phone?: string
-    email?: string
-    join_channel?: string
-    source?: string
-    status?: string
-    tier_code?: string
-    point_balance?: number
-    lifetime_amount?: number
-    created_at?: string
-    updated_at?: string
-  }>
-  const row = rows?.[0]
+  const rows = await findMembersByPhoneVariants(phone)
+  const row = rows[0]
   if (!row?.id) return null
   return {
     id: Number(row.id),
@@ -303,7 +383,7 @@ export async function ensureMemberForPortal(params: {
   gender?: string
   nationality?: string
 }): Promise<MemberSummary> {
-  const phone = normalizePhone(params.phone)
+  const phone = normalizeMemberPhone(params.phone)
   if (!phone) throw new Error('전화번호가 필요합니다.')
   const existing = await findMemberByPhone(phone)
   if (existing) return existing
@@ -349,7 +429,7 @@ export async function verifyMemberOtp(params: {
   userAgent?: string
   ip?: string
 }): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string }> {
-  const phone = normalizePhone(params.phone)
+  const phone = normalizeMemberPhone(params.phone)
   const otpCode = toText(params.otpCode)
   if (!phone || !otpCode) throw new Error('전화번호와 인증번호가 필요합니다.')
   const otp = await latestOtp(phone)
