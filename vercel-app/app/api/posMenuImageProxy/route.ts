@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseFetch } from '@/lib/supabase-server'
 
-export const dynamic = 'force-dynamic'
+const BROWSER_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=600'
+const CDN_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=604800'
 
 function isAllowedUpstream(parsed: URL): boolean {
   const h = parsed.hostname.toLowerCase()
@@ -52,7 +53,9 @@ async function readImageResponse(upstream: Response): Promise<NextResponse | nul
     status: 200,
     headers: {
       'Content-Type': outCt,
-      'Cache-Control': 'private, max-age=300',
+      'Cache-Control': BROWSER_CACHE_CONTROL,
+      'CDN-Cache-Control': CDN_CACHE_CONTROL,
+      'Vercel-CDN-Cache-Control': CDN_CACHE_CONTROL,
     },
   })
 }
@@ -77,7 +80,7 @@ export async function GET(request: NextRequest) {
 
   const upstream = await fetch(parsed.href, {
     redirect: 'follow',
-    cache: 'no-store',
+    next: { revalidate: 60 * 60 },
     headers: { Accept: 'image/*,*/*;q=0.8' },
   })
 

@@ -28,6 +28,12 @@ export async function POST(req: NextRequest) {
       name?: string
       phone?: string
       email?: string
+      birthDate?: string
+      gender?: string
+      nationality?: string
+      joinChannel?: string
+      referralCode?: string
+      referredByMemberId?: number
       source?: string
       lineUserId?: string
       lineDisplayName?: string
@@ -37,6 +43,12 @@ export async function POST(req: NextRequest) {
       name: String(body.name || '').trim(),
       phone: String(body.phone || '').trim(),
       email: String(body.email || '').trim(),
+      birthDate: String(body.birthDate || '').trim(),
+      gender: String(body.gender || '').trim(),
+      nationality: String(body.nationality || '').trim(),
+      joinChannel: String(body.joinChannel || '').trim(),
+      referralCode: String(body.referralCode || '').trim().toUpperCase(),
+      referredByMemberId: Number(body.referredByMemberId || 0) || undefined,
       source: String(body.source || '').trim() || 'manual',
       lineUserId: String(body.lineUserId || '').trim(),
       lineDisplayName: String(body.lineDisplayName || '').trim(),

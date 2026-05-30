@@ -21,6 +21,10 @@ export async function PATCH(
       lineDisplayName?: string
       birthDate?: string
       gender?: string
+      nationality?: string
+      joinChannel?: string
+      referralCode?: string
+      referredByMemberId?: number
       phone?: string
       email?: string
       consentMarketing?: boolean
@@ -35,6 +39,10 @@ export async function PATCH(
       lineDisplayName: body.lineDisplayName,
       birthDate: body.birthDate,
       gender: body.gender,
+      nationality: body.nationality,
+      joinChannel: body.joinChannel,
+      referralCode: body.referralCode,
+      referredByMemberId: body.referredByMemberId,
       phone: body.phone,
       email: body.email,
       consentMarketing: body.consentMarketing,

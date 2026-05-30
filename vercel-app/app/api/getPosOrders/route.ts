@@ -716,6 +716,10 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+    if (pollMinimal && sinceId != null && sinceId > 0 && list.length === 0) {
+      headers.set('X-Pos-Orders-Count', '0')
+      return new NextResponse(null, { status: 204, headers })
+    }
     headers.set('X-Pos-Orders-Count', String(list.length))
     return NextResponse.json(list, { headers })
   } catch (e) {

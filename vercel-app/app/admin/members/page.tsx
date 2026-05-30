@@ -26,6 +26,10 @@ type MemberForm = {
   lineDisplayName: string
   birthDate: string
   gender: string
+  nationality: string
+  joinChannel: string
+  referralCode: string
+  referredByMemberId: string
   phone: string
   email: string
   consentMarketing: boolean
@@ -40,6 +44,10 @@ const emptyForm: MemberForm = {
   lineDisplayName: "",
   birthDate: "",
   gender: "",
+  nationality: "",
+  joinChannel: "store",
+  referralCode: "",
+  referredByMemberId: "",
   phone: "",
   email: "",
   consentMarketing: false,
@@ -233,6 +241,12 @@ export default function MembersPage() {
           name,
           phone: form.phone.trim(),
           email: form.email.trim(),
+          birthDate: form.birthDate.trim(),
+          gender: form.gender.trim(),
+          nationality: form.nationality.trim(),
+          joinChannel: form.joinChannel.trim(),
+          referralCode: form.referralCode.trim(),
+          referredByMemberId: Number(form.referredByMemberId || 0) || undefined,
           source: "app",
         })
         if (!created.success || !created.member) {
@@ -247,6 +261,10 @@ export default function MembersPage() {
           lineDisplayName: form.lineDisplayName.trim(),
           birthDate: form.birthDate.trim(),
           gender: form.gender.trim(),
+          nationality: form.nationality.trim(),
+          joinChannel: form.joinChannel.trim(),
+          referralCode: form.referralCode.trim(),
+          referredByMemberId: Number(form.referredByMemberId || 0) || undefined,
           phone: form.phone.trim(),
           email: form.email.trim(),
           consentMarketing: form.consentMarketing,
@@ -269,6 +287,10 @@ export default function MembersPage() {
         lineDisplayName: form.lineDisplayName.trim(),
         birthDate: form.birthDate.trim(),
         gender: form.gender.trim(),
+        nationality: form.nationality.trim(),
+        joinChannel: form.joinChannel.trim(),
+        referralCode: form.referralCode.trim(),
+        referredByMemberId: Number(form.referredByMemberId || 0) || undefined,
         phone: form.phone.trim(),
         email: form.email.trim(),
         consentMarketing: form.consentMarketing,
@@ -355,6 +377,26 @@ export default function MembersPage() {
                 <div className="space-y-1.5">
                   <Label>{t("gender")}</Label>
                   <Input placeholder={t("memberGenderPh")} value={form.gender ?? ""} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label>{t("memberNationality")}</Label>
+                  <Input value={form.nationality ?? ""} onChange={(e) => setForm((p) => ({ ...p, nationality: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("memberJoinChannel")}</Label>
+                  <Input value={form.joinChannel ?? ""} onChange={(e) => setForm((p) => ({ ...p, joinChannel: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label>{t("memberReferralCode")}</Label>
+                  <Input value={form.referralCode ?? ""} onChange={(e) => setForm((p) => ({ ...p, referralCode: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("memberReferredById")}</Label>
+                  <Input value={form.referredByMemberId ?? ""} onChange={(e) => setForm((p) => ({ ...p, referredByMemberId: e.target.value }))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -520,6 +562,7 @@ export default function MembersPage() {
                         <th className="p-2 text-left">{t("memberPhone")}</th>
                         <th className="p-2 text-left">{t("memberFullName")}</th>
                         <th className="p-2 text-left">{t("birthDate")}</th>
+                        <th className="p-2 text-left">{t("memberNationality")}</th>
                         <th className="p-2 text-left">{t("age")}</th>
                         <th className="p-2 text-left">LINE User ID</th>
                         <th className="p-2 text-left">{t("memberNo")}</th>
@@ -541,6 +584,10 @@ export default function MembersPage() {
                               lineDisplayName: m.lineDisplayName || "",
                               birthDate: toDateInput(m.birthDate || ""),
                               gender: m.gender || "",
+                              nationality: m.nationality || "",
+                              joinChannel: m.joinChannel || "store",
+                              referralCode: m.referralCode || "",
+                              referredByMemberId: String(m.referredByMemberId || ""),
                               phone: m.phone || "",
                               email: m.email || "",
                               consentMarketing: Boolean(m.consentMarketing),
@@ -557,6 +604,7 @@ export default function MembersPage() {
                           <td className="p-2">{m.phone || "—"}</td>
                           <td className="p-2">{m.fullName || "-"}</td>
                           <td className="p-2">{m.birthDate || "-"}</td>
+                          <td className="p-2">{m.nationality || "-"}</td>
                           <td className="p-2">{calcAge(m.birthDate)}</td>
                           <td className="p-2">{m.lineUserId || "-"}</td>
                           <td className="p-2">{m.memberNo || "-"}</td>

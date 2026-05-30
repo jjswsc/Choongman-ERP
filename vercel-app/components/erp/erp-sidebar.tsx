@@ -131,6 +131,14 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
+    titleKey: "adminSectionCrm",
+    items: [
+      { titleKey: "adminCrmDashboard", icon: LayoutDashboard, href: "/admin/crm" },
+      { titleKey: "adminCrmSegments", icon: Users, href: "/admin/crm/segments" },
+      { titleKey: "adminCrmRfm", icon: TrendingUp, href: "/admin/crm/rfm" },
+    ],
+  },
+  {
     titleKey: "adminSectionStore",
     items: [
       { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },

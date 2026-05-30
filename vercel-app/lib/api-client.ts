@@ -9741,6 +9741,7 @@ export async function getPosOrders(params?: {
   if (params?.limit != null && params.limit > 0) q.set('limit', String(params.limit))
   if (params?.pollMinimal) q.set('pollMinimal', '1')
   const res = await apiFetchWithOffline('/api/getPosOrders?' + q.toString())
+  if (res.status === 204) return []
   const data = await res.json().catch(() => null)
   if (!Array.isArray(data)) return []
   return data as PosOrder[]
@@ -11309,8 +11310,12 @@ export interface Member {
   fullName?: string
   birthDate?: string
   gender?: string
+  nationality?: string
   phone: string
   email: string
+  joinChannel?: string
+  referredByMemberId?: number
+  referralCode?: string
   consentMarketing?: boolean
   consentPrivacy?: boolean
   consentAt?: string
@@ -11325,8 +11330,19 @@ export interface Member {
   lastLineEventType?: string
   lastLineEventAt?: string
   lastUpdateReason?: string
+  lastVisitedAt?: string
   createdAt?: string
   updatedAt?: string
+}
+
+export async function getMembersCursor(params?: { q?: string; afterId?: number; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.q) q.set('q', params.q)
+  if (params?.afterId != null) q.set('afterId', String(params.afterId))
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const suffix = q.toString()
+  const res = await apiFetchWithOffline('/api/members/cursor' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<{ success: boolean; rows: Member[]; nextCursor: number | null; message?: string }>
 }
 
 export async function getMembers(params?: { q?: string; limit?: number }) {
@@ -11344,6 +11360,12 @@ export async function createMember(params: {
   name: string
   phone?: string
   email?: string
+  birthDate?: string
+  gender?: string
+  nationality?: string
+  joinChannel?: string
+  referralCode?: string
+  referredByMemberId?: number
   source?: string
   lineUserId?: string
   lineDisplayName?: string
@@ -11364,6 +11386,10 @@ export async function updateMember(params: {
   lineDisplayName?: string
   birthDate?: string
   gender?: string
+  nationality?: string
+  joinChannel?: string
+  referralCode?: string
+  referredByMemberId?: number
   phone?: string
   email?: string
   consentMarketing?: boolean
@@ -11380,6 +11406,10 @@ export async function updateMember(params: {
       lineDisplayName: params.lineDisplayName,
       birthDate: params.birthDate,
       gender: params.gender,
+      nationality: params.nationality,
+      joinChannel: params.joinChannel,
+      referralCode: params.referralCode,
+      referredByMemberId: params.referredByMemberId,
       phone: params.phone,
       email: params.email,
       consentMarketing: params.consentMarketing,

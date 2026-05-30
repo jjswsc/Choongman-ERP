@@ -1,5 +1,6 @@
 import {
   supabaseInsert,
+  supabaseRpc,
   supabaseSelect,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
@@ -14,8 +15,12 @@ export type MemberSummary = {
   fullName?: string
   birthDate?: string
   gender?: string
+  nationality?: string
   phone: string
   email: string
+  joinChannel?: string
+  referredByMemberId?: number
+  referralCode?: string
   consentMarketing?: boolean
   consentPrivacy?: boolean
   consentAt?: string
@@ -30,6 +35,7 @@ export type MemberSummary = {
   lastLineEventType?: string
   lastLineEventAt?: string
   lastUpdateReason?: string
+  lastVisitedAt?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -41,6 +47,11 @@ type MemberRow = {
   full_name?: string | null
   birth_date?: string | null
   gender?: string | null
+  nationality?: string | null
+  join_channel?: string | null
+  referred_by_member_id?: number | null
+  referral_code?: string | null
+  last_visited_at?: string | null
   line_display_name?: string | null
   consent_marketing?: boolean | null
   consent_privacy?: boolean | null
@@ -100,6 +111,12 @@ export type CreateMemberInput = {
   name: string
   phone?: string
   email?: string
+  birthDate?: string
+  gender?: string
+  nationality?: string
+  joinChannel?: string
+  referralCode?: string
+  referredByMemberId?: number
   source?: string
   lineUserId?: string
   lineDisplayName?: string
@@ -113,6 +130,10 @@ export type UpdateMemberInput = {
   lineDisplayName?: string
   birthDate?: string
   gender?: string
+  nationality?: string
+  joinChannel?: string
+  referralCode?: string
+  referredByMemberId?: number
   phone?: string
   email?: string
   consentMarketing?: boolean
@@ -158,8 +179,12 @@ function toMemberSummary(
     fullName,
     birthDate: toText(member.birth_date),
     gender: toText(member.gender),
+    nationality: toText(member.nationality),
     phone: toText(member.phone),
     email: toText(member.email),
+    joinChannel: toText(member.join_channel) || 'store',
+    referredByMemberId: Number(member.referred_by_member_id || 0) || undefined,
+    referralCode: toText(member.referral_code),
     consentMarketing: Boolean(member.consent_marketing),
     consentPrivacy: Boolean(member.consent_privacy),
     consentAt: toText(member.consent_at),
@@ -174,6 +199,7 @@ function toMemberSummary(
     lastLineEventType,
     lastLineEventAt,
     lastUpdateReason: deriveLastUpdateReason({ source, lastLineEventType }),
+    lastVisitedAt: toText(member.last_visited_at),
     createdAt: toText(member.created_at),
     updatedAt: toText(member.updated_at),
   }
@@ -303,12 +329,49 @@ export async function listMembers(params?: { q?: string; limit?: number }): Prom
   })
 }
 
+export async function listMembersCursor(params?: { q?: string; afterId?: number; limit?: number }): Promise<MemberSummary[]> {
+  const q = toText(params?.q)
+  const afterId = Number(params?.afterId || 0) || null
+  const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
+  try {
+    const rows = (await supabaseRpc<MemberRow[]>('get_member_list_cursor', {
+      p_after_id: afterId,
+      p_limit: limit,
+      p_q: q || null,
+    })) as MemberRow[]
+    const memberIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
+    const lineIdentityMap = await getLineIdentities(memberIds)
+    const lineEventMap = await getLatestMemberEvents(memberIds)
+    return (rows || []).map((row) => {
+      const id = Number(row.id || 0)
+      const evt = lineEventMap.get(id)
+      return toMemberSummary(row, lineIdentityMap.get(id), {
+        lastLineEventType: evt?.eventType,
+        lastLineEventAt: evt?.processedAt,
+      })
+    })
+  } catch {
+    const batchLimit = Math.max(limit, afterId ? limit + 500 : limit)
+    const rows = await listMembers({ q, limit: batchLimit })
+    const filtered = afterId ? rows.filter((m) => m.id > afterId) : rows
+    return filtered.slice(0, limit)
+  }
+}
+
 async function insertMemberBase(input: CreateMemberInput): Promise<MemberRow> {
   const now = getBangkokDateTimeString()
+  const referralCode = toText(input.referralCode).toUpperCase() || null
+  const referredByMemberId = Number(input.referredByMemberId || 0) || null
   const inserted = (await supabaseInsert('members', {
     name: toText(input.name),
     phone: normalizePhone(input.phone || '') || null,
     email: normalizeEmail(input.email || '') || null,
+    birth_date: toText(input.birthDate) || null,
+    gender: toText(input.gender) || null,
+    nationality: toText(input.nationality) || null,
+    join_channel: toText(input.joinChannel) || 'store',
+    referral_code: referralCode,
+    referred_by_member_id: referredByMemberId,
     source: toText(input.source) || 'manual',
     status: 'active',
     created_at: now,
@@ -364,6 +427,21 @@ async function ensureLineIdentity(params: {
   })
 }
 
+export async function findMemberByReferralCode(codeRaw: string): Promise<MemberSummary | null> {
+  const code = toText(codeRaw).toUpperCase()
+  if (!code) return null
+  const rows = (await supabaseSelectFilter(
+    'members',
+    `referral_code=eq.${encodeURIComponent(code)}`,
+    { limit: 1 }
+  )) as MemberRow[]
+  const row = rows?.[0]
+  if (!row?.id) return null
+  const id = Number(row.id)
+  const lineMap = await getLineIdentities([id])
+  return toMemberSummary(row, lineMap.get(id))
+}
+
 export async function createMember(input: CreateMemberInput): Promise<MemberSummary> {
   const name = toText(input.name)
   if (!name) throw new Error('회원 이름이 필요합니다.')
@@ -393,6 +471,10 @@ export async function updateMember(input: UpdateMemberInput): Promise<MemberSumm
   if (input.lineDisplayName != null) patch.line_display_name = toText(input.lineDisplayName) || null
   if (input.birthDate != null) patch.birth_date = toText(input.birthDate) || null
   if (input.gender != null) patch.gender = toText(input.gender) || null
+  if (input.nationality != null) patch.nationality = toText(input.nationality) || null
+  if (input.joinChannel != null) patch.join_channel = toText(input.joinChannel) || 'store'
+  if (input.referralCode != null) patch.referral_code = toText(input.referralCode).toUpperCase() || null
+  if (input.referredByMemberId != null) patch.referred_by_member_id = Number(input.referredByMemberId || 0) || null
   if (input.phone != null) patch.phone = normalizePhone(input.phone) || null
   if (input.email != null) patch.email = normalizeEmail(input.email) || null
   if (input.consentMarketing != null) patch.consent_marketing = Boolean(input.consentMarketing)
@@ -437,6 +519,7 @@ export async function registerLineMember(input: {
     if (toText(input.email)) patch.email = normalizeEmail(input.email || '') || null
     if (toText(input.name)) patch.name = toText(input.name)
     if (toText(input.displayName)) patch.line_display_name = toText(input.displayName)
+    patch.join_channel = 'line'
     await supabaseUpdateByFilter('members', `id=eq.${memberId}`, patch)
     const identityPatch: Record<string, unknown> = {
       status: 'active',
@@ -456,6 +539,7 @@ export async function registerLineMember(input: {
     phone: input.phone,
     email: input.email,
     source: 'line',
+    joinChannel: 'line',
     lineUserId,
     lineDisplayName: toText(input.displayName),
     linePictureUrl: toText(input.pictureUrl),
@@ -579,7 +663,7 @@ export async function recalculateMemberTier(memberId: number): Promise<{ tierCod
 }
 
 export async function recalculateAllMemberTiers(): Promise<number> {
-  const members = (await supabaseSelect('members', { limit: 5000, select: 'id' })) as { id?: number }[]
+  const members = (await supabaseSelect('members', { limit: 50000, select: 'id' })) as { id?: number }[]
   let count = 0
   for (const member of members || []) {
     const id = Number(member.id || 0)
@@ -588,6 +672,29 @@ export async function recalculateAllMemberTiers(): Promise<number> {
     count += 1
   }
   return count
+}
+
+export async function recalculateMemberTierBatch(params?: {
+  afterId?: number
+  limit?: number
+}): Promise<{ processed: number; nextAfterId: number | null }> {
+  const limit = Math.max(1, Math.min(Number(params?.limit || 500), 5000))
+  const afterId = Number(params?.afterId || 0) || null
+  const rows = (await supabaseSelectFilter(
+    'members',
+    afterId ? `id=lt.${afterId}` : 'id=gt.0',
+    { order: 'id.desc', limit, select: 'id' }
+  )) as { id?: number }[]
+  let processed = 0
+  let nextAfterId: number | null = null
+  for (const row of rows || []) {
+    const id = Number(row.id || 0)
+    if (!id) continue
+    await recalculateMemberTier(id)
+    processed += 1
+    nextAfterId = id
+  }
+  return { processed, nextAfterId }
 }
 
 export async function listMemberTiers(): Promise<MemberTierRow[]> {
@@ -685,13 +792,28 @@ export async function applyLoyaltyOnOrder(params: {
   const pointUsed = Math.max(0, Math.trunc(Number(params.pointUsed || 0)))
   const autoEarn = Math.max(0, Math.floor(Number(params.totalAmount || 0) * pointRate))
   const pointEarned = Math.max(0, Math.trunc(Number(params.pointEarned ?? autoEarn)))
-  const nextBalance = Math.max(0, Number(member.point_balance || 0) - pointUsed + pointEarned)
-  const nextLifetime = Number(member.lifetime_amount || 0) + Math.max(0, Number(params.totalAmount || 0))
+  const orderId = Number(params.orderId || 0) || null
+  const existingByOrder = orderId
+    ? ((await supabaseSelectFilter(
+        'member_points_ledger',
+        `member_id=eq.${memberId}&order_id=eq.${orderId}`,
+        { select: 'kind', limit: 20 }
+      )) as Array<{ kind?: string }>)
+    : []
+  const existingKinds = new Set((existingByOrder || []).map((x) => toText(x.kind)))
+  const shouldInsertUse = pointUsed > 0 && !existingKinds.has('use')
+  const shouldInsertEarn = pointEarned > 0 && !existingKinds.has('earn')
+  const appliedUse = shouldInsertUse ? pointUsed : 0
+  const appliedEarn = shouldInsertEarn ? pointEarned : 0
+  const nextBalance = Math.max(0, Number(member.point_balance || 0) - appliedUse + appliedEarn)
+  const shouldApplyLifetime = shouldInsertUse || shouldInsertEarn
+  const nextLifetime =
+    Number(member.lifetime_amount || 0) + (shouldApplyLifetime ? Math.max(0, Number(params.totalAmount || 0)) : 0)
 
-  if (pointUsed > 0) {
+  if (shouldInsertUse) {
     await supabaseInsert('member_points_ledger', {
       member_id: memberId,
-      order_id: params.orderId || null,
+      order_id: orderId,
       kind: 'use',
       points: -pointUsed,
       amount: Number(params.totalAmount || 0),
@@ -699,10 +821,10 @@ export async function applyLoyaltyOnOrder(params: {
       created_at: getBangkokDateTimeString(),
     })
   }
-  if (pointEarned > 0) {
+  if (shouldInsertEarn) {
     await supabaseInsert('member_points_ledger', {
       member_id: memberId,
-      order_id: params.orderId || null,
+      order_id: orderId,
       kind: 'earn',
       points: pointEarned,
       amount: Number(params.totalAmount || 0),
@@ -710,24 +832,39 @@ export async function applyLoyaltyOnOrder(params: {
       created_at: getBangkokDateTimeString(),
     })
   }
-  if (toText(params.couponCode)) {
-    await supabaseInsert('member_coupon_issues', {
-      member_id: memberId,
-      coupon_code: toText(params.couponCode).toUpperCase(),
-      issued_at: getBangkokDateTimeString(),
-      used_at: getBangkokDateTimeString(),
-      order_id: params.orderId || null,
-      status: 'used',
-    })
+  if (toText(params.couponCode) && (shouldInsertUse || shouldInsertEarn)) {
+    const couponCode = toText(params.couponCode).toUpperCase()
+    const existingCoupon = orderId
+      ? ((await supabaseSelectFilter(
+          'member_coupon_issues',
+          `member_id=eq.${memberId}&order_id=eq.${orderId}&coupon_code=eq.${encodeURIComponent(couponCode)}`,
+          { limit: 1 }
+        )) as Array<{ id?: number }>)
+      : []
+    if (!existingCoupon?.length) {
+      await supabaseInsert('member_coupon_issues', {
+        member_id: memberId,
+        coupon_code: couponCode,
+        issued_at: getBangkokDateTimeString(),
+        used_at: getBangkokDateTimeString(),
+        order_id: params.orderId || null,
+        status: 'used',
+      })
+    }
+  }
+
+  if (!shouldInsertUse && !shouldInsertEarn) {
+    return { pointEarned: 0, tierCode: currentTierCode }
   }
 
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
     point_balance: nextBalance,
     lifetime_amount: nextLifetime,
+    last_visited_at: getBangkokDateTimeString(),
     updated_at: getBangkokDateTimeString(),
   })
   const recalc = await recalculateMemberTier(memberId)
-  return { pointEarned, tierCode: recalc.tierCode }
+  return { pointEarned: appliedEarn, tierCode: recalc.tierCode }
 }
 
 export async function listMemberCouponIssues(params?: { memberId?: number; limit?: number }) {

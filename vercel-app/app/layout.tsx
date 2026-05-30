@@ -21,21 +21,25 @@ const pretendard = localFont({
   src: "../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
   variable: "--font-pretendard",
   display: "swap",
+  preload: false,
 })
 const notoSansThai = Noto_Sans_Thai({
   subsets: ["latin", "thai"],
   variable: "--font-noto-sans-thai",
   weight: ["400", "500", "600", "700"],
   display: "swap",
+  preload: false,
 })
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+  preload: false,
 })
 const orbitron = Orbitron({
   subsets: ["latin"],
   variable: "--font-orbitron",
   weight: ["400", "500", "600", "700"],
+  preload: false,
 })
 
 function appMetadataBase(): URL | undefined {
