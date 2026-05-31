@@ -38,7 +38,7 @@ export interface MenuItem {
 export const MISE_DEFAULT = 3
 
 /** 원가 계산기·DB 미설정 시 배달앱 수수료 기본값(%) */
-export const DELIVERY_APP_FEE_PERCENT_DEFAULT = 25
+export const DELIVERY_APP_FEE_PERCENT_DEFAULT = 20
 
 /** 플랫폼 정산(익일 NET) 앱별 기본 % — DB 미설정 시 */
 export const DELIVERY_PLATFORM_SETTLEMENT_FEE_PCT: Record<"grab" | "lineman" | "shopee", number> = {

@@ -8,15 +8,19 @@ type Props = {
   filingStoreFilter: string
   onFilingStoreFilterChange: (v: string) => void
   onOpenStoreProfiles?: () => void
+  whtFocusMode?: "all" | "pnd1391" | "pnd5354" | "pp36"
+  initialWhtSubmissionFormHint?: "PND3" | "PND53" | "ALL"
 }
 
 export function TaxFilingWhtTab(props: Props) {
-  const { onOpenStoreProfiles, ...rest } = props
+  const { onOpenStoreProfiles, whtFocusMode, initialWhtSubmissionFormHint, ...rest } = props
   return (
     <AdminAccountingCompliance
       initialTab="summary"
       initialPp30SubView="wht"
       pp30Mode="wht_only"
+      whtFocusMode={whtFocusMode}
+      initialWhtSubmissionFormHint={initialWhtSubmissionFormHint}
       hideTabBar
       filingYearMonth={rest.filingYearMonth}
       onFilingYearMonthChange={rest.onFilingYearMonthChange}

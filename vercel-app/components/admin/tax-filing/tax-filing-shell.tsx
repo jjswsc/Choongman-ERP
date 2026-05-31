@@ -32,11 +32,15 @@ import { TaxFilingVatTab } from "@/components/admin/tax-filing/tab-vat"
 import { TaxFilingWhtTab } from "@/components/admin/tax-filing/tab-wht"
 import { TaxFilingCitTab } from "@/components/admin/tax-filing/tab-cit"
 import { TaxFilingSsoTab } from "@/components/admin/tax-filing/tab-sso"
-import { TaxFilingDbdTab } from "@/components/admin/tax-filing/tab-dbd"
-import { TaxFilingWorkflowTab } from "@/components/admin/tax-filing/tab-workflow"
 import { TaxFilingStoreProfilesTab } from "@/components/admin/tax-filing/tab-store-profiles"
 
-type FilingTabKey = "vat" | "wht" | "cit" | "sso" | "dbd" | "workflow" | "storeProfiles"
+type FilingTabKey =
+  | "pp30pp36"
+  | "pnd1391"
+  | "pnd5051"
+  | "pnd5354"
+  | "sso"
+  | "storeProfiles"
 
 function useFilingTabFilters(
   storeOptions: string[],
@@ -54,28 +58,25 @@ function useFilingTabFilters(
     [isManager, managerStore]
   )
 
-  const [vatYm, setVatYm] = React.useState(defaultYm)
-  const [vatStore, setVatStore] = React.useState(defaultStore)
-  const [whtYm, setWhtYm] = React.useState(defaultYm)
-  const [whtStore, setWhtStore] = React.useState(defaultStore)
-  const [citYm, setCitYm] = React.useState(defaultYm)
-  const [citStore, setCitStore] = React.useState(defaultStore)
+  const [pp30pp36Ym, setPp30pp36Ym] = React.useState(defaultYm)
+  const [pp30pp36Store, setPp30pp36Store] = React.useState(defaultStore)
+  const [pnd1391Ym, setPnd1391Ym] = React.useState(defaultYm)
+  const [pnd1391Store, setPnd1391Store] = React.useState(defaultStore)
+  const [pnd5051Ym, setPnd5051Ym] = React.useState(defaultYm)
+  const [pnd5051Store, setPnd5051Store] = React.useState(defaultStore)
+  const [pnd5354Ym, setPnd5354Ym] = React.useState(defaultYm)
+  const [pnd5354Store, setPnd5354Store] = React.useState(defaultStore)
   const [ssoYm, setSsoYm] = React.useState(defaultYm)
   const [ssoStore, setSsoStore] = React.useState(defaultStore)
-  const [dbdYm, setDbdYm] = React.useState(defaultYm)
-  const [dbdStore, setDbdStore] = React.useState(defaultStore)
-  const [workflowYm, setWorkflowYm] = React.useState(defaultYm)
-  const [workflowStore, setWorkflowStore] = React.useState(defaultStore)
   const [storeProfilesStore, setStoreProfilesStore] = React.useState(defaultStore)
 
   React.useEffect(() => {
     if (isManager && managerStore) {
-      setVatStore(managerStore)
-      setWhtStore(managerStore)
-      setCitStore(managerStore)
+      setPp30pp36Store(managerStore)
+      setPnd1391Store(managerStore)
+      setPnd5051Store(managerStore)
+      setPnd5354Store(managerStore)
       setSsoStore(managerStore)
-      setDbdStore(managerStore)
-      setWorkflowStore(managerStore)
       setStoreProfilesStore(managerStore)
     }
   }, [isManager, managerStore])
@@ -158,23 +159,29 @@ function useFilingTabFilters(
 
   const tabProps = React.useMemo(
     () => ({
-      vat: {
-        filingYearMonth: vatYm,
-        onFilingYearMonthChange: setVatYm,
-        filingStoreFilter: vatStore,
-        onFilingStoreFilterChange: setVatStore,
+      pp30pp36: {
+        filingYearMonth: pp30pp36Ym,
+        onFilingYearMonthChange: setPp30pp36Ym,
+        filingStoreFilter: pp30pp36Store,
+        onFilingStoreFilterChange: setPp30pp36Store,
       },
-      wht: {
-        filingYearMonth: whtYm,
-        onFilingYearMonthChange: setWhtYm,
-        filingStoreFilter: whtStore,
-        onFilingStoreFilterChange: setWhtStore,
+      pnd1391: {
+        filingYearMonth: pnd1391Ym,
+        onFilingYearMonthChange: setPnd1391Ym,
+        filingStoreFilter: pnd1391Store,
+        onFilingStoreFilterChange: setPnd1391Store,
       },
-      cit: {
-        filingYearMonth: citYm,
-        onFilingYearMonthChange: setCitYm,
-        filingStoreFilter: citStore,
-        onFilingStoreFilterChange: setCitStore,
+      pnd5051: {
+        filingYearMonth: pnd5051Ym,
+        onFilingYearMonthChange: setPnd5051Ym,
+        filingStoreFilter: pnd5051Store,
+        onFilingStoreFilterChange: setPnd5051Store,
+      },
+      pnd5354: {
+        filingYearMonth: pnd5354Ym,
+        onFilingYearMonthChange: setPnd5354Ym,
+        filingStoreFilter: pnd5354Store,
+        onFilingStoreFilterChange: setPnd5354Store,
       },
       sso: {
         filingYearMonth: ssoYm,
@@ -182,20 +189,19 @@ function useFilingTabFilters(
         filingStoreFilter: ssoStore,
         onFilingStoreFilterChange: setSsoStore,
       },
-      dbd: {
-        filingYearMonth: dbdYm,
-        onFilingYearMonthChange: setDbdYm,
-        filingStoreFilter: dbdStore,
-        onFilingStoreFilterChange: setDbdStore,
-      },
-      workflow: {
-        filingYearMonth: workflowYm,
-        onFilingYearMonthChange: setWorkflowYm,
-        filingStoreFilter: workflowStore,
-        onFilingStoreFilterChange: setWorkflowStore,
-      },
     }),
-    [vatYm, vatStore, whtYm, whtStore, citYm, citStore, ssoYm, ssoStore, dbdYm, dbdStore, workflowYm, workflowStore]
+    [
+      pp30pp36Ym,
+      pp30pp36Store,
+      pnd1391Ym,
+      pnd1391Store,
+      pnd5051Ym,
+      pnd5051Store,
+      pnd5354Ym,
+      pnd5354Store,
+      ssoYm,
+      ssoStore,
+    ]
   )
 
   return { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore }
@@ -213,20 +219,30 @@ export function TaxFilingShell() {
   const isManager = !isOffice && isManagerOrFranchiseeRole(role)
 
   const searchParams = useSearchParams()
-  const [tab, setTab] = React.useState("vat")
+  const [tab, setTab] = React.useState("pp30pp36")
 
   React.useEffect(() => {
     const q = String(searchParams.get("tab") || "").trim()
     if (
       q === "storeProfiles" ||
-      q === "vat" ||
-      q === "wht" ||
-      q === "cit" ||
-      q === "sso" ||
-      q === "dbd" ||
-      q === "workflow"
+      q === "pp30pp36" ||
+      q === "pnd1391" ||
+      q === "pnd5051" ||
+      q === "pnd5354" ||
+      q === "sso"
     ) {
       setTab(q)
+      return
+    }
+    // 이전 링크 호환성(vat/wht/cit 등)
+    if (q === "vat") {
+      setTab("pp30pp36")
+    } else if (q === "wht") {
+      setTab("pnd1391")
+    } else if (q === "cit") {
+      setTab("pnd5051")
+    } else if (q === "dbd" || q === "workflow") {
+      setTab("pnd5354")
     }
   }, [searchParams])
 
@@ -261,23 +277,20 @@ export function TaxFilingShell() {
               <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>
                 {t("taxFilingTabStoreProfiles")}
               </TabsTrigger>
-              <TabsTrigger value="vat" className={adminTabsTriggerCn}>
-                {t("taxFilingTabVat")}
+              <TabsTrigger value="pp30pp36" className={adminTabsTriggerCn}>
+                {t("taxFilingTabPp30Pp36")}
               </TabsTrigger>
-              <TabsTrigger value="wht" className={adminTabsTriggerCn}>
-                {t("taxFilingTabWht")}
+              <TabsTrigger value="pnd1391" className={adminTabsTriggerCn}>
+                {t("taxFilingTabPnd1391")}
               </TabsTrigger>
-              <TabsTrigger value="cit" className={adminTabsTriggerCn}>
-                {t("taxFilingTabCit")}
+              <TabsTrigger value="pnd5051" className={adminTabsTriggerCn}>
+                {t("taxFilingTabPnd5051")}
+              </TabsTrigger>
+              <TabsTrigger value="pnd5354" className={adminTabsTriggerCn}>
+                {t("taxFilingTabPnd5354")}
               </TabsTrigger>
               <TabsTrigger value="sso" className={adminTabsTriggerCn}>
                 {t("taxFilingTabSso")}
-              </TabsTrigger>
-              <TabsTrigger value="dbd" className={adminTabsTriggerCn}>
-                {t("taxFilingTabDbd")}
-              </TabsTrigger>
-              <TabsTrigger value="workflow" className={adminTabsTriggerCn}>
-                {t("taxFilingTabWorkflow")}
               </TabsTrigger>
             </TabsList>
           </AdminTabsBarWithHelp>
@@ -288,38 +301,74 @@ export function TaxFilingShell() {
             onFilingStoreFilterChange={setStoreProfilesStore}
           />
         </TabsContent>
-        <TabsContent value="vat" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pp30pp36" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingVatTab
-            {...tabProps.vat}
+            {...tabProps.pp30pp36}
             onOpenStoreProfiles={() => {
-              const s = tabProps.vat.filingStoreFilter
+              const s = tabProps.pp30pp36.filingStoreFilter
               if (s && s !== "All") setStoreProfilesStore(s)
               setTab("storeProfiles")
             }}
           />
+          <Card className="border-border/80">
+            <CardContent className="pt-4 space-y-2 text-xs text-muted-foreground">
+              <p>{t("taxFilingNotePp36Bundled")}</p>
+              <TaxFilingWhtTab
+                {...tabProps.pp30pp36}
+                whtFocusMode="pp36"
+                initialWhtSubmissionFormHint="ALL"
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
-        <TabsContent value="wht" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd1391" className={cn(adminTabsContentCn, "space-y-3")}>
+          <Card className="border-border/80">
+            <CardContent className="pt-4 text-xs text-muted-foreground leading-relaxed">
+              {t("taxFilingNotePnd91Annual")}
+            </CardContent>
+          </Card>
           <TaxFilingWhtTab
-            {...tabProps.wht}
+            {...tabProps.pnd1391}
+            whtFocusMode="pnd1391"
+            initialWhtSubmissionFormHint="PND3"
             onOpenStoreProfiles={() => {
-              const s = tabProps.wht.filingStoreFilter
+              const s = tabProps.pnd1391.filingStoreFilter
               if (s && s !== "All") setStoreProfilesStore(s)
               setTab("storeProfiles")
             }}
           />
         </TabsContent>
-        <TabsContent value="cit" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd5051" className={cn(adminTabsContentCn, "space-y-3")}>
           <FilingFiltersCard
-            tabKey="cit"
-            yearMonth={tabProps.cit.filingYearMonth}
-            onYearMonthChange={tabProps.cit.onFilingYearMonthChange}
-            storeFilter={tabProps.cit.filingStoreFilter}
-            onStoreFilterChange={tabProps.cit.onFilingStoreFilterChange}
+            tabKey="pnd5051"
+            yearMonth={tabProps.pnd5051.filingYearMonth}
+            onYearMonthChange={tabProps.pnd5051.onFilingYearMonthChange}
+            storeFilter={tabProps.pnd5051.filingStoreFilter}
+            onStoreFilterChange={tabProps.pnd5051.onFilingStoreFilterChange}
           />
           <TaxFilingCitTab
-            {...tabProps.cit}
+            {...tabProps.pnd5051}
             onOpenStoreProfiles={() => {
-              const s = tabProps.cit.filingStoreFilter
+              const s = tabProps.pnd5051.filingStoreFilter
+              if (s && s !== "All") setStoreProfilesStore(s)
+              setTab("storeProfiles")
+            }}
+          />
+        </TabsContent>
+        <TabsContent value="pnd5354" className={cn(adminTabsContentCn, "space-y-3")}>
+          <FilingFiltersCard
+            tabKey="pnd5354"
+            yearMonth={tabProps.pnd5354.filingYearMonth}
+            onYearMonthChange={tabProps.pnd5354.onFilingYearMonthChange}
+            storeFilter={tabProps.pnd5354.filingStoreFilter}
+            onStoreFilterChange={tabProps.pnd5354.onFilingStoreFilterChange}
+          />
+          <TaxFilingWhtTab
+            {...tabProps.pnd5354}
+            whtFocusMode="pnd5354"
+            initialWhtSubmissionFormHint="PND53"
+            onOpenStoreProfiles={() => {
+              const s = tabProps.pnd5354.filingStoreFilter
               if (s && s !== "All") setStoreProfilesStore(s)
               setTab("storeProfiles")
             }}
@@ -335,26 +384,6 @@ export function TaxFilingShell() {
             onSearch={() => setSsoSearchTick((n) => n + 1)}
           />
           <TaxFilingSsoTab {...tabProps.sso} filingSearchTick={ssoSearchTick} />
-        </TabsContent>
-        <TabsContent value="dbd" className={cn(adminTabsContentCn, "space-y-3")}>
-          <FilingFiltersCard
-            tabKey="dbd"
-            yearMonth={tabProps.dbd.filingYearMonth}
-            onYearMonthChange={tabProps.dbd.onFilingYearMonthChange}
-            storeFilter={tabProps.dbd.filingStoreFilter}
-            onStoreFilterChange={tabProps.dbd.onFilingStoreFilterChange}
-          />
-          <TaxFilingDbdTab {...tabProps.dbd} />
-        </TabsContent>
-        <TabsContent value="workflow" className={cn(adminTabsContentCn, "space-y-3")}>
-          <FilingFiltersCard
-            tabKey="workflow"
-            yearMonth={tabProps.workflow.filingYearMonth}
-            onYearMonthChange={tabProps.workflow.onFilingYearMonthChange}
-            storeFilter={tabProps.workflow.filingStoreFilter}
-            onStoreFilterChange={tabProps.workflow.onFilingStoreFilterChange}
-          />
-          <TaxFilingWorkflowTab {...tabProps.workflow} />
         </TabsContent>
       </Tabs>
     </div>

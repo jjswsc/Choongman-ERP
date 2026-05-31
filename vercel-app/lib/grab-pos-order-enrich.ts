@@ -257,6 +257,15 @@ export function resolveGrabItemNameAndMeta(
     const codeKey = rawName.toLowerCase()
     const byCode = catalog.menuByCode.get(codeKey)
     if (byCode?.name) return { name: byCode.name, menuId: byCode.id }
+    const promoByExactName = matchPromoFromCatalog(rawName, catalog, { allowExactNameFallback: true })
+    if (promoByExactName) {
+      return {
+        name: String(promoByExactName.name ?? rawName).trim() || rawName,
+        promoId: String(promoByExactName.id ?? '').trim() || undefined,
+        promoCode: String(promoByExactName.code ?? '').trim() || undefined,
+        promoItems: Array.isArray(promoByExactName.items) ? promoByExactName.items : undefined,
+      }
+    }
     return { name: rawName }
   }
 

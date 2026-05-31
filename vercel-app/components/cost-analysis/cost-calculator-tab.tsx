@@ -168,7 +168,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     if (row) {
       const priceHall = row.priceHall ?? 0
       const priceDelivery = row.priceDelivery ?? null
-      const useDeliveryChannel = priceDelivery != null && priceDelivery > 0
       const deliveryPercent = resolveDeliveryAppFeePercent(row.deliveryAppFeePercent)
       const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
       setMenuItem({
@@ -177,8 +176,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         menuName: (row.menuName ?? "") + (row.optionName ? ` (${row.optionName})` : ""),
         category: row.category ?? "",
         categoryMain: row.categoryMain ?? "",
-        serviceType: useDeliveryChannel ? "Delivery" : "Dine-In",
-        inclVat: useDeliveryChannel ? (priceDelivery ?? priceHall) : priceHall,
+        serviceType: "Dine-In",
+        inclVat: priceHall,
         vatIncluded: row.vatIncluded !== false,
         priceHall,
         priceDelivery,

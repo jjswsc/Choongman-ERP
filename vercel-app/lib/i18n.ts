@@ -2394,6 +2394,13 @@ export const i18n = {
     taxFilingTabSso: 'SSO 사회보험',
     taxFilingTabDbd: 'DBD 재무제표',
     taxFilingTabWorkflow: '통합 진행관리',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled: 'P.P36은 해외 서비스/수입 관련 VAT 원장으로, 월별로 P.P30과 함께 마감하는 운영을 권장합니다.',
+    taxFilingNotePnd91Annual:
+      'P.N.D 91은 연 1회(개인소득세) 신고이므로, 월별 P.N.D 1/3과 달리 연간 체크리스트로 관리해야 누락을 줄일 수 있습니다.',
     taxFilingTabStoreProfiles: '매장 납세자 정보',
     taxFilingStoreProfilesIntro:
       '매장(법인)별 ภ.พ.30·e-Filing·SSO 신고에 쓰는 납세자명·TIN·지점·사업장·SSO 계정을 등록합니다. 거래처 코드(vendor)와 연결해 물류·회계 누락을 줄입니다.',
@@ -11132,6 +11139,14 @@ Only matters the employee must handle personally on a working day:
     taxFilingTabSso: 'SSO',
     taxFilingTabDbd: 'DBD financial statements',
     taxFilingTabWorkflow: 'Unified workflow',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 is a VAT ledger for imported services. We recommend closing it monthly together with PP.30.',
+    taxFilingNotePnd91Annual:
+      'PND 91 is filed once a year (personal income tax), so it should be managed with an annual checklist rather than the monthly PND 1/3 flow.',
     taxFilingTabStoreProfiles: 'Store taxpayer profiles',
     taxFilingStoreProfilesIntro:
       'Per store (legal entity): taxpayer name, TIN, branch, place of business, and SSO account for PP30 · e-Filing and SSO filings. Link vendor code to reduce logistics/accounting mismatches.',
@@ -19652,6 +19667,14 @@ orderItemQty: 'จำนวน',
     taxFilingTabSso: 'ประกันสังคม SSO',
     taxFilingTabDbd: 'งบการเงิน DBD',
     taxFilingTabWorkflow: 'จัดการงานรวม',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 เป็นสมุด VAT สำหรับบริการ/นำเข้าจากต่างประเทศ แนะนำให้ปิดงานรายเดือนพร้อมกับ PP.30',
+    taxFilingNotePnd91Annual:
+      'PND 91 ยื่นปีละครั้ง (ภาษีเงินได้บุคคลธรรมดา) จึงควรบริหารด้วยเช็กลิสต์รายปี แยกจากงานรายเดือนของ PND 1/3',
     taxFilingTabStoreProfiles: 'ข้อมูลผู้เสียภาษีรายสาขา',
     taxFilingStoreProfilesIntro:
       'ลงทะเบียนชื่อผู้เสียภาษี TIN สาขา สถานประกอบการ และบัญชี SSO ต่อสาขา สำหรับยื่น ภ.พ.30 · e-Filing และ SSO เชื่อมรหัสผู้ขาย (vendor) เพื่อลดการขาดเชื่อมโยงโลจิสติกส์/บัญชี',
@@ -26538,6 +26561,14 @@ orderItemQty: 'အရေအတွက်',
     taxFilingTabSso: 'SSO',
     taxFilingTabDbd: 'DBD financial statements',
     taxFilingTabWorkflow: 'Unified workflow',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 is a VAT ledger for imported services. We recommend closing it monthly together with PP.30.',
+    taxFilingNotePnd91Annual:
+      'PND 91 is filed once a year (personal income tax), so it should be managed with an annual checklist rather than the monthly PND 1/3 flow.',
     taxFilingTabStoreProfiles: 'စတိုးဆိုင်အခွန်ဆောင်သူ',
     taxFilingStoreProfilesIntro:
       'စတိုးအလိုက် ภ.พ.30 · e-Filing · SSO အတွက် အခွန်ဆောင်သူအမည်·TIN·ဌာနခွဲ·လုပ်ငန်းနေရာ·SSO အကောင့်ကို မှတ်ပုံတင်ပါ။ vendor ကုဒ်ချိတ်ဆက်ခြင်းဖြင့် လော့ဂျစ်စ틱·စာရင်းကိုင်ချို့ယွင်းချက်ကို လျှော့ပါ။',
@@ -33302,6 +33333,14 @@ orderItemQty: 'ຈຳນວນ',
     taxFilingTabSso: 'SSO',
     taxFilingTabDbd: 'DBD financial statements',
     taxFilingTabWorkflow: 'Unified workflow',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 is a VAT ledger for imported services. We recommend closing it monthly together with PP.30.',
+    taxFilingNotePnd91Annual:
+      'PND 91 is filed once a year (personal income tax), so it should be managed with an annual checklist rather than the monthly PND 1/3 flow.',
     taxFilingTabStoreProfiles: 'ຂໍ້ມູນຜູ້ເສຍພາສີຕາມຮ້ານ',
     taxFilingStoreProfilesIntro:
       'ລົງທະບຽນຊື່ຜູ້ເສຍພາສี TIN ສາຂາ ສະຖານປະກອບການ ແລະບັນຊີ SSO ຕໍ່ຮ້ານ ສຳລັບຍື່ນ ภ.พ.30 · e-Filing ແລະ SSO ເຊື່ອມລະຫັດ vendor ເພື່ອຫຼຸດການຂາດເຊື່ອມໂລຈິສຕິກ/ບັນຊີ',
@@ -38331,6 +38370,14 @@ orderItemQty: 'ຈຳນວນ',
     taxFilingTabSso: 'SSO',
     taxFilingTabDbd: 'DBD financial statements',
     taxFilingTabWorkflow: 'Unified workflow',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 is a VAT ledger for imported services. We recommend closing it monthly together with PP.30.',
+    taxFilingNotePnd91Annual:
+      'PND 91 is filed once a year (personal income tax), so it should be managed with an annual checklist rather than the monthly PND 1/3 flow.',
     taxFilingTabStoreProfiles: 'ព័ត៌មានអ្នកជាប់ពន្ធតាមហាង',
     taxFilingStoreProfilesIntro:
       'ចុះឈ្មោះឈ្មោះអ្នកជាប់ពន្ធ TIN សាខា ទីតាំងអាជីវកម្ម និងគណនី SSO ក្នុងមួយហាង សម្រាប់ដាក់ ภ.พ.30 · e-Filing និង SSO ភ្ជាប់កូដ vendor ដើម្បីកាត់បន្ថយការខាតភ្ជាប់ភស្តុភារ/គណនី',
@@ -42285,6 +42332,14 @@ orderItemQty: 'ຈຳນວນ',
     taxFilingTabSso: 'SSO',
     taxFilingTabDbd: 'DBD financial statements',
     taxFilingTabWorkflow: 'Unified workflow',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 is a VAT ledger for imported services. We recommend closing it monthly together with PP.30.',
+    taxFilingNotePnd91Annual:
+      'PND 91 is filed once a year (personal income tax), so it should be managed with an annual checklist rather than the monthly PND 1/3 flow.',
     taxFilingTabStoreProfiles: 'Thông tin người nộp thuế theo cửa hàng',
     taxFilingStoreProfilesIntro:
       'Đăng ký tên người nộp thuế, TIN, chi nhánh, địa điểm kinh doanh và tài khoản SSO theo cửa hàng cho PP30 · e-Filing và SSO. Liên kết mã vendor để giảm thiếu sót logistics/kế toán.',
@@ -46192,6 +46247,14 @@ orderItemQty: 'ຈຳນວນ',
     taxFilingTabSso: 'SSO',
     taxFilingTabDbd: 'DBD financial statements',
     taxFilingTabWorkflow: 'Unified workflow',
+    taxFilingTabPp30Pp36: 'P.P30 / P.P36',
+    taxFilingTabPnd1391: 'P.N.D 1 / 3 / 91',
+    taxFilingTabPnd5051: 'P.N.D 50 / 51',
+    taxFilingTabPnd5354: 'P.N.D 53 / 54',
+    taxFilingNotePp36Bundled:
+      'PP.36 is a VAT ledger for imported services. We recommend closing it monthly together with PP.30.',
+    taxFilingNotePnd91Annual:
+      'PND 91 is filed once a year (personal income tax), so it should be managed with an annual checklist rather than the monthly PND 1/3 flow.',
     taxFilingTabStoreProfiles: 'Profil pembayar cukai kedai',
     taxFilingStoreProfilesIntro:
       'Daftar nama pembayar cukai, TIN, cawangan, tempat perniagaan dan akaun SSO setiap kedai untuk PP30 · e-Filing dan SSO. Pautkan kod vendor untuk kurangkan keciciran logistik/perakaunan.',

@@ -66,6 +66,29 @@ describe('grab-pos-order-enrich', () => {
     expect(resolved.promoId).toBe('1')
   })
 
+  it('resolves promo by exact readable name (Grab single-line set)', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [],
+      [
+        {
+          id: '93',
+          name: 'PEPSI MEGA 3',
+          code: '260457-S03',
+          items: [
+            { menuId: '10', optionId: '1', quantity: 1 },
+            { menuId: '11', optionId: '2', quantity: 1 },
+          ],
+        },
+      ]
+    )
+    const resolved = resolveGrabItemNameAndMeta({ name: 'PEPSI MEGA 3' }, catalog)
+    expect(resolved.name).toBe('PEPSI MEGA 3')
+    expect(resolved.promoId).toBe('93')
+    expect(resolved.promoCode).toBe('260457-S03')
+    expect(resolved.promoItems?.length).toBe(2)
+  })
+
   it('does not fuzzy-match promo by partial name', () => {
     const catalog = buildGrabPosCatalog(
       [],

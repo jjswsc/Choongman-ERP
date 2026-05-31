@@ -672,6 +672,10 @@ type AdminAccountingComplianceProps = {
   initialPp30SubView?: "output" | "input" | "settlement" | "wht"
   /** PP30 영역 표시 모드: all(통합) / vat_only(매출·매입만) / wht_only(원천만) */
   pp30Mode?: "all" | "vat_only" | "wht_only"
+  /** 원천징수 영역 포커스 모드: all(전체) / pnd1391 / pnd5354 / pp36 */
+  whtFocusMode?: "all" | "pnd1391" | "pnd5354" | "pp36"
+  /** 원천징수 제출형 기본값 */
+  initialWhtSubmissionFormHint?: "PND3" | "PND53" | "ALL"
   /** 세무 신고 셸과 동기화 시 본문의 중복 년·매장 입력 숨김 */
   filingYearMonth?: string
   onFilingYearMonthChange?: (v: string) => void
@@ -688,6 +692,8 @@ export function AdminAccountingCompliance({
   hideTabBar = false,
   initialPp30SubView = "output",
   pp30Mode = "all",
+  whtFocusMode = "all",
+  initialWhtSubmissionFormHint = "ALL",
   filingYearMonth,
   onFilingYearMonthChange,
   filingStoreFilter,
@@ -999,7 +1005,14 @@ export function AdminAccountingCompliance({
   const [pnd1ValidationResult, setPnd1ValidationResult] = React.useState<ValidatePnd1RdPrepResult | null>(null)
   const [pnd353Validating, setPnd353Validating] = React.useState(false)
   const [pnd353ValidationResult, setPnd353ValidationResult] = React.useState<ValidatePnd3Pnd53Result | null>(null)
-  const [whtSubmissionFormHint, setWhtSubmissionFormHint] = React.useState<"PND3" | "PND53" | "ALL">("ALL")
+  const [whtSubmissionFormHint, setWhtSubmissionFormHint] = React.useState<"PND3" | "PND53" | "ALL">(
+    initialWhtSubmissionFormHint
+  )
+  const showPnd1Area = whtFocusMode === "all" || whtFocusMode === "pnd1391"
+  const showPnd353Tools = whtFocusMode !== "pp36"
+  const showPp36Ledger = whtFocusMode === "all" || whtFocusMode === "pp36"
+  const showPnd54Ledger = whtFocusMode === "all" || whtFocusMode === "pnd5354"
+  const showWhtLedger = whtFocusMode !== "pp36"
   const [pnd1IssueFilterCodes, setPnd1IssueFilterCodes] = React.useState<Pnd1IssueCode[]>([])
   const [payrollTinGapLoading, setPayrollTinGapLoading] = React.useState(false)
   const [payrollTinGapResult, setPayrollTinGapResult] = React.useState<PayrollWhtTinGapResult | null>(null)
@@ -1104,6 +1117,9 @@ export function AdminAccountingCompliance({
   React.useEffect(() => {
     setPp30SubView(initialPp30SubView)
   }, [initialPp30SubView])
+  React.useEffect(() => {
+    setWhtSubmissionFormHint(initialWhtSubmissionFormHint)
+  }, [initialWhtSubmissionFormHint])
 
   React.useEffect(() => {
     if (allowedPp30Views.includes(pp30SubView)) return
@@ -6523,182 +6539,206 @@ export function AdminAccountingCompliance({
 
               {pp30SubView === "wht" && (
                 <div className="space-y-3 text-sm">
-                  {pp30Mode !== "wht_only" ? (
-                    <StoreVendorTaxLinkBanner
-                      t={t}
-                      tr={tr}
-                      loading={taxLinkMetaLoading}
-                      storeFilter={storeFilterForLedger}
-                      isOffice={isOffice}
-                      storeLinkEval={pp30StoreLinkEval}
-                      vendorLinkCounts={pp30VendorLinkCounts}
-                      onOpenStoreProfiles={onOpenStoreProfiles}
-                      extra={
-                        whtPayeeTinGapCount > 0 ? (
-                          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
-                            {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
-                          </div>
-                        ) : null
-                      }
-                    />
-                  ) : whtPayeeTinGapCount > 0 ? (
-                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
-                      {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
+                  {showWhtLedger ? (
+                    <>
+                      {pp30Mode !== "wht_only" ? (
+                        <StoreVendorTaxLinkBanner
+                          t={t}
+                          tr={tr}
+                          loading={taxLinkMetaLoading}
+                          storeFilter={storeFilterForLedger}
+                          isOffice={isOffice}
+                          storeLinkEval={pp30StoreLinkEval}
+                          vendorLinkCounts={pp30VendorLinkCounts}
+                          onOpenStoreProfiles={onOpenStoreProfiles}
+                          extra={
+                            whtPayeeTinGapCount > 0 ? (
+                              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
+                                {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
+                              </div>
+                            ) : null
+                          }
+                        />
+                      ) : whtPayeeTinGapCount > 0 ? (
+                        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
+                          {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
+                        </div>
+                      ) : null}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div>
+                          {t("accCompWhtGrossShort")}: {(taxSummary?.wht.totalGross || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompWhtWithheldShort")}: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompWhtRowsShort")}: {(taxSummary?.wht.rowCount || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompMissingTin")}: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompMissingCertNo")}: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                  {showPnd1Area ? (
+                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
+                      <div className="text-xs font-medium">{pnd1PayerBoxTitle}</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                        <Input
+                          placeholder="payer tax id (13 digits)"
+                          value={pnd1PayerTaxId}
+                          onChange={(e) => setPnd1PayerTaxId(e.target.value)}
+                        />
+                        <Input
+                          placeholder="branch no (00000)"
+                          value={pnd1PayerBranchNo}
+                          onChange={(e) => setPnd1PayerBranchNo(e.target.value)}
+                        />
+                        <Input
+                          className="lg:col-span-2"
+                          placeholder={lang === "th" ? "ชื่อนิติบุคคลผู้จ่าย" : t("accCompPnd1PayerLegalNamePlaceholder")}
+                          value={pnd1PayerName}
+                          onChange={(e) => setPnd1PayerName(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-xs text-muted-foreground min-w-16">{pnd1FormLabel}</div>
+                        <Select
+                          value={pnd1FormMode}
+                          onValueChange={(v) => setPnd1FormMode(v as "auto" | "pnd1" | "pnd1a" | "all")}
+                        >
+                          <SelectTrigger className="w-[180px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">Auto ({periodType === "annual" ? "PND1A" : "PND1"})</SelectItem>
+                            <SelectItem value="pnd1">PND1 (ภ.ง.ด.1)</SelectItem>
+                            <SelectItem value="pnd1a">PND1A (ภ.ง.ด.1ก)</SelectItem>
+                            <SelectItem value="all">All</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={pnd1IncludeHeader}
+                            onChange={(e) => setPnd1IncludeHeader(e.target.checked)}
+                          />
+                          include header row
+                        </label>
+                      </div>
                     </div>
                   ) : null}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                    <div>
-                      {t("accCompWhtGrossShort")}: {(taxSummary?.wht.totalGross || 0).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompWhtWithheldShort")}: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompWhtRowsShort")}: {(taxSummary?.wht.rowCount || 0).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompMissingTin")}: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompMissingCertNo")}: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                    <div className="text-xs font-medium">{pnd1PayerBoxTitle}</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                      <Input
-                        placeholder="payer tax id (13 digits)"
-                        value={pnd1PayerTaxId}
-                        onChange={(e) => setPnd1PayerTaxId(e.target.value)}
-                      />
-                      <Input
-                        placeholder="branch no (00000)"
-                        value={pnd1PayerBranchNo}
-                        onChange={(e) => setPnd1PayerBranchNo(e.target.value)}
-                      />
-                      <Input
-                        className="lg:col-span-2"
-                        placeholder={lang === "th" ? "ชื่อนิติบุคคลผู้จ่าย" : t("accCompPnd1PayerLegalNamePlaceholder")}
-                        value={pnd1PayerName}
-                        onChange={(e) => setPnd1PayerName(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-xs text-muted-foreground min-w-16">{pnd1FormLabel}</div>
-                      <Select
-                        value={pnd1FormMode}
-                        onValueChange={(v) => setPnd1FormMode(v as "auto" | "pnd1" | "pnd1a" | "all")}
+                  <div className="flex flex-wrap gap-2">
+                    {showWhtLedger ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setWhtRows((prev) => [
+                            ...prev,
+                            emptyWht(taxMonth, storeTb !== "All" ? storeTb : ""),
+                          ])
+                        }
                       >
-                        <SelectTrigger className="w-[180px] h-8">
+                        <Plus className="h-4 w-4 mr-1" />
+                        {t("accCompVatAdd")}
+                      </Button>
+                    ) : null}
+                    {showWhtLedger ? (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <a
+                          href={whtExportUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {t("accCompWhtExportCsv")}
+                        </a>
+                      </Button>
+                    ) : null}
+                    {showWhtLedger ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void printWhtCertificates(whtRowsFiltered)}
+                        disabled={!whtRowsFiltered.some((r) => Number(r.wht_amount) > 0)}
+                      >
+                        <Printer className="h-4 w-4 mr-1" />
+                        {t("whtCertPrintBulk")}
+                      </Button>
+                    ) : null}
+                    {showPnd1Area ? (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <a
+                          href={pnd1RdPrepUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {pnd1RdPrepBtnLabel}
+                        </a>
+                      </Button>
+                    ) : null}
+                    {showPnd353Tools ? (
+                      <Select
+                        value={whtSubmissionFormHint}
+                        onValueChange={(v) => setWhtSubmissionFormHint(v as "PND3" | "PND53" | "ALL")}
+                      >
+                        <SelectTrigger className="h-9 w-[140px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="auto">Auto ({periodType === "annual" ? "PND1A" : "PND1"})</SelectItem>
-                          <SelectItem value="pnd1">PND1 (ภ.ง.ด.1)</SelectItem>
-                          <SelectItem value="pnd1a">PND1A (ภ.ง.ด.1ก)</SelectItem>
-                          <SelectItem value="all">All</SelectItem>
+                          <SelectItem value="ALL">PND3/53 전체</SelectItem>
+                          <SelectItem value="PND3">PND3</SelectItem>
+                          <SelectItem value="PND53">PND53</SelectItem>
                         </SelectContent>
                       </Select>
-                      <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          checked={pnd1IncludeHeader}
-                          onChange={(e) => setPnd1IncludeHeader(e.target.checked)}
-                        />
-                        include header row
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setWhtRows((prev) => [
-                          ...prev,
-                          emptyWht(taxMonth, storeTb !== "All" ? storeTb : ""),
-                        ])
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {t("accCompVatAdd")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <a
-                        href={whtExportUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    ) : null}
+                    {showPnd353Tools ? (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <a href={whtSubmissionExportUrl} target="_blank" rel="noopener noreferrer">
+                          신고 제출형 CSV
+                        </a>
+                      </Button>
+                    ) : null}
+                    {showPnd1Area ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runPnd1Validation()}
+                        disabled={pnd1Validating}
                       >
-                        {t("accCompWhtExportCsv")}
-                      </a>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void printWhtCertificates(whtRowsFiltered)}
-                      disabled={!whtRowsFiltered.some((r) => Number(r.wht_amount) > 0)}
-                    >
-                      <Printer className="h-4 w-4 mr-1" />
-                      {t("whtCertPrintBulk")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <a
-                        href={pnd1RdPrepUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        {pnd1Validating ? t("loading") : pnd1ValidateBtnLabel}
+                      </Button>
+                    ) : null}
+                    {showPnd353Tools ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runPnd353Validation()}
+                        disabled={pnd353Validating}
                       >
-                        {pnd1RdPrepBtnLabel}
-                      </a>
-                    </Button>
-                    <Select
-                      value={whtSubmissionFormHint}
-                      onValueChange={(v) => setWhtSubmissionFormHint(v as "PND3" | "PND53" | "ALL")}
-                    >
-                      <SelectTrigger className="h-9 w-[140px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">PND3/53 전체</SelectItem>
-                        <SelectItem value="PND3">PND3</SelectItem>
-                        <SelectItem value="PND53">PND53</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <a href={whtSubmissionExportUrl} target="_blank" rel="noopener noreferrer">
-                        신고 제출형 CSV
-                      </a>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void runPnd1Validation()}
-                      disabled={pnd1Validating}
-                    >
-                      {pnd1Validating ? t("loading") : pnd1ValidateBtnLabel}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void runPnd353Validation()}
-                      disabled={pnd353Validating}
-                    >
-                      {pnd353Validating ? t("loading") : "PND3/53 검증"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void runPayrollTinGapCheck()}
-                      disabled={payrollTinGapLoading}
-                    >
-                      {payrollTinGapLoading ? t("loading") : lang === "th" ? "ตรวจสอบ TIN พนักงาน" : t("accCompPayrollTinCheckBtn")}
-                    </Button>
+                        {pnd353Validating ? t("loading") : "PND3/53 검증"}
+                      </Button>
+                    ) : null}
+                    {showPnd1Area ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runPayrollTinGapCheck()}
+                        disabled={payrollTinGapLoading}
+                      >
+                        {payrollTinGapLoading ? t("loading") : lang === "th" ? "ตรวจสอบ TIN พนักงาน" : t("accCompPayrollTinCheckBtn")}
+                      </Button>
+                    ) : null}
                   </div>
-                  {pnd353ValidationResult ? (
+                  {showPnd353Tools && pnd353ValidationResult ? (
                     <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-1">
                       <div className="font-medium">PND3/53 검증 결과</div>
                       <div>검증 행: {pnd353ValidationResult.totalRows.toLocaleString()}</div>
@@ -6706,7 +6746,9 @@ export function AdminAccountingCompliance({
                       <div>경고 건수: {(pnd353ValidationResult.issues || []).length.toLocaleString()}</div>
                     </div>
                   ) : null}
+                  {(showPp36Ledger || showPnd54Ledger) ? (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {showPp36Ledger ? (
                     <Card>
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm">PP.36 원장</CardTitle>
@@ -6735,6 +6777,8 @@ export function AdminAccountingCompliance({
                         ))}
                       </CardContent>
                     </Card>
+                    ) : null}
+                    {showPnd54Ledger ? (
                     <Card>
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm">PND54 원장</CardTitle>
@@ -6763,7 +6807,10 @@ export function AdminAccountingCompliance({
                         ))}
                       </CardContent>
                     </Card>
+                    ) : null}
                   </div>
+                  ) : null}
+                  {showPnd1Area ? (
                   <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
                     <div className="font-medium text-foreground/90">{pnd1RdPrepGuideTitle}</div>
                     <p>{pnd1RdPrepGuideNote}</p>
@@ -6777,7 +6824,8 @@ export function AdminAccountingCompliance({
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
-                  {payrollTinGapResult ? (
+                  ) : null}
+                  {showPnd1Area && payrollTinGapResult ? (
                     <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-xs font-medium">
@@ -6853,7 +6901,7 @@ export function AdminAccountingCompliance({
                       </div>
                     </div>
                   ) : null}
-                  {pnd1ValidationResult ? (
+                  {showPnd1Area && pnd1ValidationResult ? (
                     <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs font-medium">{pnd1ValidationTableTitle}</div>
@@ -6967,6 +7015,7 @@ export function AdminAccountingCompliance({
                       </div>
                     </div>
                   ) : null}
+                  {showWhtLedger ? (
                   <Card>
                     <CardContent className="p-2 overflow-x-auto space-y-3">
                       {whtRows.map((row, idx) => {
@@ -7144,6 +7193,7 @@ export function AdminAccountingCompliance({
                       ) : null}
                     </CardContent>
                   </Card>
+                  ) : null}
                 </div>
               )}
                 </>

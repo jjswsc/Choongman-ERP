@@ -7059,7 +7059,7 @@ export interface PosMenuCostAnalysisRow {
   costHall: number
   costDelivery: number
   cookingTimeMin?: number | null
-  /** 배달앱 수수료(%) — null이면 UI 기본 25% */
+  /** 배달앱 수수료(%) — null이면 UI 기본 20% */
   deliveryAppFeePercent?: number | null
   breakdown: {
     itemCode: string

@@ -211,11 +211,6 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
   if (!catalog?.size) return null
   const nameRaw = String(it.name ?? '').trim()
   if (!nameRaw) return null
-  const promoLikeName =
-    /\b(set|promo|bundle|campaign)\b/i.test(nameRaw) ||
-    /\d{5,}-S\d+/i.test(nameRaw) ||
-    nameRaw.includes('[[')
-  if (!promoLikeName) return null
   const key = normalizePromoLookupText(nameRaw)
   if (!key) return null
 

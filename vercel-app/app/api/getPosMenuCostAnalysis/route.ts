@@ -468,49 +468,10 @@ export async function GET(request: NextRequest) {
       const hasComputedCost = (c: { costHall: number; costDelivery: number; breakdown: BreakdownRow[] }) =>
         c.breakdown.length > 0 || c.costHall > 0 || c.costDelivery > 0
 
-      /**
-       * 메뉴 옵션을 재생성하면 새 option_id가 생기고, 예전에 옵션별로 입력한 BOM은
-       * pos_menu_ingredients.option_id에 고아 행으로 남을 수 있다. 직접 매칭이 없을 때만
-       * 메뉴 안의 옵션 순서로 legacy BOM을 붙여 옵션별 원가를 우선 복구한다.
-       */
-      const allCurrentOptSegs = new Set(
-        opts
-          .map((o) => (o.id == null ? '' : normalizeIngOptionKeySeg(o.id)))
-          .filter((seg) => seg && seg !== 'null')
-      )
-      const orphanBomSegs = Array.from(
-        new Set(
-          Object.keys(ingByMenuOpt)
-            .filter((k) => k.startsWith(`${mid}:`))
-            .map((k) => k.slice(String(`${mid}:`).length))
-            .filter((seg) => seg !== 'null' && !allCurrentOptSegs.has(seg))
-        )
-      ).sort((a, b) => {
-        const na = Number(a)
-        const nb = Number(b)
-        if (Number.isFinite(na) && Number.isFinite(nb) && /^\d+$/.test(a) && /^\d+$/.test(b)) return na - nb
-        return a.localeCompare(b)
-      })
-      const legacyBomSegByOptId = new Map<number, string>()
-      let orphanIdx = 0
-      for (const opt of optsToShow) {
-        if (opt.id == null) continue
-        const optId = Number(opt.id)
-        if (!Number.isFinite(optId)) continue
-        const direct = computeCost(String(opt.id), { substitutionFallbackBase: false })
-        if (hasComputedCost(direct)) continue
-        const legacySeg = orphanBomSegs[orphanIdx]
-        if (!legacySeg) break
-        legacyBomSegByOptId.set(optId, legacySeg)
-        orphanIdx += 1
-      }
       const computeOptionOwnCost = (opt: OptRow): { costHall: number; costDelivery: number; breakdown: BreakdownRow[] } | null => {
         if (opt.id == null) return null
         const direct = computeCost(String(opt.id), { substitutionFallbackBase: false })
-        if (hasComputedCost(direct)) return direct
-        const optId = Number(opt.id)
-        const legacySeg = Number.isFinite(optId) ? legacyBomSegByOptId.get(optId) : undefined
-        return legacySeg ? computeCost(legacySeg, { substitutionFallbackBase: false }) : null
+        return hasComputedCost(direct) ? direct : null
       }
 
       /** 가산형 옵션만: 소스메뉴·item_code·옵션 BOM (기본 레시피 제외) */
@@ -593,7 +554,7 @@ export async function GET(request: NextRequest) {
         }
         const optId = Number(opt.id ?? NaN)
         const addOptSeg = Number.isFinite(optId)
-          ? (legacyBomSegByOptId.get(optId) ?? normalizeIngOptionKeySeg(String(opt.id ?? '')))
+          ? normalizeIngOptionKeySeg(String(opt.id ?? ''))
           : normalizeIngOptionKeySeg(String(opt.id ?? ''))
         if (addOptSeg !== 'null') {
           for (const ing of ingByMenuOpt[`${mid}:${addOptSeg}`] || []) {
@@ -624,52 +585,7 @@ export async function GET(request: NextRequest) {
       }
 
       const base = computeCost(null)
-      /**
-       * 기본(option null) BOM이 비었을 때: 대체형만 보던 기존 로직은 가산형(additive)에만 레시피가 붙은 메뉴에서 기본 행이 0으로 남음.
-       * → 옵션 타입 무관하게 sort_order 순으로 첫 BOM을 baseDisplay로 쓴다.
-       * pos_menu_options 행이 없거나 필터에서 빠진 option_id에만 BOM이 있으면 ingByMenuOpt 키로 고아 옵션을 스캔한다.
-       * 기본 행 롤업(다른 가산 옵션 합산) 시 baseDisplay 출처 옵션은 제외해 같은 레시피를 두 번 더하지 않는다.
-       */
-      let baseDisplay = base
-      let baseDisplaySourceOptId: number | null = null
-      const baseIsEmpty =
-        base.breakdown.length === 0 && base.costHall <= 0 && base.costDelivery <= 0
-      if (baseIsEmpty) {
-        for (const opt of optsToShow) {
-          if (opt.id == null) continue
-          const sub = computeOptionOwnCost(opt)
-          if (sub && hasComputedCost(sub)) {
-            baseDisplay = sub
-            baseDisplaySourceOptId = Number(opt.id)
-            break
-          }
-        }
-        if (baseDisplay === base) {
-          const prefix = `${mid}:`
-          const segs = new Set<string>()
-          for (const k of Object.keys(ingByMenuOpt)) {
-            if (!k.startsWith(prefix)) continue
-            const seg = k.slice(prefix.length)
-            if (seg === 'null') continue
-            segs.add(seg)
-          }
-          const sortedSegs = Array.from(segs).sort((a, b) => {
-            const na = Number(a)
-            const nb = Number(b)
-            if (Number.isFinite(na) && Number.isFinite(nb) && /^\d+$/.test(a) && /^\d+$/.test(b)) return na - nb
-            return a.localeCompare(b)
-          })
-          for (const seg of sortedSegs) {
-            const sub = computeCost(seg, { substitutionFallbackBase: false })
-            if (sub.breakdown.length > 0 || sub.costHall > 0) {
-              baseDisplay = sub
-              const n = Number(seg)
-              baseDisplaySourceOptId = Number.isFinite(n) && /^\d+$/.test(String(seg).trim()) ? n : null
-              break
-            }
-          }
-        }
-      }
+      const baseDisplay = base
       const additiveIncByOptId = new Map<number, { addFood: number; addPkg: number; incBreakdown: BreakdownRow[] }>()
       for (const opt of optsToShow) {
         if ((opt.option_type || '') === 'additive' && opt.id != null) {
@@ -681,7 +597,6 @@ export async function GET(request: NextRequest) {
       const rollupIncBreakdown: BreakdownRow[] = []
       for (const opt of optsToShow) {
         if ((opt.option_type || '') !== 'additive' || opt.id == null) continue
-        if (baseDisplaySourceOptId != null && Number(opt.id) === baseDisplaySourceOptId) continue
         const v = additiveIncByOptId.get(Number(opt.id))
         if (!v) continue
         rollupAddFood += v.addFood

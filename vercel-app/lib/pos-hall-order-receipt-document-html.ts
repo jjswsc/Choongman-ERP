@@ -203,57 +203,59 @@ export function mergeSetChildrenForReceipt(
     if (!parsed) continue
     childRows.push({ index: i, ...parsed })
   }
-  if (childRows.length === 0) return out
-  const childIndexSet = new Set(childRows.map((x) => x.index))
   const hide = new Set<number>()
 
-  const findParentIndex = (promoLabel: string) => {
-    const key = normalizeReceiptTextKey(promoLabel)
-    if (!key) return -1
-    let best = -1
-    let score = 0
-    for (let i = 0; i < out.length; i++) {
-      if (childIndexSet.has(i)) continue
-      const nk = normalizeReceiptTextKey(String(out[i].name ?? ''))
-      if (!nk) continue
-      let s = 0
-      if (nk === key) s = 100
-      else if (nk.includes(key) || key.includes(nk)) s = 80
-      if (s > score) {
-        score = s
-        best = i
-      }
-    }
-    return best
-  }
+  if (childRows.length > 0) {
+    const childIndexSet = new Set(childRows.map((x) => x.index))
 
-  for (const child of childRows) {
-    const parentIdx = findParentIndex(child.promoLabel)
-    if (parentIdx < 0 || parentIdx === child.index) continue
-    const parent = out[parentIdx]
-    const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
-    const opt = String(out[child.index].note ?? '').trim()
-    let optionName = opt
-    if (opt && opts?.grabInbound) {
-      const chips = collectGrabPrintOptionLines({
-        note: opt,
-        optionNameByCode: opts.optionNameByCode,
-      })
-      if (chips.length) optionName = chips.join(', ')
-      else {
-        const parsed = formatGrabOrderLineNoteForPrint(opt, opts.optionNameByCode)
-        if (parsed) optionName = parsed
+    const findParentIndex = (promoLabel: string) => {
+      const key = normalizeReceiptTextKey(promoLabel)
+      if (!key) return -1
+      let best = -1
+      let score = 0
+      for (let i = 0; i < out.length; i++) {
+        if (childIndexSet.has(i)) continue
+        const nk = normalizeReceiptTextKey(String(out[i].name ?? ''))
+        if (!nk) continue
+        let s = 0
+        if (nk === key) s = 100
+        else if (nk.includes(key) || key.includes(nk)) s = 80
+        if (s > score) {
+          score = s
+          best = i
+        }
       }
+      return best
     }
-    list.push({
-      menuId: '',
-      optionId: null,
-      ...(optionName ? { optionName } : {}),
-      menuName: child.childName,
-      quantity: Math.max(1, Number(out[child.index].qty ?? 1) || 1),
-    } as HallOrderPromoItem)
-    out[parentIdx] = { ...parent, promoItems: list }
-    hide.add(child.index)
+
+    for (const child of childRows) {
+      const parentIdx = findParentIndex(child.promoLabel)
+      if (parentIdx < 0 || parentIdx === child.index) continue
+      const parent = out[parentIdx]
+      const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
+      const opt = String(out[child.index].note ?? '').trim()
+      let optionName = opt
+      if (opt && opts?.grabInbound) {
+        const chips = collectGrabPrintOptionLines({
+          note: opt,
+          optionNameByCode: opts.optionNameByCode,
+        })
+        if (chips.length) optionName = chips.join(', ')
+        else {
+          const parsed = formatGrabOrderLineNoteForPrint(opt, opts.optionNameByCode)
+          if (parsed) optionName = parsed
+        }
+      }
+      list.push({
+        menuId: '',
+        optionId: null,
+        ...(optionName ? { optionName } : {}),
+        menuName: child.childName,
+        quantity: Math.max(1, Number(out[child.index].qty ?? 1) || 1),
+      } as HallOrderPromoItem)
+      out[parentIdx] = { ...parent, promoItems: list }
+      hide.add(child.index)
+    }
   }
 
   const promoCodeGroups = new Map<string, number[]>()
