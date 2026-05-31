@@ -386,9 +386,37 @@ export function getIngredientStandardUnits(code: number): { unit: string; totalQ
     }
   } else {
     raw = [...(units ?? [])]
+    const hasEa = raw.some((u) => /^ea$/i.test(String(u.unit || "").trim()))
+    if (!hasEa) {
+      const tq =
+        apiItem.itemTotalQuantity != null && apiItem.itemTotalQuantity > 0
+          ? apiItem.itemTotalQuantity
+          : 1
+      raw = [{ unit: "ea", totalQuantity: tq }, ...raw]
+    }
+    if (!raw.length) {
+      raw = [{ unit: "ea", totalQuantity: 1 }]
+    }
   }
   const d = dedupeStandardUnitRows(raw)
   return d.length ? d : undefined
+}
+
+/** 표준단위 드롭다운 기본값. packaging은 ea, food는 g 우선 */
+export function pickDefaultStandardUnitKey(code: number): string {
+  const units = getIngredientStandardUnits(code)
+  if (!units?.length) return "spec"
+  const apiItem = runtimeApiItemsMap.get(code)
+  if (apiItem?.category === "packaging") {
+    const ea = units.find((u) => /^ea$/i.test(String(u.unit || "").trim()))
+    if (ea) return `${ea.unit}::${ea.totalQuantity}`
+  }
+  if (apiItem?.category === "food") {
+    const g = units.find((u) => String(u.unit || "").toLowerCase().trim() === "g")
+    if (g) return `${g.unit}::${g.totalQuantity}`
+  }
+  const first = units[0]
+  return `${first.unit}::${first.totalQuantity}`
 }
 
 /** 표준단위 key (unit::totalQuantity)에 대한 ฿/단위. API 품목만 지원. g는 항상 bahtPerUnit(1g당 원가) 사용. */

@@ -10,20 +10,6 @@ import { memberPortalT, type MemberPortalKey } from '@/lib/member-portal-i18n'
 
 const MEMBER_LANG_KEY = 'cm_member_lang'
 
-function detectBrowserLang(): LangCode {
-  if (typeof navigator === 'undefined') return 'th'
-  const nav = (navigator.language || '').toLowerCase()
-  if (nav.startsWith('th')) return 'th'
-  if (nav.startsWith('ko')) return 'ko'
-  if (nav.startsWith('en')) return 'en'
-  if (nav.startsWith('vi')) return 'vi'
-  if (nav.startsWith('ms')) return 'ms'
-  if (nav.startsWith('my') || nav.startsWith('mm')) return 'mm'
-  if (nav.startsWith('lo') || nav.startsWith('la')) return 'la'
-  if (nav.startsWith('km') || nav.startsWith('kh')) return 'kh'
-  return 'th'
-}
-
 function loadMemberLang(): LangCode {
   if (typeof window === 'undefined') return 'th'
   try {
@@ -32,7 +18,7 @@ function loadMemberLang(): LangCode {
   } catch {
     /* ignore */
   }
-  return detectBrowserLang()
+  return 'th'
 }
 
 type MemberPortalLangContextValue = {

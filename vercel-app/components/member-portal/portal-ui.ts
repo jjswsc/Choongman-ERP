@@ -65,6 +65,31 @@ export type TierVisual = {
   glow: string
 }
 
+export function buildFallbackDashboard(member: MemberSummary): PortalDashboard {
+  const tierCode = String(member.tierCode || 'BRONZE').toUpperCase()
+  const lifetimeAmount = Number(member.lifetimeAmount || 0)
+  return {
+    member,
+    referralCode: member.referralCode || '',
+    stats: {
+      visitCount: 0,
+      lifetimeAmount,
+      avgTicket: 0,
+      availableCoupons: 0,
+      pointsEarnedTotal: 0,
+    },
+    tierProgress: {
+      currentTierCode: tierCode,
+      currentTierName: tierCode,
+      nextTierCode: null,
+      nextTierName: null,
+      progressPercent: lifetimeAmount > 0 ? 100 : 0,
+      amountToNext: 0,
+      pointRate: 0.01,
+    },
+  }
+}
+
 export function tierVisual(codeRaw: string): TierVisual {
   const code = String(codeRaw || 'BRONZE').toUpperCase()
   if (code.includes('DIAMOND') || code.includes('VIP') || code.includes('PLATINUM')) {

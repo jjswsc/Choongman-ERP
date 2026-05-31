@@ -42,6 +42,7 @@ import {
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import {
+  buildFallbackDashboard,
   formatBaht,
   formatDateTime,
   formatPoints,
@@ -66,12 +67,13 @@ async function postJson<T>(url: string, body: Record<string, unknown> = {}): Pro
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    credentials: "same-origin",
   })
   return res.json() as Promise<T>
 }
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" })
+  const res = await fetch(url, { cache: "no-store", credentials: "same-origin" })
   return res.json() as Promise<T>
 }
 
@@ -240,6 +242,7 @@ export function MemberPortalApp() {
   const [birthDate, setBirthDate] = React.useState("")
   const [tab, setTab] = React.useState<PortalTab>("home")
   const [signupName, setSignupName] = React.useState("")
+  const [signupGender, setSignupGender] = React.useState<"" | "M" | "F">("")
   const [loading, setLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState(false)
   const [authPanel, setAuthPanel] = React.useState<"signup" | "login" | null>(null)
@@ -280,9 +283,18 @@ export function MemberPortalApp() {
     consentMarketing: false,
   })
 
+  const applyLoggedInMember = React.useCallback((nextMember: MemberSummary) => {
+    setMember(nextMember)
+    setDashboard(buildFallbackDashboard(nextMember))
+  }, [])
+
   const loadSession = React.useCallback(async () => {
     const me = await getJson<{ success: boolean; member?: MemberSummary }>("/api/member-portal/me")
-    if (!me.success || !me.member) return false
+    if (!me.success || !me.member) {
+      setMember(null)
+      setDashboard(null)
+      return false
+    }
 
     const [dashRes, pointsRes, couponsRes, visitsRes] = await Promise.all([
       getJson<{ success: boolean } & PortalDashboard>("/api/member-portal/me/dashboard"),
@@ -291,15 +303,17 @@ export function MemberPortalApp() {
       getJson<{ success: boolean; rows?: PortalVisitRow[] }>("/api/member-portal/me/visits"),
     ])
 
-    const dashMember = dashRes.success ? dashRes.member : me.member
+    const dashMember = dashRes.success && dashRes.member ? dashRes.member : me.member
     setMember(dashMember)
-    if (dashRes.success) {
+    if (dashRes.success && dashRes.member) {
       setDashboard({
         member: dashRes.member,
         referralCode: dashRes.referralCode,
         stats: dashRes.stats,
         tierProgress: dashRes.tierProgress,
       })
+    } else {
+      setDashboard(buildFallbackDashboard(dashMember))
     }
     setProfile((p) => ({
       ...p,
@@ -399,8 +413,11 @@ export function MemberPortalApp() {
     } else if (lineFriend === "connected") {
       setNotice(t("lineFriendConnected"))
     }
+    if (lineFriend) {
+      void loadSession()
+    }
     if (err || lineFriend) window.history.replaceState({}, "", "/m")
-  }, [lang, t])
+  }, [lang, loadSession, t])
 
   React.useEffect(() => {
     if (!member?.memberNo) return
@@ -413,7 +430,7 @@ export function MemberPortalApp() {
     setActionLoading(true)
     setError("")
     try {
-      const res = await postJson<{ success: boolean; message?: string; code?: string }>(
+      const res = await postJson<{ success: boolean; message?: string; code?: string; member?: MemberSummary }>(
         "/api/member-portal/auth/phone-birth",
         {
           phone: normalizeMemberPhone(phone),
@@ -425,7 +442,9 @@ export function MemberPortalApp() {
         setError(res.code ? memberPortalLoginError(lang, res.code) : res.message || t("loginFailed"))
         return
       }
-      await loadSession()
+      if (res.member) applyLoggedInMember(res.member)
+      const ok = await loadSession()
+      if (!ok) setError(t("loginFailed"))
     } finally {
       setActionLoading(false)
     }
@@ -436,21 +455,27 @@ export function MemberPortalApp() {
     setError("")
     setNotice("")
     try {
-      const res = await postJson<{ success: boolean; created?: boolean; message?: string; code?: string }>(
-        "/api/member-portal/auth/signup",
-        {
-          name: signupName,
-          phone: normalizeMemberPhone(phone),
-          birthDate,
-          deviceLabel: "member-web",
-        }
-      )
+      const res = await postJson<{
+        success: boolean
+        created?: boolean
+        message?: string
+        code?: string
+        member?: MemberSummary
+      }>("/api/member-portal/auth/signup", {
+        name: signupName,
+        phone: normalizeMemberPhone(phone),
+        birthDate,
+        gender: signupGender,
+        deviceLabel: "member-web",
+      })
       if (!res.success) {
         setError(res.code ? memberPortalLoginError(lang, res.code) : res.message || t("loginFailed"))
         return
       }
       setNotice(t(res.created ? "signup_success_created" : "signup_success_existing"))
-      await loadSession()
+      if (res.member) applyLoggedInMember(res.member)
+      const ok = await loadSession()
+      if (!ok) setError(t("loginFailed"))
     } finally {
       setActionLoading(false)
     }
@@ -546,7 +571,7 @@ export function MemberPortalApp() {
     )
   }
 
-  if (!member || !dashboard) {
+  if (!member) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
     return (
       <div
@@ -657,9 +682,37 @@ export function MemberPortalApp() {
                   <Label className="text-[#555]">{t("birthDateLabel")}</Label>
                   <BirthDateFields value={birthDate} onChange={setBirthDate} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[#555]">{t("genderLabel")}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["M", "F"] as const).map((value) => {
+                      const active = signupGender === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setSignupGender(value)}
+                          className={`h-11 rounded-xl border text-sm font-medium transition ${
+                            active
+                              ? "border-[#ef233c] bg-[#ef233c] text-white"
+                              : "border-[#ddd] bg-white text-[#222] hover:bg-[#f8f8f8]"
+                          }`}
+                        >
+                          {value === "M" ? t("genderMale") : t("genderFemale")}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
                 <Button
                   onClick={signupWithPhoneBirth}
-                  disabled={actionLoading || !signupName.trim() || !normalizeMemberPhone(phone) || !birthDateReady}
+                  disabled={
+                    actionLoading ||
+                    !signupName.trim() ||
+                    !normalizeMemberPhone(phone) ||
+                    !birthDateReady ||
+                    !signupGender
+                  }
                   className="h-11 w-full rounded-lg bg-[#ef233c] text-base font-semibold text-white hover:bg-[#d90429]"
                 >
                   {actionLoading ? t("signupChecking") : t("signupBtn")}
@@ -780,7 +833,9 @@ export function MemberPortalApp() {
     )
   }
 
-  const tier = tierVisual(dashboard.tierProgress.currentTierCode)
+  const activeDashboard = dashboard ?? buildFallbackDashboard(member)
+
+  const tier = tierVisual(activeDashboard.tierProgress.currentTierCode)
 
   return (
     <div
@@ -837,7 +892,7 @@ export function MemberPortalApp() {
           <div className="space-y-4">
             <MembershipCard
               member={member}
-              dashboard={dashboard}
+              dashboard={activeDashboard}
               qrDataUrl={qrDataUrl}
               showQr={showQr}
               onToggleQr={() => setShowQr((v) => !v)}
@@ -848,10 +903,10 @@ export function MemberPortalApp() {
                 <div>
                   <p className="text-sm font-medium">{t("tierNext")}</p>
                   <p className="text-xs text-white/45">
-                    {dashboard.tierProgress.nextTierName
+                    {activeDashboard.tierProgress.nextTierName
                       ? t("tierProgress", {
-                          amount: formatBaht(dashboard.tierProgress.amountToNext),
-                          tier: dashboard.tierProgress.nextTierName,
+                          amount: formatBaht(activeDashboard.tierProgress.amountToNext),
+                          tier: activeDashboard.tierProgress.nextTierName,
                         })
                       : t("tierMax")}
                   </p>
@@ -861,24 +916,24 @@ export function MemberPortalApp() {
               <div className="h-2 overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all"
-                  style={{ width: `${dashboard.tierProgress.progressPercent}%` }}
+                  style={{ width: `${activeDashboard.tierProgress.progressPercent}%` }}
                 />
               </div>
               <p className="mt-2 text-xs text-white/45">
-                {(dashboard.tierProgress.pointRate * 100).toFixed(1)}% · {dashboard.tierProgress.progressPercent}%
+                {(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · {activeDashboard.tierProgress.progressPercent}%
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <StatTile icon={Wallet} label={t("statLifetime")} value={formatBaht(dashboard.stats.lifetimeAmount)} />
+              <StatTile icon={Wallet} label={t("statLifetime")} value={formatBaht(activeDashboard.stats.lifetimeAmount)} />
               <StatTile
                 icon={History}
                 label={t("statVisits")}
-                value={`${dashboard.stats.visitCount}`}
-                sub={`${t("statAvgTicket")} ${formatBaht(dashboard.stats.avgTicket)}`}
+                value={`${activeDashboard.stats.visitCount}`}
+                sub={`${t("statAvgTicket")} ${formatBaht(activeDashboard.stats.avgTicket)}`}
               />
-              <StatTile icon={Ticket} label={t("statCoupons")} value={`${dashboard.stats.availableCoupons}`} />
-              <StatTile icon={Gift} label={t("statPointsEarned")} value={formatPoints(dashboard.stats.pointsEarnedTotal)} />
+              <StatTile icon={Ticket} label={t("statCoupons")} value={`${activeDashboard.stats.availableCoupons}`} />
+              <StatTile icon={Gift} label={t("statPointsEarned")} value={formatPoints(activeDashboard.stats.pointsEarnedTotal)} />
             </div>
 
             {homePopup ? (
@@ -936,14 +991,14 @@ export function MemberPortalApp() {
                 <div>
                   <p className="text-sm font-medium">{t("referTitle")}</p>
                   <p className="mt-1 text-xs text-white/45">{t("referDesc")}</p>
-                  <p className="mt-3 font-mono text-lg tracking-widest text-amber-200">{dashboard.referralCode}</p>
+                  <p className="mt-3 font-mono text-lg tracking-widest text-amber-200">{activeDashboard.referralCode}</p>
                 </div>
                 <Share2 className="h-5 w-5 text-amber-300/80" />
               </div>
               <div className="mt-4 flex gap-2">
-                <CopyButton text={dashboard.referralCode} label={t("copyCode")} />
+                <CopyButton text={activeDashboard.referralCode} label={t("copyCode")} />
                 <CopyButton
-                  text={`Join Choongman Chicken membership with my code ${dashboard.referralCode}`}
+                  text={`Join Choongman Chicken membership with my code ${activeDashboard.referralCode}`}
                   label={t("shareText")}
                 />
               </div>
@@ -1108,7 +1163,7 @@ export function MemberPortalApp() {
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
                 <p className="text-xs text-white/45">{t("statCoupons")}</p>
-                <p className="mt-1 text-lg font-semibold">{dashboard.stats.availableCoupons}</p>
+                <p className="mt-1 text-lg font-semibold">{activeDashboard.stats.availableCoupons}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
                 <p className="text-xs text-white/45">{t("points")}</p>
@@ -1116,7 +1171,7 @@ export function MemberPortalApp() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
                 <p className="text-xs text-white/45">{t("statVisits")}</p>
-                <p className="mt-1 text-lg font-semibold">{dashboard.stats.visitCount}</p>
+                <p className="mt-1 text-lg font-semibold">{activeDashboard.stats.visitCount}</p>
               </div>
             </div>
             {coupons.length === 0 ? (

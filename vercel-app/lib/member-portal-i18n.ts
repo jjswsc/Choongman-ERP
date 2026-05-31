@@ -82,6 +82,8 @@ export type MemberPortalKey =
   | 'nameLabel'
   | 'emailLabel'
   | 'genderLabel'
+  | 'genderMale'
+  | 'genderFemale'
   | 'nationalityLabel'
   | 'referralInputLabel'
   | 'consentMarketing'
@@ -145,6 +147,7 @@ export type MemberPortalKey =
   | 'signup_success_created'
   | 'signup_success_existing'
   | 'signup_missing_name'
+  | 'signup_missing_gender'
   | 'signup_exists_other_birth'
   | 'lineBtnWithLogo'
   | 'bgPresetLabel'
@@ -371,6 +374,8 @@ const MS: Record<MemberPortalKey, Dict> = {
   nameLabel: { en: 'Name', th: 'ชื่อ', ko: '이름' },
   emailLabel: { en: 'Email', th: 'อีเมล', ko: '이메일' },
   genderLabel: { en: 'Gender', th: 'เพศ', ko: '성별' },
+  genderMale: { en: 'Male', th: 'ชาย', ko: '남성' },
+  genderFemale: { en: 'Female', th: 'หญิง', ko: '여성' },
   nationalityLabel: { en: 'Nationality', th: 'สัญชาติ', ko: '국적' },
   referralInputLabel: { en: 'Referral code (optional)', th: 'รหัสผู้แนะนำ (ถ้ามี)', ko: '추천 코드 (선택)' },
   consentMarketing: {
@@ -525,6 +530,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Please enter your name.',
     th: 'กรุณากรอกชื่อ',
     ko: '이름을 입력해 주세요.',
+  },
+  signup_missing_gender: {
+    en: 'Please select your gender.',
+    th: 'กรุณาเลือกเพศ',
+    ko: '성별을 선택해 주세요.',
   },
   signup_exists_other_birth: {
     en: 'Phone already exists with a different birth date. Please use existing sign-in.',

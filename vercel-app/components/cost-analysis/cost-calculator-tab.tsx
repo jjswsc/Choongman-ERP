@@ -50,10 +50,14 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
 
   const breakdown = Array.isArray(row.breakdown) ? row.breakdown : []
   breakdown.forEach((b, idx) => {
-    const codeNum = parseInt(b.itemCode, 10)
-    const code = !isNaN(codeNum) ? codeNum : 10000 + idx
+    const itemCode = String(b.itemCode ?? "").trim()
+    const resolved = getIngredientCodeByItemCode(itemCode)
+    const codeNum = parseInt(itemCode, 10)
+    const code = resolved ?? (!isNaN(codeNum) ? codeNum : 10000 + idx)
     const cat = b.ingredientType === "packaging" ? "packaging" : "food"
-    runtimeItems.push({ code, name: b.itemName, bahtPerUnit: b.costPerUnit, category: cat, itemCode: b.itemCode })
+    if (!resolved) {
+      runtimeItems.push({ code, name: b.itemName, bahtPerUnit: b.costPerUnit, category: cat, itemCode })
+    }
     const item: RecipeItem = {
       ingredientCode: code,
       quantity: b.quantity,
@@ -84,7 +88,9 @@ function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: Rec
     const meta = getIngredient(code)
     const name = meta?.name ?? itemCode
     const bahtPerUnit = meta && "bahtPerUnit" in meta ? Number(meta.bahtPerUnit) || 0 : 0
-    runtimeItems.push({ code, name, bahtPerUnit, category: cat, itemCode })
+    if (!resolved) {
+      runtimeItems.push({ code, name, bahtPerUnit, category: cat, itemCode })
+    }
     const item: RecipeItem = {
       ingredientCode: code,
       quantity: Number(ing.quantity) || 0,

@@ -19,12 +19,14 @@ export async function POST(req: NextRequest) {
       name?: string
       phone?: string
       birthDate?: string
+      gender?: string
       deviceLabel?: string
     }
     const registered = await registerMemberByPhoneBirthDate({
       name: String(body.name || '').trim(),
       phone: String(body.phone || '').trim(),
       birthDate: String(body.birthDate || '').trim(),
+      gender: String(body.gender || '').trim(),
       deviceLabel: String(body.deviceLabel || '').trim() || 'member-web',
       userAgent: req.headers.get('user-agent') || '',
       ip: clientIp(req),

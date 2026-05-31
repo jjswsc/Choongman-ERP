@@ -318,6 +318,7 @@ export function TaxFilingShell() {
               <TaxFilingWhtTab
                 {...tabProps.pp30pp36}
                 filingSearchTick={pp30SearchTick}
+                embeddedPp36Section
                 whtFocusMode="pp36"
                 initialWhtSubmissionFormHint="ALL"
               />

@@ -203,6 +203,7 @@ export type PhoneBirthSignupErrorCode =
   | 'missing_name'
   | 'missing_phone'
   | 'missing_birth'
+  | 'missing_gender'
   | 'rate_limited'
   | 'exists_other_birth'
   | 'inactive'
@@ -287,10 +288,18 @@ export async function verifyMemberByPhoneBirthDate(params: {
   return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt }
 }
 
+function normalizeMemberGender(raw: string): string {
+  const v = toText(raw).toUpperCase()
+  if (v === 'M' || v === 'MALE' || v === 'ชาย') return 'M'
+  if (v === 'F' || v === 'FEMALE' || v === 'หญิง') return 'F'
+  return ''
+}
+
 export async function registerMemberByPhoneBirthDate(params: {
   name: string
   phone: string
   birthDate: string
+  gender?: string
   userAgent?: string
   deviceLabel?: string
   ip?: string
@@ -298,9 +307,11 @@ export async function registerMemberByPhoneBirthDate(params: {
   const name = toText(params.name)
   const phone = normalizeMemberPhone(params.phone)
   const birthDate = normalizeBirthDateInput(params.birthDate)
+  const gender = normalizeMemberGender(params.gender || '')
   if (!name) throw new PhoneBirthSignupError('missing_name', '이름을 입력해 주세요.')
   if (!phone) throw new PhoneBirthSignupError('missing_phone', '전화번호를 입력해 주세요.')
   if (!birthDate) throw new PhoneBirthSignupError('missing_birth', '생년월일을 입력해 주세요.')
+  if (!gender) throw new PhoneBirthSignupError('missing_gender', '성별을 선택해 주세요.')
 
   const failCount = await countRecentBirthLoginFailures(phone)
   if (failCount >= BIRTH_LOGIN_MAX_TRIES) {
@@ -337,6 +348,7 @@ export async function registerMemberByPhoneBirthDate(params: {
     name,
     phone,
     birthDate,
+    gender,
     source: 'app',
     joinChannel: 'homepage',
   })

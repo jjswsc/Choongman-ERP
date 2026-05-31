@@ -11,6 +11,8 @@ type Props = {
   whtFocusMode?: "all" | "pnd1391" | "pnd5354" | "pp36"
   initialWhtSubmissionFormHint?: "PND3" | "PND53" | "ALL"
   filingSearchTick?: number
+  /** P.P30/P.P36 탭 하단 PP36 블록일 때만 true */
+  embeddedPp36Section?: boolean
 }
 
 export function TaxFilingWhtTab(props: Props) {
@@ -19,6 +21,7 @@ export function TaxFilingWhtTab(props: Props) {
     whtFocusMode,
     initialWhtSubmissionFormHint,
     filingSearchTick,
+    embeddedPp36Section,
     ...rest
   } = props
   return (
@@ -35,6 +38,7 @@ export function TaxFilingWhtTab(props: Props) {
       onFilingStoreFilterChange={rest.onFilingStoreFilterChange}
       onOpenStoreProfiles={onOpenStoreProfiles}
       filingSearchTick={filingSearchTick}
+      embeddedPp36Section={embeddedPp36Section}
     />
   )
 }

@@ -692,6 +692,8 @@ type AdminAccountingComplianceProps = {
   filingSearchTick?: number
   /** 세무 신고 셸 PP30 검색 시 PP36 등 하위 섹션 동기 조회 */
   onFilingSearch?: () => void
+  /** P.P30/P.P36 탭 하단 PP36 임베드 전용 — P.N.D 탭 등 다른 wht_only 화면과 구분 */
+  embeddedPp36Section?: boolean
 }
 
 export function AdminAccountingCompliance({
@@ -708,6 +710,7 @@ export function AdminAccountingCompliance({
   onOpenStoreProfiles,
   filingSearchTick,
   onFilingSearch,
+  embeddedPp36Section = false,
 }: AdminAccountingComplianceProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -743,8 +746,8 @@ export function AdminAccountingCompliance({
     onFilingYearMonthChange !== undefined &&
     filingStoreFilter !== undefined &&
     onFilingStoreFilterChange !== undefined
-  /** 세무 신고 P.P30/P.P36 탭 — PP36(원천·해외 VAT) 임베드: PP30과 중복 필터·검색 UI 숨김 */
-  const isEmbeddedWhtFiling = pp30Mode === "wht_only" && hideTabBar && externalFiling
+  /** P.P30/P.P36 탭 하단 PP36 블록만: 중복 필터·PP36 제목·PP30 검색 연동 */
+  const isEmbeddedPp36Section = embeddedPp36Section === true
 
   const [internalTaxMonth, setInternalTaxMonth] = React.useState(ymNow)
   const taxMonth = externalFiling ? filingYearMonth : internalTaxMonth
@@ -2626,10 +2629,10 @@ export function AdminAccountingCompliance({
   }, [externalFiling, filingSearchTick, runSsoSearch])
 
   React.useEffect(() => {
-    if (!isEmbeddedWhtFiling || filingSearchTick == null || filingSearchTick < 1) return
+    if (!isEmbeddedPp36Section || filingSearchTick == null || filingSearchTick < 1) return
     setPp30Queried(true)
     setPp30SearchSeq((prev) => prev + 1)
-  }, [isEmbeddedWhtFiling, filingSearchTick])
+  }, [isEmbeddedPp36Section, filingSearchTick])
 
   React.useEffect(() => {
     setPnd1ValidationResult(null)
@@ -5469,14 +5472,14 @@ export function AdminAccountingCompliance({
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="pb-2 space-y-1">
               <CardTitle className="text-base">
-                {isEmbeddedWhtFiling ? t("accCompTabPp36") : t("accCompTabPp30")}
+                {isEmbeddedPp36Section ? t("accCompTabPp36") : t("accCompTabPp30")}
               </CardTitle>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                {isEmbeddedWhtFiling ? t("accCompPp36ScreenIntro") : t("accCompPp30ScreenIntro")}
+                {isEmbeddedPp36Section ? t("accCompPp36ScreenIntro") : t("accCompPp30ScreenIntro")}
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!isEmbeddedWhtFiling ? (
+              {!isEmbeddedPp36Section ? (
               <div className="flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
                 <div className="shrink-0">
                   <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
@@ -5582,7 +5585,7 @@ export function AdminAccountingCompliance({
               </div>
               ) : null}
 
-              {!isEmbeddedWhtFiling ? (
+              {!isEmbeddedPp36Section ? (
               <StoreVendorTaxLinkBanner
                 t={t}
                 tr={tr}
@@ -5596,7 +5599,7 @@ export function AdminAccountingCompliance({
               />
               ) : null}
 
-              {!isEmbeddedWhtFiling ? (
+              {!isEmbeddedPp36Section ? (
               <Collapsible open={pp30OpsOpen} onOpenChange={setPp30OpsOpen}>
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="ghost" size="sm" className="w-full justify-between px-2 h-9 font-normal">
@@ -5702,13 +5705,13 @@ export function AdminAccountingCompliance({
               </Collapsible>
               ) : null}
 
-              {!isEmbeddedWhtFiling ? (
+              {!isEmbeddedPp36Section ? (
                             <p className="text-[11px] text-muted-foreground">{t("accCompPp30XlsxIncludesEfiling")}</p>
               ) : null}
 
               {!pp30Queried ? (
                 <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
-                  {isEmbeddedWhtFiling ? t("accCompPp36EmbeddedSearchHint") : t("accCompPp30EmptySearchHint")}
+                  {isEmbeddedPp36Section ? t("accCompPp36EmbeddedSearchHint") : t("accCompPp30EmptySearchHint")}
                 </div>
               ) : (
                 <>
@@ -5730,7 +5733,7 @@ export function AdminAccountingCompliance({
                   ) : null}
                 </div>
               ) : null}
-              {!isEmbeddedWhtFiling ? (
+              {!isEmbeddedPp36Section ? (
               <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
                 {allowedPp30Views.includes("output") && (
                   <Button
@@ -5774,7 +5777,7 @@ export function AdminAccountingCompliance({
                 )}
               </div>
               ) : null}
-              {!isEmbeddedWhtFiling ? (
+              {!isEmbeddedPp36Section ? (
               <div className="text-xs text-muted-foreground">
                 {t("accCompPeriodType")}: {summaryPeriodLabel}
               </div>

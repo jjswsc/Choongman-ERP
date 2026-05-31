@@ -30,7 +30,7 @@ import {
 import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
-import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, getBahtPerStandardUnit, getQuantityFactorToStore, getQuantityFactorToDisplay, registerRuntimeSauceIfAbsent, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, getBahtPerStandardUnit, getQuantityFactorToStore, getQuantityFactorToDisplay, registerRuntimeSauceIfAbsent, pickDefaultStandardUnitKey, MISE_DEFAULT } from "@/lib/cost-data"
 
 type IngredientSource = "api" | "ingredient" | "sauce"
 
@@ -375,10 +375,7 @@ export function IngredientTable({
   /** 품목 클릭 시 즉시 테이블에 추가 (단위/수량은 테이블에서 입력) */
   const addItemImmediately = useCallback(
     (code: number) => {
-      const standardUnits = getIngredientStandardUnits(code)
-      const unitKey = standardUnits?.length
-        ? `${standardUnits[0].unit}::${standardUnits[0].totalQuantity}`
-        : "spec"
+      const unitKey = pickDefaultStandardUnitKey(code)
       const factor = getQuantityFactorToStore(code, unitKey)
       const quantity = factor > 0 ? factor : 0
       const newIndex = items.length
@@ -408,11 +405,13 @@ export function IngredientTable({
       let changed = false
       const next = { ...prev }
       items.forEach((item, i) => {
-        const units = getIngredientStandardUnits(item.ingredientCode)
         const key = prev[i] ?? "spec"
-        if (units?.length && key === "spec") {
-          next[i] = `${units[0].unit}::${units[0].totalQuantity}`
-          changed = true
+        if (key === "spec") {
+          const defaultKey = pickDefaultStandardUnitKey(item.ingredientCode)
+          if (defaultKey !== "spec") {
+            next[i] = defaultKey
+            changed = true
+          }
         }
       })
       return changed ? next : prev
@@ -573,7 +572,9 @@ export function IngredientTable({
                           </SelectContent>
                         </Select>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground">g</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {type === "packaging" ? "ea" : "g"}
+                        </span>
                       )
                     })()}
                   </TableCell>
