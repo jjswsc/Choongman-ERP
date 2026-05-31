@@ -12,8 +12,13 @@
 --
 -- 실행 순서:
 -- 1) 섹션 1-0 "사전 매핑 미리보기" 단독 실행 → resolved_code null 없어야 함
--- 2) begin ~ rollback 전체 실행 → bad_rows 0 확인
--- 3) rollback → commit 후 재실행
+-- 2) begin ~ 검증 → bad_rows 0 확인
+-- 3) 아래 8) 최종 반영이 commit 인지 확인 후 재실행
+--
+-- ⚠️ bom_cnt 가 전부 0 이면:
+--   - 8) 이 rollback 이면 DB 반영 안 됨 → commit 으로 변경
+--   - 섹션 1) 이 6행 미만이면 pos_menus.code 가 T001/K001 과 다름
+--   - pos_menu_ingredients_code_guard.sql 미실행 시 menu_code INSERT 오류 가능
 --
 -- BOM 은 이미 들어가 있고 bad_rows(숫자코드)만 고칠 때:
 --   begin; 섹션 6-1 ~ 7(검증) 만 실행 후 commit
@@ -39,8 +44,29 @@ select to_regclass('public.cm_backup_reseed_tteok_dosirak_now') as backup_table;
 select count(*) as backup_rows from public.cm_backup_reseed_tteok_dosirak_now;
 
 -- ------------------------------------------------------------
--- 1) 대상 메뉴 id 조회 (code 중심)
+-- 1) 대상 메뉴 id 조회 (code 중심) — 6행(T001~T003,K001~K003) 필수
+--    6행 미만이면 아래 "1-b" 로 실제 code 확인 후 스크립트 code 값 수정
 -- ------------------------------------------------------------
+with targets as (
+  select distinct on (upper(trim(code)))
+    id,
+    upper(trim(code)) as code,
+    name,
+    is_active
+  from public.pos_menus
+  where upper(trim(code)) in ('T001','T002','T003','K001','K002','K003')
+  order by upper(trim(code)), (is_active is true) desc, id asc
+)
+select * from targets order by code;
+
+-- 1-b) 이름으로 후보 찾기 (1) 이 6행 미만일 때)
+-- select id, code, name, is_active
+-- from public.pos_menus
+-- where lower(name) like '%tteokbokki%'
+--    or lower(name) like '%dosirak%'
+--    or upper(trim(code)) like 'T00%' or upper(trim(code)) like 'K00%'
+-- order by code, id;
+
 with m as (
   select id, upper(trim(code)) as code, name
   from public.pos_menus
@@ -57,9 +83,9 @@ with legacy_hint(excel_no, name_hint, force_code, keyword_hint, expected_price, 
     ('16', 'Onion', null::text, null::text, null::numeric, null::numeric, null::text),
     ('29', 'Egg', null, null, null, null, null),
     ('65', 'Dried Parsley', null, null, null, null, null),
-    ('73', 'CHOONGMAN TTEOKBOKKI SOUP POWDER', null, 'tteokbokki soup', null, null, null),
-    ('81', 'Hot Issue Wheat Tteok', null, 'tteok rice cake', 95::numeric, 1000::numeric, 'kg'),
-    ('82', 'SAJO Fishcake', null, 'fishcake fish cake', 160::numeric, 1000::numeric, 'kg'),
+    ('73', 'CHOONGMAN TTEOKBOKKI SOUP POWDER', 'CM019'::text, 'tteokbokki soup', null, null, null),
+    ('81', 'Hot Issue Wheat Tteok', 'JD007'::text, 'tteok rice cake', 93::numeric, 1000::numeric, 'g'),
+    ('82', 'SAJO Fishcake', 'JD008'::text, 'fishcake fish cake', 160::numeric, 1000::numeric, 'g'),
     ('102', 'water', null, 'water', 0::numeric, null, null),
     ('105', 'Food Tray 1000', null, 'food tray 1000', null, null, null),
     ('116', 'Chopsticks', null, 'chopsticks', null, null, null),
@@ -144,6 +170,19 @@ order by excel_no::int;
 
 begin;
 
+-- 2-a) 대상 메뉴 6종 없으면 즉시 중단 (INSERT 0건 방지)
+do $$
+declare
+  n int;
+begin
+  select count(distinct upper(trim(code))) into n
+  from public.pos_menus
+  where upper(trim(code)) in ('T001','T002','T003','K001','K002','K003');
+  if n < 6 then
+    raise exception 'pos_menus 에 T001~T003/K001~K003 이 %개만 있습니다. 섹션 1-b 로 code 확인 후 수정하세요.', n;
+  end if;
+end $$;
+
 -- ------------------------------------------------------------
 -- 2) 대상 BOM 초기화
 -- ------------------------------------------------------------
@@ -174,6 +213,12 @@ join (
     ('238', 1::numeric, 'packaging'),
     ('264', 1::numeric, 'packaging')
 ) as x(item_code, qty, ingredient_type) on true
+where upper(trim(m.code)) = 'T001';
+
+-- 3-check) T001 insert 건수 (0이면 code 불일치)
+select 'after_T001_insert' as step, count(*) as rows
+from public.pos_menu_ingredients i
+join public.pos_menus m on m.id = i.menu_id
 where upper(trim(m.code)) = 'T001';
 
 -- ------------------------------------------------------------
@@ -256,6 +301,14 @@ from ids
 join public.pos_menu_ingredients i on i.menu_id = ids.source_id
 where i.option_id is null or i.option_id = 0;
 
+-- 6-check) K001~K003 clone 건수
+select m.code, count(i.id) as rows
+from public.pos_menus m
+left join public.pos_menu_ingredients i on i.menu_id = m.id and (i.option_id is null or i.option_id = 0)
+where upper(trim(m.code)) in ('K001','K002','K003')
+group by m.code
+order by m.code;
+
 -- ------------------------------------------------------------
 -- 6-1) item_code 정규화 (엑셀 Item No / 소스코드)
 -- ------------------------------------------------------------
@@ -266,9 +319,9 @@ with legacy_hint(excel_no, name_hint, force_code, keyword_hint, expected_price, 
     ('16', 'Onion', null::text, null::text, null::numeric, null::numeric, null::text),
     ('29', 'Egg', null, null, null, null, null),
     ('65', 'Dried Parsley', null, null, null, null, null),
-    ('73', 'CHOONGMAN TTEOKBOKKI SOUP POWDER', null, 'tteokbokki soup', null, null, null),
-    ('81', 'Hot Issue Wheat Tteok', null, 'tteok rice cake', 95::numeric, 1000::numeric, 'kg'),
-    ('82', 'SAJO Fishcake', null, 'fishcake fish cake', 160::numeric, 1000::numeric, 'kg'),
+    ('73', 'CHOONGMAN TTEOKBOKKI SOUP POWDER', 'CM019'::text, 'tteokbokki soup', null, null, null),
+    ('81', 'Hot Issue Wheat Tteok', 'JD007'::text, 'tteok rice cake', 93::numeric, 1000::numeric, 'g'),
+    ('82', 'SAJO Fishcake', 'JD008'::text, 'fishcake fish cake', 160::numeric, 1000::numeric, 'g'),
     ('102', 'water', null, 'water', 0::numeric, null, null),
     ('105', 'Food Tray 1000', null, 'food tray 1000', null, null, null),
     ('116', 'Chopsticks', null, 'chopsticks', null, null, null),
@@ -431,9 +484,9 @@ with legacy_hint(excel_no, name_hint) as (
     ('16', 'Onion'),
     ('29', 'Egg'),
     ('65', 'Dried Parsley'),
-    ('73', 'CHOONGMAN TTEOKBOKKI SOUP POWDER'),
-    ('81', 'Hot Issue Wheat Tteok'),
-    ('82', 'SAJO Fishcake'),
+    ('73', 'CHOONGMAN TTEOKBOKKI SOUP POWDER → CM019'),
+    ('81', 'Hot Issue Wheat Tteok → JD007'),
+    ('82', 'SAJO Fishcake → JD008'),
     ('102', 'water (원가 0, 미등록 시 삭제됨)'),
     ('105', 'Food Tray 1000 ml.'),
     ('116', 'Chopsticks'),
@@ -465,9 +518,9 @@ order by m.code, i.item_code;
 -- ------------------------------------------------------------
 -- 8) 최종 반영
 -- ------------------------------------------------------------
--- 첫 실행은 rollback으로 검증, 문제 없으면 commit으로 재실행
--- commit;
-rollback;
+-- 검증(bom_cnt·bad_rows) 확인 후 commit. 문제 있으면 rollback.
+commit;
+-- rollback;
 
 -- ------------------------------------------------------------
 -- 롤백(커밋 후 문제 시)

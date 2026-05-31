@@ -20,6 +20,12 @@ import {
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 import { effectiveHazardAllowanceForJob } from '@/lib/employee-job-rules'
+import {
+  actorFromJwt,
+  fetchEmployeeAuditSnapshot,
+  sanitizeEmployeeAuditRow,
+  writeEmployeeAudit,
+} from '@/lib/employee-audit'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
@@ -457,6 +463,7 @@ export async function POST(req: NextRequest) {
     const newStore = String(d.store || '').trim()
     const newName = String(d.name || '').trim()
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const auditActor = actorFromJwt(auth, userName)
 
     if (rowId === 0) {
       payload.password = passwordValue || ''
@@ -464,9 +471,11 @@ export async function POST(req: NextRequest) {
         payload.employee_code = await buildNextEmployeeCodeForStore(newStore)
       }
       let toInsert: Record<string, unknown> = { ...payload }
+      let insertedRow: Record<string, unknown> | null = null
       for (;;) {
         try {
-          await supabaseInsert('employees', toInsert)
+          const inserted = (await supabaseInsert('employees', toInsert)) as Record<string, unknown>[] | null
+          insertedRow = inserted?.[0] ?? null
           break
         } catch (insErr) {
           const em = insErr instanceof Error ? insErr.message : String(insErr)
@@ -503,8 +512,42 @@ export async function POST(req: NextRequest) {
           throw insErr
         }
       }
+      let resolvedInsertId = Number(insertedRow?.id ?? 0) || null
+      const insertedCode = String(
+        insertedRow?.employee_code ?? payload.employee_code ?? ''
+      ).trim()
+      if (!resolvedInsertId && insertedCode) {
+        try {
+          const idRows = (await supabaseSelectFilter(
+            'employees',
+            `employee_code=eq.${encodeURIComponent(insertedCode)}&store=eq.${encodeURIComponent(newStore)}`,
+            { limit: 1, select: 'id', order: 'id.desc' }
+          ).catch(() => [])) as { id?: number }[]
+          resolvedInsertId = Number(idRows?.[0]?.id ?? 0) || null
+        } catch {
+          // id 조회 실패해도 이력은 payload 스냅샷으로 남김
+        }
+      }
+      const afterSnapshot =
+        sanitizeEmployeeAuditRow(insertedRow) ||
+        (resolvedInsertId ? sanitizeEmployeeAuditRow(await fetchEmployeeAuditSnapshot(resolvedInsertId)) : null) ||
+        sanitizeEmployeeAuditRow({ ...payload, id: resolvedInsertId, employee_code: insertedCode || payload.employee_code })
+      await writeEmployeeAudit({
+        actionType: 'insert',
+        employeeId: resolvedInsertId,
+        employeeCode: insertedCode || null,
+        employeeName: newName || null,
+        employeeStore: newStore || null,
+        beforeRow: null,
+        afterRow: afterSnapshot,
+        changeReason: changeReason || null,
+        actor: auditActor,
+      })
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
+
+    // 직원 수정 시: 기존 데이터 조회 (급여 변경 이력·attendance 갱신·입력 이력용)
+    const existingFull = await fetchEmployeeAuditSnapshot(rowId)
 
     // 직원 수정 시: 기존 데이터 조회 (급여 변경 이력·attendance 갱신용)
     let existing: {
@@ -698,6 +741,20 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    const afterFull = await fetchEmployeeAuditSnapshot(rowId)
+
+    await writeEmployeeAudit({
+      actionType: 'update',
+      employeeId: rowId,
+      employeeCode: String(afterFull?.employee_code ?? payload.employee_code ?? oldCode ?? '').trim() || null,
+      employeeName: newName || null,
+      employeeStore: newStore || null,
+      beforeRow: existingFull,
+      afterRow: afterFull,
+      changeReason: changeReason || null,
+      actor: auditActor,
+    })
 
     return NextResponse.json({ success: true, message: '✅ 직원 정보가 수정되었습니다.' }, { headers })
   } catch (e) {

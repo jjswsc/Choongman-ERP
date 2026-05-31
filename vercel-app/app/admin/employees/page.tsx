@@ -10,6 +10,7 @@ import {
   ClipboardList,
   ClipboardPenLine,
   FileWarning,
+  History,
   LayoutList,
   LineChart,
   ListChecks,
@@ -64,6 +65,7 @@ import {
   EmployeeHeadcountTab,
   EmployeeJobCatalogTab,
   EmployeeWarningLettersTab,
+  EmployeeInputHistoryTab,
   emptyForm,
   type EmployeeTableRow,
   type EmployeeFormData,
@@ -486,6 +488,7 @@ export default function EmployeesPage() {
   const showEvalAnalyticsTab = isOffice || isManagerOrFranchisee
   /** 매장 매니저·가맹점도 분석 탭에서 미평가 행 클릭 시 직원 평가 탭으로 이동 가능 */
   const showEmployeeEvalTab = isOffice || isManagerOrFranchisee
+  const showEmployeeInputHistoryTab = isOffice || isAccountingRole(userRole) || isManagerOrFranchisee
   const evalAnalyticsCanPickAllStores = isOffice
 
   const handleNew = () => {
@@ -553,6 +556,12 @@ export default function EmployeesPage() {
                   <ClipboardList className={adminTabsIconCn} aria-hidden />
                   {t("tab_hr_list")}
                 </TabsTrigger>
+                {showEmployeeInputHistoryTab && (
+                  <TabsTrigger value="input-history" className={adminTabsTriggerCn}>
+                    <History className={adminTabsIconCn} aria-hidden />
+                    {t("tab_hr_input_history")}
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="movement" className={adminTabsTriggerCn}>
                   <BarChart2 className={adminTabsIconCn} aria-hidden />
                   {t("tab_hr_movement")}
@@ -667,6 +676,12 @@ export default function EmployeesPage() {
               </div>
             </div>
           </TabsContent>
+
+          {showEmployeeInputHistoryTab && (
+            <TabsContent value="input-history" className={adminTabsContentCn}>
+              <EmployeeInputHistoryTab />
+            </TabsContent>
+          )}
 
           <TabsContent value="movement" className={adminTabsContentCn}>
             <EmployeeMovementTab userStore={userStore} userRole={userRole} />

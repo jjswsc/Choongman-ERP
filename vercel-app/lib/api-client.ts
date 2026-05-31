@@ -12287,6 +12287,45 @@ export async function deleteAdminEmployee(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface EmployeeInputAuditChange {
+  field: string
+  oldValue: string
+  newValue: string
+}
+
+export interface EmployeeInputAuditRow {
+  id: number
+  actionType: string
+  changedAt: string
+  actorName: string | null
+  actorRole: string | null
+  actorStore: string | null
+  actorEmployeeCode: string | null
+  employeeId: number | null
+  employeeCode: string | null
+  employeeName: string | null
+  employeeStore: string | null
+  changeReason: string | null
+  changes: EmployeeInputAuditChange[]
+  changeCount: number
+}
+
+export async function getEmployeeInputAudit(params?: {
+  limit?: number
+  startDate?: string
+  endDate?: string
+}): Promise<EmployeeInputAuditRow[]> {
+  const qs = new URLSearchParams()
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  if (params?.startDate) qs.set('startDate', params.startDate)
+  if (params?.endDate) qs.set('endDate', params.endDate)
+  const q = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await apiFetch(`/api/getEmployeeInputAudit${q}`)
+  const data = await res.json().catch(() => [])
+  if (!res.ok) return []
+  return Array.isArray(data) ? (data as EmployeeInputAuditRow[]) : []
+}
+
 export interface StoreJobHeadcountRow {
   store: string
   job: string

@@ -7,6 +7,12 @@ import {
   franchiseeQueryStoreAllowed,
   normalizedAllowedStoresFromJwt,
 } from '@/lib/franchisee-multi-store'
+import {
+  actorFromJwt,
+  fetchEmployeeAuditSnapshot,
+  sanitizeEmployeeAuditRow,
+  writeEmployeeAudit,
+} from '@/lib/employee-audit'
 
 /** 직원 삭제 */
 export async function POST(req: NextRequest) {
@@ -35,15 +41,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '❌ 잘못된 행' }, { headers })
     }
 
-    const rows = (await supabaseSelectFilter('employees', `id=eq.${r}`, {
-      select: 'store,resign_date',
-      limit: 1,
-    })) as { store?: string; resign_date?: string | null }[] | null
-    if (!rows || rows.length === 0) {
+    let beforeRow = await fetchEmployeeAuditSnapshot(r)
+    if (!beforeRow) {
+      const fallback = (await supabaseSelectFilter('employees', `id=eq.${r}`, {
+        select: 'id,store,resign_date,name,employee_code',
+        limit: 1,
+      })) as Record<string, unknown>[]
+      beforeRow = fallback?.[0] ?? null
+    }
+    if (!beforeRow) {
       return NextResponse.json({ success: false, message: '❌ 해당 직원을 찾을 수 없습니다.' }, { headers })
     }
 
-    const rowStore = String(rows[0].store || '').trim()
+    const rowStore = String(beforeRow.store || '').trim()
     const isTop = ['director', 'secretary', 'officer', 'ceo', 'hr'].some((role) => effectiveRole.includes(role)) || isAccountingRole(effectiveRole)
     if (!isTop) {
       if (jwt && isFranchiseeRole(effectiveRole) && !franchiseeQueryStoreAllowed(jwt, userStore)) {
@@ -62,12 +72,13 @@ export async function POST(req: NextRequest) {
     }
 
     const today = new Date().toISOString().slice(0, 10)
+    const resignDateRaw = beforeRow.resign_date
     const patch: Record<string, unknown> = {
       employment_status: 'resigned',
       deleted_at: new Date().toISOString(),
       deleted_by: userName || null,
       delete_reason: reason || null,
-      resign_date: rows[0].resign_date ? String(rows[0].resign_date).slice(0, 10) : today,
+      resign_date: resignDateRaw ? String(resignDateRaw).slice(0, 10) : today,
     }
     try {
       await supabaseUpdateByFilter('employees', `id=eq.${r}`, patch)
@@ -76,6 +87,24 @@ export async function POST(req: NextRequest) {
       if (!/employment_status|deleted_at|deleted_by|delete_reason|42703|column/i.test(em)) throw e
       await supabaseUpdateByFilter('employees', `id=eq.${r}`, { resign_date: patch.resign_date })
     }
+
+    let afterRow = await fetchEmployeeAuditSnapshot(r)
+    if (!afterRow) {
+      afterRow = sanitizeEmployeeAuditRow({ ...beforeRow, ...patch, id: r })
+    }
+
+    await writeEmployeeAudit({
+      actionType: 'delete',
+      employeeId: r,
+      employeeCode: String(beforeRow.employee_code ?? '').trim() || null,
+      employeeName: String(beforeRow.name ?? '').trim() || null,
+      employeeStore: rowStore || null,
+      beforeRow: sanitizeEmployeeAuditRow(beforeRow),
+      afterRow: sanitizeEmployeeAuditRow(afterRow),
+      changeReason: reason || null,
+      actor: actorFromJwt(auth, userName),
+    })
+
     return NextResponse.json({ success: true, message: '✅ 퇴사/비활성 처리되었습니다.' }, { headers })
   } catch (e) {
     console.error('deleteAdminEmployee:', e)
