@@ -145,6 +145,11 @@ import {
 import { type SsoFilingWageMode } from "@/lib/payroll-utils"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
+import {
+  buildCorporateTaxPdfHtml,
+  exportCorporateTaxPdf,
+  validateCorporateTaxForPdf,
+} from "@/lib/corporate-tax-pdf"
 
 type VatDraft = {
   id?: number
@@ -683,8 +688,10 @@ type AdminAccountingComplianceProps = {
   onFilingStoreFilterChange?: (v: string) => void
   /** PP30 화면에서 매장 납세자 정보 탭으로 이동 */
   onOpenStoreProfiles?: () => void
-  /** 세무 신고 셸 SSO 필터 카드 검색 버튼 틱 */
+  /** 세무 신고 셸 SSO·PP30 필터 카드 검색 버튼 틱 */
   filingSearchTick?: number
+  /** 세무 신고 셸 PP30 검색 시 PP36 등 하위 섹션 동기 조회 */
+  onFilingSearch?: () => void
 }
 
 export function AdminAccountingCompliance({
@@ -700,6 +707,7 @@ export function AdminAccountingCompliance({
   onFilingStoreFilterChange,
   onOpenStoreProfiles,
   filingSearchTick,
+  onFilingSearch,
 }: AdminAccountingComplianceProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -709,7 +717,7 @@ export function AdminAccountingCompliance({
   const canWriteCompliance = canWriteAccountingCompliance(role)
   const canApproveCompliance = canApproveAccountingCompliance(role)
   const canApproveUnlock = canApproveAccountingPeriodUnlock(role)
-  const { stores: storeList, resolveStoreKey, storeLabels, legacyToCanonical } = useStoreList()
+  const { stores: storeList, resolveStoreKey, storeLabels, legacyToCanonical, formatStoreLabel } = useStoreList()
   const managerStore = (auth?.store || "").trim()
   const hqUserByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
   /** 본사·회계만 전 매장; 매장 매니저·가맹은 소속 매장만(본사 store 문자열이어도 역할이 매장이면 전체 조회 불가) */
@@ -735,6 +743,8 @@ export function AdminAccountingCompliance({
     onFilingYearMonthChange !== undefined &&
     filingStoreFilter !== undefined &&
     onFilingStoreFilterChange !== undefined
+  /** 세무 신고 P.P30/P.P36 탭 — PP36(원천·해외 VAT) 임베드: PP30과 중복 필터·검색 UI 숨김 */
+  const isEmbeddedWhtFiling = pp30Mode === "wht_only" && hideTabBar && externalFiling
 
   const [internalTaxMonth, setInternalTaxMonth] = React.useState(ymNow)
   const taxMonth = externalFiling ? filingYearMonth : internalTaxMonth
@@ -952,8 +962,9 @@ export function AdminAccountingCompliance({
   const vatLoadSeqRef = React.useRef(0)
   const whtLoadSeqRef = React.useRef(0)
   const taxSummaryLoadSeqRef = React.useRef(0)
-  const vatInFlightKeyRef = React.useRef<string | null>(null)
   const [citData, setCitData] = React.useState<CorporateTaxComputationData | null>(null)
+  const [citPdfExporting, setCitPdfExporting] = React.useState(false)
+  const [citPdfHint, setCitPdfHint] = React.useState<string | null>(null)
   const [workflowRows, setWorkflowRows] = React.useState<AccountingWorkflowStatusRow[]>([])
   const [workflowFallbackUsed, setWorkflowFallbackUsed] = React.useState(false)
   const [etaxTaxId, setEtaxTaxId] = React.useState("")
@@ -1049,6 +1060,7 @@ export function AdminAccountingCompliance({
   const [citAdjustmentsDraft, setCitAdjustmentsDraft] = React.useState<
     { adjustmentType: "add_back" | "deduction"; itemName: string; amount: string; memo: string }[]
   >([])
+  const citPdfValidation = React.useMemo(() => validateCorporateTaxForPdf(citData), [citData])
 
   const ssoSelectedStore = React.useMemo(() => {
     const pickStore = externalFiling ? storeTb : ssoStoreFilter
@@ -1343,11 +1355,6 @@ export function AdminAccountingCompliance({
 
   const loadVat = React.useCallback(async () => {
     if (!canUse) return
-    const requestKey = `${taxMonth}|${periodType}|${ledgerStatusFilter}|${storeFilterForLedger}`
-    if (vatInFlightKeyRef.current === requestKey) {
-      return
-    }
-    vatInFlightKeyRef.current = requestKey
     const seq = ++vatLoadSeqRef.current
     setLoading(true)
     try {
@@ -1378,7 +1385,6 @@ export function AdminAccountingCompliance({
       appAlert(t("accCompLoadFail"))
     } finally {
       if (seq === vatLoadSeqRef.current) setLoading(false)
-      if (vatInFlightKeyRef.current === requestKey) vatInFlightKeyRef.current = null
     }
   }, [
     canUse,
@@ -1391,10 +1397,6 @@ export function AdminAccountingCompliance({
     loadVatStoreNameGaps,
     t,
   ])
-
-  React.useEffect(() => {
-    if (!pp30Queried || tab !== "summary") return
-  }, [pp30Queried, tab, taxMonth, storeFilterForLedger, pp30SubView, vatRows.length, whtRows.length, loading])
 
   React.useEffect(() => {
     if (tab !== "summary") return
@@ -1574,6 +1576,17 @@ export function AdminAccountingCompliance({
     }
   }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
 
+  const loadVatRef = React.useRef(loadVat)
+  const loadWhtRef = React.useRef(loadWht)
+  const loadPp36Ref = React.useRef(loadPp36)
+  const loadPnd54Ref = React.useRef(loadPnd54)
+  const loadTaxSummaryRef = React.useRef(loadTaxSummary)
+  loadVatRef.current = loadVat
+  loadWhtRef.current = loadWht
+  loadPp36Ref.current = loadPp36
+  loadPnd54Ref.current = loadPnd54
+  loadTaxSummaryRef.current = loadTaxSummary
+
   const loadCit = React.useCallback(async () => {
     if (!canUse) return
     setLoading(true)
@@ -1586,6 +1599,7 @@ export function AdminAccountingCompliance({
         userStore: auth?.store,
       })
       setCitData(data)
+      setCitPdfHint(null)
       setCitAdjustmentsDraft(
         (data.adjustments || []).map((x) => ({
           adjustmentType: x.type,
@@ -1601,6 +1615,72 @@ export function AdminAccountingCompliance({
       setLoading(false)
     }
   }, [canUse, role, citYearMonthForApi, periodType, storeTb, auth?.store])
+
+  const resolveCitPdfCodeLabel = React.useCallback(
+    (prefix: "accCompCitPdfErr_" | "accCompCitPdfWarn_", code: string) => {
+      const key = `${prefix}${String(code || "").toLowerCase()}`
+      const translated = t(key)
+      return translated === key ? code : translated
+    },
+    [t]
+  )
+
+  const exportCitPdf = React.useCallback(async () => {
+    const validation = validateCorporateTaxForPdf(citData)
+    if (!validation.isValid || !citData) {
+      const errText = validation.errors
+        .map((c) => resolveCitPdfCodeLabel("accCompCitPdfErr_", c))
+        .join(", ")
+      setCitPdfHint(
+        `${t("accCompCitPdfBlockedPrefix")} ${errText || t("accCompCitPdfNoData")}`
+      )
+      return
+    }
+    setCitPdfExporting(true)
+    setCitPdfHint(null)
+    try {
+      const html = buildCorporateTaxPdfHtml({
+        data: citData,
+        title: t("accCompCitPdfTitle"),
+        subtitle: t("accCompCitPdfSubtitle"),
+        amountLabel: t("amount"),
+        generatedAtLabel: t("accCompCitPdfGeneratedAt"),
+        storeScopeLabel: t("accCompStore"),
+        storeScopeValue: storeTb,
+        periodLabel: t("accCompCitPdfPeriod"),
+        filingFormLabel: t("accCompCitPdfForm"),
+        accountingProfitLabel: t("accCompCitAccountingProfit"),
+        taxAddBackLabel: t("accCompCitTaxAddBacks"),
+        taxDeductionLabel: t("accCompCitTaxDeductions"),
+        taxableIncomeLabel: t("accCompCitTaxableIncome"),
+        projectedAnnualTaxableIncomeLabel: t("accCompCitProjectedAnnualTaxableIncome"),
+        taxRateLabel: t("accCompCitTaxRate"),
+        estimatedTaxLabel: t("accCompCitEstimated"),
+        filingTaxDueLabel: t("accCompCitFilingTaxDue"),
+        adjustmentsTitle: t("accCompCitAdjustmentsTitle"),
+        adjustmentsTypeLabel: t("accCompCitAdjustmentsType"),
+        adjustmentsItemLabel: t("accCompCitAdjustmentsItem"),
+        adjustmentsAmountLabel: t("accCompCitAdjustmentsAmount"),
+        adjustmentsMemoLabel: t("accCompCitAdjustmentsMemo"),
+        adjustmentTypeAddBackLabel: t("accCompCitAdjustmentTypeAddBack"),
+        adjustmentTypeDeductionLabel: t("accCompCitAdjustmentTypeDeduction"),
+        noAdjustmentsLabel: t("accCompCitNoAdjustments"),
+      })
+      await exportCorporateTaxPdf({ data: citData, html })
+      if (validation.warnings.length > 0) {
+        const warnText = validation.warnings
+          .map((c) => resolveCitPdfCodeLabel("accCompCitPdfWarn_", c))
+          .join(", ")
+        setCitPdfHint(`${t("accCompCitPdfWarnPrefix")} ${warnText}`)
+      } else {
+        setCitPdfHint(t("accCompCitPdfDone"))
+      }
+    } catch {
+      setCitPdfHint(t("accCompCitPdfExportFailed"))
+    } finally {
+      setCitPdfExporting(false)
+    }
+  }, [citData, resolveCitPdfCodeLabel, storeTb, t])
 
   const loadWorkflow = React.useCallback(async () => {
     if (!canUse) return
@@ -2386,19 +2466,14 @@ export function AdminAccountingCompliance({
     let cancelled = false
     void (async () => {
       if (pp30SubView === "wht") {
-        setWhtRows([])
-        setPp36Rows([])
-        setPnd54Rows([])
+        await Promise.all([loadWhtRef.current(), loadPp36Ref.current(), loadPnd54Ref.current()])
+      } else {
+        await loadVatRef.current()
       }
-      else setVatRows([])
-      if (pp30SubView === "wht") {
-        await Promise.all([loadWht(), loadPp36(), loadPnd54()])
-      }
-      else await loadVat()
       if (cancelled) {
         return
       }
-      void loadTaxSummary()
+      void loadTaxSummaryRef.current()
     })()
     return () => {
       cancelled = true
@@ -2413,11 +2488,6 @@ export function AdminAccountingCompliance({
     periodType,
     ledgerStatusFilter,
     pp30SearchSeq,
-    loadTaxSummary,
-    loadVat,
-    loadWht,
-    loadPp36,
-    loadPnd54,
   ])
 
   React.useEffect(() => {
@@ -2554,6 +2624,12 @@ export function AdminAccountingCompliance({
     if (!externalFiling || filingSearchTick == null || filingSearchTick < 1) return
     void runSsoSearch()
   }, [externalFiling, filingSearchTick, runSsoSearch])
+
+  React.useEffect(() => {
+    if (!isEmbeddedWhtFiling || filingSearchTick == null || filingSearchTick < 1) return
+    setPp30Queried(true)
+    setPp30SearchSeq((prev) => prev + 1)
+  }, [isEmbeddedWhtFiling, filingSearchTick])
 
   React.useEffect(() => {
     setPnd1ValidationResult(null)
@@ -4085,8 +4161,8 @@ export function AdminAccountingCompliance({
   }, [canUse, role, taxMonth, periodType, storeFilterForLedger, t])
 
   const storeOptionLabel = React.useCallback(
-    (code: string) => (code === "All" ? t("all") : code),
-    [t]
+    (code: string) => (code === "All" ? t("all") : formatStoreLabel(code) || code),
+    [t, formatStoreLabel]
   )
 
   const workflowStatusLabel = React.useCallback(
@@ -5392,10 +5468,15 @@ export function AdminAccountingCompliance({
         <TabsContent value="summary" className={cn(tabsContentClass, "space-y-3")}>
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="pb-2 space-y-1">
-              <CardTitle className="text-base">{t("accCompTabPp30")}</CardTitle>
-              <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompPp30ScreenIntro")}</p>
+              <CardTitle className="text-base">
+                {isEmbeddedWhtFiling ? t("accCompTabPp36") : t("accCompTabPp30")}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isEmbeddedWhtFiling ? t("accCompPp36ScreenIntro") : t("accCompPp30ScreenIntro")}
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!isEmbeddedWhtFiling ? (
               <div className="flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
                 <div className="shrink-0">
                   <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
@@ -5475,6 +5556,7 @@ export function AdminAccountingCompliance({
                     onClick={() => {
                       setPp30Queried(true)
                       setPp30SearchSeq((prev) => prev + 1)
+                      onFilingSearch?.()
                     }}
                   >
                     {t("search")}
@@ -5498,7 +5580,9 @@ export function AdminAccountingCompliance({
                   </Button>
                 </div>
               </div>
+              ) : null}
 
+              {!isEmbeddedWhtFiling ? (
               <StoreVendorTaxLinkBanner
                 t={t}
                 tr={tr}
@@ -5510,7 +5594,9 @@ export function AdminAccountingCompliance({
                 onOpenStoreProfiles={onOpenStoreProfiles}
                 showProfileShortcut
               />
+              ) : null}
 
+              {!isEmbeddedWhtFiling ? (
               <Collapsible open={pp30OpsOpen} onOpenChange={setPp30OpsOpen}>
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="ghost" size="sm" className="w-full justify-between px-2 h-9 font-normal">
@@ -5614,12 +5700,15 @@ export function AdminAccountingCompliance({
                   )}
                 </CollapsibleContent>
               </Collapsible>
+              ) : null}
 
+              {!isEmbeddedWhtFiling ? (
                             <p className="text-[11px] text-muted-foreground">{t("accCompPp30XlsxIncludesEfiling")}</p>
+              ) : null}
 
               {!pp30Queried ? (
                 <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
-                  {t("accCompPp30EmptySearchHint")}
+                  {isEmbeddedWhtFiling ? t("accCompPp36EmbeddedSearchHint") : t("accCompPp30EmptySearchHint")}
                 </div>
               ) : (
                 <>
@@ -5641,6 +5730,7 @@ export function AdminAccountingCompliance({
                   ) : null}
                 </div>
               ) : null}
+              {!isEmbeddedWhtFiling ? (
               <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
                 {allowedPp30Views.includes("output") && (
                   <Button
@@ -5683,9 +5773,12 @@ export function AdminAccountingCompliance({
                   </Button>
                 )}
               </div>
+              ) : null}
+              {!isEmbeddedWhtFiling ? (
               <div className="text-xs text-muted-foreground">
                 {t("accCompPeriodType")}: {summaryPeriodLabel}
               </div>
+              ) : null}
 
               {loading ? (
                 <div className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground" aria-live="polite">
@@ -7283,7 +7376,28 @@ export function AdminAccountingCompliance({
                 {t("accCompCitPackageCsv")}
               </a>
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!citData || loading || citPdfExporting || !citPdfValidation.isValid}
+              onClick={() => void exportCitPdf()}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {citPdfExporting ? t("pL_exportBusy") : t("accCompCitPackagePdf")}
+            </Button>
           </div>
+          {citData && citPdfValidation.warnings.length > 0 ? (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+              {citPdfValidation.warnings
+                .map((c) => resolveCitPdfCodeLabel("accCompCitPdfWarn_", c))
+                .join(" / ")}
+            </div>
+          ) : null}
+          {citPdfHint ? (
+            <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              {citPdfHint}
+            </div>
+          ) : null}
           <StoreVendorTaxLinkBanner
             t={t}
             tr={tr}
@@ -7323,13 +7437,16 @@ export function AdminAccountingCompliance({
                 {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
               </div>
               <div>
-                신고폼: {String(citData?.filingForm || "-").toUpperCase()}
+                신고폼: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
               </div>
               <div>
-                연환산 과세소득: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
+                {t("accCompCitProjectedAnnualTaxableIncome")}: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
               </div>
               <div>
-                이번 신고 납부예정액: {(citData?.filingTaxDue || 0).toLocaleString()}
+                {t("accCompCitFilingTaxDue")}: {(citData?.filingTaxDue || 0).toLocaleString()}
+              </div>
+              <div>
+                {t("accCompCitPdfPeriod")}: {citData?.pdfMeta?.periodLabel || citData?.periodKey || "-"}
               </div>
             </CardContent>
           </Card>

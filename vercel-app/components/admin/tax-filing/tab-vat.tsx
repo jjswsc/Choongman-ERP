@@ -8,10 +8,11 @@ type Props = {
   filingStoreFilter: string
   onFilingStoreFilterChange: (v: string) => void
   onOpenStoreProfiles?: () => void
+  onFilingSearch?: () => void
 }
 
 export function TaxFilingVatTab(props: Props) {
-  const { onOpenStoreProfiles, ...rest } = props
+  const { onOpenStoreProfiles, onFilingSearch, ...rest } = props
   return (
     <AdminAccountingCompliance
       initialTab="summary"
@@ -23,6 +24,7 @@ export function TaxFilingVatTab(props: Props) {
       filingStoreFilter={rest.filingStoreFilter}
       onFilingStoreFilterChange={rest.onFilingStoreFilterChange}
       onOpenStoreProfiles={onOpenStoreProfiles}
+      onFilingSearch={onFilingSearch}
     />
   )
 }

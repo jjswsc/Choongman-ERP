@@ -104,6 +104,42 @@ function isOfficeEquivalentStore(a: string, b: string): boolean {
   return isHeadOfficeLikeStoreName(aa) && isHeadOfficeLikeStoreName(bb)
 }
 
+function masterRowMatchesScopeKey(
+  row: ErpStoreMasterRow,
+  key: string,
+  legacyToCanonical: Record<string, string>
+): boolean {
+  const probe = String(key || '').trim()
+  if (!probe) return false
+  const canonical = canonicalizeStoreName(probe, legacyToCanonical)
+  const candidates = Array.from(new Set([probe, canonical].filter(Boolean)))
+  const sc = String(row.store_code || '').trim()
+  const dn = String(row.display_name || '').trim()
+  for (const c of candidates) {
+    if (sc && storesMatchForGradeLookup(sc, c)) return true
+    if (dn && storesMatchForGradeLookup(dn, c)) return true
+    for (const alias of row.aliases || []) {
+      const a = String(alias || '').trim()
+      if (a && storesMatchForGradeLookup(a, c)) return true
+    }
+  }
+  return false
+}
+
+/** display_name·별칭·레거시 입력으로 erp_stores 행 찾기 */
+export function findErpStoreMasterForScopeKey(
+  key: string,
+  masters: ErpStoreMasterRow[],
+  legacyToCanonical: Record<string, string>
+): ErpStoreMasterRow | null {
+  const raw = String(key || '').trim()
+  if (!raw) return null
+  for (const row of masters || []) {
+    if (masterRowMatchesScopeKey(row, raw, legacyToCanonical)) return row
+  }
+  return null
+}
+
 /** store_code 기준 display_name·별칭·레거시 키 — VAT 원장 store_name(표시명·location) 매칭용 */
 export function buildStoreScopeAliasKeys(
   storeCode: string,
@@ -113,17 +149,26 @@ export function buildStoreScopeAliasKeys(
   const code = String(storeCode || '').trim()
   if (!code) return []
   const keys = new Set<string>([code])
-  for (const row of masters || []) {
-    if (String(row.store_code || '').trim() !== code) continue
-    const dn = String(row.display_name || '').trim()
+  const master =
+    findErpStoreMasterForScopeKey(code, masters, legacyToCanonical) ||
+    (masters || []).find((row) => String(row.store_code || '').trim() === code) ||
+    null
+  if (master) {
+    const sc = String(master.store_code || '').trim()
+    if (sc) keys.add(sc)
+    const dn = String(master.display_name || '').trim()
     if (dn) keys.add(dn)
-    for (const alias of row.aliases || []) {
+    for (const alias of master.aliases || []) {
       const a = String(alias || '').trim()
       if (a) keys.add(a)
     }
   }
+  const canonical = canonicalizeStoreName(code, legacyToCanonical)
+  if (canonical) keys.add(canonical)
   for (const [legacy, canon] of Object.entries(legacyToCanonical || {})) {
-    if (String(canon || '').trim() === code) {
+    const canonCode = String(canon || '').trim()
+    if (!canonCode) continue
+    if (canonCode === code || (canonical && canonCode === canonical)) {
       const leg = String(legacy || '').trim()
       if (leg) keys.add(leg)
     }
@@ -152,11 +197,13 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
   }
 
   const requestedCanonical = canonicalizeStoreName(requested, legacyToCanonical)
-  const aliasKeys = buildStoreScopeAliasKeys(requestedCanonical || requested, masters, legacyToCanonical)
+  const master = findErpStoreMasterForScopeKey(requested, masters, legacyToCanonical)
+  const scopeStoreCode = String(master?.store_code || requestedCanonical || requested).trim()
+  const aliasKeys = buildStoreScopeAliasKeys(scopeStoreCode || requested, masters, legacyToCanonical)
 
   return {
     requested,
-    requestedCanonical,
+    requestedCanonical: scopeStoreCode || requestedCanonical,
     matches: (storeName: string): boolean => {
       const rowStore = String(storeName || '').trim()
       if (!rowStore) return false

@@ -2949,7 +2949,7 @@ export async function getVatLedger(params: {
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
-  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  q.set('storeFilter', params.storeFilter || 'All')
   const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
   const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
   if (!res.ok) {
@@ -3733,6 +3733,19 @@ export type CorporateTaxComputationData = {
   taxRate: number
   estimatedTax: number
   filingTaxDue: number
+  pdfMeta: {
+    formCode: 'P.N.D.50' | 'P.N.D.51'
+    periodLabel: string
+    periodStartMonth: string
+    periodEndMonth: string
+    generatedAtBangkok: string
+    storeScopeLabel: string
+  }
+  validation: {
+    isValid: boolean
+    errors: string[]
+    warnings: string[]
+  }
   adjustments: { type: 'add_back' | 'deduction'; itemName: string; amount: number; memo: string | null }[]
 }
 

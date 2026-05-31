@@ -1,6 +1,7 @@
 import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 
 type JournalEntryLite = {
   id?: number
@@ -34,12 +35,36 @@ export type CorporateTaxComputation = {
   estimatedTax: number
   projectedAnnualTaxableIncome: number
   filingTaxDue: number
+  pdfMeta: {
+    formCode: 'P.N.D.50' | 'P.N.D.51'
+    periodLabel: string
+    periodStartMonth: string
+    periodEndMonth: string
+    generatedAtBangkok: string
+    storeScopeLabel: string
+  }
+  validation: {
+    isValid: boolean
+    errors: string[]
+    warnings: string[]
+  }
   adjustments: {
     type: 'add_back' | 'deduction'
     itemName: string
     amount: number
     memo: string | null
   }[]
+}
+
+function buildCorporateTaxPeriodLabel(period: {
+  periodType: 'monthly' | 'half_year' | 'annual'
+  startMonth: string
+  endMonth: string
+  periodKey: string
+}): string {
+  if (period.periodType === 'monthly') return period.startMonth
+  if (period.periodType === 'half_year') return `${period.periodKey} (${period.startMonth} ~ ${period.endMonth})`
+  return `${period.periodKey} (${period.startMonth} ~ ${period.endMonth})`
 }
 
 function isStoreMatched(storeName: string | null | undefined, filter: string): boolean {
@@ -147,6 +172,18 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   const estimatedTax = projectedAnnualTaxableIncome * appliedTaxRate
   const filingTaxDue = period.periodType === 'half_year' ? estimatedTax * 0.5 : estimatedTax
   const filingForm: CorporateTaxComputation['filingForm'] = period.periodType === 'half_year' ? 'pnd51' : 'pnd50'
+  const validationErrors: string[] = []
+  const validationWarnings: string[] = []
+  if (!period.periodKey) validationErrors.push('MISSING_PERIOD_KEY')
+  if (!period.startMonth || !period.endMonth) validationErrors.push('MISSING_PERIOD_RANGE')
+  if (!Number.isFinite(appliedTaxRate) || appliedTaxRate < 0) validationErrors.push('INVALID_TAX_RATE')
+  if (!Number.isFinite(taxableIncome) || taxableIncome < 0) validationErrors.push('INVALID_TAXABLE_INCOME')
+  if (!Number.isFinite(filingTaxDue) || filingTaxDue < 0) validationErrors.push('INVALID_FILING_TAX_DUE')
+  if (!entryIds.length) validationWarnings.push('NO_JOURNAL_ENTRIES_IN_PERIOD')
+  if (period.periodType === 'annual' && period.months.length !== 12) validationWarnings.push('ANNUAL_MONTH_COUNT_MISMATCH')
+  if (period.periodType === 'half_year' && period.months.length !== 6) {
+    validationWarnings.push('HALF_YEAR_MONTH_COUNT_MISMATCH')
+  }
 
   return {
     periodType: period.periodType,
@@ -162,6 +199,19 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
     estimatedTax: toFixed2(estimatedTax),
     projectedAnnualTaxableIncome: toFixed2(projectedAnnualTaxableIncome),
     filingTaxDue: toFixed2(filingTaxDue),
+    pdfMeta: {
+      formCode: filingForm === 'pnd51' ? 'P.N.D.51' : 'P.N.D.50',
+      periodLabel: buildCorporateTaxPeriodLabel(period),
+      periodStartMonth: period.startMonth,
+      periodEndMonth: period.endMonth,
+      generatedAtBangkok: getBangkokDateTimeString(),
+      storeScopeLabel: scope.storeFilter,
+    },
+    validation: {
+      isValid: validationErrors.length === 0,
+      errors: validationErrors,
+      warnings: validationWarnings,
+    },
     adjustments,
   }
 }

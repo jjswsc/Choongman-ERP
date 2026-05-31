@@ -246,13 +246,14 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
+    const initialStoreScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const syncStoreFilter = initialStoreScope.requestedCanonical || storeFilter
     const initialRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
       select: '*',
       order: 'doc_date.asc,id.asc',
       pageSize: 4000,
       maxRows: 100000,
     })) as Record<string, unknown>[] | null
-    const initialStoreScope = await createAccountingStoreScopeMatcher(storeFilter)
     const initialEntries = (initialRows || []).filter((row) => {
       if (!initialStoreScope.matches(String(row.store_name || ''))) return false
       return matchesFilingStatus(row.filing_status, filingStatus)
@@ -268,11 +269,11 @@ export async function GET(request: NextRequest) {
       await syncInputVatFromExpensesForPeriod({
         startMonth: period.startMonth,
         endMonth: period.endMonth,
-        storeFilter,
+        storeFilter: syncStoreFilter,
       })
       await syncTaxVatLedgersFromStockAndExpenses({
         months: period.months,
-        storeFilter,
+        storeFilter: syncStoreFilter,
       })
     }
 
@@ -312,9 +313,8 @@ export async function GET(request: NextRequest) {
       pageSize: 4000,
       maxRows: 100000,
     })) as Record<string, unknown>[] | null
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
     const entries = (rows || []).filter((row) => {
-      if (!storeScope.matches(String(row.store_name || ''))) return false
+      if (!initialStoreScope.matches(String(row.store_name || ''))) return false
       return matchesFilingStatus(row.filing_status, filingStatus)
     })
     return NextResponse.json({ entries: enrichVatLedgerEntries(entries), period }, { headers })

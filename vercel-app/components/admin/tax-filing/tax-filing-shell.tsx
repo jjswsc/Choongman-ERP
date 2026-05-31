@@ -257,6 +257,7 @@ export function TaxFilingShell() {
   const storeOptionLabel = React.useCallback((code: string) => (code === "All" ? t("all") : code), [t])
 
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
+  const [pp30SearchTick, setPp30SearchTick] = React.useState(0)
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
@@ -304,6 +305,7 @@ export function TaxFilingShell() {
         <TabsContent value="pp30pp36" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingVatTab
             {...tabProps.pp30pp36}
+            onFilingSearch={() => setPp30SearchTick((n) => n + 1)}
             onOpenStoreProfiles={() => {
               const s = tabProps.pp30pp36.filingStoreFilter
               if (s && s !== "All") setStoreProfilesStore(s)
@@ -315,6 +317,7 @@ export function TaxFilingShell() {
               <p>{t("taxFilingNotePp36Bundled")}</p>
               <TaxFilingWhtTab
                 {...tabProps.pp30pp36}
+                filingSearchTick={pp30SearchTick}
                 whtFocusMode="pp36"
                 initialWhtSubmissionFormHint="ALL"
               />
