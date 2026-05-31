@@ -1,6 +1,6 @@
 import { supabaseSelect } from '@/lib/supabase-server'
 import { todayStrBangkok } from '@/lib/attendance-utils'
-import { normStoreKey } from '@/lib/store-list-keys'
+import { extractStoreDisplayTail, normStoreKey } from '@/lib/store-list-keys'
 
 const STORE_HEADER_VALUES = new Set(['store', '매장명'])
 
@@ -115,6 +115,11 @@ export function buildLegacyToCanonicalMap(masters: ErpStoreMasterRow[]): Record<
     for (const k of keys) {
       const nk = normStoreKey(k)
       if (nk) m[nk] = code
+      const tail = extractStoreDisplayTail(k)
+      if (tail) {
+        const nkt = normStoreKey(tail)
+        if (nkt) m[nkt] = code
+      }
     }
   }
   return m

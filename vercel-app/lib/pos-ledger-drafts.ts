@@ -44,6 +44,70 @@ export async function resolveStoreDisplayNameForVatLedger(storeKey: string): Pro
   return key
 }
 
+/** POS 주문 id → store_code (VAT 원장 store_name 공란 행 해석용) */
+export async function buildPosOrderStoreCodeMap(orderIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  const idList = Array.from(new Set(orderIds.map((id) => Math.floor(Number(id) || 0)).filter((id) => id > 0)))
+  const chunkSize = 200
+  for (let i = 0; i < idList.length; i += chunkSize) {
+    const chunk = idList.slice(i, i + chunkSize)
+    const orderRows = (await supabaseSelectFilter('pos_orders', `id=in.(${chunk.join(',')})`, {
+      select: 'id,store_code',
+      limit: chunk.length,
+    })) as { id?: number; store_code?: string | null }[] | null
+    for (const o of orderRows || []) {
+      const oid = Math.floor(Number(o.id) || 0)
+      const sc = String(o.store_code || '').trim()
+      if (oid > 0 && sc) out.set(oid, sc)
+    }
+  }
+  return out
+}
+
+/** store_name 공란 VAT 원장 — memo의 POS 주문으로 매장 표시명 추론 */
+export async function resolveVatLedgerEntryStoreNameForScope(
+  row: { store_name?: string | null; memo?: string | null },
+  posStoreByOrderId: Map<number, string>
+): Promise<string> {
+  const current = String(row.store_name || '').trim()
+  if (current) return current
+  const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
+  if (!m) return ''
+  const oid = Math.floor(Number(m[1]) || 0)
+  if (oid <= 0) return ''
+  const storeCode = posStoreByOrderId.get(oid) || ''
+  if (!storeCode) return ''
+  return resolveStoreDisplayNameForVatLedger(storeCode)
+}
+
+/** 조회 직전 store_name 보강 — backfill 후에도 공란인 POS 자동 행 */
+export async function enrichVatLedgerRowsStoreNames(
+  rows: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+  const emptyPosOrderIds: number[] = []
+  for (const row of rows || []) {
+    if (String(row.store_name || '').trim()) continue
+    const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
+    if (!m) continue
+    const oid = Math.floor(Number(m[1]) || 0)
+    if (oid > 0) emptyPosOrderIds.push(oid)
+  }
+  if (!emptyPosOrderIds.length) return rows || []
+  const posStoreByOrderId = await buildPosOrderStoreCodeMap(emptyPosOrderIds)
+  const out: Record<string, unknown>[] = []
+  for (const row of rows || []) {
+    const current = String(row.store_name || '').trim()
+    if (current) {
+      out.push(row)
+      continue
+    }
+    const resolved = await resolveVatLedgerEntryStoreNameForScope(row, posStoreByOrderId)
+    if (resolved) out.push({ ...row, store_name: resolved })
+    else out.push(row)
+  }
+  return out
+}
+
 /** 과거·자동 VAT 원장 store_name → erp_stores.display_name 백필 (POS·입고·지출 공통) */
 export async function backfillVatLedgerStoreNames(validMonths: string[]): Promise<number> {
   const months = (validMonths || []).map((m) => String(m || '').slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m))
@@ -65,21 +129,7 @@ export async function backfillVatLedgerStoreNames(validMonths: string[]): Promis
     if (oid > 0) posOrderIds.add(oid)
   }
 
-  const posStoreByOrderId = new Map<number, string>()
-  const idList = Array.from(posOrderIds)
-  const chunkSize = 200
-  for (let i = 0; i < idList.length; i += chunkSize) {
-    const chunk = idList.slice(i, i + chunkSize)
-    const orderRows = (await supabaseSelectFilter('pos_orders', `id=in.(${chunk.join(',')})`, {
-      select: 'id,store_code',
-      limit: chunk.length,
-    })) as { id?: number; store_code?: string | null }[] | null
-    for (const o of orderRows || []) {
-      const oid = Math.floor(Number(o.id) || 0)
-      const sc = String(o.store_code || '').trim()
-      if (oid > 0 && sc) posStoreByOrderId.set(oid, sc)
-    }
-  }
+  const posStoreByOrderId = await buildPosOrderStoreCodeMap(Array.from(posOrderIds))
 
   let updated = 0
   for (const row of rows || []) {

@@ -2,7 +2,7 @@ import { buildLegacyToCanonicalMap, fetchErpStoresMaster, type ErpStoreMasterRow
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
-import { normStoreKey } from '@/lib/store-list-keys'
+import { addStoreNameAliasVariants, extractStoreDisplayTail, normStoreKey } from '@/lib/store-list-keys'
 
 /** 매장·가맹 등 — 요청 매장이 허용 범위 밖일 때 */
 export class AccountingStoreScopeForbidden extends Error {
@@ -148,29 +148,26 @@ export function buildStoreScopeAliasKeys(
 ): string[] {
   const code = String(storeCode || '').trim()
   if (!code) return []
-  const keys = new Set<string>([code])
+  const keys = new Set<string>()
+  addStoreNameAliasVariants(keys, code)
   const master =
     findErpStoreMasterForScopeKey(code, masters, legacyToCanonical) ||
     (masters || []).find((row) => String(row.store_code || '').trim() === code) ||
     null
   if (master) {
-    const sc = String(master.store_code || '').trim()
-    if (sc) keys.add(sc)
-    const dn = String(master.display_name || '').trim()
-    if (dn) keys.add(dn)
+    addStoreNameAliasVariants(keys, String(master.store_code || '').trim())
+    addStoreNameAliasVariants(keys, String(master.display_name || '').trim())
     for (const alias of master.aliases || []) {
-      const a = String(alias || '').trim()
-      if (a) keys.add(a)
+      addStoreNameAliasVariants(keys, String(alias || '').trim())
     }
   }
   const canonical = canonicalizeStoreName(code, legacyToCanonical)
-  if (canonical) keys.add(canonical)
+  if (canonical) addStoreNameAliasVariants(keys, canonical)
   for (const [legacy, canon] of Object.entries(legacyToCanonical || {})) {
     const canonCode = String(canon || '').trim()
     if (!canonCode) continue
     if (canonCode === code || (canonical && canonCode === canonical)) {
-      const leg = String(legacy || '').trim()
-      if (leg) keys.add(leg)
+      addStoreNameAliasVariants(keys, String(legacy || '').trim())
     }
   }
   return Array.from(keys)
@@ -208,15 +205,31 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
       const rowStore = String(storeName || '').trim()
       if (!rowStore) return false
       const rowCanonical = canonicalizeStoreName(rowStore, legacyToCanonical)
+      const rowTail = extractStoreDisplayTail(rowStore)
+      const scopeKey = scopeStoreCode || requestedCanonical || requested
       if (isOfficeEquivalentStore(rowStore, requested)) return true
-      if (requestedCanonical && isOfficeEquivalentStore(rowStore, requestedCanonical)) return true
+      if (scopeKey && isOfficeEquivalentStore(rowStore, scopeKey)) return true
       if (rowCanonical && isOfficeEquivalentStore(rowCanonical, requested)) return true
+      if (scopeKey && rowCanonical && scopeKey === rowCanonical) return true
       if (requestedCanonical && rowCanonical && requestedCanonical === rowCanonical) return true
       if (storesMatchForGradeLookup(rowStore, requested)) return true
+      if (scopeKey && storesMatchForGradeLookup(rowStore, scopeKey)) return true
       if (requestedCanonical && storesMatchForGradeLookup(rowStore, requestedCanonical)) return true
       if (rowCanonical && storesMatchForGradeLookup(rowCanonical, requested)) return true
+      if (scopeKey && rowCanonical && storesMatchForGradeLookup(rowCanonical, scopeKey)) return true
+      if (rowTail && rowTail !== rowStore) {
+        if (scopeKey && storesMatchForGradeLookup(rowTail, scopeKey)) return true
+        if (requestedCanonical && storesMatchForGradeLookup(rowTail, requestedCanonical)) return true
+        if (storesMatchForGradeLookup(rowTail, requested)) return true
+      }
       for (const key of aliasKeys) {
         if (storesMatchForGradeLookup(rowStore, key)) return true
+        if (rowCanonical && storesMatchForGradeLookup(rowCanonical, key)) return true
+        if (rowTail && storesMatchForGradeLookup(rowTail, key)) return true
+        const nk = normStoreKey(key)
+        if (nk && normStoreKey(rowStore) === nk) return true
+        if (rowCanonical && nk && normStoreKey(rowCanonical) === nk) return true
+        if (rowTail && nk && normStoreKey(rowTail) === nk) return true
       }
       return false
     },

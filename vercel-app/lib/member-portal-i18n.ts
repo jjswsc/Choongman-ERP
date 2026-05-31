@@ -49,6 +49,41 @@ export type MemberPortalKey =
   | 'orderDesc'
   | 'orderPickupBtn'
   | 'orderDeliveryBtn'
+  | 'orderPickupHubDesc'
+  | 'orderDeliveryHubDesc'
+  | 'orderDeliveryDesc'
+  | 'orderDeliveryNote'
+  | 'orderBack'
+  | 'orderPickupSavingsDesc'
+  | 'orderSelectStore'
+  | 'orderSelectStorePh'
+  | 'orderSelectStoreFirst'
+  | 'orderPickupTime'
+  | 'orderPickupTimeHint'
+  | 'orderPickupContinue'
+  | 'orderPickupSetupBack'
+  | 'orderPickupSummary'
+  | 'orderPickupTooSoon'
+  | 'orderMemberNoticeTitle'
+  | 'orderMemberNoticeBody'
+  | 'orderMemberNoticeOk'
+  | 'orderMenuLoadFail'
+  | 'orderMenuEmpty'
+  | 'orderMenuOptionsNote'
+  | 'orderSelectOption'
+  | 'orderOptionBack'
+  | 'orderOptionStep'
+  | 'orderBanbanNote'
+  | 'orderAdd'
+  | 'orderCartTitle'
+  | 'orderCartTotal'
+  | 'orderSubmit'
+  | 'orderSubmitSuccess'
+  | 'orderSubmitFail'
+  | 'pickup_too_soon'
+  | 'empty_cart'
+  | 'store_required'
+  | 'invalid_pickup_time'
   | 'locationTitle'
   | 'locationDesc'
   | 'locationComing'
@@ -267,12 +302,103 @@ const MS: Record<MemberPortalKey, Dict> = {
   tabMe: { en: 'Me', th: 'ฉัน', ko: '내정보' },
   orderTitle: { en: 'Order now', th: 'สั่งซื้อเลย', ko: '지금 주문' },
   orderDesc: {
-    en: 'Start order flow with pickup or delivery.',
-    th: 'เริ่มสั่งซื้อได้ทั้งรับที่ร้านและเดลิเวอรี',
-    ko: '픽업 또는 배달 주문을 시작하세요.',
+    en: 'Pickup at store (member price) or order via delivery apps.',
+    th: 'รับที่ร้านในราคาสมาชิก หรือสั่งผ่านแอปเดลิเวอรี',
+    ko: '매장 픽업(회원가) 또는 배달앱 주문을 선택하세요.',
   },
   orderPickupBtn: { en: 'Pickup order', th: 'รับที่ร้าน', ko: '픽업 주문' },
   orderDeliveryBtn: { en: 'Delivery order', th: 'เดลิเวอรี', ko: '배달 주문' },
+  orderPickupHubDesc: {
+    en: 'Order for pickup at your store — about 10% cheaper than delivery apps.',
+    th: 'สั่งรับที่ร้าน — ราคาถูกกว่าแอปเดลิเวอรีประมาณ 10%',
+    ko: '매장 픽업 주문 — 배달앱보다 약 10% 저렴',
+  },
+  orderDeliveryHubDesc: {
+    en: 'Open Grab, LINE MAN, or ShopeeFood to order delivery.',
+    th: 'เปิด Grab, LINE MAN หรือ ShopeeFood เพื่อสั่งเดลิเวอรี',
+    ko: 'Grab · LINE MAN · ShopeeFood 배달앱으로 주문',
+  },
+  orderDeliveryDesc: {
+    en: 'Choose your preferred delivery platform.',
+    th: 'เลือกแพลตฟอร์มเดลิเวอรีที่ต้องการ',
+    ko: '원하는 배달앱을 선택해 주세요.',
+  },
+  orderDeliveryNote: {
+    en: 'Delivery fees and promotions follow each app. Member pickup orders are cheaper via the pickup menu.',
+    th: 'ค่าส่งและโปรโมชันตามแต่ละแอป รับที่ร้านผ่านเมนูสมาชิกจะถูกกว่า',
+    ko: '배달비·프로모션은 각 앱 기준입니다. 회원 픽업은 앱 내 픽업 메뉴가 더 저렴합니다.',
+  },
+  orderBack: { en: 'Back', th: 'กลับ', ko: '뒤로' },
+  orderPickupSavingsDesc: {
+    en: 'Order pickup at about 10% lower than delivery app prices. Pay at the store when you pick up.',
+    th: 'สั่งรับที่ร้างราคาถูกกว่าแอปเดลิเวอรีประมาณ 10% ชำระที่ร้านเมื่อมารับ',
+    ko: '배달앱보다 약 10% 저렴한 가격에 픽업 주문할 수 있습니다. 픽업 시 매장에서 결제합니다.',
+  },
+  orderSelectStore: { en: 'Store', th: 'สาขา', ko: '매장' },
+  orderSelectStorePh: { en: 'Select a store', th: 'เลือกสาขา', ko: '매장을 선택하세요' },
+  orderSelectStoreFirst: { en: 'Please select a store first.', th: 'กรุณาเลือกสาขาก่อน', ko: '먼저 매장을 선택해 주세요.' },
+  orderPickupTime: { en: 'Pickup time', th: 'เวลารับ', ko: '픽업 희망 시간' },
+  orderPickupTimeHint: {
+    en: 'Earliest pickup is 30 minutes from now (Bangkok time).',
+    th: 'รับได้เร็วสุด 30 นาทีจากนี้ (เวลากรุงเทพ)',
+    ko: '최소 현재 시간 30분 이후부터 선택 가능 (방콕 시간)',
+  },
+  orderPickupContinue: { en: 'Choose menu', th: 'เลือกเมนู', ko: '메뉴 선택' },
+  orderPickupSetupBack: { en: 'Change store/time', th: 'เปลี่ยนสาขา/เวลา', ko: '매장·시간 변경' },
+  orderPickupSummary: {
+    en: '{store} · Pickup {time}',
+    th: '{store} · รับ {time}',
+    ko: '{store} · 픽업 {time}',
+  },
+  orderPickupTooSoon: {
+    en: 'Pickup must be at least 30 minutes from now.',
+    th: 'เวลารับต้องอย่างน้อย 30 นาทีจากนี้',
+    ko: '픽업 시간은 현재 시각 기준 30분 이후여야 합니다.',
+  },
+  orderMemberNoticeTitle: { en: 'Member order', th: 'คำสั่งซื้อสมาชิก', ko: '회원 주문입니다' },
+  orderMemberNoticeBody: {
+    en: 'This order is linked to your membership and sent to the store POS as pickup (takeout).',
+    th: 'คำสั่งซื้อนี้ผูกกับสมาชิกและส่งไป POS ร้านเป็นรับที่ร้าน',
+    ko: '회원 정보와 연결되어 해당 매장 POS 포장 주문으로 접수됩니다.',
+  },
+  orderMemberNoticeOk: { en: 'Start ordering', th: 'เริ่มสั่ง', ko: '주문 시작' },
+  orderMenuLoadFail: { en: 'Could not load menu.', th: 'โหลดเมนูไม่สำเร็จ', ko: '메뉴를 불러오지 못했습니다.' },
+  orderMenuEmpty: { en: 'No pickup items available.', th: 'ไม่มีเมนูพร้อมสั่ง', ko: '주문 가능한 메뉴가 없습니다.' },
+  orderMenuOptionsNote: {
+    en: 'Half-and-half (banban) menus — please order at the store.',
+    th: 'เมนูครึ่งๆ — สั่งที่ร้าน',
+    ko: '반반 메뉴는 매장에서 주문해 주세요.',
+  },
+  orderSelectOption: { en: 'Choose option', th: 'เลือกตัวเลือก', ko: '옵션 선택' },
+  orderOptionBack: { en: 'Back', th: 'ย้อนกลับ', ko: '이전' },
+  orderOptionStep: {
+    en: 'Step {step}/{total}',
+    th: 'ขั้นที่ {step}/{total}',
+    ko: '{step}/{total} 단계',
+  },
+  orderBanbanNote: {
+    en: 'Half-and-half menu — order at the store.',
+    th: 'เมนูครึ่งๆ — สั่งที่ร้าน',
+    ko: '반반 메뉴는 매장 주문만 가능합니다.',
+  },
+  orderAdd: { en: 'Add', th: 'เพิ่ม', ko: '담기' },
+  orderCartTitle: { en: 'Cart', th: 'ตะกร้า', ko: '장바구니' },
+  orderCartTotal: { en: 'Subtotal', th: 'ยอดรวม', ko: '합계' },
+  orderSubmit: { en: 'Place pickup order', th: 'ยืนยันรับที่ร้าน', ko: '픽업 주문하기' },
+  orderSubmitSuccess: {
+    en: 'Order placed ({orderNo}). Pay at pickup.',
+    th: 'สั่งแล้ว ({orderNo}) ชำระเมื่อมารับ',
+    ko: '주문 접수됨 ({orderNo}). 픽업 시 결제해 주세요.',
+  },
+  orderSubmitFail: { en: 'Order failed. Try again.', th: 'สั่งไม่สำเร็จ', ko: '주문에 실패했습니다.' },
+  pickup_too_soon: {
+    en: 'Pickup must be at least 30 minutes from now.',
+    th: 'เวลารับต้องอย่างน้อย 30 นาทีจากนี้',
+    ko: '픽업 시간은 30분 이후여야 합니다.',
+  },
+  empty_cart: { en: 'Cart is empty.', th: 'ตะกร้าว่าง', ko: '장바구니가 비어 있습니다.' },
+  store_required: { en: 'Store is required.', th: 'ต้องเลือกสาขา', ko: '매장을 선택해 주세요.' },
+  invalid_pickup_time: { en: 'Invalid pickup time.', th: 'เวลารับไม่ถูกต้อง', ko: '픽업 시간이 올바르지 않습니다.' },
   locationTitle: { en: 'Store locations', th: 'ที่ตั้งสาขา', ko: '매장 위치' },
   locationDesc: {
     en: 'Find nearby stores and choose your favorite branch.',

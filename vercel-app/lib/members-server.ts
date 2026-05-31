@@ -157,6 +157,34 @@ function normalizePhone(v: string): string {
   return toText(v).replace(/[^\d+]/g, '')
 }
 
+export type MemberSaveErrorCode = 'DUPLICATE_PHONE'
+
+export class MemberSaveError extends Error {
+  readonly code: MemberSaveErrorCode
+
+  constructor(code: MemberSaveErrorCode, message: string) {
+    super(message)
+    this.name = 'MemberSaveError'
+    this.code = code
+  }
+}
+
+function isDuplicatePhoneDbError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e || '')
+  return /23505/.test(msg) && /uq_members_phone_digits|phone_digits/i.test(msg)
+}
+
+function rethrowMemberSaveError(e: unknown): never {
+  if (e instanceof MemberSaveError) throw e
+  if (isDuplicatePhoneDbError(e)) {
+    throw new MemberSaveError(
+      'DUPLICATE_PHONE',
+      '이 전화번호는 이미 다른 회원에게 등록되어 있습니다.'
+    )
+  }
+  throw e instanceof Error ? e : new Error(String(e || '회원 저장에 실패했습니다.'))
+}
+
 function normalizeEmail(v: string): string {
   return toText(v).toLowerCase()
 }
@@ -371,21 +399,26 @@ async function insertMemberBase(input: CreateMemberInput): Promise<MemberRow> {
   const now = getBangkokDateTimeString()
   const referralCode = toText(input.referralCode).toUpperCase() || null
   const referredByMemberId = Number(input.referredByMemberId || 0) || null
-  const inserted = (await supabaseInsert('members', {
-    name: toText(input.name),
-    phone: normalizePhone(input.phone || '') || null,
-    email: normalizeEmail(input.email || '') || null,
-    birth_date: toText(input.birthDate) || null,
-    gender: toText(input.gender) || null,
-    nationality: toText(input.nationality) || null,
-    join_channel: toText(input.joinChannel) || 'store',
-    referral_code: referralCode,
-    referred_by_member_id: referredByMemberId,
-    source: toText(input.source) || 'manual',
-    status: 'active',
-    created_at: now,
-    updated_at: now,
-  })) as MemberRow[]
+  let inserted: MemberRow[]
+  try {
+    inserted = (await supabaseInsert('members', {
+      name: toText(input.name),
+      phone: normalizePhone(input.phone || '') || null,
+      email: normalizeEmail(input.email || '') || null,
+      birth_date: toText(input.birthDate) || null,
+      gender: toText(input.gender) || null,
+      nationality: toText(input.nationality) || null,
+      join_channel: toText(input.joinChannel) || 'store',
+      referral_code: referralCode,
+      referred_by_member_id: referredByMemberId,
+      source: toText(input.source) || 'manual',
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    })) as MemberRow[]
+  } catch (e) {
+    rethrowMemberSaveError(e)
+  }
   const created = inserted?.[0]
   if (!created?.id) throw new Error('회원 생성에 실패했습니다.')
   const memberNo = buildMemberNo(Number(created.id))
@@ -548,7 +581,11 @@ export async function updateMember(input: UpdateMemberInput): Promise<MemberSumm
   if (input.consentPrivacy != null) patch.consent_privacy = Boolean(input.consentPrivacy)
   if (input.consentAt != null) patch.consent_at = toText(input.consentAt) || null
   if (input.status != null) patch.status = toText(input.status) || 'active'
-  await supabaseUpdateByFilter('members', `id=eq.${id}`, patch)
+  try {
+    await supabaseUpdateByFilter('members', `id=eq.${id}`, patch)
+  } catch (e) {
+    rethrowMemberSaveError(e)
+  }
 
   const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, { limit: 1 })) as MemberRow[]
   if (!rows || rows.length === 0) throw new Error('회원을 찾을 수 없습니다.')

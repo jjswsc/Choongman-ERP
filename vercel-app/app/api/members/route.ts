@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createMember, listMembers } from '@/lib/members-server'
+import { createMember, listMembers, MemberSaveError } from '@/lib/members-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(req: NextRequest) {
@@ -57,6 +57,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, member }, { headers })
   } catch (e) {
     console.error('POST /api/members:', e)
+    if (e instanceof MemberSaveError) {
+      return NextResponse.json(
+        { success: false, code: e.code, message: e.message },
+        { headers }
+      )
+    }
     return NextResponse.json(
       {
         success: false,

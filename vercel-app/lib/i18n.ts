@@ -6035,6 +6035,11 @@ export const i18n = {
     memberCreateFail: '회원 등록에 실패했습니다.',
     memberDetailSaveFail: '등록 후 상세 정보 저장에 실패했습니다.',
     memberUpdateFail: '회원 수정에 실패했습니다.',
+    memberDuplicatePhone:
+      '이 전화번호는 이미 다른 회원에게 등록되어 있습니다. 검색으로 기존 회원을 찾거나 다른 번호를 입력해 주세요.',
+    memberListPagePrev: '이전',
+    memberListPageNext: '다음',
+    memberListPageShowing: '현재 페이지 {count}명',
     memberLineApiMissingTitle: 'LINE Messaging API 미설정',
     memberLineApiMissingBody:
       'Vercel(또는 서버) 환경 변수에 LINE_CHANNEL_ACCESS_TOKEN과 LINE_CHANNEL_SECRET를 설정한 뒤 재배포해야 친구 목록·표시명 동기화가 동작합니다.',
@@ -14901,6 +14906,11 @@ orderItemQty: 'Qty',
     memberCreateFail: 'Failed to create member.',
     memberDetailSaveFail: 'Failed to save details after registration.',
     memberUpdateFail: 'Failed to update member.',
+    memberDuplicatePhone:
+      'This phone number is already registered to another member. Search for the existing member or use a different number.',
+    memberListPagePrev: 'Previous',
+    memberListPageNext: 'Next',
+    memberListPageShowing: '{count} on this page',
     memberLineApiMissingTitle: 'LINE Messaging API not configured',
     memberLineApiMissingBody:
       'Set LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET in server environment and redeploy to enable sync.',

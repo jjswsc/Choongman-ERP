@@ -11443,7 +11443,7 @@ export async function createMember(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; member?: Member }>
+  return res.json() as Promise<{ success: boolean; code?: string; message?: string; member?: Member }>
 }
 
 export async function updateMember(params: {
@@ -11485,7 +11485,7 @@ export async function updateMember(params: {
       status: params.status,
     }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; member?: Member }>
+  return res.json() as Promise<{ success: boolean; code?: string; message?: string; member?: Member }>
 }
 
 export async function registerLineMember(params: {

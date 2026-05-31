@@ -761,13 +761,18 @@ export function AdminAccountingCompliance({
   const storeTb = externalFiling ? filingStoreFilter : internalStoreTb
   const setStoreTb = externalFiling ? onFilingStoreFilterChange : setInternalStoreTb
 
-  /** POS·원장의 store_name(코드)과 로그인/표시 문자열이 다를 때 레거시→코드로 맞춤 */
-  const storeFilterForLedger = React.useMemo(() => {
+  /** POS·원장 API storeFilter — 사용자 선택값 그대로(서버에서 erp_stores로 해석) */
+  const storeFilterForApi = React.useMemo(() => {
     const s = String(storeTb ?? "").trim()
     if (!s || s === "All" || s === "*") return "All"
-    const r = String(resolveStoreKey(s) ?? "").trim()
-    return r || s
-  }, [storeTb, resolveStoreKey])
+    return s
+  }, [storeTb])
+  /** 프로필·UI용 canonical store_code */
+  const storeFilterForLedger = React.useMemo(() => {
+    if (storeFilterForApi === "All") return "All"
+    const r = String(resolveStoreKey(storeFilterForApi) ?? "").trim()
+    return r || storeFilterForApi
+  }, [storeFilterForApi, resolveStoreKey])
   const isHeadOfficeLedgerStore = React.useMemo(() => {
     if (storeFilterForLedger === "All") return false
     return isOfficeStore(storeFilterForLedger) || isHeadOfficeLikeStoreName(storeFilterForLedger)
@@ -1204,7 +1209,7 @@ export function AdminAccountingCompliance({
       const data = await getAccountingPeriodCloseStatus({
         userRole: role,
         yearMonth: taxMonth,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       })
       if (data.snapshot) {
         setPp30PeriodClose({
@@ -1281,7 +1286,7 @@ export function AdminAccountingCompliance({
         taxMonth,
         yearMonth: taxMonth,
         periodType,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       })
       if (error) {
         setVatStoreNameGaps(null)
@@ -1293,7 +1298,7 @@ export function AdminAccountingCompliance({
     } finally {
       setVatStoreNameGapsLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
+  }, [canUse, role, taxMonth, periodType, storeFilterForApi])
 
   const probeHqSupplyReconcile = React.useCallback(async () => {
     if (!canUse || storeFilterForLedger === "All" || isHeadOfficeLedgerStore) {
@@ -1308,7 +1313,7 @@ export function AdminAccountingCompliance({
         taxMonth,
         yearMonth: taxMonth,
         periodType,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       })
       setHqSupplyReconcileApplicable(applicable)
       if (!applicable) setIntercompanyVatRecon(null)
@@ -1332,7 +1337,7 @@ export function AdminAccountingCompliance({
         taxMonth,
         yearMonth: taxMonth,
         periodType,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       })
       if (error) {
         setIntercompanyVatRecon(null)
@@ -1368,7 +1373,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         }),
         PP30_FETCH_TIMEOUT_MS
       )
@@ -1395,7 +1400,7 @@ export function AdminAccountingCompliance({
     taxMonth,
     periodType,
     ledgerStatusFilter,
-    storeFilterForLedger,
+    storeFilterForApi,
     mapVat,
     loadVatStoreNameGaps,
     t,
@@ -1487,7 +1492,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         }),
         PP30_FETCH_TIMEOUT_MS
       )
@@ -1503,7 +1508,7 @@ export function AdminAccountingCompliance({
     } finally {
       if (seq === whtLoadSeqRef.current) setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapWht])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, mapWht])
 
   const loadPp36 = React.useCallback(async () => {
     if (!canUse) return
@@ -1516,7 +1521,7 @@ export function AdminAccountingCompliance({
           yearMonth: taxMonth,
           periodType,
           filingStatus: ledgerStatusFilter,
-          storeFilter: storeFilterForLedger,
+          storeFilter: storeFilterForApi,
         }),
         PP30_FETCH_TIMEOUT_MS
       )
@@ -1526,7 +1531,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapPp36])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, mapPp36])
 
   const loadPnd54 = React.useCallback(async () => {
     if (!canUse) return
@@ -1539,7 +1544,7 @@ export function AdminAccountingCompliance({
           yearMonth: taxMonth,
           periodType,
           filingStatus: ledgerStatusFilter,
-          storeFilter: storeFilterForLedger,
+          storeFilter: storeFilterForApi,
         }),
         PP30_FETCH_TIMEOUT_MS
       )
@@ -1549,7 +1554,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapPnd54])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, mapPnd54])
 
   const loadTaxSummary = React.useCallback(async () => {
     if (!canUse) return
@@ -1561,7 +1566,7 @@ export function AdminAccountingCompliance({
         userRole: role,
         yearMonth: taxMonth,
         periodType,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         }),
         PP30_FETCH_TIMEOUT_MS
       )
@@ -1577,7 +1582,7 @@ export function AdminAccountingCompliance({
     } finally {
       if (seq === taxSummaryLoadSeqRef.current) setSummaryLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
+  }, [canUse, role, taxMonth, periodType, storeFilterForApi])
 
   const loadVatRef = React.useRef(loadVat)
   const loadWhtRef = React.useRef(loadWht)
@@ -2452,7 +2457,7 @@ export function AdminAccountingCompliance({
     setTaxSummary(null)
   }, [
     taxMonth,
-    storeFilterForLedger,
+    storeFilterForApi,
     periodType,
     ledgerStatusFilter,
     pp30Queried,
@@ -2487,7 +2492,7 @@ export function AdminAccountingCompliance({
     pp30Queried,
     pp30SubView,
     taxMonth,
-    storeFilterForLedger,
+    storeFilterForApi,
     periodType,
     ledgerStatusFilter,
     pp30SearchSeq,
@@ -3687,7 +3692,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         excludePosAuto: isHeadOfficeLedgerStore,
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, isHeadOfficeLedgerStore]
@@ -3700,7 +3705,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
@@ -3712,7 +3717,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         format: "submission",
         formHint: whtSubmissionFormHint,
       }),
@@ -3726,7 +3731,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
@@ -3738,7 +3743,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
@@ -3754,7 +3759,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         filingForm: pnd1FilingForm,
         payerTaxId: pnd1PayerTaxId,
         payerBranchNo: pnd1PayerBranchNo,
@@ -4042,7 +4047,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         filingForm: pnd1FilingForm,
       })
       setPnd1ValidationResult(data)
@@ -4078,7 +4083,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
         formHint: whtSubmissionFormHint,
       })
       setPnd353ValidationResult(data)
@@ -4140,7 +4145,7 @@ export function AdminAccountingCompliance({
         taxMonth,
         yearMonth: taxMonth,
         periodType,
-        storeFilter: storeFilterForLedger,
+        storeFilter: storeFilterForApi,
       })
       setPayrollTinGapResult(data)
       if (data.gapRowCount > 0) {
@@ -6259,7 +6264,7 @@ export function AdminAccountingCompliance({
                             body: JSON.stringify({
                               userRole: role,
                               yearMonth: taxMonth,
-                              storeFilter: storeFilterForLedger !== "All" ? storeFilterForLedger : undefined,
+                              storeFilter: storeFilterForApi !== "All" ? storeFilterForLedger : undefined,
                             }),
                           })
                           const j = (await res.json()) as {

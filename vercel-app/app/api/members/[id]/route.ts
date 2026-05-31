@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateMember } from '@/lib/members-server'
+import { updateMember, MemberSaveError } from '@/lib/members-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function PATCH(
@@ -53,6 +53,12 @@ export async function PATCH(
     return NextResponse.json({ success: true, member }, { headers })
   } catch (e) {
     console.error('PATCH /api/members/[id]:', e)
+    if (e instanceof MemberSaveError) {
+      return NextResponse.json(
+        { success: false, code: e.code, message: e.message },
+        { headers }
+      )
+    }
     return NextResponse.json(
       {
         success: false,

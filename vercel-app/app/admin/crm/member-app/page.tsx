@@ -147,16 +147,20 @@ function validateImageByRule(
 }
 
 export default function CrmMemberAppContentPage() {
-  const [activeTab, setActiveTab] = React.useState<"design" | "popup" | "info" | "store_photo" | "contact">("design")
+  const [activeTab, setActiveTab] = React.useState<"design" | "popup" | "info" | "store_photo" | "contact" | "delivery">("design")
   const [items, setItems] = React.useState<ContentItem[]>([])
   const [form, setForm] = React.useState<FormState>(emptyForm())
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
   const [contactInstagramUrl, setContactInstagramUrl] = React.useState("")
+  const [deliveryGrabUrl, setDeliveryGrabUrl] = React.useState("")
+  const [deliveryLinemanUrl, setDeliveryLinemanUrl] = React.useState("")
+  const [deliveryShopeeUrl, setDeliveryShopeeUrl] = React.useState("")
   const [loginBackgroundUrl, setLoginBackgroundUrl] = React.useState("")
   const [appBackgroundUrl, setAppBackgroundUrl] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [contactSaving, setContactSaving] = React.useState(false)
+  const [deliverySaving, setDeliverySaving] = React.useState(false)
   const [designSaving, setDesignSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [notice, setNotice] = React.useState("")
@@ -206,6 +210,24 @@ export default function CrmMemberAppContentPage() {
     }
   }, [])
 
+  const loadDeliverySettings = React.useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/member-portal/admin/settings/delivery-links", { cache: "no-store" })
+      const data = (await res.json()) as {
+        success: boolean
+        grabUrl?: string
+        linemanUrl?: string
+        shopeeUrl?: string
+      }
+      if (!res.ok || !data.success) return
+      setDeliveryGrabUrl(String(data.grabUrl || ""))
+      setDeliveryLinemanUrl(String(data.linemanUrl || ""))
+      setDeliveryShopeeUrl(String(data.shopeeUrl || ""))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   const loadDesignSettings = React.useCallback(async () => {
     try {
       const res = await apiFetch("/api/member-portal/admin/settings/design", { cache: "no-store" })
@@ -225,8 +247,9 @@ export default function CrmMemberAppContentPage() {
   React.useEffect(() => {
     refresh().catch(() => {})
     loadContactSettings().catch(() => {})
+    loadDeliverySettings().catch(() => {})
     loadDesignSettings().catch(() => {})
-  }, [loadContactSettings, loadDesignSettings, refresh])
+  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, refresh])
 
   React.useEffect(() => {
     if (activeTab === "popup" || activeTab === "info" || activeTab === "store_photo") {
@@ -338,6 +361,34 @@ export default function CrmMemberAppContentPage() {
     }
   }, [contactFacebookUrl, contactInstagramUrl, loadContactSettings])
 
+  const saveDeliverySettings = React.useCallback(async () => {
+    setDeliverySaving(true)
+    setError("")
+    setNotice("")
+    try {
+      const res = await apiFetch("/api/member-portal/admin/settings/delivery-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grabUrl: deliveryGrabUrl,
+          linemanUrl: deliveryLinemanUrl,
+          shopeeUrl: deliveryShopeeUrl,
+        }),
+      })
+      const data = (await res.json()) as { success: boolean; message?: string }
+      if (!res.ok || !data.success) {
+        setError(data.message || "배달 앱 링크 저장에 실패했습니다.")
+        return
+      }
+      setNotice("배달 앱 링크를 저장했습니다.")
+      await loadDeliverySettings()
+    } catch {
+      setError("배달 앱 링크 저장 중 오류가 발생했습니다.")
+    } finally {
+      setDeliverySaving(false)
+    }
+  }, [deliveryGrabUrl, deliveryLinemanUrl, deliveryShopeeUrl, loadDeliverySettings])
+
   const saveDesignSettings = React.useCallback(async () => {
     setDesignSaving(true)
     setError("")
@@ -436,12 +487,13 @@ export default function CrmMemberAppContentPage() {
         {!!error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-5">
+          <TabsList className="grid h-auto w-full grid-cols-6">
             <TabsTrigger value="design">디자인</TabsTrigger>
             <TabsTrigger value="popup">팝업</TabsTrigger>
             <TabsTrigger value="info">정보 업데이트</TabsTrigger>
             <TabsTrigger value="store_photo">매장 사진</TabsTrigger>
             <TabsTrigger value="contact">문의 채널</TabsTrigger>
+            <TabsTrigger value="delivery">배달 앱</TabsTrigger>
           </TabsList>
 
           <TabsContent value="design" className="space-y-4">
@@ -537,6 +589,53 @@ export default function CrmMemberAppContentPage() {
                     {contactSaving ? "저장 중..." : "문의 채널 저장"}
                   </Button>
                   <Button variant="outline" onClick={() => loadContactSettings().catch(() => {})}>
+                    다시 불러오기
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="delivery" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>배달 앱 링크</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  회원앱 주문 탭에서 배달 선택 시 열리는 GrabFood / LINE MAN / ShopeeFood 링크입니다. 비워 두면 기본 URL을 사용합니다.
+                </p>
+                <div className="grid gap-3">
+                  <div className="space-y-1.5">
+                    <Label>GrabFood URL</Label>
+                    <Input
+                      value={deliveryGrabUrl}
+                      onChange={(e) => setDeliveryGrabUrl(e.target.value)}
+                      placeholder="https://food.grab.com/..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>LINE MAN URL</Label>
+                    <Input
+                      value={deliveryLinemanUrl}
+                      onChange={(e) => setDeliveryLinemanUrl(e.target.value)}
+                      placeholder="https://lineman.line.me/..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>ShopeeFood URL</Label>
+                    <Input
+                      value={deliveryShopeeUrl}
+                      onChange={(e) => setDeliveryShopeeUrl(e.target.value)}
+                      placeholder="https://shopeefood.th/..."
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={() => saveDeliverySettings()} disabled={deliverySaving}>
+                    {deliverySaving ? "저장 중..." : "배달 링크 저장"}
+                  </Button>
+                  <Button variant="outline" onClick={() => loadDeliverySettings().catch(() => {})}>
                     다시 불러오기
                   </Button>
                 </div>

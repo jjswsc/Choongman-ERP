@@ -23,7 +23,6 @@ import {
   Ticket,
   UserRound,
   Wallet,
-  X,
 } from "lucide-react"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { Button } from "@/components/ui/button"
@@ -41,6 +40,7 @@ import {
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
+import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import {
   buildFallbackDashboard,
   formatBaht,
@@ -77,9 +77,9 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
-function LineLogo() {
+function LineLogo({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" className="h-6 w-6" aria-hidden>
+    <svg viewBox="0 0 64 64" className={className ?? "h-12 w-12"} aria-hidden>
       <rect x="2" y="2" width="60" height="60" rx="14" fill="#06C755" />
       <path
         d="M14 24.8C14 17.73 19.73 12 26.8 12h10.4C44.27 12 50 17.73 50 24.8c0 6.63-5.06 12.07-11.52 12.69l-4.77 6.1a1.4 1.4 0 0 1-2.5-.86v-5.15H26.8C19.73 37.58 14 31.87 14 24.8Z"
@@ -132,56 +132,96 @@ function MembershipCard({
   const { t } = useMemberPortalLang()
   const tier = tierVisual(dashboard.tierProgress.currentTierCode)
   const displayName = member.fullName || member.name || "Member"
+  const cardShellClass = `relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${tier.gradient} p-5 ${tier.glow}`
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${tier.gradient} p-5 ${tier.glow}`}
-    >
-      <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-      <div className="pointer-events-none absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-black/20 blur-2xl" />
-
-      <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.24em] text-white/55">{t("membership")}</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{displayName}</h2>
-          <p className="mt-1 text-sm text-white/65">{maskPhone(member.phone)}</p>
-        </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${tier.chip}`}>
-          {dashboard.tierProgress.currentTierName || tier.label}
-        </span>
-      </div>
-
-      <div className="relative mt-6 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-black/20 px-4 py-3 backdrop-blur-sm">
-          <p className="text-[11px] uppercase tracking-wider text-white/50">{t("points")}</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{formatPoints(member.pointBalance || 0)}</p>
-        </div>
-        <div className="rounded-2xl bg-black/20 px-4 py-3 backdrop-blur-sm">
-          <p className="text-[11px] uppercase tracking-wider text-white/50">{t("memberNoShort")}</p>
-          <p className="mt-1 text-lg font-semibold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
-        </div>
-      </div>
-
-      <div className="relative mt-4 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-white/55">{t("scanAtCounter")}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onToggleQr}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15"
-          aria-label={showQr ? t("hideQr") : t("showQr")}
+    <div className="[perspective:1000px]">
+      <div
+        className={`relative min-h-[292px] transition-transform duration-500 ease-in-out will-change-transform [transform-style:preserve-3d] ${
+          showQr ? "[transform:rotateY(180deg)]" : ""
+        }`}
+      >
+        <div
+          className={`${cardShellClass} absolute inset-0 [backface-visibility:hidden] [transform:rotateY(0deg)]`}
+          aria-hidden={showQr}
         >
-          <QrCode className="h-5 w-5" />
-        </button>
-      </div>
+          <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-black/20 blur-2xl" />
 
-      {showQr && qrDataUrl ? (
-        <div className="relative mt-4 flex flex-col items-center rounded-2xl border border-white/10 bg-white p-4">
-          <img src={qrDataUrl} alt="Member QR" className="h-44 w-44 rounded-xl" />
-          <p className="mt-3 text-center text-xs text-neutral-600">{member.memberNo || `M${member.id}`}</p>
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-white/55">{t("membership")}</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{displayName}</h2>
+              <p className="mt-1 text-sm text-white/65">{maskPhone(member.phone)}</p>
+            </div>
+            <span className={`rounded-full border px-3 py-1 text-xs font-medium ${tier.chip}`}>
+              {dashboard.tierProgress.currentTierName || tier.label}
+            </span>
+          </div>
+
+          <div className="relative mt-6 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-black/20 px-4 py-3 backdrop-blur-sm">
+              <p className="text-[11px] uppercase tracking-wider text-white/50">{t("points")}</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{formatPoints(member.pointBalance || 0)}</p>
+            </div>
+            <div className="rounded-2xl bg-black/20 px-4 py-3 backdrop-blur-sm">
+              <p className="text-[11px] uppercase tracking-wider text-white/50">{t("memberNoShort")}</p>
+              <p className="mt-1 text-lg font-semibold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
+            </div>
+          </div>
+
+          <div className="relative mt-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs text-white/55">{t("scanAtCounter")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleQr}
+              disabled={!qrDataUrl}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 disabled:opacity-40"
+              aria-label={t("showQr")}
+              aria-pressed={false}
+            >
+              <QrCode className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-      ) : null}
+
+        <div
+          className={`${cardShellClass} absolute inset-0 flex flex-col [backface-visibility:hidden] [transform:rotateY(180deg)]`}
+          aria-hidden={!showQr}
+        >
+          <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-black/20 blur-2xl" />
+
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-white/55">{t("scanAtCounter")}</p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">{member.memberNo || `#${member.id}`}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleQr}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15"
+              aria-label={t("hideQr")}
+              aria-pressed={true}
+            >
+              <QrCode className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="relative mt-4 flex flex-1 flex-col items-center justify-center">
+            {qrDataUrl ? (
+              <div className="flex w-full flex-col items-center rounded-2xl border border-white/10 bg-white p-4 shadow-[0_12px_40px_rgba(0,0,0,0.25)]">
+                <img src={qrDataUrl} alt="Member QR" className="h-44 w-44 rounded-xl" />
+                <p className="mt-3 text-center text-xs font-medium text-neutral-600">{member.memberNo || `M${member.id}`}</p>
+              </div>
+            ) : (
+              <Loader2 className="h-8 w-8 animate-spin text-white/50" aria-hidden />
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -507,11 +547,6 @@ export function MemberPortalApp() {
     )
   }, [locationSearch, stores])
 
-  const favoriteStore = React.useMemo(
-    () => stores.find((s) => s.storeCode === favoriteStoreCode) || null,
-    [stores, favoriteStoreCode]
-  )
-
   const homePopup = React.useMemo(
     () =>
       contentItems.find(
@@ -542,15 +577,6 @@ export function MemberPortalApp() {
     return map
   }, [contentItems])
 
-  const buildPosHref = React.useCallback(
-    (mode: "pickup" | "delivery") => {
-      const q = new URLSearchParams({ mode, from: "member" })
-      if (favoriteStoreCode) q.set("store", favoriteStoreCode)
-      return `/pos?${q.toString()}`
-    },
-    [favoriteStoreCode]
-  )
-
   const logout = async () => {
     await postJson("/api/member-portal/auth/logout", {})
     setMember(null)
@@ -573,198 +599,223 @@ export function MemberPortalApp() {
 
   if (!member) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
+    const portalFieldClass =
+      "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white shadow-inner shadow-black/20 placeholder:text-white/30 focus-visible:border-amber-400/50 focus-visible:ring-amber-400/20"
+    const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-white/45"
+
     return (
       <div
-        className="min-h-[100dvh] bg-white text-[#191919]"
+        className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white"
         style={
           designBackgrounds.loginBackgroundUrl
             ? {
-                backgroundImage: `linear-gradient(rgba(255,255,255,0.82), rgba(255,255,255,0.9)), url(${designBackgrounds.loginBackgroundUrl})`,
+                backgroundImage: `linear-gradient(rgba(8,8,10,0.82), rgba(8,8,10,0.92)), url(${designBackgrounds.loginBackgroundUrl})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }
             : undefined
         }
       >
-        <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 py-7">
-          <div className="mb-8 flex items-center justify-between">
-            <button
-              type="button"
-              aria-label="close"
-              onClick={() => {
-                setAuthPanel(null)
-                setError("")
-                setNotice("")
-              }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e6e6e6] text-[#555] hover:bg-[#f5f5f5]"
-            >
-              <X className="h-5 w-5" />
-            </button>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.14),transparent_42%)]" />
+        <div className="pointer-events-none absolute -left-24 top-32 h-56 w-56 rounded-full bg-[#ef233c]/10 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 bottom-40 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
+
+        <div className="relative mx-auto flex min-h-[100dvh] max-w-lg flex-col px-5 pb-8 pt-6">
+          <div className="mb-10 flex justify-end">
             <MemberPortalLangSelect />
           </div>
-          <div className="mb-11 flex flex-col items-center text-center">
-            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-white p-2">
-              <Image src={brand.logoSymbolSrc} alt={brand.logoAlt} width={62} height={62} className="h-16 w-16 object-contain" />
+
+          <div className="mb-10 flex flex-col items-center text-center">
+            <div className="relative mb-5">
+              <div className="absolute inset-0 scale-110 rounded-[28px] bg-amber-400/20 blur-xl" />
+              <div className="relative flex h-[88px] w-[88px] items-center justify-center rounded-[28px] border border-white/15 bg-white/[0.06] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+                <Image src={brand.logoSymbolSrc} alt={brand.logoAlt} width={64} height={64} className="h-16 w-16 object-contain" />
+              </div>
             </div>
-            <h1 className="mt-1 text-[42px] font-extrabold tracking-tight text-[#ef233c]">{brand.headerWordmark}</h1>
-            <p className="mt-1 max-w-sm text-[17px] leading-relaxed text-[#333]">{t("memberLounge")}</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.28em] text-amber-200/70">{t("memberLounge")}</p>
+            <h1 className="mt-2 bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-[2.35rem] font-bold leading-none tracking-tight text-transparent">
+              {brand.headerWordmark}
+            </h1>
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/50">
+              {t("loginSubtitle")}
+            </p>
           </div>
 
           {!!notice && (
-            <div className="mb-4 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
               {notice}
             </div>
           )}
 
           {!!error && (
-            <div className="mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
               {error}
             </div>
           )}
 
-          <div className="space-y-3.5">
-            <Button
-              className="h-[52px] w-full rounded-md bg-[#2563eb] text-base font-semibold text-white hover:bg-[#1d4ed8]"
-              disabled={!lineLoginEnabled}
-              onClick={() => {
-                window.location.href = "/api/member-portal/auth/line/start"
-              }}
-            >
-              <span className="inline-flex items-center gap-2 text-[15px]">
-                <span className="scale-90">
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <div className="mb-4 flex items-center gap-2 text-white/70">
+              <Sparkles className="h-4 w-4 text-amber-300/80" aria-hidden />
+              <p className="text-sm font-medium tracking-wide">{t("lineLoginDesc")}</p>
+            </div>
+
+            <div className="space-y-3">
+              <Button
+                className="h-14 w-full rounded-2xl border-0 bg-[#06C755] text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(6,199,85,0.28)] transition hover:bg-[#05b34c] disabled:opacity-50"
+                disabled={!lineLoginEnabled}
+                onClick={() => {
+                  window.location.href = "/api/member-portal/auth/line/start"
+                }}
+              >
+                <span className="inline-flex items-center gap-3">
                   <LineLogo />
+                  {lineLoginEnabled ? t("lineBtnWithLogo") : t("lineLoginPreparing")}
                 </span>
-                {lineLoginEnabled ? t("lineBtnWithLogo") : t("lineLoginPreparing")}
-              </span>
-            </Button>
+              </Button>
 
-            <button
-              type="button"
-              onClick={() => setAuthPanel((prev) => (prev === "signup" ? null : "signup"))}
-              className="h-[52px] w-full rounded-md bg-[#ef233c] px-4 text-base font-semibold text-white transition hover:bg-[#d90429]"
-            >
-              {t("signupBtn")}
-            </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthPanel((prev) => (prev === "signup" ? null : "signup"))
+                    setError("")
+                  }}
+                  className={`h-[50px] rounded-2xl px-3 text-sm font-semibold transition ${
+                    authPanel === "signup"
+                      ? "bg-gradient-to-br from-[#ef233c] to-[#c1121f] text-white shadow-[0_8px_24px_rgba(239,35,60,0.25)]"
+                      : "border border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.07]"
+                  }`}
+                >
+                  {t("signupBtn")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthPanel((prev) => (prev === "login" ? null : "login"))
+                    setError("")
+                  }}
+                  className={`h-[50px] rounded-2xl px-3 text-sm font-semibold transition ${
+                    authPanel === "login"
+                      ? "border border-amber-400/40 bg-amber-400/10 text-amber-100"
+                      : "border border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.07]"
+                  }`}
+                >
+                  {t("loginBtn")}
+                </button>
+              </div>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => setAuthPanel((prev) => (prev === "login" ? null : "login"))}
-              className="h-[52px] w-full rounded-md border border-[#d9d9d9] bg-white px-4 text-base font-medium text-[#222] transition hover:bg-[#f8f8f8]"
-            >
-              {t("loginBtn")}
-            </button>
+            {authPanel === "signup" ? (
+              <div className="mt-5 border-t border-white/10 pt-5">
+                <p className="mb-4 text-sm font-medium text-white/80">{t("signupTitle")}</p>
+                <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("signupNameLabel")}</Label>
+                    <Input
+                      value={signupName}
+                      onChange={(e) => setSignupName(e.target.value)}
+                      placeholder={t("signupNameLabel")}
+                      className={portalFieldClass}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("phoneLabel")}</Label>
+                    <Input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="0812345678"
+                      inputMode="tel"
+                      className={portalFieldClass}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("birthDateLabel")}</Label>
+                    <BirthDateFields value={birthDate} onChange={setBirthDate} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("genderLabel")}</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["M", "F"] as const).map((value) => {
+                        const active = signupGender === value
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setSignupGender(value)}
+                            className={`h-11 rounded-2xl border text-sm font-medium transition ${
+                              active
+                                ? "border-[#ef233c]/60 bg-[#ef233c]/90 text-white"
+                                : "border-white/10 bg-white/[0.04] text-white/80 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            {value === "M" ? t("genderMale") : t("genderFemale")}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={signupWithPhoneBirth}
+                    disabled={
+                      actionLoading ||
+                      !signupName.trim() ||
+                      !normalizeMemberPhone(phone) ||
+                      !birthDateReady ||
+                      !signupGender
+                    }
+                    className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#ef233c] to-[#d90429] text-base font-semibold text-white shadow-[0_8px_24px_rgba(239,35,60,0.22)] hover:from-[#d90429] hover:to-[#b9132a]"
+                  >
+                    {actionLoading ? t("signupChecking") : t("signupBtn")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {authPanel === "login" ? (
+              <div className="mt-5 border-t border-white/10 pt-5">
+                <p className="mb-4 text-sm font-medium text-white/80">{t("phoneBirthTitle")}</p>
+                <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("phoneLabel")}</Label>
+                    <Input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="0812345678"
+                      inputMode="tel"
+                      className={portalFieldClass}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("birthDateLabel")}</Label>
+                    <BirthDateFields value={birthDate} onChange={setBirthDate} />
+                  </div>
+                  <Button
+                    onClick={loginWithPhoneBirth}
+                    disabled={actionLoading || !normalizeMemberPhone(phone) || !birthDateReady}
+                    className="h-12 w-full rounded-2xl border border-amber-400/30 bg-amber-400/10 text-base font-semibold text-amber-50 hover:bg-amber-400/15"
+                  >
+                    {actionLoading ? t("loginChecking") : t("loginBtn")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          {authPanel === "signup" ? (
-            <div className="mt-4 rounded-2xl border border-[#ececec] bg-white p-4">
-              <p className="mb-3 text-sm font-medium text-[#333]">{t("signupTitle")}</p>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[#555]">{t("signupNameLabel")}</Label>
-                  <Input
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    placeholder={t("signupNameLabel")}
-                    className="h-11 rounded-xl border-[#ddd] bg-white text-[#222] placeholder:text-[#999]"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[#555]">{t("phoneLabel")}</Label>
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="0812345678"
-                    inputMode="tel"
-                    className="h-11 rounded-xl border-[#ddd] bg-white text-[#222] placeholder:text-[#999]"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[#555]">{t("birthDateLabel")}</Label>
-                  <BirthDateFields value={birthDate} onChange={setBirthDate} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[#555]">{t("genderLabel")}</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["M", "F"] as const).map((value) => {
-                      const active = signupGender === value
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setSignupGender(value)}
-                          className={`h-11 rounded-xl border text-sm font-medium transition ${
-                            active
-                              ? "border-[#ef233c] bg-[#ef233c] text-white"
-                              : "border-[#ddd] bg-white text-[#222] hover:bg-[#f8f8f8]"
-                          }`}
-                        >
-                          {value === "M" ? t("genderMale") : t("genderFemale")}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                <Button
-                  onClick={signupWithPhoneBirth}
-                  disabled={
-                    actionLoading ||
-                    !signupName.trim() ||
-                    !normalizeMemberPhone(phone) ||
-                    !birthDateReady ||
-                    !signupGender
-                  }
-                  className="h-11 w-full rounded-lg bg-[#ef233c] text-base font-semibold text-white hover:bg-[#d90429]"
-                >
-                  {actionLoading ? t("signupChecking") : t("signupBtn")}
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          {authPanel === "login" ? (
-            <div className="mt-4 rounded-2xl border border-[#ececec] bg-white p-4">
-              <p className="mb-3 text-sm font-medium text-[#333]">{t("phoneBirthTitle")}</p>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[#555]">{t("phoneLabel")}</Label>
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="0812345678"
-                    inputMode="tel"
-                    className="h-11 rounded-xl border-[#ddd] bg-white text-[#222] placeholder:text-[#999]"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[#555]">{t("birthDateLabel")}</Label>
-                  <BirthDateFields value={birthDate} onChange={setBirthDate} />
-                </div>
-                <Button
-                  onClick={loginWithPhoneBirth}
-                  disabled={actionLoading || !normalizeMemberPhone(phone) || !birthDateReady}
-                  className="h-11 w-full rounded-lg border border-[#d9d9d9] bg-white text-base font-semibold text-[#222] hover:bg-[#f8f8f8]"
-                >
-                  {actionLoading ? t("loginChecking") : t("loginBtn")}
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-auto pt-12 text-center">
+          <div className="mt-auto pt-10 text-center">
             <button
               type="button"
-              className="text-[18px] font-medium text-[#d72c47] transition hover:opacity-80"
+              className="text-sm font-medium text-amber-200/90 transition hover:text-amber-100"
               onClick={() => {
                 setContactMenuOpen(true)
               }}
             >
               {t("footerContactUs")}
             </button>
-            <p className="mt-4 text-[12px] leading-relaxed text-[#8a8a8a]">
+            <p className="mt-4 text-[11px] leading-relaxed text-white/40">
               {t("footerLegalIntro")}{" "}
               <button
                 type="button"
-                className="text-[#d72c47] underline underline-offset-2"
+                className="text-amber-200/80 underline underline-offset-2 hover:text-amber-100"
                 onClick={() => {
                   window.location.href = "/m/terms"
                 }}
@@ -774,7 +825,7 @@ export function MemberPortalApp() {
               /{" "}
               <button
                 type="button"
-                className="text-[#d72c47] underline underline-offset-2"
+                className="text-amber-200/80 underline underline-offset-2 hover:text-amber-100"
                 onClick={() => {
                   window.location.href = "/m/privacy"
                 }}
@@ -783,23 +834,23 @@ export function MemberPortalApp() {
               </button>
               .
             </p>
-            <p className="mt-2 text-[11px] leading-relaxed text-[#9a9a9a]">{t("footerPrivacy")}</p>
           </div>
 
           {contactMenuOpen ? (
-            <div className="fixed inset-0 z-50 flex items-end bg-black/35">
+            <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm">
               <button
                 type="button"
                 className="absolute inset-0"
                 aria-label="close contact menu"
                 onClick={() => setContactMenuOpen(false)}
               />
-              <div className="relative w-full rounded-t-3xl bg-white px-5 pb-8 pt-5 shadow-2xl">
-                <p className="mb-4 text-center text-sm font-medium text-[#333]">{t("contactMenuTitle")}</p>
-                <div className="space-y-2">
+              <div className="relative w-full rounded-t-[28px] border border-white/10 bg-[#121214] px-5 pb-8 pt-5 shadow-2xl">
+                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" />
+                <p className="mb-4 text-center text-sm font-medium text-white/80">{t("contactMenuTitle")}</p>
+                <div className="space-y-2.5">
                   <button
                     type="button"
-                    className="h-12 w-full rounded-lg bg-[#1877F2] text-sm font-semibold text-white"
+                    className="h-12 w-full rounded-2xl bg-[#1877F2] text-sm font-semibold text-white shadow-lg"
                     onClick={() => {
                       window.open(contactUrls.facebookUrl, "_blank")
                       setContactMenuOpen(false)
@@ -809,7 +860,7 @@ export function MemberPortalApp() {
                   </button>
                   <button
                     type="button"
-                    className="h-12 w-full rounded-lg bg-[#E1306C] text-sm font-semibold text-white"
+                    className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#833AB4] via-[#E1306C] to-[#F77737] text-sm font-semibold text-white shadow-lg"
                     onClick={() => {
                       window.open(contactUrls.instagramUrl, "_blank")
                       setContactMenuOpen(false)
@@ -819,7 +870,7 @@ export function MemberPortalApp() {
                   </button>
                   <button
                     type="button"
-                    className="h-11 w-full rounded-lg border border-[#ddd] bg-white text-sm font-medium text-[#222]"
+                    className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-medium text-white/80"
                     onClick={() => setContactMenuOpen(false)}
                   >
                     {t("contactMenuClose")}
@@ -955,37 +1006,6 @@ export function MemberPortalApp() {
               </div>
             ) : null}
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-              <div className="mb-3">
-                <p className="text-sm font-medium">{t("quickOrderTitle")}</p>
-                <p className="mt-1 text-xs text-white/45">{t("quickOrderDesc")}</p>
-                {favoriteStore ? (
-                  <p className="mt-2 text-xs text-amber-300/90">
-                    {t("quickOrderStoreHint", { store: favoriteStore.displayName })}
-                  </p>
-                ) : null}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  onClick={() => {
-                    window.location.href = buildPosHref("pickup")
-                  }}
-                  className="h-11 rounded-2xl bg-amber-400 text-sm font-medium text-black hover:bg-amber-300"
-                >
-                  {t("quickOrderPickup")}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    window.location.href = buildPosHref("delivery")
-                  }}
-                  className="h-11 rounded-2xl border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
-                >
-                  {t("quickOrderDelivery")}
-                </Button>
-              </div>
-            </div>
-
             <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-amber-400/10 to-transparent p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1034,38 +1054,15 @@ export function MemberPortalApp() {
           </div>
         )}
 
-        {tab === "order" && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">{t("orderTitle")}</h2>
-              <p className="text-sm text-white/45">{t("orderDesc")}</p>
-            </div>
-            <div className="grid gap-3">
-              <Button
-                onClick={() => {
-                  window.location.href = buildPosHref("pickup")
-                }}
-                className="h-12 rounded-2xl bg-amber-400 text-base font-medium text-black hover:bg-amber-300"
-              >
-                {t("orderPickupBtn")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  window.location.href = buildPosHref("delivery")
-                }}
-                className="h-12 rounded-2xl border-white/20 bg-white/5 text-white hover:bg-white/10"
-              >
-                {t("orderDeliveryBtn")}
-              </Button>
-            </div>
-            {favoriteStore ? (
-              <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
-                {t("quickOrderStoreHint", { store: favoriteStore.displayName })}
-              </div>
-            ) : null}
-          </div>
-        )}
+        {tab === "order" && member ? (
+          <MemberPortalOrderTab
+            lang={lang}
+            t={t}
+            member={member}
+            stores={stores}
+            favoriteStoreCode={favoriteStoreCode}
+          />
+        ) : null}
 
         {tab === "location" && (
           <div className="space-y-4">
