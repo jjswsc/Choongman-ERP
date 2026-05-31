@@ -14,7 +14,9 @@ export {
   removeFromQueue,
   updateQueueItem,
   OFFLINE_QUEUE_MAX_RETRIES,
+  filterPendingRequestsByScope,
   type PendingRequest,
+  type OfflineQueueScope,
 } from './queue'
 export {
   formatQueuedAtBangkok,

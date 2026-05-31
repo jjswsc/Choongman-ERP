@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, CheckCircle2, Printer, RotateCw, Save } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Printer, RotateCw, Save, WandSparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,18 +12,11 @@ import {
 } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
 import { tr, useT } from '@/lib/i18n'
-
-type PrinterRow = { name: string; displayName: string; isDefault: boolean }
-
-type PrintConfig = {
-  silent?: boolean
-  deviceName?: string | null
-  receiptDeviceName?: string | null
-  kitchen1DeviceName?: string | null
-  kitchen2DeviceName?: string | null
-  kitchen3DeviceName?: string | null
-  kitchenDeviceName?: string | null
-}
+import {
+  inspectPosHybridPrintHealth,
+  type PosHybridPrintConfig as PrintConfig,
+  type PosHybridPrinterRow as PrinterRow,
+} from '@/lib/pos-hybrid-print-health'
 
 type EditablePrintConfig = {
   silent: boolean
@@ -33,6 +26,65 @@ type EditablePrintConfig = {
   kitchen1DeviceName: string
   kitchen2DeviceName: string
   kitchen3DeviceName: string
+}
+
+type EditableStringField = Exclude<keyof EditablePrintConfig, 'silent'>
+
+type AutoRepairSummary = {
+  next: EditablePrintConfig
+  changedFields: Array<keyof EditablePrintConfig>
+}
+
+const AUTO_REPAIR_FIELDS: EditableStringField[] = [
+  'deviceName',
+  'receiptDeviceName',
+  'kitchenDeviceName',
+  'kitchen1DeviceName',
+  'kitchen2DeviceName',
+  'kitchen3DeviceName',
+]
+
+function normalizePrinterToken(raw: unknown): string {
+  return String(raw || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
+function autoRepairDraft(params: {
+  draft: EditablePrintConfig
+  printers: PrinterRow[]
+}): AutoRepairSummary {
+  const changedFields: Array<keyof EditablePrintConfig> = []
+  const next: EditablePrintConfig = { ...params.draft }
+  const printers = Array.isArray(params.printers) ? params.printers : []
+  const byNormalized = new Map<string, string>()
+  for (const p of printers) {
+    const name = String(p.name || '').trim()
+    if (!name) continue
+    byNormalized.set(normalizePrinterToken(name), name)
+    const display = String(p.displayName || '').trim()
+    if (display) byNormalized.set(normalizePrinterToken(display), name)
+  }
+
+  for (const key of AUTO_REPAIR_FIELDS) {
+    const raw = String(next[key] || '').trim()
+    if (!raw) continue
+    const canonical = byNormalized.get(normalizePrinterToken(raw))
+    if (!canonical) continue
+    if (canonical === raw) continue
+    next[key] = canonical
+    changedFields.push(key as keyof EditablePrintConfig)
+  }
+
+  const defaultPrinter = printers.find((p) => p.isDefault)
+  const defaultName = String(defaultPrinter?.name || '').trim()
+  if (defaultName && !String(next.receiptDeviceName || '').trim()) {
+    next.receiptDeviceName = defaultName
+    changedFields.push('receiptDeviceName')
+  }
+
+  return { next, changedFields }
 }
 
 function normalizeConfigForEdit(cfg: PrintConfig | null): EditablePrintConfig {
@@ -139,6 +191,21 @@ export function PosHybridPrintDiagnosticsButton() {
     }
   }, [draft, shell, t])
 
+  const onAutoRepair = React.useCallback(() => {
+    const repaired = autoRepairDraft({ draft, printers })
+    if (repaired.changedFields.length === 0) {
+      setSaveMessage(t('posShellPrintDiagnosticsAutoRepairNoChange'))
+      return
+    }
+    setDraft(repaired.next)
+    setError(null)
+    setSaveMessage(
+      tr(t, 'posShellPrintDiagnosticsAutoRepairDone', {
+        count: repaired.changedFields.length,
+      })
+    )
+  }, [draft, printers, t])
+
   const fieldDefs = React.useMemo(
     () =>
       [
@@ -215,16 +282,11 @@ export function PosHybridPrintDiagnosticsButton() {
     ? `${defaultPrinter.name}${defaultPrinter.displayName && defaultPrinter.displayName !== defaultPrinter.name ? ` (${defaultPrinter.displayName})` : ''}`
     : ''
 
-  const hasExplicitPrintDevices =
-    !!config &&
-    Boolean(
-      (config.deviceName && String(config.deviceName).trim()) ||
-        (config.receiptDeviceName && String(config.receiptDeviceName).trim()) ||
-        (config.kitchenDeviceName && String(config.kitchenDeviceName).trim()) ||
-        (config.kitchen1DeviceName && String(config.kitchen1DeviceName).trim()) ||
-        (config.kitchen2DeviceName && String(config.kitchen2DeviceName).trim()) ||
-        (config.kitchen3DeviceName && String(config.kitchen3DeviceName).trim())
-    )
+  const healthSummary = React.useMemo(
+    () => inspectPosHybridPrintHealth({ printers, config }),
+    [printers, config]
+  )
+  const hasExplicitPrintDevices = healthSummary.hasExplicitPrintDevices
 
   const nullHint = t('posShellPrintDiagnosticsRuntimeNullExplain')
 
@@ -251,8 +313,7 @@ export function PosHybridPrintDiagnosticsButton() {
     [t, config, loading]
   )
 
-  const usesOnlyWindowsDefault =
-    !loading && Boolean(config) && !hasExplicitPrintDevices && Boolean(defaultPrinterLabel)
+  const usesOnlyWindowsDefault = !loading && healthSummary.usesOnlyWindowsDefault
 
   const checklistItems: Array<{ title: string; done: boolean; hint: string }> = [
     {
@@ -311,6 +372,16 @@ export function PosHybridPrintDiagnosticsButton() {
               {t('posShellPrintDiagnosticsGuide')}
             </p>
             <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading || saving}
+                onClick={onAutoRepair}
+              >
+                <WandSparkles className="mr-1 h-3.5 w-3.5" />
+                {t('posShellPrintDiagnosticsAutoRepair')}
+              </Button>
               <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load()}>
                 <RotateCw className={`mr-1 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
                 {t('posShellPrintDiagnosticsRefresh')}

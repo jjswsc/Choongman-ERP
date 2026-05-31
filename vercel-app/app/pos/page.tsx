@@ -54,7 +54,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { appAlert } from '@/lib/app-message'
-import { drawerOpenOptionFromPrinterSettings } from '@/lib/pos-cash-drawer'
+import {
+  drawerOpenOptionFromPrinterSettings,
+  formatPosCashDrawerFailureMessage,
+  shouldWarnPosCashDrawerFailure,
+} from '@/lib/pos-cash-drawer'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { PosDrawerPinSettingsDialog } from '@/components/pos/pos-drawer-pin-settings-dialog'
 
@@ -281,11 +285,14 @@ function POSMainPageInner() {
           userName: auth?.user,
           drawerOpenOption: drawerOpenOptionFromPrinterSettings(hw),
         })
-        if (!dr.success && !businessNavDrawerWarnedRef.current) {
+        if (dr.success) {
+          // 성공하면 경고 플래그를 풀어 이후 실제 실패를 다시 감지한다.
+          businessNavDrawerWarnedRef.current = false
+        }
+        if (!dr.success && shouldWarnPosCashDrawerFailure(dr.error) && !businessNavDrawerWarnedRef.current) {
           businessNavDrawerWarnedRef.current = true
           await appAlert(
-            t('posDrawerOpenBridgeFail') ||
-              '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.'
+            formatPosCashDrawerFailureMessage(t, dr.error)
           )
         }
       }

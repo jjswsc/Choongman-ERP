@@ -12,6 +12,13 @@ export const i18n = {
     all: '전체',
     status: '상태',
     search: '검색',
+    today: '오늘',
+    custom: '직접 선택',
+    last7Days: '최근 7일',
+    last30Days: '최근 30일',
+    dateTime: '시간',
+    create: '추가',
+    manager: '담당자',
     loading: '불러오는 중...',
     cancel: '취소',
     btnSelect: '선택',
@@ -4717,6 +4724,18 @@ export const i18n = {
     posPrinterCopyWorking: '가져오는 중…',
     posDrawerOpenBridgeFail:
       '돈통 열기에 실패했습니다. Windows 하이브리드(Choongman POS)는 최신 설치본인지, runtime-config에 영수증 프린터명(print.receiptDeviceName)이 맞는지 확인해 주세요. 웹 전용·별도 브리지로 쓰는 경우에는 127.0.0.1:18181 드로어 브리지가 실행 중인지 확인해 주세요.',
+    posDrawerOpenErrForbidden:
+      '돈통 열기 권한이 없습니다. Windows 하이브리드 POS 앱에서 다시 시도해 주세요.',
+    posDrawerOpenErrNoPrinter:
+      '영수증 프린터가 지정되지 않았습니다. 프린터 점검에서 receiptDeviceName을 확인해 주세요.',
+    posDrawerOpenErrDrawerKickFailed:
+      '프린터에는 연결되었지만 돈통 열기 명령이 실패했습니다. 돈통 케이블/드라이버를 확인해 주세요.',
+    posDrawerOpenErrShellException:
+      'POS 앱 내부 통신 오류로 돈통 열기에 실패했습니다. 앱을 재시작한 뒤 다시 시도해 주세요.',
+    posDrawerOpenErrAllLocalBridgeFailed:
+      '로컬 브리지 연결에 실패했습니다. 브리지 프로그램 실행 상태를 확인해 주세요.',
+    posDrawerOpenErrBridgeResponseFailed:
+      '브리지 응답은 왔지만 성공으로 확인되지 않았습니다. 브리지 로그를 확인해 주세요.',
     posPrinterSavedQueued:
       '저장 요청이 대기 중입니다. 네트워크가 복구되면 서버에 반영됩니다. 지금 새로고침하면 예전 설정이 보일 수 있습니다.',
     posReceiptImageOnly: '{{label}}: 이미지 파일만 업로드할 수 있습니다.',
@@ -5828,6 +5847,19 @@ export const i18n = {
     posShellPrintDiagnosticsHint:
       'Windows에 등록된 프린터와 runtime-config 인쇄 설정을 비교합니다. 이름은 PowerShell Get-Printer의 Name과 동일해야 합니다.',
     posShellPrintDiagnosticsGuide: '점검 순서: 목록 새로고침 → 프린터명 확인 → 필요 시 저장',
+    posShellPrintDiagnosticsAutoRepair: '원클릭 자동 맞춤',
+    posShellPrintDiagnosticsAutoRepairDone: '이름/매핑 자동 보정 {count}건을 적용했습니다. 저장해 반영하세요.',
+    posShellPrintDiagnosticsAutoRepairNoChange: '자동 보정할 항목이 없습니다.',
+    posShellStartupHealthWarnTitle: '프린터 자동 점검에서 주의 항목이 발견되었습니다.',
+    posShellStartupHealthWarnBody:
+      '현재 설정이면 주문/영수증 출력이 불안정할 수 있습니다. 상단 `프린터 점검`에서 이름 일치와 매핑을 확인해 주세요.',
+    posShellStartupHealthWarnMismatch:
+      'runtime-config의 프린터명이 현재 Windows 프린터 목록과 불일치합니다.',
+    posShellStartupHealthWarnNoExplicit:
+      '개별 출력 프린터가 지정되지 않아 Windows 기본 프린터로만 출력될 수 있습니다.',
+    posShellStartupHealthWarnDefaultOnly:
+      '현재는 기본 프린터 의존 상태입니다. 영수증/주방 프린터를 분리 지정하세요.',
+    posShellStartupHealthWarnAction: '지금 `프린터 점검`에서 다시 읽기 후 저장해 주세요.',
     posShellPrintDiagnosticsMatchHint: '입력값은 위 프린터 이름과 한 글자까지 동일해야 정상 동작합니다.',
     posShellPrintDiagnosticsRefresh: '다시 읽기',
     posShellPrintDiagnosticsRuntime: 'runtime-config (무인쇄 대상)',
@@ -7414,7 +7446,7 @@ export const i18n = {
     helpSum_admin_pos_cost_analysis:
       'POS 메뉴별 홀·배달 판매가와 원가·원가율을 조회하고, 재료 구성·배합(소스) 단가·원가 계산기로 검토·저장하는 화면입니다.',
     helpHow_admin_pos_cost_analysis:
-      '① 목록: 대분류·카테고리·검색어를 정한 뒤「조회」로 불러옵니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다. 행을 누르면「원가 계산기」탭으로 이동해 그 메뉴(옵션)가 열립니다.\n② 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다. 상단 요약의 평균 원가율은 원가율이 0%인 메뉴는 홀/배달 각각 평균에서 제외될 수 있습니다.\n③ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 관리하고, 재계산으로 메뉴 원가에 쓰이는 배합비를 갱신합니다.\n④ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 수량·로스를 수정하고 저장하면 POS 메뉴 원가에 반영됩니다. 편집은 본사(오피스) 등 권한이 있는 역할만 가능할 수 있습니다.\n⑤ 자세한 단계는「도움말」본문을 참고하고, 끝나면「화면으로 돌아가기」로 목록으로 돌아오세요.',
+      '① 목록: 대분류·카테고리·검색어를 정한 뒤「조회」로 불러옵니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다. 행을 누르면「원가 계산기」탭으로 이동해 그 메뉴(옵션)가 열립니다.\n② 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다. 상단 요약의 평균 원가율은 원가율이 0%인 메뉴는 홀/배달 각각 평균에서 제외될 수 있습니다.\n③ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 관리하고, 재계산으로 메뉴 원가에 쓰이는 배합비를 갱신합니다.\n④ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 수량·로스를 수정하고 저장하면 POS 메뉴 원가에 반영됩니다. 편집은 본사(오피스) 등 권한이 있는 역할만 가능할 수 있습니다.\n⑤ 수정 이력: 기간(오늘/최근 7일/최근 30일/직접)과 검색어를 정한 뒤 반드시「조회」를 눌러야 이력이 표시됩니다. 메뉴·재료·수량·로스·작업유형(추가/수정/삭제)·담당자 정보를 확인할 수 있습니다.\n⑥ 자세한 단계는「도움말」본문을 참고하고, 끝나면「화면으로 돌아가기」로 목록으로 돌아오세요.',
     helpSum_admin_total_sales:
       '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
@@ -8425,6 +8457,9 @@ export const i18n = {
     posMenuImportUpload: '일괄 업로드',
     posCostAnalysis: '원가 분석',
     posCostTabList: '목록',
+    posCostAuditTab: '수정 이력',
+    posCostAuditHint: '원가분석 수정 이력을 확인하려면 [조회]를 누르세요.',
+    posCostAuditSearchPh: '메뉴·재료·담당자 검색',
     posCostSearchPh: '코드·메뉴명·옵션 검색',
     posCostAnalysisSub: '메뉴별 원가·마진·재료 내역. 품목 코드 있음=본사, 없음=매장 구매.',
     posCostEditOfficeOnly: '원가 데이터 수정은 오피스 직원만 가능합니다.',
@@ -8772,6 +8807,13 @@ export const i18n = {
     all: 'All',
     status: 'Status',
     search: 'Search',
+    today: 'Today',
+    custom: 'Custom',
+    last7Days: 'Last 7 days',
+    last30Days: 'Last 30 days',
+    dateTime: 'Date/time',
+    create: 'Add',
+    manager: 'Staff',
     loading: 'Loading...',
     cancel: 'Cancel',
     btnSelect: 'Select',
@@ -13433,6 +13475,9 @@ orderItemQty: 'Qty',
     posTerminalRevokeConfirm: 'Revoke this device? It will be removed from the list until it opens the terminal again.',
     posScreenConfigComingSoon: 'Coming soon.',
     posCostTabList: 'List',
+    posCostAuditTab: 'Change history',
+    posCostAuditHint: 'Set filters and click [Query] to load BOM change history.',
+    posCostAuditSearchPh: 'Search menu, ingredient, staff',
     posCostSearchPh: 'Search code, menu, option',
     posCostCalculator: 'Cost Calculator',
     adminPosPrinters: 'Printer Settings',
@@ -13480,6 +13525,18 @@ orderItemQty: 'Qty',
     posPrinterCopyWorking: 'Importing…',
     posDrawerOpenBridgeFail:
       'Could not open the cash drawer. On Windows hybrid (Choongman POS), use the latest shell build and set the receipt printer in runtime-config (print.receiptDeviceName). If you use the separate Node bridge instead, ensure it is listening on 127.0.0.1:18181.',
+    posDrawerOpenErrForbidden:
+      'No permission to open the cash drawer. Retry from the Windows hybrid POS app.',
+    posDrawerOpenErrNoPrinter:
+      'No receipt printer is configured. Check `receiptDeviceName` in Printer check.',
+    posDrawerOpenErrDrawerKickFailed:
+      'Printer connection is present, but the drawer-kick command failed. Check the drawer cable and driver.',
+    posDrawerOpenErrShellException:
+      'POS shell communication failed while opening the drawer. Restart the app and try again.',
+    posDrawerOpenErrAllLocalBridgeFailed:
+      'Could not reach the local drawer bridge. Confirm the bridge service is running.',
+    posDrawerOpenErrBridgeResponseFailed:
+      'Bridge responded without a success result. Check bridge logs.',
     posPrinterSavedQueued:
       'Save is queued. It will sync when the network is back. Refreshing now may show old settings.',
     posReceiptImageOnly: '{{label}}: Only image files can be uploaded.',
@@ -14590,6 +14647,20 @@ orderItemQty: 'Qty',
     posShellPrintDiagnosticsHint:
       'Compare printers registered in Windows with runtime-config print settings. Names must match PowerShell Get-Printer Name.',
     posShellPrintDiagnosticsGuide: 'Check order: refresh the list → verify the printer name → save if needed',
+    posShellPrintDiagnosticsAutoRepair: 'One-click auto-fix',
+    posShellPrintDiagnosticsAutoRepairDone:
+      'Applied {count} auto-fix item(s) for name/mapping. Save to apply to runtime config.',
+    posShellPrintDiagnosticsAutoRepairNoChange: 'No auto-fixable items were found.',
+    posShellStartupHealthWarnTitle: 'Startup printer check found a risk item.',
+    posShellStartupHealthWarnBody:
+      'Current mapping may cause unstable receipt or kitchen printing. Open `Printer check` and verify name matching.',
+    posShellStartupHealthWarnMismatch:
+      'A runtime-config printer name does not match the current Windows printer list.',
+    posShellStartupHealthWarnNoExplicit:
+      'No explicit print target is set, so output may rely only on the Windows default printer.',
+    posShellStartupHealthWarnDefaultOnly:
+      'The current setup depends on the default printer. Set separate receipt and kitchen devices.',
+    posShellStartupHealthWarnAction: 'Open `Printer check`, reload, and save the corrected mapping.',
     posShellPrintDiagnosticsMatchHint:
       'Values must match a printer name above exactly, character for character, to work correctly.',
     posShellPrintDiagnosticsRefresh: 'Reload',
@@ -16176,7 +16247,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_cost_analysis:
       'Review POS menu hall vs delivery prices, costs, and cost ratios; inspect BOM lines; manage sauce blend costs; edit and save in the cost calculator.',
     helpHow_admin_pos_cost_analysis:
-      '① List: set main category, category, and search text, then press Query to load. Click column headers to sort; use the row chevron to expand ingredient breakdown. Click a row to jump to the Cost calculator tab with that menu/option.\n② Costs and ratios shown include a default mise / en place factor (3%). Summary averages may exclude rows whose cost ratio is 0% for hall or delivery separately.\n③ Blend (sauce) costs: maintain blend recipes and unit costs, then recalculate so menus pick up updated blend values.\n④ Cost calculator: pick menu/option, edit food vs packaging ingredients, quantities, and loss, then save to update POS menu costs. Editing may be limited to head-office roles.\n⑤ Open Help for the full step-by-step guide, then Back to screen when you are done.',
+      '① List: set main category, category, and search text, then press Query to load. Click column headers to sort; use the row chevron to expand ingredient breakdown. Click a row to jump to the Cost calculator tab with that menu/option.\n② Costs and ratios shown include a default mise / en place factor (3%). Summary averages may exclude rows whose cost ratio is 0% for hall or delivery separately.\n③ Blend (sauce) costs: maintain blend recipes and unit costs, then recalculate so menus pick up updated blend values.\n④ Cost calculator: pick menu/option, edit food vs packaging ingredients, quantities, and loss, then save to update POS menu costs. Editing may be limited to head-office roles.\n⑤ Audit trail: set period (today / last 7 days / last 30 days / custom) and keyword, then press Query to load rows. It shows menu, ingredient, quantity, loss rate, action type (insert/update/delete), and actor details.\n⑥ Open Help for the full step-by-step guide, then Back to screen when you are done.',
     helpSum_admin_total_sales:
       'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:
@@ -22686,6 +22757,18 @@ orderItemQty: 'จำนวน',
     posPrinterCopyWorking: 'กำลังนำเข้า…',
     posDrawerOpenBridgeFail:
       'เปิดลิ้นชักเงินไม่ได้: เชื่อมต่อบริดจ์ในเครื่องไม่สำเร็จ ตรวจสอบว่าโปรแกรมบริดจ์บน POS กำลังทำงาน',
+    posDrawerOpenErrForbidden:
+      'ไม่มีสิทธิ์เปิดลิ้นชักเงิน โปรดลองจากแอป POS Hybrid บน Windows',
+    posDrawerOpenErrNoPrinter:
+      'ยังไม่ได้ตั้งเครื่องพิมพ์ใบเสร็จ ตรวจที่ `receiptDeviceName` ในเมนูตรวจเครื่องพิมพ์',
+    posDrawerOpenErrDrawerKickFailed:
+      'เชื่อมต่อเครื่องพิมพ์ได้ แต่คำสั่งเปิดลิ้นชักล้มเหลว ตรวจสายลิ้นชัก/ไดรเวอร์',
+    posDrawerOpenErrShellException:
+      'สื่อสารกับแอป POS ไม่สำเร็จขณะเปิดลิ้นชัก โปรดปิดแล้วเปิดแอปใหม่',
+    posDrawerOpenErrAllLocalBridgeFailed:
+      'เชื่อมต่อบริดจ์ในเครื่องไม่สำเร็จ โปรดตรวจว่าโปรแกรมบริดจ์กำลังทำงาน',
+    posDrawerOpenErrBridgeResponseFailed:
+      'บริดจ์ตอบกลับแล้วแต่ไม่ยืนยันผลสำเร็จ โปรดตรวจ log ของบริดจ์',
     posPrinterSavedQueued:
       'คำขอบันทึกอยู่ในคิว เมื่อเน็ตกลับมาจะซิงก์กับเซิร์ฟเวอร์ รีเฟรชตอนนี้อาจเห็นการตั้งค่าเก่า',
     posReceiptImageOnly: '{{label}}: อัปโหลดได้เฉพาะไฟล์รูปภาพ',
@@ -23926,6 +24009,20 @@ orderItemQty: 'จำนวน',
     posShellPrintDiagnosticsHint:
       'เปรียบเทียบเครื่องพิมพ์ใน Windows กับการตั้งค่าใน runtime-config ชื่อต้องตรงกับ Get-Printer Name ใน PowerShell',
     posShellPrintDiagnosticsGuide: 'ลำดับตรวจ: โหลดรายการใหม่ → ตรวจชื่อเครื่องพิมพ์ → บันทึกเมื่อจำเป็น',
+    posShellPrintDiagnosticsAutoRepair: 'ปรับให้อัตโนมัติในคลิกเดียว',
+    posShellPrintDiagnosticsAutoRepairDone:
+      'ปรับชื่อ/แมปอัตโนมัติแล้ว {count} รายการ โปรดกดบันทึกเพื่อใช้งาน',
+    posShellPrintDiagnosticsAutoRepairNoChange: 'ไม่พบรายการที่ปรับอัตโนมัติได้',
+    posShellStartupHealthWarnTitle: 'ระบบตรวจพิมพ์อัตโนมัติพบความเสี่ยง',
+    posShellStartupHealthWarnBody:
+      'การตั้งค่าปัจจุบันอาจทำให้พิมพ์ใบเสร็จ/ครัวไม่เสถียร โปรดเปิด `ตรวจเครื่องพิมพ์` และตรวจชื่อให้ตรง',
+    posShellStartupHealthWarnMismatch:
+      'ชื่อเครื่องพิมพ์ใน runtime-config ไม่ตรงกับรายการเครื่องพิมพ์ปัจจุบันของ Windows',
+    posShellStartupHealthWarnNoExplicit:
+      'ยังไม่ได้กำหนดเครื่องพิมพ์แบบเจาะจง ระบบอาจพิมพ์ไปที่ค่าเริ่มต้นของ Windows เท่านั้น',
+    posShellStartupHealthWarnDefaultOnly:
+      'ตอนนี้ยังพึ่งเครื่องพิมพ์ค่าเริ่มต้น ควรกำหนดเครื่องพิมพ์ใบเสร็จ/ครัวแยก',
+    posShellStartupHealthWarnAction: 'เข้า `ตรวจเครื่องพิมพ์` แล้วกดโหลดใหม่/บันทึกอีกครั้ง',
     posShellPrintDiagnosticsMatchHint:
       'ค่าที่กรอกต้องตรงกับชื่อเครื่องพิมพ์ด้านบนทุกตัวอักษรจึงจะทำงานได้ถูกต้อง',
     posShellPrintDiagnosticsRefresh: 'โหลดใหม่',

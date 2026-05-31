@@ -32,9 +32,12 @@ import {
   normalQueuedApiPath,
   type SyncSnapshot,
   type PendingRequest,
+  type OfflineQueueScope,
+  filterPendingRequestsByScope,
 } from '@/lib/offline'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { sendPosHealthAlert } from '@/lib/pos-health-alert-client'
 
 interface OfflineBannerProps {
   /** 동기화 완료 시 호출 (todaySales 갱신 등) */
@@ -49,6 +52,8 @@ interface OfflineBannerProps {
   pendingLabel?: string
   /** true: 오프라인일 때만 표시 (매출 관리 등, 주문 대기 건수 무시) */
   offlineOnly?: boolean
+  /** 큐 표시 범위: all(기본) | pos_runtime_critical(주문·결산 등 핵심만) */
+  queueScope?: OfflineQueueScope
 }
 
 export function OfflineBanner({
@@ -58,6 +63,7 @@ export function OfflineBanner({
   retryLabel: retryLabelProp,
   pendingLabel: pendingLabelProp,
   offlineOnly = false,
+  queueScope = 'all',
 }: OfflineBannerProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -76,6 +82,7 @@ export function OfflineBanner({
   const [queueDetailOpen, setQueueDetailOpen] = React.useState(false)
   const [queueDetailItems, setQueueDetailItems] = React.useState<PendingRequest[]>([])
   const [queueDetailLoading, setQueueDetailLoading] = React.useState(false)
+  const deadLetterAlertSigRef = React.useRef<string>('')
 
   const totalQueued = retriableCount + deadLetterCount
 
@@ -88,12 +95,12 @@ export function OfflineBanner({
   )
 
   const refreshPending = React.useCallback(() => {
-    getOfflineQueueCounts()
+    getOfflineQueueCounts({ scope: queueScope })
       .then(async ({ retriable, dead }) => {
         setRetriableCount(retriable)
         setDeadLetterCount(dead)
         try {
-          const hint = await getOfflineQueueErrorHint()
+          const hint = await getOfflineQueueErrorHint({ scope: queueScope })
           setLastErrorHint(hint)
         } catch {
           setLastErrorHint(null)
@@ -104,7 +111,7 @@ export function OfflineBanner({
         setDeadLetterCount(0)
         setLastErrorHint(null)
       })
-  }, [])
+  }, [queueScope])
 
   const triggerSyncNow = React.useCallback(() => {
     if (syncing) return
@@ -157,6 +164,50 @@ export function OfflineBanner({
     })
   }, [])
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (deadLetterCount <= 0) return
+    const signature = `${deadLetterCount}:${(lastErrorHint || '').trim()}`
+    if (deadLetterAlertSigRef.current === signature) return
+
+    const now = Date.now()
+    const storageKey = 'cm-pos-dead-letter-alert-last-v1'
+    let prevAt = 0
+    let prevSig = ''
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { at?: number; sig?: string }
+        prevAt = Number(parsed?.at || 0)
+        prevSig = String(parsed?.sig || '')
+      }
+    } catch {
+      prevAt = 0
+      prevSig = ''
+    }
+
+    const throttled = now - prevAt < 15 * 60 * 1000
+    if (throttled && prevSig === signature) return
+    deadLetterAlertSigRef.current = signature
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ at: now, sig: signature }))
+    } catch {
+      // ignore
+    }
+
+    void sendPosHealthAlert({
+      eventType: 'offline_dead_letter_detected',
+      payload: {
+        pathname: window.location.pathname,
+        deadLetterCount,
+        retriableCount,
+        lastErrorHint: (lastErrorHint || '').trim() || null,
+        userAgent: navigator.userAgent,
+      },
+    })
+  }, [deadLetterCount, lastErrorHint, retriableCount])
+
   const lastSyncAtText = React.useMemo(() => {
     const ts = syncSnapshot.lastSuccessAt
     if (!ts) return '-'
@@ -196,14 +247,15 @@ export function OfflineBanner({
     setQueueDetailLoading(true)
     try {
       const all = await getAllPending()
-      all.sort((a, b) => a.createdAt - b.createdAt)
-      setQueueDetailItems(all)
+      const scoped = filterPendingRequestsByScope(all, queueScope)
+      scoped.sort((a, b) => a.createdAt - b.createdAt)
+      setQueueDetailItems(scoped)
     } catch {
       setQueueDetailItems([])
     } finally {
       setQueueDetailLoading(false)
     }
-  }, [])
+  }, [queueScope])
 
   if (offlineOnly && online) return null
   if (!offlineOnly && online && totalQueued === 0) return null

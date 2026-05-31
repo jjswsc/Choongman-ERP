@@ -199,6 +199,10 @@ import {
 } from '@/lib/pos-grab-cancel-alert-suppress'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import {
+  formatPosCashDrawerFailureMessage,
+  shouldWarnPosCashDrawerFailure,
+} from '@/lib/pos-cash-drawer'
+import {
   publishPosCustomerDisplayState,
   type PosCustomerDisplayPayload,
 } from '@/lib/pos-customer-display-state'
@@ -5054,12 +5058,13 @@ export default function PosTerminalPage() {
         userName: auth?.user || '',
         drawerOpenOption,
       })
-      if (!res.success && !drawerOpenWarnedRef.current) {
+      if (res.success) {
+        // 성공 시 이전 실패 경고 상태를 즉시 해제해 다음 실패를 정확히 알린다.
+        drawerOpenWarnedRef.current = false
+      }
+      if (!res.success && shouldWarnPosCashDrawerFailure(res.error) && !drawerOpenWarnedRef.current) {
         drawerOpenWarnedRef.current = true
-        await appAlert(
-          (t('posDrawerOpenBridgeFail') ||
-            '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.')
-        )
+        await appAlert(formatPosCashDrawerFailureMessage(t, res.error))
       }
     },
     [isPosDemo, currentStoreId, auth?.user, drawerOpenOption, t, openPosCashDrawerSecure]
@@ -8004,7 +8009,7 @@ export default function PosTerminalPage() {
           setIsMainPosDevice(v)
         }}
       />
-      <OfflineBanner onSyncComplete={refetchCurrentStore} />
+      <OfflineBanner onSyncComplete={refetchCurrentStore} queueScope="pos_runtime_critical" />
       <div
         className={cn(
           'flex-1 flex min-h-0 min-w-0',

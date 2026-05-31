@@ -24,6 +24,67 @@ export type PosCashDrawerOpenResult = {
   error?: string
 }
 
+export function shouldWarnPosCashDrawerFailure(errorRaw: unknown): boolean {
+  const error = String(errorRaw || '').trim()
+  if (!error) return true
+  if (error === 'pin_cancelled') return false
+  if (error === 'store_required') return false
+  return true
+}
+
+export function formatPosCashDrawerFailureMessage(
+  t: (key: string) => string,
+  errorRaw: unknown
+): string {
+  const tx = (key: string, fallback: string) => {
+    const s = t(key)
+    return !s || s === key ? fallback : s
+  }
+  const error = String(errorRaw || '').trim()
+  if (!error) return tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')
+  if (error.startsWith('shell:')) {
+    const shellReason = error.slice('shell:'.length)
+    if (shellReason === 'forbidden') {
+      return tx(
+        'posDrawerOpenErrForbidden',
+        'POS 앱 권한으로 돈통을 열 수 없습니다. 하이브리드 앱에서 다시 시도해 주세요.'
+      )
+    }
+    if (shellReason === 'no_printer') {
+      return tx(
+        'posDrawerOpenErrNoPrinter',
+        '영수증 프린터가 지정되지 않아 돈통을 열 수 없습니다. 프린터 점검에서 receiptDeviceName을 확인해 주세요.'
+      )
+    }
+    if (shellReason === 'drawer_kick_failed') {
+      return tx(
+        'posDrawerOpenErrDrawerKickFailed',
+        '프린터에는 연결되었지만 돈통 킥 명령이 실패했습니다. 프린터/돈통 케이블과 드라이버를 확인해 주세요.'
+      )
+    }
+    if (shellReason === 'shell_exception') {
+      return tx(
+        'posDrawerOpenErrShellException',
+        'POS 하이브리드 앱 내부 통신 오류로 돈통 열기에 실패했습니다. 앱을 재시작해 주세요.'
+      )
+    }
+    return tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')
+  }
+  if (error === 'all_local_bridge_endpoints_failed') {
+    return tx(
+      'posDrawerOpenErrAllLocalBridgeFailed',
+      '로컬 브리지 연결에 실패했습니다. POS 브릿지 서비스 실행 상태를 확인해 주세요.'
+    )
+  }
+  if (error === 'bridge_response_failed') {
+    return tx(
+      'posDrawerOpenErrBridgeResponseFailed',
+      '브리지 응답은 왔지만 성공으로 확인되지 않았습니다. 브리지 로그를 확인해 주세요.'
+    )
+  }
+  return tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')
+}
+
 export function drawerOpenOptionFromPrinterSettings(
   settings: { drawerOpenOption?: string } | null | undefined
 ): 'password_and_reason' | 'reason_only' | 'force' {

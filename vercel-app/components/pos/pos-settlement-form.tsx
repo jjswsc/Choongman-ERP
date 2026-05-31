@@ -1191,6 +1191,7 @@ ${footerStamp}
           offlineMsg={t('posSettlementOfflineSaved') || '오프라인 모드 - 결산이 로컬에 저장됩니다. 복구 후 자동 전송됩니다.'}
           syncingMsg={t('posSyncing') || '동기화 중...'}
           retryLabel={t('posRetrySync') || '재시도'}
+          queueScope="pos_runtime_critical"
         />
         <div className={cn('flex flex-wrap items-start gap-3', compact ? 'mb-4' : 'mb-6')}>
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

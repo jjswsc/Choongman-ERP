@@ -30,7 +30,11 @@ import { isOfficeRole } from '@/lib/permissions'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { cn } from '@/lib/utils'
-import { drawerOpenOptionFromPrinterSettings } from '@/lib/pos-cash-drawer'
+import {
+  drawerOpenOptionFromPrinterSettings,
+  formatPosCashDrawerFailureMessage,
+  shouldWarnPosCashDrawerFailure,
+} from '@/lib/pos-cash-drawer'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 
@@ -252,11 +256,14 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
           userName: auth?.user,
           drawerOpenOption,
         })
-        if (!dr.success && !tillDepositDrawerWarnedRef.current) {
+        if (dr.success) {
+          // 성공 시 경고 상태 자동 해제
+          tillDepositDrawerWarnedRef.current = false
+        }
+        if (!dr.success && shouldWarnPosCashDrawerFailure(dr.error) && !tillDepositDrawerWarnedRef.current) {
           tillDepositDrawerWarnedRef.current = true
           await appAlert(
-            t('posDrawerOpenBridgeFail') ||
-              '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.'
+            formatPosCashDrawerFailureMessage(t, dr.error)
           )
         }
       }
@@ -470,6 +477,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
         offlineMsg={t('posLocalOfflineNotice')}
         syncingMsg={t('posSyncing') || '동기화 중...'}
         retryLabel={t('posRetrySync') || '재시도'}
+        queueScope="pos_runtime_critical"
       />
 
       {(balanceCardAmount != null || completedCash != null) && (

@@ -7,6 +7,7 @@ import { getDB, STORES } from './db'
 /** `sync.ts`와 동일 — 이 횟수 이상 실패 시 더 이상 자동 전송하지 않음 */
 export const OFFLINE_QUEUE_MAX_RETRIES = 8
 export const OFFLINE_QUEUE_UPDATED_EVENT = 'cm-offline-queue-updated'
+export type OfflineQueueScope = 'all' | 'pos_runtime_critical'
 
 export interface PendingRequest {
   id: string
@@ -25,6 +26,40 @@ export interface PendingRequest {
     deadReason?: string
     lastStatus?: number
   }
+}
+
+const POS_RUNTIME_CRITICAL_APIS = new Set([
+  '/api/savePosOrder',
+  '/api/updatePosOrder',
+  '/api/updatePosOrderStatus',
+  '/api/markPosOrderItemServed',
+  '/api/processPosStockDeduction',
+  '/api/posDineInTableActions',
+  '/api/savePosSettlement',
+  '/api/addTillTransaction',
+  '/api/deleteTillTransaction',
+])
+
+function normalizeApiPath(path: unknown): string {
+  return String(path || '').trim().split('?')[0] || ''
+}
+
+function isPosRuntimeCriticalItem(item: PendingRequest): boolean {
+  const api = normalizeApiPath(item.api)
+  if (POS_RUNTIME_CRITICAL_APIS.has(api)) return true
+  const domainTag = String(item.metadata?.domainTag || '').trim().toLowerCase()
+  // POS 도메인이지만 핵심 API가 아닌 잡큐(부가 동기화 등)는 POS 배너에서 숨김
+  if (domainTag === 'pos') return false
+  // domainTag 없는 레거시·기타 도메인: 핵심 API만 노출
+  return false
+}
+
+export function filterPendingRequestsByScope(
+  all: PendingRequest[],
+  scope: OfflineQueueScope = 'all'
+): PendingRequest[] {
+  if (scope === 'all') return all
+  return all.filter((item) => isPosRuntimeCriticalItem(item))
 }
 
 function uuid(): string {
@@ -69,11 +104,14 @@ export async function getPendingCount(): Promise<number> {
 }
 
 /** 배너·동기화용: 아직 전송 재시도 가능한 건 / 한도 초과로 스킵되는 건 */
-export async function getOfflineQueueCounts(): Promise<{ retriable: number; dead: number }> {
+export async function getOfflineQueueCounts(
+  options?: { scope?: OfflineQueueScope }
+): Promise<{ retriable: number; dead: number }> {
   const all = await getAllPending()
+  const scoped = filterPendingRequestsByScope(all, options?.scope || 'all')
   let retriable = 0
   let dead = 0
-  for (const item of all) {
+  for (const item of scoped) {
     if (item.retryCount >= OFFLINE_QUEUE_MAX_RETRIES) dead += 1
     else retriable += 1
   }
@@ -81,9 +119,10 @@ export async function getOfflineQueueCounts(): Promise<{ retriable: number; dead
 }
 
 /** 배너 표시용: 재시도 가능한 건 중 가장 최근 실패 메시지(서버/HTTP 원인) */
-export async function getOfflineQueueErrorHint(): Promise<string | null> {
+export async function getOfflineQueueErrorHint(options?: { scope?: OfflineQueueScope }): Promise<string | null> {
   const all = await getAllPending()
-  const retriable = all.filter((i) => i.retryCount < OFFLINE_QUEUE_MAX_RETRIES)
+  const scoped = filterPendingRequestsByScope(all, options?.scope || 'all')
+  const retriable = scoped.filter((i) => i.retryCount < OFFLINE_QUEUE_MAX_RETRIES)
   const withErr = retriable
     .filter((i) => (i.lastError ?? '').trim().length > 0)
     .sort(

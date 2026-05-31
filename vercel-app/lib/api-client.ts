@@ -7130,6 +7130,44 @@ export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Pr
   return arr
 }
 
+export interface PosCostAnalysisAuditRow {
+  id: number
+  actionType: string
+  changedAt: string
+  actorName: string | null
+  actorRole: string | null
+  actorStore: string | null
+  actorEmployeeCode: string | null
+  menuId: number | null
+  menuCode: string | null
+  menuName: string | null
+  optionId: number | null
+  optionName: string | null
+  optionCode: string | null
+  ingredientId: number | null
+  itemCode: string | null
+  itemName: string | null
+  quantity: number
+  lossRate: number
+  ingredientType: string | null
+}
+
+export async function getPosCostAnalysisAudit(params?: {
+  limit?: number
+  startDate?: string
+  endDate?: string
+}): Promise<PosCostAnalysisAuditRow[]> {
+  const qs = new URLSearchParams()
+  if (params?.limit != null) qs.set('limit', String(params.limit))
+  if (params?.startDate) qs.set('startDate', params.startDate)
+  if (params?.endDate) qs.set('endDate', params.endDate)
+  const q = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await apiFetch(`/api/getPosCostAnalysisAudit${q}`)
+  const data = await res.json().catch(() => [])
+  if (!res.ok) return []
+  return Array.isArray(data) ? (data as PosCostAnalysisAuditRow[]) : []
+}
+
 // ─── 배합(합성품) 원가 — API 테이블명 sauces 유지 ───
 export interface SauceRow {
   id?: number

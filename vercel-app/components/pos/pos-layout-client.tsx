@@ -12,8 +12,12 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
+import { appAlert } from "@/lib/app-message"
+import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
+import { sendPosHealthAlert } from "@/lib/pos-health-alert-client"
 
 const POS_TOPBAR_HIDDEN_KEY = "cm-pos-topbar-hidden"
+const POS_PRINT_STARTUP_ALERT_KEY = "cm-pos-print-startup-health-alert-v1"
 
 function PosShellUtilityButtons({
   shellUpdateAvailable,
@@ -174,6 +178,68 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     setShellMinimizeAvailable(typeof window.cmPosShell?.minimizeWindow === "function")
     setShellQuitAvailable(typeof window.cmPosShell?.quitApp === "function")
   }, [])
+
+  useEffect(() => {
+    if (!isCmPosHybridShell()) return
+    if (typeof window === "undefined") return
+    const shell = window.cmPosShell
+    if (typeof shell?.listPrinters !== "function" || typeof shell?.getPrintConfig !== "function") return
+
+    try {
+      if (sessionStorage.getItem(POS_PRINT_STARTUP_ALERT_KEY) === "1") return
+    } catch {
+      // ignore
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [printers, config] = await Promise.all([shell.listPrinters!(), shell.getPrintConfig!()])
+        if (cancelled) return
+        const summary = inspectPosHybridPrintHealth({
+          printers: Array.isArray(printers) ? printers : [],
+          config: config && typeof config === "object" ? config : null,
+        })
+        const hasIssue =
+          summary.mismatchFields.length > 0 || summary.usesOnlyWindowsDefault || !summary.hasExplicitPrintDevices
+        if (!hasIssue) return
+
+        const lines: string[] = []
+        lines.push(t("posShellStartupHealthWarnTitle"))
+        lines.push(t("posShellStartupHealthWarnBody"))
+        if (summary.mismatchFields.length > 0) {
+          lines.push(t("posShellStartupHealthWarnMismatch"))
+        } else if (!summary.hasExplicitPrintDevices) {
+          lines.push(t("posShellStartupHealthWarnNoExplicit"))
+        } else if (summary.usesOnlyWindowsDefault) {
+          lines.push(t("posShellStartupHealthWarnDefaultOnly"))
+        }
+        lines.push(t("posShellStartupHealthWarnAction"))
+        await appAlert(lines.join("\n"))
+        void sendPosHealthAlert({
+          eventType: "hybrid_print_mapping_mismatch",
+          payload: {
+            pathname: window.location.pathname,
+            mismatchFields: summary.mismatchFields,
+            usesOnlyWindowsDefault: summary.usesOnlyWindowsDefault,
+            hasExplicitPrintDevices: summary.hasExplicitPrintDevices,
+            defaultPrinterLabel: summary.defaultPrinterLabel,
+            printerCount: Array.isArray(printers) ? printers.length : 0,
+          },
+        })
+        try {
+          sessionStorage.setItem(POS_PRINT_STARTUP_ALERT_KEY, "1")
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore: startup check must not block POS
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [t])
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return

@@ -233,6 +233,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
         offlineMsg={t('posLocalOfflineNotice')}
         syncingMsg={t('posSyncing') || '동기화 중...'}
         retryLabel={t('posRetrySync') || '재시도'}
+        queueScope="pos_runtime_critical"
       />
 
       {currentBalance != null && (

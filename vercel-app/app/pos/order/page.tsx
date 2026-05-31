@@ -1666,6 +1666,7 @@ export default function PosOrderPage() {
           offlineMsg={t("posOfflineSaved") || "오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다."}
           syncingMsg={t("posSyncing") || "동기화 중..."}
           retryLabel={t("posRetrySync") || "재시도"}
+          queueScope="pos_runtime_critical"
         />
       {todaySales != null && (
         <div className="flex shrink-0 items-center justify-end border-b border-slate-200 bg-white px-4 py-2 text-xs shadow-sm">

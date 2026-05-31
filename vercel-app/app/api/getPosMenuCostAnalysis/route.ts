@@ -37,6 +37,8 @@ type MenuRow = {
 type IngRow = {
   id?: number
   menu_id?: number
+  /** 코드 중심 매핑용 스냅샷(컬럼 없으면 undefined) */
+  menu_code?: string | null
   option_id?: number | null
   item_code?: string
   quantity?: number
@@ -161,6 +163,22 @@ async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
   return []
 }
 
+async function loadPosMenuIngredientsPaged(): Promise<IngRow[]> {
+  const order = 'id.asc'
+  const selects = [
+    'id,menu_id,menu_code,option_id,item_code,quantity,loss_rate,ingredient_type',
+    'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
+  ]
+  for (const select of selects) {
+    try {
+      return (await supabaseSelectAllPages('pos_menu_ingredients', { order, select })) as IngRow[]
+    } catch {
+      /* 다음 select 조합 시도 */
+    }
+  }
+  return []
+}
+
 /** POS 메뉴 원가 분석 - 전체 메뉴 + 옵션별 원가/재료 breakdown (본사/매장 구분) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -178,10 +196,7 @@ export async function GET(request: NextRequest) {
     const [menuData, sauceData, sauceIngData] = await Promise.all([
       Promise.all([
         loadPosMenusPaged(),
-        supabaseSelectAllPages('pos_menu_ingredients', {
-          order: 'id.asc',
-          select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
-        }),
+        loadPosMenuIngredientsPaged(),
         loadPosMenuOptionsPaged(),
         supabaseSelectAllPages('items', {
           order: 'code.asc',
@@ -337,6 +352,14 @@ export async function GET(request: NextRequest) {
       const n = Number(String(raw).trim())
       return Number.isFinite(n) ? n : NaN
     }
+    const normalizeMenuCodeKey = (raw: unknown): string => String(raw ?? '').trim().toLowerCase()
+    const menuIdByCodeKey: Record<string, number> = {}
+    for (const m of menuRows || []) {
+      const codeKey = normalizeMenuCodeKey(m.code)
+      const mid = parseMenuIdNum(m.id)
+      if (!codeKey || !Number.isFinite(mid) || mid <= 0) continue
+      menuIdByCodeKey[codeKey] = mid
+    }
 
     const optsByMenu: Record<number, (typeof optRows) extends (infer R)[] | null ? R[] : never> = {}
     for (const o of optRows || []) {
@@ -357,13 +380,31 @@ export async function GET(request: NextRequest) {
     }
 
     const ingByMenuOpt: Record<string, (typeof ingRows) extends (infer R)[] | null ? R[] : never> = {}
+    let remappedByCodeCount = 0
     for (const ing of ingRows || []) {
-      const mid = parseMenuIdNum(ing.menu_id)
+      let mid = parseMenuIdNum(ing.menu_id)
+      const ingCodeKey = normalizeMenuCodeKey(ing.menu_code)
+      if (ingCodeKey) {
+        const mappedMid = menuIdByCodeKey[ingCodeKey]
+        if (Number.isFinite(mappedMid) && mappedMid > 0) {
+          const currentCodeKey =
+            Number.isFinite(mid) && mid > 0 && menusById[mid]
+              ? normalizeMenuCodeKey(menusById[mid].code)
+              : ''
+          if (!Number.isFinite(mid) || mid <= 0 || !menusById[mid] || (currentCodeKey && currentCodeKey !== ingCodeKey)) {
+            mid = mappedMid
+            remappedByCodeCount += 1
+          }
+        }
+      }
       if (!Number.isFinite(mid) || mid <= 0) continue
       const oidSeg = normalizeIngOptionKeySeg(ing.option_id)
       const key = `${mid}:${oidSeg}`
       if (!ingByMenuOpt[key]) ingByMenuOpt[key] = []
       ingByMenuOpt[key].push(ing)
+    }
+    if (remappedByCodeCount > 0) {
+      console.warn(`getPosMenuCostAnalysis: remapped ${remappedByCodeCount} ingredient rows by menu_code`)
     }
 
     interface BreakdownRow {
