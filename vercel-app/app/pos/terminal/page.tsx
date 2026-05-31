@@ -590,6 +590,8 @@ type PendingPayRequest = {
   items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   /** 기존 주문 결제 시 영수증용 */
   orderNo?: string
+  /** 기존 pos_orders 행 id (결제 updatePosOrder용) */
+  existingOrderId?: number | null
 } | null
 
 type KbankOutcomeState = {
@@ -812,6 +814,13 @@ export default function PosTerminalPage() {
     },
     [isPosDemo, t]
   )
+
+  const alertPaymentBackendBusy = useCallback(async () => {
+    await appAlert(
+      t('posPaymentBackendBusy') ||
+        '다른 주문 처리가 진행 중입니다. 잠시 후 다시 결제해 주세요.'
+    )
+  }, [t])
 
   const refetchCurrentStore = useCallback(() => {
     return refetchStores({ scope: 'current', immediate: true })
@@ -6576,6 +6585,12 @@ export default function PosTerminalPage() {
             posBackendActionInFlight={posCartBackendBusy}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
+              if (posCartBackendBusyRef.current) {
+                await alertPaymentBackendBusy()
+                return false
+              }
+              posCartBackendBusyRef.current = true
+              setPosCartBackendBusy(true)
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -6586,9 +6601,9 @@ export default function PosTerminalPage() {
                   setDeliveryOrderNo('')
                   clearCartFromTerminal()
                   await refetchCurrentStore()
-                  return
+                  return true
                 }
-                if (!(await ensureBusinessOpenForOrder())) return
+                if (!(await ensureBusinessOpenForOrder())) return false
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 let memoWithKbank = upsertPosSplitReceiptsInMemo(
                   String(payload.memo ?? ''),
@@ -6596,15 +6611,15 @@ export default function PosTerminalPage() {
                 )
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
-                  if (!linkpos.ok) return
+                  if (!linkpos.ok) return false
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: 'delivery',
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
                   })
-                  if (!kbankQr.ok) return
+                  if (!kbankQr.ok) return false
                   memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
-                  await updatePosOrder({
+                  const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payloadItemsNormalized),
                     tableName: payload.orderLabel,
@@ -6622,11 +6637,15 @@ export default function PosTerminalPage() {
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
+                  if (!updateRes.success) {
+                    await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
+                    return false
+                  }
                   const completedOk = await applyOrderStatusWithRetry({
                     id: existingOrderId,
                     status: 'paid',
                   })
-                  if (!completedOk) return
+                  if (!completedOk) return false
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -6690,11 +6709,23 @@ export default function PosTerminalPage() {
                 setDeliveryOrderNo('')
                 await refetchCurrentStore()
                 if (payload.payment != null) schedulePostPaymentCustomerQr()
+                return true
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
+                await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+                return false
+              } finally {
+                posCartBackendBusyRef.current = false
+                setPosCartBackendBusy(false)
               }
             }}
             onTakeoutOrderComplete={async (payload, existingOrderId) => {
+              if (posCartBackendBusyRef.current) {
+                await alertPaymentBackendBusy()
+                return false
+              }
+              posCartBackendBusyRef.current = true
+              setPosCartBackendBusy(true)
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -6703,9 +6734,9 @@ export default function PosTerminalPage() {
                   setSelectedTakeoutTargetLabel('')
                   clearCartFromTerminal()
                   await refetchCurrentStore()
-                  return
+                  return true
                 }
-                if (!(await ensureBusinessOpenForOrder())) return
+                if (!(await ensureBusinessOpenForOrder())) return false
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 let memoWithKbank = upsertPosSplitReceiptsInMemo(
                   String(payload.memo ?? ''),
@@ -6713,15 +6744,15 @@ export default function PosTerminalPage() {
                 )
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
-                  if (!linkpos.ok) return
+                  if (!linkpos.ok) return false
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: 'takeout',
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
                   })
-                  if (!kbankQr.ok) return
+                  if (!kbankQr.ok) return false
                   memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
-                  await updatePosOrder({
+                  const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payloadItemsNormalized),
                     tableName: payload.orderLabel,
@@ -6739,11 +6770,15 @@ export default function PosTerminalPage() {
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
+                  if (!updateRes.success) {
+                    await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
+                    return false
+                  }
                   const completedOk = await applyOrderStatusWithRetry({
                     id: existingOrderId,
                     status: 'paid',
                   })
-                  if (!completedOk) return
+                  if (!completedOk) return false
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -6802,8 +6837,14 @@ export default function PosTerminalPage() {
                 setSelectedTakeoutTargetLabel('')
                 await refetchCurrentStore()
                 if (payload.payment != null) schedulePostPaymentCustomerQr()
+                return true
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
+                await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+                return false
+              } finally {
+                posCartBackendBusyRef.current = false
+                setPosCartBackendBusy(false)
               }
             }}
             onOrderSubmit={async (payload) => {
@@ -7373,7 +7414,10 @@ export default function PosTerminalPage() {
               }
             }}
             onDineInOrderComplete={async (payload, existingOrderId) => {
-              if (posCartBackendBusyRef.current) return
+              if (posCartBackendBusyRef.current) {
+                await alertPaymentBackendBusy()
+                return false
+              }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
@@ -7388,14 +7432,14 @@ export default function PosTerminalPage() {
                   clearCartFromTerminal()
                   clearReceiptQueue()
                   await refetchCurrentStore()
-                  return
+                  return true
                 }
-                if (!(await ensureBusinessOpenForOrder())) return
+                if (!(await ensureBusinessOpenForOrder())) return false
                 let orderIdToComplete: number | null = null
                 let orderNo: string = ''
                 const pay = payload.payment
                 const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
-                if (!linkpos.ok) return
+                if (!linkpos.ok) return false
                 const kbankQr = pay
                   ? await runKbankQrPaymentIfNeeded(pay, {
                       orderType: 'dine_in',
@@ -7403,13 +7447,13 @@ export default function PosTerminalPage() {
                       orderId: existingOrderId ?? undefined,
                     })
                   : { ok: true as const }
-                if (!kbankQr.ok) return
+                if (!kbankQr.ok) return false
                 const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
-                  await updatePosOrder({
+                  const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payloadItemsNormalized),
                     tableName: payload.tableName,
@@ -7428,6 +7472,10 @@ export default function PosTerminalPage() {
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
+                  if (!updateRes.success) {
+                    await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
+                    return false
+                  }
                   orderIdToComplete = existingOrderId
                   orderNo = pendingReceiptOrderNo ?? ''
                 } else if (pay != null) {
@@ -7492,6 +7540,11 @@ export default function PosTerminalPage() {
                       pricingAdjustments,
                       closeStatus: targetClose,
                     })
+                    if (!res.success) {
+                      const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                      await appAlert(msg)
+                      return false
+                    }
                     orderIdToComplete = (res as { orderId?: number }).orderId ?? null
                     orderNo = (res as { orderNo?: string }).orderNo ?? ''
                     await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
@@ -7503,7 +7556,7 @@ export default function PosTerminalPage() {
                     id: orderIdToComplete,
                     status: targetStatus,
                   })
-                  if (!statusOk) return
+                  if (!statusOk) return false
                   /** 후불(완료)만 즉시 테이블 비움. 선불(paid)은 테이블·내역 유지 */
                   if (!payload.isPrepaid && payload.tableName) {
                     clearTableOrder(currentStoreId, payload.tableName)
@@ -7570,15 +7623,21 @@ export default function PosTerminalPage() {
                 setSelectedTableId(null)
                 await refetchCurrentStore()
                 if (pay) schedulePostPaymentCustomerQr()
+                return true
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
+                await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+                return false
               } finally {
                 posCartBackendBusyRef.current = false
                 setPosCartBackendBusy(false)
               }
             }}
             onNonDineOrderComplete={async (payload) => {
-              if (posCartBackendBusyRef.current) return
+              if (posCartBackendBusyRef.current) {
+                await alertPaymentBackendBusy()
+                return false
+              }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
@@ -7595,18 +7654,18 @@ export default function PosTerminalPage() {
                   }
                   clearCartFromTerminal()
                   await refetchCurrentStore()
-                  return
+                  return true
                 }
-                if (!(await ensureBusinessOpenForOrder())) return
+                if (!(await ensureBusinessOpenForOrder())) return false
                 /** `await` 사이에 카트가 비면 터미널 보정이 불가 → 링크포스/결제 대기 전에 스냅샷 */
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
-                if (!linkpos.ok) return
+                if (!linkpos.ok) return false
                 const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                   orderType: payload.orderType,
                   orderLabel: payload.orderLabel,
                 })
-                if (!kbankQr.ok) return
+                if (!kbankQr.ok) return false
                 const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const paymentSumBeforeSave =
                   Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
@@ -7644,7 +7703,7 @@ export default function PosTerminalPage() {
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
                   await appAlert(msg)
-                  return
+                  return false
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const newOrderId = (res as { orderId?: number }).orderId ?? null
@@ -7938,8 +7997,11 @@ export default function PosTerminalPage() {
                   }
                 }
                 if (hasPayment) schedulePostPaymentCustomerQr()
+                return true
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)
+                await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+                return false
               } finally {
                 posCartBackendBusyRef.current = false
                 setPosCartBackendBusy(false)
@@ -8654,6 +8716,7 @@ export default function PosTerminalPage() {
                 setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
                 setPendingPayRequest({
                   tableName: servingTable.name,
+                  existingOrderId: Number(servingTable.order.id),
                   items: servingTable.order.items.map((item) => ({
                     id: item.id,
                     name: item.name,

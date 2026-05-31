@@ -372,12 +372,16 @@ export type CartPanelAddItemPayload = {
   promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number; optionName?: string | null }[]
 }
 
+export type CartPanelOrderCompleteResult = boolean | Promise<boolean>
+
 export interface CartPanelHandle {
   addItem: (item: CartPanelAddItemPayload) => void
   clearCart: () => void
   openDineInPaymentFromOrder: (payload: {
     tableName: string
     orderNo?: string
+    /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
+    existingOrderId?: number | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
@@ -474,7 +478,7 @@ interface CartPanelProps {
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
-  }, existingOrderId?: number) => void
+  }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onTakeoutOrderComplete?: (payload: {
     items: CartPanelOrderLinePayload[]
@@ -492,7 +496,7 @@ interface CartPanelProps {
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
-  }, existingOrderId?: number) => void
+  }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
   onDineInOrderComplete?: (payload: {
     items: CartPanelOrderLinePayload[]
@@ -513,7 +517,7 @@ interface CartPanelProps {
     /** 선불: 결제 후 테이블 유지. 후불: 결제 시 테이블 초기화 */
     isPrepaid?: boolean
     guestCount?: number
-  }, existingOrderId?: number) => void
+  }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 배달/포장 주문 결제 완료 시 */
   onNonDineOrderComplete?: (payload: {
     orderType: 'delivery' | 'takeout'
@@ -532,7 +536,7 @@ interface CartPanelProps {
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
     pointUsed?: number
-  }) => void
+  }) => CartPanelOrderCompleteResult
   /** 주문 버튼으로 이미 전송된 주문 ID (결제 시 해당 주문에 결제 반영용) */
   pendingOrderId?: number | null
   /** 최종 가격 반영 옵션(부가세/서비스비/카드비/기타) */
@@ -935,6 +939,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   /** 결제 확정 직후: 현금 거스름 안내(확인 버튼으로만 닫음). 터미널은 onPostPaymentCashChange로 부모에 위임 */
   const [postPaymentCashChangeBaht, setPostPaymentCashChangeBaht] = useState<number | null>(null)
+  const [paymentSubmitInFlight, setPaymentSubmitInFlight] = useState(false)
   const setPostPaymentCashChange = useCallback(
     (baht: number | null) => {
       if (onPostPaymentCashChange) onPostPaymentCashChange(baht)
@@ -1120,9 +1125,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   useEffect(() => {
     if (showPaymentModal && orderType === 'dine-in') {
-      setIsPrepaid(!pendingOrderId)
+      const hasExistingOrder =
+        isExistingOrderCheckout || normalizeExistingPosOrderId(pendingOrderId) != null
+      setIsPrepaid(!hasExistingOrder)
     }
-  }, [showPaymentModal, orderType, pendingOrderId])
+  }, [showPaymentModal, orderType, pendingOrderId, isExistingOrderCheckout])
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   useEffect(() => {
@@ -3271,9 +3278,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     void openPaymentModalWithAmount(total)
   }
 
-  const submitNonDineOrder = (withPayment: boolean) => {
-    if (orderType === 'dine-in') return
-    if (!onNonDineOrderComplete) return
+  const submitNonDineOrder = async (withPayment: boolean): Promise<boolean> => {
+    if (orderType === 'dine-in') return false
+    if (!onNonDineOrderComplete) return false
     const payDel = parseFloat(payDeliveryApp) || 0
     const channelCtx = cartPanelDeliveryChannelContext({
       deliveryAppProp,
@@ -3308,7 +3315,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const selectedMemberNo = memberMap[selectedMemberId]?.memberNo || ''
     if (withPayment) finalizeSplitPaymentsForReceipt()
     const splitReceipts = withPayment ? buildSplitReceiptPayloads() : undefined
-    onNonDineOrderComplete({
+    const result = await onNonDineOrderComplete({
       orderType,
       orderLabel: orderType === 'delivery'
         ? (deliveryLabel || t('posOrderTypeDelivery') || '배달')
@@ -3342,9 +3349,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           },
       ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
     })
+    return result !== false
   }
 
-  const handlePaymentComplete = () => {
+  const handlePaymentComplete = async () => {
+    if (paymentSubmitInFlight || posBackendActionInFlight) return
+    setPaymentSubmitInFlight(true)
+    try {
     const dineInTableName = selectedTable?.name || paymentTableNameOverride
     finalizeSplitPaymentsForReceipt()
     const resolvedPayment = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
@@ -3394,8 +3405,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const resolvedExistingCheckoutId =
       checkoutExistingPosOrderIdRef.current ?? normalizeExistingPosOrderId(pendingOrderId)
 
+    let paymentOk = false
     if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
-      onDineInOrderComplete(
+      paymentOk =
+        (await onDineInOrderComplete(
         {
           items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           tableName: dineInTableName,
@@ -3420,15 +3433,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           isPrepaid,
           guestCount: guestCount > 0 ? guestCount : undefined,
         },
-        pendingOrderId ?? undefined
-      )
+        resolvedExistingCheckoutId ?? undefined
+      )) !== false
     } else if (
       orderType === 'delivery' &&
       resolvedExistingCheckoutId != null &&
       paymentTableNameOverride &&
       onDeliveryOrderComplete
     ) {
-      onDeliveryOrderComplete(
+      paymentOk =
+        (await onDeliveryOrderComplete(
         {
           items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           orderLabel: paymentTableNameOverride,
@@ -3452,14 +3466,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           pointUsed: pointUsedNum || undefined,
         },
         resolvedExistingCheckoutId
-      )
+      )) !== false
     } else if (
       orderType === 'takeout' &&
       resolvedExistingCheckoutId != null &&
       paymentTableNameOverride &&
       onTakeoutOrderComplete
     ) {
-      onTakeoutOrderComplete(
+      paymentOk =
+        (await onTakeoutOrderComplete(
         {
           items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           orderLabel: paymentTableNameOverride,
@@ -3483,10 +3498,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           pointUsed: pointUsedNum || undefined,
         },
         resolvedExistingCheckoutId
-      )
+      )) !== false
     } else if (orderType !== 'dine-in' && onNonDineOrderComplete) {
-      submitNonDineOrder(true)
+      paymentOk = await submitNonDineOrder(true)
+    } else {
+      paymentOk = true
     }
+
+    if (!paymentOk) return
+
     const cashPayRecorded = resolvedPayment.paymentCash || 0
     const tenderChangeRounded = round2(Math.max(0, cashChangeAmountForTendered))
     const showPostCashChangeReminder = cashPayRecorded > 0.001 && tenderChangeRounded > 0.001
@@ -3496,6 +3516,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     handleClearCart()
     if (showPostCashChangeReminder) {
       setPostPaymentCashChange(tenderChangeRounded)
+    }
+    } finally {
+      setPaymentSubmitInFlight(false)
     }
   }
 
@@ -3566,10 +3589,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const openDineInPaymentFromOrder = (payload: {
     tableName: string
     orderNo?: string
+    existingOrderId?: number | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   }) => {
-    checkoutExistingPosOrderIdRef.current = null
-    setIsExistingOrderCheckout(false)
+    const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
+    checkoutExistingPosOrderIdRef.current = existingId
+    setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
@@ -6158,11 +6183,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     ? 'bg-muted text-muted-foreground hover:bg-muted'
                     : 'shadow-md'
                 )}
-                disabled={!splitReadyForComplete || taxInvoiceInvalid}
-                onClick={handlePaymentComplete}
+                disabled={!splitReadyForComplete || taxInvoiceInvalid || posBackendActionInFlight || paymentSubmitInFlight}
+                onClick={() => void handlePaymentComplete()}
                 data-tour="pos-tour-payment-confirm"
               >
-                {t('posPayConfirm') || '결제 완료'}
+                {paymentSubmitInFlight
+                  ? t('posPaymentProcessing') || '처리 중…'
+                  : t('posPayConfirm') || '결제 완료'}
               </Button>
             </DialogFooter>
           </>
