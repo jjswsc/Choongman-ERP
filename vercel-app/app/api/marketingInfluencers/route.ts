@@ -10,6 +10,8 @@ import {
   fetchCampaignMetaForExpenseMemo,
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
+import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
+import { normalizeVendorCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 import { requireAuth } from '@/lib/verify-auth'
 
 function parseNum(val: unknown): number {
@@ -84,6 +86,14 @@ function isColumnSchemaError(e: unknown): boolean {
   )
 }
 
+function normalizeStoreName(val: unknown): string {
+  return String(val ?? '').trim()
+}
+
+function isStoreScopedRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
+}
+
 /** 인플루언서 목록 조회 */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -127,6 +137,7 @@ export async function GET(req: NextRequest) {
       hireType: String(row.hire_type ?? 'pay'),
       budget: parseNum(row.budget),
       actualCost: parseNum(row.actual_cost),
+      vendorCode: String(row.vendor_code ?? '').trim(),
       shootingDate: row.shooting_date ? parseDate(row.shooting_date) : null,
       publishDate: row.publish_date ? parseDate(row.publish_date) : null,
       platformLinks: parsePlatformLinks(row.platform_links),
@@ -187,6 +198,8 @@ export async function POST(req: NextRequest) {
       userName?: string
       user_role?: string
       user_name?: string
+      vendorCode?: string
+      vendor_code?: string
     }
 
     const name = String(body.name ?? '').trim()
@@ -197,6 +210,8 @@ export async function POST(req: NextRequest) {
     const campaignId = String(body.campaignId ?? '').trim()
     const userRole = String(auth.role || '')
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userStore = normalizeStoreName(auth.store || '')
+    const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
 
     if (!name) {
       return NextResponse.json(
@@ -285,6 +300,15 @@ export async function POST(req: NextRequest) {
         : ''
 
     const detailLine = [contactName, name].filter(Boolean).join(' · ') || name
+    const explicitVendorCode = normalizeVendorCode(body.vendorCode ?? body.vendor_code)
+    const branchStore = normalizeStoreName(body.branchReview)
+    const branchVendorCode =
+      !explicitVendorCode && branchStore ? await resolveVendorCodeFromStore(branchStore) : ''
+    const scopedVendorCode =
+      !explicitVendorCode && !branchVendorCode && scopedStore
+        ? await resolveVendorCodeFromStore(scopedStore)
+        : ''
+    const effectiveVendorCode = explicitVendorCode || branchVendorCode || scopedVendorCode
 
     const sync = await syncMarketingExpenseAccrual({
       userRole,
@@ -298,6 +322,7 @@ export async function POST(req: NextRequest) {
       expenseDate,
       dueDate: null,
       detailLine,
+      vendorCode: effectiveVendorCode,
       existingExpenseAccrualId: priorAccrualId,
     })
 

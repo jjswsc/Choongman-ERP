@@ -121,10 +121,10 @@ export function tierVisual(codeRaw: string): TierVisual {
   }
   return {
     label: code,
-    gradient: 'from-[#1a1410] via-[#2d2218] to-[#4a3728]',
-    accent: 'text-orange-100',
-    chip: 'bg-orange-300/15 text-orange-50 border-orange-200/20',
-    glow: 'shadow-[0_0_36px_rgba(251,146,60,0.12)]',
+    gradient: 'from-[#1a1208] via-[#3d2a14] to-[#6b4e24]',
+    accent: 'text-amber-100',
+    chip: 'bg-amber-400/15 text-amber-50 border-amber-300/30',
+    glow: 'shadow-[0_0_48px_rgba(212,175,55,0.18)]',
   }
 }
 

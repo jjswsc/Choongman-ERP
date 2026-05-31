@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { lookupVendorNameByCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 
 /** 매장별 회사명 조회 (vendors gps_name 또는 name 일치, 없으면 본사) */
 async function getStoreCompanyName(store: string): Promise<string> {
   const storeTrim = String(store || '').trim()
   if (!storeTrim) return ''
+  const vendorCode = await resolveVendorCodeFromStore(storeTrim)
+  if (vendorCode) {
+    const linkedName = await lookupVendorNameByCode(vendorCode)
+    if (linkedName) return linkedName
+  }
   try {
     let rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent(storeTrim)}`, { limit: 1 })) as { name?: string }[]
     if (!rows?.length && !storeTrim.match(/^CM\s+/i)) {

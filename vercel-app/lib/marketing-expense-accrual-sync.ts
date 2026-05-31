@@ -15,6 +15,7 @@ import {
   deleteJournalEntriesBySource,
   assertAccountingDateOpen,
 } from '@/lib/accounting-posting'
+import { normalizeVendorCode } from '@/lib/vendor-code-policy'
 
 export type MarketingExpenseChannel = 'ad' | 'influencer' | 'material' | 'promo'
 
@@ -111,6 +112,7 @@ async function updatePlannedAccrual(
     memo: string
     payeeCode: string
     payeeName: string
+    vendorCode?: string
     userName?: string
   }
 ): Promise<void> {
@@ -126,6 +128,7 @@ async function updatePlannedAccrual(
   }
   await assertAccountingDateOpen(params.expenseDate)
   const encoded = encodeExpensePayeeCode(params.payeeCode)
+  const payableVendorCode = normalizeVendorCode(params.vendorCode)
   const accountSubjectId = row.account_subject_id != null ? Number(row.account_subject_id) : null
 
   await supabaseUpdate('expense_accruals', expenseAccrualId, {
@@ -148,7 +151,7 @@ async function updatePlannedAccrual(
     const a = Number(p.amount || 0)
     if (a <= 0) continue
     await supabaseUpdate('payable_transactions', p.id, {
-      vendor_code: params.payeeCode.startsWith('auto_') ? null : params.payeeCode,
+      vendor_code: payableVendorCode || null,
       amount: params.amount,
       trans_date: params.expenseDate,
       memo: params.memo ? `지출발생: ${params.memo.slice(0, 200)}` : '지출발생',
@@ -186,6 +189,7 @@ async function updatePlannedAccrual(
 async function createPlannedAccrual(params: {
   payeeCode: string
   payeeName: string
+  vendorCode?: string
   amount: number
   expenseDate: string
   dueDate: string | null
@@ -193,6 +197,7 @@ async function createPlannedAccrual(params: {
   userName?: string
 }): Promise<number> {
   const encoded = encodeExpensePayeeCode(params.payeeCode)
+  const payableVendorCode = normalizeVendorCode(params.vendorCode)
   const inserted = (await supabaseInsert('expense_accruals', {
     payee_code: encoded,
     payee_name: params.payeeName,
@@ -208,7 +213,7 @@ async function createPlannedAccrual(params: {
   if (!expenseAccrualId) throw new Error('지급예정 등록에 실패했습니다.')
 
   await supabaseInsert('payable_transactions', {
-    vendor_code: params.payeeCode.startsWith('auto_') ? null : params.payeeCode,
+    vendor_code: payableVendorCode || null,
     amount: Math.abs(params.amount),
     ref_type: 'Expense',
     ref_id: null,
@@ -253,6 +258,7 @@ export async function syncMarketingExpenseAccrual(params: {
   expenseDate: string
   dueDate?: string | null
   detailLine: string
+  vendorCode?: string
   existingExpenseAccrualId?: number | null
 }): Promise<MarketingExpenseSyncResult> {
   if (!isOfficeRoleForMarketingExpenseSync(params.userRole || '')) {
@@ -276,6 +282,7 @@ export async function syncMarketingExpenseAccrual(params: {
 
   const payeeCode = `mkt_${params.channel}_${params.recordId}`
   const payeeName = `마케팅·${CHANNEL_KO[params.channel]}`
+  const vendorCode = normalizeVendorCode(params.vendorCode)
   const memo = buildMemo({
     channel: params.channel,
     campaignNo: params.campaignNo,
@@ -307,6 +314,7 @@ export async function syncMarketingExpenseAccrual(params: {
         memo,
         payeeCode,
         payeeName,
+        vendorCode,
         userName: params.userName,
       })
       return { linkExpenseAccrualId: existingId, message: '지급예정이 갱신되었습니다.' }
@@ -319,6 +327,7 @@ export async function syncMarketingExpenseAccrual(params: {
       expenseDate,
       dueDate,
       memo,
+      vendorCode,
       userName: params.userName,
     })
     return { linkExpenseAccrualId: newId, message: '지출관리 지급예정에 등록되었습니다.' }

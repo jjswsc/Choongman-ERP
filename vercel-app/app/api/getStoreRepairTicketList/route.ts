@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       completed_at?: string
       resolution_note?: string
       vendor_name?: string
+      vendor_code?: string
       estimated_cost?: number | null
       actual_cost?: number | null
     }[]
@@ -105,6 +106,7 @@ export async function GET(request: NextRequest) {
         completedAt: d.completed_at ? String(d.completed_at) : '',
         resolutionNote: String(d.resolution_note || ''),
         vendorName: String(d.vendor_name || ''),
+        vendorCode: String(d.vendor_code || ''),
         estimatedCost: d.estimated_cost != null ? Number(d.estimated_cost) : null,
         actualCost: d.actual_cost != null ? Number(d.actual_cost) : null,
       }

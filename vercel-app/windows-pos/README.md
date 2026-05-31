@@ -137,6 +137,17 @@ npm run build:win
 - `store-speed-safe.sample.json` (안정 우선)
 - `store-speed-fast.sample.json` (체감 속도 우선)
 - `store-speed-turbo.sample.json` (고속, 모니터링 필수)
+- `store-cm-silom-print-overlay.json` (CM Silom — 연속 주방 인쇄 본문 깨짐 대응, **기존 config에 병합**)
+
+CM Silom 등 기존 `runtime-config.json`의 `print.*` 프린터 이름을 지우지 않고 타이밍만 올릴 때:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/merge-windows-pos-runtime-config.ps1 `
+  -OverlayPath "store-configs/store-cm-silom-print-overlay.json" `
+  -RuntimeConfigPath "$env:APPDATA\choongman-pos-windows\runtime-config.json"
+```
+
+적용 후 POS 앱을 재시작합니다.
 
 권장 적용 순서:
 

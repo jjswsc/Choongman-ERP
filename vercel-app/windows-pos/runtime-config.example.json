@@ -5,7 +5,9 @@
   "kiosk": "1",
   "mainLoadTimeoutMs": 45000,
   "posDomBlankCheckMs": 22000,
-  "printHtmlSettleMs": 400,
+  "printHtmlSettleMs": 360,
+  "postHtmlPrintSpoolFlushMs": 600,
+  "printHtmlQueueGapMs": 120,
   "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
   "print": {
     "silent": true,

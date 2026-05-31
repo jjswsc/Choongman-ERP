@@ -22,6 +22,7 @@ import {
   aggregateSsoRemittanceByStore,
   type PayrollRecordSsoRow,
 } from '@/lib/payroll-sso-expense-sync-calc'
+import { normalizeMachineCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 
 export {
   aggregateSsoRemittanceByStore,
@@ -127,6 +128,7 @@ async function deletePlannedSsoAccrual(expenseAccrualId: number): Promise<void> 
 async function upsertStoreSsoAccrual(params: {
   monthStr: string
   store: string
+  vendorCode?: string
   totalBaht: number
   employeeCount: number
   expenseSubject: AccountSubjectPick
@@ -150,7 +152,7 @@ async function upsertStoreSsoAccrual(params: {
       0,
       480
     )
-  const vendorCode = `SSO:${store}`.slice(0, 120)
+  const vendorCode = params.vendorCode || normalizeMachineCode(`SSO:${store}`) || 'SSO:UNKNOWN'
 
   const existingId = Number(existing?.id || 0)
   const existingStatus = String(existing?.status || '').toLowerCase()
@@ -309,6 +311,8 @@ export async function syncPayrollSsoExpenseAccruals(params: {
   const storeTotals: PayrollSsoExpenseSyncResult['stores'] = []
 
   for (const [store, agg] of byStore.entries()) {
+    const linkedVendorCode = await resolveVendorCodeFromStore(store)
+    const payableVendorCode = linkedVendorCode || normalizeMachineCode(`SSO:${store}`) || ''
     storeTotals.push({
       store,
       totalBaht: agg.totalBaht,
@@ -318,6 +322,7 @@ export async function syncPayrollSsoExpenseAccruals(params: {
     const result = await upsertStoreSsoAccrual({
       monthStr,
       store,
+      vendorCode: payableVendorCode,
       totalBaht: agg.totalBaht,
       employeeCount: agg.employeeCount,
       expenseSubject,

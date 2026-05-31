@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { lookupVendorNameByCode, resolveVendorCodeFromStore, resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
 
 function normalizePhotoUrls(raw: unknown): string[] | undefined {
   if (raw === undefined) return undefined
@@ -43,8 +44,17 @@ export async function POST(request: NextRequest) {
 
     const nowIso = new Date().toISOString()
     const nextStatus = String(data.status ?? '').trim()
+    const store = String(data.store || '').trim()
+    const requestedVendorCodeLoose = await resolveVendorCodeLoose(
+      data.vendorCode ?? data.vendor_code ?? data.vendorName ?? data.vendor_name
+    )
+    const requestedVendorCode =
+      requestedVendorCodeLoose || (store ? await resolveVendorCodeFromStore(store) : '')
+    const vendorName =
+      (requestedVendorCode ? await lookupVendorNameByCode(requestedVendorCode) : '') ||
+      String(data.vendorName ?? data.vendor_name ?? '').trim()
     const patch: Record<string, unknown> = {
-      store_name: String(data.store || '').trim(),
+      store_name: store,
       reporter: String(data.reporter || '').trim(),
       category: String(data.category || '').trim(),
       priority: String(data.priority || '').trim(),
@@ -54,7 +64,8 @@ export async function POST(request: NextRequest) {
       status: nextStatus || String(prev.status || '접수'),
       handler: String(data.handler || '').trim(),
       resolution_note: String(data.resolutionNote ?? data.resolution_note ?? '').trim(),
-      vendor_name: String(data.vendorName ?? data.vendor_name ?? '').trim(),
+      vendor_name: vendorName,
+      vendor_code: requestedVendorCode || null,
       estimated_cost: data.estimatedCost != null && data.estimatedCost !== '' ? Number(data.estimatedCost) : null,
       actual_cost: data.actualCost != null && data.actualCost !== '' ? Number(data.actualCost) : null,
     }
@@ -79,7 +90,14 @@ export async function POST(request: NextRequest) {
       patch.completed_at = nowIso
     }
 
-    await supabaseUpdateByFilter('store_repair_tickets', `id=eq.${encodeURIComponent(rowOrId)}`, patch)
+    try {
+      await supabaseUpdateByFilter('store_repair_tickets', `id=eq.${encodeURIComponent(rowOrId)}`, patch)
+    } catch (e) {
+      const msg = String(e || '').toLowerCase()
+      if (!msg.includes('vendor_code')) throw e
+      delete patch.vendor_code
+      await supabaseUpdateByFilter('store_repair_tickets', `id=eq.${encodeURIComponent(rowOrId)}`, patch)
+    }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' })
   } catch (e) {

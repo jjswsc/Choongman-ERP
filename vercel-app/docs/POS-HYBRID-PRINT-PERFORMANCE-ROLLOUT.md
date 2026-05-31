@@ -8,8 +8,11 @@
 ## 코드 반영 항목
 - `windows-pos/main.js`
   - HTML 인쇄 IPC 큐 직렬화
-  - 숨김 인쇄 창 재사용
-  - settle/spool 대기시간 단축 + 실패 시 자동 백오프
+  - 무인쇄 시 **건별 전용 숨김 창**(재사용 시 연속 주방 인쇄 본문 깨짐 방지)
+  - `printHtmlSettleMs` 전체 반영 + `document.fonts.ready` 대기
+  - 인쇄 성공 후 스풀 안정화(`postHtmlPrintSpoolFlushMs`)를 다음 작업 전에 수행
+- `lib/pos-print-html.ts`
+  - 렌더러에서 영수증·주방 HTML 인쇄 **전역 직렬 큐**
 - `app/pos/terminal/page.tsx`
   - 메인 폴링 간격 10초 → 6초
   - Realtime payload 빈 항목 감지 시 즉시 폴백 poll 트리거
@@ -47,6 +50,25 @@
   - `lib/print-html-iframe.ts`: Android는 영수증 HTML만 담은 **보조 창**에서 `print()` (`printHtmlInDedicatedPrintWindow`).
   - `lib/pos-store.ts`: `refetchStores({ scope: 'current' })`는 이미 데이터가 있으면 **로딩 오버레이 생략**.
 - **매장 확인**: MBK 태블릿 APK 최신 + Vercel 배포 후, 인쇄 미리보기에 **영수증/주방 본문**만 보이는지·Letter가 아닌 80mm(또는 프린터 기본)에 가깝게 나오는지.
+
+## CM Silom(สาขาสีลม) — 주방전 본문 깨짐
+
+**증상**: 연속 주문 후 「Kitchen 1」 헤더만 정상, 본문이 기호·난문처럼 출력.
+
+**매장 PC 적용** (`vercel-app/` 루트, 기존 프린터 이름 유지):
+
+```powershell
+# 1) 최신 Windows POS 설치본( main.js 수정 포함 ) 배포 후
+# 2) %APPDATA%\choongman-pos-windows\runtime-config.json 에 타이밍만 병합
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/merge-windows-pos-runtime-config.ps1 `
+  -OverlayPath "store-configs/store-cm-silom-print-overlay.json" `
+  -RuntimeConfigPath "$env:APPDATA\choongman-pos-windows\runtime-config.json"
+# 3) Choongman POS 재시작
+```
+
+오버레이 값: `printHtmlSettleMs: 360`, `postHtmlPrintSpoolFlushMs: 600`, `printHtmlQueueGapMs: 120`.
+
+**Vercel**: `lib/pos-print-html.ts`, `app/pos/order/page.tsx` 배포(웹 POS·자동 주방 인쇄 큐).
 
 ## 장애 대응(즉시 되돌림)
 - 인쇄 실패 급증 시 임시 조치

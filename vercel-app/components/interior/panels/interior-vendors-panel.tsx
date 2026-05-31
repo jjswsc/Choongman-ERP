@@ -123,11 +123,16 @@ export function InteriorVendorsPanel({ projectId, embedded = false }: { projectI
       await appAlert(t("interiorVendorNameRequired"))
       return
     }
+    if (!String(editing.vendorCode || "").trim()) {
+      await appAlert(`${t("posMenuCode")} ${t("required")}`)
+      return
+    }
     try {
       const res = await saveInteriorVendorTrack({
         ...editing,
         projectId: Number(projectId),
         vendorName: editing.vendorName.trim(),
+        vendorCode: String(editing.vendorCode || "").trim(),
       })
       if (res.success) {
         setEditing(null)

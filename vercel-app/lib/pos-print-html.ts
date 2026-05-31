@@ -73,11 +73,12 @@ export function resolveAfterKitchenToReceiptDelayMs(): number {
   return POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS
 }
 
-let shellPrintQueue = Promise.resolve()
+/** 렌더러: 연속 주문·주방/영수증 HTML 인쇄 직렬화(웹 iframe 동시 print() 깨짐 방지) */
+let posHtmlPrintQueue = Promise.resolve()
 
-function enqueueShellPrint<T>(task: () => Promise<T>): Promise<T> {
-  const next = shellPrintQueue.catch(() => undefined).then(task)
-  shellPrintQueue = next.then(
+function enqueuePosHtmlPrint<T>(task: () => Promise<T>): Promise<T> {
+  const next = posHtmlPrintQueue.catch(() => undefined).then(task)
+  posHtmlPrintQueue = next.then(
     () => undefined,
     () => undefined
   )
@@ -125,14 +126,10 @@ export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   }) => void
 }
 
-/**
- * POS 영수증·주방전 등: Windows 하이브리드 셸이면 main 프로세스 인쇄(iframe.print 무시 대응),
- * 그 외(크롬 등 웹)는 기존 숨김 iframe 인쇄만 사용.
- */
-export function printPosHtmlDocument(
+async function printPosHtmlDocumentInner(
   fullDocumentHtml: string,
   opts?: PrintPosHtmlDocumentOptions
-): void {
+): Promise<void> {
   const win = typeof window !== 'undefined' ? window : undefined
   const shell =
     win &&
@@ -182,45 +179,82 @@ export function printPosHtmlDocument(
 
   if (useShell) {
     const uiLang = getClientUiLang()
-    void enqueueShellPrint(() => shell.printHtml!(fullDocumentHtml, shellOpts))
-      .then((r) => {
-        opts?.onShellPrintResult?.(r || {})
-        const ok = Boolean(r?.ok)
-        if (ok) {
-          if (r?.cutOk === false && opts?.alertOnCutFailure !== false) {
-            const detail = r?.cutReason ? ` (${String(r.cutReason)})` : ''
-            void appAlert(getRuntimeUiString(uiLang, 'posPrintCutFailedDetail', { detail }))
-          }
-          opts?.onAfterCleanup?.()
-          return
+    try {
+      const r = await shell.printHtml!(fullDocumentHtml, shellOpts)
+      opts?.onShellPrintResult?.(r || {})
+      const ok = Boolean(r?.ok)
+      if (ok) {
+        if (r?.cutOk === false && opts?.alertOnCutFailure !== false) {
+          const detail = r?.cutReason ? ` (${String(r.cutReason)})` : ''
+          void appAlert(getRuntimeUiString(uiLang, 'posPrintCutFailedDetail', { detail }))
         }
-        const reason: string =
-          r && typeof (r as { reason?: string }).reason === 'string'
-            ? String((r as { reason?: string }).reason)
-            : 'print_failed'
-        if (opts?.suppressPrintError !== true) {
-          void appAlert(getRuntimeUiString(uiLang, 'posPrintFailedWithReason', { reason }))
-        }
-        printHtmlInHiddenIframe(fullDocumentHtml, opts)
-      })
-      .catch(() => {
-        opts?.onShellPrintResult?.({ ok: false, reason: 'shell_invoke_error' })
-        if (opts?.suppressPrintError !== true) {
-          void appAlert(getRuntimeUiString(uiLang, 'posPrintRequestError'))
-        }
-        printHtmlInHiddenIframe(fullDocumentHtml, opts)
-      })
+        opts?.onAfterCleanup?.()
+        return
+      }
+      const reason: string =
+        r && typeof (r as { reason?: string }).reason === 'string'
+          ? String((r as { reason?: string }).reason)
+          : 'print_failed'
+      if (opts?.suppressPrintError !== true) {
+        void appAlert(getRuntimeUiString(uiLang, 'posPrintFailedWithReason', { reason }))
+      }
+      await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      opts?.onAfterCleanup?.()
+    } catch {
+      opts?.onShellPrintResult?.({ ok: false, reason: 'shell_invoke_error' })
+      if (opts?.suppressPrintError !== true) {
+        void appAlert(getRuntimeUiString(getClientUiLang(), 'posPrintRequestError'))
+      }
+      await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      opts?.onAfterCleanup?.()
+    }
     return
   }
 
-  if (isPosAndroidWebPrintClient()) {
-    printHtmlInDedicatedPrintWindow(fullDocumentHtml, {
+  await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+  opts?.onAfterCleanup?.()
+}
+
+function printPosHtmlDocumentViaIframe(
+  fullDocumentHtml: string,
+  opts?: PrintPosHtmlDocumentOptions
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const merged: PrintHtmlInHiddenIframeOptions = {
       ...opts,
-      focusIframeBeforePrint: false,
-      printDelayMs: opts?.printDelayMs ?? 80,
-    })
-    return
-  }
+      onAfterCleanup: () => {
+        resolve()
+      },
+      onPrintUnavailable: () => {
+        try {
+          opts?.onPrintUnavailable?.()
+        } catch {
+          /* ignore */
+        }
+        reject(new Error(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE))
+      },
+    }
 
-  printHtmlInHiddenIframe(fullDocumentHtml, opts)
+    if (isPosAndroidWebPrintClient()) {
+      printHtmlInDedicatedPrintWindow(fullDocumentHtml, {
+        ...merged,
+        focusIframeBeforePrint: false,
+        printDelayMs: opts?.printDelayMs ?? 80,
+      })
+      return
+    }
+
+    printHtmlInHiddenIframe(fullDocumentHtml, merged)
+  })
+}
+
+/**
+ * POS 영수증·주방전 등: Windows 하이브리드 셸이면 main 프로세스 인쇄(iframe.print 무시 대응),
+ * 그 외(크롬 등 웹)는 숨김 iframe 인쇄. 연속 인쇄는 내부 큐로 직렬화하며 `await` 시 완료까지 반환한다.
+ */
+export function printPosHtmlDocument(
+  fullDocumentHtml: string,
+  opts?: PrintPosHtmlDocumentOptions
+): Promise<void> {
+  return enqueuePosHtmlPrint(() => printPosHtmlDocumentInner(fullDocumentHtml, opts))
 }

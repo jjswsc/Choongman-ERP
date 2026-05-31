@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
       standaloneSetMenu?: boolean
       userName?: string
       user_name?: string
+      vendorCode?: string
+      vendor_code?: string
       /** 세트 구성 Step 1 가격 기준: hall | delivery */
       composePricingBasis?: string
       compose_pricing_basis?: string
@@ -327,6 +329,7 @@ export async function POST(req: NextRequest) {
         expenseDate,
         dueDate: null,
         detailLine: `${code} ${name}`.trim().slice(0, 120),
+        vendorCode: String(body.vendorCode ?? body.vendor_code ?? '').trim(),
         existingExpenseAccrualId: priorAccrualId,
       })
       expenseSyncMessage = sync.message

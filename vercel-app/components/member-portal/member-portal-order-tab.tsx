@@ -11,6 +11,7 @@ import { formatBangkokDateTimeLocalInput } from "@/lib/member-portal-pickup-time
 import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { formatBaht } from "@/components/member-portal/portal-ui"
+import { mpGlassCard, mpGlassCardSoft, mpPrimaryBtn } from "@/lib/member-portal-design"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { isBanbanMenu } from "@/lib/pos-banban-utils"
@@ -350,7 +351,7 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
           <button
             type="button"
             onClick={() => setView("delivery")}
-            className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:bg-white/[0.05]"
+            className={`${mpGlassCardSoft} p-5 text-left transition hover:border-white/15`}
           >
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-white/80">
@@ -430,7 +431,7 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
       )}
 
       {!pickupReady ? (
-        <div className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+        <div className={`space-y-4 ${mpGlassCard} p-5`}>
           <div className="space-y-1.5">
             <Label className="text-[11px] uppercase tracking-wider text-white/45">{t("orderSelectStore")}</Label>
             <select
@@ -516,7 +517,7 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
           )}
 
           {cart.length > 0 && (
-            <div className="sticky bottom-24 z-20 rounded-3xl border border-white/10 bg-[#121214]/95 p-4 shadow-2xl backdrop-blur-md">
+            <div className={`sticky bottom-24 z-20 ${mpGlassCard} p-4 shadow-2xl`}>
               <p className="mb-2 text-sm font-medium">{t("orderCartTitle")}</p>
               <div className="max-h-40 space-y-2 overflow-y-auto">
                 {cart.map((line) => (

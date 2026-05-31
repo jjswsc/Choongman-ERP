@@ -1,114 +1,250 @@
 "use client"
-import { appAlert } from "@/lib/app-message"
 
+import { appAlert } from "@/lib/app-message"
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
+import { Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
-import { adjustMemberPoints, getMemberPoints, getMembers } from "@/lib/api-client"
+import { MemberPointsPolicyTab } from "@/components/admin/member-points-policy-tab"
+import { MemberPointsSearchPanel } from "@/components/admin/member-points-search-panel"
+import { adjustMemberPoints, getMemberPoints, type Member } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+
+type LedgerRow = {
+  id: number
+  memberId: number
+  kind: string
+  points: number
+  amount: number
+  note: string
+  createdAt: string
+}
+
+function formatPointKind(kind: string, t: ReturnType<typeof useT>): string {
+  if (kind === "earn") return t("memberPointsKindEarn")
+  if (kind === "use") return t("memberPointsKindUse")
+  if (kind === "adjust") return t("memberPointsKindAdjust")
+  return kind
+}
 
 export default function MemberPointsPage() {
   const { lang } = useLang()
   const t = useT(lang)
-  const [memberId, setMemberId] = React.useState("")
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get("tab") === "policy" ? "policy" : "ledger"
+  const [tab, setTab] = React.useState(initialTab)
+  const [selectedMember, setSelectedMember] = React.useState<Member | null>(null)
   const [deltaPoints, setDeltaPoints] = React.useState("0")
   const [note, setNote] = React.useState("")
-  const [members, setMembers] = React.useState<Array<{ id: number; name: string; memberNo: string; pointBalance?: number }>>([])
-  const [rows, setRows] = React.useState<Array<{ id: number; memberId: number; kind: string; points: number; amount: number; note: string; createdAt: string }>>([])
+  const [rows, setRows] = React.useState<LedgerRow[]>([])
+  const [ledgerLoading, setLedgerLoading] = React.useState(false)
+  const [adjusting, setAdjusting] = React.useState(false)
 
-  const load = React.useCallback(async () => {
-    const id = Number(memberId || 0)
-    const [list, points] = await Promise.all([
-      getMembers({ limit: 300 }),
-      getMemberPoints({ memberId: id || undefined, limit: 300 }),
-    ])
-    setMembers(list.map((m) => ({ id: m.id, name: m.name, memberNo: m.memberNo, pointBalance: m.pointBalance })))
-    setRows(points as typeof rows)
-  }, [memberId])
+  const loadLedger = React.useCallback(async (memberId: number) => {
+    setLedgerLoading(true)
+    try {
+      const points = await getMemberPoints({ memberId, limit: 300 })
+      setRows(points as LedgerRow[])
+    } catch {
+      setRows([])
+    } finally {
+      setLedgerLoading(false)
+    }
+  }, [])
 
   React.useEffect(() => {
-    load().catch(() => {})
-  }, [load])
+    if (selectedMember?.id) {
+      void loadLedger(selectedMember.id)
+    } else {
+      setRows([])
+    }
+  }, [selectedMember?.id, loadLedger])
+
+  React.useEffect(() => {
+    const next = searchParams.get("tab") === "policy" ? "policy" : "ledger"
+    setTab(next)
+  }, [searchParams])
+
+  const handleSelectMember = React.useCallback((member: Member) => {
+    setSelectedMember(member)
+    setDeltaPoints("0")
+    setNote("")
+  }, [])
 
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Wallet className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("memberPoints")}</h1>
+            <p className="text-xs text-muted-foreground">{t("memberPointsPageSub")}</p>
+          </div>
+        </div>
         <CrmSubnav />
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>{t("memberPointsAdjustTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-4">
-            <Input placeholder={t("memberId")} value={memberId} onChange={(e) => setMemberId(e.target.value)} />
-            <Input placeholder={t("memberPointsDeltaPh")} value={deltaPoints} onChange={(e) => setDeltaPoints(e.target.value)} />
-            <Input placeholder={t("reason")} value={note} onChange={(e) => setNote(e.target.value)} />
-            <Button
-              onClick={async () => {
-                const id = Number(memberId || 0)
-                const p = Number(deltaPoints || 0)
-                if (!id || !p) return
-                const res = await adjustMemberPoints({ memberId: id, points: p, note })
-                if (!res.success) await appAlert(res.message || t("memberPointsAdjustFail"))
-                setDeltaPoints("0")
-                setNote("")
-                await load()
-              }}
-            >
-              {t("apply")}
-            </Button>
-          </CardContent>
-        </Card>
 
-        <Card className="mb-4">
-          <CardHeader><CardTitle>{t("memberPointsBalanceTitle")}</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr><th className="p-2 text-left">ID</th><th className="p-2 text-left">{t("memberNo")}</th><th className="p-2 text-left">{t("name")}</th><th className="p-2 text-left">{t("memberPointsBalance")}</th></tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => (
-                    <tr key={m.id} className="border-t">
-                      <td className="p-2">{m.id}</td>
-                      <td className="p-2">{m.memberNo}</td>
-                      <td className="p-2">{m.name}</td>
-                      <td className="p-2">{Number(m.pointBalance || 0).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <Tabs value={tab} onValueChange={setTab} className="mt-4 space-y-4">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="ledger">{t("memberPointsTabLedger")}</TabsTrigger>
+            <TabsTrigger value="policy">{t("memberPointsTabPolicy")}</TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader><CardTitle>{t("memberPointsLedgerTitle")}</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr><th className="p-2 text-left">{t("date")}</th><th className="p-2 text-left">{t("memberId")}</th><th className="p-2 text-left">{t("type")}</th><th className="p-2 text-left">{t("points")}</th><th className="p-2 text-left">{t("amount")}</th><th className="p-2 text-left">{t("memo")}</th></tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id} className="border-t">
-                      <td className="p-2">{r.createdAt}</td>
-                      <td className="p-2">{r.memberId}</td>
-                      <td className="p-2">{r.kind}</td>
-                      <td className="p-2">{r.points}</td>
-                      <td className="p-2">{Number(r.amount || 0).toLocaleString()}</td>
-                      <td className="p-2">{r.note}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <TabsContent value="ledger" className="mt-0">
+            <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+              <div className="lg:sticky lg:top-4 lg:self-start">
+                <MemberPointsSearchPanel
+                  selectedMemberId={selectedMember?.id ?? null}
+                  onSelectMember={handleSelectMember}
+                />
+              </div>
+
+              <div className="space-y-4">
+                {selectedMember ? (
+                  <>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">{t("memberPointsSelectedMember")}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t("name")}</p>
+                          <p className="font-medium">{selectedMember.name || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t("memberNo")}</p>
+                          <p className="font-medium">{selectedMember.memberNo || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t("memberTier")}</p>
+                          <p className="font-medium">{selectedMember.tierCode || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t("memberPointsBalance")}</p>
+                          <p className="text-lg font-semibold tabular-nums">
+                            {Number(selectedMember.pointBalance || 0).toLocaleString()}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">{t("memberPointsAdjustTitle")}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                          <Input
+                            placeholder={t("memberPointsDeltaPh")}
+                            value={deltaPoints}
+                            onChange={(e) => setDeltaPoints(e.target.value)}
+                          />
+                          <Input placeholder={t("reason")} value={note} onChange={(e) => setNote(e.target.value)} />
+                        </div>
+                        <Button
+                          className="shrink-0 sm:min-w-[5.5rem]"
+                          disabled={adjusting}
+                          onClick={async () => {
+                            const p = Number(deltaPoints || 0)
+                            if (!selectedMember.id || !p) return
+                            setAdjusting(true)
+                            try {
+                              const res = await adjustMemberPoints({
+                                memberId: selectedMember.id,
+                                points: p,
+                                note,
+                              })
+                              if (!res.success) {
+                                await appAlert(res.message || t("memberPointsAdjustFail"))
+                                return
+                              }
+                              setDeltaPoints("0")
+                              setNote("")
+                              setSelectedMember((prev) =>
+                                prev ? { ...prev, pointBalance: Number(prev.pointBalance || 0) + p } : prev
+                              )
+                              await loadLedger(selectedMember.id)
+                            } finally {
+                              setAdjusting(false)
+                            }
+                          }}
+                        >
+                          {adjusting ? t("loading") : t("apply")}
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">{t("memberPointsLedgerTitle")}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {ledgerLoading ? (
+                          <p className="text-sm text-muted-foreground">{t("loading")}</p>
+                        ) : (
+                          <div className="overflow-auto rounded-md border">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/40">
+                                <tr>
+                                  <th className="p-2 text-left">{t("date")}</th>
+                                  <th className="p-2 text-left">{t("type")}</th>
+                                  <th className="p-2 text-right">{t("points")}</th>
+                                  <th className="p-2 text-right">{t("amount")}</th>
+                                  <th className="p-2 text-left">{t("memo")}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((r) => (
+                                  <tr key={r.id} className="border-t">
+                                    <td className="p-2 whitespace-nowrap">{r.createdAt}</td>
+                                    <td className="p-2">{formatPointKind(r.kind, t)}</td>
+                                    <td
+                                      className={`p-2 text-right tabular-nums ${r.points >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}
+                                    >
+                                      {r.points >= 0 ? "+" : ""}
+                                      {r.points.toLocaleString()}
+                                    </td>
+                                    <td className="p-2 text-right tabular-nums">
+                                      {Number(r.amount || 0).toLocaleString()}
+                                    </td>
+                                    <td className="p-2">{r.note || "—"}</td>
+                                  </tr>
+                                ))}
+                                {!rows.length && (
+                                  <tr>
+                                    <td colSpan={5} className="p-4 text-center text-muted-foreground">
+                                      {t("memberPointsNoLedger")}
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <Card>
+                    <CardContent className="flex min-h-[280px] items-center justify-center p-8">
+                      <p className="text-center text-sm text-muted-foreground">{t("memberPointsSelectHint")}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </TabsContent>
+
+          <TabsContent value="policy" className="mt-0">
+            <MemberPointsPolicyTab />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

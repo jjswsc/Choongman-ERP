@@ -1205,17 +1205,18 @@ function ensureReusableHiddenPrintWindow() {
 async function waitForHiddenWindowSettle(printWindow, baseSettleMs) {
   const settle = Math.max(0, Math.trunc(Number(baseSettleMs) || 0));
   const adaptiveExtra = Math.min(800, htmlPrintFailureStreak * 160);
-  const quickSettleMs = Math.min(settle + adaptiveExtra, 220);
-  if (quickSettleMs > 0) {
-    await delayMs(quickSettleMs);
+  /** 성능 롤아웃 때 220ms 상한을 두면 연속 주방 인쇄에서 본문이 깨진 채 스풀에 올라가는 경우가 있음 */
+  const totalSettleMs = Math.min(settle + adaptiveExtra, 5000);
+  if (totalSettleMs > 0) {
+    await delayMs(totalSettleMs);
   }
   try {
     await Promise.race([
       printWindow.webContents.executeJavaScript(
-        "new Promise((resolve)=>{try{requestAnimationFrame(()=>requestAnimationFrame(resolve));}catch(_e){resolve();}})",
+        "new Promise((resolve)=>{const done=()=>{try{requestAnimationFrame(()=>requestAnimationFrame(resolve));}catch(_e){resolve();}};if(document.fonts&&document.fonts.ready){document.fonts.ready.then(done).catch(done);}else{done();}})",
         true
       ),
-      delayMs(220),
+      delayMs(Math.max(400, Math.min(totalSettleMs + 200, 1500))),
     ]);
   } catch {
     /* ignore */
@@ -1277,7 +1278,14 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
           /* ignore */
         }
       } else {
-        printWindow = ensureReusableHiddenPrintWindow();
+        /** 재사용 창에 loadFile 하면 이전 작업 래스터화 중 DOM이 바뀌어 주방전 본문이 깨질 수 있음 → 건별 전용 창 */
+        printWindow = new BrowserWindow(buildHiddenPrintWindowOptions(false));
+        destroyAfterRun = true;
+        try {
+          printWindow.webContents.setZoomFactor(1);
+        } catch {
+          /* ignore */
+        }
       }
 
       await printWindow.loadFile(tmpPath);
@@ -1330,7 +1338,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       while (!r.success && thermalAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
         thermalAttempts += 1;
         await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
-        await waitForHiddenWindowSettle(printWindow, Math.min(220, PRINT_HTML_SETTLE_MS));
+        await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
         r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
       }
       // #region agent log
@@ -1348,7 +1356,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         while (!r.success && driverAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
           driverAttempts += 1;
           await delayMs(120 * driverAttempts + htmlPrintFailureStreak * 80);
-          await waitForHiddenWindowSettle(printWindow, Math.min(220, PRINT_HTML_SETTLE_MS));
+          await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
           r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
         }
         // #region agent log
@@ -1385,6 +1393,9 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       // #endregion
       if (r.success) {
         htmlPrintFailureStreak = 0;
+        if (POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED > 0) {
+          await delayMs(POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED);
+        }
       } else {
         htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
       }
@@ -2099,8 +2110,8 @@ if (!gotLock) {
       });
       const out = { ...result };
       const sendCut = shouldSendEscPosRawCut(payload);
+      /** 스풀 안정화는 printHtmlDocumentInHiddenWindow 성공 시 이미 수행됨(절단 직전 중복 대기 제거) */
       if (result.ok && !Boolean(payload?.preferDialog) && sendCut) {
-        await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED));
         try {
           let device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
             printRole: payload?.printRole,

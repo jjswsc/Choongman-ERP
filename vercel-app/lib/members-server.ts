@@ -938,21 +938,22 @@ export async function applyLoyaltyOnOrder(params: {
       )) as Array<{ kind?: string }>)
     : []
   const existingKinds = new Set((existingByOrder || []).map((x) => toText(x.kind)))
+  const balanceBefore = Math.max(0, Math.trunc(Number(member.point_balance || 0)))
   const shouldInsertUse = pointUsed > 0 && !existingKinds.has('use')
   const shouldInsertEarn = pointEarned > 0 && !existingKinds.has('earn')
-  const appliedUse = shouldInsertUse ? pointUsed : 0
+  const appliedUse = shouldInsertUse ? Math.min(pointUsed, balanceBefore) : 0
   const appliedEarn = shouldInsertEarn ? pointEarned : 0
-  const nextBalance = Math.max(0, Number(member.point_balance || 0) - appliedUse + appliedEarn)
+  const nextBalance = Math.max(0, balanceBefore - appliedUse + appliedEarn)
   const shouldApplyLifetime = shouldInsertUse || shouldInsertEarn
   const nextLifetime =
     Number(member.lifetime_amount || 0) + (shouldApplyLifetime ? Math.max(0, Number(params.totalAmount || 0)) : 0)
 
-  if (shouldInsertUse) {
+  if (shouldInsertUse && appliedUse > 0) {
     await supabaseInsert('member_points_ledger', {
       member_id: memberId,
       order_id: orderId,
       kind: 'use',
-      points: -pointUsed,
+      points: -appliedUse,
       amount: Number(params.totalAmount || 0),
       note: toText(params.orderNo) || 'order_use',
       created_at: getBangkokDateTimeString(),

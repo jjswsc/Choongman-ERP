@@ -127,7 +127,8 @@ import {
 } from "@/lib/pos-menu-display-description"
 import {
   printPosHtmlDocument,
-  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
+  resolveBetweenKitchenSlipsDelayMs,
   type PrintPosHtmlDocumentOptions,
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
@@ -1438,15 +1439,16 @@ export default function PosOrderPage() {
         | "onShellPrintResult"
       >
     ) =>
-      new Promise<void>((resolve, reject) => {
-        printPosHtmlDocument(fullHtml, {
-          title,
-          printDelayMs: 0,
-          fallbackCleanupMs: 120_000,
-          ...thermal,
-          onPrintUnavailable: () => reject(new Error(t("posPrintUnavailable"))),
-          onAfterCleanup: () => resolve(),
-        })
+      printPosHtmlDocument(fullHtml, {
+        title,
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        ...thermal,
+      }).catch((e: unknown) => {
+        if (e instanceof Error && e.message === POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE) {
+          return Promise.reject(new Error(t("posPrintUnavailable")))
+        }
+        return Promise.reject(e)
       }),
     [t]
   )
@@ -1600,7 +1602,7 @@ export default function PosOrderPage() {
           },
         })
         if (idx + 1 < slips.length) {
-          await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+          await new Promise((resolve) => setTimeout(resolve, resolveBetweenKitchenSlipsDelayMs()))
           await printOne(idx + 1)
         }
       }

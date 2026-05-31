@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { normalizeVendorCode } from '@/lib/vendor-code-policy'
 
 /** 인테리어 업체 마스터 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const id = body.id != null ? Number(body.id) : null
     const name = String(body.name ?? '').trim()
-    const code = String(body.code ?? '').trim()
+    const code = normalizeVendorCode(body.code)
     const contactName = String(body.contactName ?? body.contact_name ?? '').trim()
     const phone = String(body.phone ?? '').trim()
     const email = String(body.email ?? '').trim()
@@ -24,10 +25,13 @@ export async function POST(request: NextRequest) {
     if (!name) {
       return NextResponse.json({ success: false, message: '업체명을 입력하세요.' }, { status: 400, headers })
     }
+    if (!code) {
+      return NextResponse.json({ success: false, message: '업체 코드를 입력하세요.' }, { status: 400, headers })
+    }
 
     const row = {
       name,
-      code: code || null,
+      code,
       contact_name: contactName || null,
       phone: phone || null,
       email: email || null,

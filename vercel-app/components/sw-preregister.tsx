@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context"
 function shouldRegisterSwForPath(pathname: string | null): boolean {
   if (!pathname) return false
   if (pathname === "/login" || pathname === "/admin/login" || pathname === "/pos/login") return true
+  if (pathname === "/m" || pathname.startsWith("/m/")) return true
   return false
 }
 

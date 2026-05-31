@@ -6121,6 +6121,19 @@ export const i18n = {
     memberPointsBalanceTitle: '회원 포인트 잔액',
     memberPointsBalance: '잔액',
     memberPointsLedgerTitle: '포인트 원장',
+    memberPointsTabLedger: '조회·조정',
+    memberPointsTabPolicy: '매출 적립 규칙',
+    memberPointsPageSub: '회원 포인트 조회·수기 조정과 POS 매출 연동 적립 규칙을 관리합니다.',
+    memberPointsSearchTitle: '회원 검색',
+    memberPointsSelectedMember: '선택 회원',
+    memberPointsSelectHint: '왼쪽에서 회원을 검색한 뒤 행을 선택하면 잔액·원장·조정을 할 수 있습니다.',
+    memberPointsNoSearchResult: '검색 결과가 없습니다.',
+    memberPointsNoLedger: '포인트 내역이 없습니다.',
+    memberPointsEarnHint: 'POS에서 회원을 지정하고 결제가 완료되면, 회원 등급의 적립율(매출×율, 소수점 내림)로 포인트가 자동 적립됩니다.',
+    memberPointsPolicyExample: '예: 적립율 0.01 → 매출 1,000바트 결제 시 10P 적립',
+    memberPointsKindEarn: '적립',
+    memberPointsKindUse: '사용',
+    memberPointsKindAdjust: '조정',
     memberCouponsIssueTitle: '회원 쿠폰 발급',
     memberCouponsCodePh: 'coupon code',
     memberCouponsIssueFail: '발급 실패',
@@ -7548,9 +7561,9 @@ export const i18n = {
     helpHow_admin_members:
       '① 목록에서 회원을 검색·선택합니다.\n② 좌측 폼에서 이름·전화·등급 등을 등록·수정합니다.\n③ 상단 탭에서 포인트·쿠폰·방문·등급·세그먼트·RFM으로 이동합니다.',
     helpSum_admin_members_points:
-      '회원 포인트 잔액과 원장을 조회하고 수기 조정하는 화면입니다.',
+      '회원 포인트 잔액·원장 조회, 수기 조정, POS 매출 연동 적립 규칙(등급별 적립율)을 관리하는 화면입니다.',
     helpHow_admin_members_points:
-      '① 회원을 선택해 잔액을 확인합니다.\n② +/- 포인트로 수기 조정합니다.\n③ 원장에서 적립·사용 이력을 확인합니다.',
+      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 등급별 적립율·누적금액 기준을 설정합니다. POS 결제 완료 시 매출×적립율로 자동 적립됩니다.\n③ 등급 재계산으로 누적 매출 기준 등급을 일괄 반영합니다.',
     helpSum_admin_members_coupons:
       '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다.',
     helpHow_admin_members_coupons:
@@ -14992,6 +15005,19 @@ orderItemQty: 'Qty',
     memberPointsBalanceTitle: 'Member points balance',
     memberPointsBalance: 'Balance',
     memberPointsLedgerTitle: 'Points ledger',
+    memberPointsTabLedger: 'Lookup & adjust',
+    memberPointsTabPolicy: 'Sales earn rules',
+    memberPointsPageSub: 'Look up member points, manual adjustments, and POS sales-based earn rules.',
+    memberPointsSearchTitle: 'Member search',
+    memberPointsSelectedMember: 'Selected member',
+    memberPointsSelectHint: 'Search on the left and select a row to view balance, ledger, and adjustments.',
+    memberPointsNoSearchResult: 'No results found.',
+    memberPointsNoLedger: 'No point history.',
+    memberPointsEarnHint: 'When a member is linked on POS and payment completes, points are earned automatically (sales × tier rate, floored).',
+    memberPointsPolicyExample: 'Example: rate 0.01 → 10 points on 1,000 THB sales',
+    memberPointsKindEarn: 'Earn',
+    memberPointsKindUse: 'Use',
+    memberPointsKindAdjust: 'Adjust',
     memberCouponsIssueTitle: 'Issue member coupon',
     memberCouponsCodePh: 'coupon code',
     memberCouponsIssueFail: 'Issue failed',
@@ -16417,9 +16443,9 @@ orderItemQty: 'Qty',
     helpHow_admin_members:
       '① Search and select a member in the list.\n② Register or edit name, phone, tier, and other fields in the left form.\n③ Use the top tabs for points, coupons, visits, tiers, segments, and RFM.',
     helpSum_admin_members_points:
-      'View member point balances and ledger entries; apply manual adjustments.',
+      'View member point balances and ledger, manual adjustments, and POS sales-based earn rules (tier rates).',
     helpHow_admin_members_points:
-      '① Select a member to view the balance.\n② Adjust with +/- points when needed.\n③ Review earn and redeem history in the ledger.',
+      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: set tier earn rates and cumulative amount thresholds. POS auto-earns on completed payment (sales × rate).\n③ Run tier recalculation to apply cumulative sales thresholds.',
     helpSum_admin_members_coupons:
       'Issue member coupons and review master and redemption history.',
     helpHow_admin_members_coupons:

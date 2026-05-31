@@ -1,0 +1,32 @@
+{
+  "id": "/m/?source=pwa",
+  "name": "충만치킨 멤버십",
+  "short_name": "충만 멤버십",
+  "description": "충만치킨 회원 라운지 — 포인트·쿠폰·주문",
+  "start_url": "/m",
+  "scope": "/m/",
+  "display": "standalone",
+  "background_color": "#08080a",
+  "theme_color": "#08080a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-member-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-member-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-member-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

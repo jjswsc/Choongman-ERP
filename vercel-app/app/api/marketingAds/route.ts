@@ -10,6 +10,8 @@ import {
   fetchCampaignMetaForExpenseMemo,
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
+import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
+import { normalizeVendorCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 import { requireAuth } from '@/lib/verify-auth'
 
 function parseNum(val: unknown): number {
@@ -35,6 +37,14 @@ function isColumnSchemaError(e: unknown): boolean {
     /Could not find the .* column/i.test(s) ||
     /column .* does not exist/i.test(s)
   )
+}
+
+function normalizeStoreName(val: unknown): string {
+  return String(val ?? '').trim()
+}
+
+function isStoreScopedRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
 }
 
 /** 광고 목록 조회 (campaignId 필터 옵션) */
@@ -80,6 +90,7 @@ export async function GET(req: NextRequest) {
       postLink: String(row.post_link ?? ''),
       boostBudget: parseNum(row.boost_budget),
       actualSpent: parseNum(row.actual_spent),
+      vendorCode: String(row.vendor_code ?? '').trim(),
       expenseAccrualId:
         row.expense_accrual_id != null && row.expense_accrual_id !== ''
           ? String(row.expense_accrual_id)
@@ -131,6 +142,8 @@ export async function POST(req: NextRequest) {
       userName?: string
       user_role?: string
       user_name?: string
+      vendorCode?: string
+      vendor_code?: string
     }
 
     const platform = String(body.platform ?? '').trim()
@@ -138,6 +151,8 @@ export async function POST(req: NextRequest) {
     const campaignId = String(body.campaignId ?? '').trim()
     const userRole = String(auth.role || '')
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userStore = normalizeStoreName(auth.store || '')
+    const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
 
     if (!platform) {
       return NextResponse.json(
@@ -238,6 +253,10 @@ export async function POST(req: NextRequest) {
     const campaignNo = camp?.campaignNo || ''
     const actual = parseNum(body.actualSpent)
     const expenseDate = body.publishDate ? String(body.publishDate).slice(0, 10) : ''
+    const explicitVendorCode = normalizeVendorCode(body.vendorCode ?? body.vendor_code)
+    const scopedVendorCode =
+      !explicitVendorCode && scopedStore ? await resolveVendorCodeFromStore(scopedStore) : ''
+    const effectiveVendorCode = explicitVendorCode || scopedVendorCode
 
     const sync = await syncMarketingExpenseAccrual({
       userRole,
@@ -253,6 +272,7 @@ export async function POST(req: NextRequest) {
       detailLine: `${platform}${
         body.contentTopic ? ` · ${String(body.contentTopic).slice(0, 80)}` : ''
       }${contentDetail ? ` · ${contentDetail.slice(0, 80)}` : ''}`,
+      vendorCode: effectiveVendorCode,
       existingExpenseAccrualId: priorAccrualId,
     })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { lookupVendorNameByCode, resolveVendorCodeFromStore, resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
 
 async function nextTicketNumber(): Promise<string> {
   const ymd = getBangkokTodayDateString()
@@ -50,8 +51,15 @@ export async function POST(request: NextRequest) {
 
     const ticketNumber = await nextTicketNumber()
     const photoUrls = normalizePhotoUrls(data.photoUrls ?? data.photo_urls)
-
-    await supabaseInsert('store_repair_tickets', {
+    const requestedVendorCodeLoose = await resolveVendorCodeLoose(
+      data.vendorCode || data.vendor_code || data.vendorName || data.vendor_name
+    )
+    const requestedVendorCode =
+      requestedVendorCodeLoose || (store ? await resolveVendorCodeFromStore(store) : '')
+    const vendorName =
+      (requestedVendorCode ? await lookupVendorNameByCode(requestedVendorCode) : '') ||
+      String(data.vendorName || data.vendor_name || '').trim()
+    const insertRow: Record<string, unknown> = {
       ticket_number: ticketNumber,
       store_name: store,
       reporter: String(data.reporter || '').trim(),
@@ -64,10 +72,20 @@ export async function POST(request: NextRequest) {
       status: String(data.status || '접수').trim(),
       handler: String(data.handler || '').trim(),
       resolution_note: String(data.resolutionNote || data.resolution_note || '').trim(),
-      vendor_name: String(data.vendorName || data.vendor_name || '').trim(),
+      vendor_name: vendorName,
+      vendor_code: requestedVendorCode || null,
       estimated_cost: data.estimatedCost != null && data.estimatedCost !== '' ? Number(data.estimatedCost) : null,
       actual_cost: data.actualCost != null && data.actualCost !== '' ? Number(data.actualCost) : null,
-    })
+    }
+
+    try {
+      await supabaseInsert('store_repair_tickets', insertRow)
+    } catch (e) {
+      const msg = String(e || '').toLowerCase()
+      if (!msg.includes('vendor_code')) throw e
+      delete insertRow.vendor_code
+      await supabaseInsert('store_repair_tickets', insertRow)
+    }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.', ticketNumber })
   } catch (e) {

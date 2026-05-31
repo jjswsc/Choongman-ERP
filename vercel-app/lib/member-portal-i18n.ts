@@ -137,6 +137,20 @@ export type MemberPortalKey =
   | 'showQr'
   | 'hideQr'
   | 'scanAtCounter'
+  | 'pwaInstallTitle'
+  | 'pwaInstallDesc'
+  | 'pwaInstallBtn'
+  | 'pwaInstallDismiss'
+  | 'pwaInstallIosHint'
+  | 'pwaInstallAndroidHint'
+  | 'greetingMorning'
+  | 'greetingAfternoon'
+  | 'greetingEvening'
+  | 'homeWelcomeSub'
+  | 'homeQuickOrder'
+  | 'homeQuickStores'
+  | 'homeQuickCoupons'
+  | 'homeQuickProfile'
   | 'err_line_not_configured'
   | 'err_line_bad_channel_id'
   | 'err_line_state_mismatch'
@@ -536,6 +550,48 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'สแกนที่เคาน์เตอร์',
     ko: '카운터에서 스캔',
   },
+  pwaInstallTitle: {
+    en: 'Install as app',
+    th: 'ติดตั้งเป็นแอป',
+    ko: '앱으로 설치하기',
+  },
+  pwaInstallDesc: {
+    en: 'Add to your home screen for quick access to points, coupons, and orders.',
+    th: 'เพิ่มไปหน้าจอหลักเพื่อใช้แต้ม คูปอง และสั่งอาหารได้เร็วขึ้น',
+    ko: '홈 화면에 추가하면 포인트·쿠폰·주문을 앱처럼 바로 이용할 수 있습니다.',
+  },
+  pwaInstallBtn: {
+    en: 'Install',
+    th: 'ติดตั้ง',
+    ko: '설치',
+  },
+  pwaInstallDismiss: {
+    en: 'Dismiss',
+    th: 'ปิด',
+    ko: '닫기',
+  },
+  pwaInstallIosHint: {
+    en: 'Tap Share, then “Add to Home Screen”',
+    th: 'แตะ Share แล้วเลือก “Add to Home Screen”',
+    ko: '공유(↑) → “홈 화면에 추가”를 선택하세요',
+  },
+  pwaInstallAndroidHint: {
+    en: 'Browser menu (⋮) → Install app or Add to Home screen',
+    th: 'เมนูเบราว์เซอร์ (⋮) → ติดตั้งแอป หรือ เพิ่มไปหน้าจอหลัก',
+    ko: '브라우저 메뉴(⋮) → 앱 설치 또는 홈 화면에 추가',
+  },
+  greetingMorning: { en: 'Good morning', th: 'สวัสดีตอนเช้า', ko: '좋은 아침이에요' },
+  greetingAfternoon: { en: 'Good afternoon', th: 'สวัสดีตอนบ่าย', ko: '좋은 오후예요' },
+  greetingEvening: { en: 'Good evening', th: 'สวัสดีตอนเย็น', ko: '좋은 저녁이에요' },
+  homeWelcomeSub: {
+    en: 'Your premium membership experience',
+    th: 'ประสบการณ์สมาชิกระดับพรีเมียม',
+    ko: '프리미엄 멤버십을 경험해 보세요',
+  },
+  homeQuickOrder: { en: 'Order', th: 'สั่ง', ko: '주문' },
+  homeQuickStores: { en: 'Stores', th: 'สาขา', ko: '매장' },
+  homeQuickCoupons: { en: 'Coupons', th: 'คูปอง', ko: '쿠폰' },
+  homeQuickProfile: { en: 'Profile', th: 'โปรไฟล์', ko: '내정보' },
   err_line_not_configured: {
     en: 'LINE Login is not ready. Please contact the store.',
     th: 'LINE Login ยังไม่พร้อมใช้งาน กรุณาติดต่อร้านค้า',

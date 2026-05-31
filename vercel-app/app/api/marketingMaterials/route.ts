@@ -12,6 +12,7 @@ import {
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
 import { requireAuth } from '@/lib/verify-auth'
+import { resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -110,6 +111,7 @@ export async function GET(req: NextRequest) {
       quantity: Number(row.quantity) || 1,
       unitCost: parseNum(row.unit_cost),
       actualCost: parseNum(row.actual_cost),
+      vendorCode: String(row.vendor_code ?? '').trim(),
       branches: parseBranchesJson(row.branches),
       isHqWide: Boolean(row.is_hq_wide),
       displayStartDate: parseDate(row.display_start_date),
@@ -170,6 +172,8 @@ export async function POST(req: NextRequest) {
       user_name?: string
       userStore?: string
       user_store?: string
+      vendorCode?: string
+      vendor_code?: string
     }
 
     const campaignId = String(body.campaignId ?? '').trim()
@@ -274,6 +278,7 @@ export async function POST(req: NextRequest) {
         : ''
 
     const typeLabel = String(body.type ?? 'tentcard').trim()
+    const scopedVendorCode = scopedStore ? await resolveVendorCodeFromStore(scopedStore) : ''
     const sync = await syncMarketingExpenseAccrual({
       userRole,
       userName,
@@ -286,6 +291,7 @@ export async function POST(req: NextRequest) {
       expenseDate,
       dueDate: null,
       detailLine: `${typeLabel} · ${name}`.slice(0, 120),
+      vendorCode: String(body.vendorCode ?? body.vendor_code ?? '').trim() || scopedVendorCode,
       existingExpenseAccrualId: priorAccrualId,
     })
 

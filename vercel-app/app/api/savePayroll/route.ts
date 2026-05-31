@@ -14,6 +14,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 
 const CHUNK = 50
 
@@ -81,6 +82,13 @@ function buildPayrollPayeeCode(monthStr: string, store: string, name: string, em
   const suffix = emp && emp !== 'na' ? `-${emp}` : ''
   const base = `payroll-${monthStr}-${normalizeToken(store)}-${normalizeToken(name)}${suffix}`
   return `${base}::wm::expense`
+}
+
+function buildEmployeeVendorCode(name: string, employeeId: number, employeeCode: string): string {
+  if (employeeId > 0) return normalizeMachineCode(`EMPID:${employeeId}`) || `EMPID:${employeeId}`
+  const code = String(employeeCode || '').trim().toUpperCase()
+  if (code) return normalizeMachineCode(`EMPCODE:${code}`) || `EMPCODE:${code}`
+  return normalizeMachineCode(`EMPNAME:${name}`) || 'EMPNAME:UNKNOWN'
 }
 
 /** DB unique 가 (month, lower(trim(store)), employee_id) 인 경우 PostgREST on_conflict=month,store,employee_id 와 불일치 → upsert 가 INSERT 만 시도해 23505 발생 */
@@ -328,6 +336,7 @@ export async function POST(request: NextRequest) {
       if (!store || !name || netPay <= 0) continue
 
       const payeeCode = buildPayrollPayeeCode(monthStr, store, name, employeeToken)
+      const employeeVendorCode = buildEmployeeVendorCode(name, employeeId, employeeCode)
       const memo = `[PAYROLL] ${monthStr} ${store} ${name} 급여`
       const existing = existingByPayeeCode.get(payeeCode)
       const existingId = Number(existing?.id || 0)
@@ -357,7 +366,7 @@ export async function POST(request: NextRequest) {
               amount: netPay,
               trans_date: expenseDate,
               memo: expenseMemo,
-              vendor_code: `EMP:${name}`.slice(0, 120),
+              vendor_code: employeeVendorCode,
               account_subject_id: expenseSubject.id,
               expense_date: expenseDate,
               due_date: dueDate,
@@ -387,7 +396,7 @@ export async function POST(request: NextRequest) {
       if (!expenseAccrualId) continue
 
       await supabaseInsert('payable_transactions', {
-        vendor_code: `EMP:${name}`.slice(0, 120),
+        vendor_code: employeeVendorCode,
         amount: netPay,
         ref_type: 'Expense',
         ref_id: null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { touchInteriorVendorDirectoryFromTrack } from '@/lib/interior-vendor-directory-server'
+import { lookupVendorNameByCode, normalizeVendorCode } from '@/lib/vendor-code-policy'
 
 const ALLOWED_STATUS = new Set(['planned', 'ordered', 'paid', 'received', 'done', 'delayed', 'cancelled'])
 
@@ -14,8 +15,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const id = body.id != null ? Number(body.id) : null
     const projectId = Number(body.projectId ?? body.project_id)
-    const vendorName = String(body.vendorName ?? body.vendor_name ?? '').trim()
-    const vendorCode = String(body.vendorCode ?? body.vendor_code ?? '').trim()
+    let vendorName = String(body.vendorName ?? body.vendor_name ?? '').trim()
+    const vendorCode = normalizeVendorCode(body.vendorCode ?? body.vendor_code)
     const workPackageIdRaw = body.workPackageId ?? body.work_package_id
     const workPackageId = workPackageIdRaw != null && workPackageIdRaw !== '' ? Number(workPackageIdRaw) : null
     const paymentDueDate = body.paymentDueDate ?? body.payment_due_date
@@ -31,8 +32,11 @@ export async function POST(request: NextRequest) {
     if (!projectId || Number.isNaN(projectId)) {
       return NextResponse.json({ success: false, message: 'projectId가 필요합니다.' }, { status: 400, headers })
     }
+    if (!vendorCode) {
+      return NextResponse.json({ success: false, message: '업체 코드를 입력하세요.' }, { status: 400, headers })
+    }
     if (!vendorName) {
-      return NextResponse.json({ success: false, message: '업체명을 입력하세요.' }, { status: 400, headers })
+      vendorName = (await lookupVendorNameByCode(vendorCode)) || vendorCode
     }
 
     const status = ALLOWED_STATUS.has(rawStatus) ? rawStatus : 'planned'

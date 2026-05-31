@@ -145,6 +145,7 @@ export function AdminStoreRepairs() {
     handler: "",
     resolutionNote: "",
     vendorName: "",
+    vendorCode: "",
   })
   const [saveLoading, setSaveLoading] = useState(false)
 
@@ -262,6 +263,7 @@ export function AdminStoreRepairs() {
       handler: "",
       resolutionNote: "",
       vendorName: "",
+      vendorCode: "",
       store: isManager ? auth?.store || "" : f.store,
       reporter: writerName,
     }))
@@ -314,6 +316,7 @@ export function AdminStoreRepairs() {
         handler: form.handler,
         resolutionNote: form.resolutionNote,
         vendorName: form.vendorName,
+        vendorCode: form.vendorCode,
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("store_check_saved"))
@@ -361,6 +364,7 @@ export function AdminStoreRepairs() {
         handler: editItem.handler,
         resolutionNote: editItem.resolutionNote,
         vendorName: editItem.vendorName,
+        vendorCode: editItem.vendorCode,
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("store_check_updated"))
@@ -773,6 +777,24 @@ export function AdminStoreRepairs() {
                     className="text-xs"
                   />
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold block mb-1">{t("repair_field_vendor")}</label>
+                    <Input
+                      value={form.vendorName}
+                      onChange={(e) => setForm((f) => ({ ...f, vendorName: e.target.value }))}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold block mb-1">{t("posMenuCode")}</label>
+                    <Input
+                      value={form.vendorCode}
+                      onChange={(e) => setForm((f) => ({ ...f, vendorCode: e.target.value }))}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="text-xs font-semibold block mb-1">{t("repair_field_photos")}</label>
                   <p className="text-[11px] text-muted-foreground mb-2">{t("repair_photo_hint")}</p>
@@ -928,6 +950,14 @@ export function AdminStoreRepairs() {
                 <Input
                   value={editItem.vendorName}
                   onChange={(e) => setEditItem({ ...editItem, vendorName: e.target.value })}
+                  className="h-8"
+                />
+              </div>
+              <div>
+                <label className="font-semibold block mb-1">{t("posMenuCode")}</label>
+                <Input
+                  value={editItem.vendorCode || ""}
+                  onChange={(e) => setEditItem({ ...editItem, vendorCode: e.target.value })}
                   className="h-8"
                 />
               </div>

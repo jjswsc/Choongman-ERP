@@ -5689,7 +5689,7 @@ export async function getInteriorVendorTracks(params: { projectId: string | numb
 }
 
 export async function saveInteriorVendorTrack(
-  params: Partial<InteriorVendorTrack> & { projectId: number; vendorName: string }
+  params: Partial<InteriorVendorTrack> & { projectId: number; vendorName: string; vendorCode: string }
 ) {
   const res = await apiFetchWithOffline('/api/saveInteriorVendorTrack', {
     method: 'POST',
@@ -7746,6 +7746,7 @@ export async function savePosPromo(params: {
   marketingActualCost?: number | null
   /** 메뉴 관리 세트: 캠페인 없이 저장 (서버가 SET-1 … 코드 부여) */
   standaloneSetMenu?: boolean
+  vendorCode?: string
   userRole?: string
   userName?: string
   composePricingBasis?: 'hall' | 'delivery'
@@ -8438,6 +8439,7 @@ export interface MarketingAd {
   postLink: string
   boostBudget: number
   actualSpent: number
+  vendorCode?: string
   expenseAccrualId?: string | null
 }
 
@@ -8461,6 +8463,7 @@ export async function saveMarketingAd(params: {
   postLink?: string
   boostBudget?: number
   actualSpent?: number
+  vendorCode?: string
   userRole?: string
   userName?: string
   userStore?: string
@@ -8519,6 +8522,7 @@ export interface MarketingInfluencer {
   budget: number
   /** 실제 지출(지급예정 연동) */
   actualCost: number
+  vendorCode?: string
   shootingDate: string | null
   publishDate: string | null
   platformLinks: Record<string, string>
@@ -8552,6 +8556,7 @@ export async function saveMarketingInfluencer(params: {
   publishDate?: string | null
   platformLinks?: Record<string, string>
   note?: string
+  vendorCode?: string
   userRole?: string
   userName?: string
   userStore?: string
@@ -8588,6 +8593,7 @@ export interface MarketingMaterial {
   quantity: number
   unitCost: number
   actualCost: number
+  vendorCode?: string
   branches: string[]
   isHqWide: boolean
   displayStartDate: string | null
@@ -8634,6 +8640,7 @@ export async function saveMarketingMaterial(params: {
   placementSpots?: string[]
   status?: string
   note?: string
+  vendorCode?: string
   userRole?: string
   userName?: string
   userStore?: string
@@ -13132,6 +13139,7 @@ export interface StoreRepairTicketItem {
   completedAt: string
   resolutionNote: string
   vendorName: string
+  vendorCode?: string
   estimatedCost: number | null
   actualCost: number | null
 }

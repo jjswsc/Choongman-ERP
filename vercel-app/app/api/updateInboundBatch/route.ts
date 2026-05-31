@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { normalizeVendorCode } from '@/lib/vendor-code-policy'
 
 /** 입고 배치 수정 (거래처, 인보이스 등) */
 export async function POST(request: NextRequest) {
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const patch: Record<string, unknown> = {}
     if (body.vendorName !== undefined) patch.vendor_name = String(body.vendorName || '').trim() || null
-    if (body.vendorCode !== undefined) patch.vendor_code = String(body.vendorCode || '').trim() || null
+    if (body.vendorCode !== undefined) patch.vendor_code = normalizeVendorCode(body.vendorCode) || null
     if (body.poNo !== undefined) patch.po_no = String(body.poNo || '').trim() || null
     if (body.invoiceNo !== undefined) patch.invoice_no = String(body.invoiceNo || '').trim() || null
     if (body.invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(body.invoicePhotoUrl || '').trim() || null
@@ -37,8 +38,7 @@ export async function POST(request: NextRequest) {
       const payables = (await supabaseSelectFilter('payable_transactions', `ref_type=eq.Inbound&ref_id=eq.${batchId}`, { limit: 1 })) as { id?: number }[]
       if (payables?.length && payables[0].id) {
         const payPatch: Record<string, unknown> = {}
-        if (patch.vendor_code !== undefined) payPatch.vendor_code = patch.vendor_code || patch.vendor_name
-        if (patch.vendor_name !== undefined && patch.vendor_code === undefined) payPatch.vendor_code = patch.vendor_name
+        if (patch.vendor_code !== undefined) payPatch.vendor_code = patch.vendor_code
         if (Object.keys(payPatch).length > 0) {
           await supabaseUpdate('payable_transactions', payables[0].id, payPatch)
         }

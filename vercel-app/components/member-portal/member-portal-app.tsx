@@ -4,7 +4,6 @@ import * as React from "react"
 import Image from "next/image"
 import QRCode from "qrcode"
 import {
-  Award,
   ChevronRight,
   Copy,
   ExternalLink,
@@ -12,9 +11,7 @@ import {
   History,
   Home,
   Loader2,
-  LogOut,
   MapPin,
-  QrCode,
   Search,
   Share2,
   ShoppingCart,
@@ -41,12 +38,24 @@ import {
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
+import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
+import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
+import {
+  GlassCard,
+  MemberPortalAmbienceBackground,
+  MemberPortalShell,
+  PremiumAppHeader,
+  PremiumBottomNav,
+  PremiumStatTile,
+  QuickActionButton,
+  SectionTitle,
+  TierProgressCard,
+} from "@/components/member-portal/member-portal-premium-ui"
 import {
   buildFallbackDashboard,
   formatBaht,
   formatDateTime,
   formatPoints,
-  maskPhone,
   tierVisual,
   type PortalCouponRow,
   type PortalDashboard,
@@ -55,6 +64,8 @@ import {
   type PortalTab,
   type PortalVisitRow,
 } from "@/components/member-portal/portal-ui"
+import { clearMemberPortalMemberLocalData } from "@/lib/member-portal-client-storage"
+import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
 
 type MemberPortalStoreRow = {
   storeCode: string
@@ -113,162 +124,6 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       <Copy className="h-3.5 w-3.5" />
       {copied ? t("copied") : label || t("copy")}
     </button>
-  )
-}
-
-function MembershipCard({
-  member,
-  dashboard,
-  qrDataUrl,
-  showQr,
-  onToggleQr,
-}: {
-  member: MemberSummary
-  dashboard: PortalDashboard
-  qrDataUrl: string
-  showQr: boolean
-  onToggleQr: () => void
-}) {
-  const { t } = useMemberPortalLang()
-  const tier = tierVisual(dashboard.tierProgress.currentTierCode)
-  const displayName = member.fullName || member.name || "Member"
-  const cardShellClass = `relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${tier.gradient} p-5 ${tier.glow}`
-
-  return (
-    <div className="[perspective:1000px]">
-      <div
-        className={`relative min-h-[292px] transition-transform duration-500 ease-in-out will-change-transform [transform-style:preserve-3d] ${
-          showQr ? "[transform:rotateY(180deg)]" : ""
-        }`}
-      >
-        <div
-          className={`${cardShellClass} absolute inset-0 [backface-visibility:hidden] [transform:rotateY(0deg)]`}
-          aria-hidden={showQr}
-        >
-          <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-black/20 blur-2xl" />
-
-          <div className="relative flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.24em] text-white/55">{t("membership")}</p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">{displayName}</h2>
-              <p className="mt-1 text-sm text-white/65">{maskPhone(member.phone)}</p>
-            </div>
-            <span className={`rounded-full border px-3 py-1 text-xs font-medium ${tier.chip}`}>
-              {dashboard.tierProgress.currentTierName || tier.label}
-            </span>
-          </div>
-
-          <div className="relative mt-6 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-black/20 px-4 py-3 backdrop-blur-sm">
-              <p className="text-[11px] uppercase tracking-wider text-white/50">{t("points")}</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{formatPoints(member.pointBalance || 0)}</p>
-            </div>
-            <div className="rounded-2xl bg-black/20 px-4 py-3 backdrop-blur-sm">
-              <p className="text-[11px] uppercase tracking-wider text-white/50">{t("memberNoShort")}</p>
-              <p className="mt-1 text-lg font-semibold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
-            </div>
-          </div>
-
-          <div className="relative mt-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs text-white/55">{t("scanAtCounter")}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onToggleQr}
-              disabled={!qrDataUrl}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 disabled:opacity-40"
-              aria-label={t("showQr")}
-              aria-pressed={false}
-            >
-              <QrCode className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        <div
-          className={`${cardShellClass} absolute inset-0 flex flex-col [backface-visibility:hidden] [transform:rotateY(180deg)]`}
-          aria-hidden={!showQr}
-        >
-          <div className="pointer-events-none absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-black/20 blur-2xl" />
-
-          <div className="relative flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.24em] text-white/55">{t("scanAtCounter")}</p>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">{member.memberNo || `#${member.id}`}</h2>
-            </div>
-            <button
-              type="button"
-              onClick={onToggleQr}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15"
-              aria-label={t("hideQr")}
-              aria-pressed={true}
-            >
-              <QrCode className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="relative mt-4 flex flex-1 flex-col items-center justify-center">
-            {qrDataUrl ? (
-              <div className="flex w-full flex-col items-center rounded-2xl border border-white/10 bg-white p-4 shadow-[0_12px_40px_rgba(0,0,0,0.25)]">
-                <img src={qrDataUrl} alt="Member QR" className="h-44 w-44 rounded-xl" />
-                <p className="mt-3 text-center text-xs font-medium text-neutral-600">{member.memberNo || `M${member.id}`}</p>
-              </div>
-            ) : (
-              <Loader2 className="h-8 w-8 animate-spin text-white/50" aria-hidden />
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StatTile({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 backdrop-blur-sm">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
-        <Icon className="h-4 w-4" />
-      </div>
-      <p className="text-xs text-white/50">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-white">{value}</p>
-      {sub ? <p className="mt-1 text-[11px] text-white/40">{sub}</p> : null}
-    </div>
-  )
-}
-
-function BottomNav({ tab, onChange }: { tab: PortalTab; onChange: (tab: PortalTab) => void }) {
-  const { t } = useMemberPortalLang()
-  const items: Array<{ id: PortalTab; label: string; icon: React.ElementType }> = [
-    { id: "home", label: t("tabHome"), icon: Home },
-    { id: "order", label: t("tabOrder"), icon: ShoppingCart },
-    { id: "location", label: t("tabLocation"), icon: MapPin },
-    { id: "privilege", label: t("tabPrivilege"), icon: Ticket },
-    { id: "me", label: t("tabMe"), icon: UserRound },
-  ]
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0d]/95 backdrop-blur-xl">
-      <div className="mx-auto grid max-w-lg grid-cols-5 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
-        {items.map(({ id, label, icon: Icon }) => {
-          const active = tab === id
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onChange(id)}
-              className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] transition ${
-                active ? "text-amber-300" : "text-white/45 hover:text-white/70"
-              }`}
-            >
-              <Icon className={`h-5 w-5 ${active ? "text-amber-300" : ""}`} />
-              {label}
-            </button>
-          )
-        })}
-      </div>
-    </nav>
   )
 }
 
@@ -331,8 +186,10 @@ export function MemberPortalApp() {
   const loadSession = React.useCallback(async () => {
     const me = await getJson<{ success: boolean; member?: MemberSummary }>("/api/member-portal/me")
     if (!me.success || !me.member) {
+      clearMemberPortalMemberLocalData()
       setMember(null)
       setDashboard(null)
+      setFavoriteStoreCode("")
       return false
     }
 
@@ -579,11 +436,14 @@ export function MemberPortalApp() {
 
   const logout = async () => {
     await postJson("/api/member-portal/auth/logout", {})
+    clearMemberPortalMemberLocalData()
     setMember(null)
     setDashboard(null)
     setPoints([])
     setCoupons([])
     setVisits([])
+    setFavoriteStoreCode("")
+    setShowQr(false)
     setTab("home")
     setPhone("")
     setBirthDate("")
@@ -606,15 +466,11 @@ export function MemberPortalApp() {
     return (
       <div
         className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white"
-        style={
-          designBackgrounds.loginBackgroundUrl
-            ? {
-                backgroundImage: `linear-gradient(rgba(8,8,10,0.82), rgba(8,8,10,0.92)), url(${designBackgrounds.loginBackgroundUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : undefined
-        }
+        style={{
+          backgroundImage: `linear-gradient(rgba(8,8,10,0.84), rgba(8,8,10,0.92)), url(${resolveMemberLoginBackgroundUrl(designBackgrounds.loginBackgroundUrl)})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+        }}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.14),transparent_42%)]" />
         <div className="pointer-events-none absolute -left-24 top-32 h-56 w-56 rounded-full bg-[#ef233c]/10 blur-3xl" />
@@ -652,6 +508,10 @@ export function MemberPortalApp() {
               {error}
             </div>
           )}
+
+          <div className="mb-4">
+            <MemberPwaInstallBanner />
+          </div>
 
           <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md">
             <div className="mb-4 flex items-center gap-2 text-white/70">
@@ -885,63 +745,64 @@ export function MemberPortalApp() {
   }
 
   const activeDashboard = dashboard ?? buildFallbackDashboard(member)
-
   const tier = tierVisual(activeDashboard.tierProgress.currentTierCode)
+  const greetingKey = memberPortalGreetingKey()
+  const navItems = [
+    { id: "home" as const, label: t("tabHome"), icon: Home },
+    { id: "order" as const, label: t("tabOrder"), icon: ShoppingCart },
+    { id: "location" as const, label: t("tabLocation"), icon: MapPin },
+    { id: "privilege" as const, label: t("tabPrivilege"), icon: Ticket },
+    { id: "me" as const, label: t("tabMe"), icon: UserRound },
+  ]
 
   return (
-    <div
-      className="min-h-[100dvh] bg-[#08080a] pb-24 text-white"
-      style={
-        designBackgrounds.appBackgroundUrl
-          ? {
-              backgroundImage: `linear-gradient(rgba(8,8,10,0.78), rgba(8,8,10,0.86)), url(${designBackgrounds.appBackgroundUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }
-          : undefined
-      }
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.10),transparent_40%)]" />
-
-      <div className="relative mx-auto max-w-lg px-4 pb-6 pt-5">
-        <header className="mb-5 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 p-1.5">
-              <Image src={brand.logoSymbolSrc} alt={brand.logoAlt} width={28} height={28} className="h-7 w-7 object-contain" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-white/45">{t("memberLounge")}</p>
-              <p className="truncate font-medium">{member.fullName || member.name}</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <MemberPortalLangSelect />
-            <button
-              type="button"
-              onClick={logout}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition hover:text-white"
-              aria-label={t("logout")}
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
+    <MemberPortalAmbienceBackground imageUrl={designBackgrounds.appBackgroundUrl}>
+      <MemberPortalShell>
+        <PremiumAppHeader
+          wordmark={t("memberLounge")}
+          displayName={member.fullName || member.name || "Member"}
+          tierLabel={activeDashboard.tierProgress.currentTierName || tier.label}
+          logoSrc={brand.logoSymbolSrc}
+          logoAlt={brand.logoAlt}
+          langSelect={<MemberPortalLangSelect />}
+          onLogout={logout}
+          logoutLabel={t("logout")}
+        />
 
         {!!notice && (
-          <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 backdrop-blur-md">
             {notice}
           </div>
         )}
 
         {!!error && (
-          <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 backdrop-blur-md">
             {error}
           </div>
         )}
 
+        <div className="mb-4">
+          <MemberPwaInstallBanner />
+        </div>
+
         {tab === "home" && (
           <div className="space-y-4">
-            <MembershipCard
+            <div className="px-0.5">
+              <p className="text-sm font-medium text-amber-200/80">{t(greetingKey)}</p>
+              <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-white">
+                {member.fullName || member.name}
+              </h1>
+              <p className="mt-1 text-sm text-white/50">{t("homeWelcomeSub")}</p>
+            </div>
+
+            <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <QuickActionButton icon={ShoppingCart} label={t("homeQuickOrder")} onClick={() => setTab("order")} />
+              <QuickActionButton icon={MapPin} label={t("homeQuickStores")} onClick={() => setTab("location")} />
+              <QuickActionButton icon={Ticket} label={t("homeQuickCoupons")} onClick={() => setTab("privilege")} />
+              <QuickActionButton icon={UserRound} label={t("homeQuickProfile")} onClick={() => setTab("me")} />
+            </div>
+
+            <MemberPortalMembershipCard
               member={member}
               dashboard={activeDashboard}
               qrDataUrl={qrDataUrl}
@@ -949,85 +810,70 @@ export function MemberPortalApp() {
               onToggleQr={() => setShowQr((v) => !v)}
             />
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">{t("tierNext")}</p>
-                  <p className="text-xs text-white/45">
-                    {activeDashboard.tierProgress.nextTierName
-                      ? t("tierProgress", {
-                          amount: formatBaht(activeDashboard.tierProgress.amountToNext),
-                          tier: activeDashboard.tierProgress.nextTierName,
-                        })
-                      : t("tierMax")}
-                  </p>
-                </div>
-                <Award className={`h-5 w-5 ${tier.accent}`} />
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all"
-                  style={{ width: `${activeDashboard.tierProgress.progressPercent}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-white/45">
-                {(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · {activeDashboard.tierProgress.progressPercent}%
-              </p>
-            </div>
+            <TierProgressCard
+              title={t("tierNext")}
+              subtitle={
+                activeDashboard.tierProgress.nextTierName
+                  ? t("tierProgress", {
+                      amount: formatBaht(activeDashboard.tierProgress.amountToNext),
+                      tier: activeDashboard.tierProgress.nextTierName,
+                    })
+                  : t("tierMax")
+              }
+              progressPercent={activeDashboard.tierProgress.progressPercent}
+              pointRateLabel={`${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · ${activeDashboard.tierProgress.progressPercent}%`}
+              accentClass={tier.accent}
+            />
 
             <div className="grid grid-cols-2 gap-3">
-              <StatTile icon={Wallet} label={t("statLifetime")} value={formatBaht(activeDashboard.stats.lifetimeAmount)} />
-              <StatTile
+              <PremiumStatTile icon={Wallet} label={t("statLifetime")} value={formatBaht(activeDashboard.stats.lifetimeAmount)} />
+              <PremiumStatTile
                 icon={History}
                 label={t("statVisits")}
                 value={`${activeDashboard.stats.visitCount}`}
                 sub={`${t("statAvgTicket")} ${formatBaht(activeDashboard.stats.avgTicket)}`}
               />
-              <StatTile icon={Ticket} label={t("statCoupons")} value={`${activeDashboard.stats.availableCoupons}`} />
-              <StatTile icon={Gift} label={t("statPointsEarned")} value={formatPoints(activeDashboard.stats.pointsEarnedTotal)} />
+              <PremiumStatTile icon={Ticket} label={t("statCoupons")} value={`${activeDashboard.stats.availableCoupons}`} accent="emerald" />
+              <PremiumStatTile icon={Gift} label={t("statPointsEarned")} value={formatPoints(activeDashboard.stats.pointsEarnedTotal)} accent="rose" />
             </div>
 
             {homePopup ? (
-              <div className="rounded-3xl border border-fuchsia-300/25 bg-fuchsia-400/10 p-5">
+              <GlassCard className="border-fuchsia-300/20 bg-fuchsia-500/10">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-fuchsia-100">{homePopup.title || t("memberLounge")}</p>
-                    {homePopup.body ? <p className="mt-1 text-xs text-fuchsia-50/85">{homePopup.body}</p> : null}
+                    {homePopup.body ? <p className="mt-1 text-xs leading-relaxed text-fuchsia-50/85">{homePopup.body}</p> : null}
                   </div>
-                  <Sparkles className="h-5 w-5 text-fuchsia-200" />
+                  <Sparkles className="h-5 w-5 shrink-0 text-fuchsia-200" />
                 </div>
                 {homePopup.imageUrl ? (
-                  <img
-                    src={homePopup.imageUrl}
-                    alt={homePopup.title || "popup"}
-                    className="mt-3 h-32 w-full rounded-2xl object-cover"
-                  />
+                  <img src={homePopup.imageUrl} alt={homePopup.title || "popup"} className="mt-3 h-36 w-full rounded-2xl object-cover" />
                 ) : null}
-              </div>
+              </GlassCard>
             ) : null}
 
-            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-amber-400/10 to-transparent p-5">
+            <GlassCard className="border-amber-400/15 bg-gradient-to-br from-amber-400/10 to-transparent">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">{t("referTitle")}</p>
-                  <p className="mt-1 text-xs text-white/45">{t("referDesc")}</p>
-                  <p className="mt-3 font-mono text-lg tracking-widest text-amber-200">{activeDashboard.referralCode}</p>
+                  <p className="text-sm font-semibold">{t("referTitle")}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/50">{t("referDesc")}</p>
+                  <p className="mt-3 font-mono text-xl tracking-[0.2em] text-amber-200">{activeDashboard.referralCode}</p>
                 </div>
-                <Share2 className="h-5 w-5 text-amber-300/80" />
+                <Share2 className="h-5 w-5 shrink-0 text-amber-300/80" />
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <CopyButton text={activeDashboard.referralCode} label={t("copyCode")} />
                 <CopyButton
                   text={`Join Choongman Chicken membership with my code ${activeDashboard.referralCode}`}
                   label={t("shareText")}
                 />
               </div>
-            </div>
+            </GlassCard>
 
             <button
               type="button"
               onClick={() => setTab("privilege")}
-              className="flex w-full items-center justify-between rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-4 text-left transition hover:bg-white/[0.05]"
+              className={`${mpGlassCardSoft} flex w-full items-center justify-between px-5 py-4 text-left transition hover:border-white/15`}
             >
               <div>
                 <p className="font-medium">{t("recentPoints")}</p>
@@ -1039,17 +885,17 @@ export function MemberPortalApp() {
             </button>
 
             {homeInfoItems.length > 0 ? (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-                <p className="mb-3 text-sm font-medium">업데이트</p>
+              <GlassCard soft>
+                <p className="mb-3 text-sm font-semibold">Updates</p>
                 <div className="space-y-2">
                   {homeInfoItems.map((item) => (
-                    <div key={item.contentKey} className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p className="text-sm text-white/90">{item.title || "안내"}</p>
-                      {item.body ? <p className="mt-0.5 text-xs text-white/55">{item.body}</p> : null}
+                    <div key={item.contentKey} className="rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
+                      <p className="text-sm text-white/90">{item.title || "—"}</p>
+                      {item.body ? <p className="mt-0.5 text-xs leading-relaxed text-white/55">{item.body}</p> : null}
                     </div>
                   ))}
                 </div>
-              </div>
+              </GlassCard>
             ) : null}
           </div>
         )}
@@ -1066,35 +912,29 @@ export function MemberPortalApp() {
 
         {tab === "location" && (
           <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">{t("locationTitle")}</h2>
-              <p className="text-sm text-white/45">{t("locationDesc")}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+            <SectionTitle title={t("locationTitle")} subtitle={t("locationDesc")} />
+            <GlassCard soft className="px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-white/45" />
                 <Input
                   value={locationSearch}
                   onChange={(e) => setLocationSearch(e.target.value)}
                   placeholder={t("locationSearchPh")}
-                  className="h-8 border-0 bg-transparent px-0 text-sm text-white placeholder:text-white/40 focus-visible:ring-0"
+                  className="h-9 border-0 bg-transparent px-0 text-sm text-white placeholder:text-white/40 focus-visible:ring-0"
                 />
               </div>
-            </div>
-            <div className="space-y-2">
+            </GlassCard>
+            <div className="space-y-2.5">
               {filteredStores.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-white/20 bg-white/[0.03] px-5 py-14 text-center">
+                <GlassCard soft className="px-5 py-14 text-center">
                   <MapPin className="mx-auto mb-3 h-7 w-7 text-amber-300/80" />
                   <p className="text-sm text-white/70">
                     {stores.length > 0 ? t("locationNoResult") : t("locationComing")}
                   </p>
-                </div>
+                </GlassCard>
               ) : (
                 filteredStores.map((s) => (
-                  <div
-                    key={s.storeCode}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
-                  >
+                  <GlassCard key={s.storeCode} soft className="px-4 py-3.5">
                     {storePhotoMap.get(s.storeCode) ? (
                       <img
                         src={storePhotoMap.get(s.storeCode)}
@@ -1144,7 +984,7 @@ export function MemberPortalApp() {
                       <Star className={`h-3.5 w-3.5 ${favoriteStoreCode === s.storeCode ? "fill-current" : ""}`} />
                       {favoriteStoreCode === s.storeCode ? t("locationFavorite") : t("locationFavoriteSet")}
                     </button>
-                  </div>
+                  </GlassCard>
                 ))
               )}
             </div>
@@ -1153,34 +993,28 @@ export function MemberPortalApp() {
 
         {tab === "privilege" && (
           <div className="space-y-3">
-            <div className="mb-1">
-              <h2 className="text-lg font-semibold">{t("privilegeTitle")}</h2>
-              <p className="text-sm text-white/45">{t("privilegeDesc")}</p>
-            </div>
+            <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
-                <p className="text-xs text-white/45">{t("statCoupons")}</p>
-                <p className="mt-1 text-lg font-semibold">{activeDashboard.stats.availableCoupons}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
-                <p className="text-xs text-white/45">{t("points")}</p>
-                <p className="mt-1 text-lg font-semibold">{formatPoints(member.pointBalance || 0)}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
-                <p className="text-xs text-white/45">{t("statVisits")}</p>
-                <p className="mt-1 text-lg font-semibold">{activeDashboard.stats.visitCount}</p>
-              </div>
+              <GlassCard soft className="px-3 py-3 text-center">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("statCoupons")}</p>
+                <p className="mt-1 text-lg font-bold">{activeDashboard.stats.availableCoupons}</p>
+              </GlassCard>
+              <GlassCard soft className="px-3 py-3 text-center">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("points")}</p>
+                <p className="mt-1 text-lg font-bold">{formatPoints(member.pointBalance || 0)}</p>
+              </GlassCard>
+              <GlassCard soft className="px-3 py-3 text-center">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("statVisits")}</p>
+                <p className="mt-1 text-lg font-bold">{activeDashboard.stats.visitCount}</p>
+              </GlassCard>
             </div>
             {coupons.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-white/10 px-5 py-12 text-center text-white/45">
+              <GlassCard soft className="px-5 py-12 text-center text-white/45">
                 {t("noCoupons")}
-              </div>
+              </GlassCard>
             ) : (
               coupons.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-3xl border border-white/10 bg-white/[0.03] p-5"
-                >
+                <GlassCard key={c.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-mono text-lg tracking-wide text-amber-200">{c.couponCode}</p>
@@ -1203,24 +1037,21 @@ export function MemberPortalApp() {
                       <CopyButton text={c.couponCode} label={t("copyCode")} />
                     </div>
                   ) : null}
-                </div>
+                </GlassCard>
               ))
             )}
-            <div>
-              <h2 className="text-lg font-semibold">{t("historyTitle")}</h2>
-              <p className="text-sm text-white/45">{t("historySub")}</p>
-            </div>
+            <SectionTitle title={t("historyTitle")} subtitle={t("historySub")} />
 
             <div>
-              <h3 className="mb-3 text-sm font-medium text-white/70">{t("recentOrders")}</h3>
+              <h3 className="mb-3 text-sm font-semibold text-white/70">{t("recentOrders")}</h3>
               <div className="space-y-2">
                 {visits.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-white/10 px-5 py-10 text-center text-white/45">
+                  <GlassCard soft className="px-5 py-10 text-center text-white/45">
                     {t("noOrders")}
-                  </div>
+                  </GlassCard>
                 ) : (
                   visits.map((v) => (
-                    <div key={v.orderId} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <GlassCard key={v.orderId} soft className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-medium">{formatBaht(v.total)}</p>
@@ -1228,22 +1059,22 @@ export function MemberPortalApp() {
                         </div>
                         <p className="text-xs text-white/45">{formatDateTime(v.visitedAt, dateLocale)}</p>
                       </div>
-                    </div>
+                    </GlassCard>
                   ))
                 )}
               </div>
             </div>
 
             <div>
-              <h3 className="mb-3 text-sm font-medium text-white/70">{t("pointsHistory")}</h3>
+              <h3 className="mb-3 text-sm font-semibold text-white/70">{t("pointsHistory")}</h3>
               <div className="space-y-2">
                 {points.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-white/10 px-5 py-10 text-center text-white/45">
+                  <GlassCard soft className="px-5 py-10 text-center text-white/45">
                     {t("noPoints")}
-                  </div>
+                  </GlassCard>
                 ) : (
                   points.map((p) => (
-                    <div key={p.id} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <GlassCard key={p.id} soft className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className={`font-medium ${p.points >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
@@ -1256,7 +1087,7 @@ export function MemberPortalApp() {
                         </div>
                         <p className="text-xs text-white/45">{formatDateTime(p.createdAt, dateLocale)}</p>
                       </div>
-                    </div>
+                    </GlassCard>
                   ))
                 )}
               </div>
@@ -1266,24 +1097,21 @@ export function MemberPortalApp() {
 
         {tab === "me" && (
           <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">{t("profileTitle")}</h2>
-              <p className="text-sm text-white/45">{t("profileSub")}</p>
-            </div>
+            <SectionTitle title={t("profileTitle")} subtitle={t("profileSub")} />
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+            <GlassCard>
               <div className="grid gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-white/70">{t("nameLabel")}</Label>
                   <Input
                     value={profile.name}
                     onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
-                    className="rounded-2xl border-white/10 bg-black/20 text-white"
+                    className={mpInputClass}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-white/70">{t("phoneLabel")}</Label>
-                  <Input value={member.phone || ""} disabled className="rounded-2xl border-white/10 bg-black/10 text-white/60" />
+                  <Input value={member.phone || ""} disabled className={`${mpInputClass} opacity-60`} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-white/70">{t("birthDateLabel")}</Label>
@@ -1299,7 +1127,7 @@ export function MemberPortalApp() {
                       value={profile.gender}
                       onChange={(e) => setProfile((p) => ({ ...p, gender: e.target.value }))}
                       placeholder="M / F"
-                      className="rounded-2xl border-white/10 bg-black/20 text-white"
+                      className={mpInputClass}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1308,7 +1136,7 @@ export function MemberPortalApp() {
                       value={profile.nationality}
                       onChange={(e) => setProfile((p) => ({ ...p, nationality: e.target.value }))}
                       placeholder="TH"
-                      className="rounded-2xl border-white/10 bg-black/20 text-white"
+                      className={mpInputClass}
                     />
                   </div>
                 </div>
@@ -1317,7 +1145,7 @@ export function MemberPortalApp() {
                   <Input
                     value={profile.email}
                     onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
-                    className="rounded-2xl border-white/10 bg-black/20 text-white"
+                    className={mpInputClass}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1326,10 +1154,10 @@ export function MemberPortalApp() {
                     value={profile.referralCode}
                     onChange={(e) => setProfile((p) => ({ ...p, referralCode: e.target.value.toUpperCase() }))}
                     placeholder="CM123456"
-                    className="rounded-2xl border-white/10 bg-black/20 text-white"
+                    className={mpInputClass}
                   />
                 </div>
-                <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-sm">
+                <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm">
                   <input
                     type="checkbox"
                     checked={profile.consentMarketing}
@@ -1340,27 +1168,23 @@ export function MemberPortalApp() {
                 </label>
               </div>
 
-              <Button
-                onClick={saveProfile}
-                disabled={actionLoading}
-                className="mt-5 h-12 w-full rounded-2xl bg-amber-400 text-base font-medium text-black hover:bg-amber-300"
-              >
+              <Button onClick={saveProfile} disabled={actionLoading} className={`mt-5 w-full ${mpPrimaryBtn}`}>
                 {actionLoading ? t("saving") : t("saveProfile")}
               </Button>
-            </div>
+            </GlassCard>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/45">
+            <GlassCard soft className="text-sm text-white/50">
               <p>{t("memberNo")} {member.memberNo}</p>
               <p className="mt-1">{t("joined")} {member.createdAt ? formatDateTime(member.createdAt, dateLocale) : "-"}</p>
               {member.lastVisitedAt ? (
                 <p className="mt-1">{t("lastVisit")} {formatDateTime(member.lastVisitedAt, dateLocale)}</p>
               ) : null}
-            </div>
+            </GlassCard>
           </div>
         )}
-      </div>
+      </MemberPortalShell>
 
-      <BottomNav tab={tab} onChange={setTab} />
-    </div>
+      <PremiumBottomNav tab={tab} onChange={setTab} items={navItems} />
+    </MemberPortalAmbienceBackground>
   )
 }

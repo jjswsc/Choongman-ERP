@@ -32,6 +32,8 @@ const withSerwist = withSerwistInit({
     { url: "/pos/terminal", revision },
     /** POS PWA start_url·오프라인 폴백 — 없으면 /pos/login 요청이 캐시에 없어 빈 화면 */
     { url: "/pos/login", revision },
+    /** 회원 라운지 PWA — 홈 화면 설치 start_url */
+    { url: "/m", revision },
   ],
 });
 

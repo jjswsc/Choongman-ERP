@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { normalizeVendorCode } from '@/lib/vendor-code-policy'
 
 /** 직매입 품목 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     const unit = String((body.unit ?? 'set') || 'set').trim()
     const price = Number(body.price ?? 0) || 0
     const sumAmount = Number(body.sumAmount ?? body.sum_amount) ?? qty * price
-    const supplierCode = String((body.supplierCode ?? body.supplier_code) || '').trim()
+    const supplierCode = normalizeVendorCode(body.supplierCode ?? body.supplier_code)
     const status = String((body.status ?? 'pending') || 'pending').trim()
     const remark = String((body.remark ?? '') || '').trim()
 

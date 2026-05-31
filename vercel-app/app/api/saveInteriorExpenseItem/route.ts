@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { normalizeVendorCode } from '@/lib/vendor-code-policy'
 
 /** 비용 항목 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     const projectId = Number(body.projectId ?? body.project_id)
     const category = String(body.category ?? '').trim()
     const description = String(body.description ?? '').trim()
-    const vendorCode = String((body.vendorCode ?? body.vendor_code) || '').trim()
+    const vendorCode = normalizeVendorCode(body.vendorCode ?? body.vendor_code)
     const quote = Number(body.quote ?? body.quote) || 0
     const paid = Number(body.paid ?? body.paid) || 0
     const balance = Number((body.balance ?? body.balance) ?? 0)

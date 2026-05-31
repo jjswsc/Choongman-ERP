@@ -362,9 +362,10 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const paymentComplete = total > 0 && paymentSum >= total - 0.02
     let pointEarned = pointEarnedReq
     const previousEarned = Number(current?.point_earned || 0)
-    if (memberId > 0 && paymentSum > 0 && previousEarned <= 0) {
+    if (memberId > 0 && paymentComplete && previousEarned <= 0) {
       const loyalty = await applyLoyaltyOnOrder({
         memberId,
         orderId: id,

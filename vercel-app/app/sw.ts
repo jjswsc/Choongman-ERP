@@ -198,6 +198,22 @@ const authLoginApisGetNetworkOnly = {
   handler: new NetworkOnly(),
 }
 
+/** 회원 라운지 API — 쿠키 기반 개인정보이므로 SW 캐시 금지(공용 기기·계정 전환) */
+const memberPortalApisNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && pathname.startsWith("/api/member-portal")
+  },
+  handler: new NetworkOnly(),
+}
+
 const authLoginPostNetworkOnly = {
   matcher({
     sameOrigin,
@@ -359,6 +375,7 @@ const serwist = new Serwist({
     posMenuImageProxyGetNetworkOnly,
     posQrBrandAssetsCacheFirst,
     authLoginApisGetNetworkOnly,
+    memberPortalApisNetworkOnly,
     authLoginPostNetworkOnly,
     posLoginDocumentNetworkFirst,
     loginPagesGetNetworkOnly,
@@ -409,8 +426,16 @@ const serwist = new Serwist({
           return (
             request.destination === "document" &&
             !pathname.startsWith("/admin") &&
-            !pathname.startsWith("/pos")
+            !pathname.startsWith("/pos") &&
+            !pathname.startsWith("/m")
           )
+        },
+      },
+      {
+        url: "/m",
+        matcher({ request }) {
+          const pathname = new URL(request.url).pathname
+          return request.destination === "document" && pathname.startsWith("/m")
         },
       },
     ],

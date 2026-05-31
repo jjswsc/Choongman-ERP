@@ -779,17 +779,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         | 'escPosCutOverride'
         | 'onShellPrintResult'
       >
-    ) =>
-      new Promise<void>((resolve, reject) => {
-        printPosHtmlDocument(fullHtml, {
-          title,
-          printDelayMs: 0,
-          fallbackCleanupMs: 120_000,
-          ...thermal,
-          onPrintUnavailable: () => reject(new Error(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE)),
-          onAfterCleanup: () => resolve(),
-        })
-      }),
+    ) => printPosHtmlDocument(fullHtml, {
+      title,
+      printDelayMs: 0,
+      fallbackCleanupMs: 120_000,
+      ...thermal,
+    }),
     [t]
   )
 
