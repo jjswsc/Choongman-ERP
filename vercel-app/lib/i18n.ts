@@ -1481,6 +1481,8 @@ export const i18n = {
     emp_audit_action_deactivate: '퇴사/비활성',
     emp_audit_col_registered: '등록 값',
     tab_hr_eval: '직원 평가',
+    tab_hr_eval_register: '평가 입력',
+    tab_hr_eval_hub_desc: '평가 입력·분석·목록·경고서·항목 설정을 아래 하위 탭에서 선택합니다. 권한에 따라 보이는 탭만 다릅니다.',
     tab_eval_list: '평가 목록',
     tab_eval_kitchen_setting: '주방 항목 설정',
     tab_eval_service_setting: '서비스 항목 설정',
@@ -1545,7 +1547,7 @@ export const i18n = {
     eval_analytics_coverage_none: '이 조건에서 미평가 직원이 없습니다.',
     eval_analytics_coverage_unavailable: '커버리지를 계산할 수 없습니다(직원 데이터를 불러오지 못했습니다).',
     eval_analytics_col_job: '직무',
-    eval_analytics_unevaluated_open_eval: '행을 클릭하면 직원 평가 탭으로 이동해 해당 직원이 선택됩니다.',
+    eval_analytics_unevaluated_open_eval: '행을 클릭하면 직원 평가 → 평가 입력 하위 탭으로 이동해 해당 직원이 선택됩니다.',
     eval_jump_not_found: '직원 목록에서 해당 인원을 찾지 못했습니다. 매장·이름 표기가 다르면 직원 목록에서 확인해 주세요.',
     eval_load_record_fail: '저장된 평가를 불러오지 못했습니다. 권한·네트워크를 확인하거나 평가 이력에서 다시 시도해 주세요.',
     eval_list_open_for_edit: '이 평가 수정',
@@ -7492,9 +7494,9 @@ export const i18n = {
     helpHow_admin_company_documents:
       '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② 목록: 필터를 맞춘 뒤「조회」로 불러옵니다. 제목 열 머리글을 누르면 제목 오름차순·내림차순이 전환되고, 기본은 등록일 최신순입니다. 행의 연필(수정)로 등록 탭에 불러온 뒤「문서 정보」하단「저장」으로 제목·카테고리·권한·날짜·비고·공문을 저장합니다(Drive는 URL을 왼쪽 카드에서 함께 저장).\n③ 등록: 「문서 정보」에 제목·카테고리(전 매장 공통)·연결·발급 날짜·만료일·비고를 입력한 뒤, Drive URL 저장 또는 파일 업로드를 진행합니다.\n④ 카테고리: 카테고리 탭에서 전사 공통 목록을 추가·수정합니다(매장별로 나누지 않음).\n⑤ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
     helpSum_admin_employees:
-      '직원 명단을 매장·직무·등급·재직 상태로 조회하고, 좌측 폼에서 인적·급여·은행·세무 정보를 등록·수정하며, 직원 입력 이력·인원 이동·적정 인원·평가·경고장 등 HR 보조 탭을 한 화면에서 다룹니다.',
+      '직원 명단을 매장·직무·등급·재직 상태로 조회하고, 좌측 폼에서 인적·급여·은행·세무 정보를 등록·수정하며, 직원 입력 이력·인원 이동·적정 인원·직원 평가(하위 탭) 등 HR 보조 탭을 한 화면에서 다룹니다.',
     helpHow_admin_employees:
-      '① 직원 목록: 매장·직무·등급·재직(근무/휴직/퇴사 등)·검색어로 좁힌 뒤「조회」를 누릅니다. 표에서 행을 고르면 왼쪽 폼에 그 직원이 채워지고,「신규」로 빈 폼을 열 수 있습니다. 저장 전 필수(※)와 날짜·숫자 형식을 확인합니다.\n② 권한: 매장 매니저·가맹점주는 보통 자기 매장 위주이며 Officer/Director 역할 부여 등은 본사(디렉터) 정책에 따릅니다. 가맹 복수 매장이 켜져 있으면 본사에서 허용한 경우에만「추가 매장」을 편집할 수 있습니다.\n③ 직원 입력 이력: 기간·작업·담당자로 직원 등록·수정·퇴사 처리 기록을 조회합니다. 행을 클릭하면 항목별 변경 전·후를 확인할 수 있습니다(비밀번호는 기록하지 않음).\n④ 인원 이동·적정 인원: 기간·매장 기준으로 이동·편성·목표 인원을 봅니다.\n⑤ 직무 목록·평가·경고장·평가 분석·평가 목록·평가 항목 설정: 역할에 따라 탭이 보이며, 평가·항목 설정은 본사 위주입니다.\n⑥ 급여·근태 등 다른 메뉴에서 직원 링크로 들어온 경우에도 목록을 조회한 뒤 같은 폼으로 수정합니다.\n⑦ 자세한 단계는「도움말」본문을 보고, 끝나면「화면으로 돌아가기」로 목록으로 돌아옵니다.',
+      '① 직원 목록: 매장·직무·등급·재직(근무/휴직/퇴사 등)·검색어로 좁힌 뒤「조회」를 누릅니다. 표에서 행을 고르면 왼쪽 폼에 그 직원이 채워지고,「신규」로 빈 폼을 열 수 있습니다. 저장 전 필수(※)와 날짜·숫자 형식을 확인합니다.\n② 권한: 매장 매니저·가맹점주는 보통 자기 매장 위주이며 Officer/Director 역할 부여 등은 본사(디렉터) 정책에 따릅니다. 가맹 복수 매장이 켜져 있으면 본사에서 허용한 경우에만「추가 매장」을 편집할 수 있습니다.\n③ 직원 입력 이력: 기간·작업·담당자로 직원 등록·수정·퇴사 처리 기록을 조회합니다. 행을 클릭하면 항목별 변경 전·후를 확인할 수 있습니다(비밀번호는 기록하지 않음).\n④ 인원 이동·적정 인원: 기간·매장 기준으로 이동·편성·목표 인원을 봅니다.\n⑤ 직원 평가: 상단「직원 평가」탭 안에서 하위 탭(평가 입력·직원평가분석·평가 목록·경고서·평가 항목 설정)을 고릅니다. 분석·목록·경고서에서 직원 행을 열면「평가 입력」하위 탭으로 이동합니다. 항목 설정은 본사 위주입니다.\n⑥ 급여·근태 등 다른 메뉴에서 직원 링크로 들어온 경우에도 목록을 조회한 뒤 같은 폼으로 수정합니다.\n⑦ 자세한 단계는「도움말」본문을 보고, 끝나면「화면으로 돌아가기」로 목록으로 돌아옵니다.',
     helpSum_admin_members:
       '회원 마스터를 조회·등록·수정하고 LINE·앱 가입 정보를 ERP 기준으로 관리하는 화면입니다.',
     helpHow_admin_members:
@@ -10283,6 +10285,8 @@ Only matters the employee must handle personally on a working day:
     emp_audit_action_deactivate: 'Resign / deactivate',
     emp_audit_col_registered: 'Registered value',
     tab_hr_eval: 'Employee Eval',
+    tab_hr_eval_register: 'Evaluation entry',
+    tab_hr_eval_hub_desc: 'Use the sub-tabs below for entry, analytics, history, warning letters, and item setup. Visible tabs depend on your role.',
     tab_eval_list: 'Eval History',
     tab_eval_kitchen_setting: 'Kitchen Items',
     tab_eval_service_setting: 'Service Items',
@@ -10347,7 +10351,7 @@ Only matters the employee must handle personally on a working day:
     eval_analytics_coverage_none: 'No unevaluated employees for this filter.',
     eval_analytics_coverage_unavailable: 'Coverage could not be computed (employee data unavailable).',
     eval_analytics_col_job: 'Job',
-    eval_analytics_unevaluated_open_eval: 'Click a row to open Employee evaluation with that person selected.',
+    eval_analytics_unevaluated_open_eval: 'Click a row to open Employee Eval → Evaluation entry with that person selected.',
     eval_jump_not_found: 'That person was not found in the employee list. Check spelling or store if the name differs.',
     eval_load_record_fail: 'Could not load the saved evaluation. Check permissions or try again from evaluation history.',
     eval_list_open_for_edit: 'Edit this evaluation',
@@ -16313,9 +16317,9 @@ orderItemQty: 'Qty',
     helpHow_admin_company_documents:
       '① Store: pick the store to query at the top. With permission, choose All stores to see every store’s documents.\n② List: set filters and press Search. Click the Title header to toggle ascending/descending by title; default order is newest by registration time. Use the row pencil to open the Register tab; edit fields under Document details and press Save at the bottom (Drive URLs are saved from the left card together with the link).\n③ Register: fill Document details (title, category, relation, issue/expiry dates, note), then save a Drive URL or upload a file.\n④ Categories: pick a store, then add top-level categories (no parent) or subcategories under a parent (e.g. notices, manuals).\n⑤ Use Help on the right for the full guide, then Back to screen when finished.',
     helpSum_admin_employees:
-      'Look up staff by store, job, grade, and employment status; edit HR, payroll, bank, and tax fields in the left form; and use satellite tabs for input history, movement, headcount, evaluations, and warning letters in one place.',
+      'Look up staff by store, job, grade, and employment status; edit HR, payroll, bank, and tax fields in the left form; and use satellite tabs for input history, movement, headcount, and employee evaluation (with sub-tabs) in one place.',
     helpHow_admin_employees:
-      '① Employee list: narrow with store, job, grade, employment status, and search text, then press Query. Selecting a row fills the left form; use New to open a blank profile. Check required fields (※) and date/number formats before Save.\n② Roles: store managers and franchisees usually work within their store scope; assigning Officer/Director follows head-office policy. If multi-store franchise is enabled, edit Extra stores only when head office allows it.\n③ Movement & headcount: review transfers and staffing targets by period and store.\n④ Job catalog, evaluations, warning letters, analytics, evaluation list, and item settings: tabs appear by role; evaluation setup is mostly head-office.\n⑤ Deep links from Payroll or Attendance still load the list first—then edit in the same form.\n⑥ Open Help for the long guide, then Back to screen when you are done.',
+      '① Employee list: narrow with store, job, grade, employment status, and search text, then press Query. Selecting a row fills the left form; use New to open a blank profile. Check required fields (※) and date/number formats before Save.\n② Roles: store managers and franchisees usually work within their store scope; assigning Officer/Director follows head-office policy. If multi-store franchise is enabled, edit Extra stores only when head office allows it.\n③ Input history: review who changed employee records and when (passwords are not logged).\n④ Movement & headcount: review transfers and staffing targets by period and store.\n⑤ Employee Eval: open the top tab, then pick sub-tabs (entry, analytics, history, warning letters, item setup). Rows in analytics/history/warnings open Evaluation entry.\n⑥ Deep links from Payroll or Attendance still load the list first—then edit in the same form.\n⑦ Open Help for the long guide, then Back to screen when you are done.',
     helpSum_admin_members:
       'Look up, register, and edit member master data; manage app and LINE-linked profiles in ERP.',
     helpHow_admin_members:

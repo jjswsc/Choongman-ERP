@@ -9,11 +9,7 @@ import {
   BarChart2,
   ClipboardList,
   ClipboardPenLine,
-  FileWarning,
   History,
-  LayoutList,
-  LineChart,
-  ListChecks,
   Tags,
   Users,
   UsersRound,
@@ -28,17 +24,14 @@ import {
   isOfficeRole,
   isOfficeStore,
   isAccountingRole,
-  isDirectorRole,
   canAssignEmployeeOfficerRole,
   canAssignEmployeeDirectorRole,
   canonicalEmployeeFormRole,
 } from "@/lib/permissions"
 import {
-  adminTabsBarCn,
   adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
   adminTabsContentCn,
 } from "@/lib/admin-tab-styles"
@@ -57,14 +50,11 @@ import {
   EmployeeFilterBar,
   EmployeeTable,
   EmployeeForm,
-  EmployeeEvalTab,
-  EmployeeEvalListTab,
-  EmployeeEvalAnalyticsTab,
-  EmployeeEvalItemsSettingsTab,
+  EmployeeEvalHubTab,
+  type EmployeeEvalSubTab,
   EmployeeMovementTab,
   EmployeeHeadcountTab,
   EmployeeJobCatalogTab,
-  EmployeeWarningLettersTab,
   EmployeeInputHistoryTab,
   emptyForm,
   type EmployeeTableRow,
@@ -72,7 +62,6 @@ import {
   type EmployeeEvalJumpTarget,
 } from "@/components/employees"
 import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
-import { resolveEmployeeNickJobForEvalJump } from "@/lib/employee-eval-jump-resolve"
 import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
@@ -211,9 +200,16 @@ export default function EmployeesPage() {
   const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
   const [franchiseeMulti, setFranchiseeMulti] = React.useState<FranchiseeMultiStoreSettings | null>(null)
   const [hrMainTab, setHrMainTab] = React.useState("list")
+  const [evalSubTab, setEvalSubTab] = React.useState<EmployeeEvalSubTab>("register")
   const [evalJumpPayload, setEvalJumpPayload] = React.useState<EmployeeEvalJumpTarget | null>(null)
   const [evalResultSaveSerial, setEvalResultSaveSerial] = React.useState(0)
   const clearEvalJump = React.useCallback(() => setEvalJumpPayload(null), [])
+
+  const openEvalRegister = React.useCallback((target?: EmployeeEvalJumpTarget) => {
+    if (target) setEvalJumpPayload(target)
+    setHrMainTab("eval")
+    setEvalSubTab("register")
+  }, [])
 
   const adminRowToForm = React.useCallback(
     (e: AdminEmployeeItem): EmployeeFormData => {
@@ -486,10 +482,34 @@ export default function EmployeesPage() {
   const isManagerOrFranchisee = isManager || isFranchiseeRole(userRole)
   const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
   const showEvalAnalyticsTab = isOffice || isManagerOrFranchisee
-  /** 매장 매니저·가맹점도 분석 탭에서 미평가 행 클릭 시 직원 평가 탭으로 이동 가능 */
   const showEmployeeEvalTab = isOffice || isManagerOrFranchisee
   const showEmployeeInputHistoryTab = isOffice || isAccountingRole(userRole) || isManagerOrFranchisee
+  const showEvalHubTab = true
   const evalAnalyticsCanPickAllStores = isOffice
+
+  const handleHrMainTabChange = React.useCallback((next: string) => {
+    if (next === "warning-letters") {
+      setHrMainTab("eval")
+      setEvalSubTab("warning-letters")
+      return
+    }
+    if (next === "eval-analytics") {
+      setHrMainTab("eval")
+      setEvalSubTab("analytics")
+      return
+    }
+    if (next === "eval-list") {
+      setHrMainTab("eval")
+      setEvalSubTab("list")
+      return
+    }
+    if (next === "eval-items-setting") {
+      setHrMainTab("eval")
+      setEvalSubTab("items-setting")
+      return
+    }
+    setHrMainTab(next)
+  }, [])
 
   const handleNew = () => {
     const base = { ...emptyForm }
@@ -530,7 +550,7 @@ export default function EmployeesPage() {
     return storesForFilter
   }, [auth?.allowedStores, userRole, isManager, userStore, storesForFilter])
 
-  // 직원 평가 탭은 allEmployees를 쓰는데, 목록 탭 '조회' 없이 오면 비어 있음 → 본사·회계·매장관리자는 백그라운드 로드
+  // 직원 평가(입력·경고서 등)는 allEmployees 필요 → 목록 탭 조회 없이도 백그라운드 로드
   React.useEffect(() => {
     if (!showEmployeeEvalTab) return
     void loadEmployeeList({ updateDisplay: false })
@@ -549,7 +569,7 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        <Tabs value={hrMainTab} onValueChange={setHrMainTab} className={adminTabsRootCn}>
+        <Tabs value={hrMainTab} onValueChange={handleHrMainTabChange} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
@@ -576,32 +596,10 @@ export default function EmployeesPage() {
                     {t("tab_hr_job_catalog")}
                   </TabsTrigger>
                 )}
-                {showEmployeeEvalTab && (
+                {showEvalHubTab && (
                   <TabsTrigger value="eval" className={adminTabsTriggerCn}>
                     <ClipboardPenLine className={adminTabsIconCn} aria-hidden />
                     {t("tab_hr_eval")}
-                  </TabsTrigger>
-                )}
-                {showEmployeeEvalTab && (
-                  <TabsTrigger value="warning-letters" className={adminTabsTriggerCn}>
-                    <FileWarning className={adminTabsIconCn} aria-hidden />
-                    {t("tab_hr_warning_letters")}
-                  </TabsTrigger>
-                )}
-                {showEvalAnalyticsTab && (
-                  <TabsTrigger value="eval-analytics" className={adminTabsTriggerCn}>
-                    <LineChart className={adminTabsIconCn} aria-hidden />
-                    {t("tab_hr_eval_analytics")}
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value="eval-list" className={adminTabsTriggerCn}>
-                  <ListChecks className={adminTabsIconCn} aria-hidden />
-                  {t("tab_eval_list")}
-                </TabsTrigger>
-                {isOffice && (
-                  <TabsTrigger value="eval-items-setting" className={adminTabsTriggerCn}>
-                    <LayoutList className={adminTabsIconCn} aria-hidden />
-                    {t("tab_eval_items_setting")}
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -702,93 +700,30 @@ export default function EmployeesPage() {
             </TabsContent>
           )}
 
-          {showEmployeeEvalTab && (
+          {showEvalHubTab && (
             <TabsContent value="eval" className={adminTabsContentCn}>
-              <EmployeeEvalTab
-                stores={storesForForm}
-                employees={allEmployees}
-                onSaved={() => {
+              <EmployeeEvalHubTab
+                subTab={evalSubTab}
+                onSubTabChange={setEvalSubTab}
+                storesForForm={storesForForm}
+                storesForFilter={storesForFilter}
+                allEmployees={allEmployees}
+                showRegisterTab={showEmployeeEvalTab}
+                showAnalyticsTab={showEvalAnalyticsTab}
+                showListTab
+                showWarningTab={showEmployeeEvalTab}
+                showItemsTab={isOffice}
+                evalAnalyticsCanPickAllStores={evalAnalyticsCanPickAllStores}
+                canUseAiSummary={isOffice}
+                jumpToEmployee={evalJumpPayload}
+                onJumpToEmployeeConsumed={clearEvalJump}
+                evalSaveSerial={evalResultSaveSerial}
+                onEvalSaved={() => {
                   void loadEmployeeList()
                   setEvalResultSaveSerial((n) => n + 1)
                 }}
-                jumpToEmployee={evalJumpPayload}
-                onJumpToEmployeeConsumed={clearEvalJump}
+                onOpenEvalRegister={openEvalRegister}
               />
-            </TabsContent>
-          )}
-          {showEmployeeEvalTab && (
-            <TabsContent value="warning-letters" className={adminTabsContentCn}>
-              <EmployeeWarningLettersTab
-                stores={storesForFilter}
-                employees={allEmployees}
-                evalSaveSerial={evalResultSaveSerial}
-                onOpenEval={(target) => {
-                  if (target.evalType === "standalone") return
-                  setEvalJumpPayload({
-                    key: Date.now(),
-                    store: target.store,
-                    name: target.name,
-                    nick: target.nick,
-                    job: target.job,
-                    evalType: target.evalType,
-                    evaluationId: target.evaluationId,
-                  })
-                  setHrMainTab("eval")
-                }}
-              />
-            </TabsContent>
-          )}
-          {showEvalAnalyticsTab && (
-            <TabsContent value="eval-analytics" className={adminTabsContentCn}>
-              <EmployeeEvalAnalyticsTab
-                stores={storesForFilter}
-                canPickAllStores={evalAnalyticsCanPickAllStores}
-                canUseAiSummary={isOffice}
-                onOpenEvalForUnevaluated={
-                  showEmployeeEvalTab
-                    ? (row) => {
-                        setEvalJumpPayload({
-                          key: Date.now(),
-                          store: row.store,
-                          name: row.name,
-                          nick: row.nick,
-                          job: row.job,
-                        })
-                        setHrMainTab("eval")
-                      }
-                    : undefined
-                }
-              />
-            </TabsContent>
-          )}
-          <TabsContent value="eval-list" className="mt-0 p-4 sm:p-6">
-            <EmployeeEvalListTab
-              stores={storesForFilter}
-              onEditInEvalTab={
-                showEmployeeEvalTab
-                  ? (row) => {
-                      const { nick, job } = resolveEmployeeNickJobForEvalJump(
-                        allEmployees,
-                        row.store,
-                        row.employeeName
-                      )
-                      setEvalJumpPayload({
-                        key: Date.now(),
-                        store: row.store,
-                        name: row.employeeName,
-                        nick,
-                        job,
-                        evaluationId: row.id,
-                      })
-                      setHrMainTab("eval")
-                    }
-                  : undefined
-              }
-            />
-          </TabsContent>
-          {isOffice && (
-            <TabsContent value="eval-items-setting" className={adminTabsContentCn}>
-              <EmployeeEvalItemsSettingsTab />
             </TabsContent>
           )}
         </Tabs>
