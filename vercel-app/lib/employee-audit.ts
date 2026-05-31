@@ -3,6 +3,8 @@ import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { isAccountingRole } from '@/lib/permissions'
 
+export { EMPLOYEE_AUDIT_FIELD_I18N } from '@/lib/employee-audit-fields'
+
 const AUDIT_EXCLUDED_KEYS = new Set(['password'])
 
 /** employees_audit before/after 스냅샷 조회용 (password 제외) */
@@ -36,43 +38,6 @@ export async function fetchEmployeeAuditSnapshot(employeeId: number): Promise<Re
     }
   }
   return null
-}
-
-/** DB 컬럼명 → i18n 키 (직원 입력 이력 UI) */
-export const EMPLOYEE_AUDIT_FIELD_I18N: Record<string, string> = {
-  store: 'emp_label_store',
-  name: 'emp_label_name',
-  name_title: 'emp_label_nick_title',
-  nick: 'emp_label_nickname',
-  phone: 'emp_label_phone',
-  job: 'emp_label_job',
-  birth: 'emp_label_birth',
-  nation: 'emp_label_nation',
-  join_date: 'emp_label_join_date',
-  resign_date: 'emp_label_leave_date',
-  employment_status: 'emp_audit_field_employment_status',
-  sal_type: 'emp_label_sal_type',
-  sal_amt: 'emp_label_sal_amt',
-  role: 'emp_label_role',
-  email: 'emp_label_email',
-  employee_code: 'emp_label_employee_code',
-  id_number: 'emp_id_number',
-  tax_id: 'emp_tax_id',
-  sso_number: 'emp_sso_number',
-  sso_exempt: 'emp_sso_exempt_label',
-  address: 'emp_address',
-  bank_name: 'emp_bank_name',
-  account_number: 'emp_account_number',
-  position_allowance: 'emp_position_allowance',
-  haz_allow: 'emp_risk_allowance',
-  attendance_allowance: 'emp_attendance_allowance',
-  grade: 'emp_grade',
-  photo: 'emp_photo',
-  id_card_photo: 'emp_id_card',
-  extra_stores: 'emp_franchisee_extra_stores',
-  deleted_at: 'emp_audit_deleted_at',
-  deleted_by: 'emp_audit_deleted_by',
-  delete_reason: 'emp_audit_delete_reason',
 }
 
 export type EmployeeAuditActor = {

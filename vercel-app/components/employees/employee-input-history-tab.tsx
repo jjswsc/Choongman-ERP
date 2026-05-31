@@ -6,7 +6,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { getEmployeeInputAudit, type EmployeeInputAuditRow } from "@/lib/api-client"
-import { EMPLOYEE_AUDIT_FIELD_I18N } from "@/lib/employee-audit"
+import { EMPLOYEE_AUDIT_FIELD_I18N } from "@/lib/employee-audit-fields"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
