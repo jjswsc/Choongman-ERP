@@ -3,6 +3,7 @@ import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrs
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilterAsync } from '@/lib/pos-sales-store-filter'
+import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import { applyPosSalesStoreSelectionFilterAsync } from '@/lib/pos-sales-fetch-rows'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { normalizePosCancelReasonKey } from '@/lib/pos-cancel-reason-key'
@@ -25,7 +26,10 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
-    const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
+    const stores = await resolvePosSalesStoresFromRequest(
+      request,
+      resolveStoresFromParams(pos, searchParams.get('stores'))
+    )
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {

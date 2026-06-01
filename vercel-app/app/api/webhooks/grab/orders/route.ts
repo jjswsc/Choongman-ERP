@@ -36,7 +36,26 @@ export async function POST(req: NextRequest) {
     : null
   const acceptanceMode = resolveOrderAcceptanceMode(policyBundle)
   const initialStatus = acceptanceMode === 'auto' ? 'cooking' : 'pending'
-  let persisted = await persistGrabOrderToPos(body, { initialStatus })
+  let orderPayload: Record<string, unknown> = body
+  if (merchantID) {
+    try {
+      const listed = await grabListOrdersByIds({ merchantID, orderIDs: [orderID] })
+      const fullOrder = (listed?.orders || []).find((o) => String(o.orderID || '').trim() === orderID)
+      if (fullOrder) {
+        const fullItems = (fullOrder as { items?: unknown }).items
+        if (Array.isArray(fullItems) && fullItems.length > 0) {
+          orderPayload = fullOrder as Record<string, unknown>
+        }
+      }
+    } catch (e) {
+      logGrabWebhook('submit_order', req, {
+        orderID,
+        merchantID,
+        listOrdersPrefetchError: String(e ?? 'unknown'),
+      })
+    }
+  }
+  let persisted = await persistGrabOrderToPos(orderPayload, { initialStatus })
   const firstPersistError = persisted.ok ? '' : String(persisted.message || '')
   // 일부 매장에서 submit_order payload에 items가 누락되어 no line items로 실패하는 케이스 폴백
   if (!persisted.ok && firstPersistError === 'no line items' && merchantID) {

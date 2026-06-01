@@ -1,0 +1,255 @@
+import type {
+  BalanceSheetReport,
+  IncomeStatementLineDetail,
+  IncomeStatementReport,
+  UnpostedBankTransaction,
+} from '@/lib/accounting-reports'
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+function mergeLineDetails(rows: IncomeStatementLineDetail[][]): IncomeStatementLineDetail[] | undefined {
+  const flat = rows.flat().filter((r) => r && Number(r.amount) !== 0)
+  if (flat.length === 0) return undefined
+  const byKey = new Map<string, IncomeStatementLineDetail>()
+  for (const row of flat) {
+    const key = String(row.key || '').trim() || '__unknown__'
+    const prev = byKey.get(key)
+    const amt = round2((prev?.amount ?? 0) + Number(row.amount || 0))
+    byKey.set(key, {
+      key,
+      amount: amt,
+      label: prev?.label || row.label,
+    })
+  }
+  return Array.from(byKey.values()).sort((a, b) => b.amount - a.amount)
+}
+
+function mergeExpenseBySubject(
+  rows: NonNullable<IncomeStatementReport['expenseByAccountSubject']>[]
+): IncomeStatementReport['expenseByAccountSubject'] {
+  const flat = rows.flat().filter(Boolean)
+  if (flat.length === 0) return undefined
+  const byId = new Map<string, NonNullable<IncomeStatementReport['expenseByAccountSubject']>[number]>()
+  for (const row of flat) {
+    const idKey = row.accountSubjectId == null ? 'null' : String(row.accountSubjectId)
+    const prev = byId.get(idKey)
+    const amt = round2((prev?.amount ?? 0) + Number(row.amount || 0))
+    byId.set(idKey, {
+      accountSubjectId: row.accountSubjectId,
+      code: prev?.code || row.code,
+      name: prev?.name || row.name,
+      nameEn: prev?.nameEn ?? row.nameEn,
+      nameTh: prev?.nameTh ?? row.nameTh,
+      amount: amt,
+    })
+  }
+  return Array.from(byId.values()).sort((a, b) => b.amount - a.amount)
+}
+
+/** 가맹 허용 매장별 손익 → 「내 매장 전체」합산 */
+export function mergeIncomeStatementReports(
+  reports: IncomeStatementReport[],
+  meta: { yearMonth: string; startStr: string; endStr: string }
+): IncomeStatementReport {
+  if (reports.length === 0) {
+    return {
+      yearMonth: meta.yearMonth,
+      startStr: meta.startStr,
+      endStr: meta.endStr,
+      storeFilter: 'All',
+      timezone: 'Asia/Bangkok',
+      sales: 0,
+      purchases: 0,
+      beginningInventory: 0,
+      endingInventory: 0,
+      cogs: 0,
+      expenses: 0,
+      grossProfit: 0,
+      netProfit: 0,
+      expenseBreakdown: {
+        pettyCash: 0,
+        bankWithdraw: 0,
+        deliveryAppFees: 0,
+        cardFees: 0,
+        fixedExpenses: 0,
+        total: 0,
+      },
+    }
+  }
+  if (reports.length === 1) {
+    return { ...reports[0]!, storeFilter: 'All' }
+  }
+
+  const sum = (pick: (r: IncomeStatementReport) => number) =>
+    round2(reports.reduce((a, r) => a + pick(r), 0))
+
+  const warnings = new Set<string>()
+  const limits: Record<string, { fetched: number; limit: number; total?: number }> = {}
+  const overlapKeys = new Set<string>()
+  const excludedHq: { key: string; amount: number; label?: string }[] = []
+
+  for (const r of reports) {
+    for (const w of r.diagnostics?.warnings || []) warnings.add(w)
+    for (const [k, v] of Object.entries(r.diagnostics?.limits || {})) {
+      const prev = limits[k]
+      if (!prev) limits[k] = { ...v }
+      else {
+        limits[k] = {
+          fetched: (prev.fetched || 0) + (v.fetched || 0),
+          limit: Math.max(prev.limit || 0, v.limit || 0),
+          total: (prev.total ?? 0) + (v.total ?? 0),
+        }
+      }
+    }
+    for (const k of r.diagnostics?.purchaseInboundBankOverlapVendorKeys || []) overlapKeys.add(k)
+    for (const x of r.diagnostics?.purchaseExcludedHqBankPayments || []) excludedHq.push(x)
+  }
+
+  const sales = sum((r) => r.sales)
+  const purchases = sum((r) => r.purchases)
+  const beginningInventory = sum((r) => r.beginningInventory)
+  const endingInventory = sum((r) => r.endingInventory)
+  const cogs = sum((r) => r.cogs)
+  const expenses = sum((r) => r.expenses)
+  const grossProfit = sum((r) => r.grossProfit)
+  const netProfit = sum((r) => r.netProfit)
+
+  const expenseBreakdown = {
+    pettyCash: sum((r) => r.expenseBreakdown.pettyCash),
+    bankWithdraw: sum((r) => r.expenseBreakdown.bankWithdraw),
+    deliveryAppFees: sum((r) => r.expenseBreakdown.deliveryAppFees),
+    cardFees: sum((r) => r.expenseBreakdown.cardFees),
+    fixedExpenses: sum((r) => r.expenseBreakdown.fixedExpenses),
+    total: sum((r) => r.expenseBreakdown.total),
+  }
+
+  const purchaseByVendor = mergeLineDetails(reports.map((r) => r.purchaseByVendor || []))
+  const salesByCustomer = mergeLineDetails(reports.map((r) => r.salesByCustomer || []))
+  const salesByDay = mergeLineDetails(reports.map((r) => r.salesByDay || []))
+  const expenseByAccountSubject = mergeExpenseBySubject(
+    reports.map((r) => r.expenseByAccountSubject || [])
+  )
+
+  const outboundTotal = sum((r) => r.diagnostics?.purchaseHqOutboundBasis?.outboundTotal ?? 0)
+  const approvedOrdersTotal = sum(
+    (r) => r.diagnostics?.purchaseHqOutboundBasis?.approvedOrdersTotal ?? 0
+  )
+
+  return {
+    yearMonth: meta.yearMonth,
+    startStr: meta.startStr,
+    endStr: meta.endStr,
+    storeFilter: 'All',
+    timezone: 'Asia/Bangkok',
+    sales,
+    purchases,
+    beginningInventory,
+    endingInventory,
+    cogs,
+    expenses,
+    grossProfit,
+    netProfit,
+    expenseBreakdown,
+    expenseByAccountSubject,
+    purchaseByVendor,
+    salesByCustomer,
+    salesByDay,
+    diagnostics: {
+      warnings: [...warnings],
+      limits,
+      purchaseInboundBankOverlapVendorKeys: overlapKeys.size ? [...overlapKeys] : undefined,
+      purchaseHqOutboundBasis:
+        outboundTotal > 0 || approvedOrdersTotal > 0
+          ? {
+              outboundTotal,
+              approvedOrdersTotal,
+              diff: round2(outboundTotal - approvedOrdersTotal),
+            }
+          : undefined,
+      purchaseExcludedHqBankPayments: excludedHq.length ? excludedHq : undefined,
+    },
+  }
+}
+
+/** 가맹 허용 매장별 대차 → 「내 매장 전체」합산 */
+export function mergeBalanceSheetReports(
+  reports: BalanceSheetReport[],
+  meta: { yearMonth: string; startStr: string; endStr: string }
+): BalanceSheetReport {
+  if (reports.length === 0) {
+    return {
+      yearMonth: meta.yearMonth,
+      startStr: meta.startStr,
+      endStr: meta.endStr,
+      storeFilter: 'All',
+      timezone: 'Asia/Bangkok',
+      assets: { cashAndBanks: 0, inventory: 0, receivables: 0, total: 0 },
+      liabilities: { payables: 0, total: 0 },
+      equity: {
+        openingCapital: 0,
+        retainedEarningsYtd: 0,
+        currentPeriodProfit: 0,
+        total: 0,
+      },
+      balanceCheckDiff: 0,
+      unpostedBankWithdrawals: [],
+    }
+  }
+  if (reports.length === 1) {
+    return { ...reports[0]!, storeFilter: 'All' }
+  }
+
+  const sum = (pick: (r: BalanceSheetReport) => number) =>
+    round2(reports.reduce((a, r) => a + pick(r), 0))
+
+  const cashAndBanks = sum((r) => r.assets.cashAndBanks)
+  const inventory = sum((r) => r.assets.inventory)
+  const receivables = sum((r) => r.assets.receivables)
+  const assetsTotal = sum((r) => r.assets.total)
+  const payables = sum((r) => r.liabilities.payables)
+  const liabilitiesTotal = sum((r) => r.liabilities.total)
+  const openingCapital = sum((r) => r.equity.openingCapital)
+  const retainedEarningsYtd = sum((r) => r.equity.retainedEarningsYtd)
+  const currentPeriodProfit = sum((r) => r.equity.currentPeriodProfit)
+  const equityTotal = sum((r) => r.equity.total)
+  const balanceCheckDiff = round2(assetsTotal - (liabilitiesTotal + equityTotal))
+
+  const glAccount1130 = sum((r) => r.ledgerBreakdown?.glAccount1130 ?? 0)
+  const subledgerReceivables = sum((r) => r.ledgerBreakdown?.subledgerReceivables ?? 0)
+  const glAccount2110 = sum((r) => r.ledgerBreakdown?.glAccount2110 ?? 0)
+  const subledgerPayables = sum((r) => r.ledgerBreakdown?.subledgerPayables ?? 0)
+  const glAccount1010 = sum((r) => r.ledgerBreakdown?.glAccount1010 ?? 0)
+
+  const unposted: UnpostedBankTransaction[] = []
+  for (const r of reports) {
+    for (const u of r.unpostedBankWithdrawals || []) unposted.push(u)
+  }
+
+  return {
+    yearMonth: meta.yearMonth,
+    startStr: meta.startStr,
+    endStr: meta.endStr,
+    storeFilter: 'All',
+    timezone: 'Asia/Bangkok',
+    assets: { cashAndBanks, inventory, receivables, total: assetsTotal },
+    liabilities: { payables, total: liabilitiesTotal },
+    ledgerBreakdown: {
+      glAccount1130,
+      subledgerReceivables,
+      glAccount2110,
+      subledgerPayables,
+      glAccount1010,
+      glSource: reports[0]?.ledgerBreakdown?.glSource ?? 'select',
+    },
+    equity: {
+      openingCapital,
+      retainedEarningsYtd,
+      currentPeriodProfit,
+      total: equityTotal,
+    },
+    balanceCheckDiff,
+    unpostedBankWithdrawals: unposted,
+  }
+}

@@ -12,6 +12,8 @@ import {
   isManagerRole,
   canSelectAllStoresForPosSalesManagement,
 } from "@/lib/permissions"
+import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import { useStoreView } from "@/lib/store-view-context"
 import {
   parseOrderTypesParam,
   normalizeOrderTypesQueryString,
@@ -389,10 +391,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const searchParams = useSearchParams()
   const isHoursPanel = searchParams.get("hours") === "1"
   const { auth } = useAuth()
+  const { viewStore } = useStoreView()
   const canSearchAll = canSelectAllStoresForPosSalesManagement(
     auth?.role || "",
     auth?.store || ""
   )
+  const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores
+  )
+  const canMultiStorePicker = canSearchAll || canFranchiseeMultiStore
   const canEditPosBizDayStore = React.useMemo(() => {
     const r = String(auth?.role || "").toLowerCase()
     return isManagerRole(r) || isFranchiseeRole(r)
@@ -604,7 +612,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     return undefined
   }, [selectedStoresKey, selectedStoresParam])
 
-  const officeStoreSelectionReady = !canSearchAll || selectedStores.length > 0
+  const officeStoreSelectionReady = !canMultiStorePicker || selectedStores.length > 0
   const canQuerySales = !!(startStr && endStr) && officeStoreSelectionReady
 
   const scopedStoreData = React.useMemo(
@@ -630,14 +638,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   )
 
   const filteredStoreOptions = React.useMemo(() => {
+    const base = canSearchAll ? posOptions : posBizDayStoreChoices
     const q = storeSearch.trim().toLowerCase()
-    if (!q) return posOptions
-    return posOptions.filter((p) => {
+    if (!q) return base
+    return base.filter((p) => {
       const pl = p.toLowerCase()
       if (pl.includes(q)) return true
       return posStoreDisplayName(p).toLowerCase().includes(q)
     })
-  }, [posOptions, storeSearch, posStoreDisplayName])
+  }, [canSearchAll, posOptions, posBizDayStoreChoices, storeSearch, posStoreDisplayName])
 
   React.useEffect(() => {
     if (!storePickerOpen) return
@@ -1051,7 +1060,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const salesAnalyticsPlaceholder = React.useMemo(() => {
     if (!hasData) return tr("salesSelectPeriod", "기간을 선택해 주세요.")
-    if (canSearchAll && selectedStores.length === 0) {
+    if (canMultiStorePicker && selectedStores.length === 0) {
       return tr(
         "salesSelectStoreBeforeQuery",
         "매장을 하나 이상 선택한 뒤「조회」를 눌러 주세요. 「전체 선택」으로 여러 매장·전체를 볼 수 있습니다."
@@ -1064,7 +1073,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       )
     }
     return null
-  }, [hasData, canSearchAll, selectedStores.length, showSalesResults, tr])
+  }, [hasData, canMultiStorePicker, selectedStores.length, showSalesResults, tr])
 
   /** 상단(현재·직전동일·전주) — 기간/매장×기간 탐색 주제만 3칸 비교, 그 외 금액 위주는 현재만, 메뉴·채널·배달은 생략 */
   const summaryRowShowFull =
@@ -1492,11 +1501,32 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [loadPosOptions, canSearchAll])
 
   React.useEffect(() => {
-    if (!canSearchAll && auth?.store) {
-      const fixed = normalizeStoreCodes([auth.store])
-      if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
+    if (canSearchAll) return
+    if (!canFranchiseeMultiStore) {
+      if (auth?.store) {
+        const fixed = normalizeStoreCodes([auth.store])
+        if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
+      }
+      return
     }
-  }, [canSearchAll, auth?.store, selectedStoresKey])
+    const all = normalizeStoreCodes(posBizDayStoreChoices)
+    const allKey = all.join(",")
+    const v = String(viewStore || "").trim()
+    if (!v || v === "All") {
+      if (selectedStoresKey !== allKey) setSelectedStores(all)
+      return
+    }
+    const pick = normalizeStoreCodes([v])
+    const pickKey = pick.join(",")
+    if (pick.length && selectedStoresKey !== pickKey) setSelectedStores(pick)
+  }, [
+    canSearchAll,
+    canFranchiseeMultiStore,
+    auth?.store,
+    posBizDayStoreChoices,
+    viewStore,
+    selectedStoresKey,
+  ])
 
   const sumPeriodTotal = React.useCallback(
     (res: Awaited<ReturnType<typeof getPosSalesByPeriod>>) => {
@@ -1517,7 +1547,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const loadAllAnalytics = React.useCallback(() => {
     if (isHoursPanel) return
     if (!startStr || !endStr) return
-    if (canSearchAll && selectedStores.length === 0) return
+    if (canMultiStorePicker && selectedStores.length === 0) return
     const keySnapshot = analyticsParamKey
     const id = ++loadIdRef.current
     const dateSpan = diffDaysInclusiveBangkok(startStr, endStr)
@@ -1874,7 +1904,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {canSearchAll ? (
+              {canMultiStorePicker ? (
                 <div className="relative" ref={storePickerRef}>
                   <Button
                     id={storePickerBtnId}
@@ -1890,9 +1920,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <span className="truncate text-left">
                       {selectedStores.length === 0
                         ? storePickerPlaceholder
-                        : selectedStores.length === 1
-                          ? posStoreDisplayName(selectedStores[0])
-                          : `${selectedStores.length}${tr("selected", "개 선택")}`}
+                        : selectedStores.length === posBizDayStoreChoices.length &&
+                            posBizDayStoreChoices.length > 1
+                          ? canFranchiseeMultiStore
+                            ? tr("salesSelectMyFranchiseStoresAll", "내 매장 전체")
+                            : tr("salesSelectStoreAll", "전체 매장")
+                          : selectedStores.length === 1
+                            ? posStoreDisplayName(selectedStores[0])
+                            : `${selectedStores.length}${tr("selected", "개 선택")}`}
                     </span>
                     <span className="ml-2 text-xs text-muted-foreground">{storePickerOpen ? "▲" : "▼"}</span>
                   </Button>
@@ -1917,7 +1952,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           variant="outline"
                           onClick={() => {
                             skipDefaultStoreAutoSelectRef.current = false
-                            const all = normalizeStoreCodes([...posOptions])
+                            const all = normalizeStoreCodes(
+                              canSearchAll ? [...posOptions] : [...posBizDayStoreChoices]
+                            )
                             userSelectedRef.current.storesKey = all.join(",")
                             setSelectedStores(all)
                           }}
@@ -1991,7 +2028,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               onClick={loadAllAnalytics}
               disabled={!canQuerySales || loading}
               title={
-                canSearchAll && selectedStores.length === 0
+                canMultiStorePicker && selectedStores.length === 0
                   ? tr("salesQueryNeedStore", "매장을 선택해 주세요.")
                   : undefined
               }
@@ -2013,7 +2050,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </p>
           ) : null}
 
-          {!isHoursPanel && canSearchAll && selectedStores.length === 0 && posBizDayStoreChoices.length > 0 ? (
+          {!isHoursPanel && canMultiStorePicker && selectedStores.length === 0 && posBizDayStoreChoices.length > 0 ? (
             <p className="mb-3 text-xs text-amber-800 dark:text-amber-300 leading-relaxed" role="status">
               {tr(
                 "salesSelectStoreHint",

@@ -28,6 +28,12 @@ import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { isFranchiseeRole } from "@/lib/permissions"
+import {
+  canFranchiseeAggregateAllowedStores,
+  FRANCHISEE_AGGREGATE_ALL_STORES_VALUE,
+  isFranchiseeAggregateAllStoresView,
+} from "@/lib/franchisee-multi-store"
+import { useStoreView } from "@/lib/store-view-context"
 import { useAutoTranslate } from "@/lib/auto-translate"
 import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
@@ -67,12 +73,16 @@ export function ErpHeader() {
   const t = useT(lang)
   const { enabled: autoTranslateEnabled, setEnabled: setAutoTranslateEnabled } = useAutoTranslate()
   const brand = useAppBrandConfig()
+  const { viewStore, setViewStore } = useStoreView()
+
   const franchiseeSwitchStores = useMemo(() => {
     if (!auth || !isFranchiseeRole(auth.role || "")) return null
     const a = auth.allowedStores
     if (!a || a.length <= 1) return null
     return a
   }, [auth])
+
+  const canFranchiseeAll = canFranchiseeAggregateAllowedStores(auth?.role, auth?.allowedStores)
 
   const isLoginPage = pathname === "/admin/login"
   const isDashboard = pathname === "/admin" || pathname === "/admin/"
@@ -219,13 +229,32 @@ export function ErpHeader() {
         {franchiseeSwitchStores && auth && (
           <>
             <Select
-              value={auth.store || franchiseeSwitchStores[0]}
-              onValueChange={(v) => setAuth({ ...auth, store: v })}
+              value={
+                canFranchiseeAll && isFranchiseeAggregateAllStoresView(viewStore)
+                  ? FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
+                  : auth.store || franchiseeSwitchStores[0]
+              }
+              onValueChange={(v) => {
+                if (v === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE) {
+                  setViewStore(FRANCHISEE_AGGREGATE_ALL_STORES_VALUE)
+                  return
+                }
+                setViewStore(v)
+                setAuth({ ...auth, store: v })
+              }}
             >
               <SelectTrigger className="h-8 w-[min(12rem,32vw)] text-xs" aria-label={t("header_view_store")}>
                 <SelectValue placeholder={t("header_view_store")} />
               </SelectTrigger>
               <SelectContent>
+                {canFranchiseeAll ? (
+                  <SelectItem
+                    value={FRANCHISEE_AGGREGATE_ALL_STORES_VALUE}
+                    className="text-xs font-medium"
+                  >
+                    {t("store_all_my_franchise_stores")}
+                  </SelectItem>
+                ) : null}
                 {franchiseeSwitchStores.map((s) => (
                   <SelectItem key={s} value={s} className="text-xs">
                     {s}

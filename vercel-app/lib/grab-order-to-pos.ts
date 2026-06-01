@@ -180,7 +180,7 @@ function extractModifierCandidatesFromItem(item: Record<string, unknown>): Recor
     const node = queue.shift()
     if (!node) break
     const { key, value, depth } = node
-    if (depth > 3 || value == null) continue
+    if (depth > 5 || value == null) continue
     if (typeof value !== 'object') continue
     if (visited.has(value)) continue
     visited.add(value)
@@ -264,11 +264,75 @@ function extractOptionCodesFromModifier(mod: Record<string, unknown>): string[] 
   for (const raw of idCandidates) {
     const text = String(raw ?? '').trim()
     if (!text) continue
-    const fromModId = /(?:^|[^A-Za-z0-9])mod-([A-Za-z0-9]+-\d+)-item-/i.exec(text)?.[1]
+    const fromModId =
+      /(?:^|[^A-Za-z0-9])mod-([A-Za-z][A-Za-z0-9]*-\d+)-item-/i.exec(text)?.[1] ||
+      /^mod-([A-Za-z][A-Za-z0-9]*-\d+)-item-/i.exec(text)?.[1]
     if (fromModId && isLikelyOptionCode(fromModId)) out.add(fromModId.toUpperCase())
     if (isLikelyOptionCode(text)) out.add(text.toUpperCase())
   }
   return Array.from(out)
+}
+
+/** Grab submit_order: `modifiers[]` + `modifierGroups[].modifiers[]` (API는 name 없이 id만 올 수 있음) */
+function flattenGrabOrderItemModifiers(item: Record<string, unknown>): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = []
+  const seen = new Set<string>()
+  const push = (raw: unknown) => {
+    const mod = asRecord(raw)
+    if (!Object.keys(mod).length) return
+    const sig = buildModifierPriceSignature(mod)
+    if (seen.has(sig)) return
+    seen.add(sig)
+    out.push(mod)
+  }
+  for (const m of Array.isArray(item.modifiers) ? item.modifiers : []) push(m)
+  for (const g of Array.isArray(item.modifierGroups) ? item.modifierGroups : []) {
+    const group = asRecord(g)
+    for (const m of Array.isArray(group.modifiers) ? group.modifiers : []) push(m)
+    for (const m of Array.isArray(group.selectedModifiers) ? group.selectedModifiers : []) push(m)
+  }
+  return out
+}
+
+function grabPosItemHasOptionSnapshot(item: PosItem): boolean {
+  const note = String(item.note ?? '').trim()
+  if (/(?:^|\s)(mods?:|optc:)/i.test(note)) return true
+  if (/(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(note)) return true
+  if (String(item.optionCode ?? item.optionCode1 ?? '').trim()) return true
+  if (Array.isArray(item.optionCodes) && item.optionCodes.length > 0) return true
+  return false
+}
+
+function countGrabPosItemOptionSnapshots(items: PosItem[]): number {
+  return items.filter((it) => grabPosItemHasOptionSnapshot(it)).length
+}
+
+/** 주방 슬립: `SPICY YANGNYEOM (M - Drumette)` 형태 — note 유실 시에도 옵션 표기 */
+function formatGrabKitchenDisplayName(baseName: string, modifierLabels: string[]): string {
+  const name = String(baseName ?? '').trim()
+  const labels = (modifierLabels || []).map((x) => String(x ?? '').trim()).filter(Boolean)
+  if (!name || labels.length === 0) return name
+  if (/\([^)]+\)/.test(name)) return name
+  const nameKey = name.toLowerCase()
+  const extras = labels.filter((lab) => {
+    const lk = lab.toLowerCase()
+    if (lk === nameKey) return false
+    if (nameKey.includes(lk) || lk.includes(nameKey)) return false
+    return true
+  })
+  if (extras.length === 0) return name
+  const sizePart = extras.filter((lab) =>
+    /^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(lab) ||
+    /\b(size|part|boneless|drumette|joint wing|wing|leg|순살|뼈|โดบา|ปีก)\b/i.test(lab)
+  )
+  const sideOrOther = extras.filter((lab) => !sizePart.includes(lab))
+  const grouped = [...sizePart, ...sideOrOther]
+  if (grouped.length === 0) return name
+  if (grouped.length === 1) return `${name} (${grouped[0]})`
+  const head = grouped[0]
+  const tail = grouped.slice(1).join(', ')
+  if (/^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(head) && tail) return `${name} (${head} - ${tail})`
+  return `${name} (${grouped.join(', ')})`
 }
 
 function readLineMinorTotal(item: Record<string, unknown>): number {
@@ -706,14 +770,13 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
   for (const raw of rawItems) {
     const item = asRecord(raw)
     const qty = Math.max(1, Math.trunc(toNumber(item.quantity) || 1))
-    const modifiers = Array.isArray(item.modifiers) ? item.modifiers : []
+    const flatModifiers = flattenGrabOrderItemModifiers(item)
     let modifierMinor = 0
     const modifierNames: string[] = []
     const pricedModifierSignatures = new Set<string>()
     const pricedModifierFuzzySignatures = new Set<string>()
     const optionCodeSet = new Set<string>()
-    for (const m of modifiers) {
-      const mod = asRecord(m)
+    for (const mod of flatModifiers) {
       const modQty = Math.max(1, Math.trunc(toNumber(mod.quantity) || 1))
       modifierMinor += toNumber(mod.price) * modQty
       pricedModifierSignatures.add(buildModifierPriceSignature(mod))
@@ -767,7 +830,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         item.grabItemName ??
         ''
     ).trim()
-    const itemName = resolved.name || rawDisplayName || `Grab item ${idx + 1}`
+    let itemName = resolved.name || rawDisplayName || `Grab item ${idx + 1}`
     const unitBaseMinor = toNumber(item.price)
     const lineMinor = deepReadGrabLineMinorTotal(item) || readLineMinorTotal(item)
     const unitMinorResolved = resolveGrabLineUnitMinor({
@@ -801,6 +864,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     if (inferredDefaultSize && !modifierNamesForNote.includes(inferredDefaultSize)) {
       modifierNamesForNote.unshift(inferredDefaultSize)
     }
+    itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,
@@ -825,8 +889,13 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         price: minorToMajor(unitMinor, exponent),
         qty: rowQty,
         ...(menuId1 ? { menuId1 } : {}),
-        ...(optionCodes.length === 1 ? { optionCode: optionCodes[0], optionCode1: optionCodes[0] } : {}),
-        ...(optionCodes.length > 1 ? { optionCodes } : {}),
+        ...(optionCodes.length > 0
+          ? {
+              optionCodes,
+              optionCode: optionCodes[0],
+              optionCode1: optionCodes[0],
+            }
+          : {}),
         ...(resolved.promoId ? { promoId: resolved.promoId } : {}),
         ...(resolved.promoCode ? { promoCode: resolved.promoCode } : {}),
         ...(resolved.promoItems && resolved.promoItems.length > 0 ? { promoItems: resolved.promoItems } : {}),
@@ -987,9 +1056,37 @@ export async function persistGrabOrderToPos(
   const existing = (await supabaseSelectFilter(
     'pos_orders',
     `store_code=eq.${encodeURIComponent(storeCode)}&memo=ilike.${encodeURIComponent(`*grab_order:${orderID}*`)}`,
-    { limit: 1, select: 'id,order_no' }
-  )) as { id?: number; order_no?: string }[]
+    { limit: 1, select: 'id,order_no,items_json' }
+  )) as { id?: number; order_no?: string; items_json?: string }[]
   if (existing?.[0]?.id) {
+    const snapshot = await buildGrabPosOrderSnapshot(order)
+    let oldItems: PosItem[] = []
+    try {
+      oldItems = JSON.parse(String(existing[0].items_json ?? '[]')) as PosItem[]
+      if (!Array.isArray(oldItems)) oldItems = []
+    } catch {
+      oldItems = []
+    }
+    const oldOptCount = countGrabPosItemOptionSnapshots(oldItems)
+    const newOptCount = countGrabPosItemOptionSnapshots(snapshot.items)
+    const shouldRefreshItems =
+      snapshot.items.length > 0 &&
+      (newOptCount > oldOptCount ||
+        (oldOptCount === 0 && newOptCount > 0) ||
+        JSON.stringify(oldItems) !== JSON.stringify(snapshot.items))
+    if (shouldRefreshItems) {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(existing[0].id)}`, {
+        items_json: JSON.stringify(snapshot.items),
+        subtotal: snapshot.subtotal,
+        discount_amt: snapshot.discountAmt,
+        delivery_fee: snapshot.deliveryFee,
+        packaging_fee: snapshot.packagingFee,
+        vat: snapshot.vat,
+        total: snapshot.total,
+        payment_cash: snapshot.paymentCash,
+        payment_delivery_app: snapshot.paymentDeliveryApp,
+      })
+    }
     return {
       ok: true,
       orderId: Number(existing[0].id),

@@ -6,6 +6,7 @@ import {
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
   isLikelyPosOptionCode,
+  resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { splitPosPrintItemLine, stripLeadingPrintCodeBrackets } from '@/lib/pos-print-item-line'
@@ -504,6 +505,9 @@ export function buildKitchenHallStyleSlipLines(
 
   for (const it of regular) {
     const pi = it.promoItems
+    const resolvedNote = grabInbound
+      ? resolveGrabItemPrintNote(it as Parameters<typeof resolveGrabItemPrintNote>[0])
+      : String(it.note ?? '').trim()
     if (Array.isArray(pi) && pi.length > 0) {
       const headerName = stripLeadingPrintCodeBrackets(String(it.name ?? ''))
       const promoComposeLines = promoComposeFromOrderParent(
@@ -518,7 +522,7 @@ export function buildKitchenHallStyleSlipLines(
         name: stripLeadingPrintCodeBrackets(String(it.name ?? '')),
         qty: Math.max(1, resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown }) || 1),
         ...(() => {
-          const note = formatItemNoteForPrint(String(it.note ?? '').trim())
+          const note = formatItemNoteForPrint(resolvedNote)
           return note ? { note } : {}
         })(),
         ...(promoComposeLines.length > 0 ? { promoComposeLines } : {}),
@@ -533,7 +537,7 @@ export function buildKitchenHallStyleSlipLines(
     const resolvedMainName = fallbackNameFromNote
       ? fallbackNameFromNote
       : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
-    const formattedNote = formatItemNoteForPrint(String(it.note ?? '').trim(), lineSplit.optionLine)
+    const formattedNote = formatItemNoteForPrint(resolvedNote, lineSplit.optionLine)
     const dedupedNote =
       fallbackNameFromNote &&
       formattedNote &&

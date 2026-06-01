@@ -22,6 +22,8 @@ type UpdateMenuNotificationBody = {
    * menu-sync-state 웹훅 누락/지연 시 운영 우회용.
    */
   syncPromoTargetPriceCampaigns?: unknown
+  /** true면 fixPrice 캠페인을 일치 여부와 관계없이 삭제·재생성 */
+  forcePromoCampaignResync?: unknown
 }
 
 function coerceMerchantIdInputs(body: UpdateMenuNotificationBody): string[] {
@@ -89,14 +91,22 @@ export async function POST(req: NextRequest) {
       body.syncPromoTargetPriceCampaigns === true ||
       body.syncPromoTargetPriceCampaigns === 'true' ||
       body.syncPromoTargetPriceCampaigns === 1
+    const forcePromoCampaignResync =
+      body.forcePromoCampaignResync === true ||
+      body.forcePromoCampaignResync === 'true' ||
+      body.forcePromoCampaignResync === 1
     const promoCampaignSyncResults: Record<
       string,
-      { created: number; updated: number; skipped: number; deleted: number } | { error: string }
+      | { created: number; updated: number; skipped: number; deleted: number; targets: number }
+      | { error: string }
     > = {}
     if (shouldSyncPromoCampaigns && succeededMerchantIDs.length > 0) {
       for (const merchantID of succeededMerchantIDs) {
         try {
-          promoCampaignSyncResults[merchantID] = await syncGrabPromoTargetPriceCampaigns({ merchantID })
+          promoCampaignSyncResults[merchantID] = await syncGrabPromoTargetPriceCampaigns({
+            merchantID,
+            force: forcePromoCampaignResync,
+          })
         } catch (e) {
           promoCampaignSyncResults[merchantID] = { error: String(e ?? 'unknown_error') }
         }

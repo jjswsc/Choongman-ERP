@@ -77,6 +77,7 @@ describe('pos-kitchen-slip-display', () => {
     const lines = buildKitchenHallStyleSlipLines(slipItems, {
       orderItems,
       optionNameByCode: catalog.optionNameByCode,
+      grabInbound: false,
     })
     expect(lines[0].promoComposeLines).toEqual(['GOLDEN FRIED CHICKEN (S Boneless) x1'])
     expect(lines[0].note).toBeUndefined()
@@ -231,5 +232,24 @@ describe('pos-kitchen-slip-display', () => {
       menuCodeByMenuId: { '8': 'C008' },
     })
     expect(lines[0].name).toBe('SNOW ONION')
+  })
+
+  it('grab line resolves optionCode when note is empty', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [
+        { optionCode: 'C011-2', name: 'M - Drumette' },
+        { optionCode: 'C011-1', name: 'S Boneless' },
+      ]
+    )
+    const lines = buildKitchenHallStyleSlipLines(
+      [{ id: 'grab:line-chicken', name: 'SPICY YANGNYEOM', qty: 1, optionCode1: 'C011-2' }],
+      {
+        grabInbound: true,
+        optionNameByCode: catalog.optionNameByCode,
+      }
+    )
+    expect(lines[0].name).toBe('SPICY YANGNYEOM')
+    expect(lines[0].note).toContain('Drumette')
   })
 })

@@ -11,6 +11,8 @@ import {
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
   resolveOptionCodesToLabels,
+  synthesizeGrabItemOptionNote,
+  resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 
 describe('resolveGrabMerchantPosTotal', () => {
@@ -159,6 +161,29 @@ describe('grab-pos-order-enrich', () => {
     )
     const meta = resolveGrabDeliveryLineNote('C011-3, C011-5', catalog.optionNameByCode)
     expect(meta.optionChips).toEqual(['M - 순살', 'Kimchi 30g.'])
+  })
+
+  it('resolveGrabItemPrintNote merges optc into existing note', () => {
+    expect(
+      resolveGrabItemPrintNote({
+        note: 'mods:Kimchi 30g.',
+        optionCode1: 'C011-2',
+        optionCodes: ['C011-5'],
+      })
+    ).toBe('mods:Kimchi 30g. · optc:C011-2,C011-5')
+  })
+
+  it('synthesizeGrabItemOptionNote rebuilds optc note from item fields', () => {
+    expect(
+      synthesizeGrabItemOptionNote({
+        note: '',
+        optionCode1: 'C011-2',
+        optionCodes: ['C011-5'],
+      })
+    ).toBe('optc:C011-2,C011-5')
+    expect(synthesizeGrabItemOptionNote({ note: 'mods:Size S', optionCode1: 'C011-1' })).toBe(
+      'mods:Size S · optc:C011-1'
+    )
   })
 
   it('maps "Item note:" prefixed code list to readable option chips', () => {

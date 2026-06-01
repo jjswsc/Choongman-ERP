@@ -19,6 +19,8 @@ import {
   resolveFinancialStatementStoreLabel,
 } from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import { useStoreView } from "@/lib/store-view-context"
 import {
   useStoreList,
   getBalanceSheet,
@@ -81,8 +83,14 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   const t = useT(lang)
   const { auth } = useAuth()
   const { stores: storeList, storeLabels } = useStoreList()
+  const { viewStore } = useStoreView()
   const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
   const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
+  const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores,
+    auth?.store
+  )
   const managerStore = (auth?.store || "").trim()
   const scopedStoreChoices = React.useMemo(() => {
     const seen = new Set<string>()
@@ -104,7 +112,12 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
     () => props.yearMonthEnd ?? props.yearMonth ?? defaultYm
   )
   const [storeFilter, setStoreFilter] = React.useState(() =>
-    props.storeFilter ?? (isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All")
+    props.storeFilter ??
+      (canFranchiseeMultiStore
+        ? "All"
+        : isManager && scopedStoreChoices[0]
+          ? scopedStoreChoices[0]
+          : "All")
   )
   const [loading, setLoading] = React.useState(false)
   const [data, setData] = React.useState<BalanceSheetData | null>(null)
@@ -158,8 +171,18 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   )
 
   React.useEffect(() => {
-    if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
-  }, [isManager, scopedStoreChoices])
+    if (props.storeFilter) return
+    if (!canFranchiseeMultiStore) {
+      if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
+      return
+    }
+    const v = String(viewStore || "").trim()
+    if (!v || v === "All") {
+      setStoreFilter("All")
+      return
+    }
+    if (scopedStoreChoices.includes(v)) setStoreFilter(v)
+  }, [props.storeFilter, canFranchiseeMultiStore, isManager, scopedStoreChoices, viewStore])
 
   React.useEffect(() => {
     if (props.yearMonth) {
@@ -307,7 +330,9 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   )
   const managerStoreOptions = isManager ? scopedStoreChoices : []
 
-  const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t)
+  const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t, {
+    franchiseAggregateAll: canFranchiseeMultiStore && storeFilter === "All",
+  })
 
   return (
     <div className="space-y-4">
@@ -378,6 +403,9 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             {o.label}
                           </SelectItem>
                         ))}
+                      {isManager && canFranchiseeMultiStore ? (
+                        <SelectItem value="All">{t("store_all_my_franchise_stores")}</SelectItem>
+                      ) : null}
                       {isManager &&
                         managerStoreOptions.map((s) => (
                           <SelectItem key={s} value={s}>

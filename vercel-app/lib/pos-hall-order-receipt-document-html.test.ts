@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
   buildPosHallOrderReceiptDocumentHtml,
@@ -182,6 +182,26 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).not.toContain('CHEESE TORNADO / GARLIC')
   })
 
+  it('prints digits-only POS order number below date and omits store name', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: 'CMUNIONMALL-20260601-004',
+        storeCode: 'CM Union Mall',
+        orderType: 'delivery',
+        tableName: 'Shopee #762',
+        items: [{ id: '1', name: 'Set 1', price: 111, qty: 1 }],
+        subtotal: 111,
+        discountAmt: 23,
+        total: 88,
+      },
+      t: (k) => (k === 'posOrderNo' ? 'Order No' : k),
+      lang: 'en',
+    })
+    expect(html).not.toContain('CM Union Mall')
+    expect(html).toMatch(/Order No[\s\S]*?20260601004/)
+    expect(html).not.toContain('CMUNIONMALL')
+  })
+
   it('does not print internal memo stamps inside tax invoice address', () => {
     const tax = {
       memberNo: '',
@@ -214,5 +234,42 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('Bangkok')
     expect(html).not.toContain('ORDER_CANCELLED')
     expect(html).not.toContain('PAY_CORRECT')
+  })
+
+  it('prints grab option codes from item fields on hall order receipt', () => {
+    const catalog = buildGrabPosCatalog(
+      [],
+      [
+        { optionCode: 'C011-2', name: 'M - Drumette' },
+        { optionCode: 'C011-5', name: 'Kimchi 30g.' },
+      ]
+    )
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '011',
+        storeCode: 'CM True Digital',
+        orderType: 'delivery',
+        memo: 'grab_order:GF-565',
+        items: [
+          {
+            id: 'grab:line-1',
+            name: 'SPICY YANGNYEOM',
+            price: 159,
+            qty: 1,
+            note: 'mods:Kimchi 30g.',
+            optionCodes: ['C011-2', 'C011-5'],
+          },
+        ],
+        subtotal: 159,
+        discountAmt: 0,
+        total: 159,
+      },
+      t: (k) => k,
+      lang: 'en',
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(html).toContain('SPICY YANGNYEOM')
+    expect(html).toContain('M - Drumette')
+    expect(html).toContain('Kimchi 30g.')
   })
 })

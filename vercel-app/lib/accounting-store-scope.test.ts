@@ -8,6 +8,12 @@ const officeAuth = {
   allowedStores: [] as string[],
 }
 
+const franchiseAuth = {
+  userRole: 'franchisee',
+  userStore: 'CM Rama9',
+  allowedStores: ['CM Rama9', 'CM Ladprao'],
+}
+
 describe('resolveAccountingStoreFilterFromAuth', () => {
   it('keeps 본사 for HQ income statement (does not rewrite to All)', () => {
     expect(resolveAccountingStoreFilterFromAuth('본사', officeAuth)).toBe('본사')
@@ -16,6 +22,15 @@ describe('resolveAccountingStoreFilterFromAuth', () => {
 
   it('still allows explicit All for network rollup', () => {
     expect(resolveAccountingStoreFilterFromAuth('All', officeAuth)).toBe('All')
+  })
+
+  it('franchisee multi-store: All stays All (allowed stores rollup)', () => {
+    expect(resolveAccountingStoreFilterFromAuth('All', franchiseAuth)).toBe('All')
+    expect(resolveAccountingStoreFilterFromAuth('', franchiseAuth)).toBe('All')
+  })
+
+  it('franchisee multi-store: single allowed store', () => {
+    expect(resolveAccountingStoreFilterFromAuth('CM Ladprao', franchiseAuth)).toBe('CM Ladprao')
   })
 })
 

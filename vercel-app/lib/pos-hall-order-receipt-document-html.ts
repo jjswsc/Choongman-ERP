@@ -14,12 +14,14 @@ import {
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
   resolveGrabPrintNoteRequest,
+  resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import {
   expandBanbanComposeLineForPrint,
@@ -37,6 +39,9 @@ type HallOrderItem = {
   price: number
   qty: number
   note?: string
+  optionCode?: string | null
+  optionCode1?: string | null
+  optionCodes?: string[] | null
   /** 추가 주문(테이블 merge)으로 새로 들어온 줄 — 영수증 품목명 앞 `>` 표시 */
   isAddon?: boolean
   promoId?: string
@@ -391,6 +396,17 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     esc(timestamp) +
     c('span') +
     c('div')
+  const posOrderNoDigits = formatPosOrderNoDigitsOnly(String(payload.orderNo ?? '').trim())
+  const posOrderNoRow =
+    posOrderNoDigits
+      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
+        esc(tr('posOrderNo', '주문번호')) +
+        c('span') +
+        '<span class="receipt-meta-value">' +
+        esc(posOrderNoDigits) +
+        c('span') +
+        c('div')
+      : ''
   const otKey = normalizePosOrderTypeKey(payload.orderType)
   const orderTypeLabelText =
     otKey === 'delivery'
@@ -425,9 +441,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
               (k) => t(k)
             )
           : ''
+      const grabPrintNote = grabInbound ? resolveGrabItemPrintNote(it) : String(it.note ?? '')
       const grabOptionLines = grabInbound
         ? collectGrabPrintOptionLines({
-            note: it.note,
+            note: grabPrintNote,
             optionFragment: lineSplit.optionLine,
             optionNameByCode,
           }).map((opt) => translatePosMenuLineForReceipt(opt, (k) => t(k)))
@@ -443,7 +460,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           ? grabOptionLines
           : splitReceiptOptionTokens(lineOption)
       const lineNote = grabInbound
-        ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
+        ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode)
         : formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
           normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
@@ -560,10 +577,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     memo: payload.memo,
   })
   const printContent =
-    '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' +
-    esc(payload.storeCode) +
-    c('div') +
-    '<div class="receipt-order-label">' +
+    '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-order-label">' +
     esc(tr('posOrderNo', '주문')) +
     ' #' +
     esc(orderNoForPrint) +
@@ -577,6 +591,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     guestRow +
     channelOrderNoRow +
     dateRow +
+    posOrderNoRow +
     c('div') +
     '<div class="receipt-divider">' +
     c('div') +

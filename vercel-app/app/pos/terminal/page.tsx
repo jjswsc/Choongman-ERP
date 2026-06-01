@@ -97,7 +97,7 @@ import {
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { buildOptionNameByCodeFromMenus, resolveGrabDeliveryLineNote } from '@/lib/grab-pos-order-enrich'
+import { buildOptionNameByCodeFromMenus, resolveGrabDeliveryLineNote, resolveGrabItemPrintNote } from '@/lib/grab-pos-order-enrich'
 import {
   parsePosOrderMemo,
   upsertPosOrderTaxInvoiceMemo,
@@ -2156,7 +2156,22 @@ export default function PosTerminalPage() {
       const items = (order.items || []).map((it) => {
         const note = String(it.note ?? '').trim()
         const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
-        const optionCode = String((it as { optionCode1?: string; optionCode2?: string }).optionCode1 ?? (it as { optionCode1?: string; optionCode2?: string }).optionCode2 ?? '').trim()
+        const pit = it as {
+          optionCode?: string
+          optionCode1?: string
+          optionCode2?: string
+          optionCodes?: string[]
+          promoId?: string
+          promo_id?: string
+          promoCode?: string
+          promo_code?: string
+        }
+        const optionCodes = Array.isArray(pit.optionCodes)
+          ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
+          : []
+        const optionCode = String(
+          pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
+        ).trim()
         const displayName = resolvePosOrderItemMenuDisplayName(
           {
             id: String(it.id ?? ''),
@@ -2165,21 +2180,17 @@ export default function PosTerminalPage() {
           },
           menus
         )
-        const pit = it as {
-          promoId?: string
-          promo_id?: string
-          promoCode?: string
-          promo_code?: string
-        }
         const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
         const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
+        const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
         return {
           id: String(it.id ?? ''),
-          name: displayName,
+          name: grabLine ? String(it.name ?? displayName) : displayName,
           price: Number(it.price ?? 0),
           qty: Number(it.qty ?? 1),
           ...(menuId ? { menuId } : {}),
-          ...(optionCode ? { optionCode } : {}),
+          ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
+          ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
           ...(note ? { note } : {}),
           ...(promoId ? { promoId } : {}),
           ...(promoCode ? { promoCode } : {}),
@@ -2369,27 +2380,38 @@ export default function PosTerminalPage() {
               const items = (order.items || []).map((it) => {
                 const note = String(it.note ?? '').trim()
                 const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
-                const optionCode = String((it as { optionCode1?: string; optionCode2?: string }).optionCode1 ?? (it as { optionCode1?: string; optionCode2?: string }).optionCode2 ?? '').trim()
-                const displayName = resolvePosOrderItemMenuDisplayName({
-                  id: String(it.id ?? ''),
-                  name: String(it.name ?? ''),
-                  menuId,
-                }, menus)
                 const pit = it as {
+                  optionCode?: string
+                  optionCode1?: string
+                  optionCode2?: string
+                  optionCodes?: string[]
                   promoId?: string
                   promo_id?: string
                   promoCode?: string
                   promo_code?: string
                 }
+                const optionCodes = Array.isArray(pit.optionCodes)
+                  ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
+                  : []
+                const optionCode = String(
+                  pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
+                ).trim()
+                const displayName = resolvePosOrderItemMenuDisplayName({
+                  id: String(it.id ?? ''),
+                  name: String(it.name ?? ''),
+                  menuId,
+                }, menus)
                 const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
                 const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
+                const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
                 return {
                   id: String(it.id ?? ''),
-                  name: displayName,
+                  name: grabLine ? String(it.name ?? displayName) : displayName,
                   price: Number(it.price ?? 0),
                   qty: Number(it.qty ?? 1),
                   ...(menuId ? { menuId } : {}),
-                  ...(optionCode ? { optionCode } : {}),
+                  ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
+                  ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
                   ...(note ? { note } : {}),
                   ...(promoId ? { promoId } : {}),
                   ...(promoCode ? { promoCode } : {}),
@@ -3220,7 +3242,15 @@ export default function PosTerminalPage() {
         return {
           ...it,
           note:
-            formatLineNoteForPrint(String(it.note ?? '')) ||
+            resolveGrabItemPrintNote({
+              note: String(it.note ?? ''),
+              optionCode: String((it as { optionCode?: string }).optionCode ?? '').trim() || undefined,
+              optionCode1: String((it as { optionCode1?: string }).optionCode1 ?? '').trim() || undefined,
+              optionCode2: String((it as { optionCode2?: string }).optionCode2 ?? '').trim() || undefined,
+              optionCodes: Array.isArray((it as { optionCodes?: string[] }).optionCodes)
+                ? (it as { optionCodes?: string[] }).optionCodes
+                : undefined,
+            }) ||
             inferDefaultSizeLabelForLine({
               menuId: String((it as { menuId?: string }).menuId ?? ''),
               id: String((it as { id?: string }).id ?? ''),

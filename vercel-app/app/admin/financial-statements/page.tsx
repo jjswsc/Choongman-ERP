@@ -21,6 +21,8 @@ import {
   buildFinancialStatementFranchiseStoreOptions,
 } from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import { useStoreView } from "@/lib/store-view-context"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
   adminTabsContentCn,
@@ -39,8 +41,14 @@ export default function FinancialStatementsPage() {
   const t = useT(lang)
   const { stores: storeList, storeLabels } = useStoreList()
 
+  const { viewStore } = useStoreView()
   const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
   const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
+  const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores,
+    auth?.store
+  )
   const managerStore = (auth?.store || "").trim()
   const scopedStoreChoices = React.useMemo(() => {
     const seen = new Set<string>()
@@ -58,14 +66,27 @@ export default function FinancialStatementsPage() {
   const [yearMonthStart, setYearMonthStart] = React.useState(() => defaultYm)
   const [yearMonthEnd, setYearMonthEnd] = React.useState(() => defaultYm)
   const [storeFilter, setStoreFilter] = React.useState(() =>
-    isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All"
+    canFranchiseeMultiStore
+      ? "All"
+      : isManager && scopedStoreChoices[0]
+        ? scopedStoreChoices[0]
+        : "All"
   )
   const [tab, setTab] = React.useState<"income" | "balance" | "reconcile">("income")
   const [queryToken, setQueryToken] = React.useState(0)
 
   React.useEffect(() => {
-    if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
-  }, [isManager, scopedStoreChoices])
+    if (!canFranchiseeMultiStore) {
+      if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
+      return
+    }
+    const v = String(viewStore || "").trim()
+    if (!v || v === "All") {
+      setStoreFilter("All")
+      return
+    }
+    if (scopedStoreChoices.includes(v)) setStoreFilter(v)
+  }, [canFranchiseeMultiStore, isManager, scopedStoreChoices, viewStore])
 
   const franchiseStoreOptions = React.useMemo(
     () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
@@ -157,6 +178,9 @@ export default function FinancialStatementsPage() {
                           {o.label}
                         </SelectItem>
                       ))}
+                    {isManager && canFranchiseeMultiStore ? (
+                      <SelectItem value="All">{t("store_all_my_franchise_stores")}</SelectItem>
+                    ) : null}
                     {isManager &&
                       managerStoreOptions.map((s) => (
                         <SelectItem key={s} value={s}>

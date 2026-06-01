@@ -33,9 +33,11 @@ import {
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
   resolveGrabPrintNoteRequest,
+  resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
+import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import {
   allocateDiscountExcludingDrinksAndPromos,
@@ -481,6 +483,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     tableName: receiptData.tableName,
     memo: receiptData.memo,
   })
+  const posOrderNoDigits = formatPosOrderNoDigitsOnly(String(receiptData.orderNo ?? '').trim())
   const receiptBarcodeUrl = d.receiptBarcode ? buildCode128BarcodeUrl(receiptOrderNoRaw) : ''
   const at = printedAt && !Number.isNaN(printedAt.getTime()) ? printedAt : new Date()
   const printedAtStr = new Intl.DateTimeFormat('en-GB', {
@@ -588,9 +591,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         const promoComposeLinesExpanded = promoComposeLines.flatMap(
           (line) => expandBanbanComposeLineForPrint(line) ?? [line]
         )
+        const grabPrintNote = grabInbound ? resolveGrabItemPrintNote(it) : String(it.note ?? '')
         const grabOptionLines = grabInbound
           ? collectGrabPrintOptionLines({
-              note: it.note,
+              note: grabPrintNote,
               optionFragment: baseLineSplit.optionLine,
               optionNameByCode,
             }).map((line) => translatePosMenuLineForReceipt(line, t))
@@ -613,7 +617,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ]
           : []
         const lineNote = grabInbound
-          ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
+          ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode)
           : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
         const detailLines = [...baseOptionLine, ...banbanFlavorLines, ...promoComposeLinesExpanded]
         const detailRows = detailLines
@@ -668,9 +672,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ? `<div class="simple-tax-subtitle">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>`
             : ''
         }
-        <div class="simple-store">${esc(receiptData.storeCode)}</div>
         <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
         <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
+        ${
+          posOrderNoDigits
+            ? `<div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(posOrderNoDigits)}</div>`
+            : ''
+        }
         <div class="simple-line"><b>${esc(tr('posOrderType', 'Order Type'))}</b>: ${esc(orderTypeLabel)}</div>
         ${tableForPrint ? `<div class="simple-line"><b>${esc(tr('posTable', '테이블'))}</b>: ${escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableForPrint)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
@@ -720,7 +728,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           color: #000;
           background: #fff;
         }
-        .simple-store { text-align: center; font-size: 12px; font-weight: 800; margin-bottom: 6px; color: #000; }
         .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; font-weight: 700; color: #000; }
         .simple-biz { color: #000; font-weight: 700; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
@@ -741,7 +748,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       <div class="receipt-content receipt-payment${useLegacyAligned ? ' receipt-payment--legacy-safe' : ''} ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
         <div class="receipt-brand-wrap text-center">
           ${showLogo ? `<img src="${esc(logoUrl)}" alt="Company logo" class="receipt-brand-logo ${esc(d.receiptLogoSize)}" />` : ''}
-          <div class="receipt-store-name">${esc(receiptData.storeCode)}</div>
         </div>
         <div class="receipt-divider"></div>
         ${
@@ -768,6 +774,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
               : ''
           }
           ${receiptMetaRowHtml(esc(tr('date', 'Date')), esc(printedAtStr))}
+          ${
+            posOrderNoDigits
+              ? receiptMetaRowHtml(esc(tr('posOrderNo', '주문번호')), esc(posOrderNoDigits))
+              : ''
+          }
           ${receiptMetaRowHtml(
             esc(tr('posOrderType', 'Order Type')),
             esc(orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType)
@@ -813,8 +824,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           )
             .map((it, idx) => {
             const baseLineSplit = splitPosPrintItemLine(it.name)
+            const grabPrintNote = grabInbound ? resolveGrabItemPrintNote(it) : String(it.note ?? '')
             const lineNote = grabInbound
-              ? resolveGrabPrintNoteRequest(String(it.note ?? ''), optionNameByCode)
+              ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode)
               : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
@@ -882,7 +894,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
               : []
             const grabOptionLines = grabInbound
               ? collectGrabPrintOptionLines({
-                  note: it.note,
+                  note: grabPrintNote,
                   optionFragment: baseLineSplit.optionLine,
                   optionNameByCode,
                 }).map((line) => translatePosMenuLineForReceipt(line, t))

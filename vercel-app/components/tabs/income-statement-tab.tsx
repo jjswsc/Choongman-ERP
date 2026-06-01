@@ -44,6 +44,8 @@ import {
   resolveFinancialStatementStoreLabel,
 } from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import { useStoreView } from "@/lib/store-view-context"
 import {
   readIncomeStatementBeginningInvOverride,
   writeIncomeStatementBeginningInvOverride,
@@ -1300,8 +1302,14 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const t = useT(lang)
   const { stores: storeList, storeLabels } = useStoreList()
 
+  const { viewStore } = useStoreView()
   const isOffice = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
   const isManager = !isOffice && isManagerOrFranchiseeRole(auth?.role || "")
+  const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores,
+    auth?.store
+  )
   const managerStore = (auth?.store || "").trim()
   const scopedStoreChoices = React.useMemo(() => {
     const seen = new Set<string>()
@@ -1323,7 +1331,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     () => props.yearMonthEnd ?? props.yearMonth ?? defaultYm
   )
   const [storeFilter, setStoreFilter] = React.useState(() =>
-    props.storeFilter ?? (isManager && scopedStoreChoices[0] ? scopedStoreChoices[0] : "All")
+    props.storeFilter ??
+      (canFranchiseeMultiStore
+        ? "All"
+        : isManager && scopedStoreChoices[0]
+          ? scopedStoreChoices[0]
+          : "All")
   )
   const [data, setData] = React.useState<IncomeStatementData | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -1372,10 +1385,18 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const printRef = React.useRef<HTMLDivElement | null>(null)
 
   React.useEffect(() => {
-    if (isManager && scopedStoreChoices[0]) {
-      setStoreFilter(scopedStoreChoices[0])
+    if (props.storeFilter) return
+    if (!canFranchiseeMultiStore) {
+      if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
+      return
     }
-  }, [isManager, scopedStoreChoices])
+    const v = String(viewStore || "").trim()
+    if (!v || v === "All") {
+      setStoreFilter("All")
+      return
+    }
+    if (scopedStoreChoices.includes(v)) setStoreFilter(v)
+  }, [props.storeFilter, canFranchiseeMultiStore, isManager, scopedStoreChoices, viewStore])
 
   React.useEffect(() => {
     if (props.yearMonth) {
@@ -1850,7 +1871,9 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     }
   }, [data, manualEnabled, manualAmountStr, begInvManualEnabled, begInvAmountStr])
 
-  const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t)
+  const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t, {
+    franchiseAggregateAll: canFranchiseeMultiStore && storeFilter === "All",
+  })
 
   const buildXlsxRows = React.useCallback((): IncomeStatementXlsxRow[] => {
     if (!data || !view) return []

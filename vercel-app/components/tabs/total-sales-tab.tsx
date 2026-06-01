@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/lib/auth-context"
 import { canSelectAllStoresForPosSalesManagement } from "@/lib/permissions"
+import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import { useStoreView } from "@/lib/store-view-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -124,10 +126,16 @@ export function TotalSalesTab() {
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => t(key) || fallback, [t])
 
+  const { viewStore } = useStoreView()
   const canSearchAll = canSelectAllStoresForPosSalesManagement(
     auth?.role || "",
     auth?.store || ""
   )
+  const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores
+  )
+  const canMultiStorePicker = canSearchAll || canFranchiseeMultiStore
   const today = todayStrBangkok()
   const monthRange = React.useMemo(() => getBangkokMonthRange(), [])
 
@@ -248,7 +256,7 @@ export function TotalSalesTab() {
     })
   }, [])
 
-  const canQuery = canSearchAll ? (salesFetchStores?.length ?? 0) > 0 : true
+  const canQuery = canMultiStorePicker ? (salesFetchStores?.length ?? 0) > 0 : true
 
   React.useEffect(() => {
     let cancel = false
@@ -314,11 +322,38 @@ export function TotalSalesTab() {
     return tr("salesSelectStorePrompt", "매장 선택")
   }, [storeChoices.length, posOptionsLoading, posOptionsLoadFailed, canSearchAll, tr])
 
+  const selectedStoresKey = React.useMemo(
+    () => normalizeStoreCodes(selectedStores).join(","),
+    [selectedStores]
+  )
+
   React.useEffect(() => {
-    if (!canSearchAll && auth?.store) {
-      setSelectedStores(normalizeStoreCodes([auth.store]))
+    if (canSearchAll) return
+    if (!canFranchiseeMultiStore) {
+      if (auth?.store) {
+        const fixed = normalizeStoreCodes([auth.store]).join(",")
+        if (selectedStoresKey !== fixed) setSelectedStores(normalizeStoreCodes([auth.store]))
+      }
+      return
     }
-  }, [canSearchAll, auth?.store])
+    const all = normalizeStoreCodes(storeChoices)
+    const allKey = all.join(",")
+    const v = String(viewStore || "").trim()
+    if (!v || v === "All") {
+      if (selectedStoresKey !== allKey) setSelectedStores(all)
+      return
+    }
+    const pick = normalizeStoreCodes([v])
+    const pickKey = pick.join(",")
+    if (pick.length && selectedStoresKey !== pickKey) setSelectedStores(pick)
+  }, [
+    canSearchAll,
+    canFranchiseeMultiStore,
+    auth?.store,
+    storeChoices,
+    viewStore,
+    selectedStoresKey,
+  ])
 
   React.useEffect(() => {
     if (!storePickerOpen) return
@@ -468,12 +503,25 @@ export function TotalSalesTab() {
   )
 
   const storeLabelForExport = React.useMemo(() => {
-    if (!canSearchAll) return selectedStores[0] ?? auth?.store ?? ""
+    if (!canMultiStorePicker) return selectedStores[0] ?? auth?.store ?? ""
     if (!salesFetchStores?.length) return ""
     if (salesFetchStores.length === 1) return posStoreDisplayName(salesFetchStores[0]!)
-    if (salesFetchStores.length === storeChoices.length) return tr("salesSelectStoreAll", "전체 매장")
+    if (salesFetchStores.length === storeChoices.length) {
+      return canFranchiseeMultiStore
+        ? tr("salesSelectMyFranchiseStoresAll", "내 매장 전체")
+        : tr("salesSelectStoreAll", "전체 매장")
+    }
     return salesFetchStores.map((c) => posStoreDisplayName(c)).join(", ")
-  }, [canSearchAll, salesFetchStores, storeChoices.length, selectedStores, auth?.store, posStoreDisplayName, tr])
+  }, [
+    canMultiStorePicker,
+    canFranchiseeMultiStore,
+    salesFetchStores,
+    storeChoices.length,
+    selectedStores,
+    auth?.store,
+    posStoreDisplayName,
+    tr,
+  ])
 
   const handleExportExcel = React.useCallback(() => {
     if (!levelsData) return
@@ -665,7 +713,7 @@ export function TotalSalesTab() {
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
-            {canSearchAll ? (
+            {canMultiStorePicker ? (
               <div className="relative" ref={storePickerRef}>
                 <Button
                   id={storePickerBtnId}
@@ -682,7 +730,9 @@ export function TotalSalesTab() {
                     {selectedStores.length === 0
                       ? storePickerPlaceholder
                       : selectedStores.length === storeChoices.length && storeChoices.length > 1
-                        ? tr("salesSelectStoreAll", "전체 매장")
+                        ? canFranchiseeMultiStore
+                          ? tr("salesSelectMyFranchiseStoresAll", "내 매장 전체")
+                          : tr("salesSelectStoreAll", "전체 매장")
                         : selectedStores.length === 1
                           ? posStoreDisplayName(selectedStores[0]!)
                           : `${selectedStores.length}${tr("selected", "개 선택")}`}
@@ -792,7 +842,7 @@ export function TotalSalesTab() {
             </Button>
           </div>
 
-          {canSearchAll && selectedStores.length === 0 ? (
+          {canMultiStorePicker && selectedStores.length === 0 ? (
             <p className="text-xs text-amber-800 dark:text-amber-300" role="status">
               {tr(
                 "salesSelectStoreHint",

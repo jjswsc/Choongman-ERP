@@ -7,7 +7,8 @@ import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
 import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
-import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import { canFranchiseeAggregateAllowedStores } from '@/lib/franchisee-multi-store'
+import { isAccountingRole, isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { addStoreNameAliasVariants, normStoreKey } from '@/lib/store-list-keys'
 
 export { findErpStoreMasterForScopeKey } from '@/lib/erp-store-identity'
@@ -58,9 +59,21 @@ export function canAccessAllAccountingStores(auth: AccountingStoreAuthScope): bo
   )
 }
 
+/** 가맹 복수 매장 — 재무제표에서 All = 허용 매장 합산(본사 전 네트워크와 별도) */
+export function resolveFranchiseeAccountingAllowedStoresOnly(
+  auth: AccountingStoreAuthScope
+): string[] | undefined {
+  if (!isFranchiseeRole(String(auth.userRole || ''))) return undefined
+  const allowed = collectAccountingAllowedStores(auth)
+  if (!canFranchiseeAggregateAllowedStores(auth.userRole, auth.allowedStores, auth.userStore)) {
+    return undefined
+  }
+  return allowed.length > 1 ? allowed : undefined
+}
+
 /**
  * 재무제표·시산 등 storeFilter 확정 (세무 원장 API와 동일 규칙).
- * 매장 매니저·가맹점주: allowedStores·소속 매장만, All/미지정 시 첫 허용 매장.
+ * 가맹 복수 매장: All/미지정 → All(허용 매장 합산). 단일 허용만 있으면 그 매장.
  */
 export function resolveAccountingStoreFilterFromAuth(
   requestedStoreFilter: string | undefined | null,
@@ -75,6 +88,16 @@ export function resolveAccountingStoreFilterFromAuth(
       return requested
     }
     return requested || 'All'
+  }
+
+  const franchiseAll = resolveFranchiseeAccountingAllowedStoresOnly(auth)
+  if (franchiseAll?.length) {
+    if (!requested || requested === 'All' || requested === '전체' || requested === '*') {
+      return 'All'
+    }
+    const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requested))
+    if (!allowed) throw new AccountingStoreScopeForbidden()
+    return requested
   }
 
   let effective = requested

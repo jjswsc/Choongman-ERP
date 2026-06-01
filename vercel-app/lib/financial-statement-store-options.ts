@@ -43,9 +43,15 @@ export function buildFinancialStatementFranchiseStoreOptions(
 export function resolveFinancialStatementStoreLabel(
   storeFilter: string,
   storeLabels: Record<string, string>,
-  t: (key: string) => string
+  t: (key: string) => string,
+  opts?: { franchiseAggregateAll?: boolean }
 ): string {
-  if (storeFilter === 'All') return t('all') || 'All'
+  if (storeFilter === 'All') {
+    if (opts?.franchiseAggregateAll) {
+      return t('store_all_my_franchise_stores') || t('salesSelectMyFranchiseStoresAll') || 'All my stores'
+    }
+    return t('all') || 'All'
+  }
   if (isFinancialStatementHeadOfficeStore(storeFilter, storeLabels)) {
     return t('pettyScopeOffice') || 'Office'
   }

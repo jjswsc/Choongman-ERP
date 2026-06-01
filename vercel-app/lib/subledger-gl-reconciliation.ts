@@ -55,10 +55,83 @@ export type SubledgerGlReconciliationReport = {
   }[]
 }
 
+function mergeSubledgerGlReconciliationReports(
+  reports: SubledgerGlReconciliationReport[]
+): SubledgerGlReconciliationReport {
+  if (reports.length === 0) {
+    return {
+      yearMonth: '',
+      endStr: '',
+      storeFilter: 'All',
+      timezone: 'Asia/Bangkok',
+      receivables: {
+        glAccount1130: 0,
+        subledgerTotal: 0,
+        difference: 0,
+        glSource: 'select',
+        subledgerSource: 'select',
+      },
+      payables: {
+        glAccount2110: 0,
+        subledgerTotal: 0,
+        difference: 0,
+        glSource: 'select',
+        subledgerSource: 'select',
+      },
+      cashGl1010: 0,
+      riskyRevenueDeposits: [],
+      pendingChannelSettlements: [],
+      receivableReceiveWithSettlementLink: [],
+    }
+  }
+  if (reports.length === 1) return { ...reports[0]!, storeFilter: 'All' }
+  const sum = (n: (r: SubledgerGlReconciliationReport) => number) =>
+    round2(reports.reduce((a, r) => a + n(r), 0))
+  const gl1130 = sum((r) => r.receivables.glAccount1130)
+  const subRecv = sum((r) => r.receivables.subledgerTotal)
+  const gl2110 = sum((r) => r.payables.glAccount2110)
+  const subPay = sum((r) => r.payables.subledgerTotal)
+  return {
+    yearMonth: reports[0]!.yearMonth,
+    endStr: reports[0]!.endStr,
+    storeFilter: 'All',
+    timezone: 'Asia/Bangkok',
+    receivables: {
+      glAccount1130: gl1130,
+      subledgerTotal: subRecv,
+      difference: round2(gl1130 - subRecv),
+      glSource: reports[0]!.receivables.glSource,
+      subledgerSource: reports[0]!.receivables.subledgerSource,
+    },
+    payables: {
+      glAccount2110: gl2110,
+      subledgerTotal: subPay,
+      difference: round2(gl2110 - subPay),
+      glSource: reports[0]!.payables.glSource,
+      subledgerSource: reports[0]!.payables.subledgerSource,
+    },
+    cashGl1010: sum((r) => r.cashGl1010),
+    riskyRevenueDeposits: reports.flatMap((r) => r.riskyRevenueDeposits),
+    pendingChannelSettlements: reports.flatMap((r) => r.pendingChannelSettlements),
+    receivableReceiveWithSettlementLink: reports.flatMap((r) => r.receivableReceiveWithSettlementLink),
+  }
+}
+
 export async function computeSubledgerGlReconciliation(
   input: IncomeScopeInput
 ): Promise<SubledgerGlReconciliationReport> {
   const scope = normalizeIncomeScope(input)
+  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+    const perStore = await Promise.all(
+      scope.allowedStoresOnly.map((store) =>
+        computeSubledgerGlReconciliation({
+          ...input,
+          storeFilter: store,
+        })
+      )
+    )
+    return mergeSubledgerGlReconciliationReports(perStore)
+  }
   const { yearMonth, endStr, storeFilter, isHQ } = scope
 
   const [gl, recv, pay] = await Promise.all([

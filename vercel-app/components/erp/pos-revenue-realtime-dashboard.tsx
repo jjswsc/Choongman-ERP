@@ -61,6 +61,8 @@ type DashboardResponse = {
 type PosRevenueRealtimeDashboardProps = {
   effectiveStoreCode: string
   isOfficeSelector: boolean
+  /** 가맹 허용 매장 합산 — stores 쿼리에 명시 */
+  salesStoreCodes?: string[]
 }
 
 function formatBaht(value: number): string {
@@ -82,6 +84,7 @@ const revenueYAxis = {
 export function PosRevenueRealtimeDashboard({
   effectiveStoreCode,
   isOfficeSelector,
+  salesStoreCodes,
 }: PosRevenueRealtimeDashboardProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -96,7 +99,8 @@ export function PosRevenueRealtimeDashboard({
     setError("")
     try {
       const q = new URLSearchParams()
-      if (storeCode && storeCode !== "All") q.set("stores", storeCode)
+      if (salesStoreCodes?.length) q.set("stores", salesStoreCodes.join(","))
+      else if (storeCode && storeCode !== "All") q.set("stores", storeCode)
       const res = await fetch(`/api/posRealtimeRevenueDashboard?${q.toString()}`, { cache: "no-store" })
       const json = (await res.json()) as DashboardResponse
       if (!res.ok || !json?.success) {

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_MENU_ROW_SELECT,
@@ -38,7 +39,10 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
-    const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
+    const stores = await resolvePosSalesStoresFromRequest(
+      request,
+      resolveStoresFromParams(pos, searchParams.get('stores'))
+    )
     const searchTokens = parseSearchTokens(searchParams.get('search'))
     const searchMode = String(searchParams.get('searchMode') ?? 'or').toLowerCase()
     const searchAnd = searchMode === 'and' || searchMode === 'all'

@@ -54,6 +54,8 @@ const periodChartYAxisProps = {
 export type AdminSalesDashboardChartsProps = {
   effectiveStoreCode: string
   isOfficeSelector: boolean
+  /** 가맹 「내 매장 전체」등 — 명시 매장 코드(본사 All=undefined 와 구분) */
+  salesStoreCodes?: string[]
 }
 
 function resolveStoresParam(storeCode: string): string[] | undefined {
@@ -65,17 +67,19 @@ function resolveStoresParam(storeCode: string): string[] | undefined {
 export function AdminSalesDashboardCharts({
   effectiveStoreCode,
   isOfficeSelector,
+  salesStoreCodes,
 }: AdminSalesDashboardChartsProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
 
   const today = React.useMemo(() => getBangkokTodayDateString(), [])
-  const storesParam = React.useMemo(
-    () => resolveStoresParam(effectiveStoreCode),
-    [effectiveStoreCode]
-  )
-  const isAllStores = !storesParam?.length
+  const storesParam = React.useMemo(() => {
+    if (salesStoreCodes?.length) return salesStoreCodes
+    return resolveStoresParam(effectiveStoreCode)
+  }, [effectiveStoreCode, salesStoreCodes])
+  const isAllStores =
+    effectiveStoreCode === "All" && !salesStoreCodes?.length ? true : (salesStoreCodes?.length ?? 0) > 1
 
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")

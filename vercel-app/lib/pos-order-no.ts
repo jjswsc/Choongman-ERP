@@ -68,3 +68,8 @@ export function formatPosOrderNoForPrint(orderNo: string): string {
   if (pure != null) return formatPosDailyOrderSeq(pure)
   return s
 }
+
+/** 영수증 등: order_no 문자열에서 숫자만 이어 붙임 (CMUNIONMALL-20260601-004 → 20260601004) */
+export function formatPosOrderNoDigitsOnly(orderNo: string): string {
+  return String(orderNo ?? '').replace(/\D/g, '')
+}

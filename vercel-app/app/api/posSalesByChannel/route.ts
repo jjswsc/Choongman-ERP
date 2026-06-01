@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizePosOrderTypeKey, parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
@@ -26,7 +27,10 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
-    const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
+    const stores = await resolvePosSalesStoresFromRequest(
+      request,
+      resolveStoresFromParams(pos, searchParams.get('stores'))
+    )
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {

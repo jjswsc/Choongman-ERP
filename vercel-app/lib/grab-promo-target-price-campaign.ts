@@ -331,9 +331,12 @@ function listCampaignRows(payload: unknown): GrabCampaignListRow[] {
 
 export async function syncGrabPromoTargetPriceCampaigns(params: {
   merchantID: string
-}): Promise<{ created: number; updated: number; skipped: number; deleted: number }> {
+  /** true면 Grab에 동일 캠페인이 있어도 삭제 후 재생성(메뉴 item id 변경·표시 불일치 우회) */
+  force?: boolean
+}): Promise<{ created: number; updated: number; skipped: number; deleted: number; targets: number }> {
   const merchantID = String(params.merchantID || '').trim()
-  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0 }
+  const force = params.force === true
+  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0, targets: 0 }
 
   const bundle = await loadPromoBundle()
   const businessDateYmd = bangkokDateStrISO()
@@ -412,7 +415,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     existingByPrefix = indexManagedCampaigns(listed)
   } catch (e) {
     console.warn('[grab-promo-campaign] list_failed', { merchantID, error: String(e) })
-    return { created: 0, updated: 0, skipped: targets.length, deleted: 0 }
+    return { created: 0, updated: 0, skipped: targets.length, deleted: 0, targets: targets.length }
   }
 
   const existingByName = new Map<string, GrabCampaignListRow>()
@@ -453,6 +456,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     try {
       if (hit?.id) {
         if (
+          !force &&
           grabCampaignDiscountMatchesTarget(hit, {
             grabItemId: target.grabItemId,
             salePriceMajor: target.salePrice,
@@ -461,7 +465,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
           skipped += 1
           continue
         }
-        if (indexed?.section === 'ongoing') {
+        if (force || indexed?.section === 'ongoing') {
           await grabJsonRequest({
             path: `/partner/v1/campaigns/${encodeURIComponent(String(hit.id))}`,
             method: 'DELETE',
@@ -536,7 +540,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
   }
 
-  return { created, updated, skipped, deleted }
+  return { created, updated, skipped, deleted, targets: targets.length }
 }
 
 /** 메뉴 빌드용: promo_id → 정가·할인가 (Grab 메뉴 item price = 정가) */

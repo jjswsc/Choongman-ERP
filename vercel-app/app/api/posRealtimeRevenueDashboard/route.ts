@@ -15,7 +15,7 @@ import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
-import { isOfficeRole } from '@/lib/permissions'
+import { resolvePosSalesStoresForAuth } from '@/lib/pos-sales-request-scope'
 
 const FETCH_LIMIT = 50000
 const COMPLETED_STATUSES = new Set(['completed', 'paid', 'ready'])
@@ -203,12 +203,7 @@ export async function GET(request: NextRequest) {
     const endStr = searchParams.get('endStr')?.trim() || startStr
     const pos = searchParams.get('pos')?.trim()
     const requestedStores = resolveStoresFromParams(pos, searchParams.get('stores'))
-    const isOffice = isOfficeRole(auth?.role || '')
-    const stores = isOffice
-      ? requestedStores
-      : String(auth?.store || '').trim()
-        ? [String(auth?.store || '').trim()]
-        : requestedStores
+    const stores = resolvePosSalesStoresForAuth(auth, requestedStores)
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
     const delayThresholdMin = Math.max(
       1,

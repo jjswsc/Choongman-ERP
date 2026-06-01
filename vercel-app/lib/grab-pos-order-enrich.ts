@@ -587,19 +587,22 @@ export function formatGrabPromoComposeLinesForPrint(
   const menuName = String(p.menuName ?? '').trim()
   const qty = Math.max(1, Number(p.quantity) || 1)
   const optName = String(p.optionName ?? '').trim()
+  const optionParts = splitPromoOptionNameParts(optName)
   const optionOnly =
-    optName && shouldGrabPromoComposeOptionOnly(p.parentItemName, menuName)
+    optName &&
+    shouldGrabPromoComposeOptionOnly(p.parentItemName, menuName) &&
+    (grabSplit || optionParts.length > 1)
 
   if (!optName) return [`${menuName} x${qty}`]
 
   if (optionOnly) {
-    const parts = splitPromoOptionNameParts(optName)
+    const parts = optionParts
     if (parts.length <= 1) return [`${optName} x${qty}`]
     return parts.map((part) => `${part} x${qty}`)
   }
 
   if (!grabSplit) return [`${menuName} (${optName}) x${qty}`]
-  const parts = splitPromoOptionNameParts(optName)
+  const parts = optionParts
   if (parts.length <= 1) return [`${menuName} (${optName}) x${qty}`]
   return parts.map((part) => `${menuName} (${part}) x${qty}`)
 }
@@ -652,6 +655,65 @@ export function parseOptcCodesFromNote(note: string): string[] {
     }
   }
   return out
+}
+
+function collectGrabItemOptionCodeFields(item: {
+  optionCode?: string | null
+  optionCode1?: string | null
+  optionCode2?: string | null
+  optionCodes?: string[] | null
+}): string[] {
+  const out = new Set<string>()
+  for (const raw of [
+    item.optionCode,
+    item.optionCode1,
+    item.optionCode2,
+    ...(Array.isArray(item.optionCodes) ? item.optionCodes : []),
+  ]) {
+    const code = String(raw ?? '').trim().toUpperCase()
+    if (code) out.add(code)
+  }
+  return Array.from(out)
+}
+
+/**
+ * Grab 줄 note 단일 소스: DB note + optionCode(s) 필드를 `optc:` 코드로 병합.
+ * 인쇄(홀·주방·결제) 직전에 호출하고, note 를 사람이 읽는 문장으로 미리 바꾸지 않는다.
+ */
+export function resolveGrabItemPrintNote(item: {
+  note?: string | null
+  optionCode?: string | null
+  optionCode1?: string | null
+  optionCode2?: string | null
+  optionCodes?: string[] | null
+}): string {
+  const existing = String(item.note ?? '').trim()
+  const fieldCodes = collectGrabItemOptionCodeFields(item)
+  const noteCodes = parseOptcCodesFromNote(existing).map((c) => c.toUpperCase())
+  const mergedCodes = new Set<string>([...noteCodes, ...fieldCodes])
+  if (mergedCodes.size === 0) return existing
+
+  const mergedOptc = `optc:${Array.from(mergedCodes).join(',')}`
+  if (!existing) return mergedOptc
+
+  const chunks = existing
+    .split('·')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const withoutOptc = chunks.filter((c) => !/^optc:/i.test(c))
+  withoutOptc.push(mergedOptc)
+  return withoutOptc.join(' · ')
+}
+
+/** @deprecated resolveGrabItemPrintNote 사용 */
+export function synthesizeGrabItemOptionNote(item: {
+  note?: string | null
+  optionCode?: string | null
+  optionCode1?: string | null
+  optionCode2?: string | null
+  optionCodes?: string[] | null
+}): string {
+  return resolveGrabItemPrintNote(item)
 }
 
 /** 배달 패널·영수증: Grab 줄 note의 optc/mods를 사람이 읽을 옵션 요약으로 */

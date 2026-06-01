@@ -7,6 +7,7 @@ import {
   formatPosReceiptOrderNoDisplay,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
+import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
@@ -51,7 +52,7 @@ function MetaRow({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export function PosHallOrderReceiptPreview({
-  storeCode,
+  storeCode: _storeCode,
   orderNo,
   orderType,
   orderTypeLabels = {},
@@ -91,12 +92,12 @@ export function PosHallOrderReceiptPreview({
   const tableDisplay = tableName ? translateReceiptTableDisplayName(tableName, t) : ''
   const guestN = Math.max(0, Math.min(99, Math.trunc(Number(guestCount ?? 0) || 0)))
   const channelOrderPick = pickPosChannelOrderNo({ tableName, orderNo, memo })
+  const posOrderNoDigits = formatPosOrderNoDigitsOnly(orderNo)
 
   return (
     <div className={cn('receipt-content receipt-order-simple space-y-2 text-sm text-black', className)}>
       <div className="receipt-order-header text-center">
-        <div className="receipt-store-name text-[13px] font-bold">{storeCode}</div>
-        <div className="receipt-order-label mt-1 text-[11px] font-extrabold leading-snug">
+        <div className="receipt-order-label text-[11px] font-extrabold leading-snug">
           {tr('posOrderNo', '주문')} #{orderNoForPrint}
           <span className="receipt-order-type-chip receipt-order-type-chip--inline ml-1 inline-block rounded-full border-[1.4px] border-black bg-white px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
             {orderTypeLabelText}
@@ -116,6 +117,9 @@ export function PosHallOrderReceiptPreview({
           <MetaRow label={tr('posChannelOrderNo', '채널 주문번호')} value={`#${channelOrderPick.text.trim()}`} />
         ) : null}
         <MetaRow label={tr('date', 'Date')} value={formatPosDateTimeMedium(at, lang)} />
+        {posOrderNoDigits ? (
+          <MetaRow label={tr('posOrderNo', '주문번호')} value={posOrderNoDigits} />
+        ) : null}
       </div>
       <div className="receipt-divider border-t border-dashed border-black" />
       <div className="receipt-item-head grid grid-cols-[1fr_16mm] gap-1 border-b border-black pb-1 text-[11px] font-bold">

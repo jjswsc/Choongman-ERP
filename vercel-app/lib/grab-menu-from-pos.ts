@@ -36,6 +36,14 @@ function isGrabAdvancedPricingFallbackEnabled(): boolean {
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }
 
+/** `GRAB_MENU_ADVANCED_PRICING_FALLBACK=0|false` 일 때만 컷프라이스 advancedPricing 생략 */
+function isGrabAdvancedPricingExplicitlyDisabled(): boolean {
+  const raw = String(process.env.GRAB_MENU_ADVANCED_PRICING_FALLBACK || '')
+    .trim()
+    .toLowerCase()
+  return raw === '0' || raw === 'false' || raw === 'no' || raw === 'off'
+}
+
 type MenuRow = {
   id?: number
   code?: string
@@ -1021,15 +1029,17 @@ export async function buildGrabMenuFromPos(params: {
       const promoId = Number(menu.promo_id ?? 0)
       const promoCut = promoId > 0 ? promoCutByPromoId.get(promoId) : undefined
       /**
-       * Grab Cut Price: item.price=정가, advancedPricing=배달 할인가(캠페인 실패 시 손님 화면용),
-       * fixPrice 캠페인=menu-sync SUCCESS 후(주문·Grab 프로모 연동).
+       * Grab Cut Price: item.price=정가(minor), advancedPricing=Grab 앱 배달 할인가(손님 화면 취소선+할인가),
+       * fixPrice 캠페인=주문·Grab 프로모 연동(표시는 advancedPricing 우선).
        */
       const grabListPriceMajor =
         promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)
       const grabListPriceMinor = Math.max(1, toMinorUnit(grabListPriceMajor))
       const grabSalePriceMinor =
         promoCut?.showCutPrice ? Math.max(1, toMinorUnit(promoCut.salePrice)) : grabListPriceMinor
-      const enableAdvancedPricingFallback = isGrabAdvancedPricingFallbackEnabled()
+      const includeAdvancedPricing =
+        promoCut?.showCutPrice &&
+        (isGrabAdvancedPricingFallbackEnabled() || !isGrabAdvancedPricingExplicitlyDisabled())
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
         ? policyImageUrl
@@ -1047,7 +1057,7 @@ export async function buildGrabMenuFromPos(params: {
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
         ...(available ? {} : { maxStock: 0 }),
         price: grabListPriceMinor,
-        ...(promoCut?.showCutPrice && enableAdvancedPricingFallback
+        ...(includeAdvancedPricing
           ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabSalePriceMinor) }
           : {}),
         campaignInfo: null,

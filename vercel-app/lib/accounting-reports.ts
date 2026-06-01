@@ -18,7 +18,14 @@ import {
   sumHqOutboundSalesMatchingOutboundManagement,
   sumHqOutboundSubtotalMatchingOutboundManagement,
 } from '@/lib/hq-outbound-income-total'
-import { resolveAccountingStoreFilterFromAuth } from '@/lib/accounting-store-scope'
+import {
+  resolveAccountingStoreFilterFromAuth,
+  resolveFranchiseeAccountingAllowedStoresOnly,
+} from '@/lib/accounting-store-scope'
+import {
+  mergeBalanceSheetReports,
+  mergeIncomeStatementReports,
+} from '@/lib/accounting-income-statement-merge'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import {
   buildStoreFieldOrIlikeFragment,
@@ -382,15 +389,22 @@ export function normalizeIncomeScope(input: IncomeScopeInput): {
   endStr: string
   storeFilter: string
   isHQ: boolean
+  /** 가맹 「내 매장 전체」— storeFilter All 이지만 이 목록만 합산 */
+  allowedStoresOnly?: string[]
 } {
-  const storeFilter = resolveAccountingStoreFilterFromAuth(input.storeFilter, {
+  const authScope = {
     userRole: input.userRole,
     userStore: input.userStore,
     allowedStores: input.allowedStores,
-  })
+  }
+  const storeFilter = resolveAccountingStoreFilterFromAuth(input.storeFilter, authScope)
   const { yearMonth, startStr, endStr } = getBangkokMonthRange(input.yearMonth)
   const isHQ = isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter)
-  return { yearMonth, startStr, endStr, storeFilter, isHQ }
+  const allowedStoresOnly =
+    storeFilter === 'All' && !isHQ
+      ? resolveFranchiseeAccountingAllowedStoresOnly(authScope)
+      : undefined
+  return { yearMonth, startStr, endStr, storeFilter, isHQ, allowedStoresOnly }
 }
 
 type DirectInboundPurchaseOpts = {
@@ -724,6 +738,21 @@ async function getInventoryValue(
 
 export async function computeIncomeStatementReport(input: IncomeScopeInput): Promise<IncomeStatementReport> {
   const scope = normalizeIncomeScope(input)
+  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+    const perStore = await Promise.all(
+      scope.allowedStoresOnly.map((store) =>
+        computeIncomeStatementReport({
+          ...input,
+          storeFilter: store,
+        })
+      )
+    )
+    return mergeIncomeStatementReports(perStore, {
+      yearMonth: scope.yearMonth,
+      startStr: scope.startStr,
+      endStr: scope.endStr,
+    })
+  }
   const { startStr, endStr, storeFilter, isHQ, yearMonth } = scope
   const warnings: string[] = []
   const limits: Record<string, { fetched: number; limit: number; total?: number }> = {}
@@ -1492,6 +1521,21 @@ const UNPOSTED_WITHDRAW_CATEGORIES = ['transfer', 'loan', 'advance', 'correction
 
 export async function computeBalanceSheetReport(input: IncomeScopeInput): Promise<BalanceSheetReport> {
   const scope = normalizeIncomeScope(input)
+  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+    const perStore = await Promise.all(
+      scope.allowedStoresOnly.map((store) =>
+        computeBalanceSheetReport({
+          ...input,
+          storeFilter: store,
+        })
+      )
+    )
+    return mergeBalanceSheetReports(perStore, {
+      yearMonth: scope.yearMonth,
+      startStr: scope.startStr,
+      endStr: scope.endStr,
+    })
+  }
   const { yearMonth, startStr, endStr, storeFilter, isHQ } = scope
 
   let bankAccounts: { id?: number; store?: string; opening_balance?: number }[] = []
