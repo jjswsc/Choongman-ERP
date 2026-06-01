@@ -62,6 +62,45 @@ describe('mergeSetChildrenForReceipt', () => {
     expect(rows[0]?.promoItems?.[0]?.menuName).toBe('Aquafina')
     expect(rows[0]?.promoItems?.[0]?.optionName).toBe('500ml')
   })
+
+  it('keeps two POS promo sets separate when they share promoId but have different choices', () => {
+    const rows = mergeSetChildrenForReceipt([
+      {
+        id: 'promo-99-set-a',
+        name: 'Choongman Festival Set 2',
+        price: 333,
+        qty: 1,
+        promoId: '99',
+        promoCode: 'FEST-S02',
+        promoItems: [
+          { menuId: '1', optionId: 's', menuName: 'GOLDEN FRIED CHICKEN', optionName: 'S Boneless', quantity: 1 },
+          { menuId: '2', optionId: 'sea', menuName: 'Seafood-jjigae Soup with rice', quantity: 1 },
+        ],
+      },
+      {
+        id: 'promo-99-set-b',
+        name: 'Choongman Festival Set 2',
+        price: 333,
+        qty: 1,
+        promoId: '99',
+        promoCode: 'FEST-S02',
+        promoItems: [
+          { menuId: '1', optionId: 's', menuName: 'GOLDEN FRIED CHICKEN', optionName: 'S Boneless', quantity: 1 },
+          { menuId: '3', optionId: 'kim', menuName: 'Kimchi Soup with rice', quantity: 1 },
+        ],
+      },
+    ])
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.promoItems?.map((x) => x.menuName)).toEqual([
+      'GOLDEN FRIED CHICKEN',
+      'Seafood-jjigae Soup with rice',
+    ])
+    expect(rows[1]?.promoItems?.map((x) => x.menuName)).toEqual([
+      'GOLDEN FRIED CHICKEN',
+      'Kimchi Soup with rice',
+    ])
+  })
 })
 
 describe('resolveHallOrderReceiptDiscountAmt', () => {
@@ -309,6 +348,51 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('Bangkok')
     expect(html).not.toContain('ORDER_CANCELLED')
     expect(html).not.toContain('PAY_CORRECT')
+  })
+
+  it('prints two festival sets as separate lines on hall order receipt', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '017',
+        storeCode: 'CM Silom',
+        orderType: 'Dine In',
+        tableName: 'T - 5',
+        guestCount: 3,
+        items: [
+          {
+            id: 'promo-99-set-a',
+            name: 'Choongman Festival Set 2',
+            price: 333,
+            qty: 1,
+            promoId: '99',
+            promoItems: [
+              { menuId: '1', optionId: 's', menuName: 'GOLDEN FRIED CHICKEN', optionName: 'S Boneless', quantity: 1 },
+              { menuId: '2', optionId: null, menuName: 'Seafood-jjigae Soup with rice', quantity: 1 },
+            ],
+          },
+          {
+            id: 'promo-99-set-b',
+            name: 'Choongman Festival Set 2',
+            price: 333,
+            qty: 1,
+            promoId: '99',
+            promoItems: [
+              { menuId: '1', optionId: 's', menuName: 'GOLDEN FRIED CHICKEN', optionName: 'S Boneless', quantity: 1 },
+              { menuId: '3', optionId: null, menuName: 'Kimchi Soup with rice', quantity: 1 },
+            ],
+          },
+        ],
+        subtotal: 666,
+        discountAmt: 0,
+        total: 666,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html.match(/Choongman Festival Set 2/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(html).toContain('Seafood-jjigae Soup with rice')
+    expect(html).toContain('Kimchi Soup with rice')
+    expect(html).not.toMatch(/- Choongman Festival Set 2 x1/)
   })
 
   it('prints grab option codes from item fields on hall order receipt', () => {

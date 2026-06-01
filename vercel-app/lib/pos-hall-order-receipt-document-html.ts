@@ -279,13 +279,58 @@ function buildReceiptChildPromoLine(
   } as HallOrderPromoItem
 }
 
+function isReceiptPromoParentLine(item: HallOrderItem): boolean {
+  return Array.isArray(item.promoItems) && item.promoItems.length > 0
+}
+
+/** promoItems 없이도 세트 헤더 줄(Shopee·Grab 플랫 라인)인지 */
+function isReceiptPromoBundleHeaderLine(item: HallOrderItem): boolean {
+  if (isReceiptPromoParentLine(item)) return true
+  const name = String(item.name ?? '').trim()
+  if (!name || parseReceiptSetChildLineName(name)) return false
+  const hasPromoRef =
+    String((item as { promoId?: unknown }).promoId ?? '').trim().length > 0 ||
+    String((item as { promoCode?: unknown }).promoCode ?? '').trim().length > 0
+  if (!hasPromoRef) return false
+  return /\bset\b|\[[^\]]+\]/i.test(name) || (Number(item.price) || 0) > 0.0001
+}
+
 function pickReceiptSetParentIndex(indices: number[], out: HallOrderItem[]): number {
   return (
-    indices.find((idx) => Array.isArray(out[idx].promoItems) && out[idx].promoItems!.length > 0) ??
-    indices.find((idx) => /\bset\b|\[[^\]]+\]/i.test(String(out[idx].name ?? ''))) ??
-    indices.find((idx) => String((out[idx] as { promoId?: unknown }).promoId ?? '').trim().length > 0) ??
+    indices.find((idx) => isReceiptPromoParentLine(out[idx])) ??
+    indices.find((idx) => isReceiptPromoBundleHeaderLine(out[idx])) ??
     indices[0]
   )
+}
+
+function findPrecedingReceiptPromoParentIndex(
+  orphanIdx: number,
+  parentIndices: number[]
+): number {
+  let best = -1
+  for (const parentIdx of parentIndices) {
+    if (parentIdx <= orphanIdx && parentIdx > best) best = parentIdx
+  }
+  return best >= 0 ? best : parentIndices[0]
+}
+
+function attachReceiptOrphanPromoLine(
+  out: HallOrderItem[],
+  parentIdx: number,
+  orphanIdx: number,
+  hide: Set<number>,
+  opts?: {
+    grabInbound?: boolean
+    optionNameByCode?: Map<string, string> | Record<string, string>
+  }
+): void {
+  if (parentIdx < 0 || orphanIdx < 0 || parentIdx === orphanIdx || hide.has(orphanIdx)) return
+  if (isReceiptPromoBundleHeaderLine(out[orphanIdx])) return
+  const parent = out[parentIdx]
+  const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
+  list.push(buildReceiptChildPromoLine(out[orphanIdx], opts))
+  out[parentIdx] = { ...parent, promoItems: list }
+  hide.add(orphanIdx)
 }
 
 function mergeReceiptPromoGroupedLines(
@@ -299,15 +344,38 @@ function mergeReceiptPromoGroupedLines(
 ): void {
   for (const indices of groups.values()) {
     if (indices.length < 2) continue
-    const parentIdx = pickReceiptSetParentIndex(indices, out)
-    const parent = out[parentIdx]
-    const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
-    for (const childIdx of indices) {
-      if (childIdx === parentIdx || hide.has(childIdx)) continue
-      list.push(buildReceiptChildPromoLine(out[childIdx], opts))
-      hide.add(childIdx)
+    const parentIndices = indices.filter(
+      (idx) => !hide.has(idx) && isReceiptPromoBundleHeaderLine(out[idx])
+    )
+    const orphanIndices = indices.filter(
+      (idx) => !hide.has(idx) && !isReceiptPromoBundleHeaderLine(out[idx])
+    )
+
+    if (parentIndices.length > 1) {
+      for (const orphanIdx of orphanIndices) {
+        attachReceiptOrphanPromoLine(
+          out,
+          findPrecedingReceiptPromoParentIndex(orphanIdx, parentIndices),
+          orphanIdx,
+          hide,
+          opts
+        )
+      }
+      continue
     }
-    out[parentIdx] = { ...parent, promoItems: list }
+
+    if (parentIndices.length === 1) {
+      const parentIdx = parentIndices[0]
+      for (const orphanIdx of orphanIndices) {
+        attachReceiptOrphanPromoLine(out, parentIdx, orphanIdx, hide, opts)
+      }
+      continue
+    }
+
+    const parentIdx = pickReceiptSetParentIndex(indices, out)
+    for (const orphanIdx of orphanIndices) {
+      attachReceiptOrphanPromoLine(out, parentIdx, orphanIdx, hide, opts)
+    }
   }
 }
 
@@ -332,11 +400,10 @@ export function mergeSetChildrenForReceipt(
   if (childRows.length > 0) {
     const childIndexSet = new Set(childRows.map((x) => x.index))
 
-    const findParentIndex = (promoLabel: string) => {
+    const findParentIndex = (promoLabel: string, childIndex: number) => {
       const key = normalizeReceiptTextKey(promoLabel)
       if (!key) return -1
-      let best = -1
-      let score = 0
+      const candidates: { index: number; score: number }[] = []
       for (let i = 0; i < out.length; i++) {
         if (childIndexSet.has(i)) continue
         const nk = normalizeReceiptTextKey(String(out[i].name ?? ''))
@@ -344,22 +411,20 @@ export function mergeSetChildrenForReceipt(
         let s = 0
         if (nk === key) s = 100
         else if (nk.includes(key) || key.includes(nk)) s = 80
-        if (s > score) {
-          score = s
-          best = i
-        }
+        if (s > 0) candidates.push({ index: i, score: s })
       }
-      return best
+      if (candidates.length === 0) return -1
+      const maxScore = Math.max(...candidates.map((c) => c.score))
+      const bestMatches = candidates.filter((c) => c.score === maxScore)
+      const preceding = bestMatches.filter((c) => c.index <= childIndex)
+      const pool = preceding.length > 0 ? preceding : bestMatches
+      return pool.reduce((best, cur) => (cur.index > best.index ? cur : best)).index
     }
 
     for (const child of childRows) {
-      const parentIdx = findParentIndex(child.promoLabel)
+      const parentIdx = findParentIndex(child.promoLabel, child.index)
       if (parentIdx < 0 || parentIdx === child.index) continue
-      const parent = out[parentIdx]
-      const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
-      list.push(buildReceiptChildPromoLine(out[child.index], opts))
-      out[parentIdx] = { ...parent, promoItems: list }
-      hide.add(child.index)
+      attachReceiptOrphanPromoLine(out, parentIdx, child.index, hide, opts)
     }
   }
 
