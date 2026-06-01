@@ -138,9 +138,17 @@ describe('classifyGrabCampaignApiError', () => {
   })
 
   it('classifies start-time-too-close errors', () => {
-    const err = new Error(
-      'Grab API error: 400 {"message":"CAMPAIGN_START_TIME_TOO_CLOSE_TO_NOW:failed to create MFC:"}'
-    )
-    expect(classifyGrabCampaignApiError(err)).toBe('START_TIME_INVALID')
+    expect(
+      classifyGrabCampaignApiError(
+        new Error(
+          'Grab API error: 400 {"message":"CAMPAIGN_START_TIME_TOO_CLOSE_TO_NOW:failed to create MFC:"}'
+        )
+      )
+    ).toBe('START_TIME_INVALID')
+    expect(
+      classifyGrabCampaignApiError(
+        new Error('campaign start time too close for now | invalid_argument')
+      )
+    ).toBe('START_TIME_INVALID')
   })
 })

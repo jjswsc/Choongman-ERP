@@ -325,7 +325,8 @@ export function classifyGrabCampaignApiError(err: unknown): GrabCampaignErrorCod
   if (msg.includes('items not found')) return 'ITEMS_NOT_FOUND'
   if (
     msg.includes('starttime has to be after now') ||
-    msg.includes('campaign_start_time_too_close_to_now')
+    msg.includes('campaign_start_time_too_close_to_now') ||
+    msg.includes('start time too close')
   ) {
     return 'START_TIME_INVALID'
   }
@@ -664,6 +665,68 @@ async function replaceGrabCampaign(params: {
   }
 }
 
+const GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES = 65
+
+/** 캠페인 생성·교체 — 5분 리드 거절 시 65분으로 재시도, percentage 실패 시 fixPrice fallback */
+async function upsertGrabPromoCampaignForTarget(params: {
+  existingId?: string
+  buildBody: (opts?: {
+    leadMinutes?: number
+    discountType?: GrabPromoCampaignDiscountType
+  }) => Record<string, unknown>
+  initialLeadMinutes?: number
+}): Promise<{ usedFallback: boolean; usedExtendedLead: boolean }> {
+  const initialLead = params.initialLeadMinutes
+
+  const postOnce = async (leadMinutes: number, discountType?: GrabPromoCampaignDiscountType) => {
+    const body = params.buildBody({ leadMinutes, discountType })
+    const existingId = String(params.existingId ?? '').trim()
+    if (existingId) {
+      const primaryType = (body.discount as { type?: string })?.type
+      return replaceGrabCampaign({
+        existingId,
+        body,
+        fallbackBody:
+          primaryType === 'percentage'
+            ? params.buildBody({ leadMinutes, discountType: 'fixPrice' })
+            : undefined,
+      })
+    }
+    try {
+      await createGrabCampaign(body)
+      return { usedFallback: false }
+    } catch (e) {
+      if (discountType === 'fixPrice') throw e
+      await createGrabCampaign(params.buildBody({ leadMinutes, discountType: 'fixPrice' }))
+      return { usedFallback: true }
+    }
+  }
+
+  const leadMs = getGrabCampaignStartLeadMs(initialLead, { immediatePromoDisplay: true })
+  try {
+    const result = await postOnce(leadMs / 60_000)
+    return { ...result, usedExtendedLead: false }
+  } catch (e) {
+    if (
+      classifyGrabCampaignApiError(e) !== 'START_TIME_INVALID' ||
+      leadMs >= GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES * 60_000
+    ) {
+      throw e
+    }
+    /** 첫 replace에서 DELETE만 성공한 경우 — CREATE만 재시도 */
+    const extendedLead = GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES
+    try {
+      await createGrabCampaign(params.buildBody({ leadMinutes: extendedLead }))
+      return { usedFallback: false, usedExtendedLead: true }
+    } catch (e2) {
+      await createGrabCampaign(
+        params.buildBody({ leadMinutes: extendedLead, discountType: 'fixPrice' })
+      )
+      return { usedFallback: true, usedExtendedLead: true }
+    }
+  }
+}
+
 function listCampaignRows(payload: unknown): GrabCampaignListRow[] {
   if (!payload || typeof payload !== 'object') return []
   const o = payload as Record<string, unknown>
@@ -763,7 +826,6 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         discountType: opts?.discountType,
       })
     const primaryBody = buildBody()
-    const fixPriceFallbackBody = buildBody({ discountType: 'fixPrice' })
     const indexed =
       existingByPrefix.get(campaignName) ||
       (() => {
@@ -789,27 +851,14 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
 
     try {
-      if (hit?.id) {
-        const primaryDiscountType = (primaryBody.discount as { type?: string })?.type
-        const needsFallback =
-          primaryDiscountType === 'percentage' ? fixPriceFallbackBody : undefined
-        const result = await replaceGrabCampaign({
-          existingId: String(hit.id),
-          body: primaryBody,
-          fallbackBody: needsFallback,
-        })
-        if (result.usedFallback) campaignFallbackUsed += 1
-        updated += 1
-      } else {
-        try {
-          await createGrabCampaign(primaryBody)
-          created += 1
-        } catch {
-          await createGrabCampaign(fixPriceFallbackBody)
-          campaignFallbackUsed += 1
-          created += 1
-        }
-      }
+      const result = await upsertGrabPromoCampaignForTarget({
+        existingId: hit?.id ? String(hit.id) : undefined,
+        buildBody: (opts) => buildBody(opts),
+        initialLeadMinutes: campaignLeadMinutes,
+      })
+      if (result.usedFallback) campaignFallbackUsed += 1
+      if (hit?.id && !force) updated += 1
+      else created += 1
     } catch (e) {
       skipped += 1
       const errorCode = classifyGrabCampaignApiError(e)
