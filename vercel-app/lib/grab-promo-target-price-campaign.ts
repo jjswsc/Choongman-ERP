@@ -206,9 +206,26 @@ export function buildGrabCampaignDiscountForTarget(params: {
   }
 }
 
+export function grabCampaignNeedsDiscountTypeMigration(
+  row: GrabCampaignListRow,
+  expectedType?: GrabPromoCampaignDiscountType
+): boolean {
+  const existingType = String(row.discount?.type ?? '')
+    .trim()
+    .toLowerCase()
+  const expected = expectedType ?? resolveGrabPromoCampaignDiscountType()
+  if (!existingType) return false
+  return existingType !== expected
+}
+
 export function grabCampaignDiscountMatchesTarget(
   row: GrabCampaignListRow,
-  target: { grabItemId: string; salePriceMajor: number; regularPriceMajor: number }
+  target: {
+    grabItemId: string
+    salePriceMajor: number
+    regularPriceMajor: number
+    discountType?: GrabPromoCampaignDiscountType
+  }
 ): boolean {
   const discount = row.discount
   if (!discount) return false
@@ -216,6 +233,7 @@ export function grabCampaignDiscountMatchesTarget(
     grabItemId: target.grabItemId,
     salePriceMajor: target.salePriceMajor,
     regularPriceMajor: target.regularPriceMajor,
+    discountType: target.discountType,
   })
   const type = String(discount.type ?? '').trim()
   if (type !== expected.type) return false
@@ -808,6 +826,10 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   merchantID: string
   /** true면 Grab에 동일 캠페인이 있어도 삭제 후 재생성(메뉴 item id 변경·표시 불일치 우회) */
   force?: boolean
+  /** fixPrice→percentage 등 할인 타입 불일치 시 skip 하지 않고 PUT 마이그레이션 */
+  migrateDiscountType?: boolean
+  /** 이번 sync만 사용할 할인 타입(미지정 시 env·기본 percentage) */
+  campaignDiscountType?: GrabPromoCampaignDiscountType
   /** 분 단위 캠페인 시작 리드타임(미지정 시 immediate면 5분, Grab 거절 시 65분 재시도) */
   campaignStartLeadMinutes?: number
   /** true(기본): 메뉴 컷프라이스 push 대상 — valid_from 전 프로모 포함. 캠페인 날짜는 ERP 그대로 */
@@ -822,9 +844,12 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   menuRecordsFailed: number
   campaignErrors: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }>
   campaignFallbackUsed: number
+  campaignDiscountMigrated: number
 }> {
   const merchantID = String(params.merchantID || '').trim()
   const force = params.force === true
+  const migrateDiscountType = params.migrateDiscountType === true
+  const campaignDiscountType = params.campaignDiscountType
   const immediatePromoDisplay = params.immediatePromoDisplay !== false
   const empty = {
     created: 0,
@@ -836,6 +861,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     menuRecordsFailed: 0,
     campaignErrors: [] as Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }>,
     campaignFallbackUsed: 0,
+    campaignDiscountMigrated: 0,
   }
   if (!merchantID) return empty
 
@@ -873,6 +899,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   let created = 0
   let updated = 0
   let skipped = 0
+  let campaignDiscountMigrated = 0
   let campaignFallbackUsed = 0
   const campaignErrors: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }> = []
   const keepNames = new Set<string>()
@@ -895,7 +922,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         validTo: target.validTo,
         campaignStartLeadMinutes: opts?.leadMinutes ?? campaignLeadMinutes,
         clampCampaignValidFromToToday: immediatePromoDisplay,
-        discountType: opts?.discountType,
+        discountType: opts?.discountType ?? campaignDiscountType,
       })
     const primaryBody = buildBody()
     const indexed =
@@ -905,16 +932,29 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
           existingByName.get(campaignName) ||
           existing.find((r) => String(r.name ?? '').startsWith(campaignName))
         if (!row) return undefined
-        return { row, section: 'upcoming' as const }
+        const id = String(row.id ?? '').trim()
+        let section: 'ongoing' | 'upcoming' = 'upcoming'
+        for (const val of existingByPrefix.values()) {
+          if (String(val.row.id ?? '').trim() === id) {
+            section = val.section
+            break
+          }
+        }
+        return { row, section }
       })()
     const hit = indexed?.row
+    const discountType = campaignDiscountType ?? resolveGrabPromoCampaignDiscountType()
+    const needsTypeMigration =
+      hit?.id && migrateDiscountType && grabCampaignNeedsDiscountTypeMigration(hit, discountType)
     const matches =
       hit?.id &&
       !force &&
+      !needsTypeMigration &&
       grabCampaignDiscountMatchesTarget(hit, {
         grabItemId: target.grabItemId,
         salePriceMajor: target.salePrice,
         regularPriceMajor: target.regularPrice,
+        discountType,
       })
 
     if (matches) {
@@ -932,6 +972,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         initialLeadMinutes: campaignLeadMinutes,
       })
       if (result.usedFallback) campaignFallbackUsed += 1
+      if (needsTypeMigration) campaignDiscountMigrated += 1
       if (result.mode === 'updated') updated += 1
       else created += 1
     } catch (e) {
@@ -987,6 +1028,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     menuRecordsFailed: menuPushBefore.failed + menuPushAfter.failed,
     campaignErrors,
     campaignFallbackUsed,
+    campaignDiscountMigrated,
   }
 }
 

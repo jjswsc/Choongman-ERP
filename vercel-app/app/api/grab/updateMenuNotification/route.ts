@@ -22,6 +22,8 @@ type UpdateMenuNotificationBody = {
    * menu-sync-state 웹훅 누락/지연 시 운영 우회용.
    */
   syncPromoTargetPriceCampaigns?: unknown
+  /** true면 fixPrice→percentage 할인 타입 마이그레이션(PUT, ongoing 시작 시각 유지) */
+  migratePromoCampaignToPercentage?: unknown
   /** true면 fixPrice 캠페인을 삭제·재생성(startTime이 now+65분으로 리셋 → Simulator "Now" 취소선 사라짐) */
   forcePromoCampaignResync?: unknown
   /** true(기본): 모든 활성 Grab 세트·프로모 컷프라이스 즉시 반영 */
@@ -92,6 +94,10 @@ export async function POST(req: NextRequest) {
       body.syncPromoTargetPriceCampaigns === true ||
       body.syncPromoTargetPriceCampaigns === 'true' ||
       body.syncPromoTargetPriceCampaigns === 1
+    const migratePromoCampaignToPercentage =
+      body.migratePromoCampaignToPercentage === true ||
+      body.migratePromoCampaignToPercentage === 'true' ||
+      body.migratePromoCampaignToPercentage === 1
     const forcePromoCampaignResync =
       body.forcePromoCampaignResync === true ||
       body.forcePromoCampaignResync === 'true' ||
@@ -129,6 +135,12 @@ export async function POST(req: NextRequest) {
             merchantID,
             force: forcePromoCampaignResync,
             immediatePromoDisplay,
+            ...(migratePromoCampaignToPercentage
+              ? {
+                  migrateDiscountType: true,
+                  campaignDiscountType: 'percentage' as const,
+                }
+              : {}),
             ...(Number.isFinite(campaignStartLeadMinutes)
               ? { campaignStartLeadMinutes: campaignStartLeadMinutes as number }
               : {}),

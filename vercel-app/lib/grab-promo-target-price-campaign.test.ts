@@ -6,6 +6,7 @@ import {
   calcGrabPercentageOffMajor,
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
+  grabCampaignNeedsDiscountTypeMigration,
   resolveGrabCampaignScheduleMs,
 } from '@/lib/grab-promo-target-price-campaign'
 
@@ -112,6 +113,16 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
       )
     ).toBe(false)
+  })
+})
+
+describe('grabCampaignNeedsDiscountTypeMigration', () => {
+  it('detects fixPrice on Grab when percentage is expected', () => {
+    expect(
+      grabCampaignNeedsDiscountTypeMigration({
+        discount: { type: 'fixPrice', value: 111, scope: { objectIDs: ['item-99'] } },
+      })
+    ).toBe(true)
   })
 })
 
