@@ -71,7 +71,11 @@ import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
   registerLocallyPrintedQueuedOrderNo,
 } from '@/lib/offline/pos-queued-sync-print-suppress'
-import { posPaymentAutoPrintDedupeKey, reservePosAutoPrintKey } from '@/lib/pos-auto-print-dedupe'
+import {
+  posPaymentAutoPrintDedupeKey,
+  reservePosAutoPrintKey,
+  reservePosAutoPrintKeys,
+} from '@/lib/pos-auto-print-dedupe'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import {
   cartLinesToPosOrderItems,
@@ -172,8 +176,12 @@ import {
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import {
+  posOrderToCheckoutDiscountSnapshot,
+  type PosExistingOrderCheckoutDiscount,
+} from '@/lib/pos-existing-order-checkout-discount'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
-import { negatePosReceiptMoney, receiptModalDataForVoidReceipt } from '@/lib/pos-void-receipt'
+import { printPosVoidReceiptForOrder } from '@/lib/print-pos-void-receipt'
 import {
   posOrderPaymentFieldsFromSnapshot,
   receiptPaymentFieldsFromSnapshot,
@@ -614,6 +622,8 @@ type PendingPayRequest = {
   orderNo?: string
   /** 기존 pos_orders 행 id (결제 updatePosOrder용) */
   existingOrderId?: number | null
+  /** DB·플랫폼 할인·합계 — 결제 모달에서 0으로 초기화하지 않음 */
+  orderDiscount?: PosExistingOrderCheckoutDiscount
 } | null
 
 type KbankOutcomeState = {
@@ -1763,7 +1773,10 @@ export default function PosTerminalPage() {
   useLayoutEffect(() => {
     if (!pendingPayRequest) return
     if (!cartRef.current) return
-    cartRef.current.openDineInPaymentFromOrder(pendingPayRequest)
+    cartRef.current.openDineInPaymentFromOrder({
+      ...pendingPayRequest,
+      existingOrderId: pendingDineInOrderId,
+    })
     setPendingPayRequest(null)
   }, [pendingPayRequest])
 
@@ -1774,6 +1787,7 @@ export default function PosTerminalPage() {
       orderLabel: pendingTakeoutPayRequest.tableName,
       items: pendingTakeoutPayRequest.items,
       existingOrderId: pendingTakeoutOrderId,
+      orderDiscount: pendingTakeoutPayRequest.orderDiscount,
     })
     setPendingTakeoutPayRequest(null)
   }, [pendingTakeoutPayRequest, pendingTakeoutOrderId])
@@ -1785,6 +1799,7 @@ export default function PosTerminalPage() {
       orderLabel: pendingDeliveryPayRequest.tableName,
       items: pendingDeliveryPayRequest.items,
       existingOrderId: pendingDeliveryOrderId,
+      orderDiscount: pendingDeliveryPayRequest.orderDiscount,
     })
     setPendingDeliveryPayRequest(null)
   }, [pendingDeliveryPayRequest, pendingDeliveryOrderId])
@@ -3264,10 +3279,17 @@ export default function PosTerminalPage() {
     const autoPrintDedupeKey = String(payload._autoPrintDedupeKey ?? '').trim()
     if (directPrint && autoPrintDedupeKey) {
       const storeForDedupe = String(currentStoreId || payload.storeCode || '').trim()
-      if (!reservePosAutoPrintKey(storeForDedupe, autoPrintDedupeKey)) {
+      const dedupeKeys = [autoPrintDedupeKey]
+      const orderNo = String(payload.orderNo ?? '').trim()
+      /** 저장 직후(orderNo 기반)와 리얼타임(orderId 기반) 키를 같은 예약 그룹으로 묶어 2장 인쇄 방지 */
+      if (/:hall:auto$/u.test(autoPrintDedupeKey) && orderNo) {
+        dedupeKeys.push(`submit:hall:${orderNo}`)
+      }
+      if (!reservePosAutoPrintKeys(storeForDedupe, dedupeKeys)) {
         logPosPrintDebug('hall_autoprint_skip_dedupe', {
           orderNo: payload.orderNo,
           dedupeKey: autoPrintDedupeKey,
+          dedupeKeys,
           storeCode: storeForDedupe,
         })
         /** 중복 홀 건너뛸 때 주방 콜백까지 실행하면 Realtime+폴링에서 주방만 2장 나감 */
@@ -3465,9 +3487,18 @@ export default function PosTerminalPage() {
       const settings =
         posPrinterSettingsRef.current ??
         (await getPrinterSettingsForStore(storeCode || currentStoreId))
+      const itemsBase = (() => {
+        const base = data.items ?? []
+        const hasSetChild = base.some((it) => parseGrabSetChildLineName(String(it.name ?? '')))
+        if (!hasSetChild) return base
+        return mergeGrabSetChildLinesIntoPromoParents(
+          base as Parameters<typeof mergeGrabSetChildLinesIntoPromoParents>[0],
+          grabCatalogForPrint
+        ).filter((it) => !(it as { grabSetChild?: boolean }).grabSetChild)
+      })()
       const enriched = {
         ...data,
-        items: enrichReceiptModalItemsForPromoDisplay(data.items, posReceiptLineOpts),
+        items: enrichReceiptModalItemsForPromoDisplay(itemsBase, posReceiptLineOpts),
       }
       const receiptHtml = buildPosPaymentReceiptDocumentHtml({
         receiptData: enriched,
@@ -3618,134 +3649,16 @@ export default function PosTerminalPage() {
       if (!po?.items?.length) return
 
       const settings = await getPrinterSettingsForStore(currentStoreId)
-      const paymentSum = posOrderPaymentSum(po)
-      const orderTypeLabelMap = {
-        dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
-        takeout: tPrint('posOrderTypeTakeout') ?? '포장',
-        delivery: tPrint('posOrderTypeDelivery') ?? '배달',
-      }
-
-      if (paymentSum > 0.005) {
-        const voidBase = receiptModalDataForVoidReceipt(po, posReceiptLineOpts)
-        const receiptData = {
-          ...voidBase,
-          items: enrichReceiptModalItemsForPromoDisplay(voidBase.items, posReceiptLineOpts),
-        }
-        const receiptHtml = buildPosPaymentReceiptDocumentHtml({
-          receiptData,
-          menus,
-          optionNameByCode,
-          orderTypeLabels: orderTypeLabelMap,
-          t: tPrint,
-          lang: printLang,
-          origin: typeof window !== 'undefined' ? window.location.origin : '',
-          printerSettings: settings,
-          forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(currentStoreId),
-        })
-        printPosHtmlDocument(receiptHtml, {
-          title: tPrint('posReceipt') || '영수증',
-          printDelayMs: 0,
-          fallbackCleanupMs: 120_000,
-          focusIframeBeforePrint: false,
-          printRole: 'receipt',
-          printReceiptKind: 'payment',
-          escPosCutOverride: resolveEscPosCutOverride(settings, {
-            printRole: 'receipt',
-            printReceiptKind: 'payment',
-          }),
-          onPrintUnavailable: () => {
-            void appAlert(t('posPrintUnavailable'))
-          },
-        })
-        return
-      }
-
-      const channel = normalizePosOrderTypeKey(po.orderType ?? 'dine_in')
-      const orderTypeLabel =
-        channel === 'delivery'
-          ? orderTypeLabelMap.delivery
-          : channel === 'takeout'
-            ? orderTypeLabelMap.takeout
-            : orderTypeLabelMap.dine_in
-      const subtotal = Math.max(0, Number(po.subtotal ?? 0) || 0)
-      const discountAmt = Math.max(0, Number(po.discountAmt ?? 0) || 0)
-      const pricing = computePosPricing({
-        subtotal,
-        discountAmt,
-        cardPaymentAmount: Math.max(0, Number(po.paymentCard ?? 0) || 0),
-        adjustments: pricingAdjustments,
-      })
-      const receiptPrintItems = (po.items || []).map((it) => {
-        const row = it as PosOrderItem
-        const menuId = String(row.menuId1 ?? row.menuId2 ?? '').trim()
-        const displayName = resolveOrderItemDisplayName({
-          id: String(it.id ?? ''),
-          name: String(it.name ?? ''),
-          menuId,
-        })
-        const note = String(it.note ?? '').trim()
-        return {
-          id: String(it.id ?? ''),
-          name: displayName,
-          price: negatePosReceiptMoney(Number(it.price ?? 0)),
-          qty: Math.max(1, Number(it.qty ?? 1) || 1),
-          ...(note ? { note } : {}),
-          ...(Array.isArray(row.promoItems) && row.promoItems.length > 0
-            ? { promoItems: enrichPromoItemsWithOptionName(row.promoItems) }
-            : {}),
-        }
-      })
-      const hallHtml = buildPosHallOrderReceiptDocumentHtml({
-        payload: {
-          orderNo: String(po.orderNo ?? '').trim(),
-          storeCode: currentStoreId,
-          orderType: orderTypeLabel,
-          tableName: String(po.tableName ?? '').trim(),
-          memo: String(po.memo ?? ''),
-          items: receiptPrintItems,
-          subtotal: negatePosReceiptMoney(subtotal),
-          discountAmt,
-          total: negatePosReceiptMoney(pricing.finalTotal),
-          vatFeeAmt: pricing.vatFeeAmt,
-          vatFeeMode: pricing.vatFeeMode,
-          ...receiptTaxDisplayFieldsFromPricing(pricing),
-          serviceFeeAmt: pricing.serviceFeeAmt,
-          serviceFeeMode: pricing.serviceFeeMode,
-          cardFeeAmt: pricing.cardFeeAmt,
-          cardFeeMode: pricing.cardFeeMode,
-          otherFeeAmt: pricing.otherFeeAmt,
-          otherFeeMode: pricing.otherFeeMode,
-          ...posGuestCountSpread(po.guestCount),
-          voidReceiptMode: true,
-        },
+      await printPosVoidReceiptForOrder({
+        order: po,
+        menus,
+        menuOptions: menuOptionsForCodeMap.length > 0 ? menuOptionsForCodeMap : menuOptions,
+        promos: promosWithItems,
+        lineOpts: posReceiptLineOpts,
         t: tPrint,
         lang: printLang,
-        resolveOrderItemDisplayName: (it) =>
-          resolveOrderItemDisplayName({
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            menuId: String((it as { menuId?: string }).menuId ?? ''),
-            promoId: String((it as { promoId?: string }).promoId ?? ''),
-            promoCode: String((it as { promoCode?: string }).promoCode ?? ''),
-          }),
-        menuNameById: (menuId: string) =>
-          menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
-        menuCodeByMenuId: Object.fromEntries(
-          menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
-        ),
-        optionNameByCode,
-      })
-      printPosHtmlDocument(hallHtml, {
-        title: tPrint('posReceipt') || '영수증',
-        printDelayMs: 0,
-        fallbackCleanupMs: 120_000,
-        focusIframeBeforePrint: false,
-        printRole: 'receipt',
-        printReceiptKind: 'hall_order',
-        escPosCutOverride: resolveEscPosCutOverride(settings, {
-          printRole: 'receipt',
-          printReceiptKind: 'hall_order',
-        }),
+        printerSettings: settings,
+        pricingAdjustments,
         onPrintUnavailable: () => {
           void appAlert(t('posPrintUnavailable'))
         },
@@ -8996,6 +8909,10 @@ export default function PosTerminalPage() {
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: selectedDeliveryOrder.orderNo,
+                  orderDiscount: posOrderToCheckoutDiscountSnapshot({
+                    ...selectedDeliveryOrder,
+                    items: selectedDeliveryOrder.items,
+                  }),
                 })
                 setSelectedDeliveryTargetId(null)
                 setSelectedDeliveryTargetLabel('')
@@ -9079,6 +8996,10 @@ export default function PosTerminalPage() {
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: servingTable.order.orderNo,
+                  orderDiscount: posOrderToCheckoutDiscountSnapshot({
+                    ...servingTable.order,
+                    items: servingTable.order.items,
+                  }),
                 })
                 setServingTableId(null)
               }}
@@ -9132,6 +9053,10 @@ export default function PosTerminalPage() {
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: selectedTakeoutOrder.orderNo,
+                  orderDiscount: posOrderToCheckoutDiscountSnapshot({
+                    ...selectedTakeoutOrder,
+                    items: selectedTakeoutOrder.items,
+                  }),
                 })
                 setSelectedTakeoutTargetId(null)
                 setSelectedTakeoutTargetLabel('')

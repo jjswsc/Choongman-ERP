@@ -5,6 +5,7 @@ import type { Order } from '@/lib/pos-types'
 import {
   formatGrabOrderLineNoteForPrint,
   isGrabInboundPosOrder,
+  isLikelyPosOptionCode,
 } from '@/lib/grab-pos-order-enrich'
 import { mergeSetChildrenForReceipt, type HallOrderPayload } from '@/lib/pos-hall-order-receipt-document-html'
 import {
@@ -14,6 +15,14 @@ import {
 } from '@/lib/pos-pricing'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-domain'
+import {
+  posOrderToCheckoutDiscountSnapshot,
+  resolveEffectivePosOrderDiscountAmt,
+} from '@/lib/pos-existing-order-checkout-discount'
+import {
+  buildKitchenMenuNameLookup,
+  resolveKitchenMenuNameFromLookup,
+} from '@/lib/pos-kitchen-menu-display-name'
 
 export type PosOrderReceiptLineOptions = {
   /**
@@ -239,6 +248,51 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
   return candidates[0].id
 }
 
+/** Shopee·배달앱 note(옵션 그룹:선택)에서 구성 메뉴명 후보 추출 */
+function parseLineNoteMenuFragments(note: string): string[] {
+  const raw = String(note ?? '').trim()
+  if (!raw) return []
+  return raw
+    .split(/[,·\n]/)
+    .map((part) => {
+      const text = part.trim()
+      if (!text) return ''
+      const colon = text.indexOf(':')
+      return (colon >= 0 ? text.slice(colon + 1) : text).trim()
+    })
+    .filter(
+      (text) =>
+        text &&
+        !/^(optc:|mods?:)/i.test(text) &&
+        !isLikelyPosOptionCode(text)
+    )
+}
+
+/** promoItems 에 menuName 이 없을 때 부모 줄 note 의 사람 읽기 옵션명으로 순서 매칭 */
+export function enrichPromoMenuNamesFromLineNote(
+  promoItems: ReceiptPromoLine[] | undefined,
+  note: string
+): ReceiptPromoLine[] | undefined {
+  if (!Array.isArray(promoItems) || promoItems.length === 0) return promoItems
+  const fragments = parseLineNoteMenuFragments(note)
+  if (!fragments.length) return promoItems
+  let fi = 0
+  return promoItems.map((p) => {
+    if (String(p.menuName ?? '').trim()) return p
+    while (fi < fragments.length) {
+      const menuName = fragments[fi++]!.trim()
+      if (menuName) return { ...p, menuName }
+    }
+    return p
+  })
+}
+
+/** 카탈로그 id-only 줄 + mergeSetChildrenForReceipt 이름 줄이 섞이면 이름 있는 줄만 남긴다 */
+function preferNamedReceiptPromoItems(promoItems: ReceiptPromoLine[]): ReceiptPromoLine[] {
+  const named = promoItems.filter((p) => String(p.menuName ?? '').trim())
+  return named.length > 0 ? named : promoItems
+}
+
 /** 프로모 구성 줄 — optionCode 기반 optionName 보강 */
 export function enrichPromoSnapshotForPrint(
   promoItems: ReceiptPromoLine[] | undefined,
@@ -248,14 +302,15 @@ export function enrichPromoSnapshotForPrint(
   const optionNameByCode = opts?.optionNameByCode
   const optionNameById = opts?.optionNameById
   const menus = opts?.menus
+  const menuLookup = menus?.length ? buildKitchenMenuNameLookup(menus) : null
   return promoItems.map((p) => {
     let optionName = String(p.optionName ?? '').trim()
     let menuName = String(p.menuName ?? '').trim()
     const menuId = String(p.menuId ?? '').trim()
     const optionCode = String(p.optionCode ?? '').trim()
     const optionId = String(p.optionId ?? '').trim()
-    if (!menuName && menuId && menus?.length) {
-      menuName = String(menus.find((m) => String(m.id) === menuId)?.name ?? '').trim()
+    if (!menuName && menuId && menuLookup) {
+      menuName = resolveKitchenMenuNameFromLookup(menuId, menuLookup, '')
     }
     if (!optionName && optionCode && optionNameByCode?.size) {
       const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, optionNameByCode)
@@ -379,15 +434,22 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
   const menus = opts?.menus
   if (!items?.length || (!catalog?.size && !menus?.length)) return items
   return items.map((it) => {
+    const note = String(it.note ?? it.line_note ?? '').trim()
+    const applyPromoEnrich = (promo: ReceiptPromoLine[] | null | undefined): ReceiptPromoLine[] | undefined => {
+      if (!promo?.length) return undefined
+      const fromSnapshot = enrichPromoSnapshotForPrint(promo, opts) ?? promo
+      const fromNote = enrichPromoMenuNamesFromLineNote(fromSnapshot, note) ?? fromSnapshot
+      return fromNote
+    }
     const direct = pickPromoItemsFromOrderLine(it)
     if (direct && direct.length > 0) {
-      const enriched = enrichPromoSnapshotForPrint(normalizeReceiptPromoLines(direct), opts)
-      return { ...it, promoItems: enriched } as T
+      const enriched = applyPromoEnrich(normalizeReceiptPromoLines(direct))
+      return enriched ? ({ ...it, promoItems: enriched } as T) : (it as T)
     }
     const promo = resolvePromoItemsForReceiptLine(it, catalog, menus)
     if (!promo || promo.length === 0) return it
-    const enriched = enrichPromoSnapshotForPrint(promo, opts) ?? promo
-    return { ...it, promoItems: enriched } as T
+    const enriched = applyPromoEnrich(promo)
+    return enriched ? ({ ...it, promoItems: enriched } as T) : (it as T)
   })
 }
 
@@ -482,23 +544,60 @@ export function enrichReceiptModalItemsForPromoDisplay(
     items as unknown as Record<string, unknown>[],
     opts
   ) as ReceiptModalData['items']
-  return mergeSetChildrenForReceipt(
+  const merged = mergeSetChildrenForReceipt(
     enriched as Parameters<typeof mergeSetChildrenForReceipt>[0],
     {
       grabInbound: isGrabInboundPosOrder({ items: enriched }),
       optionNameByCode: opts?.optionNameByCode,
     }
-  ) as ReceiptModalData['items']
+  )
+  return merged.map((it) => {
+    const pi = (it as { promoItems?: ReceiptPromoLine[] }).promoItems
+    if (!Array.isArray(pi) || pi.length === 0) return it
+    const coalesced = preferNamedReceiptPromoItems(pi)
+    return coalesced === pi ? it : { ...it, promoItems: coalesced }
+  }) as ReceiptModalData['items']
+}
+
+function effectivePosOrderDiscountForReceipt(
+  order: PosOrder,
+  adjustments: PosPricingAdjustments,
+  opts?: PosOrderReceiptLineOptions
+): number {
+  const lines = posOrderItemsToReceiptLines(order, opts)
+  return resolveEffectivePosOrderDiscountAmt({
+    snapshot: posOrderToCheckoutDiscountSnapshot(order),
+    items: lines.map((it) => ({
+      price: it.price,
+      qty: it.qty,
+      lineDiscountAmt: it.lineDiscountAmt,
+    })),
+    adjustments,
+  })
 }
 
 /** 영수증 관리 등: DB에 저장된 합계·부가세로 재인쇄 (당시 요금 재계산 없음) */
-export function receiptModalDataFromPosOrderReprint(order: PosOrder, opts?: PosOrderReceiptLineOptions): ReceiptModalData {
+export function receiptModalDataFromPosOrderReprint(
+  order: PosOrder,
+  opts?: PosOrderReceiptLineOptions,
+  adjustments?: PosPricingAdjustments
+): ReceiptModalData {
   const v = Number(order.vat ?? 0) || 0
+  const effectiveDiscountAmt = adjustments
+    ? effectivePosOrderDiscountForReceipt(order, adjustments, opts)
+    : resolveEffectivePosOrderDiscountAmt({
+        snapshot: posOrderToCheckoutDiscountSnapshot(order),
+        items: posOrderItemsToReceiptLines(order, opts).map((it) => ({
+          price: it.price,
+          qty: it.qty,
+          lineDiscountAmt: it.lineDiscountAmt,
+        })),
+      })
   return {
     orderNo: order.orderNo ?? '',
     items: posOrderItemsToReceiptLines(order, opts),
     subtotal: order.subtotal ?? 0,
-    discountAmt: order.discountAmt ?? 0,
+    discountAmt: effectiveDiscountAmt,
     deliveryFee: order.deliveryFee,
     packagingFee: order.packagingFee,
     total: order.total ?? 0,
@@ -537,22 +636,25 @@ export function receiptModalDataFromPosOrderForPayment(
   adjustments: PosPricingAdjustments,
   opts?: PosOrderReceiptLineOptions
 ): ReceiptModalData {
+  const effectiveDiscountAmt = effectivePosOrderDiscountForReceipt(order, adjustments, opts)
+  const storedTotal = Math.max(0, Number(order.total ?? 0) || 0)
   const pricing = computePosPricing({
     subtotal: order.subtotal ?? 0,
-    discountAmt: order.discountAmt ?? 0,
+    discountAmt: effectiveDiscountAmt,
     deliveryFee: order.deliveryFee ?? 0,
     packagingFee: order.packagingFee ?? 0,
     cardPaymentAmount: order.paymentCard ?? 0,
     adjustments,
   })
+  const total = storedTotal > 0.005 ? storedTotal : pricing.finalTotal
   return {
     orderNo: order.orderNo ?? '',
     items: posOrderItemsToReceiptLines(order, opts),
     subtotal: order.subtotal ?? 0,
-    discountAmt: order.discountAmt ?? 0,
+    discountAmt: effectiveDiscountAmt,
     deliveryFee: order.deliveryFee,
     packagingFee: order.packagingFee,
-    total: pricing.finalTotal,
+    total,
     storeCode: order.storeCode,
     orderType: order.orderType,
     tableName: order.tableName,
@@ -616,12 +718,12 @@ export function hallOrderReceiptPayloadFromPosOrder(
   adjustments: PosPricingAdjustments,
   opts?: PosOrderReceiptLineOptions & { orderTypeLabel?: string; storeCodeFallback?: string }
 ): HallOrderPayload {
-  const discountAmt = Math.max(0, Number(order.discountAmt ?? 0) || 0)
+  const effectiveDiscountAmt = effectivePosOrderDiscountForReceipt(order, adjustments, opts)
   const couponDiscountAmt = Math.max(0, Number(order.couponDiscountAmt ?? 0) || 0)
   const subtotal = Math.max(0, Number(order.subtotal ?? 0) || 0)
   const pricing = computePosPricing({
     subtotal,
-    discountAmt,
+    discountAmt: effectiveDiscountAmt,
     deliveryFee: order.deliveryFee ?? 0,
     packagingFee: order.packagingFee ?? 0,
     cardPaymentAmount: Math.max(0, Number(order.paymentCard ?? 0) || 0),
@@ -638,7 +740,7 @@ export function hallOrderReceiptPayloadFromPosOrder(
     ...(order.memo ? { memo: String(order.memo) } : {}),
     items: hallOrderItemsFromReceiptLines(lines),
     subtotal,
-    discountAmt,
+    discountAmt: effectiveDiscountAmt,
     couponDiscountAmt,
     ...(order.discountReason ? { discountReason: String(order.discountReason) } : {}),
     total,

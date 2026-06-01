@@ -37,11 +37,8 @@ export const POS_RECEIPT_VOID_EXTRA_STYLES = `
   }
 `
 
-export function receiptModalDataForVoidReceipt(
-  order: PosOrder,
-  opts?: PosOrderReceiptLineOptions
-): ReceiptModalData {
-  const base = receiptModalDataFromPosOrderReprint(order, opts)
+/** 결제·분할 영수증 재인쇄 데이터 → void(취소) 영수증 */
+export function voidReceiptModalData(base: ReceiptModalData): ReceiptModalData {
   const neg = negatePosReceiptMoney
   return {
     ...base,
@@ -105,4 +102,11 @@ export function receiptModalDataForVoidReceipt(
       ? { paymentDeliveryApp: neg(base.paymentDeliveryApp) }
       : {}),
   }
+}
+
+export function receiptModalDataForVoidReceipt(
+  order: PosOrder,
+  opts?: PosOrderReceiptLineOptions
+): ReceiptModalData {
+  return voidReceiptModalData(receiptModalDataFromPosOrderReprint(order, opts))
 }

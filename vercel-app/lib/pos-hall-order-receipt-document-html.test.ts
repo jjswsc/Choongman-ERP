@@ -52,6 +52,38 @@ describe('mergeSetChildrenForReceipt', () => {
     ])
   })
 
+  it('merges [[promo]] bracket child lines onto parent by label match', () => {
+    const rows = mergeSetChildrenForReceipt([
+      {
+        id: 'p1',
+        name: '[April] Set 2',
+        price: 111,
+        qty: 1,
+        promoItems: [
+          { menuId: '22', optionId: null, quantity: 1 },
+          { menuId: '25', optionId: null, quantity: 1 },
+        ],
+      },
+      { id: 'c1', name: '[[April] Set 2] Rice', price: 0, qty: 1, menuId: '22' },
+      {
+        id: 'c2',
+        name: '[[April] Set 2] SOY SAUCE CHICKEN',
+        price: 0,
+        qty: 1,
+        menuId: '25',
+        note: 'mods:S Boneless',
+      },
+    ] satisfies MergeSetTestItem[])
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.promoItems?.map((x) => x.menuName)).toEqual([
+      undefined,
+      undefined,
+      'Rice',
+      'SOY SAUCE CHICKEN',
+    ])
+  })
+
   it('keeps option text from child line name for hall orders', () => {
     const rows = mergeSetChildrenForReceipt([
       { id: 'p1', name: 'Festival Set 2', qty: 1, promoId: '9', promoCode: 'SET-S02' },

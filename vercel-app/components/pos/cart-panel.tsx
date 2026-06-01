@@ -104,6 +104,10 @@ import {
   type PosPricingAdjustments,
   type PosPricingResult,
 } from '@/lib/pos-pricing'
+import {
+  manualDiscountSeedFromCheckoutSnapshot,
+  type PosExistingOrderCheckoutDiscount,
+} from '@/lib/pos-existing-order-checkout-discount'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import {
   translateReceiptTableDisplayName,
@@ -388,18 +392,22 @@ export interface CartPanelHandle {
     /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
     existingOrderId?: number | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    /** DB·플랫폼에 저장된 할인·합계 — 결제 시 0으로 초기화하지 않음 */
+    orderDiscount?: PosExistingOrderCheckoutDiscount
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
     existingOrderId?: number | null
+    orderDiscount?: PosExistingOrderCheckoutDiscount
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
     existingOrderId?: number | null
+    orderDiscount?: PosExistingOrderCheckoutDiscount
   }) => void
 }
 
@@ -408,6 +416,56 @@ function normalizeExistingPosOrderId(raw: unknown): number | null {
   if (!Number.isFinite(n) || n <= 0) return null
   const id = Math.trunc(n)
   return id > 0 ? id : null
+}
+
+function resetCheckoutDiscountUiState(setters: {
+  setDiscountType: (v: 'percent' | 'fixed') => void
+  setDiscountValue: (v: number) => void
+  setDiscountReason: (v: string) => void
+  setAppliedCollabId: (v: string | null) => void
+  setCouponCode: (v: string) => void
+  setAppliedCoupons: (v: PosAppliedCoupon[]) => void
+  setCouponQuantity: (v: number) => void
+  setCouponMessage: (v: string) => void
+  setPointUsed: (v: string) => void
+}) {
+  setters.setDiscountType('percent')
+  setters.setDiscountValue(0)
+  setters.setDiscountReason('')
+  setters.setAppliedCollabId(null)
+  setters.setCouponCode('')
+  setters.setAppliedCoupons([])
+  setters.setCouponQuantity(1)
+  setters.setCouponMessage('')
+  setters.setPointUsed('0')
+}
+
+function seedCheckoutDiscountFromExistingOrder(
+  orderDiscount: PosExistingOrderCheckoutDiscount | undefined,
+  items: { price: number; quantity: number }[],
+  pricingAdjustments: PosPricingAdjustments | undefined,
+  setters: {
+    setDiscountType: (v: 'percent' | 'fixed') => void
+    setDiscountValue: (v: number) => void
+    setDiscountReason: (v: string) => void
+  }
+): number {
+  if (!orderDiscount) return 0
+  const seed = manualDiscountSeedFromCheckoutSnapshot({
+    snapshot: orderDiscount,
+    items: items.map((i) => ({ price: i.price, qty: i.quantity })),
+    adjustments: pricingAdjustments,
+  })
+  if (seed.discountValue > 0.0001) {
+    setters.setDiscountType('fixed')
+    setters.setDiscountValue(seed.discountValue)
+    setters.setDiscountReason(seed.discountReason)
+    return seed.discountValue
+  }
+  setters.setDiscountType('percent')
+  setters.setDiscountValue(0)
+  setters.setDiscountReason(seed.discountReason)
+  return 0
 }
 
 interface CartPanelProps {
@@ -3648,6 +3706,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderNo?: string
     existingOrderId?: number | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    orderDiscount?: PosExistingOrderCheckoutDiscount
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
@@ -3660,16 +3719,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
       ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
-    setDiscountType('percent')
-    setDiscountValue(0)
-    setDiscountReason('')
+    resetCheckoutDiscountUiState({
+      setDiscountType,
+      setDiscountValue,
+      setDiscountReason,
+      setAppliedCollabId,
+      setCouponCode,
+      setAppliedCoupons,
+      setCouponQuantity,
+      setCouponMessage,
+      setPointUsed,
+    })
+    const receiptDiscountTotal = seedCheckoutDiscountFromExistingOrder(
+      payload.orderDiscount,
+      normalized,
+      pricingAdjustments,
+      { setDiscountType, setDiscountValue, setDiscountReason }
+    )
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
       receiptSubtotal: amount,
-      receiptDiscountTotal: pointUsedNum,
+      receiptDiscountTotal,
       receiptTableName: payload.tableName,
       receiptOrderNo: payload.orderNo,
     })
@@ -3679,6 +3752,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
+    orderDiscount?: PosExistingOrderCheckoutDiscount
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
@@ -3691,16 +3765,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
       ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
-    setDiscountType('percent')
-    setDiscountValue(0)
-    setDiscountReason('')
+    resetCheckoutDiscountUiState({
+      setDiscountType,
+      setDiscountValue,
+      setDiscountReason,
+      setAppliedCollabId,
+      setCouponCode,
+      setAppliedCoupons,
+      setCouponQuantity,
+      setCouponMessage,
+      setPointUsed,
+    })
+    const receiptDiscountTotal = seedCheckoutDiscountFromExistingOrder(
+      payload.orderDiscount,
+      normalized,
+      pricingAdjustments,
+      { setDiscountType, setDiscountValue, setDiscountReason }
+    )
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
       receiptSubtotal: amount,
-      receiptDiscountTotal: pointUsedNum,
+      receiptDiscountTotal,
     })
   }
 
@@ -3708,6 +3796,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
+    orderDiscount?: PosExistingOrderCheckoutDiscount
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
@@ -3720,22 +3809,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
       ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
-    setDiscountType('percent')
-    setDiscountValue(0)
-    setDiscountReason('')
-    setAppliedCollabId(null)
-    setCouponCode('')
-    setAppliedCoupons([])
-    setCouponQuantity(1)
-    setCouponMessage('')
-    setPointUsed('0')
+    resetCheckoutDiscountUiState({
+      setDiscountType,
+      setDiscountValue,
+      setDiscountReason,
+      setAppliedCollabId,
+      setCouponCode,
+      setAppliedCoupons,
+      setCouponQuantity,
+      setCouponMessage,
+      setPointUsed,
+    })
+    const receiptDiscountTotal = seedCheckoutDiscountFromExistingOrder(
+      payload.orderDiscount,
+      normalized,
+      pricingAdjustments,
+      { setDiscountType, setDiscountValue, setDiscountReason }
+    )
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
       receiptSubtotal: amount,
-      receiptDiscountTotal: 0,
+      receiptDiscountTotal,
     })
   }
 

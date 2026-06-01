@@ -94,18 +94,37 @@ export function reservePosAutoPrintKey(
   key: string,
   ttlMs: number = DEFAULT_TTL_MS
 ): boolean {
-  const fk = fullKey(storeCode, key)
-  if (!fk) return true
+  return reservePosAutoPrintKeys(storeCode, [key], ttlMs)
+}
+
+/** 관련 키 묶음을 한 번에 예약(별칭 키 포함). 하나라도 최근 키면 모두 차단 */
+export function reservePosAutoPrintKeys(
+  storeCode: string,
+  keys: string[],
+  ttlMs: number = DEFAULT_TTL_MS
+): boolean {
+  const uniqueKeys = Array.from(
+    new Set((Array.isArray(keys) ? keys : []).map((k) => String(k ?? '').trim()).filter(Boolean))
+  )
+  if (uniqueKeys.length === 0) return true
+  const fullKeys = uniqueKeys.map((k) => fullKey(storeCode, k)).filter(Boolean)
+  if (fullKeys.length === 0) return true
   const now = Date.now()
   const ttl = Math.max(1000, Number(ttlMs) || DEFAULT_TTL_MS)
   pruneMemory(now)
-  const memPrev = memoryReservedAt.get(fk)
-  if (typeof memPrev === 'number' && now - memPrev < ttl) return false
+  for (const fk of fullKeys) {
+    const memPrev = memoryReservedAt.get(fk)
+    if (typeof memPrev === 'number' && now - memPrev < ttl) return false
+  }
   const map = pruneMap(readMap(), now)
-  const prev = map[fk]
-  if (typeof prev === 'number' && now - prev < ttl) return false
-  memoryReservedAt.set(fk, now)
-  map[fk] = now
+  for (const fk of fullKeys) {
+    const prev = map[fk]
+    if (typeof prev === 'number' && now - prev < ttl) return false
+  }
+  for (const fk of fullKeys) {
+    memoryReservedAt.set(fk, now)
+    map[fk] = now
+  }
   writeMap(map)
   return true
 }

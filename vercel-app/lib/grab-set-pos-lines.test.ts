@@ -9,6 +9,10 @@ describe('parseGrabSetChildLineName', () => {
       childName: 'Rice',
     })
   })
+
+  it('does not treat promo parent `[April] Set 2` as a compose child line', () => {
+    expect(parseGrabSetChildLineName('[April] Set 2')).toBeNull()
+  })
 })
 
 describe('mergeGrabSetChildLinesIntoPromoParents', () => {

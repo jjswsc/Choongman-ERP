@@ -35,6 +35,10 @@ import {
   resolveGrabPrintNoteRequest,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
+import {
+  buildKitchenMenuNameLookup,
+  resolveKitchenMenuNameFromLookup,
+} from '@/lib/pos-kitchen-menu-display-name'
 import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
@@ -399,6 +403,16 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       : optionNameByCodeParam && typeof optionNameByCodeParam === 'object'
         ? new Map(Object.entries(optionNameByCodeParam))
         : buildOptionNameByCodeFromMenus(menus, menuOptions ?? [])
+  const menuNameLookup = buildKitchenMenuNameLookup(menus)
+  const resolvePromoMenuNameForPrint = (pi: { menuId?: string | null; menuName?: unknown }) => {
+    const fromSnap = String(pi.menuName ?? '').trim()
+    if (fromSnap) return fromSnap
+    const mid = String(pi.menuId ?? '').trim()
+    if (!mid) return ''
+    const fromLookup = resolveKitchenMenuNameFromLookup(mid, menuNameLookup, '')
+    if (fromLookup) return fromLookup
+    return menus.find((m) => String(m.id) === mid)?.name?.trim() || ''
+  }
   const tr = (key: string, fallback: string) => {
     const value = t(key)
     return value && value !== key ? value : fallback
@@ -560,8 +574,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                   optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
                   menuName:
                     String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
-                    menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
-                    '',
+                    resolvePromoMenuNameForPrint(pi),
                   quantity: Math.max(1, Number(pi.quantity) || 1),
                 })),
                 { optionNameByCode, menuCodeByMenuId }
@@ -572,7 +585,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ? promoRows.flatMap((pi) => {
                 const menuName =
                   String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
-                  menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                  resolvePromoMenuNameForPrint(pi) ||
                   `#${String(pi.menuId)}`
                 const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
                 const optName =
@@ -852,8 +865,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                       optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
                       menuName:
                         String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
-                        menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
-                        '',
+                        resolvePromoMenuNameForPrint(pi),
                       quantity: Math.max(1, Number(pi.quantity) || 1),
                     })),
                     { optionNameByCode, menuCodeByMenuId }
@@ -864,7 +876,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 ? promoRows.flatMap((pi) => {
                     const menuName =
                       String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
-                      menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                      resolvePromoMenuNameForPrint(pi) ||
                       `#${String(pi.menuId)}`
                     const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
                     const optName =

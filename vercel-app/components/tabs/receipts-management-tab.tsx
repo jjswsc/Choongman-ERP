@@ -92,6 +92,8 @@ import {
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import { printPosVoidReceiptForOrder } from '@/lib/print-pos-void-receipt'
+import { isPosReversalStatus } from '@/lib/pos-order-policy'
 import {
   buildKitchenPrintTrackingId,
   clearKitchenPrintFailure,
@@ -727,6 +729,39 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         },
       })
     } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    }
+  }
+
+  const handlePrintVoidReceipt = async (o: PosOrder) => {
+    const store = (o.storeCode ?? '').trim()
+    if (!store || !o.items?.length) {
+      await appAlert(t('posPrintUnavailable'))
+      return
+    }
+    try {
+      const settings = await getPosPrinterSettings({ storeCode: store })
+      const printed = await printPosVoidReceiptForOrder({
+        order: o,
+        menus,
+        promos: promosWithItems,
+        lineOpts: { promoCatalogById, menus },
+        t,
+        lang,
+        printerSettings: settings,
+        printedAt: new Date(),
+        onPrintUnavailable: () => {
+          void appAlert(t('posPrintUnavailable'))
+        },
+      })
+      if (!printed) {
+        await appAlert(t('posPrintUnavailable'))
+      }
+    } catch (e) {
+      if (String(e).includes(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE)) {
+        await appAlert(t('posPrintUnavailable'))
+        return
+      }
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }
@@ -1393,11 +1428,41 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         await appAlert(String(res.message ?? '').trim() || t('processFail') || '실패')
         return
       }
-      await appAlert(t('posReceiptPayCorrectCanceled'))
+      const canceledOrderId = payCorrectOrder.id
+      const canceledStoreCode = String(payCorrectOrder.storeCode ?? '').trim()
       setPayCorrectOrder(null)
       setPayCorrectReason('')
       setPcOrderTotal('')
       void loadOrders()
+
+      let voidPrinted = false
+      if (canceledStoreCode) {
+        try {
+          const list = await getPosOrders({ orderId: canceledOrderId, storeCode: canceledStoreCode })
+          const fresh = list?.[0]
+          if (fresh?.items?.length) {
+            const settings = await getPosPrinterSettings({ storeCode: canceledStoreCode })
+            voidPrinted = await printPosVoidReceiptForOrder({
+              order: fresh,
+              menus,
+              promos: promosWithItems,
+              lineOpts: { promoCatalogById, menus },
+              t,
+              lang,
+              printerSettings: settings,
+              printedAt: new Date(),
+              onPrintUnavailable: () => {
+                void appAlert(t('posPrintUnavailable'))
+              },
+            })
+          }
+        } catch (printErr) {
+          console.error('Void receipt print (receipts tab cancel):', printErr)
+        }
+      }
+      await appAlert(
+        voidPrinted ? t('posReceiptPayCorrectCanceledPrinted') : t('posReceiptPayCorrectCanceled')
+      )
     } catch (e) {
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
@@ -1764,18 +1829,36 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                         </>
                                       )
                                     })()}
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className={ADMIN_BTN_XS_CN}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handlePrintCustomerReceipt(o)
-                                      }}
-                                    >
-                                      <Printer className="h-3 w-3" />
-                                      {t('posCustomerReceiptPrint') || '손님 영수증'}
-                                    </Button>
+                                    {isPosReversalStatus(String(o.status ?? '')) ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className={cn(
+                                          ADMIN_BTN_XS_CN,
+                                          'border-rose-300 text-rose-800 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-950/40'
+                                        )}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          void handlePrintVoidReceipt(o)
+                                        }}
+                                      >
+                                        <Printer className="h-3 w-3" />
+                                        {t('posReceiptVoidPrint') || '취소 영수증'}
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className={ADMIN_BTN_XS_CN}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handlePrintCustomerReceipt(o)
+                                        }}
+                                      >
+                                        <Printer className="h-3 w-3" />
+                                        {t('posCustomerReceiptPrint') || '손님 영수증'}
+                                      </Button>
+                                    )}
                                     <Button
                                       size="sm"
                                       variant="outline"

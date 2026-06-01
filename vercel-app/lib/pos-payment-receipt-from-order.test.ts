@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { PosPromoWithItems } from '@/lib/api-client'
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
+  enrichPromoMenuNamesFromLineNote,
   enrichPromoSnapshotForPrint,
+  enrichReceiptModalItemsForPromoDisplay,
 } from '@/lib/pos-payment-receipt-from-order'
 
 type OrderLikeRow = Record<string, unknown> & {
@@ -103,3 +105,53 @@ describe('enrichPromoSnapshotForPrint', () => {
     })
   })
 })
+
+describe('enrichPromoMenuNamesFromLineNote', () => {
+  it('fills missing menuName from Shopee-style option note', () => {
+    const rows = enrichPromoMenuNamesFromLineNote(
+      [
+        { menuId: '22', optionId: null, quantity: 1 },
+        { menuId: '25', optionId: null, quantity: 1 },
+      ],
+      'Side:Rice, Chicken:SOY SAUCE CHICKEN (S Boneless)'
+    )
+    expect(rows?.map((x) => x.menuName)).toEqual(['Rice', 'SOY SAUCE CHICKEN (S Boneless)'])
+  })
+})
+
+describe('enrichReceiptModalItemsForPromoDisplay', () => {
+  it('drops id-only promo stubs when named compose lines were merged', () => {
+    const rows = enrichReceiptModalItemsForPromoDisplay(
+      [
+        {
+          id: '1',
+          name: '[April] Set 2',
+          price: 111,
+          qty: 1,
+          promoItems: [
+            { menuId: '22', optionId: null, quantity: 1 },
+            { menuId: '25', optionId: null, quantity: 1 },
+          ],
+        },
+        {
+          id: '2',
+          name: '[[April] Set 2] Rice',
+          price: 0,
+          qty: 1,
+          menuId: '22',
+        },
+        {
+          id: '3',
+          name: '[[April] Set 2] SOY SAUCE CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId: '25',
+          note: 'mods:S Boneless',
+        },
+      ],
+      { menus: [] }
+    )
+    expect(rows[0]?.promoItems?.map((x) => x.menuName)).toEqual(['Rice', 'SOY SAUCE CHICKEN'])
+  })
+})
+

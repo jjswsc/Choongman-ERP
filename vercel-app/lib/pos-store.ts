@@ -5,7 +5,7 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
-import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
+import { filterPosTerminalStoreOptions } from '@/lib/pos-sales-test-office'
 import {
   getPosTableLayout,
   getGrabStoreIntegrations,
@@ -435,7 +435,7 @@ function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): S
 }
 
 export function usePosStore() {
-  const { stores: storeCodes, legacyToCanonical } = useStoreList()
+  const { stores: storeCodes, legacyToCanonical, loading: storeListLoading } = useStoreList()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canonicalAuthStore = useMemo(() => {
@@ -453,10 +453,10 @@ export function usePosStore() {
       if (storeCodes.length > 0) codes = storeCodes
       else if (canonicalAuthStore) codes = [canonicalAuthStore]
       else codes = storeCodes
-      return filterPosSalesStoreOptionsForManagement(codes)
+      return filterPosTerminalStoreOptions(codes)
     }
     codes = canonicalAuthStore ? [canonicalAuthStore] : storeCodes
-    return codes
+    return filterPosTerminalStoreOptions(codes)
   }, [canSearchAll, canonicalAuthStore, storeCodes])
 
   const [stores, setStores] = useState<Store[]>([])
@@ -571,6 +571,10 @@ export function usePosStore() {
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {
+    if (storeListLoading) {
+      setLoading(true)
+      return
+    }
     if (!effectiveStoreCodes?.length) {
       setStores([])
       setLoading(false)
@@ -617,9 +621,16 @@ export function usePosStore() {
       .catch(() => {
         setStores([])
         setOrdersByStoreId({})
+        setCurrentStoreId((prev) => {
+          if (prev && effectiveStoreCodes.includes(prev)) return prev
+          if (canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)) {
+            return canonicalAuthStore
+          }
+          return effectiveStoreCodes[0] ?? ''
+        })
       })
       .finally(() => setLoading(false))
-  }, [effectiveStoreCodes.join(','), canonicalAuthStore, fetchStoreSnapshot])
+  }, [effectiveStoreCodes.join(','), canonicalAuthStore, fetchStoreSnapshot, storeListLoading])
 
   // effectiveStoreCodes 변경 시 currentStoreId가 목록에 없으면 첫 매장으로
   useEffect(() => {

@@ -182,6 +182,8 @@ function parseReceiptSetChildLineName(name: string): { promoLabel: string; child
   if (!childName) return null
   const prefix = trimmed.slice(0, lastBracket + 1)
   if (!prefix.includes('[')) return null
+  const closingBrackets = (prefix.match(/\]/g) ?? []).length
+  if (closingBrackets < 2 && !/^\[\[/u.test(trimmed)) return null
   const promoLabel = prefix
     .replace(/^\[+/, '')
     .replace(/\]+$/, '')
@@ -258,8 +260,9 @@ function buildReceiptChildPromoLine(
   }
 ): HallOrderPromoItem {
   const childNameRaw = String(child.name ?? '').trim()
+  const setParsed = parseReceiptSetChildLineName(childNameRaw)
   const split = splitPosPrintItemLine(childNameRaw)
-  const childName = split.mainName || childNameRaw
+  const childName = setParsed?.childName || split.mainName || childNameRaw
   const menuId = String(
     child.menuId ?? (child as { menuId1?: string | null }).menuId1 ?? ''
   ).trim()

@@ -30,3 +30,16 @@ export function filterPosSalesStoreOptionsForManagement(storeCodes: string[]): s
     return t && !isPosSalesTestOfficeStoreCode(t)
   })
 }
+
+/**
+ * POS 터미널·테이블/주문 스냅샷용 매장 목록.
+ * CM Office 등 본사 시연 매장은 포함하고, 매출 집계용 본사 제외(`filterPosSalesStoreOptionsForManagement`)와 분리한다.
+ */
+export function filterPosTerminalStoreOptions(storeCodes: string[]): string[] {
+  return storeCodes.filter((s) => {
+    const t = String(s || '').trim()
+    if (!t) return false
+    const norm = t.toLowerCase().replace(/\s+/g, ' ')
+    return !POS_SALES_EXCLUDED_STORE_CODES.has(norm)
+  })
+}

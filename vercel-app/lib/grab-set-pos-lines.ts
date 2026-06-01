@@ -35,6 +35,9 @@ export function parseGrabSetChildLineName(name: string): { promoLabel: string; c
   if (!childName) return null
   const prefix = trimmed.slice(0, lastBracket + 1)
   if (!prefix.includes('[')) return null
+  /** 부모 `[April] Set 2` 는 `[April]` 뒤 Set명 — 구성 줄(`] Rice`)과 구분 */
+  const closingBrackets = (prefix.match(/\]/g) ?? []).length
+  if (closingBrackets < 2 && !/^\[\[/u.test(trimmed)) return null
   const promoLabel = prefix
     .replace(/^\[+/, '')
     .replace(/\]+$/, '')
