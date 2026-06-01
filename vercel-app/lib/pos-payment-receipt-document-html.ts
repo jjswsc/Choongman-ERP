@@ -404,14 +404,40 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ? new Map(Object.entries(optionNameByCodeParam))
         : buildOptionNameByCodeFromMenus(menus, menuOptions ?? [])
   const menuNameLookup = buildKitchenMenuNameLookup(menus)
+  const menuNameByCode = new Map<string, string>()
+  for (const menu of menus) {
+    const code = String(menu.code ?? '').trim().toUpperCase()
+    const name = String(menu.name ?? '').trim()
+    if (!code || !name || menuNameByCode.has(code)) continue
+    menuNameByCode.set(code, name)
+  }
+  const parsePromoMenuPlaceholderToken = (raw: string): string => {
+    const text = String(raw ?? '').trim()
+    if (!text) return ''
+    const hashOnly = text.match(/^#\s*([A-Za-z0-9][A-Za-z0-9_-]*)$/)
+    if (hashOnly?.[1]) return hashOnly[1]
+    const bracketOnly = text.match(/^\[([A-Za-z0-9][A-Za-z0-9_-]*)\]$/)
+    if (bracketOnly?.[1]) return bracketOnly[1]
+    return ''
+  }
+  const resolveMenuNameByIdOrCode = (menuIdRaw: unknown, menuNameRaw: unknown): string => {
+    const menuId = String(menuIdRaw ?? '').trim()
+    const fromName = String(menuNameRaw ?? '').trim()
+    const placeholderToken = parsePromoMenuPlaceholderToken(fromName)
+    const candidates = [menuId, placeholderToken].filter(Boolean)
+    for (const candidate of candidates) {
+      const fromLookup = resolveKitchenMenuNameFromLookup(candidate, menuNameLookup, '')
+      if (fromLookup) return fromLookup
+      const byId = menus.find((m) => String(m.id) === candidate)?.name?.trim() || ''
+      if (byId) return byId
+      const byCode = menuNameByCode.get(candidate.toUpperCase()) || ''
+      if (byCode) return byCode
+    }
+    if (fromName && !placeholderToken) return fromName
+    return ''
+  }
   const resolvePromoMenuNameForPrint = (pi: { menuId?: string | null; menuName?: unknown }) => {
-    const fromSnap = String(pi.menuName ?? '').trim()
-    if (fromSnap) return fromSnap
-    const mid = String(pi.menuId ?? '').trim()
-    if (!mid) return ''
-    const fromLookup = resolveKitchenMenuNameFromLookup(mid, menuNameLookup, '')
-    if (fromLookup) return fromLookup
-    return menus.find((m) => String(m.id) === mid)?.name?.trim() || ''
+    return resolveMenuNameByIdOrCode(pi.menuId, pi.menuName)
   }
   const tr = (key: string, fallback: string) => {
     const value = t(key)
@@ -584,7 +610,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           promoRows.length > 0
             ? promoRows.flatMap((pi) => {
                 const menuName =
-                  String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
                   resolvePromoMenuNameForPrint(pi) ||
                   `#${String(pi.menuId)}`
                 const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
@@ -875,7 +900,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
               promoRows.length > 0
                 ? promoRows.flatMap((pi) => {
                     const menuName =
-                      String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
                       resolvePromoMenuNameForPrint(pi) ||
                       `#${String(pi.menuId)}`
                     const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()

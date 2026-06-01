@@ -463,4 +463,33 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('M - Drumette')
     expect(html).toContain('Kimchi 30g.')
   })
+
+  it('replaces promo placeholder code with menu name on hall order receipt', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '562',
+        storeCode: 'CM Silom',
+        orderType: 'delivery',
+        tableName: 'Grab #562',
+        items: [
+          {
+            id: 'set-3',
+            name: '[April] Set 3',
+            price: 111,
+            qty: 1,
+            promoItems: [{ menuId: '22', optionId: null, menuName: '#22', quantity: 1 }],
+          },
+        ],
+        subtotal: 111,
+        discountAmt: 0,
+        total: 111,
+      },
+      t: (k) => k,
+      lang: 'en',
+      menuNameById: (menuId: string) => (menuId === '22' ? 'Rice' : ''),
+      menuCodeByMenuId: { '22': 'C022' },
+    })
+    expect(html).toContain('Rice x1')
+    expect(html).not.toContain('#22 x1')
+  })
 })

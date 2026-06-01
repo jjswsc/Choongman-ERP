@@ -480,6 +480,40 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     const value = t(key)
     return value && value !== key ? value : fallback
   }
+  const menuNameByCode = new Map<string, string>()
+  if (typeof menuNameById === 'function' && menuCodeByMenuId) {
+    for (const [menuId, rawCode] of Object.entries(menuCodeByMenuId)) {
+      const code = String(rawCode ?? '').trim().toUpperCase()
+      if (!code || menuNameByCode.has(code)) continue
+      const name = String(menuNameById(menuId) ?? '').trim()
+      if (name) menuNameByCode.set(code, name)
+    }
+  }
+  const parsePromoMenuPlaceholderToken = (raw: string): string => {
+    const text = String(raw ?? '').trim()
+    if (!text) return ''
+    const hashOnly = text.match(/^#\s*([A-Za-z0-9][A-Za-z0-9_-]*)$/)
+    if (hashOnly?.[1]) return hashOnly[1]
+    const bracketOnly = text.match(/^\[([A-Za-z0-9][A-Za-z0-9_-]*)\]$/)
+    if (bracketOnly?.[1]) return bracketOnly[1]
+    return ''
+  }
+  const resolvePromoComposeMenuName = (menuIdRaw: unknown, menuNameRaw: unknown): string => {
+    const menuId = String(menuIdRaw ?? '').trim()
+    const fromName = String(menuNameRaw ?? '').trim()
+    const placeholderToken = parsePromoMenuPlaceholderToken(fromName)
+    const candidates = [menuId, placeholderToken].filter(Boolean)
+    for (const candidate of candidates) {
+      if (typeof menuNameById === 'function') {
+        const fromId = String(menuNameById(candidate) ?? '').trim()
+        if (fromId) return fromId
+      }
+      const byCode = menuNameByCode.get(candidate.toUpperCase()) || ''
+      if (byCode) return byCode
+    }
+    if (fromName && !placeholderToken) return fromName
+    return ''
+  }
   const timestamp = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
@@ -640,8 +674,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         promoRows.length > 0
           ? promoRows.flatMap((p) => {
               const menuName =
-                String((p as { menuName?: unknown }).menuName ?? '').trim() ||
-                (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : '') ||
+                resolvePromoComposeMenuName(
+                  String(p.menuId || ''),
+                  (p as { menuName?: unknown }).menuName ?? ''
+                ) ||
                 `#${String(p.menuId)}`
               const optCode = String((p as { optionCode?: unknown }).optionCode ?? '').trim()
               const optName =

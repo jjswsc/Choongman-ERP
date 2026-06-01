@@ -670,6 +670,13 @@ async function updateGrabCampaign(existingId: string, body: Record<string, unkno
   })
 }
 
+async function updateGrabCampaignDiscountOnly(
+  existingId: string,
+  discount: Record<string, unknown>
+): Promise<void> {
+  await updateGrabCampaign(existingId, { discount })
+}
+
 /** PUT 시 ongoing(이미 시작) 캠페인은 startTime/endTime 제외 — Grab이 과거 startTime PUT 거절함 */
 export function buildPutBodyForExistingGrabCampaign(
   freshBody: Record<string, unknown>,
@@ -743,6 +750,8 @@ async function upsertGrabPromoCampaignForTarget(params: {
   existingRow?: GrabCampaignListRow
   campaignSection?: 'ongoing' | 'upcoming'
   forceReplace?: boolean
+  /** fixPrice→percentage: discount-only PUT 후 실패 시 replace(65분 lead) */
+  migrateDiscountType?: boolean
   buildBody: (opts?: {
     leadMinutes?: number
     discountType?: GrabPromoCampaignDiscountType
@@ -765,6 +774,29 @@ async function upsertGrabPromoCampaignForTarget(params: {
     }
   }
 
+  if (existingId && !forceReplace && params.migrateDiscountType) {
+    const discount = params.buildBody().discount
+    if (discount && typeof discount === 'object') {
+      try {
+        await updateGrabCampaignDiscountOnly(existingId, discount as Record<string, unknown>)
+        return { usedFallback: false, usedExtendedLead: false, mode: 'updated' }
+      } catch (e) {
+        console.warn('[grab-promo-campaign] migrate_discount_put_failed', {
+          existingId,
+          error: String(e),
+        })
+      }
+    }
+    const leadMinutes = GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES
+    const body = params.buildBody({ leadMinutes, discountType: 'percentage' })
+    const result = await replaceGrabCampaign({
+      existingId,
+      body,
+      fallbackBody: params.buildBody({ leadMinutes, discountType: 'fixPrice' }),
+    })
+    return { ...result, usedExtendedLead: true, mode: 'replaced' }
+  }
+
   if (existingId && !forceReplace) {
     const putBody = buildPutBodyForExistingGrabCampaign(
       params.buildBody(),
@@ -775,15 +807,6 @@ async function upsertGrabPromoCampaignForTarget(params: {
       await updateGrabCampaign(existingId, putBody)
       return { usedFallback: false, usedExtendedLead: false, mode: 'updated' }
     } catch (e) {
-      if (classifyGrabCampaignApiError(e) === 'START_TIME_INVALID') {
-        const discountOnly = buildPutBodyForExistingGrabCampaign(
-          params.buildBody(),
-          params.existingRow ?? { id: existingId },
-          'ongoing'
-        )
-        await updateGrabCampaign(existingId, discountOnly)
-        return { usedFallback: false, usedExtendedLead: false, mode: 'updated' }
-      }
       /** ongoing은 시작 시각 보존 — DELETE+POST 금지(Now 취소선 유지) */
       if (section === 'ongoing') throw e
       console.warn('[grab-promo-campaign] put_failed_try_replace', {
@@ -974,8 +997,9 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       })()
     const hit = indexed?.row
     const discountType = campaignDiscountType ?? resolveGrabPromoCampaignDiscountType()
-    const needsTypeMigration =
+    const needsTypeMigration = Boolean(
       hit?.id && migrateDiscountType && grabCampaignNeedsDiscountTypeMigration(hit, discountType)
+    )
     const matches =
       hit?.id &&
       !force &&
@@ -998,12 +1022,16 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         existingRow: hit,
         campaignSection: indexed?.section,
         forceReplace: force,
+        migrateDiscountType: migrateDiscountType || needsTypeMigration,
         buildBody: (opts) => buildBody(opts),
         initialLeadMinutes: campaignLeadMinutes,
       })
       if (result.usedFallback) campaignFallbackUsed += 1
-      if (needsTypeMigration) campaignDiscountMigrated += 1
+      if (needsTypeMigration && (result.mode === 'updated' || result.mode === 'replaced')) {
+        campaignDiscountMigrated += 1
+      }
       if (result.mode === 'updated') updated += 1
+      else if (result.mode === 'replaced') updated += 1
       else created += 1
     } catch (e) {
       skipped += 1
