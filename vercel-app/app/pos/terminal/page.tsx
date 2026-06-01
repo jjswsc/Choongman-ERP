@@ -2090,13 +2090,22 @@ export default function PosTerminalPage() {
   }, [currentStoreId])
 
   const reserveKitchenAutoPrintKey = useCallback(
-    (rawKey: string, ttlMs = 6 * 60 * 60 * 1000) => {
-      const key = String(rawKey || '').trim()
-      if (!key) return true
+    (rawKeyOrKeys: string | string[], ttlMs = 6 * 60 * 60 * 1000) => {
+      const keys = Array.from(
+        new Set(
+          (Array.isArray(rawKeyOrKeys) ? rawKeyOrKeys : [rawKeyOrKeys])
+            .map((k) => String(k || '').trim())
+            .filter(Boolean)
+        )
+      )
+      if (!keys.length) return true
       const store = String(currentStoreId || '').trim()
-      const reserved = reservePosAutoPrintKey(store, key, ttlMs)
+      const reserved = reservePosAutoPrintKeys(store, keys, ttlMs)
       if (reserved) {
-        printedKitchenSlipKeysRef.current.set(key, Date.now())
+        const now = Date.now()
+        for (const key of keys) {
+          printedKitchenSlipKeysRef.current.set(key, now)
+        }
       }
       return reserved
     },
@@ -2190,6 +2199,26 @@ export default function PosTerminalPage() {
     promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
   }
 
+  function buildDineInAddonKitchenFallbackDedupeKey(
+    orderNoRaw: string,
+    lines: DineInAddonKitchenCartLine[]
+  ): string {
+    const orderNo = String(orderNoRaw ?? '').trim()
+    if (!orderNo || !lines.length) return ''
+    const parts = lines
+      .map((line) => {
+        const name = String(line.name ?? '').trim()
+        const price = Number(line.price ?? 0) || 0
+        const note = String(line.note ?? '').trim()
+        const qty = resolveCartLineQuantityForSave(line as { quantity?: unknown; qty?: unknown })
+        return `${name}\u001f${price}\u001f${note}\u001f${qty}`
+      })
+      .filter(Boolean)
+    if (!parts.length) return ''
+    parts.sort()
+    return `order-no:${orderNo}:kitchen:add:fallback:${parts.join('|')}`
+  }
+
   /** 홀 추가 주문 — Realtime·폴링·로컬 제출 공통 주방 자동인쇄 */
   const dispatchDineInAddonKitchenPrint = useCallback(
     (params: {
@@ -2204,11 +2233,14 @@ export default function PosTerminalPage() {
     }) => {
       const { kitchenCartLines, dedupeKey, orderNo, storeCode, tableName, memo, guestCount, logEvent } = params
       if (!kitchenCartLines.length) return
-      if (!reserveKitchenAutoPrintKey(dedupeKey)) return
+      const fallbackDedupeKey = buildDineInAddonKitchenFallbackDedupeKey(orderNo, kitchenCartLines)
+      const dedupeKeys = fallbackDedupeKey ? [dedupeKey, fallbackDedupeKey] : [dedupeKey]
+      if (!reserveKitchenAutoPrintKey(dedupeKeys)) return
       logPosPrintDebug(logEvent, {
         orderNo,
         storeCode,
         dedupeKey,
+        dedupeKeys,
         kitchenLines: kitchenCartLines.length,
       })
       const itemsForKitchen = kitchenCartLines.map((i) => {

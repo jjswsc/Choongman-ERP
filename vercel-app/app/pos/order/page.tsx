@@ -150,6 +150,10 @@ import { loadPosDeliveryMenuImageByMenuId } from "@/lib/load-pos-delivery-menu-i
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
 import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
 import { isChickenMenu } from "@/lib/pos-menu-categories"
+import {
+  posHallAutoPrintDedupeKey,
+  reservePosAutoPrintKeys,
+} from "@/lib/pos-auto-print-dedupe"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -337,6 +341,7 @@ export default function PosOrderPage() {
   const [deliveryPaymentChannel, setDeliveryPaymentChannel] = React.useState<"grab" | "lineman" | "shopee">("grab")
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
+    serverOrderId?: number
     items: CartItem[]
     subtotal: number
     discountAmt: number
@@ -1375,6 +1380,7 @@ export default function PosOrderPage() {
         setShowPaymentModal(false)
         setReceiptData({
           orderNo: res.orderNo ?? "",
+          ...(typeof res.orderId === "number" && res.orderId > 0 ? { serverOrderId: res.orderId } : {}),
           items: cart.map((it, idx) => ({
             ...it,
             ...(lineDiscountSnapshot[idx] > 0.0001
@@ -1639,6 +1645,29 @@ export default function PosOrderPage() {
     }
   }
 
+  const reserveHallOrderAutoPrintDedupe = React.useCallback((): boolean => {
+    if (!receiptData) return true
+    const storeForDedupe = String(receiptData.storeCode || storeCode || "").trim()
+    const orderNoForDedupe = String(receiptData.orderNo || "").trim()
+    const dedupeKeys: string[] = []
+    const orderId = Number(receiptData.serverOrderId ?? 0)
+    if (orderId > 0) {
+      const hallKey = posHallAutoPrintDedupeKey(orderId)
+      if (hallKey) dedupeKeys.push(hallKey)
+    }
+    if (orderNoForDedupe) dedupeKeys.push(`submit:hall:${orderNoForDedupe}`)
+    if (!storeForDedupe || dedupeKeys.length === 0) return true
+    return reservePosAutoPrintKeys(storeForDedupe, dedupeKeys)
+  }, [receiptData, storeCode])
+
+  const reserveHallOrderAutoPrintDedupeRef = React.useRef(reserveHallOrderAutoPrintDedupe)
+  reserveHallOrderAutoPrintDedupeRef.current = reserveHallOrderAutoPrintDedupe
+
+  const handlePrintReceiptRef = React.useRef(handlePrintReceipt)
+  const handlePrintKitchenSlipRef = React.useRef(handlePrintKitchenSlip)
+  handlePrintReceiptRef.current = handlePrintReceipt
+  handlePrintKitchenSlipRef.current = handlePrintKitchenSlip
+
   React.useEffect(() => {
     if (!receiptData) return
     if (!isMainPosDevice) return
@@ -1650,16 +1679,17 @@ export default function PosOrderPage() {
     const timers: ReturnType<typeof setTimeout>[] = []
     if (autoPrintKitchenSlipOnOrder) {
       timers.push(setTimeout(() => {
-        void handlePrintKitchenSlip()
+        void handlePrintKitchenSlipRef.current()
       }, 180))
     }
     if (autoPrintReceiptOnPayment) {
       timers.push(setTimeout(() => {
-        handlePrintReceipt()
+        if (!reserveHallOrderAutoPrintDedupeRef.current()) return
+        void handlePrintReceiptRef.current()
       }, autoPrintKitchenSlipOnOrder ? 780 : 180))
     }
     return () => timers.forEach((id) => clearTimeout(id))
-  }, [receiptData, isMainPosDevice, autoPrintReceiptOnPayment, autoPrintKitchenSlipOnOrder, handlePrintReceipt, handlePrintKitchenSlip])
+  }, [receiptData, isMainPosDevice, autoPrintReceiptOnPayment, autoPrintKitchenSlipOnOrder])
 
   const orderTypeLabels: Record<OrderType, string> = {
     dine_in: t("posOrderTypeDineIn") ?? "매장",
