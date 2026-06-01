@@ -437,23 +437,45 @@ function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
   categories: unknown[]
 } {
   const capped = sections.slice(0, 20)
-  const sellingTimes = capped.map((sec) => ({
-    id: sec.id,
-    name: sec.name,
-    startTime: GRAB_SELLING_TIME_WINDOW_START,
-    endTime: GRAB_SELLING_TIME_WINDOW_END,
-    serviceHours: sec.serviceHours,
-  }))
+  const sellingTimes: Array<{
+    id: string
+    name: string
+    startTime: string
+    endTime: string
+    serviceHours: GrabMenuSectionOut['serviceHours']
+  }> = []
+  const sellingTimeIdBySectionId = new Map<string, string>()
+  const sellingTimeIdByHoursSignature = new Map<string, string>()
+  for (const sec of capped) {
+    const signature = JSON.stringify(sec.serviceHours ?? {})
+    const existing = sellingTimeIdByHoursSignature.get(signature)
+    if (existing) {
+      sellingTimeIdBySectionId.set(sec.id, existing)
+      continue
+    }
+    sellingTimes.push({
+      id: sec.id,
+      name: sec.name,
+      startTime: GRAB_SELLING_TIME_WINDOW_START,
+      endTime: GRAB_SELLING_TIME_WINDOW_END,
+      serviceHours: sec.serviceHours,
+    })
+    sellingTimeIdByHoursSignature.set(signature, sec.id)
+    sellingTimeIdBySectionId.set(sec.id, sec.id)
+  }
   const categories: unknown[] = []
   let globalSequence = 1
   for (const sec of capped) {
-    const stId = sec.id
+    const stId = sellingTimeIdBySectionId.get(sec.id) || sec.id
     const cats = Array.isArray(sec.categories) ? sec.categories : []
     for (const raw of cats) {
       if (categories.length >= 100) break
       const cat = raw as Record<string, unknown>
       const baseId = String(cat.id ?? '').trim()
-      const uniqueId = normalizeId(`${stId}__${baseId || 'cat'}`, `cat-${categories.length + 1}`)
+      const uniqueId = normalizeId(
+        `${sec.id}__${baseId || 'cat'}`,
+        `cat-${categories.length + 1}`
+      )
       const row: Record<string, unknown> = {
         ...cat,
         id: uniqueId,
