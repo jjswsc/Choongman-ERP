@@ -290,23 +290,7 @@ export function AdminSalesDashboardCharts({
             <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
               {tr("salesByStore", "매장별")}
             </h3>
-            <div className="h-[min(360px,50vh)]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={storeChartRows} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" {...periodChartYAxisProps} />
-                  <YAxis
-                    dataKey="storeDisplayName"
-                    type="category"
-                    width={100}
-                    tick={{ fontSize: 10, ...ERP_NUMERIC_CHART_TICK }}
-                  />
-                  <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                  <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-3 overflow-x-auto rounded-lg border">
+            <div className="overflow-x-auto rounded-lg border">
               <table className="min-w-full text-xs">
                 <thead className="bg-muted/50">
                   <tr>

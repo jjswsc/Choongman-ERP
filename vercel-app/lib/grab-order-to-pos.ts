@@ -2,7 +2,11 @@ import { supabaseInsert, supabaseSelect, supabaseSelectFilter, supabaseUpdateByF
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { consumeDeliveryMenuStockByName } from '@/lib/pos-delivery-policy'
-import { buildGrabOrderMemo, mergeGrabStateIntoFullMemo } from '@/lib/grab-order-memo'
+import {
+  buildGrabOrderMemo,
+  grabOrderMemoPostgrestIlikeFilter,
+  mergeGrabStateIntoFullMemo,
+} from '@/lib/grab-order-memo'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import {
   buildGrabPosCatalog,
@@ -1055,7 +1059,7 @@ export async function persistGrabOrderToPos(
   const memo = buildGrabOrderMemo(orderID, grabMemoState)
   const existing = (await supabaseSelectFilter(
     'pos_orders',
-    `store_code=eq.${encodeURIComponent(storeCode)}&memo=ilike.${encodeURIComponent(`*grab_order:${orderID}*`)}`,
+    `store_code=eq.${encodeURIComponent(storeCode)}&${grabOrderMemoPostgrestIlikeFilter(orderID)}`,
     { limit: 1, select: 'id,order_no,items_json' }
   )) as { id?: number; order_no?: string; items_json?: string }[]
   if (existing?.[0]?.id) {
@@ -1173,6 +1177,55 @@ function canApplyGrabStatusTransition(prevStatus: string, nextStatus: string): b
   return false
 }
 
+type PosOrderGrabSyncRow = { id?: number; status?: string; memo?: string }
+
+async function loadGrabSubmitOrderWebhookPayload(orderID: string): Promise<Record<string, unknown> | null> {
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_grab_webhook_events',
+      `event_kind=eq.submit_order&order_id=eq.${encodeURIComponent(orderID)}`,
+      { limit: 1, order: 'received_at.desc', select: 'payload_json' }
+    )) as { payload_json?: unknown }[] | null
+    const raw = rows?.[0]?.payload_json
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return raw as Record<string, unknown>
+    }
+  } catch {
+    // fail-open — memo 조회만으로 진행
+  }
+  return null
+}
+
+/** memo의 grab_order 앵커 조회 실패 시 submit_order 웹훅·table_name(Grab #…)으로 폴백 */
+async function findPosOrderRowForGrabStateSync(orderID: string): Promise<PosOrderGrabSyncRow | null> {
+  let rows = (await supabaseSelectFilter('pos_orders', grabOrderMemoPostgrestIlikeFilter(orderID), {
+    limit: 1,
+    select: 'id,status,memo',
+  })) as PosOrderGrabSyncRow[]
+
+  if (rows?.[0]?.id) return rows[0] ?? null
+
+  const submitPayload = await loadGrabSubmitOrderWebhookPayload(orderID)
+  if (!submitPayload) return null
+
+  const shortOrderNumber = String(submitPayload.shortOrderNumber ?? '').trim()
+  if (!shortOrderNumber) return null
+
+  const storeCode = resolveGrabStoreCode(submitPayload)
+  const tableFilter = `table_name=ilike.${encodeURIComponent(`%Grab #${shortOrderNumber}%`)}`
+  const filter = storeCode
+    ? `store_code=eq.${encodeURIComponent(storeCode)}&${tableFilter}`
+    : tableFilter
+
+  rows = (await supabaseSelectFilter('pos_orders', filter, {
+    limit: 1,
+    order: 'created_at.desc',
+    select: 'id,status,memo',
+  })) as PosOrderGrabSyncRow[]
+
+  return rows?.[0] ?? null
+}
+
 export async function syncGrabOrderStateToPos(params: {
   orderID: string
   state: string
@@ -1186,24 +1239,20 @@ export async function syncGrabOrderStateToPos(params: {
 
   const nextStatus = mapGrabStateToPosStatus(incomingState)
 
-  const memoIlike = `memo=ilike.${encodeURIComponent(`*grab_order:${orderID}*`)}`
-  let rows = (await supabaseSelectFilter('pos_orders', memoIlike, {
-    limit: 1,
-    select: 'id,status,memo',
-  })) as { id?: number; status?: string; memo?: string }[]
+  let row = await findPosOrderRowForGrabStateSync(orderID)
 
-  if (!rows?.[0]?.id && params.orderPayload && typeof params.orderPayload === 'object') {
+  if (!row?.id && params.orderPayload && typeof params.orderPayload === 'object') {
     const persisted = await persistGrabOrderToPos(params.orderPayload as Record<string, unknown>)
     if (!persisted.ok) {
       return { ok: false, message: `order_not_found_and_create_failed:${persisted.message}` }
     }
-    rows = (await supabaseSelectFilter('pos_orders', `id=eq.${persisted.orderId}`, {
-      limit: 1,
-      select: 'id,status,memo',
-    })) as { id?: number; status?: string; memo?: string }[]
+    row =
+      ((await supabaseSelectFilter('pos_orders', `id=eq.${persisted.orderId}`, {
+        limit: 1,
+        select: 'id,status,memo',
+      })) as PosOrderGrabSyncRow[])?.[0] ?? null
   }
 
-  const row = rows?.[0]
   if (!row?.id) return { ok: false, message: 'pos_order_not_found' }
 
   const prevMemo = String(row.memo ?? '')

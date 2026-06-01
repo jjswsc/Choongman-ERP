@@ -25,6 +25,7 @@ import {
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
+import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 
 function isMissingServiceColumnsError(e: unknown): boolean {
   const msg = String(e ?? '').toLowerCase()
@@ -55,7 +56,6 @@ export async function POST(req: NextRequest) {
     const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
     const items = await enrichOrderItemsWithOptionCode(itemsRaw)
-    const memo = String(body?.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()
     const serviceAmt = Math.max(0, Number(body?.serviceAmt ?? body?.service_amt ?? 0))
@@ -145,6 +145,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const current = existing[0]
+
+    const memo = preserveGrabDeliveryMemoAnchor(String(body?.memo ?? ''), String(current?.memo ?? ''))
 
     const openCheck = await assertPosBusinessOpenForOrderSave(String(current?.store_code ?? ''))
     if (!openCheck.ok) {

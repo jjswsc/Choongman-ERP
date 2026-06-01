@@ -27,46 +27,57 @@ export async function PUT(req: NextRequest) {
     logGrabWebhook('push_order_state', req, { error: 'missing_orderID_or_state' })
     return new NextResponse(null, { status: 400 })
   }
-  const duplicate = await reserveGrabWebhookEvent({
-    eventKind: 'push_order_state',
-    uniqueKey: dedupeKey,
-    requestId: String(body.requestID ?? ''),
-    orderId: orderID,
-    merchantId: String(body.merchantID ?? ''),
-    partnerMerchantId: String(body.partnerMerchantID ?? ''),
-    payload: body,
-  })
-  if (duplicate) {
-    logGrabWebhook('push_order_state', req, { orderID, state, duplicate: true })
-    return new NextResponse(null, { status: 204 })
-  }
-  const synced = await syncGrabOrderStateToPos({
-    orderID,
-    state,
-    orderPayload: body.order,
-  })
-  if (!synced.ok) {
-    await releaseGrabWebhookEvent({
+
+  try {
+    const duplicate = await reserveGrabWebhookEvent({
       eventKind: 'push_order_state',
       uniqueKey: dedupeKey,
-    }).catch(() => {})
+      requestId: String(body.requestID ?? ''),
+      orderId: orderID,
+      merchantId: String(body.merchantID ?? ''),
+      partnerMerchantId: String(body.partnerMerchantID ?? ''),
+      payload: body,
+    })
+    if (duplicate) {
+      logGrabWebhook('push_order_state', req, { orderID, state, duplicate: true })
+      return new NextResponse(null, { status: 204 })
+    }
+    const synced = await syncGrabOrderStateToPos({
+      orderID,
+      state,
+      orderPayload: body.order,
+    })
+    if (!synced.ok) {
+      await releaseGrabWebhookEvent({
+        eventKind: 'push_order_state',
+        uniqueKey: dedupeKey,
+      }).catch(() => {})
+      logGrabWebhook('push_order_state', req, {
+        orderID,
+        merchantID: String(body.merchantID ?? ''),
+        state,
+        syncError: synced.message,
+      })
+      return NextResponse.json({ reason: 'sync_failed', message: synced.message }, { status: 500 })
+    }
+
     logGrabWebhook('push_order_state', req, {
       orderID,
       merchantID: String(body.merchantID ?? ''),
       state,
-      syncError: synced.message,
+      posOrderId: synced.orderId ?? null,
+      posStatus: synced.status ?? null,
+      updated: synced.updated,
+      memoUpdated: synced.memoUpdated ?? false,
     })
-    return NextResponse.json({ reason: 'sync_failed' }, { status: 500 })
+    return new NextResponse(null, { status: 204 })
+  } catch (e) {
+    logGrabWebhook('push_order_state', req, {
+      orderID,
+      merchantID: String(body.merchantID ?? ''),
+      state,
+      error: String(e ?? 'unknown'),
+    })
+    return NextResponse.json({ reason: 'internal_error', message: String(e ?? 'unknown') }, { status: 500 })
   }
-
-  logGrabWebhook('push_order_state', req, {
-    orderID,
-    merchantID: String(body.merchantID ?? ''),
-    state,
-    posOrderId: synced.orderId ?? null,
-    posStatus: synced.status ?? null,
-    updated: synced.updated,
-    memoUpdated: synced.memoUpdated ?? false,
-  })
-  return new NextResponse(null, { status: 204 })
 }

@@ -188,3 +188,42 @@ export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[
     }
   })
 }
+
+function posOrderItemsSubtotal(lines: PosOrderItem[]): number {
+  return lines.reduce((sum, it) => {
+    const price = Number(it.price ?? 0) || 0
+    const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
+    return sum + price * qty
+  }, 0)
+}
+
+/**
+ * 홀 결제 저장: 추가 주문 직후 카트가 DB보다 적을 때(예: 7UP만 DB에 있고 카트엔 없음)
+ * 결제 payload가 옛 스냅샷으로 `items_json`을 덮어쓰지 않도록 서버 줄을 보존한다.
+ * 카트가 서버와 동일·더 많은 줄이면 `mergeDineInAddonCartPosItemsWithExisting` 결과를 그대로 쓴다.
+ */
+export function mergeDineInPaymentCartWithServerItems(
+  serverItems: PosOrderItem[],
+  fromCart: PosOrderItem[]
+): PosOrderItem[] {
+  if (!serverItems.length) return fromCart.map((c) => ({ ...c }))
+  if (!fromCart.length) return serverItems.map((e) => ({ ...e }))
+
+  const primary = mergeDineInAddonCartPosItemsWithExisting(serverItems, fromCart)
+  const cartIds = new Set(fromCart.map((c) => normPosOrderItemId(c.id)).filter(Boolean))
+  const primaryIds = new Set(primary.map((p) => normPosOrderItemId(p.id)).filter(Boolean))
+
+  const serverOnly = serverItems.filter((e) => {
+    const k = normPosOrderItemId(e.id)
+    if (!k || cartIds.has(k) || primaryIds.has(k)) return false
+    if (String(e.cancelledAt ?? '').trim()) return false
+    return true
+  })
+  if (!serverOnly.length) return primary
+
+  const serverSub = posOrderItemsSubtotal(serverItems)
+  const primarySub = posOrderItemsSubtotal(primary)
+  if (serverSub <= primarySub + 0.0001) return primary
+
+  return [...primary, ...serverOnly.map((e) => ({ ...e }))]
+}

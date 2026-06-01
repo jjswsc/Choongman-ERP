@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cartLinesToPosOrderItems,
   mergeDineInAddonCartPosItemsWithExisting,
+  mergeDineInPaymentCartWithServerItems,
   normalizeCartLineIdForSave,
 } from '@/lib/pos-order-item-map'
 
@@ -56,6 +57,40 @@ describe('mergeDineInAddonCartPosItemsWithExisting', () => {
       { id: 'line-b', name: 'Kimchi Soup', price: 30, qty: 1, quantity: 1 },
       { id: 'line-c', name: 'Cheese Cream Kimchi Rice', price: 249, qty: 1, quantity: 1 },
       { id: 'line-pepsi', name: 'Pepsi', price: 30, qty: 1, quantity: 1 },
+    ])
+  })
+})
+
+describe('mergeDineInPaymentCartWithServerItems', () => {
+  it('keeps server-only add-on lines when payment cart is a stale subset (MBK 7UP case)', () => {
+    const server = [
+      { id: 'line-a', name: 'Main', price: 249, qty: 1, quantity: 1 },
+      { id: 'line-b', name: 'Side', price: 219, qty: 1, quantity: 1 },
+      { id: 'line-7up', name: '7UP No Sugar', price: 30, qty: 1, quantity: 1 },
+    ]
+    const staleCart = [
+      { id: 'line-a', name: 'Main', price: 249, qty: 1, quantity: 1 },
+      { id: 'line-b', name: 'Side', price: 219, qty: 1, quantity: 1 },
+    ]
+    expect(mergeDineInPaymentCartWithServerItems(server, staleCart)).toMatchObject([
+      { id: 'line-a', price: 249, qty: 1 },
+      { id: 'line-b', price: 219, qty: 1 },
+      { id: 'line-7up', name: '7UP No Sugar', price: 30, qty: 1 },
+    ])
+  })
+
+  it('uses cart as full snapshot when cart includes every server line', () => {
+    const server = [
+      { id: 'line-a', name: 'Main', price: 249, qty: 1, quantity: 1 },
+      { id: 'line-b', name: 'Side', price: 219, qty: 2, quantity: 2 },
+    ]
+    const cart = [
+      { id: 'line-a', name: 'Main', price: 249, qty: 1, quantity: 1 },
+      { id: 'line-b', name: 'Side', price: 219, qty: 3, quantity: 3 },
+    ]
+    expect(mergeDineInPaymentCartWithServerItems(server, cart)).toMatchObject([
+      { id: 'line-a', qty: 1 },
+      { id: 'line-b', qty: 3 },
     ])
   })
 })

@@ -172,17 +172,6 @@ export function PosRevenueRealtimeDashboard({
     return storeRevenueBarRows.filter((r) => r.value > 0)
   }, [storeRevenueBarRows])
 
-  const officeRevenueChartRows = React.useMemo(
-    () =>
-      officeRows.map((r) => ({
-        storeCode: r.storeCode,
-        completed: Number(r.completedRevenue ?? 0),
-        waiting: Number(r.waitingRevenue ?? 0),
-        delayed: Number(r.delayedRevenue ?? 0),
-      })),
-    [officeRows]
-  )
-
   const officeCompletedPieRows = React.useMemo(
     () =>
       officeRows
@@ -350,24 +339,6 @@ export function PosRevenueRealtimeDashboard({
             </p>
           ) : (
             <>
-              <div className="h-[min(340px,45vh)]">
-                <p className="mb-2 text-[11px] text-muted-foreground">
-                  {tr("adminRealtimeOfficeRevenueStack", "매장별 실매출·대기·지연 (누적 막대)")}
-                </p>
-                <ResponsiveContainer width="100%" height="92%">
-                  <BarChart data={officeRevenueChartRows} margin={{ bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="storeCode" tick={{ fontSize: 9 }} interval={0} angle={-28} textAnchor="end" height={56} />
-                    <YAxis {...revenueYAxis} />
-                    <Tooltip formatter={(v: number) => formatBaht(v)} />
-                    <Legend />
-                    <Bar dataKey="completed" stackId="rev" fill="#3b82f6" name={tr("salesManagementTabSalesStatus", "실매출")} />
-                    <Bar dataKey="waiting" stackId="rev" fill="#f59e0b" name={tr("adminLiveStoreSalesWaitingRevenue", "대기매출")} />
-                    <Bar dataKey="delayed" stackId="rev" fill="#ef4444" name={tr("adminLiveStoreSalesDelayedRevenue", "지연매출")} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
               <div className="grid gap-4 lg:grid-cols-2">
                 {officeCompletedPieRows.length > 0 ? (
                   <div className="h-[260px]">

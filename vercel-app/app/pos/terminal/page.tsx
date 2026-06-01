@@ -75,6 +75,7 @@ import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catal
 import {
   cartLinesToPosOrderItems,
   mergeDineInAddonCartPosItemsWithExisting,
+  mergeDineInPaymentCartWithServerItems,
   normalizeCartLineIdForSave,
   orderUiItemsToPosOrderItems,
   resolveCartLineQuantityForSave,
@@ -671,6 +672,38 @@ function reconcilePayloadItemsWithTerminalCart<
     if (Number.isFinite(raw) && raw > 0) return it
     return { ...it, quantity: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }) }
   })
+}
+
+function posOrderApiItemsToPosOrderItems(
+  rows: NonNullable<PosOrder['items']> | undefined | null
+): PosOrderItem[] {
+  if (!rows?.length) return []
+  return orderUiItemsToPosOrderItems(
+    rows.map((it, idx) => ({
+      id: String(it.id ?? `line-${idx}`),
+      name: String(it.name ?? ''),
+      quantity: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
+      price: Number(it.price ?? 0) || 0,
+      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...(String(it.promoId ?? '').trim() ? { promoId: String(it.promoId).trim() } : {}),
+      ...(String(it.promoCode ?? '').trim() ? { promoCode: String(it.promoCode).trim() } : {}),
+      ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+      ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
+      ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
+      ...(String(it.cancelledAt ?? '').trim() ? { cancelledAt: String(it.cancelledAt) } : {}),
+      ...(String(it.cancelledBy ?? '').trim() ? { cancelledBy: String(it.cancelledBy) } : {}),
+      ...(String(it.cancelReason ?? '').trim() ? { cancelReason: String(it.cancelReason) } : {}),
+    }))
+  )
+}
+
+async function fetchPosOrderItemsForPaymentMerge(
+  orderId: number,
+  storeCode: string
+): Promise<PosOrderItem[]> {
+  const rows = await getPosOrders({ orderId, storeCode, limit: 1 })
+  const hit = Array.isArray(rows) ? rows[0] : null
+  return posOrderApiItemsToPosOrderItems(hit?.items)
 }
 
 export default function PosTerminalPage() {
@@ -7446,6 +7479,16 @@ export default function PosTerminalPage() {
                   setPendingDineInOrderId(savedOrderId)
                   pendingDineInOrderTableRef.current = String(payload.tableName ?? '').trim()
                 }
+                /** 추가 주문 직후 결제 카트가 DB보다 적어지는 것 방지 — 저장된 전체 줄로 터미널 카트 동기화 */
+                setTerminalCartLines(
+                  receiptPrintItems.map((it) => ({
+                    id: String(it.id ?? ''),
+                    name: String(it.name ?? ''),
+                    quantity: it.qty,
+                    price: Number(it.price ?? 0) || 0,
+                    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+                  }))
+                )
                 setServingTableId(null)
                 setSelectedTableId(null)
                 await refreshStoreListAfterOrderSave({
@@ -7509,12 +7552,22 @@ export default function PosTerminalPage() {
                 if (!kbankQr.ok) return false
                 const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
+                const cartItemsForSave = cartLinesToPosOrderItems(payloadItemsNormalized)
+                let itemsForPaymentSave = cartItemsForSave
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
+                  try {
+                    const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
+                    if (serverItems.length > 0) {
+                      itemsForPaymentSave = mergeDineInPaymentCartWithServerItems(serverItems, cartItemsForSave)
+                    }
+                  } catch (e) {
+                    console.warn('payment merge with server items failed:', e)
+                  }
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
-                    items: cartLinesToPosOrderItems(payloadItemsNormalized),
+                    items: itemsForPaymentSave,
                     tableName: payload.tableName,
                     memo: memoWithKbank,
                     discountAmt: payload.discountAmt ?? 0,
@@ -7550,7 +7603,7 @@ export default function PosTerminalPage() {
                   if (localNoCandidate) {
                     mergedLocal = await mergeQueuedSavePosOrderByLocalOrderNo(localNoCandidate, (body) => ({
                       ...body,
-                      items: cartLinesToPosOrderItems(payloadItemsNormalized),
+                      items: itemsForPaymentSave,
                       tableName: payload.tableName,
                       memo: memoWithKbank,
                       discountAmt: payload.discountAmt ?? 0,
@@ -7592,7 +7645,7 @@ export default function PosTerminalPage() {
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
                       localOrderNo: posSaveClientKey,
-                      items: cartLinesToPosOrderItems(payloadItemsNormalized),
+                      items: itemsForPaymentSave,
                       ...posOrderPaymentFieldsFromSnapshot(pay),
                       linkposPayment: linkpos.linkposPayment,
                       kbankPartnerTransactionId: String((kbankQr as { partnerTransactionId?: string }).partnerTransactionId || '') || null,
@@ -7624,7 +7677,10 @@ export default function PosTerminalPage() {
                   /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                   clearTableOrder(currentStoreId, payload.tableName)
                 }
-                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                const subtotal = itemsForPaymentSave.reduce(
+                  (s, it) => s + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
+                  0
+                )
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                 await tryOpenDrawerOnOrderComplete(payload.payment, {
@@ -7632,7 +7688,7 @@ export default function PosTerminalPage() {
                 })
                 const receiptPayload: ReceiptModalData = {
                   orderNo,
-                  items: cartLinesToPosOrderItems(payloadItemsNormalized),
+                  items: itemsForPaymentSave,
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
