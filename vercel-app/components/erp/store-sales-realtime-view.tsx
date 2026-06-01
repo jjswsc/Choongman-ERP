@@ -18,6 +18,7 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { getPosTodaySales } from "@/lib/api-client"
+import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import type { Store } from "@/lib/pos-types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -92,6 +93,16 @@ export function StoreSalesRealtimeView({
   const tr = (key: string, fallback: string) => tOr(t, key, fallback)
   const isAllStoresSelected = effectiveStoreCode === ALL_STORE_VALUE
 
+  /** HQ·TEST 등 비운영 매장 — 관리자 실시간 API와 동일하게 집계·목록에서 제외 */
+  const operationalStores = useMemo(() => {
+    const allowed = new Set(
+      filterPosSalesStoreOptionsForManagement(
+        stores.map((s) => String(s.id || "").trim()).filter(Boolean)
+      )
+    )
+    return stores.filter((s) => allowed.has(String(s.id || "").trim()))
+  }, [stores])
+
   const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
   const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
@@ -99,8 +110,8 @@ export function StoreSalesRealtimeView({
   /** 테이블/주문만 바뀌고 매장 ID 집합이 같으면 동일 — `stores` 참조 변경으로 당일 매출 API가 반복 호출되는 것을 막음 */
   const allStoresCodesKey = useMemo(() => {
     if (!isAllStoresSelected) return ""
-    return [...new Set(stores.map((s) => String(s.id || "").trim()).filter(Boolean))].sort().join(",")
-  }, [isAllStoresSelected, stores])
+    return [...new Set(operationalStores.map((s) => String(s.id || "").trim()).filter(Boolean))].sort().join(",")
+  }, [isAllStoresSelected, operationalStores])
 
   const loadTodaySales = useCallback((opts?: { forceNetwork?: boolean }) => {
     const forceNetwork = Boolean(opts?.forceNetwork)
@@ -186,7 +197,7 @@ export function StoreSalesRealtimeView({
     })
   }, [currentStore?.tables, tableSortMode])
   const byStoreRows = useMemo(() => {
-    return stores
+    return operationalStores
       .map((store) => {
         const paid = Number(storeSalesMap[store.id]?.completedTotal ?? 0)
         const tableTotal = Number(
@@ -203,7 +214,7 @@ export function StoreSalesRealtimeView({
         if (b.tableTotal !== a.tableTotal) return b.tableTotal - a.tableTotal
         return String(a.storeId || "").localeCompare(String(b.storeId || ""), "ko")
       })
-  }, [stores, storeSalesMap])
+  }, [operationalStores, storeSalesMap])
   const byStoreTotal = useMemo(
     () =>
       byStoreRows.reduce(

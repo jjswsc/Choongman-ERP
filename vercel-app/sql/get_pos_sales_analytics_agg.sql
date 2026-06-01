@@ -24,7 +24,8 @@ AS $$
     OR lower(btrim(coalesce(p_store_code, ''))) LIKE '%본점%'
     OR lower(btrim(coalesce(p_store_code, ''))) LIKE '%office%'
     OR lower(btrim(coalesce(p_store_code, ''))) LIKE '%head office%'
-    OR lower(btrim(coalesce(p_store_code, ''))) LIKE '%hq%',
+    OR lower(btrim(coalesce(p_store_code, ''))) LIKE '%hq%'
+    OR lower(btrim(coalesce(p_store_code, ''))) = 'test',
     false
   );
 $$;

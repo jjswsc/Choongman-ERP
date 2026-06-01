@@ -1,4 +1,5 @@
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
+import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
   collectGrabPartnerStoreIds,
   isGrabFoodMerchantMapKey,
@@ -9,6 +10,16 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 type TriggerParams = {
   reason: string
   partnerMerchantID?: string | null
+  /** true면 메뉴 알림 성공 직후 fixPrice 캠페인(컷프라이스) 동기화 */
+  syncPromoTargetPriceCampaigns?: boolean
+}
+
+/** underscore 구분 reason(`save_pos_promo`) — JS `\bpromo\b`는 `_`를 word char로 취급해 매칭 실패 */
+function isPromoMenuSyncReason(reason: string): boolean {
+  return String(reason || '')
+    .toLowerCase()
+    .split('_')
+    .includes('promo')
 }
 
 type IntegrationRow = {
@@ -61,10 +72,16 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
   attempted: number
   sent: number
   failed: number
+  promoCampaignSynced: number
+  promoCampaignSyncFailed: number
 }> {
   const merchants = await loadActiveGrabMerchants(params.partnerMerchantID)
   let sent = 0
   let failed = 0
+  let promoCampaignSynced = 0
+  let promoCampaignSyncFailed = 0
+  const shouldSyncPromoCampaigns =
+    params.syncPromoTargetPriceCampaigns === true || isPromoMenuSyncReason(params.reason)
   for (const merchantID of merchants) {
     try {
       await grabUpdateMenuNotification(merchantID)
@@ -73,6 +90,24 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
         merchantID,
         reason: params.reason,
       })
+      if (shouldSyncPromoCampaigns) {
+        try {
+          const result = await syncGrabPromoTargetPriceCampaigns({ merchantID })
+          promoCampaignSynced += 1
+          console.info('[grab-menu-sync] promo_target_price_campaigns', {
+            merchantID,
+            reason: params.reason,
+            ...result,
+          })
+        } catch (e) {
+          promoCampaignSyncFailed += 1
+          console.error('[grab-menu-sync] promo_target_price_campaigns_failed', {
+            merchantID,
+            reason: params.reason,
+            error: String(e ?? 'unknown'),
+          })
+        }
+      }
     } catch (e) {
       failed += 1
       console.error('[grab-menu-sync] notification_failed', {
@@ -82,5 +117,5 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
       })
     }
   }
-  return { attempted: merchants.length, sent, failed }
+  return { attempted: merchants.length, sent, failed, promoCampaignSynced, promoCampaignSyncFailed }
 }

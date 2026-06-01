@@ -16,6 +16,7 @@ import {
   filterNonOfficeStores,
   resolveDefaultViewStoreForOffice,
 } from "@/lib/store-view-context"
+import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
@@ -39,7 +40,7 @@ export function MobileStoreSelectorBar() {
     (isOfficeRole(auth.role || "") || isOfficeStore(auth.store || ""))
 
   const storeOptions = React.useMemo(() => {
-    const branches = filterNonOfficeStores(stores)
+    const branches = filterPosSalesStoreOptionsForManagement(filterNonOfficeStores(stores))
     return [ALL_STORE_VALUE, ...branches]
   }, [stores])
 

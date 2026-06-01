@@ -6,8 +6,15 @@
  */
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 
+/** 매출·실시간 집계에서 제외할 비운영 store_code (정확 일치, 대소문자 무시). HQ 등은 isHeadOfficeLikeStoreName 으로 별도 제외. */
+const POS_SALES_EXCLUDED_STORE_CODES = new Set(['test'])
+
 export function isPosSalesTestOfficeStoreCode(storeCode: unknown): boolean {
-  return isHeadOfficeLikeStoreName(String(storeCode ?? ''))
+  const raw = String(storeCode ?? '').trim()
+  if (!raw) return false
+  if (isHeadOfficeLikeStoreName(raw)) return true
+  const norm = raw.toLowerCase().replace(/\s+/g, ' ')
+  return POS_SALES_EXCLUDED_STORE_CODES.has(norm)
 }
 
 /** 매출 관리·가맹 POS 손익 집계용 — 본사 테스트 POS 주문 제외 */

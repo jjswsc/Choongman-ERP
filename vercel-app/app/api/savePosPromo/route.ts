@@ -307,7 +307,10 @@ export async function POST(req: NextRequest) {
 
     const channelDelivery = body.channelDelivery !== false
     if (channelDelivery && ext.is_active !== false) {
-      void triggerGrabMenuNotification({ reason: 'save_pos_promo' })
+      void triggerGrabMenuNotification({
+        reason: 'save_pos_promo',
+        syncPromoTargetPriceCampaigns: true,
+      })
     }
 
     const campaignIdForExpense = campaignIdRaw || String(body.marketingCampaignId ?? '').trim()

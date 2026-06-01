@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabJsonRequest } from '@/lib/grab-openapi'
 import { parseGrabMenuNotificationMerchantBulkInput } from '@/lib/grab-menu-notification-input-parse'
+import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
   listAllGrabFoodMerchantIdsFromStoreMap,
   resolveGrabMenuNotificationMerchantIDs,
@@ -16,6 +17,11 @@ type UpdateMenuNotificationBody = {
   merchantIDs?: unknown
   /** true면 `GRAB_STORE_MAP_JSON`의 모든 `GFSBPOS-…` 키에 대해 호출 */
   all?: unknown
+  /**
+   * true면 메뉴 알림 후 Grab fixPrice 캠페인(컷프라이스용)도 즉시 동기화.
+   * menu-sync-state 웹훅 누락/지연 시 운영 우회용.
+   */
+  syncPromoTargetPriceCampaigns?: unknown
 }
 
 function coerceMerchantIdInputs(body: UpdateMenuNotificationBody): string[] {
@@ -79,6 +85,23 @@ export async function POST(req: NextRequest) {
     const success = failures.length === 0
     const failedSet = new Set(failures.map((f) => f.merchantID))
     const succeededMerchantIDs = Array.from(toNotify).filter((id) => !failedSet.has(id))
+    const shouldSyncPromoCampaigns =
+      body.syncPromoTargetPriceCampaigns === true ||
+      body.syncPromoTargetPriceCampaigns === 'true' ||
+      body.syncPromoTargetPriceCampaigns === 1
+    const promoCampaignSyncResults: Record<
+      string,
+      { created: number; updated: number; skipped: number; deleted: number } | { error: string }
+    > = {}
+    if (shouldSyncPromoCampaigns && succeededMerchantIDs.length > 0) {
+      for (const merchantID of succeededMerchantIDs) {
+        try {
+          promoCampaignSyncResults[merchantID] = await syncGrabPromoTargetPriceCampaigns({ merchantID })
+        } catch (e) {
+          promoCampaignSyncResults[merchantID] = { error: String(e ?? 'unknown_error') }
+        }
+      }
+    }
     return NextResponse.json(
       {
         success,
@@ -86,6 +109,7 @@ export async function POST(req: NextRequest) {
         ...(failures.length ? { succeededMerchantIDs } : {}),
         ...(unresolvedInputs.length ? { unresolvedInputs } : {}),
         ...(failures.length ? { failures } : {}),
+        ...(shouldSyncPromoCampaigns ? { promoCampaignSyncResults } : {}),
       },
       { status: success ? 200 : 500, headers }
     )

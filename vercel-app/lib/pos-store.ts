@@ -5,6 +5,7 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
+import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import {
   getPosTableLayout,
   getGrabStoreIntegrations,
@@ -378,12 +379,15 @@ export function usePosStore() {
     return raw
   }, [auth?.store, legacyToCanonical, storeCodes])
   const effectiveStoreCodes = useMemo(() => {
+    let codes: string[]
     if (canSearchAll) {
-      if (storeCodes.length > 0) return storeCodes
-      if (canonicalAuthStore) return [canonicalAuthStore]
-      return storeCodes
+      if (storeCodes.length > 0) codes = storeCodes
+      else if (canonicalAuthStore) codes = [canonicalAuthStore]
+      else codes = storeCodes
+      return filterPosSalesStoreOptionsForManagement(codes)
     }
-    return canonicalAuthStore ? [canonicalAuthStore] : storeCodes
+    codes = canonicalAuthStore ? [canonicalAuthStore] : storeCodes
+    return codes
   }, [canSearchAll, canonicalAuthStore, storeCodes])
 
   const [stores, setStores] = useState<Store[]>([])
