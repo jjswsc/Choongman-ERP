@@ -233,6 +233,27 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless)')
     })
 
+    it('option 끄더라도 flavor는 별도 키가 없으면 출력한다(반반 맛 누락 방지)', () => {
+      const policy = {
+        option: false,
+        sidedish: false,
+        size: true,
+        part: true,
+      }
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Banban Chicken (SNOW ONION, SWEET YANGNYEOM)',
+          qty: 1,
+        },
+        noEsc,
+        close,
+        { optionGroupPrint: policy }
+      )
+      expect(html).toContain('Banban Chicken')
+      expect(html).toContain('- SNOW ONION')
+      expect(html).toContain('- SWEET YANGNYEOM')
+    })
+
     it('Size 라벨 행은 note 선두 메뉴명으로 복구하고 잘못된 Size 본문 노출을 막는다', () => {
       const html = formatKitchenSlipItemRowHtml(
         {

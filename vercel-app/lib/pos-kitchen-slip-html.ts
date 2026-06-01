@@ -219,7 +219,9 @@ const KITCHEN_OPTION_POLICY_CLASS_ALIASES: Record<string, string[]> = {
   side: ['side', 'sidedish', 'side_dish'],
   part: ['part', 'ส่วน'],
   size: ['size', 'type'],
-  flavor: ['flavor', 'option'],
+  // flavor는 별도 스위치로만 제어한다.
+  // `option:false`(기타 옵션 숨김) 레거시 값이 맛까지 숨기지 않도록 분리.
+  flavor: ['flavor'],
   other: ['other', 'option'],
   takeaway: ['takeaway'],
   option: ['option'],
