@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabCancelOrder } from '@/lib/grab-partner-api'
+import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 
 function resolveMerchantIdByStore(storeCode: string): string {
-  const raw = String(process.env.GRAB_STORE_MAP_JSON ?? '').trim()
-  if (!raw) return ''
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const target = storeCode.trim().toLowerCase()
-    for (const [merchantLike, mappedStore] of Object.entries(parsed)) {
-      const mapped = String(mappedStore ?? '').trim().toLowerCase()
-      if (mapped && mapped === target) return String(merchantLike || '').trim()
-    }
-    return ''
-  } catch {
-    return ''
+  const parsed = parseGrabStoreMap()
+  if (!parsed || Object.keys(parsed).length === 0) return ''
+  const target = storeCode.trim().toLowerCase()
+  for (const [merchantLike, mappedStore] of Object.entries(parsed)) {
+    const mapped = String(mappedStore ?? '').trim().toLowerCase()
+    if (mapped && mapped === target) return String(merchantLike || '').trim()
   }
+  return ''
 }
 
 export async function PUT(req: NextRequest) {

@@ -1,5 +1,5 @@
 import { grabJsonRequest } from '@/lib/grab-openapi'
-import { resolveGrabMenuNotificationMerchantIDs } from '@/lib/grab-resolve-menu-notification-merchants'
+import { isGrabFoodMerchantMapKey } from '@/lib/grab-resolve-menu-notification-merchants'
 
 export type GrabCreateSelfServeJourneyResponse = {
   activationUrl: string
@@ -14,20 +14,18 @@ export async function grabCreateSelfServeJourney(partnerMerchantID: string) {
 }
 
 export async function grabUpdateMenuNotification(merchantID: string): Promise<void> {
-  const ids = resolveGrabMenuNotificationMerchantIDs(merchantID)
-  if (!ids.length) {
-    console.warn('[grab] updateMenuNotification: unresolved merchantID (check GRAB_STORE_MAP_JSON)', {
+  const id = String(merchantID || '').trim()
+  if (!id || !isGrabFoodMerchantMapKey(id)) {
+    console.warn('[grab] updateMenuNotification: invalid merchantID (check GRAB_STORE_MAP_JSON)', {
       merchantID,
     })
     throw new Error('grab_menu_notification_merchant_unresolved')
   }
-  for (const id of ids) {
-    await grabJsonRequest({
-      path: '/partner/v1/merchant/menu/notification',
-      method: 'POST',
-      body: { merchantID: id },
-    })
-  }
+  await grabJsonRequest({
+    path: '/partner/v1/merchant/menu/notification',
+    method: 'POST',
+    body: { merchantID: id },
+  })
 }
 
 type GrabMenuField = 'ITEM' | 'MODIFIER'

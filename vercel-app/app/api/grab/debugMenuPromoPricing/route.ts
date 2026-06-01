@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { buildGrabMenuFromPos } from '@/lib/grab-menu-from-pos'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { loadGrabPromoCutPriceByPromoId } from '@/lib/grab-promo-target-price-campaign'
+import { resolveGrabMenuNotificationMerchantIDs } from '@/lib/grab-resolve-menu-notification-merchants'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   try {
     const url = new URL(req.url)
-    const merchantID = String(url.searchParams.get('merchantID') || 'GFSBPOS-204-253').trim()
+    const merchantID = String(url.searchParams.get('merchantID') || 'GFSBPOS-811-087').trim()
     const partnerMerchantID = String(url.searchParams.get('partnerMerchantID') || '1040').trim()
     const nameFilter = String(url.searchParams.get('q') || 'april').trim().toLowerCase()
 
@@ -102,6 +103,8 @@ export async function GET(req: NextRequest) {
         success: true,
         merchantID,
         partnerMerchantID,
+        /** `1040` 등 파트너 ID로 sync 시 실제 Grab에 알릴 merchantID 목록 */
+        resolvedMerchantIDs: resolveGrabMenuNotificationMerchantIDs(partnerMerchantID),
         filter: nameFilter,
         itemCount: items.length,
         items,

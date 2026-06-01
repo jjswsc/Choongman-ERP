@@ -9,14 +9,47 @@ import { normStoreKey } from '@/lib/store-list-keys'
  * 2) Partner Store ID → ERP `store_code`(드롭다운 value와 동일)
  *    예: `"1048":"CM Asoke"`
  *
- * (1)만 있으면 POS에서 "CM Asoke"로 필터할 때 숫자 코드와 이어지지 않으므로,
- *     같은 JSON에 (2) 한 줄을 넣거나, ERP `store_code`를 파트너 ID와 같게 두면 된다.
+ * 손님 앱·주문용 Grab 포털 ID(`3-C6DWPB4VCKK1GT` 등)는 **별도 한 줄** env:
+ * `GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040`
+ * (쉼표로 여러 매장: `포털ID=1040,다른포털=1048`)
  */
-export function parseGrabStoreMap(): Record<string, string> {
-  const raw = process.env.GRAB_STORE_MAP_JSON?.trim()
-  if (!raw) return {}
+export function parseGrabPortalMerchantMap(raw?: string): Record<string, string> {
+  const s = String(raw ?? process.env.GRAB_PORTAL_MERCHANT_MAP ?? '').trim()
+  if (!s) return {}
+
+  if (s.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(s) as Record<string, unknown>
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(parsed)) {
+        const key = String(k || '').trim()
+        const val = String(v || '').trim()
+        if (key && val) out[key] = val
+      }
+      return out
+    } catch {
+      return {}
+    }
+  }
+
+  const out: Record<string, string> = {}
+  for (const part of s.split(/[,;\n]+/)) {
+    const piece = part.trim()
+    if (!piece) continue
+    const eq = piece.indexOf('=')
+    if (eq <= 0) continue
+    const key = piece.slice(0, eq).trim()
+    const val = piece.slice(eq + 1).trim()
+    if (key && val) out[key] = val
+  }
+  return out
+}
+
+function parseGrabStoreMapJsonObject(raw?: string): Record<string, string> {
+  const s = String(raw ?? process.env.GRAB_STORE_MAP_JSON ?? '').trim()
+  if (!s) return {}
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const parsed = JSON.parse(s) as Record<string, unknown>
     const out: Record<string, string> = {}
     for (const [k, v] of Object.entries(parsed)) {
       const key = String(k || '').trim()
@@ -27,6 +60,15 @@ export function parseGrabStoreMap(): Record<string, string> {
   } catch {
     return {}
   }
+}
+
+/** GRAB_STORE_MAP_JSON + GRAB_PORTAL_MERCHANT_MAP 병합 */
+export function parseGrabStoreMap(): Record<string, string> {
+  const out = parseGrabStoreMapJsonObject()
+  for (const [k, v] of Object.entries(parseGrabPortalMerchantMap())) {
+    out[k] = v
+  }
+  return out
 }
 
 /**

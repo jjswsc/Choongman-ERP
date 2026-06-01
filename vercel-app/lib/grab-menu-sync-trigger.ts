@@ -1,8 +1,8 @@
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
 import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
-  collectGrabPartnerStoreIds,
   isGrabFoodMerchantMapKey,
+  resolveGrabMenuNotificationMerchantIDs,
 } from '@/lib/grab-resolve-menu-notification-merchants'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
@@ -44,28 +44,22 @@ async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promi
     const status = String(row.integration_status ?? '').trim().toUpperCase()
     if (status !== 'ACTIVE' && status !== 'SYNCING') continue
     const merchantID = String(row.grab_merchant_id ?? '').trim()
-    if (merchantID && isGrabFoodMerchantMapKey(merchantID)) out.add(merchantID)
+    if (!merchantID) continue
+    for (const id of resolveGrabMenuNotificationMerchantIDs(merchantID)) out.add(id)
   }
-  if (out.size > 0) return Array.from(out)
+  if (out.size > 0) return Array.from(out).sort()
 
   const map = parseGrabStoreMap()
   const partnerRaw = String(partnerMerchantID ?? '').trim()
 
   if (partnerRaw) {
-    const partnerIds = collectGrabPartnerStoreIds(partnerRaw, map)
-    for (const pid of partnerIds) {
-      for (const [grabMerchantID, mappedStore] of Object.entries(map)) {
-        if (!isGrabFoodMerchantMapKey(grabMerchantID)) continue
-        if (String(mappedStore).trim() === pid) out.add(grabMerchantID)
-      }
-    }
-    return Array.from(out)
+    return resolveGrabMenuNotificationMerchantIDs(partnerRaw)
   }
 
   for (const grabMerchantID of Object.keys(map)) {
     if (isGrabFoodMerchantMapKey(grabMerchantID)) out.add(grabMerchantID)
   }
-  return Array.from(out)
+  return Array.from(out).sort()
 }
 
 export async function triggerGrabMenuNotification(params: TriggerParams): Promise<{

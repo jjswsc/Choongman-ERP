@@ -1,7 +1,9 @@
 import { bangkokDateStrISO, bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
+import { GRAB_DELIVERY_ON_APP_PRICING_KEYS } from '@/lib/grab-menu-advanced-pricing'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { grabJsonRequest } from '@/lib/grab-openapi'
+import { grabUpdateMenuRecord } from '@/lib/grab-partner-api'
 import {
   calcPromoRegularPriceForGrabCut,
   isPromoEligibleForGrabDeliveryApp,
@@ -333,10 +335,18 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   merchantID: string
   /** true면 Grab에 동일 캠페인이 있어도 삭제 후 재생성(메뉴 item id 변경·표시 불일치 우회) */
   force?: boolean
-}): Promise<{ created: number; updated: number; skipped: number; deleted: number; targets: number }> {
+}): Promise<{
+  created: number
+  updated: number
+  skipped: number
+  deleted: number
+  targets: number
+  menuRecordsPushed: number
+  menuRecordsFailed: number
+}> {
   const merchantID = String(params.merchantID || '').trim()
   const force = params.force === true
-  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0, targets: 0 }
+  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0, targets: 0, menuRecordsPushed: 0, menuRecordsFailed: 0 }
 
   const bundle = await loadPromoBundle()
   const businessDateYmd = bangkokDateStrISO()
@@ -350,6 +360,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     promoId: number
     grabItemId: string
     salePrice: number
+    regularPrice: number
     promoName: string
     validFrom: string | null
     validTo: string | null
@@ -396,6 +407,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       promoId,
       grabItemId: buildGrabMenuItemId(mirror),
       salePrice: cut.salePrice,
+      regularPrice: cut.regularPrice,
       promoName: String(promo.name ?? promo.code ?? '').trim(),
       validFrom: promo.valid_from ? String(promo.valid_from).slice(0, 10) : null,
       validTo: promo.valid_to ? String(promo.valid_to).slice(0, 10) : null,
@@ -414,7 +426,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     existingByPrefix = indexManagedCampaigns(listed)
   } catch (e) {
     console.warn('[grab-promo-campaign] list_failed', { merchantID, error: String(e) })
-    return { created: 0, updated: 0, skipped: targets.length, deleted: 0, targets: targets.length }
+    return { created: 0, updated: 0, skipped: targets.length, deleted: 0, targets: targets.length, menuRecordsPushed: 0, menuRecordsFailed: 0 }
   }
 
   const existingByName = new Map<string, GrabCampaignListRow>()
@@ -539,7 +551,43 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
   }
 
-  return { created, updated, skipped, deleted, targets: targets.length }
+  /** Get food menu만으로는 Grab 앱 컷프라이스가 안 붙는 매장 — item price·advancedPricing 직접 push */
+  let menuRecordsPushed = 0
+  let menuRecordsFailed = 0
+  for (const target of targets) {
+    const cut = resolvePromoCutPrice({
+      salePrice: target.salePrice,
+      regularPrice: target.regularPrice,
+    })
+    if (!cut.showCutPrice) continue
+    const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
+    const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
+    if (regularMinor <= saleMinor) continue
+    try {
+      await grabUpdateMenuRecord({
+        merchantID,
+        field: 'ITEM',
+        id: target.grabItemId,
+        price: regularMinor,
+        advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+          key,
+          price: saleMinor,
+        })),
+      })
+      menuRecordsPushed += 1
+    } catch (e) {
+      menuRecordsFailed += 1
+      console.warn('[grab-promo-campaign] push_menu_record_failed', {
+        merchantID,
+        grabItemId: target.grabItemId,
+        regularMinor,
+        saleMinor,
+        error: String(e),
+      })
+    }
+  }
+
+  return { created, updated, skipped, deleted, targets: targets.length, menuRecordsPushed, menuRecordsFailed }
 }
 
 /** 메뉴 빌드용: promo_id → 정가·할인가 (Grab 메뉴 item price = 정가) */
