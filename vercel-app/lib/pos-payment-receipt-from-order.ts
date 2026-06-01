@@ -24,12 +24,15 @@ export type PosOrderReceiptLineOptions = {
   menus?: PosMenu[]
   /** 프로모 구성 optionCode → 표시명 (캐셔·주방) */
   optionNameByCode?: Map<string, string>
+  /** 프로모 구성 optionId → 표시명 */
+  optionNameById?: Map<string, string>
 }
 
 type ReceiptPromoLine = {
   menuId: string
   optionId: string | null
   optionCode?: string | null
+  optionName?: string
   menuName?: string
   quantity: number
 }
@@ -238,20 +241,35 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
 /** 프로모 구성 줄 — optionCode 기반 optionName 보강 */
 export function enrichPromoSnapshotForPrint(
   promoItems: ReceiptPromoLine[] | undefined,
-  opts?: Pick<PosOrderReceiptLineOptions, 'optionNameByCode' | 'menus'>
+  opts?: Pick<PosOrderReceiptLineOptions, 'optionNameByCode' | 'optionNameById' | 'menus'>
 ): ReceiptPromoLine[] | undefined {
   if (!Array.isArray(promoItems) || promoItems.length === 0) return promoItems
   const optionNameByCode = opts?.optionNameByCode
+  const optionNameById = opts?.optionNameById
+  const menus = opts?.menus
   return promoItems.map((p) => {
-    let optionName = String((p as { optionName?: unknown }).optionName ?? '').trim()
+    let optionName = String(p.optionName ?? '').trim()
+    let menuName = String(p.menuName ?? '').trim()
+    const menuId = String(p.menuId ?? '').trim()
     const optionCode = String(p.optionCode ?? '').trim()
+    const optionId = String(p.optionId ?? '').trim()
+    if (!menuName && menuId && menus?.length) {
+      menuName = String(menus.find((m) => String(m.id) === menuId)?.name ?? '').trim()
+    }
     if (!optionName && optionCode && optionNameByCode?.size) {
       const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, optionNameByCode)
       if (fromCode && !fromCode.split(',').every((x) => /^[A-Z0-9-]+$/i.test(x.trim()))) {
         optionName = fromCode
       }
     }
-    return optionName ? { ...p, optionName } : p
+    if (!optionName && optionId && optionNameById?.size) {
+      optionName = String(optionNameById.get(optionId) ?? '').trim()
+    }
+    return {
+      ...p,
+      ...(menuName ? { menuName } : {}),
+      ...(optionName ? { optionName } : {}),
+    }
   })
 }
 
@@ -264,11 +282,15 @@ function normalizeReceiptPromoLines(raw: unknown[]): ReceiptPromoLine[] {
     const optionCodeStr = optionCode != null && String(optionCode).trim() ? String(optionCode).trim() : null
     const menuNameRaw = o.menuName ?? o.menu_name
     const menuNameStr = menuNameRaw != null && String(menuNameRaw).trim() ? String(menuNameRaw).trim() : ''
+    const optionNameRaw = o.optionName ?? o.option_name
+    const optionNameStr =
+      optionNameRaw != null && String(optionNameRaw).trim() ? String(optionNameRaw).trim() : ''
     return {
       menuId: String(o.menuId ?? o.menu_id ?? ''),
       optionId: optStr,
       ...(optionCodeStr ? { optionCode: optionCodeStr } : {}),
       ...(menuNameStr ? { menuName: menuNameStr } : {}),
+      ...(optionNameStr ? { optionName: optionNameStr } : {}),
       quantity: Math.max(1, Number(o.quantity ?? o.qty ?? 1) || 1),
     }
   })
@@ -368,6 +390,34 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
   })
 }
 
+function pickGrabOptionCodeFieldsFromOrderRow(row: Record<string, unknown>): {
+  optionCode?: string
+  optionCode1?: string
+  optionCode2?: string
+  optionCodes?: string[]
+} {
+  const pick = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = row[k]
+      if (v != null && String(v).trim()) return String(v).trim()
+    }
+    return null
+  }
+  const optionCode = pick('optionCode', 'option_code')
+  const optionCode1 = pick('optionCode1', 'option_code1')
+  const optionCode2 = pick('optionCode2', 'option_code2')
+  const rawCodes = row.optionCodes ?? row.option_codes
+  const optionCodes = Array.isArray(rawCodes)
+    ? rawCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
+    : []
+  return {
+    ...(optionCode ? { optionCode } : {}),
+    ...(optionCode1 ? { optionCode1 } : {}),
+    ...(optionCode2 ? { optionCode2 } : {}),
+    ...(optionCodes.length > 0 ? { optionCodes } : {}),
+  }
+}
+
 function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLineOptions) {
   const catalog = opts?.promoCatalogById
   const menus = opts?.menus
@@ -381,6 +431,18 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
       row.menuId1 ?? row.menuId ?? row.menu_id ?? (it as { menuId?: unknown }).menuId ?? ''
     ).trim()
     const promoId = pickPromoIdFromOrderLine(row)
+    const promoCode = coerceNonEmptyId(row.promoCode) ?? coerceNonEmptyId(row.promo_code)
+    const lineOptionId =
+      coerceNonEmptyId(row.optionId) ??
+      coerceNonEmptyId(row.option_id) ??
+      coerceNonEmptyId(row.optionId1) ??
+      coerceNonEmptyId(row.option_id1)
+    const lineOptionCode =
+      coerceNonEmptyId(row.optionCode) ??
+      coerceNonEmptyId(row.option_code) ??
+      coerceNonEmptyId(row.optionCode1) ??
+      coerceNonEmptyId(row.option_code1)
+    const grabOptionFields = pickGrabOptionCodeFieldsFromOrderRow(row)
     return {
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
@@ -396,7 +458,11 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
       ),
       ...(menuId ? { menuId } : {}),
       ...(promoId ? { promoId } : {}),
+      ...(promoCode ? { promoCode } : {}),
+      ...(lineOptionId ? { optionId: lineOptionId } : {}),
+      ...(lineOptionCode ? { optionCode: lineOptionCode } : {}),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...grabOptionFields,
       ...(rowDelivery ? { deliveryAppCode: rowDelivery } : {}),
       ...(promo && promo.length > 0 ? { promoItems: promo } : {}),
     }

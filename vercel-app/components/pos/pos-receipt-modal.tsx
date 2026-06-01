@@ -301,6 +301,7 @@ export function PosReceiptModal({
       : buildPosPaymentReceiptDocumentHtml({
           receiptData: { ...receiptData, items: itemsForReceipt },
           menus,
+          optionNameByCode,
           orderTypeLabels,
           t,
           lang,

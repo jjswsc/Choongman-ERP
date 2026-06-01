@@ -1207,8 +1207,8 @@ export default function PosTerminalPage() {
     return m
   }, [promosWithItems])
   const posReceiptLineOpts: PosOrderReceiptLineOptions = useMemo(
-    () => ({ promoCatalogById, menus, optionNameByCode }),
-    [promoCatalogById, menus, optionNameByCode]
+    () => ({ promoCatalogById, menus, optionNameByCode, optionNameById }),
+    [promoCatalogById, menus, optionNameByCode, optionNameById]
   )
   const grabCatalogForPrint = useMemo(
     () =>
@@ -3405,6 +3405,7 @@ export default function PosTerminalPage() {
         const receiptHtml = buildPosPaymentReceiptDocumentHtml({
           receiptData,
           menus,
+          optionNameByCode,
           orderTypeLabels: orderTypeLabelMap,
           t: tPrint,
           lang: printLang,
@@ -5979,6 +5980,7 @@ export default function PosTerminalPage() {
         const receiptHtml = buildPosPaymentReceiptDocumentHtml({
           receiptData,
           menus,
+          optionNameByCode,
           orderTypeLabels: {
             dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
             takeout: tPrint('posOrderTypeTakeout') ?? '포장',

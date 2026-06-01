@@ -39,6 +39,8 @@ type HallOrderItem = {
   price: number
   qty: number
   note?: string
+  menuId?: string
+  optionId?: string | null
   optionCode?: string | null
   optionCode1?: string | null
   optionCodes?: string[] | null
@@ -192,6 +194,115 @@ function normalizeReceiptTextKey(v: string): string {
     .trim()
 }
 
+function isReceiptPromoBundleCode(code: string): boolean {
+  const c = String(code ?? '').trim().toUpperCase()
+  if (!c) return false
+  return /-S\d+$/i.test(c) || /^SET-\d+$/i.test(c)
+}
+
+function resolveReceiptChildPromoOptionName(
+  child: HallOrderItem,
+  opts?: {
+    grabInbound?: boolean
+    optionNameByCode?: Map<string, string> | Record<string, string>
+  }
+): string {
+  const existing = String((child as { optionName?: unknown }).optionName ?? '').trim()
+  if (existing) return existing
+
+  const note = String(child.note ?? '').trim()
+  if (note) {
+    if (opts?.grabInbound) {
+      const chips = collectGrabPrintOptionLines({
+        note,
+        optionNameByCode: opts.optionNameByCode,
+      })
+      if (chips.length) return chips.join(', ')
+    }
+    const parsed = formatGrabOrderLineNoteForPrint(note, opts?.optionNameByCode)
+    if (parsed) return parsed
+    const normalized = normalizePosLineNote(note, { keepOptionSummary: false })
+    if (normalized) return normalized
+  }
+
+  const optionCode = String(
+    child.optionCode ?? (child as { optionCode1?: string | null }).optionCode1 ?? ''
+  ).trim()
+  if (optionCode) {
+    const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, opts?.optionNameByCode)
+    if (fromCode && !fromCode.split(',').every((x) => /^[A-Z0-9-]+$/i.test(x.trim()))) {
+      return fromCode
+    }
+  }
+
+  const split = splitPosPrintItemLine(String(child.name ?? ''))
+  if (split.optionLine) {
+    return formatGrabOptionFragmentForPrint(split.optionLine, opts?.optionNameByCode)
+  }
+  return ''
+}
+
+function buildReceiptChildPromoLine(
+  child: HallOrderItem,
+  opts?: {
+    grabInbound?: boolean
+    optionNameByCode?: Map<string, string> | Record<string, string>
+  }
+): HallOrderPromoItem {
+  const childNameRaw = String(child.name ?? '').trim()
+  const split = splitPosPrintItemLine(childNameRaw)
+  const childName = split.mainName || childNameRaw
+  const menuId = String(
+    child.menuId ?? (child as { menuId1?: string | null }).menuId1 ?? ''
+  ).trim()
+  const optionCode = String(
+    child.optionCode ?? (child as { optionCode1?: string | null }).optionCode1 ?? ''
+  ).trim()
+  const optionIdRaw = String((child as { optionId?: unknown }).optionId ?? '').trim()
+  const optionId = optionIdRaw || null
+  const optionName = resolveReceiptChildPromoOptionName(child, opts)
+  return {
+    menuId: menuId || '',
+    optionId,
+    ...(optionCode ? { optionCode } : {}),
+    ...(optionName ? { optionName } : {}),
+    menuName: childName,
+    quantity: Math.max(1, Number(child.qty ?? 1) || 1),
+  } as HallOrderPromoItem
+}
+
+function pickReceiptSetParentIndex(indices: number[], out: HallOrderItem[]): number {
+  return (
+    indices.find((idx) => Array.isArray(out[idx].promoItems) && out[idx].promoItems!.length > 0) ??
+    indices.find((idx) => /\bset\b|\[[^\]]+\]/i.test(String(out[idx].name ?? ''))) ??
+    indices.find((idx) => String((out[idx] as { promoId?: unknown }).promoId ?? '').trim().length > 0) ??
+    indices[0]
+  )
+}
+
+function mergeReceiptPromoGroupedLines(
+  out: HallOrderItem[],
+  groups: Map<string, number[]>,
+  hide: Set<number>,
+  opts?: {
+    grabInbound?: boolean
+    optionNameByCode?: Map<string, string> | Record<string, string>
+  }
+): void {
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue
+    const parentIdx = pickReceiptSetParentIndex(indices, out)
+    const parent = out[parentIdx]
+    const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
+    for (const childIdx of indices) {
+      if (childIdx === parentIdx || hide.has(childIdx)) continue
+      list.push(buildReceiptChildPromoLine(out[childIdx], opts))
+      hide.add(childIdx)
+    }
+    out[parentIdx] = { ...parent, promoItems: list }
+  }
+}
+
 /** Grab·주방 분할 `[세트] 구성` 줄을 부모 세트의 promoItems 로 합친다(캐셔·홀 주문서). */
 export function mergeSetChildrenForReceipt(
   items: HallOrderItem[],
@@ -238,26 +349,7 @@ export function mergeSetChildrenForReceipt(
       if (parentIdx < 0 || parentIdx === child.index) continue
       const parent = out[parentIdx]
       const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
-      const opt = String(out[child.index].note ?? '').trim()
-      let optionName = opt
-      if (opt && opts?.grabInbound) {
-        const chips = collectGrabPrintOptionLines({
-          note: opt,
-          optionNameByCode: opts.optionNameByCode,
-        })
-        if (chips.length) optionName = chips.join(', ')
-        else {
-          const parsed = formatGrabOrderLineNoteForPrint(opt, opts.optionNameByCode)
-          if (parsed) optionName = parsed
-        }
-      }
-      list.push({
-        menuId: '',
-        optionId: null,
-        ...(optionName ? { optionName } : {}),
-        menuName: child.childName,
-        quantity: Math.max(1, Number(out[child.index].qty ?? 1) || 1),
-      } as HallOrderPromoItem)
+      list.push(buildReceiptChildPromoLine(out[child.index], opts))
       out[parentIdx] = { ...parent, promoItems: list }
       hide.add(child.index)
     }
@@ -269,49 +361,23 @@ export function mergeSetChildrenForReceipt(
     const code = String((out[i] as { promoCode?: unknown }).promoCode ?? '')
       .trim()
       .toUpperCase()
-    if (!code || !/^[A-Z0-9]+-S\d+$/i.test(code)) continue
+    if (!code || !isReceiptPromoBundleCode(code)) continue
     const list = promoCodeGroups.get(code) ?? []
     list.push(i)
     promoCodeGroups.set(code, list)
   }
-  for (const indices of promoCodeGroups.values()) {
-    if (indices.length < 2) continue
-    const parentIdx =
-      indices.find((idx) => Array.isArray(out[idx].promoItems) && out[idx].promoItems!.length > 0) ??
-      indices.find((idx) => /\bset\b|\[[^\]]+\]/i.test(String(out[idx].name ?? ''))) ??
-      indices.find((idx) => String((out[idx] as { promoId?: unknown }).promoId ?? '').trim().length > 0) ??
-      indices[0]
-    const parent = out[parentIdx]
-    const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
-    for (const childIdx of indices) {
-      if (childIdx === parentIdx || hide.has(childIdx)) continue
-      const child = out[childIdx]
-      const childName = String(child.name ?? '').trim()
-      if (!childName) continue
-      const opt = String(child.note ?? '').trim()
-      let optionName = opt
-      if (opt && opts?.grabInbound) {
-        const chips = collectGrabPrintOptionLines({
-          note: opt,
-          optionNameByCode: opts.optionNameByCode,
-        })
-        if (chips.length) optionName = chips.join(', ')
-        else {
-          const parsed = formatGrabOrderLineNoteForPrint(opt, opts.optionNameByCode)
-          if (parsed) optionName = parsed
-        }
-      }
-      list.push({
-        menuId: '',
-        optionId: null,
-        ...(optionName ? { optionName } : {}),
-        menuName: childName,
-        quantity: Math.max(1, Number(child.qty ?? 1) || 1),
-      } as HallOrderPromoItem)
-      hide.add(childIdx)
-    }
-    out[parentIdx] = { ...parent, promoItems: list }
+  mergeReceiptPromoGroupedLines(out, promoCodeGroups, hide, opts)
+
+  const promoIdGroups = new Map<string, number[]>()
+  for (let i = 0; i < out.length; i++) {
+    if (hide.has(i)) continue
+    const pid = String((out[i] as { promoId?: unknown }).promoId ?? '').trim()
+    if (!pid) continue
+    const list = promoIdGroups.get(pid) ?? []
+    list.push(i)
+    promoIdGroups.set(pid, list)
   }
+  mergeReceiptPromoGroupedLines(out, promoIdGroups, hide, opts)
 
   return out.filter((_, idx) => !hide.has(idx))
 }
@@ -468,21 +534,19 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       const lineMainForPromo = lineSplit.mainName || lineName
       const promoRows =
         Array.isArray(it.promoItems) && it.promoItems.length > 0
-          ? grabInbound
-            ? enrichGrabPromoItemsForPrint(
-                it.promoItems.slice(0, 8).map((p) => ({
-                  menuId: String(p.menuId || ''),
-                  optionId: p.optionId,
-                  optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
-                  optionName: (p as { optionName?: string | null }).optionName ?? null,
-                  menuName:
-                    String((p as { menuName?: unknown }).menuName ?? '').trim() ||
-                    (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : ''),
-                  quantity: Math.max(1, Number(p.quantity) || 1),
-                })),
-                { optionNameByCode, menuCodeByMenuId }
-              )
-            : it.promoItems.slice(0, 8)
+          ? enrichGrabPromoItemsForPrint(
+              it.promoItems.slice(0, 8).map((p) => ({
+                menuId: String(p.menuId || ''),
+                optionId: p.optionId,
+                optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
+                optionName: (p as { optionName?: string | null }).optionName ?? null,
+                menuName:
+                  String((p as { menuName?: unknown }).menuName ?? '').trim() ||
+                  (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : ''),
+                quantity: Math.max(1, Number(p.quantity) || 1),
+              })),
+              { optionNameByCode, menuCodeByMenuId }
+            )
           : []
       const promoComposeLines =
         promoRows.length > 0

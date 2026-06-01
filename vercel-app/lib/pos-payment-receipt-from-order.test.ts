@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { PosPromoWithItems } from '@/lib/api-client'
-import { enrichPosOrderLikeItemsWithPromoSnapshot } from '@/lib/pos-payment-receipt-from-order'
+import {
+  enrichPosOrderLikeItemsWithPromoSnapshot,
+  enrichPromoSnapshotForPrint,
+} from '@/lib/pos-payment-receipt-from-order'
 
 type OrderLikeRow = Record<string, unknown> & {
   id: string
@@ -81,5 +84,22 @@ describe('enrichPosOrderLikeItemsWithPromoSnapshot promo detection', () => {
     )
     expect(Array.isArray(rows[0].promoItems)).toBe(true)
     expect(rows[0].promoItems?.[0]).toMatchObject({ menuId: '74' })
+  })
+})
+
+describe('enrichPromoSnapshotForPrint', () => {
+  it('preserves optionName from order snapshot and resolves menuName from menus', () => {
+    const rows = enrichPromoSnapshotForPrint(
+      [{ menuId: '10', optionId: '5', optionName: 'M - Drumette', quantity: 1 }],
+      {
+        menus: [{ id: '10', name: 'Golden Fried Chicken' } as never],
+        optionNameById: new Map([['5', 'M - Drumette (fallback)']]),
+      }
+    )
+    expect(rows?.[0]).toMatchObject({
+      menuId: '10',
+      menuName: 'Golden Fried Chicken',
+      optionName: 'M - Drumette',
+    })
   })
 })

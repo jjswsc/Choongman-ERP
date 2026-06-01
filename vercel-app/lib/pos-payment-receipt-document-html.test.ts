@@ -29,6 +29,41 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     expect(html).not.toContain('CMUNIONMALL')
   })
 
+  it('prints Grab option lines from optionCodes (standard layout)', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: {
+        ...baseReceipt,
+        memo: 'grab_order:GF-565',
+        items: [
+          {
+            id: 'grab:line-1',
+            name: 'SPICY YANGNYEOM',
+            price: 159,
+            qty: 1,
+            note: 'mods:Kimchi 30g.',
+            optionCodes: ['C011-2', 'C011-5'],
+          },
+        ],
+        subtotal: 159,
+        total: 159,
+        paymentCash: 159,
+      },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://example.com',
+      printedAt: new Date('2026-06-01T03:49:00.000Z'),
+      optionNameByCode: new Map([
+        ['C011-2', 'M - Drumette'],
+        ['C011-5', 'Kimchi 30g.'],
+      ]),
+    })
+    expect(html).toContain('SPICY YANGNYEOM')
+    expect(html).toContain('M - Drumette')
+    expect(html).toContain('Kimchi 30g.')
+  })
+
   it('prints digits-only order number below date and omits store name (simple layout)', () => {
     const html = buildPosPaymentReceiptDocumentHtml({
       receiptData: baseReceipt,

@@ -30,6 +30,38 @@ describe('mergeSetChildrenForReceipt', () => {
       'PEPSI MEGA 2',
     ])
   })
+
+  it('merges children by shared promoId when promoCode is missing on child lines', () => {
+    const rows = mergeSetChildrenForReceipt([
+      {
+        id: 'p1',
+        name: 'Choongman Festival Set 2',
+        qty: 1,
+        promoId: '99',
+        promoItems: [{ menuId: '1', optionId: null, menuName: 'GOLDEN FRIED CHICKEN', quantity: 1 }],
+      },
+      { id: 'c1', name: 'Aquafina', qty: 1, promoId: '99', menuId: '2' },
+      { id: 'c2', name: 'Rice', qty: 1, promoId: '99', menuId: '3' },
+    ])
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.promoItems?.map((x) => x.menuName)).toEqual([
+      'GOLDEN FRIED CHICKEN',
+      'Aquafina',
+      'Rice',
+    ])
+  })
+
+  it('keeps option text from child line name for hall orders', () => {
+    const rows = mergeSetChildrenForReceipt([
+      { id: 'p1', name: 'Festival Set 2', qty: 1, promoId: '9', promoCode: 'SET-S02' },
+      { id: 'c1', name: 'Aquafina (500ml)', qty: 1, promoCode: 'SET-S02' },
+    ])
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.promoItems?.[0]?.menuName).toBe('Aquafina')
+    expect(rows[0]?.promoItems?.[0]?.optionName).toBe('500ml')
+  })
 })
 
 describe('resolveHallOrderReceiptDiscountAmt', () => {

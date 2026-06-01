@@ -2,7 +2,7 @@
  * 결제(손님) 영수증 전체 HTML — PosReceiptModal·영수증 관리 재인쇄 공통
  */
 
-import type { PosMenu, PosPrinterSettings } from '@/lib/api-client'
+import type { PosMenu, PosMenuOption, PosPrinterSettings } from '@/lib/api-client'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
@@ -373,6 +373,9 @@ export type BuildPosPaymentReceiptDocumentHtmlParams = {
   designOverride?: Partial<PosPaymentReceiptDesignResolved>
   /** true면 2열 레이아웃(grid/flex/table)을 쓰지 않는 초단순 텍스트 모드 강제 */
   forceSimpleTextMode?: boolean
+  /** Grab 등 option_code → 표시명 (미전달 시 menus·menuOptions로 구성) */
+  optionNameByCode?: Map<string, string> | Record<string, string>
+  menuOptions?: PosMenuOption[]
 }
 
 export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceiptDocumentHtmlParams): string {
@@ -387,7 +390,15 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     printerSettings,
     designOverride,
     forceSimpleTextMode,
+    optionNameByCode: optionNameByCodeParam,
+    menuOptions,
   } = params
+  const optionNameByCode =
+    optionNameByCodeParam instanceof Map
+      ? optionNameByCodeParam
+      : optionNameByCodeParam && typeof optionNameByCodeParam === 'object'
+        ? new Map(Object.entries(optionNameByCodeParam))
+        : buildOptionNameByCodeFromMenus(menus, menuOptions ?? [])
   const tr = (key: string, fallback: string) => {
     const value = t(key)
     return value && value !== key ? value : fallback
@@ -513,7 +524,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       receiptData.discountReason
     )
     const orderTypeLabel = orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType
-    const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
     const menuCodeByMenuId = Object.fromEntries(
       menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
     )
@@ -542,22 +552,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             : ''
         const promoRows =
           Array.isArray(it.promoItems) && it.promoItems.length > 0
-            ? grabInbound
-              ? enrichGrabPromoItemsForPrint(
-                  it.promoItems.slice(0, 8).map((pi) => ({
-                    menuId: String(pi.menuId || ''),
-                    optionId: pi.optionId,
-                    optionCode: (pi as { optionCode?: string | null }).optionCode ?? null,
-                    optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
-                    menuName:
-                      String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
-                      menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
-                      '',
-                    quantity: Math.max(1, Number(pi.quantity) || 1),
-                  })),
-                  { optionNameByCode, menuCodeByMenuId }
-                )
-              : it.promoItems.slice(0, 8)
+            ? enrichGrabPromoItemsForPrint(
+                it.promoItems.slice(0, 8).map((pi) => ({
+                  menuId: String(pi.menuId || ''),
+                  optionId: pi.optionId,
+                  optionCode: (pi as { optionCode?: string | null }).optionCode ?? null,
+                  optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
+                  menuName:
+                    String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
+                    menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                    '',
+                  quantity: Math.max(1, Number(pi.quantity) || 1),
+                })),
+                { optionNameByCode, menuCodeByMenuId }
+              )
             : []
         const promoComposeLines =
           promoRows.length > 0
@@ -812,7 +820,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             : receiptPayLine(esc(tr('posMenuName', '품목')), esc(tr('amount', '금액')), 'receipt-pay-line--head')
         }
         ${(() => {
-          const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
           const grabInbound = isGrabInboundPosOrder({
             memo: receiptData.memo,
             deliveryAppCode: receiptData.deliveryAppCode,
@@ -837,22 +844,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             )
             const promoRows =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
-                ? grabInbound
-                  ? enrichGrabPromoItemsForPrint(
-                      it.promoItems.slice(0, 8).map((pi) => ({
-                        menuId: String(pi.menuId || ''),
-                        optionId: pi.optionId,
-                        optionCode: (pi as { optionCode?: string | null }).optionCode ?? null,
-                        optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
-                        menuName:
-                          String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
-                          menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
-                          '',
-                        quantity: Math.max(1, Number(pi.quantity) || 1),
-                      })),
-                      { optionNameByCode, menuCodeByMenuId }
-                    )
-                  : it.promoItems.slice(0, 8)
+                ? enrichGrabPromoItemsForPrint(
+                    it.promoItems.slice(0, 8).map((pi) => ({
+                      menuId: String(pi.menuId || ''),
+                      optionId: pi.optionId,
+                      optionCode: (pi as { optionCode?: string | null }).optionCode ?? null,
+                      optionName: String((pi as { optionName?: unknown }).optionName ?? '').trim() || null,
+                      menuName:
+                        String((pi as { menuName?: unknown }).menuName ?? '').trim() ||
+                        menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                        '',
+                      quantity: Math.max(1, Number(pi.quantity) || 1),
+                    })),
+                    { optionNameByCode, menuCodeByMenuId }
+                  )
                 : []
             const promoComposeLines =
               promoRows.length > 0

@@ -704,6 +704,7 @@ export function PosTerminalMenuScreen({
         .map((line) => ({
           menuId: line.menuId,
           optionId: line.optionId,
+          ...(line.optionCode ? { optionCode: line.optionCode } : {}),
           quantity: line.quantity,
         }))
     })
