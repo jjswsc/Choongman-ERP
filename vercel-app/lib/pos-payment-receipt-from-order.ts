@@ -6,7 +6,7 @@ import {
   formatGrabOrderLineNoteForPrint,
   isGrabInboundPosOrder,
 } from '@/lib/grab-pos-order-enrich'
-import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
+import { mergeSetChildrenForReceipt, type HallOrderPayload } from '@/lib/pos-hall-order-receipt-document-html'
 import {
   computePosPricing,
   receiptTaxDisplayFieldsFromPricing,
@@ -587,6 +587,133 @@ export function receiptModalDataFromPosOrderForPayment(
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: false,
     receiptPrintedAt: resolvePosOrderPaidAt(order),
+  }
+}
+
+function hallOrderItemsFromReceiptLines(
+  lines: ReturnType<typeof posOrderItemsToReceiptLines>
+): HallOrderPayload['items'] {
+  return lines.map((it) => ({
+    id: it.id,
+    name: it.name,
+    price: it.price,
+    qty: it.qty,
+    ...(it.lineDiscountAmt > 0.0001 ? { lineDiscountAmt: it.lineDiscountAmt } : {}),
+    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+    ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
+    ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
+    ...(it.menuId ? { menuId: it.menuId } : {}),
+    ...(it.optionCode ? { optionCode: it.optionCode } : {}),
+    ...(it.promoId ? { promoId: it.promoId } : {}),
+    ...(it.promoCode ? { promoCode: it.promoCode } : {}),
+  }))
+}
+
+/** 홀 주문서(บิลสั้น) 인쇄 payload — 결제 영수증과 동일 할인·합계 기준 */
+export function hallOrderReceiptPayloadFromPosOrder(
+  order: PosOrder,
+  adjustments: PosPricingAdjustments,
+  opts?: PosOrderReceiptLineOptions & { orderTypeLabel?: string; storeCodeFallback?: string }
+): HallOrderPayload {
+  const discountAmt = Math.max(0, Number(order.discountAmt ?? 0) || 0)
+  const couponDiscountAmt = Math.max(0, Number(order.couponDiscountAmt ?? 0) || 0)
+  const subtotal = Math.max(0, Number(order.subtotal ?? 0) || 0)
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt,
+    deliveryFee: order.deliveryFee ?? 0,
+    packagingFee: order.packagingFee ?? 0,
+    cardPaymentAmount: Math.max(0, Number(order.paymentCard ?? 0) || 0),
+    adjustments,
+  })
+  const storedTotal = Math.max(0, Number(order.total ?? 0) || 0)
+  const total = storedTotal > 0.005 ? storedTotal : pricing.finalTotal
+  const lines = posOrderItemsToReceiptLines(order, opts)
+  return {
+    orderNo: String(order.orderNo ?? ''),
+    storeCode: String(order.storeCode ?? opts?.storeCodeFallback ?? '').trim(),
+    orderType: opts?.orderTypeLabel ?? String(order.orderType ?? ''),
+    ...(order.tableName ? { tableName: String(order.tableName) } : {}),
+    ...(order.memo ? { memo: String(order.memo) } : {}),
+    items: hallOrderItemsFromReceiptLines(lines),
+    subtotal,
+    discountAmt,
+    couponDiscountAmt,
+    ...(order.discountReason ? { discountReason: String(order.discountReason) } : {}),
+    total,
+    deliveryFee: order.deliveryFee,
+    packagingFee: order.packagingFee,
+    vatFeeAmt: pricing.vatFeeAmt,
+    vatFeeMode: pricing.vatFeeMode,
+    ...receiptTaxDisplayFieldsFromPricing(pricing),
+    serviceFeeAmt: pricing.serviceFeeAmt,
+    serviceFeeMode: pricing.serviceFeeMode,
+    cardFeeAmt: pricing.cardFeeAmt,
+    cardFeeMode: pricing.cardFeeMode,
+    otherFeeAmt: pricing.otherFeeAmt,
+    otherFeeMode: pricing.otherFeeMode,
+    ...(order.guestCount != null ? { guestCount: order.guestCount } : {}),
+  }
+}
+
+/** Realtime·폴링 등 — DB 행 + 파싱된 품목으로 홀 주문서 payload */
+export function hallOrderReceiptPayloadFromOrderFields(
+  fields: {
+    orderNo: string
+    storeCode: string
+    orderType: string
+    tableName?: string
+    memo?: string
+    items: HallOrderPayload['items']
+    subtotal: number
+    discountAmt: number
+    couponDiscountAmt?: number
+    discountReason?: string
+    total: number
+    guestCount?: number
+    deliveryFee?: number
+    packagingFee?: number
+    paymentCard?: number
+  },
+  adjustments: PosPricingAdjustments
+): HallOrderPayload {
+  const discountAmt = Math.max(0, Number(fields.discountAmt) || 0)
+  const couponDiscountAmt = Math.max(0, Number(fields.couponDiscountAmt) || 0)
+  const subtotal = Math.max(0, Number(fields.subtotal) || 0)
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt,
+    deliveryFee: fields.deliveryFee ?? 0,
+    packagingFee: fields.packagingFee ?? 0,
+    cardPaymentAmount: Math.max(0, Number(fields.paymentCard) || 0),
+    adjustments,
+  })
+  const storedTotal = Math.max(0, Number(fields.total) || 0)
+  const total = storedTotal > 0.005 ? storedTotal : pricing.finalTotal
+  return {
+    orderNo: fields.orderNo,
+    storeCode: fields.storeCode,
+    orderType: fields.orderType,
+    ...(fields.tableName ? { tableName: fields.tableName } : {}),
+    ...(fields.memo ? { memo: fields.memo } : {}),
+    items: fields.items,
+    subtotal,
+    discountAmt,
+    couponDiscountAmt,
+    ...(fields.discountReason ? { discountReason: fields.discountReason } : {}),
+    total,
+    deliveryFee: fields.deliveryFee,
+    packagingFee: fields.packagingFee,
+    vatFeeAmt: pricing.vatFeeAmt,
+    vatFeeMode: pricing.vatFeeMode,
+    ...receiptTaxDisplayFieldsFromPricing(pricing),
+    serviceFeeAmt: pricing.serviceFeeAmt,
+    serviceFeeMode: pricing.serviceFeeMode,
+    cardFeeAmt: pricing.cardFeeAmt,
+    cardFeeMode: pricing.cardFeeMode,
+    otherFeeAmt: pricing.otherFeeAmt,
+    otherFeeMode: pricing.otherFeeMode,
+    ...(fields.guestCount != null ? { guestCount: fields.guestCount } : {}),
   }
 }
 

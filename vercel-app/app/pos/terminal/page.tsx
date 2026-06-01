@@ -151,6 +151,8 @@ import {
   posOrderRowPaymentSum,
   receiptModalDataFromPosOrderForPayment,
   receiptModalDataFromTerminalOrderTaxReprint,
+  hallOrderReceiptPayloadFromPosOrder,
+  hallOrderReceiptPayloadFromOrderFields,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
@@ -168,7 +170,11 @@ import { buildSplitPaymentReceiptBatch } from '@/lib/pos-split-payment-receipt-b
 import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
-import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
+import {
+  normalizePosOrderTypeKey,
+  resolvePosOrderTypeReceiptLabel,
+} from '@/lib/pos-sales-order-type-filter'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import {
@@ -1985,6 +1991,8 @@ export default function PosTerminalPage() {
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
   const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  /** 배달 주문 할인·합계 변경 후 홀 주문서 재인쇄 중복 방지 */
+  const printedHallDiscountReprintKeysRef = useRef<Set<string>>(new Set())
   /** 주방 주문서 자동 인쇄 중복 방지(수락/Realtime/폴링 동시 발화) */
   const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
@@ -2277,19 +2285,13 @@ export default function PosTerminalPage() {
         })()
       }
       if (autoPrintReceiptOnOrder) {
+        const hallPayload = hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+          ...posReceiptLineOpts,
+          orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+          storeCodeFallback: currentStoreId,
+        })
         await printReceiptNow(
-          {
-            orderNo: order.orderNo ?? '',
-            storeCode: order.storeCode ?? currentStoreId,
-            orderType: order.orderType ?? 'delivery',
-            tableName: order.tableName,
-            memo: order.memo,
-            items,
-            subtotal: order.subtotal ?? 0,
-            discountAmt: order.discountAmt ?? 0,
-            total: order.total ?? 0,
-            ...posGuestCountSpread(order.guestCount),
-          },
+          hallPayload,
           undefined,
           false,
           undefined,
@@ -2317,6 +2319,8 @@ export default function PosTerminalPage() {
       logPosPrintDebug,
       enrichPromoItemsWithOptionName,
       reserveKitchenAutoPrintKey,
+      pricingAdjustments,
+      posReceiptLineOpts,
     ]
   )
 
@@ -2495,19 +2499,13 @@ export default function PosTerminalPage() {
                 })()
               }
               if (autoPrintReceiptOnOrder) {
+                const hallPayload = hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+                  ...posReceiptLineOpts,
+                  orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+                  storeCodeFallback: currentStoreId,
+                })
                 await printReceiptNow(
-                  {
-                    orderNo: order.orderNo ?? '',
-                    storeCode: order.storeCode ?? currentStoreId,
-                    orderType: order.orderType ?? 'delivery',
-                    tableName: order.tableName,
-                    memo: order.memo,
-                    items,
-                    subtotal: order.subtotal ?? 0,
-                    discountAmt: order.discountAmt ?? 0,
-                    total: order.total ?? 0,
-                    ...posGuestCountSpread(order.guestCount),
-                  },
+                  hallPayload,
                   undefined,
                   false,
                   undefined,
@@ -3101,6 +3099,7 @@ export default function PosTerminalPage() {
               name: String(it.name ?? ''),
               menuId,
             })
+            const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
             return {
               id: String(it.id ?? ''),
               name: displayName,
@@ -3109,6 +3108,7 @@ export default function PosTerminalPage() {
               ...(menuId ? { menuId } : {}),
               ...(optionCode ? { optionCode } : {}),
               ...(note ? { note } : {}),
+              ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
               ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
             }
           }
@@ -3634,16 +3634,6 @@ export default function PosTerminalPage() {
     const orderNoStr = String(po.orderNo ?? '').trim()
     const tableName = String(po.tableName ?? '').trim()
     const memo = String(po.memo ?? '')
-    const discountAmt = Math.max(0, Number(po.discountAmt ?? 0) || 0)
-    const couponDiscountAmt = Math.max(0, Number(po.couponDiscountAmt ?? 0) || 0)
-    const subtotal = Math.max(0, Number(po.subtotal ?? 0) || 0)
-    const pricing = computePosPricing({
-      subtotal,
-      discountAmt,
-      cardPaymentAmount: Math.max(0, Number(po.paymentCard ?? 0) || 0),
-      adjustments: pricingAdjustments,
-    })
-
     type ReceiptPrintLine = {
       id: string
       name: string
@@ -3680,29 +3670,11 @@ export default function PosTerminalPage() {
           ? t('posOrderTypeTakeout') ?? '포장'
           : t('posOrderTypeDelivery') ?? '배달'
 
-    const receiptPayload = {
-      orderNo: orderNoStr,
-      storeCode: currentStoreId,
-      orderType: orderTypeLabel,
-      tableName,
-      memo,
-      items: receiptPrintItems,
-      subtotal,
-      discountAmt,
-      couponDiscountAmt,
-      discountReason: String(po.discountReason ?? '').trim() || undefined,
-      total: pricing.finalTotal,
-      vatFeeAmt: pricing.vatFeeAmt,
-      vatFeeMode: pricing.vatFeeMode,
-      ...receiptTaxDisplayFieldsFromPricing(pricing),
-      serviceFeeAmt: pricing.serviceFeeAmt,
-      serviceFeeMode: pricing.serviceFeeMode,
-      cardFeeAmt: pricing.cardFeeAmt,
-      cardFeeMode: pricing.cardFeeMode,
-      otherFeeAmt: pricing.otherFeeAmt,
-      otherFeeMode: pricing.otherFeeMode,
-      ...posGuestCountSpread(po.guestCount),
-    }
+    const receiptPayload = hallOrderReceiptPayloadFromPosOrder(po, pricingAdjustments, {
+      ...posReceiptLineOpts,
+      orderTypeLabel,
+      storeCodeFallback: currentStoreId,
+    })
 
     const printHallOrderSheet =
       autoPrintReceiptOnOrder || autoPrintReceiptOnAddOrder || autoPrintFinalOrderBeforePayment
@@ -3902,20 +3874,23 @@ export default function PosTerminalPage() {
       const discountAmt = Number(row.discount_amt ?? 0)
       const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
       const total = Number(row.total ?? 0)
-      const receiptPayloadRealtime = {
-        orderNo,
-        storeCode,
-        orderType,
-        tableName,
-        memo,
-        items,
-        subtotal,
-        discountAmt,
-        couponDiscountAmt,
-        discountReason: String(row.discount_reason ?? '').trim() || undefined,
-        total,
-        ...posGuestCountSpread(row.guest_count),
-      }
+      const receiptPayloadRealtime = hallOrderReceiptPayloadFromOrderFields(
+        {
+          orderNo,
+          storeCode,
+          orderType: resolvePosOrderTypeReceiptLabel(orderType, t),
+          tableName,
+          memo,
+          items,
+          subtotal,
+          discountAmt,
+          couponDiscountAmt,
+          discountReason: String(row.discount_reason ?? '').trim() || undefined,
+          total,
+          ...posGuestCountSpread(row.guest_count),
+        },
+        pricingAdjustments
+      )
       const runKitchenFromRealtimeOrderInsert = () => {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
         const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
@@ -4215,7 +4190,7 @@ export default function PosTerminalPage() {
       (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder) || autoPrintKitchenSlipOnOrder
     if (!wantPayment && !wantRemoteDineInAdd) return
 
-    const onUpdate = (payload: { new?: Record<string, unknown> }) => {
+    const onUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
@@ -4225,6 +4200,64 @@ export default function PosTerminalPage() {
       const variants = currentStoreCodeVariants
       if (!rowStore) return
       if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+
+      if (
+        autoPrintReceiptOnOrder &&
+        seenOrderIdsRef.current.has(orderId) &&
+        String(row.order_type ?? '').trim().toLowerCase() === 'delivery' &&
+        posOrderRowPaymentSum(row) <= 0 &&
+        !isPosOrderPaidLikeStatus(String(row.status ?? ''))
+      ) {
+        const oldRow = payload.old as Record<string, unknown> | undefined
+        if (oldRow) {
+          const oldDisc = Math.max(0, Number(oldRow.discount_amt ?? 0) || 0)
+          const newDisc = Math.max(0, Number(row.discount_amt ?? 0) || 0)
+          const oldCoupon = Math.max(0, Number(oldRow.coupon_discount_amt ?? 0) || 0)
+          const newCoupon = Math.max(0, Number(row.coupon_discount_amt ?? 0) || 0)
+          const oldTotal = Math.max(0, Number(oldRow.total ?? 0) || 0)
+          const newTotal = Math.max(0, Number(row.total ?? 0) || 0)
+          const discChanged =
+            Math.abs(newDisc - oldDisc) > 0.01 ||
+            Math.abs(newCoupon - oldCoupon) > 0.01 ||
+            Math.abs(newTotal - oldTotal) > 0.01
+          if (
+            discChanged &&
+            (newDisc > 0.01 || newCoupon > 0.01 || (oldTotal > newTotal + 0.01 && newTotal > 0.005))
+          ) {
+            const reprintKey = `order:${orderId}:hall-disc:${Math.round(newDisc * 100)}:${Math.round(newCoupon * 100)}:${Math.round(newTotal * 100)}`
+            if (!printedHallDiscountReprintKeysRef.current.has(reprintKey)) {
+              printedHallDiscountReprintKeysRef.current.add(reprintKey)
+              const parsedDisc = parseRealtimePosOrderRowItemsJson(row)
+              if (parsedDisc.ok && parsedDisc.items.length > 0) {
+                const hallPayload = hallOrderReceiptPayloadFromOrderFields(
+                  {
+                    orderNo: String(row.order_no ?? ''),
+                    storeCode: rowStore,
+                    orderType: resolvePosOrderTypeReceiptLabel(String(row.order_type ?? ''), t),
+                    tableName: String(row.table_name ?? ''),
+                    memo: String(row.memo ?? ''),
+                    items: parsedDisc.items,
+                    subtotal: Math.max(0, Number(row.subtotal ?? 0) || 0),
+                    discountAmt: newDisc,
+                    couponDiscountAmt: newCoupon,
+                    discountReason: String(row.discount_reason ?? '').trim() || undefined,
+                    total: newTotal,
+                    ...posGuestCountSpread(row.guest_count),
+                  },
+                  pricingAdjustments
+                )
+                logPosPrintDebug('realtime_update_delivery_discount_hall_reprint', {
+                  orderId,
+                  newDisc,
+                  newCoupon,
+                  newTotal,
+                })
+                void printReceiptNow(hallPayload, undefined, false, undefined, true)
+              }
+            }
+          }
+        }
+      }
 
       if (
         wantPayment &&
@@ -4535,6 +4568,7 @@ export default function PosTerminalPage() {
       grabCancelWatchSnapshotRef.current.clear()
       grabCancelWatchSeededRef.current = false
       lastMetaScanAtRef.current = 0
+      printedHallDiscountReprintKeysRef.current.clear()
     }
     const today = getPosBusinessDateStr()
     const poll = async () => {
@@ -4724,20 +4758,11 @@ export default function PosTerminalPage() {
             memo: String(order.memo ?? ''),
           })
           shouldRefreshCurrentStore = true
-          const receiptPayloadPoll = {
-            orderNo: order.orderNo ?? '',
-            storeCode: order.storeCode ?? currentStoreId,
-            orderType: order.orderType ?? 'dine_in',
-            tableName: order.tableName,
-            memo: order.memo,
-            items,
-            subtotal: order.subtotal ?? 0,
-            discountAmt: order.discountAmt ?? 0,
-            couponDiscountAmt: order.couponDiscountAmt ?? 0,
-            discountReason: String(order.discountReason ?? '').trim() || undefined,
-            total: order.total ?? 0,
-            ...posGuestCountSpread(order.guestCount),
-          }
+          const receiptPayloadPoll = hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+            ...posReceiptLineOpts,
+            orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+            storeCodeFallback: currentStoreId,
+          })
           const runKitchenForPolledOrder = () => {
             if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
             void (async () => {
@@ -4895,6 +4920,7 @@ export default function PosTerminalPage() {
                       name: String(it.name ?? ''),
                       menuId,
                     })
+                    const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
                     return {
                       id: String(it.id ?? ''),
                       name: displayName,
@@ -4903,6 +4929,7 @@ export default function PosTerminalPage() {
                       ...(menuId ? { menuId } : {}),
                       ...(optionCode ? { optionCode } : {}),
                       ...(note ? { note: formatLineNoteForPrint(note) } : {}),
+                      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
                       ...(Array.isArray(it.promoItems)
                         ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
                         : {}),

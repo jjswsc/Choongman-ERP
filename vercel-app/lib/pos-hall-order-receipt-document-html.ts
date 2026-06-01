@@ -19,6 +19,11 @@ import {
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
+import {
+  resolvePosReceiptLineDiscountAlloc,
+  sumPosReceiptLineDiscountAmt,
+  type PosReceiptLineDiscountItem,
+} from '@/lib/pos-receipt-line-discount'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
@@ -33,11 +38,12 @@ import {
   POS_RECEIPT_VOID_EXTRA_STYLES,
 } from '@/lib/pos-void-receipt'
 
-type HallOrderItem = {
+export type HallOrderItem = {
   id: string
   name: string
   price: number
   qty: number
+  lineDiscountAmt?: number
   note?: string
   menuId?: string
   optionId?: string | null
@@ -89,7 +95,7 @@ function splitReceiptOptionTokens(raw: string): string[] {
   return out
 }
 
-type HallOrderPayload = {
+export type HallOrderPayload = {
   orderNo: string
   storeCode: string
   orderType: string
@@ -124,7 +130,7 @@ type HallOrderPayload = {
 export function resolveHallOrderReceiptDiscountAmt(payload: {
   discountAmt?: number
   couponDiscountAmt?: number
-  items: { price: number; qty: number }[]
+  items: PosReceiptLineDiscountItem[]
   subtotal?: number
   deliveryFee?: number
   packagingFee?: number
@@ -136,7 +142,9 @@ export function resolveHallOrderReceiptDiscountAmt(payload: {
     Math.max(0, Number(payload.discountAmt) || 0),
     Math.max(0, Number(payload.couponDiscountAmt) || 0)
   )
+  const lineSum = sumPosReceiptLineDiscountAmt(payload.items || [])
   if (explicit > 0.0001) return explicit
+  if (lineSum > 0.0001) return lineSum
 
   const itemsGross = (payload.items || []).reduce(
     (sum, it) => sum + Math.max(0, Number(it.price) || 0) * Math.max(0, Number(it.qty) || 0),
@@ -490,8 +498,20 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     grabInbound,
     optionNameByCode,
   })
+  const explicitOrderDisc = resolvePosSalesDiscountAmount(
+    Math.max(0, Number(payload.discountAmt) || 0),
+    Math.max(0, Number(payload.couponDiscountAmt) || 0)
+  )
+  const mergedLineDiscSum = sumPosReceiptLineDiscountAmt(receiptItems)
+  const discountForLineAlloc =
+    explicitOrderDisc > 0.0001
+      ? explicitOrderDisc
+      : mergedLineDiscSum > 0.0001
+        ? mergedLineDiscSum
+        : resolveHallOrderReceiptDiscountAmt(payload)
+  const lineDiscountAlloc = resolvePosReceiptLineDiscountAlloc(receiptItems, discountForLineAlloc)
   const itemsRows = receiptItems
-    .map((it) => {
+    .map((it, idx) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
       const banban = parseBanbanFlavorsFromName(lineName)
       const lineSplit = splitPosPrintItemLine(lineName)
@@ -590,6 +610,15 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       const noteHtml = lineNote
         ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
         : ''
+      const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
+      const lineDiscountHtml =
+        lineDiscount > 0.0001
+          ? '<div class="receipt-line-note">' +
+            esc(tr('posDiscount', '할인')) +
+            ': -' +
+            formatBahtNum(lineDiscount) +
+            c('div')
+          : ''
       const addonPrefix = it.isAddon ? '&gt; ' : ''
       return (
         '<div class="receipt-row"><span>' +
@@ -606,6 +635,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         c('div') +
         optionHtml +
         promoComposeHtml +
+        lineDiscountHtml +
         noteHtml
       )
     })

@@ -73,6 +73,9 @@ export type MemberPortalKey =
   | 'orderMenuLoadFail'
   | 'orderMenuEmpty'
   | 'orderMenuOptionsNote'
+  | 'orderCategoryAll'
+  | 'orderViewCart'
+  | 'orderItemCount'
   | 'orderSelectOption'
   | 'orderOptionBack'
   | 'orderOptionStep'
@@ -401,6 +404,13 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Half-and-half (banban) menus — please order at the store.',
     th: 'เมนูครึ่งๆ — สั่งที่ร้าน',
     ko: '반반 메뉴는 매장에서 주문해 주세요.',
+  },
+  orderCategoryAll: { en: 'All', th: 'ทั้งหมด', ko: '전체' },
+  orderViewCart: { en: 'View cart', th: 'ดูตะกร้า', ko: '장바구니 보기' },
+  orderItemCount: {
+    en: '{count} items',
+    th: '{count} รายการ',
+    ko: '{count}개',
   },
   orderSelectOption: { en: 'Choose option', th: 'เลือกตัวเลือก', ko: '옵션 선택' },
   orderOptionBack: { en: 'Back', th: 'ย้อนกลับ', ko: '이전' },

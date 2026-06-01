@@ -1481,12 +1481,25 @@ export default function PosOrderPage() {
           qty: Number(it.qty ?? 0) || 0,
           note: String(it.note ?? ""),
           ...(it.isAddon ? { isAddon: true as const } : {}),
+          ...(Math.max(0, Number((it as { lineDiscountAmt?: number }).lineDiscountAmt ?? 0) || 0) > 0.0001
+            ? {
+                lineDiscountAmt: Math.max(
+                  0,
+                  Number((it as { lineDiscountAmt?: number }).lineDiscountAmt ?? 0) || 0
+                ),
+              }
+            : {}),
           promoItems: Array.isArray((it as { promoItems?: unknown }).promoItems)
             ? ((it as { promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[] }).promoItems ?? [])
             : [],
         })),
         subtotal: Number(receiptData.subtotal ?? 0) || 0,
         discountAmt: Number(receiptData.discountAmt ?? 0) || 0,
+        couponDiscountAmt: Math.max(
+          0,
+          Number((receiptData as { couponDiscountAmt?: number }).couponDiscountAmt ?? 0) || 0
+        ),
+        discountReason: receiptData.discountReason ? String(receiptData.discountReason) : undefined,
         total: Number(receiptData.total ?? 0) || 0,
         deliveryFee: Number(receiptData.deliveryFee ?? 0) || 0,
         packagingFee: Number(receiptData.packagingFee ?? 0) || 0,

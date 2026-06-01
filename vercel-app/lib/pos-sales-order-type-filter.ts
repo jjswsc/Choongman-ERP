@@ -87,3 +87,14 @@ export function normalizeOrderTypesQueryString(raw: string | null | undefined): 
   if (!p?.length) return ''
   return [...p].sort().join(',')
 }
+
+/** 홀 주문서·영수증 인쇄용 주문 유형 표시 라벨 */
+export function resolvePosOrderTypeReceiptLabel(
+  orderType: string | undefined | null,
+  t: (key: string) => string
+): string {
+  const key = normalizePosOrderTypeKey(orderType)
+  if (key === 'delivery') return t('posOrderTypeDelivery') || 'Delivery'
+  if (key === 'takeout') return t('posOrderTypeTakeout') || 'Takeaway'
+  return t('posOrderTypeDineIn') || 'Dine In'
+}

@@ -84,6 +84,22 @@ describe('resolveHallOrderReceiptDiscountAmt', () => {
     ).toBe(5)
   })
 
+  it('sums lineDiscountAmt when order discount_amt is zero', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 0,
+        items: [
+          { price: 111, qty: 1, lineDiscountAmt: 15 },
+          { price: 111, qty: 1, lineDiscountAmt: 15 },
+        ],
+        subtotal: 222,
+        total: 192,
+        vatFeeAmt: 12.56,
+        vatFeeMode: 'included',
+      })
+    ).toBe(30)
+  })
+
   it('infers platform discount when line gross exceeds stored total', () => {
     expect(
       resolveHallOrderReceiptDiscountAmt({
@@ -141,6 +157,33 @@ describe('buildPosHallOrderReceiptDocumentHtml — discount row', () => {
 })
 
 describe('buildPosHallOrderReceiptDocumentHtml', () => {
+  it('prints per-line and total discount for Shopee-style line discounts', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '444',
+        storeCode: 'CM Silom',
+        orderType: 'delivery',
+        tableName: 'Shopee #444',
+        items: [
+          { id: '1', name: '[April] Set 2', price: 111, qty: 1, lineDiscountAmt: 15 },
+          { id: '2', name: '[April] Set 3', price: 111, qty: 1, lineDiscountAmt: 15 },
+        ],
+        subtotal: 222,
+        discountAmt: 0,
+        total: 192,
+        vatFeeAmt: 12.56,
+        vatFeeMode: 'included',
+      },
+      t: (k) => (k === 'posDiscount' ? 'Discount' : k),
+      lang: 'en',
+    })
+    expect(html).toContain('Discount')
+    expect(html).toContain('-15')
+    expect(html).toContain('-30')
+    expect(html).toContain('192')
+    expect(html).not.toContain('>222<')
+  })
+
   it('prints discount row when effective discount is positive', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {

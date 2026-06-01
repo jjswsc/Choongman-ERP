@@ -668,6 +668,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             qty: Number(it.qty ?? 0) || 0,
             note: String(it.note ?? ''),
             ...(it.isAddon ? { isAddon: true as const } : {}),
+            ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
+              ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }
+              : {}),
             promoItems: Array.isArray(it.promoItems) ? it.promoItems : [],
           })),
           subtotal: Number(receiptData.subtotal ?? 0) || 0,
