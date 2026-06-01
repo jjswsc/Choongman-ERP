@@ -1029,8 +1029,8 @@ export async function buildGrabMenuFromPos(params: {
       const promoId = Number(menu.promo_id ?? 0)
       const promoCut = promoId > 0 ? promoCutByPromoId.get(promoId) : undefined
       /**
-       * Grab Cut Price: item.price=정가(minor), advancedPricing=Grab 앱 배달 할인가(손님 화면 취소선+할인가),
-       * fixPrice 캠페인=주문·Grab 프로모 연동(표시는 advancedPricing 우선).
+       * Grab Cut Price: item.price=정가(minor), advancedPricing=Grab 앱 배달 할인가.
+       * 손님 앱 취소선은 percentage 캠페인 + 정가 item.price 조합. fixPrice만 있으면 111만 보일 수 있음.
        */
       const grabListPriceMajor =
         promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)

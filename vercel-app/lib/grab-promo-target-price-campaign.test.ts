@@ -16,7 +16,18 @@ describe('calcGrabPercentageOffMajor', () => {
 })
 
 describe('buildGrabCampaignDiscountForTarget', () => {
-  it('uses fixPrice by default', () => {
+  it('uses percentage by default for live app strikethrough', () => {
+    const d = buildGrabCampaignDiscountForTarget({
+      grabItemId: 'item-1',
+      salePriceMajor: 111,
+      regularPriceMajor: 179,
+    })
+    expect(d.type).toBe('percentage')
+    expect(d.value).toBe(38)
+    expect((d as { cap?: number }).cap).toBe(0)
+  })
+
+  it('uses fixPrice when requested', () => {
     const d = buildGrabCampaignDiscountForTarget({
       grabItemId: 'item-1',
       salePriceMajor: 111,
@@ -70,7 +81,18 @@ describe('buildGrabTargetPriceCampaignBody', () => {
 })
 
 describe('grabCampaignDiscountMatchesTarget', () => {
-  it('returns true when fixPrice and item id match', () => {
+  it('returns true when percentage and item id match', () => {
+    expect(
+      grabCampaignDiscountMatchesTarget(
+        {
+          discount: { type: 'percentage', value: 38, scope: { objectIDs: ['item-99'] } },
+        },
+        { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
+      )
+    ).toBe(true)
+  })
+
+  it('returns false when old fixPrice campaign still on Grab', () => {
     expect(
       grabCampaignDiscountMatchesTarget(
         {
@@ -78,14 +100,14 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         },
         { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
       )
-    ).toBe(true)
+    ).toBe(false)
   })
 
-  it('returns false when discount type differs', () => {
+  it('returns false when discount value differs', () => {
     expect(
       grabCampaignDiscountMatchesTarget(
         {
-          discount: { type: 'percentage', value: 38, scope: { objectIDs: ['item-99'] } },
+          discount: { type: 'percentage', value: 30, scope: { objectIDs: ['item-99'] } },
         },
         { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
       )

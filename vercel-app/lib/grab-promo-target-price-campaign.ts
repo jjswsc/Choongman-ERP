@@ -168,12 +168,12 @@ type IndexedGrabCampaign = {
 
 export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
 
-/** 컷프라이스 캠페인: 기본 fixPrice(태국 Grab 검증됨). `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage` 로 할인율 시도 */
+/** 손님 앱 취소선: 기본 percentage(정가+할인율). fixPrice는 할인가만 보일 수 있음 → env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=fixPrice` 로 되돌림 */
 export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
-  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'fixPrice')
+  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
     .trim()
     .toLowerCase()
-  return raw === 'percentage' ? 'percentage' : 'fixPrice'
+  return raw === 'fixprice' ? 'fixPrice' : 'percentage'
 }
 
 /** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
@@ -188,13 +188,14 @@ export function buildGrabCampaignDiscountForTarget(params: {
   salePriceMajor: number
   regularPriceMajor: number
   discountType?: GrabPromoCampaignDiscountType
-}): { type: string; value: number; scope: { type: 'items'; objectIDs: string[] } } {
+}): { type: string; value: number; cap?: number; scope: { type: 'items'; objectIDs: string[] } } {
   const discountType = params.discountType ?? resolveGrabPromoCampaignDiscountType()
   const pct = calcGrabPercentageOffMajor(params.regularPriceMajor, params.salePriceMajor)
   if (discountType === 'percentage' && pct > 0) {
     return {
       type: 'percentage',
       value: pct,
+      cap: 0,
       scope: { type: 'items', objectIDs: [params.grabItemId] },
     }
   }
@@ -876,6 +877,9 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   const campaignErrors: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }> = []
   const keepNames = new Set<string>()
 
+  /** Grab 손님 앱: item.price=정가·advancedPricing=할인가를 캠페인 전에 먼저 push */
+  const menuPushBefore = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+
   for (const target of targets) {
     const campaignName = buildGrabPromoCampaignName(target.promoId)
     keepNames.add(campaignName)
@@ -971,7 +975,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
   }
 
-  const menuPush = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+  const menuPushAfter = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
 
   return {
     created,
@@ -979,8 +983,8 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     skipped,
     deleted,
     targets: targets.length,
-    menuRecordsPushed: menuPush.pushed,
-    menuRecordsFailed: menuPush.failed,
+    menuRecordsPushed: menuPushBefore.pushed + menuPushAfter.pushed,
+    menuRecordsFailed: menuPushBefore.failed + menuPushAfter.failed,
     campaignErrors,
     campaignFallbackUsed,
   }
