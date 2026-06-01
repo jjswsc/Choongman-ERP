@@ -3,7 +3,7 @@ import { buildGrabDeliveryAdvancedPricing } from '@/lib/grab-menu-advanced-prici
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { loadGrabPromoCutPriceByPromoId } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
-import { supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
@@ -600,6 +600,47 @@ function resolveStoreCodeFromGrabMerchant(merchantID: string, partnerMerchantID:
   return tail ? followGrabStoreMapChainToTerminal(tail) || tail : ''
 }
 
+async function resolveStoreCodeFromGrabIntegrationSnapshot(merchantID: string): Promise<string> {
+  const id = String(merchantID || '').trim()
+  if (!id) return ''
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_grab_store_integrations',
+      `grab_merchant_id=eq.${encodeURIComponent(id)}`,
+      {
+        limit: 20,
+        order: 'updated_at.desc',
+        select: 'partner_merchant_id',
+      }
+    )) as { partner_merchant_id?: string | null }[] | null
+    for (const row of rows || []) {
+      const partner = String(row.partner_merchant_id || '').trim()
+      if (!partner) continue
+      const mapped = followGrabStoreMapChainToTerminal(partner) || partner
+      if (mapped) return mapped
+    }
+  } catch {
+    // integration snapshot table may not exist in all environments
+  }
+  return ''
+}
+
+async function resolveStoreCodeForGrabMenu(params: {
+  merchantID: string
+  partnerMerchantID: string
+}): Promise<string> {
+  const fromWebhookPair = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
+  const normalizedWebhookPair = String(fromWebhookPair || '').trim()
+  const looksLikeGrabId =
+    looksLikeGrabMerchantId(normalizedWebhookPair) ||
+    /^gfsbpos-/i.test(normalizedWebhookPair) ||
+    /^partner\s*store\s*id\s*[-:]/i.test(normalizedWebhookPair)
+  if (normalizedWebhookPair && !looksLikeGrabId) return normalizedWebhookPair
+  const fromIntegration = await resolveStoreCodeFromGrabIntegrationSnapshot(params.merchantID)
+  if (fromIntegration) return fromIntegration
+  return normalizedWebhookPair
+}
+
 /** 배달 정책이 ERP store_code 기준이면, 파트너 숫자·별칭과 맞춰 canonical store_code로 */
 async function resolvePolicyStoreCodeForGrabMenu(storeCodeGuess: string): Promise<string> {
   const guess = String(storeCodeGuess || '').trim()
@@ -672,7 +713,10 @@ export async function buildGrabMenuFromPos(params: {
   const menus = mergeBanbanFlavorMenuIdsIntoMenus(loadedMenus, banbanFlavorLinkRows)
   if (!menus.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 
-  const storeGuess = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
+  const storeGuess = await resolveStoreCodeForGrabMenu({
+    merchantID: params.merchantID,
+    partnerMerchantID: params.partnerMerchantID,
+  })
   const resolved = await resolvePolicyBundleForGrabMenu(storeGuess)
   const { policyBundle } = resolved
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])

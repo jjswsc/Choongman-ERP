@@ -1,13 +1,15 @@
 /**
  * 매장별 매출 집계. pos_orders 기반.
- * 매장명, 주문건수, guestSum(홀 guest_count 합), dine_in 전용 건수·매출·손님수, 홀 건당·홀 1인당·건당, 공급가액·세금·할인·서비스처리·매출액
+ * 우선 RPC get_pos_sales_analytics_agg (DB 집계, 행 상한 없음) → 미배포 시 fetch 폴백.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { normalizePosOrderTypeKey, parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { parseOrderTypesParam, normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { groupPosSalesRowsByCanonicalStore } from '@/lib/pos-sales-period-aggregate'
+import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import { mapAnalyticsAggToStoreResults } from '@/lib/pos-sales-analytics-rpc-map'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -26,6 +28,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
+    const rpcRows = await tryFetchPosSalesAnalyticsAgg({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      orderTypes: orderTypesAllowed,
+      aggMode: 'store',
+    })
+
+    if (rpcRows) {
+      headers.set('X-Pos-Sales-Source', 'rpc')
+      return NextResponse.json(mapAnalyticsAggToStoreResults(rpcRows), { headers })
+    }
+
     const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
       startStr,
       endStr,
@@ -34,6 +49,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', 'fetch')
 
     const byStore: Record<
       string,

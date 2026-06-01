@@ -1,6 +1,6 @@
 /**
- * 결제수단별 매출. pos_orders 기반. 현금/카드/QR/기타.
- * 조회 구간: POS 영업일 라벨(getPosTodaySales 와 동일).
+ * 결제수단별 매출. pos_orders 기반.
+ * 우선 RPC get_pos_sales_analytics_agg → 미배포 시 fetch 폴백(기타 지갑 세부 포함).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
@@ -11,6 +11,7 @@ import {
 } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
+import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
 
 type PaymentOrderRow = {
   order_type?: string | null
@@ -40,6 +41,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
+    const rpcRows = await tryFetchPosSalesAnalyticsAgg({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      orderTypes: orderTypesAllowed,
+      aggMode: 'payment',
+    })
+
+    if (rpcRows) {
+      headers.set('X-Pos-Sales-Source', 'rpc')
+      const result = rpcRows
+        .map((r) => ({
+          paymentKey: String(r.payment_key ?? r.bucket_key ?? '').trim(),
+          sales: Number(r.total ?? 0) || 0,
+        }))
+        .filter((r) => r.paymentKey && r.sales > 0)
+        .sort((a, b) => b.sales - a.sales)
+      return NextResponse.json(result, { headers })
+    }
+
     const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
       startStr,
       endStr,
@@ -49,11 +70,10 @@ export async function GET(request: NextRequest) {
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
-    headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
+    headers.set('X-Pos-Sales-Source', 'fetch')
 
-    const filtered = filterCompletedPosSalesRows(rows, orderTypesAllowed)
     const byMethod: Record<string, number> = {}
-    for (const r of filtered as PaymentOrderRow[]) {
+    for (const r of filterCompletedPosSalesRows(rows, orderTypesAllowed) as PaymentOrderRow[]) {
       const cash = Number(r.payment_cash) || 0
       const card = Number(r.payment_card) || 0
       const qr = Number(r.payment_qr) || 0

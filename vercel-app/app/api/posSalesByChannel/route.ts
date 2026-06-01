@@ -1,13 +1,14 @@
 /**
- * 채널별 매출 (매장/포장/배달). pos_orders 기반. pos 필터 지원.
+ * 채널별 매출 (매장/포장/배달). pos_orders 기반.
+ * 우선 RPC get_pos_sales_analytics_agg → 미배포 시 fetch 폴백.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizePosOrderTypeKey, parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
+import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
 
-/** UI에서 i18n 매핑용 고정 키 */
 function bucketOrderType(raw: string): 'dine_in' | 'takeout' | 'delivery' | 'unknown' {
   const t = normalizePosOrderTypeKey(raw)
   if (t === 'dine_in' || t === '') return 'dine_in'
@@ -32,6 +33,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
+    const rpcRows = await tryFetchPosSalesAnalyticsAgg({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      orderTypes: orderTypesAllowed,
+      aggMode: 'channel',
+    })
+
+    if (rpcRows) {
+      headers.set('X-Pos-Sales-Source', 'rpc')
+      const result = rpcRows
+        .map((r) => ({
+          channelKey: String(r.bucket_key ?? '').trim(),
+          sales: Number(r.total ?? 0) || 0,
+        }))
+        .filter((r) => r.channelKey && r.sales > 0)
+        .sort((a, b) => b.sales - a.sales)
+      return NextResponse.json(result, { headers })
+    }
+
     const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
       startStr,
       endStr,
@@ -40,11 +61,10 @@ export async function GET(request: NextRequest) {
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
-    headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
+    headers.set('X-Pos-Sales-Source', 'fetch')
 
-    const filtered = filterCompletedPosSalesRows(rows, orderTypesAllowed)
     const byChannel: Record<string, number> = {}
-    for (const r of filtered) {
+    for (const r of filterCompletedPosSalesRows(rows, orderTypesAllowed)) {
       const ch = bucketOrderType(String(r.order_type ?? ''))
       const amt = Number(r.total) || 0
       byChannel[ch] = (byChannel[ch] || 0) + amt
