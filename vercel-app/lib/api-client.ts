@@ -9707,6 +9707,8 @@ export interface PosOrder {
   createdAt: string
   /** 결제·수정 시각(DB updated_at). 결제 완료 시각 추정에 사용 */
   updatedAt?: string
+  /** 최초 결제 완료 시각(DB paid_at). 영수증 관리 결제일시 표시용 */
+  paidAt?: string
   linkposProvider?: string
   linkposMode?: string
   linkposTxCode?: string

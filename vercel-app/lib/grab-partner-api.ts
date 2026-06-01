@@ -119,6 +119,44 @@ export async function grabListOrdersByIds(params: {
   })
 }
 
+export type GrabEditOrderModifier = {
+  id: string
+  quantity: number
+}
+
+export type GrabEditOrderItem = {
+  id?: string
+  externalItemID?: string
+  quantity: number
+  status?: string
+  modifiers?: GrabEditOrderModifier[]
+  [k: string]: unknown
+}
+
+export type GrabEditOrderPayload = {
+  orderID: string
+  items: GrabEditOrderItem[]
+  onlyRecalculate?: boolean
+  depositAmountInMin?: number
+  offlinePOSDiscountInMin?: number
+  [k: string]: unknown
+}
+
+export type GrabEditOrderResponse = {
+  orderID: string
+  shortOrderNumber?: string
+  [k: string]: unknown
+}
+
+export async function grabEditOrderV2(payload: GrabEditOrderPayload) {
+  const safeOrderID = encodeURIComponent(payload.orderID)
+  return grabJsonRequest<GrabEditOrderResponse>({
+    path: `/partner/v2/orders/${safeOrderID}`,
+    method: 'PUT',
+    body: payload,
+  })
+}
+
 export type GrabCancelOrderPayload = {
   orderID: string
   merchantID: string

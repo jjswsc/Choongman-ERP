@@ -241,6 +241,7 @@ export async function GET(request: NextRequest) {
       status?: string
       created_at?: string
       updated_at?: string
+      paid_at?: string
       linkpos_provider?: string
       linkpos_mode?: string
       linkpos_tx_code?: string
@@ -532,6 +533,7 @@ export async function GET(request: NextRequest) {
           status: String(r.status ?? 'pending'),
           createdAt: String(r.created_at ?? ''),
           updatedAt: String(r.updated_at ?? ''),
+          paidAt: String(r.paid_at ?? ''),
           linkposProvider: String(r.linkpos_provider ?? ''),
           linkposMode: String(r.linkpos_mode ?? ''),
           linkposTxCode: String(r.linkpos_tx_code ?? ''),

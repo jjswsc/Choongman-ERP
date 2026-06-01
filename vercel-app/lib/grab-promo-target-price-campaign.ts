@@ -3,7 +3,7 @@ import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { grabJsonRequest } from '@/lib/grab-openapi'
 import {
-  calcPromoRegularPriceForChannel,
+  calcPromoRegularPriceForGrabCut,
   isPromoEligibleForGrabDeliveryApp,
   promoItemsToPricingLines,
   resolvePromoCutPrice,
@@ -384,11 +384,10 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       promo.price_delivery != null && Number.isFinite(Number(promo.price_delivery))
         ? Number(promo.price_delivery)
         : Number(promo.price ?? 0)
-    const regularPrice = calcPromoRegularPriceForChannel({
+    const regularPrice = calcPromoRegularPriceForGrabCut({
       items: pricingItems,
       menus: menuRows,
       optionsByMenuId: bundle.optionsByMenuId,
-      channel: 'delivery',
     })
     const cut = resolvePromoCutPrice({ salePrice, regularPrice })
     if (!cut.showCutPrice) continue
@@ -571,11 +570,10 @@ export async function loadGrabPromoCutPriceByPromoId(): Promise<
       promo.price_delivery != null && Number.isFinite(Number(promo.price_delivery))
         ? Number(promo.price_delivery)
         : Number(promo.price ?? 0)
-    const regularPrice = calcPromoRegularPriceForChannel({
+    const regularPrice = calcPromoRegularPriceForGrabCut({
       items: pricingItems,
       menus: menuRows,
       optionsByMenuId: bundle.optionsByMenuId,
-      channel: 'delivery',
     })
     const cut = resolvePromoCutPrice({ salePrice, regularPrice })
     if (cut.showCutPrice) out.set(promoId, cut)

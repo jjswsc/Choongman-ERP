@@ -20,6 +20,7 @@ import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
+import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import {
   parseAppliedCouponsFromBody,
@@ -316,6 +317,13 @@ export async function POST(req: NextRequest) {
         orderStatus = closeStatus
       }
     }
+    const paidAtStamp = resolvePosOrderPaidAtStampIso({
+      existingPaidAt: null,
+      total,
+      previousPaymentSum: 0,
+      nextPaymentSum: paymentSumForStatus,
+      linkposRespondedAt: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
+    })
 
     const guest_count =
       orderType === 'dine_in' ? Math.max(0, Math.min(99, guestCountReq)) : 0
@@ -414,6 +422,7 @@ export async function POST(req: NextRequest) {
       linkpos_requested_at: linkposPayment ? String(linkposPayment.requestedAt ?? '') : null,
       linkpos_responded_at: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
       idempotency_key_hash: idempotencyKeyHash,
+      ...(paidAtStamp ? { paid_at: paidAtStamp } : {}),
     }
     let inserted: { id?: number }[] = []
     try {

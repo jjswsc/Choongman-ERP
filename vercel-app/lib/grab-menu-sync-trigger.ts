@@ -99,6 +99,12 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
             reason: params.reason,
             ...result,
           })
+          /** 캠페인 반영 후 메뉴 재알림 — Grab 앱 컷프라이스 표시용 */
+          await grabUpdateMenuNotification(merchantID)
+          console.info('[grab-menu-sync] notification_sent_after_promo_campaigns', {
+            merchantID,
+            reason: params.reason,
+          })
         } catch (e) {
           promoCampaignSyncFailed += 1
           console.error('[grab-menu-sync] promo_target_price_campaigns_failed', {

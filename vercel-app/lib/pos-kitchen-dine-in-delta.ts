@@ -4,6 +4,8 @@
  * 기존 줄 수량(qty/quantity)이 있으면 증가분만 반환한다.
  */
 
+import { normalizeCartLineIdForSave } from '@/lib/pos-order-item-map'
+
 type KitchenComparableLine = {
   id?: string
   name?: string
@@ -11,6 +13,10 @@ type KitchenComparableLine = {
   quantity?: number
   qty?: number
   note?: string
+  menuId?: string
+  menuId1?: string
+  optionCode?: string
+  optionCode1?: string
 }
 
 function lineSignature(line: KitchenComparableLine): string {
@@ -19,6 +25,13 @@ function lineSignature(line: KitchenComparableLine): string {
   const qty = lineQty(line)
   const note = String(line.note ?? '').trim()
   return [name, price, qty, note].join('\u001f')
+}
+
+function lineContentSignature(line: KitchenComparableLine): string {
+  const name = String(line.name ?? '').trim()
+  const price = Number(line.price ?? 0) || 0
+  const note = String(line.note ?? '').trim()
+  return [name, price, note].join('\u001f')
 }
 
 function lineQty(line: KitchenComparableLine): number {
@@ -30,6 +43,97 @@ function resolveExistingId(line: { id?: string }): string {
   if (!raw) return ''
   const m = raw.match(/^cart-existing-\d+-(.+)$/)
   return (m?.[1] ?? raw).trim()
+}
+
+function isEphemeralPosCartLineId(id: string): boolean {
+  const normalized = resolveExistingId({ id })
+  return /^cart-/i.test(normalized) || /^promo-cart-/i.test(normalized)
+}
+
+/** dine-in Realtime 스냅샷·주방 delta — POS 카트 임시 id(cart-*)는 품목 서명으로 고정 */
+export function resolveDineInKitchenSnapshotItemKey(
+  item: {
+    id?: unknown
+    name?: unknown
+    price?: unknown
+    note?: unknown
+    menuId?: unknown
+    menuId1?: unknown
+    optionCode?: unknown
+    optionCode1?: unknown
+  },
+  opts?: { formatNote?: (note: string) => string }
+): string {
+  const id = normalizeCartLineIdForSave(item.id)
+  if (id && !isEphemeralPosCartLineId(id)) return id
+  const formatNote = opts?.formatNote ?? ((note: string) => note.trim())
+  const name = String(item.name ?? '').trim()
+  const price = Number(item.price ?? 0) || 0
+  const note = formatNote(String(item.note ?? '').trim())
+  const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
+  const optionCode = String(item.optionCode ?? item.optionCode1 ?? '').trim()
+  return `sig:${name}\u001f${price}\u001f${menuId}\u001f${optionCode}\u001f${note}`
+}
+
+export function buildDineInQtySnapshotMap(
+  items: Array<{
+    id?: unknown
+    qty?: unknown
+    quantity?: unknown
+    name?: unknown
+    price?: unknown
+    note?: unknown
+    menuId?: unknown
+    menuId1?: unknown
+    optionCode?: unknown
+    optionCode1?: unknown
+  }>,
+  resolveKey: (item: (typeof items)[number]) => string
+): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const it of items) {
+    const key = resolveKey(it)
+    if (!key) continue
+    map.set(key, (map.get(key) ?? 0) + lineQty(it as KitchenComparableLine))
+  }
+  return map
+}
+
+/** Realtime/폴링 스냅샷 diff — 증가한 key만, 증가분 qty로 주방 줄 생성 */
+export function buildKitchenCartLinesFromSnapshotDelta<T extends KitchenComparableLine>(
+  cartLines: T[],
+  prevQtyByKey: Map<string, number>,
+  newQtyByKey: Map<string, number>,
+  resolveKey: (line: T) => string
+): T[] {
+  const out: T[] = []
+  for (const line of cartLines) {
+    const key = resolveKey(line)
+    if (!key) continue
+    const prevQty = Number(prevQtyByKey.get(key) ?? 0)
+    const nextQty = Number(newQtyByKey.get(key) ?? 0)
+    const delta = nextQty - prevQty
+    if (delta <= 0) continue
+    const lineQ = lineQty(line)
+    if (delta >= lineQ) {
+      out.push(line)
+    } else {
+      out.push({ ...line, quantity: delta, qty: delta })
+    }
+  }
+  return out
+}
+
+export function collectDineInSnapshotIncreasedKeys(
+  prevQtyByKey: Map<string, number>,
+  newQtyByKey: Map<string, number>
+): Set<string> {
+  const changed = new Set<string>()
+  for (const [key, nextQty] of newQtyByKey) {
+    const prevQty = Number(prevQtyByKey.get(key) ?? 0)
+    if (nextQty > prevQty) changed.add(key)
+  }
+  return changed
 }
 
 function existingHasQtyInfo(items: Array<{ quantity?: number; qty?: number }>): boolean {
@@ -56,6 +160,20 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
       const baseId = resolveExistingId(line)
       if (baseId && existingQtyById.has(baseId)) {
         const delta = lineQty(line) - (existingQtyById.get(baseId) ?? 0)
+        if (delta > 0) {
+          deltaLines.push({ ...line, quantity: delta, qty: delta })
+        }
+        continue
+      }
+      const contentSig = lineContentSignature(line)
+      let matchedExistingQty = 0
+      for (const ex of existingOrderItems) {
+        if (lineContentSignature(ex) === contentSig) {
+          matchedExistingQty += lineQty(ex)
+        }
+      }
+      if (matchedExistingQty > 0) {
+        const delta = lineQty(line) - matchedExistingQty
         if (delta > 0) {
           deltaLines.push({ ...line, quantity: delta, qty: delta })
         }

@@ -116,7 +116,13 @@ import {
   isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
-import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
+import {
+  buildDineInQtySnapshotMap,
+  buildKitchenCartLinesFromSnapshotDelta,
+  collectDineInSnapshotIncreasedKeys,
+  filterKitchenCartLinesForDineInAdd,
+  resolveDineInKitchenSnapshotItemKey,
+} from '@/lib/pos-kitchen-dine-in-delta'
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -903,6 +909,15 @@ export default function PosTerminalPage() {
       }
       if (!input.queuedWithoutServerId) {
         await refetchStores({ scope: 'current', immediate: true })
+        /** DB 반영 지연 시 옛 스냅샷으로 덮어쓰는 레이스 완화 */
+        if (typeof window !== 'undefined') {
+          window.setTimeout(() => {
+            void refetchStores({ scope: 'current', immediate: true })
+          }, 700)
+          window.setTimeout(() => {
+            void refetchStores({ scope: 'current', immediate: true })
+          }, 1800)
+        }
       }
     },
     [currentStoreId, refetchStores, upsertOptimisticOrder]
@@ -3162,16 +3177,10 @@ export default function PosTerminalPage() {
       note?: unknown
       menuId?: unknown
       optionCode?: unknown
-    }): string => {
-      const id = normalizeCartLineIdForSave(item.id)
-      if (id) return id
-      const name = String(item.name ?? '').trim()
-      const price = Number(item.price ?? 0) || 0
-      const note = formatLineNoteForPrint(String(item.note ?? '').trim())
-      const menuId = String(item.menuId ?? '').trim()
-      const optionCode = String(item.optionCode ?? '').trim()
-      return `sig:${name}\u001f${price}\u001f${menuId}\u001f${optionCode}\u001f${note}`
-    },
+    }): string =>
+      resolveDineInKitchenSnapshotItemKey(item, {
+        formatNote: formatLineNoteForPrint,
+      }),
     []
   )
 
@@ -3187,17 +3196,11 @@ export default function PosTerminalPage() {
         menuId?: unknown
         optionCode?: unknown
       }>
-    ): Map<string, number> => {
-      const map = new Map<string, number>()
-      for (const it of items) {
-        const key = resolveDineInSnapshotItemKey(it)
-        if (!key) continue
-        const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
-        map.set(key, (map.get(key) ?? 0) + qty)
-      }
-      return map
-    },
-    [resolveDineInSnapshotItemKey]
+    ): Map<string, number> =>
+      buildDineInQtySnapshotMap(items, (it) =>
+        resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint })
+      ),
+    []
   )
 
   async function printReceiptNow(
@@ -4181,6 +4184,22 @@ export default function PosTerminalPage() {
       lastRealtimeOrderEventAtRef.current = Date.now()
       if (!isCurrentStoreOrder(row.store_code)) return
 
+      const ot = String(row.order_type ?? '').trim().toLowerCase()
+      if (
+        ot === 'dine_in' &&
+        !isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
+        posOrderRowPaymentSum(row) <= 0
+      ) {
+        const oldRow = payload.old as Record<string, unknown> | undefined
+        if (oldRow) {
+          const newSub = Math.max(0, Number(row.subtotal ?? 0) || 0)
+          const oldSub = Math.max(0, Number(oldRow.subtotal ?? 0) || 0)
+          if (newSub > oldSub + 0.01) {
+            refetchCurrentStore()
+          }
+        }
+      }
+
       const shouldAlert = applyGrabCancelWatchRealtimeRow({
         orderId,
         row: {
@@ -4359,16 +4378,14 @@ export default function PosTerminalPage() {
         return
       }
 
-      const changedIds = [...newQtyById.keys()].filter((id) => {
-        const prevQty = Number(prevQtyById.get(id) ?? 0)
-        const nextQty = Number(newQtyById.get(id) ?? 0)
-        if (prevQty <= 0) return nextQty > 0
-        return nextQty > prevQty
-      })
+      const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
+      const changedIds = [...changedSet]
       if (changedIds.length === 0) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         return
       }
+
+      refetchCurrentStore()
 
       const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
       if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {
@@ -4376,8 +4393,6 @@ export default function PosTerminalPage() {
         return
       }
 
-      const changedSet = new Set(changedIds)
-      const previousStub = [...prevQtyById.entries()].map(([id, qty]) => ({ id, qty, quantity: qty }))
       const cartLikeNew = items.map((it) => ({
         id: resolveDineInSnapshotItemKey(it),
         name: it.name,
@@ -4388,7 +4403,12 @@ export default function PosTerminalPage() {
         ...(it.menuId ? { menuId: it.menuId } : {}),
         ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
       }))
-      const kitchenCartLines = filterKitchenCartLinesForDineInAdd(cartLikeNew, previousStub)
+      const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
+        cartLikeNew,
+        prevQtyById,
+        newQtyById,
+        (line) => resolveDineInSnapshotItemKey(line)
+      )
 
       const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
       const discountAmt = Number(row.discount_amt ?? 0)
@@ -4505,7 +4525,7 @@ export default function PosTerminalPage() {
                 dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                 items: kitchenSlipItemsForPrint(
                   slip.items,
-                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                  kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
                   ki
                 ),
                 memoLine: memoLine || null,
@@ -4576,6 +4596,7 @@ export default function PosTerminalPage() {
     logPosPrintDebug,
     buildDineInQtySnapshot,
     resolveDineInSnapshotItemKey,
+    refetchCurrentStore,
   ])
 
   useEffect(() => {
@@ -4988,6 +5009,7 @@ export default function PosTerminalPage() {
                   continue
                 }
                 dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                refetchCurrentStore()
                 const changedSet = new Set(changedIds)
                 const receiptPrintItemsRemote = items.map((it) => ({
                   ...it,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { grabJsonRequest } from '@/lib/grab-openapi'
+import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
 import { parseGrabMenuNotificationMerchantBulkInput } from '@/lib/grab-menu-notification-input-parse'
 import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
@@ -74,11 +74,7 @@ export async function POST(req: NextRequest) {
     const failures: { merchantID: string; message: string }[] = []
     for (const merchantID of toNotify) {
       try {
-        await grabJsonRequest({
-          path: '/partner/v1/merchant/menu/notification',
-          method: 'POST',
-          body: { merchantID },
-        })
+        await grabUpdateMenuNotification(merchantID)
       } catch (e) {
         failures.push({ merchantID, message: String(e) })
       }
@@ -100,6 +96,8 @@ export async function POST(req: NextRequest) {
       | { created: number; updated: number; skipped: number; deleted: number; targets: number }
       | { error: string }
     > = {}
+    const menuNotificationAfterCampaignSync: string[] = []
+    const menuNotificationAfterCampaignSyncFailures: { merchantID: string; message: string }[] = []
     if (shouldSyncPromoCampaigns && succeededMerchantIDs.length > 0) {
       for (const merchantID of succeededMerchantIDs) {
         try {
@@ -111,6 +109,20 @@ export async function POST(req: NextRequest) {
           promoCampaignSyncResults[merchantID] = { error: String(e ?? 'unknown_error') }
         }
       }
+      /** 캠페인 생성·갱신 후 Grab이 메뉴를 다시 pull 해야 컷프라이스(정가+할인가)가 붙는다 */
+      for (const merchantID of succeededMerchantIDs) {
+        const promoResult = promoCampaignSyncResults[merchantID]
+        if (promoResult && 'error' in promoResult) continue
+        try {
+          await grabUpdateMenuNotification(merchantID)
+          menuNotificationAfterCampaignSync.push(merchantID)
+        } catch (e) {
+          menuNotificationAfterCampaignSyncFailures.push({
+            merchantID,
+            message: String(e),
+          })
+        }
+      }
     }
     return NextResponse.json(
       {
@@ -120,6 +132,12 @@ export async function POST(req: NextRequest) {
         ...(unresolvedInputs.length ? { unresolvedInputs } : {}),
         ...(failures.length ? { failures } : {}),
         ...(shouldSyncPromoCampaigns ? { promoCampaignSyncResults } : {}),
+        ...(menuNotificationAfterCampaignSync.length
+          ? { menuNotificationAfterCampaignSync }
+          : {}),
+        ...(menuNotificationAfterCampaignSyncFailures.length
+          ? { menuNotificationAfterCampaignSyncFailures }
+          : {}),
       },
       { status: success ? 200 : 500, headers }
     )

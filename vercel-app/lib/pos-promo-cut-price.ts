@@ -41,6 +41,21 @@ export function calcPromoRegularPriceForChannel(params: {
   })
 }
 
+/**
+ * Grab 컷프라이스용 정가 — 배달 구성 합만 쓰면 판매가와 같아져 취소선이 안 나오는 경우가 많아
+ * 홀·배달 구성 정가 중 큰 값을 쓴다 (다른 매장과 동일한 `<Promotion>` 표시).
+ */
+export function calcPromoRegularPriceForGrabCut(params: {
+  items: PromoLineLike[]
+  menus: PromoMenuLike[]
+  optionsByMenuId: Record<string, PromoOptionLike[]>
+}): number {
+  if (!params.items.length) return 0
+  const delivery = calcPromoRegularPriceForChannel({ ...params, channel: 'delivery' })
+  const hall = calcPromoRegularPriceForChannel({ ...params, channel: 'hall' })
+  return Math.max(delivery, hall)
+}
+
 export function promoItemsToPricingLines(
   items: Array<{
     menuId?: string | number

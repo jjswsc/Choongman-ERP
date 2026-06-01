@@ -24,6 +24,10 @@ import {
 } from '@/lib/grab-order-memo'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 import { rollbackPosOrderCouponRedemptions } from '@/lib/pos-coupon-server'
+import {
+  isPosOrderPaymentCompleteForTotal,
+  posOrderPaymentSumFromAmounts,
+} from '@/lib/pos-order-paid-at'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -100,7 +104,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt',
+          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt,paid_at',
       },
       'updatePosOrderStatus'
     )) as {
@@ -120,6 +124,7 @@ export async function POST(req: NextRequest) {
       service_amt?: number
       created_by?: string
       memo?: string
+      paid_at?: string | null
     }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
@@ -286,6 +291,23 @@ export async function POST(req: NextRequest) {
     if (memoAppend && isPosReversalStatus(nextStatus)) {
       const stamp = `[ORDER_${nextStatus.toUpperCase()} ${new Date().toISOString()}] ${memoAppend.slice(0, 240)}`
       patch.memo = appendPosInternalMemoStamp(String(patch.memo ?? prev?.memo ?? ''), stamp)
+    }
+
+    const paymentSum = posOrderPaymentSumFromAmounts({
+      paymentCash: Number(prev?.payment_cash ?? 0),
+      paymentCard: Number(prev?.payment_card ?? 0),
+      paymentQr: Number(prev?.payment_qr ?? 0),
+      paymentOther: Number(prev?.payment_other ?? 0),
+      paymentDeliveryApp: Number(prev?.payment_delivery_app ?? 0),
+    })
+    const orderTotal = Number(prev?.total ?? 0)
+    const nextStatusLower = nextStatus
+    if (
+      !String(prev?.paid_at ?? '').trim() &&
+      isPosOrderPaymentCompleteForTotal(orderTotal, paymentSum) &&
+      (isPosCompletionStatus(nextStatusLower) || nextStatusLower === 'paid')
+    ) {
+      patch.paid_at = new Date().toISOString()
     }
 
     await supabaseUpdate('pos_orders', id, patch)

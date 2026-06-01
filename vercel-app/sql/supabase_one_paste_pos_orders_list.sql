@@ -11,3 +11,4 @@ ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS delivery_app_code TEXT;
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS guest_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS payment_delivery_app NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS delivery_payment_channel TEXT;
+ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS paid_at timestamptz;

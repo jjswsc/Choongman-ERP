@@ -1,0 +1,350 @@
+{
+  "info": {
+    "_postman_id": "d5b03f8f-01a0-4ff7-9aa3-2f5d2df4f8d0",
+    "name": "Grab Staging Essential (CM ERP)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "GrabFood Essential endpoints via CM ERP server routes. Configure variables first."
+  },
+  "item": [
+    {
+      "name": "Integration Module",
+      "item": [
+        {
+          "name": "Create Self Serve Journey",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partnerMerchantID\": \"{{partnerMerchantID}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/createSelfServeJourney",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "createSelfServeJourney"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Push Grab Menu (Webhook Simulate Only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantID\": \"{{grabMerchantID}}\",\n  \"partnerMerchantID\": \"{{partnerMerchantID}}\",\n  \"currency\": { \"code\": \"THB\", \"symbol\": \"฿\", \"exponent\": 2 },\n  \"sellingTimes\": [],\n  \"categories\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/grab/pushGrabMenu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "grab",
+                "pushGrabMenu"
+              ]
+            },
+            "description": "For internal webhook simulation only. Portal pass usually requires actual Grab self-serve activation export flow."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Menu Module",
+      "item": [
+        {
+          "name": "Update Menu Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantID\": \"{{grabMerchantID}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/updateMenuNotification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "updateMenuNotification"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Menu Record (ITEM)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantID\": \"{{grabMerchantID}}\",\n  \"field\": \"ITEM\",\n  \"id\": \"{{itemId}}\",\n  \"price\": 12900,\n  \"availableStatus\": \"AVAILABLE\",\n  \"maxStock\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/updateMenuRecord",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "updateMenuRecord"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Order Module",
+      "item": [
+        {
+          "name": "Mark Orders Ready",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderID\": \"{{orderID}}\",\n  \"markStatus\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/markOrderReady",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "markOrderReady"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderID\": \"{{orderID}}\",\n  \"merchantID\": \"{{grabMerchantID}}\",\n  \"cancelCode\": 1001\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/cancelOrder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "cancelOrder"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Edit Order (v2 via server route)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderID\": \"{{orderID}}\",\n  \"items\": [\n    {\n      \"id\": \"{{itemId}}\",\n      \"quantity\": 1,\n      \"status\": \"UNCHANGED\"\n    }\n  ],\n  \"onlyRecalculate\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/editOrder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "editOrder"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Orders (By orderIDs)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/listOrders?merchantID={{grabMerchantID}}&orderIDs={{orderID}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "listOrders"
+              ],
+              "query": [
+                {
+                  "key": "merchantID",
+                  "value": "{{grabMerchantID}}"
+                },
+                {
+                  "key": "orderIDs",
+                  "value": "{{orderID}}"
+                }
+              ]
+            },
+            "description": "Grab docs note this can be unavailable in staging."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Store Module",
+      "item": [
+        {
+          "name": "Get Store Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/getStoreStatus?merchantID={{grabMerchantID}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "getStoreStatus"
+              ],
+              "query": [
+                {
+                  "key": "merchantID",
+                  "value": "{{grabMerchantID}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pause Store (30m)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantID\": \"{{grabMerchantID}}\",\n  \"isPause\": true,\n  \"duration\": \"30m\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/pauseStore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "pauseStore"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unpause Store",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantID\": \"{{grabMerchantID}}\",\n  \"isPause\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/grab/pauseStore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "grab",
+                "pauseStore"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://your-vercel-domain.vercel.app"
+    },
+    {
+      "key": "partnerMerchantID",
+      "value": "CM-BKK-001"
+    },
+    {
+      "key": "grabMerchantID",
+      "value": "1-CYNGRUNGSBCCC"
+    },
+    {
+      "key": "orderID",
+      "value": "123-CYNKLPCVRN5"
+    },
+    {
+      "key": "itemId",
+      "value": "ITEM-1"
+    }
+  ]
+}

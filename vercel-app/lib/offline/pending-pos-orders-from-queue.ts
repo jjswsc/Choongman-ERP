@@ -130,6 +130,13 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
   const guestCountRaw = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
   const guestCount =
     orderType === 'dine_in' ? Math.max(0, Math.min(99, guestCountRaw)) : undefined
+  const createdAtIso = new Date(item.createdAt).toISOString()
+  const paidAtIso =
+    status === 'paid' || status === 'completed'
+      ? paySum >= total - 0.02
+        ? createdAtIso
+        : undefined
+      : undefined
 
   return {
     id: syntheticOrderId(item.id, item.createdAt),
@@ -161,7 +168,8 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
     vat,
     total,
     status,
-    createdAt: new Date(item.createdAt).toISOString(),
+    createdAt: createdAtIso,
+    ...(paidAtIso ? { paidAt: paidAtIso } : {}),
   }
 }
 

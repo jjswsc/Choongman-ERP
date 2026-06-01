@@ -329,15 +329,70 @@ function orderListMergeKey(order: Order): string {
   return ''
 }
 
+function orderLineQtySum(order: Order | undefined | null): number {
+  if (!order?.items?.length) return 0
+  return order.items.reduce(
+    (sum, it) => sum + Math.max(0, Number(it.quantity ?? 1) || 1),
+    0
+  )
+}
+
+function orderItemsSubtotal(order: Order | undefined | null): number {
+  if (!order?.items?.length) return 0
+  return order.items.reduce(
+    (sum, it) =>
+      sum + (Number(it.price ?? 0) || 0) * Math.max(0, Number(it.quantity ?? 1) || 1),
+    0
+  )
+}
+
+/** 추가 주문 직후 refetch가 DB보다 먼저 도착할 때 낙관적 스냅샷을 덮어쓰지 않음 */
+function shouldPreferPrevOrderSnapshot(prev: Order, next: Order): boolean {
+  if (isLocalOfflineOrder(prev)) return true
+  if (!isPendingListSyncOrder(prev)) return false
+  const prevQty = orderLineQtySum(prev)
+  const nextQty = orderLineQtySum(next)
+  const prevSub = orderItemsSubtotal(prev)
+  const nextSub = orderItemsSubtotal(next)
+  return prevQty > nextQty || prevSub > nextSub + 0.01
+}
+
+function mergeFetchedOrderWithPendingLocal(fetched: Order, pending: Order): Order {
+  return {
+    ...pending,
+    status: fetched.status,
+    total: Math.max(Number(pending.total ?? 0) || 0, Number(fetched.total ?? 0) || 0),
+    pendingListSync: true,
+  }
+}
+
 function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
-  const out = [...fetched]
+  const pendingByKey = new Map<string, Order>()
+  for (const row of prev) {
+    if (!isLocalOfflineOrder(row) && !isPendingListSyncOrder(row)) continue
+    const key = orderListMergeKey(row)
+    if (key) pendingByKey.set(key, row)
+  }
+  const out: Order[] = []
   const seen = new Set<string>()
   for (const row of fetched) {
     const key = orderListMergeKey(row)
-    if (key) seen.add(key)
+    const pending = key ? pendingByKey.get(key) : undefined
+    if (pending && shouldPreferPrevOrderSnapshot(pending, row)) {
+      out.push(mergeFetchedOrderWithPendingLocal(row, pending))
+      if (key) {
+        seen.add(key)
+        pendingByKey.delete(key)
+      }
+      continue
+    }
+    out.push(row)
+    if (key) {
+      seen.add(key)
+      pendingByKey.delete(key)
+    }
   }
-  for (const row of prev) {
-    if (!isLocalOfflineOrder(row) && !isPendingListSyncOrder(row)) continue
+  for (const row of pendingByKey.values()) {
     const key = orderListMergeKey(row)
     if (!key || seen.has(key)) continue
     out.unshift(row)
@@ -346,21 +401,36 @@ function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
   return out
 }
 
+function findPrevTableForMerge(tbl: Table, prevStore: Store): Table | undefined {
+  const nameNorm = normalizePosTableNameForMatch(String(tbl.name ?? ''))
+  const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
+  return prevStore.tables.find((pt) => {
+    const pn = normalizePosTableNameForMatch(String(pt.name ?? ''))
+    const pid = normalizePosTableNameForMatch(String(pt.id ?? ''))
+    return Boolean(
+      (nameNorm && (pn === nameNorm || pid === nameNorm)) ||
+        (idNorm && (pn === idNorm || pid === idNorm))
+    )
+  })
+}
+
 function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): Store {
   if (!prevStore) return nextStore
   const nextTables = nextStore.tables.map((tbl) => {
+    const prevTable = findPrevTableForMerge(tbl, prevStore)
+    const prevOrder = prevTable?.order
+    const nextOrder = tbl.order
+    if (prevOrder && nextOrder && shouldPreferPrevOrderSnapshot(prevOrder, nextOrder)) {
+      return {
+        ...tbl,
+        order: mergeFetchedOrderWithPendingLocal(nextOrder, prevOrder),
+        isOccupied: true,
+      }
+    }
     if (tbl.order) return tbl
-    const nameNorm = normalizePosTableNameForMatch(String(tbl.name ?? ''))
-    const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
-    const local = prevStore.tables.find((pt) => {
-      const o = pt.order
-      if (!isLocalOfflineOrder(o) && !isPendingListSyncOrder(o)) return false
-      const pn = normalizePosTableNameForMatch(String(pt.name ?? ''))
-      const pid = normalizePosTableNameForMatch(String(pt.id ?? ''))
-      return Boolean((nameNorm && (pn === nameNorm || pid === nameNorm)) || (idNorm && (pn === idNorm || pid === idNorm)))
-    })
-    if (!local?.order) return tbl
-    return { ...tbl, order: local.order, isOccupied: true }
+    if (!prevOrder) return tbl
+    if (!isLocalOfflineOrder(prevOrder) && !isPendingListSyncOrder(prevOrder)) return tbl
+    return { ...tbl, order: prevOrder, isOccupied: true }
   })
   return { ...nextStore, tables: nextTables }
 }

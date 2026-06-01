@@ -7,6 +7,7 @@ import {
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
+import { resolvePosOrderPaidAtStampIso, posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import {
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total,paid_at',
       },
       'updatePosOrder'
     )) as {
@@ -139,6 +140,7 @@ export async function POST(req: NextRequest) {
       subtotal?: number
       vat?: number
       total?: number
+      paid_at?: string | null
     }[] | null
 
     if (!existing?.length) {
@@ -251,6 +253,22 @@ export async function POST(req: NextRequest) {
     )
     const paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
 
+    const previousPaymentSum = posOrderPaymentSumFromAmounts({
+      paymentCash: Number(current?.payment_cash ?? 0),
+      paymentCard: Number(current?.payment_card ?? 0),
+      paymentQr: Number(current?.payment_qr ?? 0),
+      paymentOther: Number(current?.payment_other ?? 0),
+      paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
+    })
+    const nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const paidAtStamp = resolvePosOrderPaidAtStampIso({
+      existingPaidAt: String(current?.paid_at ?? '').trim() || null,
+      total,
+      previousPaymentSum,
+      nextPaymentSum,
+      linkposRespondedAt: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
+    })
+
     const patch: Record<string, unknown> = {
       table_name: tableName,
       memo,
@@ -283,6 +301,10 @@ export async function POST(req: NextRequest) {
       subtotal,
       vat,
       total,
+    }
+
+    if (paidAtStamp) {
+      patch.paid_at = paidAtStamp
     }
 
     if (linkposPayment) {
