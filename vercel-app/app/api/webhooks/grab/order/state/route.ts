@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { releaseGrabWebhookEvent, reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 import { syncGrabOrderStateToPos } from '@/lib/grab-order-to-pos'
+import { grabListOrdersByIds } from '@/lib/grab-partner-api'
 
 export const dynamic = 'force-dynamic'
+
+function shouldFailOpenOnStateSyncError(message: string): boolean {
+  const msg = String(message || '').trim().toLowerCase()
+  return (
+    msg === 'pos_order_not_found' ||
+    msg.startsWith('order_not_found_and_create_failed:') ||
+    msg.includes('no line items')
+  )
+}
 
 /**
  * Grab → 파트너: Push order state
@@ -42,19 +52,45 @@ export async function PUT(req: NextRequest) {
       logGrabWebhook('push_order_state', req, { orderID, state, duplicate: true })
       return new NextResponse(null, { status: 204 })
     }
+    const merchantID = String(body.merchantID ?? '').trim()
+    let orderPayload = body.order
+    if (!orderPayload && merchantID) {
+      try {
+        const listed = await grabListOrdersByIds({ merchantID, orderIDs: [orderID] })
+        const fetched = (listed?.orders || []).find((o) => String(o.orderID || '').trim() === orderID)
+        if (fetched) orderPayload = fetched
+      } catch (e) {
+        logGrabWebhook('push_order_state', req, {
+          orderID,
+          merchantID,
+          state,
+          listOrdersPrefetchError: String(e ?? 'unknown'),
+        })
+      }
+    }
+
     const synced = await syncGrabOrderStateToPos({
       orderID,
       state,
-      orderPayload: body.order,
+      orderPayload,
     })
     if (!synced.ok) {
       await releaseGrabWebhookEvent({
         eventKind: 'push_order_state',
         uniqueKey: dedupeKey,
       }).catch(() => {})
+      if (shouldFailOpenOnStateSyncError(synced.message)) {
+        logGrabWebhook('push_order_state', req, {
+          orderID,
+          merchantID,
+          state,
+          syncIgnored: synced.message,
+        })
+        return new NextResponse(null, { status: 204 })
+      }
       logGrabWebhook('push_order_state', req, {
         orderID,
-        merchantID: String(body.merchantID ?? ''),
+        merchantID,
         state,
         syncError: synced.message,
       })

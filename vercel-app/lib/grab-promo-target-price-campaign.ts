@@ -440,6 +440,58 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   let skipped = 0
   const keepNames = new Set<string>()
 
+  /** 캠페인 전·후 모두 정가+advancedPricing push — fixPrice만 있으면 앱에 111만 보이고 취소선 없음 */
+  const pushMenuRecordForTarget = async (target: (typeof targets)[number]) => {
+    const cut = resolvePromoCutPrice({
+      salePrice: target.salePrice,
+      regularPrice: target.regularPrice,
+    })
+    if (!cut.showCutPrice) return false
+    const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
+    const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
+    if (regularMinor <= saleMinor) return false
+    await grabUpdateMenuRecord({
+      merchantID,
+      field: 'ITEM',
+      id: target.grabItemId,
+      price: regularMinor,
+      advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+        key,
+        price: saleMinor,
+      })),
+    })
+    return true
+  }
+
+  let menuRecordsPushed = 0
+  let menuRecordsFailed = 0
+  const menuRecordPushedIds = new Set<string>()
+  const tryPushMenuRecord = async (
+    target: (typeof targets)[number],
+    phase: string,
+    options?: { allowRepeat?: boolean }
+  ) => {
+    if (!options?.allowRepeat && menuRecordPushedIds.has(target.grabItemId)) return
+    try {
+      if (await pushMenuRecordForTarget(target)) {
+        if (!menuRecordPushedIds.has(target.grabItemId)) menuRecordsPushed += 1
+        menuRecordPushedIds.add(target.grabItemId)
+      }
+    } catch (e) {
+      menuRecordsFailed += 1
+      console.warn('[grab-promo-campaign] push_menu_record_failed', {
+        merchantID,
+        phase,
+        grabItemId: target.grabItemId,
+        error: String(e),
+      })
+    }
+  }
+
+  for (const target of targets) {
+    await tryPushMenuRecord(target, 'before_campaign')
+  }
+
   for (const target of targets) {
     const campaignName = buildGrabPromoCampaignName(target.promoId)
     keepNames.add(campaignName)
@@ -551,40 +603,9 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
   }
 
-  /** Get food menu만으로는 Grab 앱 컷프라이스가 안 붙는 매장 — item price·advancedPricing 직접 push */
-  let menuRecordsPushed = 0
-  let menuRecordsFailed = 0
+  /** 캠페인 반영 후에도 정가·할인가 쌍 유지(Grab 앱 컷프라이스) */
   for (const target of targets) {
-    const cut = resolvePromoCutPrice({
-      salePrice: target.salePrice,
-      regularPrice: target.regularPrice,
-    })
-    if (!cut.showCutPrice) continue
-    const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
-    const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
-    if (regularMinor <= saleMinor) continue
-    try {
-      await grabUpdateMenuRecord({
-        merchantID,
-        field: 'ITEM',
-        id: target.grabItemId,
-        price: regularMinor,
-        advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
-          key,
-          price: saleMinor,
-        })),
-      })
-      menuRecordsPushed += 1
-    } catch (e) {
-      menuRecordsFailed += 1
-      console.warn('[grab-promo-campaign] push_menu_record_failed', {
-        merchantID,
-        grabItemId: target.grabItemId,
-        regularMinor,
-        saleMinor,
-        error: String(e),
-      })
-    }
+    await tryPushMenuRecord(target, 'after_campaign', { allowRepeat: true })
   }
 
   return { created, updated, skipped, deleted, targets: targets.length, menuRecordsPushed, menuRecordsFailed }
