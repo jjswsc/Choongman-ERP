@@ -4972,6 +4972,8 @@ export const i18n = {
     posReceiptPayCorrectTodayOnly: '매장 영업일 기준 당일·전일 주문만 정정할 수 있습니다.',
     posReceiptSearchBizDayHint:
       '조회 날짜는 마감·결산과 같은 POS 영업일 기준입니다(매장 영업 시작 시각~익일 시작 전).',
+    posReceiptListSortPaidHint:
+      '목록은 결제·완료 시각 기준 최신순이며, 접수 시각과 다를 수 있습니다.',
     posReceiptPayCorrectStatus:
       '결제가 반영된 상태(결제완료·조리중·준비완료·완료 등) 중 매장 영업일 기준 당일·전일 주문만 정정·취소할 수 있습니다.',
     posReceiptPayCorrectMismatch: '결제 합계가 주문 합계와 같아야 합니다.',
@@ -5202,6 +5204,7 @@ export const i18n = {
     posDifference: '차액',
     posDifferenceHint: '입력합계 − 시스템매출',
     posOrderDateTime: '주문일시',
+    posOrderPaidDateTime: '결제일시',
     posStatusPaid: '결제완료',
     posStatusCooking: '조리중',
     posStatusReady: '준비완료',
@@ -13863,6 +13866,8 @@ orderItemQty: 'Qty',
     posReceiptPayCorrectTodayOnly: 'Only today/yesterday (store operating day) orders can be corrected.',
     posReceiptSearchBizDayHint:
       'Dates follow the same POS operating day as close/settlement (store open time through before next open).',
+    posReceiptListSortPaidHint:
+      'The list is sorted by payment/completion time (newest first), which may differ from order time.',
     posReceiptPayCorrectStatus:
       'Only paid-like orders (paid / cooking / ready / completed, etc.) from today or the previous operating day can be corrected or cancelled here.',
     posReceiptPayCorrectMismatch: 'Payment lines must add up to the order total.',
@@ -14101,6 +14106,7 @@ orderItemQty: 'Qty',
     posDifference: 'Difference',
     posDifferenceHint: 'Input − System',
     posOrderDateTime: 'Order date/time',
+    posOrderPaidDateTime: 'Paid date/time',
     posStatusPaid: 'Paid',
     posStatusCooking: 'Cooking',
     posStatusReady: 'Ready',
@@ -23716,6 +23722,8 @@ orderItemQty: 'จำนวน',
     posReceiptPayCorrectTodayOnly: 'แก้ได้เฉพาะบิลของวันทำการนี้/วันก่อนหน้า (ตามเวลาเปิดร้านของสาขา)',
     posReceiptSearchBizDayHint:
       'วันที่ค้นหาใช้วันทำการ POS เหมือนปิดยอด/สรุปยอด (ตั้งแต่เวลาเปิดร้านจนถึงก่อนเปิดรอบถัดไป)',
+    posReceiptListSortPaidHint:
+      'เรียงตามเวลาชำระ/ปิดบิลล่าสุดก่อน อาจไม่ตรงกับเวลารับออเดอร์',
     posReceiptPayCorrectStatus:
       'แก้/ยกเลิกได้เฉพาะบิลที่ชำระแล้ว (ชำระแล้ว / กำลังทำ / พร้อมเสิร์ฟ / ปิดบิล ฯลฯ) ของวันทำการนี้/วันก่อนหน้าตามเวลาเปิดร้าน',
     posReceiptPayCorrectMismatch: 'ยอดรวมช่องทางต้องเท่ากับยอดบิล',
@@ -24685,7 +24693,8 @@ orderItemQty: 'จำนวน',
     posOptionGroupTopping: 'ท็อปปิง',
     posOptionGroupType: 'ประเภท',
     posPaymentSettingsManageSuffix: 'Manual card-input item management',
-    posOrderDateTime: 'Order date/time',
+    posOrderDateTime: 'เวลารับออเดอร์',
+    posOrderPaidDateTime: 'เวลาชำระเงิน',
     posStatusCooking: 'Cooking',
     posStatusPaid: 'Paid',
     posStatusReady: 'Ready',

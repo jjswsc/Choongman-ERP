@@ -9705,6 +9705,8 @@ export interface PosOrder {
   total: number
   status: string
   createdAt: string
+  /** 결제·수정 시각(DB updated_at). 결제 완료 시각 추정에 사용 */
+  updatedAt?: string
   linkposProvider?: string
   linkposMode?: string
   linkposTxCode?: string
@@ -9793,7 +9795,7 @@ export async function getPosOrders(params?: {
   orderId?: number
   /** status가 paid 또는 completed 인 행만 (OR). 메인 기기 결제 영수증 폴링 등 */
   statusPaidLike?: boolean
-  orderBy?: 'created_at.desc' | 'id.desc'
+  orderBy?: 'created_at.desc' | 'id.desc' | 'updated_at.desc'
   /** 목록 조회 시 행 수 상한(서버에서 최대 2000으로 캡) */
   limit?: number
   /** 메인 POS 폴링용 — linkpos 등 대형 컬럼 제외 select */

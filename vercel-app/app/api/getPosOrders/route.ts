@@ -17,7 +17,7 @@ import { addPosStoreCodeVariants, resolvePosStoreFilterCandidates } from '@/lib/
 import { normStoreKey } from '@/lib/store-list-keys'
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { supabaseSelectFilterStrippingUnknownColumns, extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { POS_ORDER_FULL_SELECT, POS_ORDER_POLL_MINIMAL_SELECT } from '@/lib/pos-order-select'
 
 async function selectPosOrders(
@@ -25,12 +25,26 @@ async function selectPosOrders(
   opts: { limit?: number; order?: string; select?: string },
   logLabel: string
 ): Promise<unknown> {
-  return supabaseSelectFilterStrippingUnknownColumns(
-    'pos_orders',
-    filter,
-    { ...opts, select: opts.select ?? POS_ORDER_SELECT },
-    logLabel
-  )
+  try {
+    return await supabaseSelectFilterStrippingUnknownColumns(
+      'pos_orders',
+      filter,
+      { ...opts, select: opts.select ?? POS_ORDER_SELECT },
+      logLabel
+    )
+  } catch (e) {
+    const order = String(opts.order || '')
+    const missingCol = extractAnyMissingColumn(e)
+    if (missingCol === 'updated_at' && order.includes('updated_at')) {
+      return supabaseSelectFilterStrippingUnknownColumns(
+        'pos_orders',
+        filter,
+        { ...opts, order: 'created_at.desc', select: opts.select ?? POS_ORDER_SELECT },
+        `${logLabel}/order-fallback`
+      )
+    }
+    throw e
+  }
 }
 
 async function resolveBearerCaller(
@@ -189,7 +203,12 @@ export async function GET(request: NextRequest) {
   const listLimit =
     parsedListLimit != null ? Math.min(Math.max(parsedListLimit, 1), 2000) : 10000
   const orderByRaw = String(searchParams.get('orderBy') || '').trim().toLowerCase()
-  const listOrder: 'created_at.desc' | 'id.desc' = orderByRaw === 'id.desc' ? 'id.desc' : 'created_at.desc'
+  const listOrder: 'created_at.desc' | 'id.desc' | 'updated_at.desc' =
+    orderByRaw === 'id.desc'
+      ? 'id.desc'
+      : orderByRaw === 'updated_at.desc'
+        ? 'updated_at.desc'
+        : 'created_at.desc'
 
   try {
     let rows: {
@@ -221,6 +240,7 @@ export async function GET(request: NextRequest) {
       total?: number
       status?: string
       created_at?: string
+      updated_at?: string
       linkpos_provider?: string
       linkpos_mode?: string
       linkpos_tx_code?: string
@@ -511,6 +531,7 @@ export async function GET(request: NextRequest) {
           total: Number(r.total) ?? 0,
           status: String(r.status ?? 'pending'),
           createdAt: String(r.created_at ?? ''),
+          updatedAt: String(r.updated_at ?? ''),
           linkposProvider: String(r.linkpos_provider ?? ''),
           linkposMode: String(r.linkpos_mode ?? ''),
           linkposTxCode: String(r.linkpos_tx_code ?? ''),

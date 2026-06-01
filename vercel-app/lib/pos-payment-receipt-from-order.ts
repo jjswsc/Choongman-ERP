@@ -1,5 +1,6 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
 import { orderUiItemsToPosOrderItems } from '@/lib/pos-order-item-map'
+import { resolvePosOrderPaidAt } from '@/lib/pos-order-paid-at'
 import type { Order } from '@/lib/pos-types'
 import {
   formatGrabOrderLineNoteForPrint,
@@ -526,6 +527,7 @@ export function receiptModalDataFromPosOrderReprint(order: PosOrder, opts?: PosO
     ...(v > 0.001 ? { vatFeeAmt: v, vatFeeMode: 'separate' as const } : {}),
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: true,
+    receiptPrintedAt: resolvePosOrderPaidAt(order),
   }
 }
 
@@ -584,6 +586,7 @@ export function receiptModalDataFromPosOrderForPayment(
     otherFeeMode: pricing.otherFeeMode,
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: false,
+    receiptPrintedAt: resolvePosOrderPaidAt(order),
   }
 }
 

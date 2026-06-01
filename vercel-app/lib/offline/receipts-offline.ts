@@ -45,8 +45,9 @@ export async function getPosOrdersWithCache(params: {
   debugPosOrders?: boolean
   /** POS 단말 당일 스냅샷 — 영업일 경계 UTC 구간 */
   posBizDayScope?: boolean
+  orderBy?: 'created_at.desc' | 'id.desc' | 'updated_at.desc'
 }): Promise<PosOrder[]> {
-  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope } = params
+  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope, orderBy } = params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
@@ -67,6 +68,7 @@ export async function getPosOrdersWithCache(params: {
         storeCode: storeCode || undefined,
         status,
         debugPosOrders,
+        ...(orderBy ? { orderBy } : {}),
         ...(posBizDayScope ? { posBizDayScope: true } : {}),
       })
       await setCache('pos_orders_cache', key, data)
@@ -89,6 +91,7 @@ export async function getPosOrdersWithCache(params: {
       endStr,
       storeCode: storeCode || undefined,
       debugPosOrders,
+      ...(orderBy ? { orderBy } : {}),
       ...(posBizDayScope ? { posBizDayScope: true } : {}),
     })
     await setCache('pos_orders_cache', key, data)

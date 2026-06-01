@@ -110,6 +110,8 @@ export type ReceiptModalData = {
   printInstanceKey?: string
   /** 주문 취소·void 시 음수 금액·Voided 배너 영수증 */
   voidReceiptMode?: boolean
+  /** 결제 영수증 Date 행 — 미지정 시 인쇄 시각 */
+  receiptPrintedAt?: string
 }
 
 interface PosReceiptModalProps {
@@ -306,7 +308,14 @@ export function PosReceiptModal({
           t,
           lang,
           origin: typeof window !== 'undefined' ? window.location.origin : '',
-          printedAt: new Date(),
+          printedAt: (() => {
+            const raw = receiptData.receiptPrintedAt?.trim()
+            if (raw) {
+              const d = new Date(raw)
+              if (!Number.isNaN(d.getTime())) return d
+            }
+            return new Date()
+          })(),
           forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(receiptData.storeCode),
           designOverride: {
             receiptBizName,

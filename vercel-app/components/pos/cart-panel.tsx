@@ -88,7 +88,11 @@ import {
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
-import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart, collabSupportsQuantityEntry } from '@/lib/pos-collab-discount'
+import {
+  buildCartPanelLineDiscountAllocations,
+  collabDiscountAmountForCart,
+  collabSupportsQuantityEntry,
+} from '@/lib/pos-collab-discount'
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
@@ -1275,9 +1279,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!Array.isArray(cartItems) || cartItems.length === 0 || totalDiscount <= 0.0001) {
       return cartItems.map(() => 0)
     }
-    const collabPart = appliedCollab ? collabDiscountAmt : 0
-    const otherPart = Math.max(0, totalDiscount - collabPart)
-    return buildMixedCartLineDiscountAllocations({
+    return buildCartPanelLineDiscountAllocations({
       lines: cartItems.map((i) => ({
         id: String(i.id ?? ''),
         name: String(i.name ?? ''),
@@ -1288,11 +1290,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
       })),
       menuById: menuByIdForCollab,
+      lineModeById: lineDiscountModeByItemId,
+      hasSelectedDiscountScope,
       collabDetail: appliedCollab?.collabDetail ?? null,
-      collabDiscountAmt: collabPart,
-      otherDiscountAmt: otherPart,
+      collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
+      serviceDiscountAmt,
+      cancelledLineAmt,
+      manualAndCouponDiscountAmt: manualDiscountAmt + couponDiscountTotal,
     })
-  }, [appliedCollab, cartItems, collabDiscountAmt, discount, menuByIdForCollab])
+  }, [
+    appliedCollab,
+    cancelledLineAmt,
+    cartItems,
+    collabDiscountAmt,
+    couponDiscountTotal,
+    discount,
+    hasSelectedDiscountScope,
+    lineDiscountModeByItemId,
+    manualDiscountAmt,
+    menuByIdForCollab,
+    serviceDiscountAmt,
+  ])
 
   const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number, lineIdx?: number) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
@@ -3197,7 +3215,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         discountTotal > 0.0001
           ? receiptLinesMatchCart && Math.abs(discountTotal - discount) < 0.02
             ? lineDiscountSnapshot
-            : buildMixedCartLineDiscountAllocations({
+            : buildCartPanelLineDiscountAllocations({
                 lines: linesForReceipt.map((i) => ({
                   id: String(i.id ?? ''),
                   name: String(i.name ?? ''),
@@ -3213,9 +3231,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     : {}),
                 })),
                 menuById: menuByIdForCollab,
+                lineModeById: lineDiscountModeByItemId,
+                hasSelectedDiscountScope,
                 collabDetail: appliedCollab?.collabDetail ?? null,
                 collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
-                otherDiscountAmt: Math.max(0, discountTotal - (appliedCollab ? collabDiscountAmt : 0)),
+                serviceDiscountAmt,
+                cancelledLineAmt,
+                manualAndCouponDiscountAmt: Math.max(
+                  0,
+                  discountTotal -
+                    (appliedCollab ? collabDiscountAmt : 0) -
+                    serviceDiscountAmt -
+                    cancelledLineAmt
+                ),
               })
           : []
       const receiptItems = linesForReceipt.map((i, idx) => ({

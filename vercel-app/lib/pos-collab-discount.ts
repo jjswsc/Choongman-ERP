@@ -319,6 +319,73 @@ export function buildMixedCartLineDiscountAllocations(input: {
   return lines.map((_, i) => to2(collabAlloc[i] + otherAlloc[i]))
 }
 
+/** 결제 모달 — 줄별 할인·서비스·취소·수동(쿠폰) 배분 (할인적용 메뉴 선택 시 수동·쿠폰은 해당 줄만) */
+export type PosCartLineDiscountMode = 'none' | 'discount' | 'service' | 'cancel'
+
+export function buildCartPanelLineDiscountAllocations(input: {
+  lines: CollabCartLineLike[]
+  menuById: Map<string, CollabMenuPick>
+  lineModeById?: Record<string, PosCartLineDiscountMode>
+  hasSelectedDiscountScope: boolean
+  collabDetail?: MarketingCollabDetail | null
+  collabDiscountAmt: number
+  serviceDiscountAmt: number
+  cancelledLineAmt: number
+  manualAndCouponDiscountAmt: number
+}): number[] {
+  const {
+    lines,
+    menuById,
+    lineModeById,
+    hasSelectedDiscountScope,
+    collabDetail,
+    collabDiscountAmt,
+    serviceDiscountAmt,
+    cancelledLineAmt,
+    manualAndCouponDiscountAmt,
+  } = input
+
+  const modeForLine = (line: CollabCartLineLike): PosCartLineDiscountMode =>
+    lineModeById?.[String(line.id ?? '')] ?? 'none'
+
+  const collabAlloc = (() => {
+    if (!collabDetail || collabDiscountAmt <= 0.0001) return lines.map(() => 0)
+    if (hasSelectedDiscountScope) {
+      const weights = lines.map((line) =>
+        modeForLine(line) === 'discount' && isCartLineEligibleForCollabDiscount(line, menuById, collabDetail)
+          ? collabLineTotal(line)
+          : 0
+      )
+      return allocateDiscountProportional(weights, collabDiscountAmt)
+    }
+    return collabLineDiscountAllocations(lines, menuById, collabDetail, collabDiscountAmt)
+  })()
+
+  const weightsForModes = (modes: PosCartLineDiscountMode[]) =>
+    lines.map((line) => (modes.includes(modeForLine(line)) ? collabLineTotal(line) : 0))
+
+  const serviceAlloc =
+    serviceDiscountAmt > 0.0001
+      ? allocateDiscountProportional(weightsForModes(['service']), serviceDiscountAmt)
+      : lines.map(() => 0)
+  const cancelAlloc =
+    cancelledLineAmt > 0.0001
+      ? allocateDiscountProportional(weightsForModes(['cancel']), cancelledLineAmt)
+      : lines.map(() => 0)
+
+  const manualWeights = hasSelectedDiscountScope
+    ? weightsForModes(['discount'])
+    : lines.map((line) => (modeForLine(line) !== 'cancel' ? collabLineTotal(line) : 0))
+
+  const manualAlloc =
+    manualAndCouponDiscountAmt > 0.0001
+      ? allocateDiscountProportional(manualWeights, manualAndCouponDiscountAmt)
+      : lines.map(() => 0)
+
+  const to2 = (n: number) => Math.round(n * 100) / 100
+  return lines.map((_, i) => to2(collabAlloc[i] + serviceAlloc[i] + cancelAlloc[i] + manualAlloc[i]))
+}
+
 function lineEligibleForCollab(
   line: CollabCartLineLike,
   menuById: Map<string, CollabMenuPick>,

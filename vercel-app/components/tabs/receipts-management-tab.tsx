@@ -82,6 +82,7 @@ import {
 import { buildSplitPaymentReceiptBatchFromOrder } from '@/lib/pos-split-payment-receipt-batch'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { resolvePosOrderPaidAt, resolvePosOrderPaidAtDate } from '@/lib/pos-order-paid-at'
 import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import {
@@ -532,6 +533,15 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     return rows
   }, [orders, appliedSearchTerm, appliedSegmentDeliveryCode, deliveryAppSelectOptions])
 
+  const sortedFilteredOrders = React.useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const ta = resolvePosOrderPaidAtDate(a).getTime()
+      const tb = resolvePosOrderPaidAtDate(b).getTime()
+      if (tb !== ta) return tb - ta
+      return Number(b.id) - Number(a.id)
+    })
+  }, [filteredOrders])
+
   const loadOrders = React.useCallback(() => {
     if (!startStr || !endStr) return
     setLoading(true)
@@ -557,6 +567,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       storeCode: store || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
       posBizDayScope: true,
+      orderBy: 'updated_at.desc' as const,
     }
     fetcher(params)
       .then(setOrders)
@@ -725,11 +736,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
-      const paidAt = o.linkposRespondedAt
-        ? new Date(o.linkposRespondedAt)
-        : o.createdAt
-          ? new Date(o.createdAt)
-          : new Date()
+      const paidAt = resolvePosOrderPaidAtDate(o)
       const lineOpts: PosOrderReceiptLineOptions = { promoCatalogById, menus }
       const splitBatch = buildSplitPaymentReceiptBatchFromOrder(o, lineOpts)
       const receiptRows = splitBatch ?? [receiptModalDataFromPosOrderReprint(o, lineOpts)]
@@ -1497,7 +1504,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             </div>
             <p className="text-[11px] leading-snug text-muted-foreground">
               {t('posReceiptSearchBizDayHint') ||
-                '조회 날짜는 마감·결산과 같은 POS 영업일 기준입니다(매장 영업 시작 시각~익일 시작 전).'}
+                '조회 날짜는 마감·결산과 같은 POS 영업일 기준입니다(매장 영업 시작 시각~익일 시작 전).'}{' '}
+              {t('posReceiptListSortPaidHint') ||
+                '목록은 결제·완료 시각 기준 최신순이며, 접수 시각과 다를 수 있습니다.'}
             </p>
           </div>
 
@@ -1557,18 +1566,19 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   <th className="px-4 py-3 text-right font-semibold">{t('posInputTotal') || '합계'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStatus') || '상태'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderDateTime')}</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t('posOrderPaidDateTime')}</th>
                   <th className="px-4 py-3 w-10" />
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.length === 0 ? (
+                {sortedFilteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                       {t('itemsNoResults') || '조회된 내역이 없습니다.'}
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((o) => (
+                  sortedFilteredOrders.map((o) => (
                     <React.Fragment key={o.id}>
                       <tr
                         id={`admin-receipt-order-row-${o.id}`}
@@ -1605,6 +1615,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                           {formatBangkokDateTime(o.createdAt)}
                         </td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap font-medium">
+                          {(() => {
+                            const paidAt = resolvePosOrderPaidAt(o)
+                            return paidAt ? formatBangkokDateTime(paidAt) : '-'
+                          })()}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             {isPayCorrectableOrder(o) && (
@@ -1633,7 +1649,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                       </tr>
                       {expandedId === o.id && (
                         <tr className="border-b bg-muted/10">
-                          <td colSpan={8} className="px-4 py-4">
+                          <td colSpan={9} className="px-4 py-4">
                             <div className="space-y-2 text-xs">
                               {(o.tableName ||
                                 o.memo ||

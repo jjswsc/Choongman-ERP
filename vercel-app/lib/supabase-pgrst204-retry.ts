@@ -29,6 +29,8 @@ function extractAnyMissingColumn(error: unknown): string | null {
   return extractPgrstMissingColumn(error) || extractPgUndefinedColumn(error)
 }
 
+export { extractAnyMissingColumn }
+
 export async function supabaseInsertWithPgrst204Fallback(
   table: string,
   row: Record<string, unknown>,

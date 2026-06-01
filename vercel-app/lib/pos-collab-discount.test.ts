@@ -3,6 +3,7 @@ import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { emptyMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import {
   allocateDiscountExcludingDrinksAndPromos,
+  buildCartPanelLineDiscountAllocations,
   collabDiscountAmountForCart,
   collabLineDiscountAllocations,
   isCartLineEligibleForCollabDiscount,
@@ -183,6 +184,36 @@ describe('pos-collab-discount exclusions', () => {
     expect(alloc[0]).toBe(119)
     expect(alloc[1]).toBe(0)
     expect(isCollabDiscountReasonText('ส่วนลดความร่วมมือ: CM x Chang')).toBe(true)
+  })
+})
+
+describe('buildCartPanelLineDiscountAllocations', () => {
+  it('수동 할인(%)은 할인적용으로 선택한 줄에만 배분하고 음료 줄은 0', () => {
+    const lines = [
+      { id: 'a', name: 'Banban Chicken', price: 259, qty: 1, menuId: '10' },
+      { id: 'b', name: 'Tteokbokki', price: 199, qty: 1, menuId: '11' },
+      { id: 'c', name: 'Aquafina', price: 20, qty: 1, menuId: '20' },
+      { id: 'd', name: 'Ice', price: 0, qty: 2 },
+    ]
+    const scopeSubtotal = 259 + 199
+    const manualDiscount = Math.floor((scopeSubtotal * 20) / 100)
+    expect(manualDiscount).toBe(91)
+    const alloc = buildCartPanelLineDiscountAllocations({
+      lines,
+      menuById,
+      lineModeById: { a: 'discount', b: 'discount', c: 'none', d: 'none' },
+      hasSelectedDiscountScope: true,
+      collabDetail: null,
+      collabDiscountAmt: 0,
+      serviceDiscountAmt: 0,
+      cancelledLineAmt: 0,
+      manualAndCouponDiscountAmt: manualDiscount,
+    })
+    expect(alloc[2]).toBe(0)
+    expect(alloc[3]).toBe(0)
+    expect(alloc.reduce((s, v) => s + v, 0)).toBeCloseTo(manualDiscount, 2)
+    expect(alloc[0]).toBeGreaterThan(0)
+    expect(alloc[1]).toBeGreaterThan(0)
   })
 })
 
