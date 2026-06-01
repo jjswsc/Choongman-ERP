@@ -3,17 +3,25 @@
  * 조회 구간: POS 영업일 라벨(getPosTodaySales 와 동일).
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
-import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
-import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
-import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
+import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import {
+  fetchPosSalesOrdersForBusinessRange,
+  POS_SALES_PAYMENT_ROW_SELECT,
+} from '@/lib/pos-sales-fetch-rows'
+import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
-const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
-const FETCH_LIMIT = 50000
+type PaymentOrderRow = {
+  order_type?: string | null
+  payment_cash?: number
+  payment_card?: number
+  payment_qr?: number
+  payment_other?: number
+  payment_other_breakdown?: unknown
+  payment_delivery_app?: number
+  delivery_payment_channel?: string | null
+}
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -32,40 +40,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
-    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
-    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      select: POS_SALES_PAYMENT_ROW_SELECT,
+      queryLabel: 'posSalesByPayment',
+    })
 
-    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: FETCH_LIMIT,
-      select:
-        'created_at,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,total,status,order_type,store_code',
-    })) as {
-      created_at?: string
-      payment_cash?: number
-      payment_card?: number
-      payment_qr?: number
-      payment_other?: number
-      payment_other_breakdown?: unknown
-      payment_delivery_app?: number
-      delivery_payment_channel?: string | null
-      order_type?: string | null
-      total?: number
-      status?: string
-      store_code?: string
-    }[]
+    if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
 
-    let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
-    rows = excludePosSalesTestOfficeRows(rows)
-    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
-
-    if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
-
+    const filtered = filterCompletedPosSalesRows(rows, orderTypesAllowed)
     const byMethod: Record<string, number> = {}
-    for (const r of rows) {
-      if (!rowMatchesOrderFilter(r.order_type ?? undefined, orderTypesAllowed)) continue
-      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+    for (const r of filtered as PaymentOrderRow[]) {
       const cash = Number(r.payment_cash) || 0
       const card = Number(r.payment_card) || 0
       const qr = Number(r.payment_qr) || 0

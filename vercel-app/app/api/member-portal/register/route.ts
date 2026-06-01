@@ -26,9 +26,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const name = String(body.name || '').trim() || member!.name
     const updated = await updateMember({
       id: memberId,
-      name: String(body.name || '').trim() || member!.name,
+      name,
+      fullName: name,
       birthDate: String(body.birthDate || '').trim(),
       gender: String(body.gender || '').trim(),
       nationality: String(body.nationality || '').trim(),

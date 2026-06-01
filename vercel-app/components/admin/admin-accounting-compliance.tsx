@@ -130,6 +130,23 @@ import {
   type VendorTaxLinkInput,
 } from "@/lib/store-vendor-tax-link"
 import { StoreVendorTaxLinkBanner } from "@/components/admin/tax-filing/store-vendor-tax-link-banner"
+import {
+  AccountingEmptyState,
+  AccountingPeriodChip,
+  AccountingStatCard,
+  AccountingStatGrid,
+  AccountingTableBodyRow,
+  AccountingTableFootRow,
+  AccountingTableHead,
+  AccountingTableShell,
+} from "@/components/admin/accounting-result-primitives"
+import {
+  accountingLedgerEntryGridCn,
+  accountingResultTdCn,
+  accountingResultTdRightCn,
+  accountingResultThCn,
+  accountingResultThRightCn,
+} from "@/lib/accounting-result-ui"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
@@ -5475,13 +5492,10 @@ export function AdminAccountingCompliance({
 
         <TabsContent value="summary" className={cn(tabsContentClass, "space-y-3")}>
           <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-2 space-y-1">
+            <CardHeader className="pb-2">
               <CardTitle className="text-base">
                 {isEmbeddedPp36Section ? t("accCompTabPp36") : t("accCompTabPp30")}
               </CardTitle>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isEmbeddedPp36Section ? t("accCompPp36ScreenIntro") : t("accCompPp30ScreenIntro")}
-              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {!isEmbeddedPp36Section ? (
@@ -5710,14 +5724,10 @@ export function AdminAccountingCompliance({
               </Collapsible>
               ) : null}
 
-              {!isEmbeddedPp36Section ? (
-                            <p className="text-[11px] text-muted-foreground">{t("accCompPp30XlsxIncludesEfiling")}</p>
-              ) : null}
-
               {!pp30Queried ? (
-                <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
+                <AccountingEmptyState>
                   {isEmbeddedPp36Section ? t("accCompPp36EmbeddedSearchHint") : t("accCompPp30EmptySearchHint")}
-                </div>
+                </AccountingEmptyState>
               ) : (
                 <>
               {vatStoreNameGapsLoading ? (
@@ -5783,9 +5793,9 @@ export function AdminAccountingCompliance({
               </div>
               ) : null}
               {!isEmbeddedPp36Section ? (
-              <div className="text-xs text-muted-foreground">
+              <AccountingPeriodChip>
                 {t("accCompPeriodType")}: {summaryPeriodLabel}
-              </div>
+              </AccountingPeriodChip>
               ) : null}
 
               {loading ? (
@@ -5802,55 +5812,57 @@ export function AdminAccountingCompliance({
               <>
               {pp30SubView === "output" && (
                 <div className="space-y-3 text-sm">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                    <div>
-                      {t("accCompVatOutputNet")}: {Math.round(outputSummaryNet).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompVatOutputVat")}: {Math.round(outputSummaryVat).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompVatPayable")}: {Math.round(outputSummaryPayable).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompVatRowsSales")}: {nonPosOutputCount.toLocaleString()}
-                      {posFilingOutputSummaries.length > 0
-                        ? ` · ${tr(t, "accCompPosAutoFilingLinesNote", { n: posFilingOutputSummaries.length.toLocaleString() })}`
-                        : ""}{" "}
-                      / {t("accCompVatTotalRows")}: {vatFilteredStats.rowCount.toLocaleString()}
-                    </div>
-                    {isHeadOfficeLedgerStore ? (
-                      <div className="md:col-span-2 text-[11px] text-muted-foreground">
-                        {t("accCompHqPosOutputExcludedNote")}
-                      </div>
-                    ) : null}
-                    <div>
-                      {t("accCompMissingTin")}: {vatFilteredStats.missingTaxIdCount.toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompMissingInvoice")}: {vatFilteredStats.missingInvoiceCount.toLocaleString()}
-                    </div>
-                  </div>
+                  <AccountingStatGrid>
+                    <AccountingStatCard
+                      label={t("accCompVatOutputNet")}
+                      value={Math.round(outputSummaryNet).toLocaleString()}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompVatOutputVat")}
+                      value={Math.round(outputSummaryVat).toLocaleString()}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompVatPayable")}
+                      value={Math.round(outputSummaryPayable).toLocaleString()}
+                      tone={outputSummaryPayable > 0 ? "warn" : "default"}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompVatRowsSales")}
+                      value={`${nonPosOutputCount.toLocaleString()} / ${vatFilteredStats.rowCount.toLocaleString()}`}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompMissingTin")}
+                      value={vatFilteredStats.missingTaxIdCount.toLocaleString()}
+                      tone={vatFilteredStats.missingTaxIdCount > 0 ? "warn" : "ok"}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompMissingInvoice")}
+                      value={vatFilteredStats.missingInvoiceCount.toLocaleString()}
+                      tone={vatFilteredStats.missingInvoiceCount > 0 ? "warn" : "ok"}
+                    />
+                  </AccountingStatGrid>
                   {taxSummary && allowedPp30Views.includes("wht") ? (
-                    <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
+                    <div className="rounded-lg border border-border/70 bg-muted/15 p-3 text-xs space-y-2">
                       <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                        <div>
-                          {t("accCompWhtLabelGross")}: {(taxSummary.wht.totalGross || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompWhtLabelWithheld")}: {(taxSummary.wht.totalWithheld || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompWhtLabelRows")}: {(taxSummary.wht.rowCount || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompMissingTinWht")}: {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t("accCompTaxWhtDocs")} · {t("accCompPp30GoWhtLedger")}
-                      </p>
+                      <AccountingStatGrid className="grid-cols-2 md:grid-cols-4">
+                        <AccountingStatCard
+                          label={t("accCompWhtLabelGross")}
+                          value={(taxSummary.wht.totalGross || 0).toLocaleString()}
+                        />
+                        <AccountingStatCard
+                          label={t("accCompWhtLabelWithheld")}
+                          value={(taxSummary.wht.totalWithheld || 0).toLocaleString()}
+                        />
+                        <AccountingStatCard
+                          label={t("accCompWhtLabelRows")}
+                          value={(taxSummary.wht.rowCount || 0).toLocaleString()}
+                        />
+                        <AccountingStatCard
+                          label={t("accCompMissingTinWht")}
+                          value={(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
+                          tone={(taxSummary.wht.missingTaxIdCount || 0) > 0 ? "warn" : "ok"}
+                        />
+                      </AccountingStatGrid>
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
@@ -5897,11 +5909,8 @@ export function AdminAccountingCompliance({
                   <Card>
                     <CardContent className="p-2 overflow-x-auto space-y-3">
                       {posFilingOutputSummaries.length > 0 ? (
-                        <div className="rounded-md border border-primary/25 bg-primary/5 p-3 space-y-2 text-xs">
+                        <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2 text-xs">
                           <div className="font-medium text-foreground">{t("accCompPosSalesAutoTitle")}</div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            {t("accCompPosSalesAutoDescription")}
-                          </p>
                           <div className="space-y-2">
                             {posFilingOutputSummaries.map((row, sidx) => (
                               <div
@@ -5930,56 +5939,52 @@ export function AdminAccountingCompliance({
                         <div className="text-[11px] font-medium text-muted-foreground px-0.5">{t("accCompNonPosSalesEdit")}</div>
                       ) : null}
                       {vatOutputViewMode === "vendor" ? (
-                        <div className="rounded-md border border-border/70 overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead className="bg-muted/30">
-                              <tr className="border-b border-border/70">
-                                <th className="p-2 text-left">{t("accCompColVendorName")}</th>
-                                <th className="p-2 text-right">{t("accCompColCount")}</th>
-                                <th className="p-2 text-right">{t("accCompLabelNetAmount")}</th>
-                                <th className="p-2 text-right">{t("accCompPhVat")}</th>
-                                <th className="p-2 text-right">{t("accCompLabelGrandTotal")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {vatOutputVendorSummaries.map((row) => (
-                                <tr key={`vendor-sum-${row.name}`} className="border-b border-border/50">
-                                  <td className="p-2">{row.name}</td>
-                                  <td className="p-2 text-right tabular-nums">{row.count.toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums">{Math.round(row.net).toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums">{Math.round(row.vat).toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums font-medium">{Math.round(row.total).toLocaleString()}</td>
-                                </tr>
-                              ))}
-                              {!vatOutputVendorSummaries.length ? (
-                                <tr>
-                                  <td className="p-6 text-center text-muted-foreground" colSpan={5}>
-                                    {t("emp_result_empty")}
-                                  </td>
-                                </tr>
-                              ) : null}
-                            </tbody>
-                            {vatOutputVendorSummaries.length ? (
-                              <tfoot className="bg-muted/20">
-                                <tr className="border-t border-border/70 font-medium">
-                                  <td className="p-2">{t("accCompTotalsFooter")}</td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {vatOutputVendorTotals.count.toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {Math.round(vatOutputVendorTotals.net).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {Math.round(vatOutputVendorTotals.vat).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {Math.round(vatOutputVendorTotals.total).toLocaleString()}
-                                  </td>
-                                </tr>
-                              </tfoot>
+                        <AccountingTableShell>
+                          <AccountingTableHead>
+                            <th className={accountingResultThCn}>{t("accCompColVendorName")}</th>
+                            <th className={accountingResultThRightCn}>{t("accCompColCount")}</th>
+                            <th className={accountingResultThRightCn}>{t("accCompLabelNetAmount")}</th>
+                            <th className={accountingResultThRightCn}>{t("accCompPhVat")}</th>
+                            <th className={accountingResultThRightCn}>{t("accCompLabelGrandTotal")}</th>
+                          </AccountingTableHead>
+                          <tbody>
+                            {vatOutputVendorSummaries.map((row) => (
+                              <AccountingTableBodyRow key={`vendor-sum-${row.name}`}>
+                                <td className={accountingResultTdCn}>{row.name}</td>
+                                <td className={accountingResultTdRightCn}>{row.count.toLocaleString()}</td>
+                                <td className={accountingResultTdRightCn}>{Math.round(row.net).toLocaleString()}</td>
+                                <td className={accountingResultTdRightCn}>{Math.round(row.vat).toLocaleString()}</td>
+                                <td className={accountingResultTdRightCn}>{Math.round(row.total).toLocaleString()}</td>
+                              </AccountingTableBodyRow>
+                            ))}
+                            {!vatOutputVendorSummaries.length ? (
+                              <AccountingTableBodyRow>
+                                <td className={`${accountingResultTdCn} text-center text-muted-foreground py-6`} colSpan={5}>
+                                  {t("emp_result_empty")}
+                                </td>
+                              </AccountingTableBodyRow>
                             ) : null}
-                          </table>
-                        </div>
+                          </tbody>
+                          {vatOutputVendorSummaries.length ? (
+                            <tfoot>
+                              <AccountingTableFootRow>
+                                <td className={accountingResultTdCn}>{t("accCompTotalsFooter")}</td>
+                                <td className={accountingResultTdRightCn}>
+                                  {vatOutputVendorTotals.count.toLocaleString()}
+                                </td>
+                                <td className={accountingResultTdRightCn}>
+                                  {Math.round(vatOutputVendorTotals.net).toLocaleString()}
+                                </td>
+                                <td className={accountingResultTdRightCn}>
+                                  {Math.round(vatOutputVendorTotals.vat).toLocaleString()}
+                                </td>
+                                <td className={accountingResultTdRightCn}>
+                                  {Math.round(vatOutputVendorTotals.total).toLocaleString()}
+                                </td>
+                              </AccountingTableFootRow>
+                            </tfoot>
+                          ) : null}
+                        </AccountingTableShell>
                       ) : null}
                       {vatOutputViewMode === "detail" ? vatRows.map((row, idx) => {
                         if (row.direction !== "output") return null
@@ -5988,7 +5993,7 @@ export function AdminAccountingCompliance({
                         return (
                           <div
                             key={row.id ?? `vat-out-${idx}`}
-                            className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
+                            className={accountingLedgerEntryGridCn}
                           >
                             <Input
                               type="date"
@@ -6178,60 +6183,56 @@ export function AdminAccountingCompliance({
 
               {pp30SubView === "input" && (
                 <div className="space-y-3 text-sm">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                    <div>
-                      {t("accCompVatInputNet")}: {Math.round(vatSettlement.inputNet).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompVatInputVat")}: {Math.round(vatSettlement.inputVat).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompVatPayable")}: {Math.round(vatSettlement.payableVat).toLocaleString()}
-                    </div>
-                    <div>
-                      {t("accCompVatRowsPurchase")}: {vatInputRowsFiltered.length.toLocaleString()} / {t("accCompVatTotalRows")}:{" "}
-                      {vatFilteredStats.rowCount.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs rounded-md border border-dashed border-border/70 bg-muted/10 p-2">
-                    <div>
-                      신고가능 매입VAT: <b>{Math.round(vatInputClaimable.claimableVat).toLocaleString()}</b>
-                    </div>
-                    <div>
-                      증빙미완료 VAT: <b>{Math.round(vatInputClaimable.pendingVat).toLocaleString()}</b>
-                    </div>
-                    <div>
-                      신고제외 VAT: <b>{Math.round(vatInputClaimable.unobtainableVat).toLocaleString()}</b>
-                    </div>
-                    <div>
-                      체크 건수(완료/미완료/제외):{" "}
-                      <b>
-                        {vatInputClaimable.claimableCount}/{vatInputClaimable.pendingCount}/{vatInputClaimable.unobtainableCount}
-                      </b>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">{t("accCompInputVatFromExpenseHint")}</p>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">{t("accCompVatInputSourcesHint")}</p>
+                  <AccountingStatGrid>
+                    <AccountingStatCard
+                      label={t("accCompVatInputNet")}
+                      value={Math.round(vatSettlement.inputNet).toLocaleString()}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompVatInputVat")}
+                      value={Math.round(vatSettlement.inputVat).toLocaleString()}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompVatPayable")}
+                      value={Math.round(vatSettlement.payableVat).toLocaleString()}
+                      tone={vatSettlement.payableVat > 0 ? "warn" : "default"}
+                    />
+                    <AccountingStatCard
+                      label={t("accCompVatRowsPurchase")}
+                      value={`${vatInputRowsFiltered.length.toLocaleString()} / ${vatFilteredStats.rowCount.toLocaleString()}`}
+                    />
+                  </AccountingStatGrid>
+                  <AccountingStatGrid>
+                    <AccountingStatCard label="신고가능 매입VAT" value={Math.round(vatInputClaimable.claimableVat).toLocaleString()} tone="ok" />
+                    <AccountingStatCard label="증빙미완료 VAT" value={Math.round(vatInputClaimable.pendingVat).toLocaleString()} tone="warn" />
+                    <AccountingStatCard label="신고제외 VAT" value={Math.round(vatInputClaimable.unobtainableVat).toLocaleString()} />
+                    <AccountingStatCard
+                      label="체크 건수(완료/미완료/제외)"
+                      value={`${vatInputClaimable.claimableCount}/${vatInputClaimable.pendingCount}/${vatInputClaimable.unobtainableCount}`}
+                    />
+                  </AccountingStatGrid>
                   {taxSummary && allowedPp30Views.includes("wht") ? (
-                    <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
+                    <div className="rounded-lg border border-border/70 bg-muted/15 p-3 text-xs space-y-2">
                       <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                        <div>
-                          {t("accCompWhtLabelGross")}: {(taxSummary.wht.totalGross || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompWhtLabelWithheld")}: {(taxSummary.wht.totalWithheld || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompWhtLabelRows")}: {(taxSummary.wht.rowCount || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompMissingTinWht")}: {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t("accCompTaxWhtDocs")} · {t("accCompPp30GoWhtLedger")}
-                      </p>
+                      <AccountingStatGrid className="grid-cols-2 md:grid-cols-4">
+                        <AccountingStatCard
+                          label={t("accCompWhtLabelGross")}
+                          value={(taxSummary.wht.totalGross || 0).toLocaleString()}
+                        />
+                        <AccountingStatCard
+                          label={t("accCompWhtLabelWithheld")}
+                          value={(taxSummary.wht.totalWithheld || 0).toLocaleString()}
+                        />
+                        <AccountingStatCard
+                          label={t("accCompWhtLabelRows")}
+                          value={(taxSummary.wht.rowCount || 0).toLocaleString()}
+                        />
+                        <AccountingStatCard
+                          label={t("accCompMissingTinWht")}
+                          value={(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
+                          tone={(taxSummary.wht.missingTaxIdCount || 0) > 0 ? "warn" : "ok"}
+                        />
+                      </AccountingStatGrid>
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
@@ -6376,7 +6377,7 @@ export function AdminAccountingCompliance({
                         return (
                           <div
                             key={row.id ?? `vat-in-${idx}`}
-                            className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
+                            className={accountingLedgerEntryGridCn}
                           >
                             <Input
                               type="date"
@@ -7127,7 +7128,7 @@ export function AdminAccountingCompliance({
                           ref={(el) => {
                             if (row.id) whtRowRefs.current[row.id] = el
                           }}
-                          className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
+                          className={accountingLedgerEntryGridCn}
                         >
                           <Input
                             type="date"
@@ -7544,24 +7545,8 @@ export function AdminAccountingCompliance({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <p className="text-muted-foreground leading-relaxed">{t("accCompSsoIntro")}</p>
-              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                <li>{t("accCompSsoStep1")}</li>
-                <li>{t("accCompSsoStep2")}</li>
-                <li>{t("accCompSsoStep3")}</li>
-              </ul>
-              <p className="text-xs text-amber-800 dark:text-amber-200/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-md px-3 py-2">
-                {t("accCompSsoDisclaimer")}
-              </p>
-              <details className="text-xs text-muted-foreground rounded-md border border-border/60 px-3 py-2 bg-muted/20">
-                <summary className="cursor-pointer font-medium text-foreground/90">{t("accCompSsoGapTitle")}</summary>
-                <p className="mt-2 whitespace-pre-line leading-relaxed">{t("accCompSsoGapBody")}</p>
-              </details>
-              <p className="text-muted-foreground text-xs">{t("accCompSsoPayrollHint")}</p>
               {!ssoQueried ? (
-                <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-8 px-4 text-center text-sm text-muted-foreground">
-                  {t("accCompSsoEmptySearchHint")}
-                </div>
+                <AccountingEmptyState>{t("accCompSsoEmptySearchHint")}</AccountingEmptyState>
               ) : null}
               <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-2">
                 <div className="text-xs font-medium">{t("accCompSsoStep1Title")}</div>

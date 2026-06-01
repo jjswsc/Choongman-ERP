@@ -312,25 +312,15 @@ export function TaxFilingShell() {
               setTab("storeProfiles")
             }}
           />
-          <Card className="border-border/80">
-            <CardContent className="pt-4 space-y-2 text-xs text-muted-foreground">
-              <p>{t("taxFilingNotePp36Bundled")}</p>
-              <TaxFilingWhtTab
-                {...tabProps.pp30pp36}
-                filingSearchTick={pp30SearchTick}
-                embeddedPp36Section
-                whtFocusMode="pp36"
-                initialWhtSubmissionFormHint="ALL"
-              />
-            </CardContent>
-          </Card>
+          <TaxFilingWhtTab
+            {...tabProps.pp30pp36}
+            filingSearchTick={pp30SearchTick}
+            embeddedPp36Section
+            whtFocusMode="pp36"
+            initialWhtSubmissionFormHint="ALL"
+          />
         </TabsContent>
         <TabsContent value="pnd1391" className={cn(adminTabsContentCn, "space-y-3")}>
-          <Card className="border-border/80">
-            <CardContent className="pt-4 text-xs text-muted-foreground leading-relaxed">
-              {t("taxFilingNotePnd91Annual")}
-            </CardContent>
-          </Card>
           <TaxFilingWhtTab
             {...tabProps.pnd1391}
             whtFocusMode="pnd1391"

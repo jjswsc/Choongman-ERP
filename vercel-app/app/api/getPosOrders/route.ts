@@ -13,9 +13,8 @@ import {
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { isOfficeRole } from '@/lib/permissions'
-import { buildLegacyToCanonicalMap, fetchErpStoresMaster, type ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { addPosStoreCodeVariants, resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
 import { normStoreKey } from '@/lib/store-list-keys'
-import { expandGrabStoreMapLinkedCodes, parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
@@ -49,37 +48,6 @@ async function resolveBearerCaller(
 }
 
 const POS_ORDER_SELECT = POS_ORDER_FULL_SELECT
-
-function addStoreVariants(set: Set<string>, raw: string) {
-  const v = String(raw || '').trim()
-  if (!v || v.toLowerCase() === 'all') return
-  set.add(v)
-  const partnerStripped = v.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
-  if (partnerStripped && partnerStripped !== v) set.add(partnerStripped)
-  const numeric = (partnerStripped || v).match(/\b(\d{3,6})\b/)?.[1] || ''
-  if (numeric) set.add(numeric)
-  const prefixed = v.startsWith('CM ') ? v.slice(3).trim() : `CM ${v}`.trim()
-  if (prefixed && prefixed !== v) set.add(prefixed)
-  const noPrefix = v.replace(/^CM\s+/i, '').trim()
-  if (noPrefix && noPrefix !== v) set.add(noPrefix)
-}
-
-function addMasterRowVariants(
-  set: Set<string>,
-  row: { store_code?: string; display_name?: string; aliases?: string[] | null }
-) {
-  addStoreVariants(set, String(row.store_code || ''))
-  addStoreVariants(set, String(row.display_name || ''))
-  for (const alias of row.aliases || []) {
-    addStoreVariants(set, String(alias || ''))
-  }
-}
-
-type GrabIntegrationRow = {
-  grab_merchant_id?: string
-  partner_merchant_id?: string
-  integration_status?: string
-}
 
 type PosOrderServiceColumnsRow = {
   id?: number
@@ -121,106 +89,6 @@ async function loadServiceColumnsByOrderId(orderIds: number[]): Promise<Map<numb
     }
   }
   return byId
-}
-
-async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]> {
-  const base = String(rawStore || '').trim()
-  if (!base || base.toLowerCase() === 'all') return []
-  const variants = new Set<string>()
-  addStoreVariants(variants, base)
-
-  let masters: ErpStoreMasterRow[] = []
-  try {
-    masters = await fetchErpStoresMaster()
-    if (masters.length > 0) {
-      const legacyToCanonical = buildLegacyToCanonicalMap(masters)
-      const canonical = String(legacyToCanonical[normStoreKey(base)] || '').trim()
-      if (canonical) addStoreVariants(variants, canonical)
-      const baseKey = normStoreKey(base)
-      const canonicalKey = normStoreKey(canonical)
-      for (const row of masters) {
-        const keys = [
-          String(row.store_code || '').trim(),
-          String(row.display_name || '').trim(),
-          ...((row.aliases || []).map((a) => String(a || '').trim())),
-        ]
-        const matched = keys.some((k) => {
-          const nk = normStoreKey(k)
-          return Boolean(nk && (nk === baseKey || (canonicalKey && nk === canonicalKey)))
-        })
-        if (matched) addMasterRowVariants(variants, row)
-      }
-    }
-  } catch {
-    // ignore master resolve failure; fall back to raw variants
-  }
-
-  let integrationRows: GrabIntegrationRow[] = []
-  try {
-    integrationRows = (await supabaseSelect('pos_grab_store_integrations', {
-      order: 'updated_at.desc',
-      limit: 500,
-      select: 'grab_merchant_id,partner_merchant_id,integration_status',
-    })) as GrabIntegrationRow[]
-  } catch {
-    integrationRows = []
-  }
-
-  const grabMap = parseGrabStoreMap()
-  const legacyToCanonical = masters.length ? buildLegacyToCanonicalMap(masters) : {}
-  const baseKey = normStoreKey(base)
-  const canonical = String(legacyToCanonical[baseKey] || '').trim()
-  const canonicalKey = normStoreKey(canonical)
-
-  // ERP store_code 가 파트너 ID와 같고, GRAB_STORE_MAP_JSON 의 merchant→partner 가 연동과 맞으면 Grab 키 후보 추가
-  for (const row of integrationRows || []) {
-    const status = String(row.integration_status || '').trim().toLowerCase()
-    if (status && status !== 'active') continue
-    const G = String(row.grab_merchant_id || '').trim()
-    const P = String(row.partner_merchant_id || '').trim()
-    if (!G || !P) continue
-    const mapped = String(grabMap[G] || '').trim()
-    if (!mapped || normStoreKey(mapped) !== normStoreKey(P)) continue
-    for (const m of masters) {
-      const keys = [
-        String(m.store_code || '').trim(),
-        String(m.display_name || '').trim(),
-        ...((m.aliases || []).map((a) => String(a || '').trim())),
-      ]
-      const matched = keys.some((k) => {
-        const nk = normStoreKey(k)
-        return Boolean(nk && (nk === baseKey || (canonicalKey && nk === canonicalKey)))
-      })
-      if (!matched) continue
-      const sc = String(m.store_code || '').trim()
-      if (normStoreKey(sc) === normStoreKey(P) || normStoreKey(sc) === normStoreKey(mapped)) {
-        addStoreVariants(variants, G)
-        addStoreVariants(variants, P)
-        addStoreVariants(variants, mapped)
-        break
-      }
-    }
-  }
-
-  for (let iter = 0; iter < 6; iter++) {
-    const size0 = variants.size
-    const variantKeys = new Set(Array.from(variants).map((v) => normStoreKey(v)).filter(Boolean))
-    for (const row of integrationRows || []) {
-      const status = String(row.integration_status || '').trim().toLowerCase()
-      if (status && status !== 'active') continue
-      const partnerId = String(row.partner_merchant_id || '').trim()
-      const partnerKey = normStoreKey(partnerId)
-      if (!partnerKey || !variantKeys.has(partnerKey)) continue
-      addStoreVariants(variants, partnerId)
-      addStoreVariants(variants, String(row.grab_merchant_id || ''))
-    }
-    for (const x of expandGrabStoreMapLinkedCodes(Array.from(variants))) {
-      addStoreVariants(variants, x)
-    }
-    if (variants.size === size0) break
-  }
-
-  return Array.from(variants)
 }
 
 function inferOrderTypeForResponse(row: {
@@ -311,10 +179,10 @@ export async function GET(request: NextRequest) {
   const storeFilterCandidates = strictStore
     ? (() => {
         const variants = new Set<string>()
-        addStoreVariants(variants, effectiveStoreCode)
+        addPosStoreCodeVariants(variants, effectiveStoreCode)
         return Array.from(variants)
       })()
-    : await resolveStoreFilterCandidates(effectiveStoreCode)
+    : await resolvePosStoreFilterCandidates(effectiveStoreCode)
   const primaryStoreFilter = storeFilterCandidates[0] || ''
   const limitRaw = searchParams.get('limit')?.trim()
   const parsedListLimit = limitRaw && /^\d+$/.test(limitRaw) ? parseInt(limitRaw, 10) : null
@@ -472,8 +340,8 @@ export async function GET(request: NextRequest) {
             select: rowSelect,
           }, 'getPosOrders/list-fallback')) as typeof rows
           const candidateKeys = new Set<string>()
-          addStoreVariants(candidateKeys, primaryStoreFilter)
-          for (const c of storeFilterCandidates) addStoreVariants(candidateKeys, c)
+          addPosStoreCodeVariants(candidateKeys, primaryStoreFilter)
+          for (const c of storeFilterCandidates) addPosStoreCodeVariants(candidateKeys, c)
           const normCandidateKeys = new Set(
             Array.from(candidateKeys)
               .map((v) => normStoreKey(v))

@@ -5,7 +5,7 @@ import {
   resolvePosBusinessHoursFromContext,
   type PosBusinessDaySettingsContext,
 } from '@/lib/pos-business-day-server'
-import { expandSalesStoreCodesForFilter } from '@/lib/pos-sales-store-filter'
+import { expandSalesStoreCodesForFilterAsync } from '@/lib/pos-sales-store-filter'
 import { supabaseRpc } from '@/lib/supabase-server'
 
 export type PosSalesPeriodSummary = {
@@ -68,7 +68,7 @@ export async function tryFetchPosSalesPeriodSummaryRpc(params: {
   endISOExclusive: string
   storeCode: string
 }): Promise<PosSalesPeriodSummary | null> {
-  const storeCodes = expandSalesStoreCodesForFilter([params.storeCode])
+  const storeCodes = await expandSalesStoreCodesForFilterAsync([params.storeCode])
   try {
     const rows = (await supabaseRpc<RpcSummaryRow[]>('get_pos_sales_period_summary', {
       p_start_utc: params.startISO,

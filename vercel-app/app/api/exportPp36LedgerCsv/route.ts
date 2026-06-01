@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { pp36LedgerToCsv, type Pp36LedgerRow } from '@/lib/pp36-ledger-csv'
 import { requireAuth } from '@/lib/verify-auth'
@@ -71,16 +71,18 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const filter = appendStoreNameFilter(monthFilter, storeFilter)
-    const rows = (await supabaseSelectFilter('vat_pp36_ledger_entries', filter, {
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const rows = (await supabaseSelectFilterAllPages('vat_pp36_ledger_entries', monthFilter, {
       select: '*',
-      limit: 20000,
+      pageSize: 4000,
+      maxRows: 100000,
       order: 'doc_date.asc,id.asc',
     })) as Pp36LedgerRow[] | null
+    const scopedRows = (rows || []).filter((row) => storeScope.matches(String(row.store_name || '')))
     const filteredRows =
       filingStatus === ''
-        ? rows || []
-        : (rows || []).filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
+        ? scopedRows
+        : scopedRows.filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
 
     const csv = pp36LedgerToCsv(filteredRows)
     return new NextResponse(csv, {

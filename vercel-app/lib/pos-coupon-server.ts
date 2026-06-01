@@ -1,12 +1,12 @@
-import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
   revalidateAppliedPosCoupons,
   summarizeLegacyCouponFields,
   validatePosCouponCandidate,
   parseAppliedCouponsFromBody,
-  parseAppliedCouponsFromOrderRow,
   type PosAppliedCouponLine,
+  type PosCouponCartLine,
   type PosCouponCandidateInput,
   type PosCouponTemplate,
   type PosCouponValidationContext,
@@ -37,6 +37,11 @@ type CouponDbRow = {
   max_discount_amt?: number | null
   max_uses?: number | null
   used_count?: number
+  benefit_kind?: string | null
+  set_qty?: number | null
+  item_scope_json?: Record<string, unknown> | null
+  priority?: number | null
+  combinable_with_manual_discount?: boolean | null
 }
 
 type SerialDbRow = {
@@ -44,6 +49,7 @@ type SerialDbRow = {
   coupon_id?: number
   serial_code?: string
   status?: string
+  order_id?: number | null
 }
 
 type MemberIssueRow = {
@@ -54,6 +60,16 @@ type MemberIssueRow = {
   used_at?: string | null
 }
 
+type RedemptionDbRow = {
+  id?: number
+  order_id?: number
+  coupon_id?: number | null
+  coupon_code?: string
+  quantity?: number
+  serial_id?: number | null
+  member_coupon_issue_id?: number | null
+}
+
 function normalizeCode(code: string): string {
   return String(code ?? '').trim().toUpperCase()
 }
@@ -62,11 +78,23 @@ export function mapPosCouponDbRow(row: CouponDbRow | null | undefined): PosCoupo
   if (!row) return null
   const redemptionRaw = String(row.redemption_mode ?? 'reusable_code').trim()
   const stackRaw = String(row.stack_mode ?? 'fixed_only').trim()
+  const benefitRaw = String(row.benefit_kind ?? '').trim()
+  const discountType =
+    benefitRaw === 'bogo' || benefitRaw === 'set_fixed' || benefitRaw === 'item_fixed'
+      ? benefitRaw
+      : row.discount_type === 'percent'
+        ? 'percent'
+        : 'fixed'
+  const scope = row.item_scope_json && typeof row.item_scope_json === 'object'
+    ? row.item_scope_json
+    : null
+  const menuIds = Array.isArray(scope?.menuIds) ? scope?.menuIds : []
+  const categoryCodes = Array.isArray(scope?.categoryCodes) ? scope?.categoryCodes : []
   return {
     id: row.id,
     code: normalizeCode(String(row.code ?? '')),
     name: String(row.name ?? ''),
-    discountType: row.discount_type === 'percent' ? 'percent' : 'fixed',
+    discountType,
     discountValue: Number(row.discount_value ?? 0),
     validFrom: row.valid_from || null,
     validTo: row.valid_to || null,
@@ -83,7 +111,39 @@ export function mapPosCouponDbRow(row: CouponDbRow | null | undefined): PosCoupo
     maxDiscountAmt: row.max_discount_amt != null ? Number(row.max_discount_amt) : null,
     maxUses: row.max_uses != null ? Number(row.max_uses) : null,
     usedCount: Math.max(0, Number(row.used_count ?? 0) || 0),
+    setQty: Number(row.set_qty ?? 0) || undefined,
+    itemScope: menuIds.length || categoryCodes.length ? { menuIds, categoryCodes } : undefined,
+    priority: Number(row.priority ?? 0) || 0,
+    allowWithManualDiscount:
+      row.combinable_with_manual_discount == null
+        ? true
+        : Boolean(row.combinable_with_manual_discount),
   }
+}
+
+function parseCartLines(raw: unknown): PosCouponCartLine[] {
+  if (!Array.isArray(raw)) return []
+  const out: PosCouponCartLine[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const data = row as Record<string, unknown>
+    const quantity = Math.max(1, Math.trunc(Number(data.quantity ?? data.qty ?? 1) || 1))
+    const lineSubtotal = Math.max(
+      0,
+      Number(
+        data.lineSubtotal ??
+          data.line_subtotal ??
+          ((Number(data.price ?? 0) || 0) * quantity)
+      ) || 0
+    )
+    out.push({
+      menuId: String(data.menuId ?? data.menu_id ?? '').trim() || undefined,
+      categoryCode: String(data.categoryCode ?? data.category_code ?? '').trim() || undefined,
+      quantity,
+      lineSubtotal,
+    })
+  }
+  return out
 }
 
 async function loadCouponTemplateByCode(code: string): Promise<PosCouponTemplate | null> {
@@ -125,10 +185,11 @@ async function findMemberCouponIssue(params: {
   const memberId = Math.max(0, Math.trunc(Number(params.memberId ?? 0) || 0))
   const code = normalizeCode(params.code)
   if (!memberId || !code) return null
+  const nowBangkok = getBangkokDateTimeString()
   const rows = (await supabaseSelectFilter(
     'member_coupon_issues',
-    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued`,
-    { order: 'id.asc', limit: 1 }
+    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(nowBangkok)})`,
+    { order: 'expires_at.asc,id.asc', limit: 1 }
   )) as MemberIssueRow[] | null
   return rows?.[0] ?? null
 }
@@ -168,6 +229,7 @@ export async function validatePosCouponApplication(params: {
   subtotal: number
   manualDiscountAmt?: number
   collabDiscountAmt?: number
+  cartLines?: PosCouponCartLine[]
   applied?: PosAppliedCouponLine[]
   candidate: PosCouponCandidateInput
   memberId?: number
@@ -177,6 +239,7 @@ export async function validatePosCouponApplication(params: {
     subtotal: Math.max(0, Number(params.subtotal) || 0),
     manualDiscountAmt: Math.max(0, Number(params.manualDiscountAmt ?? 0) || 0),
     collabDiscountAmt: Math.max(0, Number(params.collabDiscountAmt ?? 0) || 0),
+    cartLines: Array.isArray(params.cartLines) ? params.cartLines : [],
     applied: Array.isArray(params.applied) ? params.applied : [],
     todayYmd: getBangkokTodayDateString(),
     loyalty,
@@ -199,6 +262,7 @@ export async function validatePosCouponApplicationList(params: {
   subtotal: number
   manualDiscountAmt?: number
   collabDiscountAmt?: number
+  cartLines?: PosCouponCartLine[]
   appliedCoupons: PosAppliedCouponLine[]
   memberId?: number
 }): Promise<{
@@ -218,6 +282,7 @@ export async function validatePosCouponApplicationList(params: {
     subtotal: Math.max(0, Number(params.subtotal) || 0),
     manualDiscountAmt: Math.max(0, Number(params.manualDiscountAmt ?? 0) || 0),
     collabDiscountAmt: Math.max(0, Number(params.collabDiscountAmt ?? 0) || 0),
+    cartLines: Array.isArray(params.cartLines) ? params.cartLines : [],
     todayYmd: getBangkokTodayDateString(),
     loyalty,
   }
@@ -302,6 +367,82 @@ export async function persistPosOrderCouponRedemptions(params: {
   }
 }
 
+export async function rollbackPosOrderCouponRedemptions(params: {
+  orderId: number
+  reason?: string
+}): Promise<{
+  restoredIssueCount: number
+  restoredSerialCount: number
+  decrementedCouponCount: number
+}> {
+  const orderId = Number(params.orderId || 0)
+  if (!orderId) return { restoredIssueCount: 0, restoredSerialCount: 0, decrementedCouponCount: 0 }
+
+  const redemptions = (await supabaseSelectFilter(
+    'pos_order_coupon_redemptions',
+    `order_id=eq.${orderId}`,
+    { limit: 5000 }
+  )) as RedemptionDbRow[]
+  if (!redemptions?.length) {
+    return { restoredIssueCount: 0, restoredSerialCount: 0, decrementedCouponCount: 0 }
+  }
+
+  let restoredIssueCount = 0
+  let restoredSerialCount = 0
+  const qtyByCouponId = new Map<number, number>()
+  const restoredAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
+
+  for (const row of redemptions) {
+    const serialId = Number(row.serial_id || 0)
+    const issueId = Number(row.member_coupon_issue_id || 0)
+    const couponId = Number(row.coupon_id || 0)
+    const qty = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
+
+    if (serialId > 0) {
+      await supabaseUpdate('pos_coupon_serials', serialId, {
+        status: 'issued',
+        order_id: null,
+        redeemed_at: null,
+      })
+      restoredSerialCount += 1
+    }
+
+    if (issueId > 0) {
+      await supabaseUpdate('member_coupon_issues', issueId, {
+        status: 'issued',
+        used_at: null,
+        order_id: null,
+        restored_at: restoredAt,
+        restore_reason: String(params.reason || 'order_reversal').slice(0, 120),
+        restored_from_order_id: orderId,
+      })
+      restoredIssueCount += 1
+    }
+
+    if (couponId > 0) {
+      qtyByCouponId.set(couponId, (qtyByCouponId.get(couponId) || 0) + qty)
+    }
+  }
+
+  let decrementedCouponCount = 0
+  for (const [couponId, qty] of qtyByCouponId.entries()) {
+    const couponRows = (await supabaseSelectFilter('pos_coupons', `id=eq.${couponId}`, {
+      limit: 1,
+      select: 'id,used_count',
+    })) as Array<{ id?: number; used_count?: number }>
+    const current = Math.max(0, Number(couponRows?.[0]?.used_count ?? 0) || 0)
+    await supabaseUpdateByFilter('pos_coupons', `id=eq.${couponId}`, {
+      used_count: Math.max(0, current - qty),
+      updated_at: new Date().toISOString(),
+    })
+    decrementedCouponCount += 1
+  }
+
+  await supabaseDeleteByFilter('pos_order_coupon_redemptions', `order_id=eq.${orderId}`)
+
+  return { restoredIssueCount, restoredSerialCount, decrementedCouponCount }
+}
+
 export { parseAppliedCouponsFromBody, parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-domain'
 
 export async function resolvePosOrderCouponsForSave(params: {
@@ -309,6 +450,7 @@ export async function resolvePosOrderCouponsForSave(params: {
   subtotal: number
   manualDiscountAmt: number
   collabDiscountAmt?: number
+  cartLines?: PosCouponCartLine[]
   memberId?: number
 }): Promise<{
   appliedCoupons: PosAppliedCouponLine[]
@@ -343,6 +485,10 @@ export async function resolvePosOrderCouponsForSave(params: {
     subtotal: params.subtotal,
     manualDiscountAmt: params.manualDiscountAmt,
     collabDiscountAmt: params.collabDiscountAmt,
+    cartLines:
+      Array.isArray(params.cartLines) && params.cartLines.length > 0
+        ? params.cartLines
+        : parseCartLines(params.body.items ?? params.body.items_json),
     appliedCoupons: applied,
     memberId: params.memberId,
   })

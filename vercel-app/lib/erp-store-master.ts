@@ -44,11 +44,18 @@ export type ErpStoreMasterRow = {
   aliases?: string[] | null
   sort_order?: number | null
   is_active?: boolean | null
+  photo_url?: string | null
+  map_query?: string | null
+  address?: string | null
 }
 
 /** getPosOrders 등 — erp_stores 마스터는 자주 안 바뀌므로 짧게 캐시(동일 프로세스) */
 const ERP_STORES_MASTER_CACHE_MS = 5 * 60 * 1000
 let erpStoresMasterCache: { at: number; rows: ErpStoreMasterRow[] } | null = null
+
+export function invalidateErpStoresMasterCache(): void {
+  erpStoresMasterCache = null
+}
 
 export async function fetchErpStoresMaster(): Promise<ErpStoreMasterRow[]> {
   const cachedAt = erpStoresMasterCache?.at ?? 0
@@ -61,15 +68,26 @@ export async function fetchErpStoresMaster(): Promise<ErpStoreMasterRow[]> {
 }
 
 async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
+  const legacySelect =
+    'store_code,display_name,aliases,sort_order,is_active,photo_url,map_query,address'
+  const legacySelectBasic = 'store_code,display_name,aliases,sort_order,is_active'
   try {
     const rows = (await supabaseSelect('erp_stores', {
-      select: 'store_code,display_name,aliases,sort_order,is_active',
+      select: legacySelect,
       order: 'sort_order.asc,display_name.asc',
       limit: 500,
     })) as ErpStoreMasterRow[] | null
     return (rows || []).filter((r) => r.is_active !== false)
   } catch {
     try {
+      const rows = (await supabaseSelect('erp_stores', {
+        select: legacySelectBasic,
+        order: 'sort_order.asc,display_name.asc',
+        limit: 500,
+      })) as ErpStoreMasterRow[] | null
+      return (rows || []).filter((r) => r.is_active !== false)
+    } catch {
+      try {
       // SaaS 전환 스키마(tenant_id/store_name/store_code) 호환
       const rows = (await supabaseSelect('erp_stores', {
         select: 'tenant_id,store_name,store_code,is_active',
@@ -101,6 +119,7 @@ async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
       return mapped
     } catch {
       return []
+    }
     }
   }
 }

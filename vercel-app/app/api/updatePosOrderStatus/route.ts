@@ -23,10 +23,17 @@ import {
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
+import { rollbackPosOrderCouponRedemptions } from '@/lib/pos-coupon-server'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
-type SideEffectStep = 'stock' | 'journal' | 'vat_draft' | 'reversal_stock' | 'reversal_journal'
+type SideEffectStep =
+  | 'stock'
+  | 'journal'
+  | 'vat_draft'
+  | 'reversal_stock'
+  | 'reversal_journal'
+  | 'reversal_coupon'
 
 function pushFailedStep(target: SideEffectStep[], step: SideEffectStep) {
   if (!target.includes(step)) target.push(step)
@@ -200,7 +207,7 @@ export async function POST(req: NextRequest) {
         } catch (queueErr) {
           console.error('updatePosOrderStatus enqueueKitchenPrintJob(retry):', queueErr)
         }
-      } else if (isPosReversalStatus(nextStatus) && hasPositivePaymentAmount(prev)) {
+      } else if (isPosReversalStatus(nextStatus)) {
         const storeCode = String(prev?.store_code ?? '').trim()
         const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))
         try {
@@ -209,16 +216,27 @@ export async function POST(req: NextRequest) {
           pushFailedStep(failedSideEffects, 'reversal_stock')
           console.error('reversePosStockDeduction(retry):', e)
         }
+        if (hasPositivePaymentAmount(prev)) {
+          try {
+            await postPosOrderReversalJournal({
+              posOrderId: id,
+              salesDate,
+              storeName: storeCode || undefined,
+              memo: `POS 주문 ${nextStatus === 'refunded' ? '환불' : '취소'} 역분개`,
+            })
+          } catch (postingErr) {
+            pushFailedStep(failedSideEffects, 'reversal_journal')
+            console.error('updatePosOrderStatus reversal posting(retry):', postingErr)
+          }
+        }
         try {
-          await postPosOrderReversalJournal({
-            posOrderId: id,
-            salesDate,
-            storeName: storeCode || undefined,
-            memo: `POS 주문 ${nextStatus === 'refunded' ? '환불' : '취소'} 역분개`,
+          await rollbackPosOrderCouponRedemptions({
+            orderId: id,
+            reason: `status_retry_${nextStatus}`,
           })
-        } catch (postingErr) {
-          pushFailedStep(failedSideEffects, 'reversal_journal')
-          console.error('updatePosOrderStatus reversal posting(retry):', postingErr)
+        } catch (couponErr) {
+          pushFailedStep(failedSideEffects, 'reversal_coupon')
+          console.error('updatePosOrderStatus reversal coupon(retry):', couponErr)
         }
       }
       if (failedSideEffects.length > 0) {
@@ -391,6 +409,15 @@ export async function POST(req: NextRequest) {
       } catch (postingErr) {
         pushFailedStep(failedSideEffects, 'reversal_journal')
         console.error('updatePosOrderStatus reversal posting:', postingErr)
+      }
+      try {
+        await rollbackPosOrderCouponRedemptions({
+          orderId: id,
+          reason: `status_${nextStatus}`,
+        })
+      } catch (couponErr) {
+        pushFailedStep(failedSideEffects, 'reversal_coupon')
+        console.error('updatePosOrderStatus reversal coupon:', couponErr)
       }
     }
 

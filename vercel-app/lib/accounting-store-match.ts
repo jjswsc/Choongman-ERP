@@ -1,7 +1,22 @@
+import { loadErpStoreMatchIndex, type ErpStoreMatchIndex } from '@/lib/erp-store-identity'
+import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 
-/** 손익·통장·대차 등 JS 측 매장 매칭 (변형 허용) */
-export function storeMatchesIncomeFilter(storeValue: string, filter: string): boolean {
+const MATCH_INDEX_TTL_MS = 5 * 60 * 1000
+let matchIndexCache: ErpStoreMatchIndex | null = null
+let matchIndexCacheAt = 0
+
+/** erp_stores 로드 후 재무·원장 매칭에 공통 사용 */
+export async function ensureErpStoreMatchIndex(): Promise<ErpStoreMatchIndex> {
+  if (matchIndexCache && Date.now() - matchIndexCacheAt < MATCH_INDEX_TTL_MS) {
+    return matchIndexCache
+  }
+  matchIndexCache = await loadErpStoreMatchIndex()
+  matchIndexCacheAt = Date.now()
+  return matchIndexCache
+}
+
+function storeMatchesIncomeFilterLegacy(storeValue: string, filter: string): boolean {
   const a = String(storeValue || '').trim().toLowerCase()
   if (!filter || filter.trim().toLowerCase() === 'all') return true
   if (!a) return false
@@ -11,6 +26,26 @@ export function storeMatchesIncomeFilter(storeValue: string, filter: string): bo
     if (a === b || a.includes(b) || b.includes(a)) return true
   }
   return false
+}
+
+/** 손익·통장·시산 — erp_stores 단일 store_code 기준(마스터 없으면 CM 접두 폴백) */
+export function storeMatchesIncomeFilterWithIndex(
+  storeValue: string,
+  filter: string,
+  index: ErpStoreMatchIndex
+): boolean {
+  if (!filter || filter.trim().toLowerCase() === 'all') return true
+  const v = String(storeValue || '').trim()
+  if (!v) return false
+  return matchesAccountingStoreScopeRow(v, filter, index.masters, index.legacyToCanonical)
+}
+
+/** @deprecated 가능하면 ensureErpStoreMatchIndex + storeMatchesIncomeFilterWithIndex 사용 */
+export function storeMatchesIncomeFilter(storeValue: string, filter: string): boolean {
+  if (matchIndexCache && Date.now() - matchIndexCacheAt < MATCH_INDEX_TTL_MS) {
+    return storeMatchesIncomeFilterWithIndex(storeValue, filter, matchIndexCache)
+  }
+  return storeMatchesIncomeFilterLegacy(storeValue, filter)
 }
 
 export function sqlIlikeContains(term: string): string {

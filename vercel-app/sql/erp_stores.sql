@@ -4,6 +4,8 @@
 -- 1) Supabase SQL Editor에서 실행
 -- 2) store_code 는 pos_orders.store_code 와 동일하게 맞추는 것을 권장
 -- 3) display_name / aliases 에 과거 employees.store 표기를 넣어 레거시와 매칭
+-- 4) 회원앱 매장 정보(사진·주소·지도): sql/erp_stores_member_portal_fields.sql
+-- 5) 전 매장 aliases 자동 보강: sql/erp_stores_seed_all_aliases.sql
 
 CREATE TABLE IF NOT EXISTS public.erp_stores (
   store_code text PRIMARY KEY,
@@ -33,7 +35,10 @@ CREATE POLICY "erp_stores_select_public"
 -- 선택: 시드 예시 (실제 코드·이름으로 수정 후 주석 해제)
 -- INSERT INTO public.erp_stores (store_code, display_name, aliases, sort_order) VALUES
 --   ('office', 'Office', ARRAY['본사','오피스','Office'], 0),
---   ('cm_ekamai', 'CM Ekamai', ARRAY['에까마이','CM Ekamai'], 10)
+--   ('CM Ekkamai', 'CM Ekkamai', ARRAY[
+--     'Ekkamai', 'CM Ekamai', 'cm_ekamai', 'cm ekkamai', 'cm ekamai',
+--     '에까마이', 'เอกมัย', 'สาขาเอกมัย'
+--   ], 10)
 -- ON CONFLICT (store_code) DO UPDATE SET
 --   display_name = EXCLUDED.display_name,
 --   aliases = EXCLUDED.aliases,

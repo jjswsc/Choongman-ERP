@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
+  supabaseUpdate,
+} from '@/lib/supabase-server'
 import {
   assertCanApproveAccountingCompliance,
   assertCanManageAccountingCompliance,
   assertCanWriteAccountingCompliance,
 } from '@/lib/accounting-auth'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
+import { canonicalLedgerStoreName } from '@/lib/erp-store-identity'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import {
@@ -118,13 +125,17 @@ export async function GET(request: NextRequest) {
       console.warn('withholdingTaxLedger GET auto-sync skipped:', e)
     }
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const filter = appendStoreNameFilter(monthFilter, storeFilter)
-    const rows = (await supabaseSelectFilter('withholding_tax_ledger_entries', filter, {
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const rows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthFilter, {
       select: '*',
-      limit: 20000,
+      pageSize: 4000,
+      maxRows: 100000,
       order: 'payment_date.asc,id.asc',
     })) as Record<string, unknown>[] | null
-    const entries = (rows || []).filter((row) => matchesFilingStatus(row.filing_status, filingStatus))
+    const entries = (rows || []).filter((row) => {
+      if (!storeScope.matches(String(row.store_name || ''))) return false
+      return matchesFilingStatus(row.filing_status, filingStatus)
+    })
     return NextResponse.json({ entries, period }, { headers })
   } catch (e) {
     console.error('withholdingTaxLedger GET:', e)
@@ -197,6 +208,7 @@ export async function POST(request: NextRequest) {
         ? Math.floor(Number(sourceIdRaw))
         : 0
 
+    const canonicalStoreName = effectiveStoreName ? await canonicalLedgerStoreName(effectiveStoreName) : null
     const row: Record<string, unknown> = {
       payment_date: paymentDate,
       tax_month: taxMonth,
@@ -212,7 +224,7 @@ export async function POST(request: NextRequest) {
       filing_status: filingStatus,
       submitted_at: filingStatus === 'submitted' ? submittedAtRaw || new Date().toISOString() : null,
       submitted_by: filingStatus === 'submitted' ? submittedByRaw || null : null,
-      store_name: effectiveStoreName ? String(effectiveStoreName).slice(0, 200) : null,
+      store_name: canonicalStoreName ? String(canonicalStoreName).slice(0, 200) : null,
       updated_at: new Date().toISOString(),
     }
     if (directionRaw === 'inbound' || directionRaw === 'outbound') {

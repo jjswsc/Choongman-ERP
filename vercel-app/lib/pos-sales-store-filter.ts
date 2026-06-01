@@ -1,7 +1,9 @@
+import { resolvePosStoreFilterCandidatesMany } from '@/lib/pos-store-filter-candidates'
+
 /**
  * 매출 API 공통: URL stores / 단일 pos 파싱, Supabase(PostgREST) store_code 필터 조각 생성.
  * - 0개: 필터 없음
- * - 1개 이상: `storeCodeSearchVariants`로 CM 접두 등을 펼친 뒤 `in.(...)` 정확 일치(동일 주문 이중집계 없음)
+ * - 1개 이상: erp_stores 별칭·Grab ID·CM 접두 등을 펼친 뒤 `in.(...)` 정확 일치(동일 주문 이중집계 없음)
  */
 export function parseStoreList(raw: string | null): string[] {
   return String(raw ?? '')
@@ -36,16 +38,36 @@ export function expandSalesStoreCodesForFilter(stores: string[]): string[] {
   return out
 }
 
+/** erp_stores 별칭·Grab ID 포함 — 매출 API 권장 */
+export async function expandSalesStoreCodesForFilterAsync(stores: string[]): Promise<string[]> {
+  if (!stores.length) return []
+  try {
+    const expanded = await resolvePosStoreFilterCandidatesMany(stores)
+    if (expanded.length > 0) return expanded
+  } catch {
+    // fall through
+  }
+  return expandSalesStoreCodesForFilter(stores)
+}
+
 /**
  * 기존 filter 문자열(created_at=...) 뒤에 붙일 store 조건.
  * PostgREST: store_code=in.(a,b,c)
  */
-export function appendStoreCodeFilter(baseFilter: string, stores: string[]): string {
-  const expanded = expandSalesStoreCodesForFilter(stores)
+export function appendStoreCodeFilterFromExpanded(baseFilter: string, expanded: string[]): string {
   if (expanded.length === 0) return baseFilter
   const inner = expanded.join(',')
   const inClause = `in.(${inner})`
   return `${baseFilter}&store_code=${encodeURIComponent(inClause)}`
+}
+
+export function appendStoreCodeFilter(baseFilter: string, stores: string[]): string {
+  return appendStoreCodeFilterFromExpanded(baseFilter, expandSalesStoreCodesForFilter(stores))
+}
+
+export async function appendStoreCodeFilterAsync(baseFilter: string, stores: string[]): Promise<string> {
+  const expanded = await expandSalesStoreCodesForFilterAsync(stores)
+  return appendStoreCodeFilterFromExpanded(baseFilter, expanded)
 }
 
 /**
@@ -70,6 +92,28 @@ export function storeCodeSearchVariants(primary: string): string[] {
   return out
 }
 
+function buildExpandedStoreMatchSet(expanded: string[]): Set<string> {
+  const out = new Set<string>()
+  for (const code of expanded) {
+    for (const v of storeCodeSearchVariants(code)) {
+      const t = String(v || '').trim().toLowerCase()
+      if (t) out.add(t)
+    }
+  }
+  return out
+}
+
+/** DB store_code가 펼친 후보 집합에 포함되면 true */
+export function rowMatchesExpandedStoreFilter(dbStoreCode: unknown, expandedStoreCodes: string[]): boolean {
+  const raw = String(dbStoreCode ?? '').trim()
+  if (!raw || expandedStoreCodes.length === 0) return false
+  const matchSet = buildExpandedStoreMatchSet(expandedStoreCodes)
+  for (const v of storeCodeSearchVariants(raw)) {
+    if (matchSet.has(String(v || '').trim().toLowerCase())) return true
+  }
+  return false
+}
+
 /** DB `store_code`가 매출 화면에서 선택한 코드와 동일 매장 계열이면 true (CM 접두·표기 차이) */
 export function rowMatchesSalesStoreSelection(dbStoreCode: unknown, selectedCode: string): boolean {
   const a = String(dbStoreCode ?? '').trim()
@@ -82,6 +126,17 @@ export function rowMatchesSalesStoreSelection(dbStoreCode: unknown, selectedCode
     if (setB.has(x)) return true
   }
   return false
+}
+
+export function rowMatchesAnySalesStoreSelection(
+  dbStoreCode: unknown,
+  selectedCodes: string[],
+  expandedStoreCodes?: string[]
+): boolean {
+  if (expandedStoreCodes?.length) {
+    return rowMatchesExpandedStoreFilter(dbStoreCode, expandedStoreCodes)
+  }
+  return selectedCodes.some((code) => rowMatchesSalesStoreSelection(dbStoreCode, code))
 }
 
 /**

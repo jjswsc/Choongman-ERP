@@ -93,28 +93,88 @@ export function PremiumStatTile({
   value,
   sub,
   accent = "amber",
+  onClick,
 }: {
   icon: LucideIcon
   label: string
   value: string
   sub?: string
   accent?: "amber" | "rose" | "emerald"
+  onClick?: () => void
 }) {
   const accentMap = {
     amber: "from-amber-400/20 to-amber-600/5 text-amber-200 border-amber-400/20",
     rose: "from-rose-400/15 to-rose-600/5 text-rose-200 border-rose-400/20",
     emerald: "from-emerald-400/15 to-emerald-600/5 text-emerald-200 border-emerald-400/20",
   }
-  return (
-    <div className={`${mpGlassCardSoft} p-4`}>
+  const className = `${mpGlassCardSoft} p-4 text-left transition ${onClick ? "cursor-pointer hover:border-white/15 active:scale-[0.98]" : ""}`
+  const inner = (
+    <>
       <div
         className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl border bg-gradient-to-br ${accentMap[accent]}`}
       >
         <Icon className="h-4 w-4" />
       </div>
       <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/45">{label}</p>
-      <p className="mt-1.5 text-xl font-semibold tracking-tight text-white">{value}</p>
+      <p className="mt-1.5 line-clamp-2 text-base font-semibold leading-snug tracking-tight text-white">{value}</p>
       {sub ? <p className="mt-1 text-[11px] text-white/40">{sub}</p> : null}
+    </>
+  )
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {inner}
+      </button>
+    )
+  }
+  return <div className={className}>{inner}</div>
+}
+
+export function MemberPortalContentSheet({
+  open,
+  item,
+  closeLabel,
+  onClose,
+}: {
+  open: boolean
+  item: { title: string; body: string; imageUrl: string } | null
+  closeLabel: string
+  onClose: () => void
+}) {
+  if (!open || !item) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        aria-label={closeLabel}
+        onClick={onClose}
+      />
+      <div
+        className={`relative mx-auto w-full ${MP_MAX_WIDTH} max-h-[88vh] overflow-y-auto rounded-t-[1.75rem] border border-white/10 bg-[#121214] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt={item.title || "promo"}
+            className="mb-4 max-h-64 w-full rounded-2xl object-cover"
+          />
+        ) : null}
+        {item.title ? <h3 className="text-lg font-semibold text-white">{item.title}</h3> : null}
+        {item.body ? (
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{item.body}</p>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-medium text-white/90 hover:bg-white/10"
+        >
+          {closeLabel}
+        </button>
+      </div>
     </div>
   )
 }

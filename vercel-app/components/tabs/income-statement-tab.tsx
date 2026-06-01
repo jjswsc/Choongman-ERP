@@ -65,6 +65,15 @@ import {
 } from "@/lib/income-statement-export"
 import { formatBahtInteger as formatBath, roundFinancialAmount } from "@/lib/financial-amount-format"
 import {
+  accountingFinancialRowCn,
+  accountingFinancialTableCn,
+  accountingFinancialTheadCn,
+} from "@/lib/accounting-result-ui"
+import {
+  AccountingEmptyState,
+  AccountingPeriodChip,
+} from "@/components/admin/accounting-result-primitives"
+import {
   buildExpenseDrillAdminHref,
   buildPurchaseDrillAdminHref,
   expenseDrillNavContextFromDrill,
@@ -893,17 +902,7 @@ function IncomePlDetailTableContent({
   return (
     <div ref={printRef ?? undefined} className={wrapperClassName}>
       <div className={titleClassName}>{t("incomeStatementTitle")}</div>
-      <div className="text-sm text-muted-foreground mb-2">{periodLine}</div>
-      {view.useManualSales && (
-        <div className="text-xs text-muted-foreground mb-2">
-          {t("pL_systemSalesLabel")}: {formatBath(view.systemSales)}
-        </div>
-      )}
-      {view.useManualBegInv && (
-        <div className="text-xs text-muted-foreground mb-2">
-          {t("pL_systemBegInvLabel")}: {formatBath(view.systemBeginningInventory)}
-        </div>
-      )}
+      <AccountingPeriodChip className="mb-3">{periodLine}</AccountingPeriodChip>
       {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
         <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {data.diagnostics?.warnings?.join(" / ")}
@@ -959,7 +958,6 @@ function IncomePlDetailTableContent({
       {(data.diagnostics?.purchaseExcludedHqBankPayments?.length || 0) > 0 && (
         <div className="mb-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-xs text-violet-950">
           <p className="mb-1 font-medium">{t("pL_diagExcludedHqBankTitle")}</p>
-          <p className="mb-1.5 leading-relaxed text-[11px] opacity-90">{t("pL_diagExcludedHqBankHint")}</p>
           <ul className="list-disc pl-4 space-y-0.5 font-mono text-[11px]">
             {data.diagnostics!.purchaseExcludedHqBankPayments!.map((row) => (
               <li key={row.key}>
@@ -971,12 +969,13 @@ function IncomePlDetailTableContent({
           </ul>
         </div>
       )}
-      <table className="w-full max-w-md text-sm">
+      <div className="overflow-x-auto rounded-lg border border-border/80 bg-card shadow-sm">
+      <table className={`${accountingFinancialTableCn} max-w-md w-full`}>
         <thead>
-          <tr className="border-b text-muted-foreground">
-            <th className="py-2 text-left font-medium"></th>
-            <th className="py-2 text-right font-medium pr-2">{t("pL_colAmount") || "Amount"}</th>
-            <th className="py-2 text-right font-medium w-14">{t("pL_pctOfSales")}</th>
+          <tr className={accountingFinancialTheadCn}>
+            <th className="py-2.5 text-left font-medium pl-3"></th>
+            <th className="py-2.5 text-right font-medium pr-3">{t("pL_colAmount") || "Amount"}</th>
+            <th className="py-2.5 text-right font-medium w-14 pr-3">{t("pL_pctOfSales")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1012,38 +1011,6 @@ function IncomePlDetailTableContent({
                     <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
                   </tr>
                 ))}
-              {expandSales && view.useManualSales && salesBreakdownIsHqOutbound(data) && (
-                <tr className="border-b bg-muted/10">
-                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
-                    {t("pL_salesBreakdownHqOutboundNote") ||
-                      "아래는 물류 출고(출고 관리) 매출처별 합계입니다. 상단 매출은 수동 입력을 반영할 수 있습니다."}
-                  </td>
-                </tr>
-              )}
-              {expandSales && !view.useManualSales && salesBreakdownIsHqOutbound(data) && (
-                <tr className="border-b bg-muted/10">
-                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
-                    {t("pL_salesBreakdownHqOutboundHint") ||
-                      "본사 창고 실제 출고(stock_logs) 합계로, 출고 관리 화면과 동일한 단가·기간입니다. POS·승인 발주 금액과 다를 수 있습니다."}
-                  </td>
-                </tr>
-              )}
-              {expandSales && view.useManualSales && salesBreakdownIsDaily(data) && (
-                <tr className="border-b bg-muted/10">
-                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
-                    {t("pL_salesBreakdownPosDailyNote") ||
-                      "아래는 POS 영업일별 매출입니다. 상단 매출은 수동 입력을 반영할 수 있습니다."}
-                  </td>
-                </tr>
-              )}
-              {expandSales && salesBreakdownIsDaily(data) && !view.useManualSales && (
-                <tr className="border-b bg-muted/10">
-                  <td colSpan={3} className="py-1.5 pl-6 pr-2 text-[11px] text-muted-foreground leading-relaxed">
-                    {t("pL_salesBreakdownPosDailyHint") ||
-                      "POS 완료 주문 매출액 합계(매출 관리 「매장별 매출 집계」·영업일 기준과 동일)입니다."}
-                  </td>
-                </tr>
-              )}
             </>
           ) : (
             <tr className="border-b">
@@ -1103,15 +1070,6 @@ function IncomePlDetailTableContent({
             <tr className="border-b bg-muted/20">
               <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
                 {t("inNoData") || "No data found."}
-              </td>
-            </tr>
-          )}
-          {expandPurchases && (
-            <tr className="border-b bg-muted/10">
-              <td colSpan={3} className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed">
-                {salesBreakdownIsHqOutbound(data)
-                  ? t("pL_purchaseCompositionNoteHq")
-                  : t("pL_purchaseCompositionNote")}
               </td>
             </tr>
           )}
@@ -1256,6 +1214,7 @@ function IncomePlDetailTableContent({
           </tr>
         </tbody>
       </table>
+      </div>
 
       <IncomePurchaseDrillDialog
         open={purchaseDrillOpen}
@@ -2302,15 +2261,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                       {t("fs_compareByYear")}
                     </Button>
                   </div>
-                  {compareGranularity === "year" && (
-                    <p className="text-xs text-muted-foreground">{t("fs_compareYearPlNote")}</p>
-                  )}
-                  <div className="text-xs text-muted-foreground">
+                  <AccountingPeriodChip>
                     {yearMonthStart === yearMonthEnd
                       ? yearMonthEnd
                       : `${yearMonthStart} ~ ${yearMonthEnd}`}{" "}
                     · {storeLabel}
-                  </div>
+                  </AccountingPeriodChip>
                   {incomeCompareCols.length === 0 ? (
                     <p
                       className={
@@ -3347,9 +3303,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                   />
                 </div>
               ) : !isRangeCompare && !data ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {t("msg_click_query") || "Click Query button."}
-                </p>
+                <AccountingEmptyState>{t("msg_click_query") || "Click Query button."}</AccountingEmptyState>
               ) : null}
             </>
           )}

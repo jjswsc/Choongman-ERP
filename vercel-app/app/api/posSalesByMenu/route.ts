@@ -2,15 +2,14 @@
  * 메뉴별 매출 (수량·금액). pos_orders 기반. items_json에서 추출.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
-import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
-import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
-import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
-
-const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+import { supabaseSelect } from '@/lib/supabase-server'
+import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import {
+  fetchPosSalesOrdersForBusinessRange,
+  POS_SALES_MENU_ROW_SELECT,
+} from '@/lib/pos-sales-fetch-rows'
+import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 
 type PosOrderItem = {
   id?: string
@@ -28,14 +27,16 @@ type PosMenuMeta = {
   category_main?: string
 }
 
+type MenuOrderRow = {
+  items_json?: string
+}
+
 function parseSearchTokens(raw: string | null): string[] {
   return String(raw ?? '')
     .split(/[,\n]+/)
     .map((v) => v.trim().toLowerCase())
     .filter(Boolean)
 }
-
-const MENU_FETCH_LIMIT = 10000
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -57,21 +58,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
-    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
-    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      select: POS_SALES_MENU_ROW_SELECT,
+      queryLabel: 'posSalesByMenu',
+    })
 
-    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: MENU_FETCH_LIMIT,
-      select: 'created_at,items_json,status,order_type,store_code',
-    })) as { created_at?: string; items_json?: string; status?: string; order_type?: string; store_code?: string }[]
-
-    let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
-    rows = excludePosSalesTestOfficeRows(rows)
-    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
-
-    if (rowsRaw.length >= MENU_FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
 
     const menus = (await supabaseSelect('pos_menus', {
       limit: 5000,
@@ -88,9 +84,7 @@ export async function GET(request: NextRequest) {
     }
 
     const byMenu: Record<string, { qty: number; sales: number }> = {}
-    for (const r of rows) {
-      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
-      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+    for (const r of filterCompletedPosSalesRows(rows, orderTypesAllowed) as MenuOrderRow[]) {
       let items: PosOrderItem[] = []
       try {
         const parsed = JSON.parse(r.items_json || '[]')

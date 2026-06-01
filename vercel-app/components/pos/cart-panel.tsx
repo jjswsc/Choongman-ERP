@@ -3537,6 +3537,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         subtotal,
         manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
         collabDiscountAmt,
+        cartLines: cartItems.map((item) => ({
+          menuId: String((item as { menuId?: string }).menuId ?? '').trim() || undefined,
+          categoryCode: String((item as { categoryCode?: string }).categoryCode ?? '').trim() || undefined,
+          quantity: Math.max(1, Number(item.quantity || 1)),
+          lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
+        })),
         applied: appliedCoupons,
         candidate: { code, quantity: couponQuantity },
         memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
@@ -3567,6 +3573,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       subtotal,
       manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
       collabDiscountAmt,
+      cartLines: cartItems.map((item) => ({
+        menuId: String((item as { menuId?: string }).menuId ?? '').trim() || undefined,
+        categoryCode: String((item as { categoryCode?: string }).categoryCode ?? '').trim() || undefined,
+        quantity: Math.max(1, Number(item.quantity || 1)),
+        lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
+      })),
       applied: appliedCoupons,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
     }).then((res) => {

@@ -1,12 +1,24 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  AccountingEmptyState,
+  AccountingPeriodChip,
+  AccountingTableBodyRow,
+  AccountingTableHead,
+  AccountingTableShell,
+} from "@/components/admin/accounting-result-primitives"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getSubledgerGlReconciliation, type SubledgerGlReconciliationData } from "@/lib/api-client"
+import {
+  accountingResultTdCn,
+  accountingResultTdRightCn,
+  accountingResultThCn,
+} from "@/lib/accounting-result-ui"
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
+import { cn } from "@/lib/utils"
 
 type LedgerReconciliationTabProps = {
   yearMonth: string
@@ -55,13 +67,11 @@ export function LedgerReconciliationTab({
   const payOk = Math.abs(diffPay) < 1
 
   if (queryToken <= 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query")}</p>
-    )
+    return <AccountingEmptyState>{t("msg_click_query")}</AccountingEmptyState>
   }
 
   if (loading) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_loading") || "Loading…"}</p>
+    return <AccountingEmptyState>{t("msg_loading") || "Loading…"}</AccountingEmptyState>
   }
 
   if (error) {
@@ -69,24 +79,19 @@ export function LedgerReconciliationTab({
   }
 
   if (!data) {
-    return (
-      <p className="py-6 text-center text-sm text-muted-foreground">{t("inNoData") || "No data."}</p>
-    )
+    return <AccountingEmptyState>{t("inNoData") || "No data."}</AccountingEmptyState>
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        {t("recon_hint")}{" "}
-        <Link href="/admin/help" className="text-primary underline-offset-2 hover:underline">
-          {t("adminHelp") || "도움말"}
-        </Link>
-        {" · "}
-        <span className="font-mono">{data.endStr}</span> · {data.storeFilter}
-      </p>
+      <AccountingPeriodChip>
+        <span className="font-mono text-foreground">{data.endStr}</span>
+        <span aria-hidden>·</span>
+        <span>{data.storeFilter}</span>
+      </AccountingPeriodChip>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardContent className="pt-4 space-y-2">
             <div className="text-sm font-semibold">{t("bs_receivables")}</div>
             <Row label={t("recon_gl1130")} value={data.receivables.glAccount1130} />
@@ -99,7 +104,7 @@ export function LedgerReconciliationTab({
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/80 shadow-sm">
           <CardContent className="pt-4 space-y-2">
             <div className="text-sm font-semibold">{t("bs_payables")}</div>
             <Row label={t("recon_gl2110")} value={data.payables.glAccount2110} />
@@ -190,43 +195,43 @@ function Row({
 
 function IssueTable({
   title,
-  hint,
   headers,
   rows,
 }: {
   title: string
-  hint: string
+  hint?: string
   headers: string[]
   rows: string[][]
 }) {
   return (
-    <div className="rounded-md border border-amber-200/80 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="text-[11px] text-muted-foreground leading-snug">{hint}</p>
-      <div className="overflow-x-auto">
-        <table className="text-xs w-full min-w-max">
-          <thead>
-            <tr className="border-b">
-              {headers.map((h) => (
-                <th key={h} className="text-left p-1.5 font-medium">
-                  {h}
-                </th>
+    <div className="rounded-lg border border-amber-200/80 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2 shadow-sm">
+      <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">{title}</p>
+      <AccountingTableShell>
+        <AccountingTableHead>
+          {headers.map((h) => (
+            <th key={h} className={accountingResultThCn}>
+              {h}
+            </th>
+          ))}
+        </AccountingTableHead>
+        <tbody>
+          {rows.map((cells, i) => (
+            <AccountingTableBodyRow key={i}>
+              {cells.map((c, j) => (
+                <td
+                  key={j}
+                  className={cn(
+                    j === 0 ? accountingResultTdCn : accountingResultTdRightCn,
+                    "font-mono text-xs"
+                  )}
+                >
+                  {c}
+                </td>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((cells, i) => (
-              <tr key={i} className="border-b last:border-0">
-                {cells.map((c, j) => (
-                  <td key={j} className="p-1.5 font-mono whitespace-nowrap">
-                    {c}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </AccountingTableBodyRow>
+          ))}
+        </tbody>
+      </AccountingTableShell>
     </div>
   )
 }

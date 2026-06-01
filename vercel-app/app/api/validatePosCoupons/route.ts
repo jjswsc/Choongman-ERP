@@ -24,6 +24,40 @@ function parseApplied(raw: unknown): PosAppliedCouponLine[] {
     .filter(Boolean) as PosAppliedCouponLine[]
 }
 
+function parseCartLines(raw: unknown): Array<{
+  menuId?: string
+  categoryCode?: string
+  quantity: number
+  lineSubtotal: number
+}> {
+  if (!Array.isArray(raw)) return []
+  const lines: Array<{
+    menuId?: string
+    categoryCode?: string
+    quantity: number
+    lineSubtotal: number
+  }> = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    const qty = Math.max(1, Math.trunc(Number(r.quantity ?? r.qty ?? 1) || 1))
+    lines.push({
+      menuId: String(r.menuId ?? r.menu_id ?? '').trim() || undefined,
+      categoryCode: String(r.categoryCode ?? r.category_code ?? '').trim() || undefined,
+      quantity: qty,
+      lineSubtotal: Math.max(
+        0,
+        Number(
+          r.lineSubtotal ??
+            r.line_subtotal ??
+            ((Number(r.price ?? 0) || 0) * qty)
+        ) || 0
+      ),
+    })
+  }
+  return lines
+}
+
 /** POS 쿠폰 다중 검증 — candidate 추가 또는 applied 목록 재검증 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -33,6 +67,7 @@ export async function POST(req: NextRequest) {
     const subtotal = Math.max(0, Number(body.subtotal ?? 0))
     const manualDiscountAmt = Math.max(0, Number(body.manualDiscountAmt ?? 0))
     const collabDiscountAmt = Math.max(0, Number(body.collabDiscountAmt ?? 0))
+    const cartLines = parseCartLines(body.cartLines ?? body.cart_lines ?? body.items)
     const memberId = Math.max(0, Math.trunc(Number(body.memberId ?? 0) || 0)) || undefined
     const applied = parseApplied(body.applied ?? body.appliedCoupons)
     const candidateRaw = body.candidate
@@ -43,6 +78,7 @@ export async function POST(req: NextRequest) {
         subtotal,
         manualDiscountAmt,
         collabDiscountAmt,
+        cartLines,
         applied,
         candidate: {
           code: String(candidate.code ?? ''),
@@ -57,6 +93,7 @@ export async function POST(req: NextRequest) {
       subtotal,
       manualDiscountAmt,
       collabDiscountAmt,
+      cartLines,
       appliedCoupons: applied,
       memberId,
     })

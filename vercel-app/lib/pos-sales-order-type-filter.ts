@@ -76,6 +76,8 @@ export function rowMatchesOrderFilter(
 ): boolean {
   if (allowed == null) return true
   const t = normalizePosOrderTypeKey(orderType)
+  /** 구 POS 데이터: order_type 미기재 → 홀(dine_in)과 동일하게 집계 */
+  if (t === '' && allowed.includes('dine_in')) return true
   return (allowed as readonly string[]).includes(t)
 }
 

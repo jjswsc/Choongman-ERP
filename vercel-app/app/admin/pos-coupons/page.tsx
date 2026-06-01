@@ -30,7 +30,7 @@ export default function PosCouponsPage() {
   const [form, setForm] = React.useState({
     code: "",
     name: "",
-    discountType: "fixed" as "percent" | "fixed",
+    discountType: "fixed" as "percent" | "fixed" | "bogo" | "set_fixed" | "item_fixed",
     discountValue: "",
     validFrom: "",
     validTo: "",
@@ -41,6 +41,11 @@ export default function PosCouponsPage() {
     allowQuantityEntry: true,
     stackMode: "fixed_only" as "fixed_only" | "percent_only" | "any",
     maxUses: "",
+    setQty: "2",
+    itemScopeMenuIds: "",
+    itemScopeCategoryCodes: "",
+    priority: "0",
+    allowWithManualDiscount: true,
   })
 
   const loadData = React.useCallback(() => {
@@ -70,6 +75,11 @@ export default function PosCouponsPage() {
       allowQuantityEntry: true,
       stackMode: "fixed_only",
       maxUses: "",
+      setQty: "2",
+      itemScopeMenuIds: "",
+      itemScopeCategoryCodes: "",
+      priority: "0",
+      allowWithManualDiscount: true,
     })
   }
 
@@ -78,7 +88,14 @@ export default function PosCouponsPage() {
     setForm({
       code: c.code ?? "",
       name: c.name ?? "",
-      discountType: (c.discountType === "percent" ? "percent" : "fixed") as "percent" | "fixed",
+      discountType: (
+        c.discountType === "percent" ||
+        c.discountType === "bogo" ||
+        c.discountType === "set_fixed" ||
+        c.discountType === "item_fixed"
+          ? c.discountType
+          : "fixed"
+      ) as "percent" | "fixed" | "bogo" | "set_fixed" | "item_fixed",
       discountValue: String(c.discountValue ?? 0),
       validFrom: c.validFrom ?? c.startDate ?? "",
       validTo: c.validTo ?? c.endDate ?? "",
@@ -95,6 +112,15 @@ export default function PosCouponsPage() {
         | "percent_only"
         | "any",
       maxUses: (c as { maxUses?: number | null }).maxUses != null ? String((c as { maxUses?: number }).maxUses) : "",
+      setQty: String((c as { setQty?: number | null }).setQty ?? 2),
+      itemScopeMenuIds: Array.isArray((c as { itemScope?: { menuIds?: string[] } }).itemScope?.menuIds)
+        ? ((c as { itemScope?: { menuIds?: string[] } }).itemScope?.menuIds || []).join(", ")
+        : "",
+      itemScopeCategoryCodes: Array.isArray((c as { itemScope?: { categoryCodes?: string[] } }).itemScope?.categoryCodes)
+        ? ((c as { itemScope?: { categoryCodes?: string[] } }).itemScope?.categoryCodes || []).join(", ")
+        : "",
+      priority: String((c as { priority?: number }).priority ?? 0),
+      allowWithManualDiscount: (c as { allowWithManualDiscount?: boolean }).allowWithManualDiscount !== false,
     })
   }
 
@@ -126,6 +152,19 @@ export default function PosCouponsPage() {
         allowQuantityEntry: form.allowQuantityEntry,
         stackMode: form.stackMode,
         maxUses: form.maxUses.trim() ? Math.max(1, Math.trunc(Number(form.maxUses))) : null,
+        setQty: form.setQty.trim() ? Math.max(2, Math.trunc(Number(form.setQty))) : undefined,
+        itemScope: {
+          menuIds: form.itemScopeMenuIds
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean),
+          categoryCodes: form.itemScopeCategoryCodes
+            .split(",")
+            .map((x) => x.trim().toUpperCase())
+            .filter(Boolean),
+        },
+        priority: Math.max(-100, Math.min(100, Math.trunc(Number(form.priority || 0)))),
+        allowWithManualDiscount: form.allowWithManualDiscount,
       })
       if (res.success) {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -223,30 +262,34 @@ export default function PosCouponsPage() {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">{t("posCouponType") || "할인 유형"}</label>
-                  <div className="mt-1 flex gap-2">
-                    <Button
-                      type="button"
-                      variant={form.discountType === "fixed" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setForm((f) => ({ ...f, discountType: "fixed" }))}
-                    >
-                      ฿ {t("posFixed") || "고정"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={form.discountType === "percent" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setForm((f) => ({ ...f, discountType: "percent" }))}
-                    >
-                      % {t("posPercent") || "퍼센트"}
-                    </Button>
-                  </div>
+                  <Select
+                    value={form.discountType}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        discountType: v as "percent" | "fixed" | "bogo" | "set_fixed" | "item_fixed",
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">fixed (정액)</SelectItem>
+                      <SelectItem value="percent">percent (정률)</SelectItem>
+                      <SelectItem value="bogo">bogo (1+1)</SelectItem>
+                      <SelectItem value="set_fixed">set_fixed (세트)</SelectItem>
+                      <SelectItem value="item_fixed">item_fixed (품목당)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">
                     {form.discountType === "percent"
                       ? t("posDiscountRate") || "할인율 (%)"
-                      : t("posDiscountAmt") || "할인 금액 (฿)"}
+                      : form.discountType === "bogo"
+                        ? "BOGO 규칙 (금액 자동 계산)"
+                        : t("posDiscountAmt") || "할인 금액 (฿)"}
                   </label>
                   <Input
                     type="number"
@@ -255,8 +298,21 @@ export default function PosCouponsPage() {
                     value={form.discountValue}
                     onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
                     className="mt-1"
+                    disabled={form.discountType === "bogo"}
                   />
                 </div>
+                {form.discountType === "set_fixed" ? (
+                  <div>
+                    <label className="text-xs text-muted-foreground">세트 수량 기준</label>
+                    <Input
+                      type="number"
+                      min={2}
+                      value={form.setQty}
+                      onChange={(e) => setForm((f) => ({ ...f, setQty: e.target.value }))}
+                      className="mt-1"
+                    />
+                  </div>
+                ) : null}
                 <div>
                   <label className="text-xs text-muted-foreground">{t("posValidFrom") || "유효 기간 시작"}</label>
                   <Input
@@ -371,6 +427,45 @@ export default function PosCouponsPage() {
                     className="mt-1"
                     placeholder={t("posOptional") || "선택"}
                   />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-muted-foreground">대상 메뉴 ID (쉼표 구분)</label>
+                  <Input
+                    value={form.itemScopeMenuIds}
+                    onChange={(e) => setForm((f) => ({ ...f, itemScopeMenuIds: e.target.value }))}
+                    className="mt-1"
+                    placeholder="101, 102, 205"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-muted-foreground">대상 카테고리 코드 (쉼표 구분)</label>
+                  <Input
+                    value={form.itemScopeCategoryCodes}
+                    onChange={(e) => setForm((f) => ({ ...f, itemScopeCategoryCodes: e.target.value }))}
+                    className="mt-1"
+                    placeholder="CHICKEN, SIDE, DRINK"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">우선순위 (높을수록 먼저)</label>
+                  <Input
+                    type="number"
+                    min={-100}
+                    max={100}
+                    value={form.priority}
+                    onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.allowWithManualDiscount}
+                      onChange={(e) => setForm((f) => ({ ...f, allowWithManualDiscount: e.target.checked }))}
+                    />
+                    수동할인과 동시 사용 허용
+                  </label>
                 </div>
               </div>
               <div className="mt-3 flex gap-2">

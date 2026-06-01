@@ -129,7 +129,7 @@ export function TotalSalesTab() {
     auth?.store || ""
   )
   const today = todayStrBangkok()
-  const monthRange = getBangkokMonthRange()
+  const monthRange = React.useMemo(() => getBangkokMonthRange(), [])
 
   const [startStr, setStartStr] = React.useState(today)
   const [endStr, setEndStr] = React.useState(today)
@@ -262,36 +262,49 @@ export function TotalSalesTab() {
     }
   }, [])
 
+  const posOptionsLoadIdRef = React.useRef(0)
+
+  const loadPosOptions = React.useCallback(() => {
+    if (!startStr || !endStr || !canSearchAll) return
+    const id = ++posOptionsLoadIdRef.current
+    setPosOptionsLoading(true)
+    setPosOptionsLoadFailed(false)
+    getPosSalesFilterOptions({ startStr, endStr })
+      .then((r) => {
+        if (posOptionsLoadIdRef.current !== id) return
+        setPosOptions(r.posOptions || [])
+      })
+      .catch(() => {
+        if (posOptionsLoadIdRef.current !== id) return
+        setPosOptions([])
+        setPosOptionsLoadFailed(true)
+      })
+      .finally(() => {
+        if (posOptionsLoadIdRef.current !== id) return
+        setPosOptionsLoading(false)
+      })
+  }, [startStr, endStr, canSearchAll])
+
   React.useLayoutEffect(() => {
     if (canSearchAll) setPosOptionsLoading(true)
   }, [canSearchAll])
 
   React.useEffect(() => {
-    if (!canSearchAll || !today) {
+    if (!canSearchAll) {
+      posOptionsLoadIdRef.current += 1
       setPosOptionsLoading(false)
       setPosOptionsLoadFailed(false)
       return
     }
-    let cancel = false
     setPosOptionsLoading(true)
-    setPosOptionsLoadFailed(false)
-    getPosSalesFilterOptions({ startStr: monthRange.startStr, endStr: today })
-      .then((r) => {
-        if (!cancel) setPosOptions(r.posOptions || [])
-      })
-      .catch(() => {
-        if (!cancel) {
-          setPosOptions([])
-          setPosOptionsLoadFailed(true)
-        }
-      })
-      .finally(() => {
-        if (!cancel) setPosOptionsLoading(false)
-      })
+    const tid = window.setTimeout(() => {
+      loadPosOptions()
+    }, 250)
     return () => {
-      cancel = true
+      clearTimeout(tid)
+      posOptionsLoadIdRef.current += 1
     }
-  }, [canSearchAll, today, monthRange.startStr])
+  }, [loadPosOptions, canSearchAll])
 
   const storePickerPlaceholder = React.useMemo(() => {
     if (storeChoices.length > 0) return tr("salesSelectStorePrompt", "매장 선택")

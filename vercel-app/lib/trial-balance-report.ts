@@ -1,5 +1,6 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { normalizeIncomeScope, storeMatchesIncomeFilter, type IncomeScopeInput } from '@/lib/accounting-reports'
+import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
+import { ensureErpStoreMatchIndex, storeMatchesIncomeFilterWithIndex } from '@/lib/accounting-store-match'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
 
 export type TrialBalanceRow = {
@@ -22,8 +23,12 @@ export type TrialBalanceReport = {
   diff: number
 }
 
-function storeMatch(entryStore: string | null | undefined, filter: string): boolean {
-  return storeMatchesIncomeFilter(String(entryStore || ''), filter)
+function storeMatch(
+  entryStore: string | null | undefined,
+  filter: string,
+  index: Awaited<ReturnType<typeof ensureErpStoreMatchIndex>>
+): boolean {
+  return storeMatchesIncomeFilterWithIndex(String(entryStore || ''), filter, index)
 }
 
 /**
@@ -32,6 +37,7 @@ function storeMatch(entryStore: string | null | undefined, filter: string): bool
 export async function computeTrialBalanceReport(input: IncomeScopeInput): Promise<TrialBalanceReport> {
   const scope = normalizeIncomeScope(input)
   const { yearMonth, startStr, endStr, storeFilter } = scope
+  const storeIndex = await ensureErpStoreMatchIndex()
 
   const jeFilter = `accounting_date=gte.${encodeURIComponent(startStr)}&accounting_date=lte.${encodeURIComponent(endStr)}`
   const entries = (await supabaseSelectFilter('journal_entries', jeFilter, {
@@ -41,7 +47,7 @@ export async function computeTrialBalanceReport(input: IncomeScopeInput): Promis
   })) as { id?: number; store_name?: string | null }[] | null
 
   const ids = (entries || [])
-    .filter((e) => storeMatch(e.store_name, storeFilter))
+    .filter((e) => storeMatch(e.store_name, storeFilter, storeIndex))
     .map((e) => Number(e.id))
     .filter((id) => id > 0)
 

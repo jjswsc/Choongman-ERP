@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { memberPortalStoresFromMasters } from '@/lib/member-portal-stores'
 import { requireMemberSession } from '@/lib/member-portal-session'
 
 export async function GET(req: NextRequest) {
@@ -8,11 +9,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const rows = await fetchErpStoresMaster()
-    const stores = rows.map((r) => ({
-      storeCode: String(r.store_code || '').trim(),
-      displayName: String(r.display_name || '').trim() || String(r.store_code || '').trim(),
-      mapQuery: `Choongman Chicken ${String(r.display_name || '').trim()}`,
-    }))
+    const stores = memberPortalStoresFromMasters(rows)
     return NextResponse.json({ success: true, stores })
   } catch (e) {
     return NextResponse.json(
@@ -21,4 +18,3 @@ export async function GET(req: NextRequest) {
     )
   }
 }
-

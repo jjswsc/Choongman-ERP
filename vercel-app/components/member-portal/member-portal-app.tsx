@@ -19,7 +19,6 @@ import {
   Star,
   Ticket,
   UserRound,
-  Wallet,
 } from "lucide-react"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { Button } from "@/components/ui/button"
@@ -37,17 +36,18 @@ import {
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
+import { pickHomeFeatureContent } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
 import {
   GlassCard,
   MemberPortalAmbienceBackground,
+  MemberPortalContentSheet,
   MemberPortalShell,
   PremiumAppHeader,
   PremiumBottomNav,
   PremiumStatTile,
-  QuickActionButton,
   SectionTitle,
   TierProgressCard,
 } from "@/components/member-portal/member-portal-premium-ui"
@@ -56,6 +56,7 @@ import {
   formatBaht,
   formatDateTime,
   formatPoints,
+  memberToProfileForm,
   tierVisual,
   type PortalCouponRow,
   type PortalDashboard,
@@ -66,12 +67,12 @@ import {
 } from "@/components/member-portal/portal-ui"
 import { clearMemberPortalMemberLocalData } from "@/lib/member-portal-client-storage"
 import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
+import {
+  memberPortalStoreMatchesQuery,
+  type MemberPortalStoreDto,
+} from "@/lib/member-portal-stores"
 
-type MemberPortalStoreRow = {
-  storeCode: string
-  displayName: string
-  mapQuery: string
-}
+type MemberPortalStoreRow = MemberPortalStoreDto
 
 async function postJson<T>(url: string, body: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(url, {
@@ -167,6 +168,7 @@ export function MemberPortalApp() {
   const [locationSearch, setLocationSearch] = React.useState("")
   const [favoriteStoreCode, setFavoriteStoreCode] = React.useState("")
   const [showQr, setShowQr] = React.useState(false)
+  const [homeFeatureOpen, setHomeFeatureOpen] = React.useState(false)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const [profile, setProfile] = React.useState<PortalProfileForm>({
     name: "",
@@ -181,6 +183,44 @@ export function MemberPortalApp() {
   const applyLoggedInMember = React.useCallback((nextMember: MemberSummary) => {
     setMember(nextMember)
     setDashboard(buildFallbackDashboard(nextMember))
+    setProfile(memberToProfileForm(nextMember))
+  }, [])
+
+  const loadMemberContent = React.useCallback(async () => {
+    try {
+      const r = await getJson<{ success: boolean; items?: MemberPortalContentItem[] }>("/api/member-portal/content")
+      setContentItems(r.success ? r.items || [] : [])
+    } catch {
+      setContentItems([])
+    }
+  }, [])
+
+  const loadMemberStores = React.useCallback(async () => {
+    try {
+      const r = await getJson<{ success: boolean; stores?: MemberPortalStoreRow[] }>("/api/member-portal/stores")
+      setStores(r.success ? r.stores || [] : [])
+    } catch {
+      setStores([])
+    }
+  }, [])
+
+  const loadFavoriteStorePreference = React.useCallback(async () => {
+    try {
+      const r = await getJson<{ success: boolean; favoriteStoreCode?: string }>(
+        "/api/member-portal/preferences/favorite-store"
+      )
+      const code = String(r.favoriteStoreCode || "").trim()
+      if (r.success && code) {
+        setFavoriteStoreCode(code)
+        try {
+          localStorage.setItem("cm_member_favorite_store", code)
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }, [])
 
   const loadSession = React.useCallback(async () => {
@@ -190,6 +230,8 @@ export function MemberPortalApp() {
       setMember(null)
       setDashboard(null)
       setFavoriteStoreCode("")
+      setStores([])
+      setContentItems([])
       return false
     }
 
@@ -198,6 +240,9 @@ export function MemberPortalApp() {
       getJson<{ success: boolean; rows?: PortalPointRow[] }>("/api/member-portal/me/points"),
       getJson<{ success: boolean; rows?: PortalCouponRow[] }>("/api/member-portal/me/coupons"),
       getJson<{ success: boolean; rows?: PortalVisitRow[] }>("/api/member-portal/me/visits"),
+      loadMemberStores(),
+      loadFavoriteStorePreference(),
+      loadMemberContent(),
     ])
 
     const dashMember = dashRes.success && dashRes.member ? dashRes.member : me.member
@@ -212,21 +257,12 @@ export function MemberPortalApp() {
     } else {
       setDashboard(buildFallbackDashboard(dashMember))
     }
-    setProfile((p) => ({
-      ...p,
-      name: dashMember.fullName || dashMember.name || "",
-      birthDate: dashMember.birthDate || "",
-      gender: dashMember.gender || "",
-      nationality: dashMember.nationality || "",
-      email: dashMember.email || "",
-      referralCode: "",
-      consentMarketing: Boolean(dashMember.consentMarketing),
-    }))
+    setProfile(memberToProfileForm(dashMember))
     setPoints(pointsRes.rows || [])
     setCoupons(couponsRes.rows || [])
     setVisits(visitsRes.rows || [])
     return true
-  }, [])
+  }, [loadFavoriteStorePreference, loadMemberContent, loadMemberStores])
 
   React.useEffect(() => {
     ;(async () => {
@@ -240,12 +276,6 @@ export function MemberPortalApp() {
     getJson<{ lineLoginEnabled?: boolean }>("/api/member-portal/auth/phone-birth")
       .then((r) => setLineLoginEnabled(Boolean(r.lineLoginEnabled)))
       .catch(() => {})
-    getJson<{ success: boolean; stores?: MemberPortalStoreRow[] }>("/api/member-portal/stores")
-      .then((r) => setStores(r.success ? r.stores || [] : []))
-      .catch(() => setStores([]))
-    getJson<{ success: boolean; items?: MemberPortalContentItem[] }>("/api/member-portal/content")
-      .then((r) => setContentItems(r.success ? r.items || [] : []))
-      .catch(() => setContentItems([]))
     getJson<{
       success: boolean
       facebookUrl?: string
@@ -275,19 +305,6 @@ export function MemberPortalApp() {
           appBackgroundUrl: "",
         })
       })
-    getJson<{ success: boolean; favoriteStoreCode?: string }>("/api/member-portal/preferences/favorite-store")
-      .then((r) => {
-        const code = String(r.favoriteStoreCode || "").trim()
-        if (r.success && code) {
-          setFavoriteStoreCode(code)
-          try {
-            localStorage.setItem("cm_member_favorite_store", code)
-          } catch {
-            /* ignore */
-          }
-        }
-      })
-      .catch(() => {})
   }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, loadSession])
 
   React.useEffect(() => {
@@ -397,12 +414,18 @@ export function MemberPortalApp() {
   }
 
   const filteredStores = React.useMemo(() => {
-    const q = locationSearch.trim().toLowerCase()
-    if (!q) return stores
-    return stores.filter((s) =>
-      `${s.displayName} ${s.storeCode}`.toLowerCase().includes(q)
-    )
+    return stores.filter((s) => memberPortalStoreMatchesQuery(s, locationSearch))
   }, [locationSearch, stores])
+
+  React.useEffect(() => {
+    if (!member?.id) return
+    setProfile(memberToProfileForm(member))
+  }, [member?.id])
+
+  React.useEffect(() => {
+    if (tab !== "location" || !member) return
+    if (stores.length === 0) void loadMemberStores()
+  }, [tab, member, stores.length, loadMemberStores])
 
   const homePopup = React.useMemo(
     () =>
@@ -417,10 +440,18 @@ export function MemberPortalApp() {
   const homeInfoItems = React.useMemo(
     () =>
       contentItems
-        .filter((x) => x.contentType === "info" && (!x.targetTab || x.targetTab === "home"))
+        .filter(
+          (x) =>
+            x.contentType === "info" &&
+            x.targetTab !== "home_feature" &&
+            x.targetTab !== "home_promo" &&
+            (!x.targetTab || x.targetTab === "home")
+        )
         .slice(0, 4),
     [contentItems]
   )
+
+  const homeFeature = React.useMemo(() => pickHomeFeatureContent(contentItems), [contentItems])
 
   const storePhotoMap = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -442,6 +473,7 @@ export function MemberPortalApp() {
     setPoints([])
     setCoupons([])
     setVisits([])
+    setStores([])
     setFavoriteStoreCode("")
     setShowQr(false)
     setTab("home")
@@ -755,6 +787,27 @@ export function MemberPortalApp() {
     { id: "me" as const, label: t("tabMe"), icon: UserRound },
   ]
 
+  const couponBenefitText = (coupon: PortalCouponRow): string => {
+    const discountType = String(coupon.discountType || "fixed").toLowerCase()
+    const discountValue = Number(coupon.discountValue || 0)
+    const maxDiscountAmt = Number(coupon.maxDiscountAmt || 0)
+    if (discountType === "bogo") return "1+1"
+    if (discountType === "set_fixed") return `Set ฿${Math.round(discountValue)}`
+    if (discountType === "item_fixed") return `฿${Math.round(discountValue)} / item`
+    if (discountType === "percent") {
+      if (maxDiscountAmt > 0) return `${discountValue}% (max ฿${Math.round(maxDiscountAmt)})`
+      return `${discountValue}%`
+    }
+    return `฿${Math.round(discountValue)}`
+  }
+
+  const couponStackRuleText = (coupon: PortalCouponRow): string => {
+    const mode = String(coupon.stackMode || "fixed_only")
+    if (mode === "any") return "any"
+    if (mode === "percent_only") return "percent_only"
+    return "fixed_only"
+  }
+
   return (
     <MemberPortalAmbienceBackground imageUrl={designBackgrounds.appBackgroundUrl}>
       <MemberPortalShell>
@@ -795,13 +848,6 @@ export function MemberPortalApp() {
               <p className="mt-1 text-sm text-white/50">{t("homeWelcomeSub")}</p>
             </div>
 
-            <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <QuickActionButton icon={ShoppingCart} label={t("homeQuickOrder")} onClick={() => setTab("order")} />
-              <QuickActionButton icon={MapPin} label={t("homeQuickStores")} onClick={() => setTab("location")} />
-              <QuickActionButton icon={Ticket} label={t("homeQuickCoupons")} onClick={() => setTab("privilege")} />
-              <QuickActionButton icon={UserRound} label={t("homeQuickProfile")} onClick={() => setTab("me")} />
-            </div>
-
             <MemberPortalMembershipCard
               member={member}
               dashboard={activeDashboard}
@@ -826,7 +872,14 @@ export function MemberPortalApp() {
             />
 
             <div className="grid grid-cols-2 gap-3">
-              <PremiumStatTile icon={Wallet} label={t("statLifetime")} value={formatBaht(activeDashboard.stats.lifetimeAmount)} />
+              <PremiumStatTile
+                icon={Sparkles}
+                label={t("homeFeatureLabel")}
+                value={homeFeature?.title || t("homeFeatureEmpty")}
+                sub={homeFeature ? t("homeFeatureTap") : undefined}
+                accent="amber"
+                onClick={homeFeature ? () => setHomeFeatureOpen(true) : undefined}
+              />
               <PremiumStatTile
                 icon={History}
                 label={t("statVisits")}
@@ -929,15 +982,17 @@ export function MemberPortalApp() {
                 <GlassCard soft className="px-5 py-14 text-center">
                   <MapPin className="mx-auto mb-3 h-7 w-7 text-amber-300/80" />
                   <p className="text-sm text-white/70">
-                    {stores.length > 0 ? t("locationNoResult") : t("locationComing")}
+                    {stores.length === 0 ? t("locationEmpty") : t("locationNoResult")}
                   </p>
                 </GlassCard>
               ) : (
-                filteredStores.map((s) => (
+                filteredStores.map((s) => {
+                  const photoUrl = s.photoUrl || storePhotoMap.get(s.storeCode) || ""
+                  return (
                   <GlassCard key={s.storeCode} soft className="px-4 py-3.5">
-                    {storePhotoMap.get(s.storeCode) ? (
+                    {photoUrl ? (
                       <img
-                        src={storePhotoMap.get(s.storeCode)}
+                        src={photoUrl}
                         alt={s.displayName}
                         className="mb-3 h-28 w-full rounded-xl object-cover"
                       />
@@ -945,6 +1000,9 @@ export function MemberPortalApp() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-medium">{s.displayName}</p>
+                        {s.address ? (
+                          <p className="mt-0.5 text-xs text-white/55">{s.address}</p>
+                        ) : null}
                         <p className="text-xs text-white/45">
                           {t("locationCode")} · {s.storeCode}
                         </p>
@@ -985,7 +1043,8 @@ export function MemberPortalApp() {
                       {favoriteStoreCode === s.storeCode ? t("locationFavorite") : t("locationFavoriteSet")}
                     </button>
                   </GlassCard>
-                ))
+                  )
+                })
               )}
             </div>
           </div>
@@ -1018,9 +1077,17 @@ export function MemberPortalApp() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-mono text-lg tracking-wide text-amber-200">{c.couponCode}</p>
+                      {c.couponName && c.couponName !== c.couponCode ? (
+                        <p className="mt-0.5 text-xs text-white/60">{c.couponName}</p>
+                      ) : null}
                       <p className="mt-1 text-xs text-white/45">
                         {t("issuedAt")} {formatDateTime(c.issuedAt, dateLocale)}
                       </p>
+                      {c.expiresAt || c.validTo ? (
+                        <p className="mt-0.5 text-xs text-white/45">
+                          {t("couponExpiresAt")} {formatDateTime(c.expiresAt || c.validTo || "", dateLocale)}
+                        </p>
+                      ) : null}
                     </div>
                     <span
                       className={`rounded-full px-3 py-1 text-xs ${
@@ -1031,6 +1098,29 @@ export function MemberPortalApp() {
                     >
                       {memberPortalCouponStatusLabel(lang, c.status)}
                     </span>
+                  </div>
+                  <div className="mt-3 grid gap-1 text-xs text-white/65">
+                    <p>
+                      {t("couponBenefit")}: {couponBenefitText(c)}
+                    </p>
+                    {Number(c.minOrderAmt || 0) > 0 ? (
+                      <p>
+                        {t("couponMinOrder")}: ฿{Math.round(Number(c.minOrderAmt || 0))}
+                      </p>
+                    ) : null}
+                    <p>
+                      {t("couponStackRule")}: {couponStackRuleText(c)}
+                    </p>
+                    {c.campaignName ? (
+                      <p>
+                        {t("couponCampaign")}: {c.campaignName}
+                      </p>
+                    ) : null}
+                    {Array.isArray(c.issuedStoreScope) && c.issuedStoreScope.length > 0 ? (
+                      <p>
+                        {t("couponScope")}: {c.issuedStoreScope.join(", ")}
+                      </p>
+                    ) : null}
                   </div>
                   {c.status === "issued" ? (
                     <div className="mt-4">
@@ -1123,12 +1213,25 @@ export function MemberPortalApp() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-white/70">{t("genderLabel")}</Label>
-                    <Input
-                      value={profile.gender}
-                      onChange={(e) => setProfile((p) => ({ ...p, gender: e.target.value }))}
-                      placeholder="M / F"
-                      className={mpInputClass}
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["M", "F"] as const).map((value) => {
+                        const active = profile.gender === value
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setProfile((p) => ({ ...p, gender: value }))}
+                            className={`h-11 rounded-2xl border text-sm font-medium transition ${
+                              active
+                                ? "border-amber-400/50 bg-amber-400/15 text-amber-100"
+                                : "border-white/10 bg-black/20 text-white/75 hover:border-white/20"
+                            }`}
+                          >
+                            {value === "M" ? t("genderMale") : t("genderFemale")}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-white/70">{t("nationalityLabel")}</Label>
@@ -1150,12 +1253,18 @@ export function MemberPortalApp() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-white/70">{t("referralInputLabel")}</Label>
-                  <Input
-                    value={profile.referralCode}
-                    onChange={(e) => setProfile((p) => ({ ...p, referralCode: e.target.value.toUpperCase() }))}
-                    placeholder="CM123456"
-                    className={mpInputClass}
-                  />
+                  {member.referredByMemberId ? (
+                    <p className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/55">
+                      {t("profileReferralLocked")}
+                    </p>
+                  ) : (
+                    <Input
+                      value={profile.referralCode}
+                      onChange={(e) => setProfile((p) => ({ ...p, referralCode: e.target.value.toUpperCase() }))}
+                      placeholder="CM123456"
+                      className={mpInputClass}
+                    />
+                  )}
                 </div>
                 <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm">
                   <input
@@ -1169,12 +1278,15 @@ export function MemberPortalApp() {
               </div>
 
               <Button onClick={saveProfile} disabled={actionLoading} className={`mt-5 w-full ${mpPrimaryBtn}`}>
-                {actionLoading ? t("saving") : t("saveProfile")}
+                {actionLoading ? t("saving") : t("saveProfileChanges")}
               </Button>
             </GlassCard>
 
             <GlassCard soft className="text-sm text-white/50">
               <p>{t("memberNo")} {member.memberNo}</p>
+              {activeDashboard.referralCode ? (
+                <p className="mt-1">{t("myReferralCode")} {activeDashboard.referralCode}</p>
+              ) : null}
               <p className="mt-1">{t("joined")} {member.createdAt ? formatDateTime(member.createdAt, dateLocale) : "-"}</p>
               {member.lastVisitedAt ? (
                 <p className="mt-1">{t("lastVisit")} {formatDateTime(member.lastVisitedAt, dateLocale)}</p>
@@ -1185,6 +1297,13 @@ export function MemberPortalApp() {
       </MemberPortalShell>
 
       <PremiumBottomNav tab={tab} onChange={setTab} items={navItems} />
+
+      <MemberPortalContentSheet
+        open={homeFeatureOpen}
+        item={homeFeature}
+        closeLabel={t("contactMenuClose")}
+        onClose={() => setHomeFeatureOpen(false)}
+      />
     </MemberPortalAmbienceBackground>
   )
 }

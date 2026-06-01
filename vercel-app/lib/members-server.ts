@@ -1019,16 +1019,115 @@ export async function listMemberCouponIssues(params?: { memberId?: number; limit
     used_at?: string | null
     order_id?: number | null
     status?: string
+    campaign_id?: number | null
+    expires_at?: string | null
+    issued_store_scope?: unknown
+    restored_at?: string | null
+    restore_reason?: string | null
+    restored_from_order_id?: number | null
   }[]
-  return (rows || []).map((row) => ({
-    id: Number(row.id || 0),
-    memberId: Number(row.member_id || 0),
-    couponCode: toText(row.coupon_code),
-    issuedAt: toText(row.issued_at),
-    usedAt: toText(row.used_at),
-    orderId: Number(row.order_id || 0) || null,
-    status: toText(row.status) || 'issued',
-  }))
+
+  const couponCodes = Array.from(
+    new Set((rows || []).map((row) => toText(row.coupon_code).toUpperCase()).filter(Boolean))
+  )
+  const campaignIds = Array.from(
+    new Set((rows || []).map((row) => Number(row.campaign_id || 0)).filter((x) => x > 0))
+  )
+
+  const couponMap = new Map<string, {
+    name: string
+    discountType: string
+    discountValue: number
+    minOrderAmt: number
+    maxDiscountAmt: number | null
+    validTo: string
+    stackMode: string
+  }>()
+  if (couponCodes.length > 0) {
+    const codeFilter = `code=in.(${couponCodes.map((code) => encodeURIComponent(code)).join(',')})`
+    const couponRows = (await supabaseSelectFilter('pos_coupons', codeFilter, {
+      limit: 1000,
+    })) as Array<{
+      code?: string
+      name?: string
+      discount_type?: string
+      benefit_kind?: string | null
+      discount_value?: number
+      min_order_amt?: number
+      max_discount_amt?: number | null
+      valid_to?: string | null
+      stack_mode?: string | null
+    }>
+    for (const coupon of couponRows || []) {
+      const code = toText(coupon.code).toUpperCase()
+      if (!code) continue
+      const benefitKind = toText(coupon.benefit_kind)
+      const discountType =
+        benefitKind === 'bogo' || benefitKind === 'set_fixed' || benefitKind === 'item_fixed'
+          ? benefitKind
+          : toText(coupon.discount_type) || 'fixed'
+      couponMap.set(code, {
+        name: toText(coupon.name) || code,
+        discountType,
+        discountValue: Number(coupon.discount_value || 0),
+        minOrderAmt: Number(coupon.min_order_amt || 0),
+        maxDiscountAmt: coupon.max_discount_amt != null ? Number(coupon.max_discount_amt) : null,
+        validTo: toText(coupon.valid_to),
+        stackMode: toText(coupon.stack_mode) || 'fixed_only',
+      })
+    }
+  }
+
+  const campaignMap = new Map<number, string>()
+  if (campaignIds.length > 0) {
+    try {
+      const campaignRows = (await supabaseSelectFilter(
+        'crm_coupon_campaigns',
+        `id=in.(${campaignIds.join(',')})`,
+        { limit: 1000, select: 'id,name' }
+      )) as Array<{ id?: number; name?: string }>
+      for (const campaign of campaignRows || []) {
+        const id = Number(campaign.id || 0)
+        if (!id) continue
+        campaignMap.set(id, toText(campaign.name) || `campaign-${id}`)
+      }
+    } catch {
+      // 캠페인 테이블 미배포 환경 호환
+    }
+  }
+
+  return (rows || []).map((row) => {
+    const couponCode = toText(row.coupon_code).toUpperCase()
+    const coupon = couponMap.get(couponCode)
+    const campaignId = Number(row.campaign_id || 0) || null
+    const issuedScopeRaw = row.issued_store_scope
+    const issuedStoreScope = Array.isArray(issuedScopeRaw)
+      ? issuedScopeRaw.map((x) => toText(x)).filter(Boolean)
+      : []
+    return {
+      id: Number(row.id || 0),
+      memberId: Number(row.member_id || 0),
+      couponCode,
+      couponName: coupon?.name || couponCode,
+      discountType: coupon?.discountType || 'fixed',
+      discountValue: coupon?.discountValue || 0,
+      minOrderAmt: coupon?.minOrderAmt || 0,
+      maxDiscountAmt: coupon?.maxDiscountAmt ?? null,
+      validTo: coupon?.validTo || '',
+      stackMode: coupon?.stackMode || 'fixed_only',
+      issuedAt: toText(row.issued_at),
+      expiresAt: toText(row.expires_at),
+      usedAt: toText(row.used_at),
+      orderId: Number(row.order_id || 0) || null,
+      status: toText(row.status) || 'issued',
+      campaignId,
+      campaignName: campaignId ? campaignMap.get(campaignId) || '' : '',
+      issuedStoreScope,
+      restoredAt: toText(row.restored_at),
+      restoreReason: toText(row.restore_reason),
+      restoredFromOrderId: Number(row.restored_from_order_id || 0) || null,
+    }
+  })
 }
 
 export async function issueMemberCoupon(params: { memberId: number; couponCode: string }) {
@@ -1036,11 +1135,26 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
   const couponCode = toText(params.couponCode).toUpperCase()
   if (!memberId) throw new Error('유효한 memberId가 필요합니다.')
   if (!couponCode) throw new Error('couponCode가 필요합니다.')
+
+  const couponRows = (await supabaseSelectFilter(
+    'pos_coupons',
+    `code=eq.${encodeURIComponent(couponCode)}`,
+    { limit: 1, select: 'id,is_active,valid_to' }
+  )) as Array<{ id?: number; is_active?: boolean; valid_to?: string | null }>
+  const coupon = couponRows?.[0]
+  if (!coupon?.id) {
+    throw new Error(`POS 쿠폰 마스터에 ${couponCode} 코드가 없습니다.`)
+  }
+  if (coupon.is_active === false) {
+    throw new Error('비활성 상태의 쿠폰은 발급할 수 없습니다.')
+  }
+
   await supabaseInsert('member_coupon_issues', {
     member_id: memberId,
     coupon_code: couponCode,
     issued_at: getBangkokDateTimeString(),
     status: 'issued',
+    expires_at: toText(coupon.valid_to) || null,
   })
 }
 

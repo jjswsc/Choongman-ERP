@@ -1,4 +1,5 @@
 import type { MemberSummary } from '@/lib/members-server'
+import { normalizeMemberBirthDateInput } from '@/lib/member-phone-lookup'
 
 export type PortalTab = 'home' | 'order' | 'location' | 'privilege' | 'me'
 
@@ -13,6 +14,20 @@ export type PortalPointRow = {
 export type PortalCouponRow = {
   id: number
   couponCode: string
+  couponName?: string
+  discountType?: string
+  discountValue?: number
+  minOrderAmt?: number
+  maxDiscountAmt?: number | null
+  validTo?: string
+  expiresAt?: string
+  stackMode?: string
+  campaignId?: number | null
+  campaignName?: string
+  issuedStoreScope?: string[]
+  restoredAt?: string
+  restoreReason?: string
+  restoredFromOrderId?: number | null
   status: string
   issuedAt: string
   usedAt?: string
@@ -55,6 +70,26 @@ export type PortalProfileForm = {
   email: string
   referralCode: string
   consentMarketing: boolean
+}
+
+export function normalizeProfileGender(raw: string): string {
+  const v = String(raw || '').trim().toUpperCase()
+  if (v === 'M' || v === 'MALE' || v === 'ชาย') return 'M'
+  if (v === 'F' || v === 'FEMALE' || v === 'หญิง') return 'F'
+  return String(raw || '').trim()
+}
+
+/** 회원 DB → 내정보 폼 (수정 모드 프리필) */
+export function memberToProfileForm(member: MemberSummary): PortalProfileForm {
+  return {
+    name: String(member.fullName || member.name || '').trim(),
+    birthDate: normalizeMemberBirthDateInput(member.birthDate || ''),
+    gender: normalizeProfileGender(member.gender || ''),
+    nationality: String(member.nationality || '').trim(),
+    email: String(member.email || '').trim(),
+    referralCode: '',
+    consentMarketing: Boolean(member.consentMarketing),
+  }
 }
 
 export type TierVisual = {

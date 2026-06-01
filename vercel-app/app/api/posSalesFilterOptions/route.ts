@@ -4,12 +4,30 @@
  *
  * 우선 RPC `get_pos_sales_filter_store_codes`: DB에서 DISTINCT만 반환해 PostgREST·Node 메모리 부담을 줄임.
  * RPC 미배포 시 기존 select + filterRowsByPosSalesBusinessDateRange 폴백(영업일 라벨 2차 필터 유지).
+ * 기간 내 주문이 없어도 erp_stores 활성 매장은 목록에 포함(매장 선택 불가 방지).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
+import { fetchErpStoresMaster } from '@/lib/erp-store-master'
+
+async function mergeErpStoreCodesIntoSet(posSet: Set<string>): Promise<void> {
+  try {
+    const masters = await fetchErpStoresMaster()
+    for (const row of masters || []) {
+      const code = String(row.store_code ?? '').trim()
+      if (code) posSet.add(code)
+    }
+  } catch {
+    // erp_stores 미배포 시 pos_orders DISTINCT만 사용
+  }
+}
+
+function finalizePosOptions(posSet: Set<string>): string[] {
+  return filterPosSalesStoreOptionsForManagement(Array.from(posSet)).sort()
+}
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -38,7 +56,8 @@ export async function GET(request: NextRequest) {
         const p = String(r.store_code ?? '').trim()
         if (p) posSet.add(p)
       }
-      const posOptions = filterPosSalesStoreOptionsForManagement(Array.from(posSet)).sort()
+      await mergeErpStoreCodesIntoSet(posSet)
+      const posOptions = finalizePosOptions(posSet)
       return NextResponse.json({ posOptions, source: 'rpc' as const }, { headers })
     } catch (_rpcErr) {
       const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
@@ -54,7 +73,8 @@ export async function GET(request: NextRequest) {
         const p = String(r.store_code ?? '').trim()
         if (p) posSet.add(p)
       }
-      const posOptions = filterPosSalesStoreOptionsForManagement(Array.from(posSet)).sort()
+      await mergeErpStoreCodesIntoSet(posSet)
+      const posOptions = finalizePosOptions(posSet)
       if (rowsRaw.length >= 50000) headers.set('X-Sales-Truncated', '1')
 
       return NextResponse.json({ posOptions, source: 'select' as const }, { headers })

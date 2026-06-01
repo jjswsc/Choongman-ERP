@@ -3,33 +3,29 @@
  * pos_orders: order_type, delivery_app_code, items_json(레거시 보조).
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
-import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
-import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
-import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { normalizePosOrderTypeKey, parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import {
+  fetchPosSalesOrdersForBusinessRange,
+  POS_SALES_DELIVERY_ROW_SELECT,
+} from '@/lib/pos-sales-fetch-rows'
+import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import { resolveOrderDeliveryAppCode } from '@/lib/pos-delivery-order-meta'
 
-const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
-
 const ORDER_KEYS = ['dine_in', 'takeout', 'delivery'] as const
-const FETCH_LIMIT = 50000
 
 type OrderRow = {
-  created_at?: string
   order_type?: string
   total?: number
   status?: string
-  store_code?: string
   delivery_app_code?: string | null
   items_json?: string | null
 }
 
 function bucketOrderType(raw: string): (typeof ORDER_KEYS)[number] | 'unknown' {
-  const t = String(raw ?? '').trim()
-  if (t === 'dine_in' || t === 'takeout' || t === 'delivery') return t
+  const t = normalizePosOrderTypeKey(raw)
+  if (t === 'dine_in' || t === '') return 'dine_in'
+  if (t === 'takeout' || t === 'delivery') return t
   return 'unknown'
 }
 
@@ -58,28 +54,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
-    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
-    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      select: POS_SALES_DELIVERY_ROW_SELECT,
+      queryLabel: 'posSalesByDeliveryApp',
+    })
 
-    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: FETCH_LIMIT,
-      select: 'created_at,order_type,total,status,store_code,delivery_app_code,items_json',
-    })) as OrderRow[]
-
-    let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
-    rows = excludePosSalesTestOfficeRows(rows)
-    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
-
-    if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
 
     const byApp: Record<string, number> = {}
     const deliveryByPlatform: Record<string, number> = {}
 
-    for (const r of rows) {
-      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
-      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+    const filtered = filterCompletedPosSalesRows(rows as OrderRow[], orderTypesAllowed)
+
+    for (const r of filtered) {
       const k = bucketOrderType(String(r.order_type ?? ''))
       const amt = Number(r.total) || 0
       byApp[k] = (byApp[k] || 0) + amt

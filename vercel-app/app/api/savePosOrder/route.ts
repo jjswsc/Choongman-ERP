@@ -272,6 +272,16 @@ export async function POST(req: NextRequest) {
       subtotal,
       manualDiscountAmt: Math.max(0, manualDiscountForCoupons - collabDiscountAmt),
       collabDiscountAmt,
+      cartLines: items.map((it) => {
+        const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
+        const price = Number(it.price ?? 0)
+        return {
+          menuId: String((it as { menuId?: string; menu_id?: string }).menuId ?? (it as { menu_id?: string }).menu_id ?? '').trim() || undefined,
+          categoryCode: String((it as { categoryCode?: string; category_code?: string }).categoryCode ?? (it as { category_code?: string }).category_code ?? '').trim() || undefined,
+          quantity: qty,
+          lineSubtotal: Math.max(0, price * qty),
+        }
+      }),
       memberId: memberId || undefined,
     })
     const couponCode = couponResolved.couponCode

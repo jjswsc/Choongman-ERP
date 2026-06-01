@@ -1,7 +1,6 @@
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpdate } from '@/lib/supabase-server'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { fetchErpStoresMaster } from '@/lib/erp-store-master'
-import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { canonicalLedgerStoreName } from '@/lib/erp-store-identity'
 import { POS_SALES_COMPLETED_STATUSES } from '@/lib/pos-sales-period-aggregate'
 import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import {
@@ -26,22 +25,9 @@ function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): 
   return next
 }
 
-/** POS store_code·별칭 → erp_stores.display_name (세무 원장 store_name 정합) */
+/** POS·입고·직원 등任意 키 → erp_stores.display_name (VAT 원장 store_name 단일 표기) */
 export async function resolveStoreDisplayNameForVatLedger(storeKey: string): Promise<string> {
-  const key = String(storeKey || '').trim()
-  if (!key) return ''
-  const masters = await fetchErpStoresMaster()
-  for (const row of masters) {
-    const display = String(row.display_name || '').trim()
-    const code = String(row.store_code || '').trim()
-    if (display && storesMatchForGradeLookup(display, key)) return display
-    if (code && storesMatchForGradeLookup(code, key)) return display || code
-    for (const alias of row.aliases || []) {
-      const a = String(alias || '').trim()
-      if (a && storesMatchForGradeLookup(a, key)) return display || code || key
-    }
-  }
-  return key
+  return canonicalLedgerStoreName(storeKey)
 }
 
 /** POS 주문 id → store_code (VAT 원장 store_name 공란 행 해석용) */
@@ -64,44 +50,148 @@ export async function buildPosOrderStoreCodeMap(orderIds: number[]): Promise<Map
   return out
 }
 
-/** store_name 공란 VAT 원장 — memo의 POS 주문으로 매장 표시명 추론 */
-export async function resolveVatLedgerEntryStoreNameForScope(
-  row: { store_name?: string | null; memo?: string | null },
-  posStoreByOrderId: Map<number, string>
-): Promise<string> {
-  const current = String(row.store_name || '').trim()
-  if (current) return current
-  const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
-  if (!m) return ''
-  const oid = Math.floor(Number(m[1]) || 0)
-  if (oid <= 0) return ''
-  const storeCode = posStoreByOrderId.get(oid) || ''
-  if (!storeCode) return ''
-  return resolveStoreDisplayNameForVatLedger(storeCode)
+/** stock_logs id → location (매입 자동 원장 store_name 공란 행 해석용) */
+export async function buildStockLogLocationMap(stockLogIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  const idList = Array.from(new Set(stockLogIds.map((id) => Math.floor(Number(id) || 0)).filter((id) => id > 0)))
+  const chunkSize = 200
+  for (let i = 0; i < idList.length; i += chunkSize) {
+    const chunk = idList.slice(i, i + chunkSize)
+    const rows = (await supabaseSelectFilter('stock_logs', `id=in.(${chunk.join(',')})`, {
+      select: 'id,location,vendor_target',
+      limit: chunk.length,
+    })) as { id?: number; location?: string | null; vendor_target?: string | null }[] | null
+    for (const row of rows || []) {
+      const sid = Math.floor(Number(row.id) || 0)
+      const loc = String(row.location || '').trim() || String(row.vendor_target || '').trim()
+      if (sid > 0 && loc) out.set(sid, loc)
+    }
+  }
+  return out
 }
 
-/** 조회 직전 store_name 보강 — backfill 후에도 공란인 POS 자동 행 */
+/** expense_accruals id → store_name (지출 매입 VAT 원장 store_name 공란 행 해석용) */
+export async function buildExpenseAccrualStoreMap(expenseIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  const idList = Array.from(new Set(expenseIds.map((id) => Math.floor(Number(id) || 0)).filter((id) => id > 0)))
+  const chunkSize = 200
+  for (let i = 0; i < idList.length; i += chunkSize) {
+    const chunk = idList.slice(i, i + chunkSize)
+    const rows = (await supabaseSelectFilter('expense_accruals', `id=in.(${chunk.join(',')})`, {
+      select: 'id,store_name',
+      limit: chunk.length,
+    })) as { id?: number; store_name?: string | null }[] | null
+    for (const row of rows || []) {
+      const eid = Math.floor(Number(row.id) || 0)
+      const store = String(row.store_name || '').trim()
+      if (eid > 0 && store) out.set(eid, store)
+    }
+  }
+  return out
+}
+
+type VatLedgerStoreResolveMaps = {
+  posStoreByOrderId: Map<number, string>
+  stockLocationByLogId: Map<number, string>
+  expenseStoreById: Map<number, string>
+}
+
+function parseAutoMemoSourceKey(
+  memo: string,
+  maps: VatLedgerStoreResolveMaps
+): string {
+  const text = String(memo || '')
+  const posM = text.match(/\[AUTO:POS_ORDER:(\d+)\]/i)
+  if (posM) {
+    const oid = Math.floor(Number(posM[1]) || 0)
+    return (oid > 0 ? maps.posStoreByOrderId.get(oid) : '') || ''
+  }
+  const stockM = text.match(/\[AUTO:STOCK_LOG:(\d+)\]/i)
+  if (stockM) {
+    const sid = Math.floor(Number(stockM[1]) || 0)
+    return (sid > 0 ? maps.stockLocationByLogId.get(sid) : '') || ''
+  }
+  const expM = text.match(/\[AUTO:EXPENSE_ACCRUAL:(\d+)\]/i)
+  if (expM) {
+    const eid = Math.floor(Number(expM[1]) || 0)
+    return (eid > 0 ? maps.expenseStoreById.get(eid) : '') || ''
+  }
+  return ''
+}
+
+/** store_name 공란 VAT 원장 — memo의 POS·입고·지출 자동 태그로 매장 표시명 추론 */
+export async function resolveVatLedgerEntryStoreNameForScope(
+  row: { store_name?: string | null; memo?: string | null },
+  maps: VatLedgerStoreResolveMaps
+): Promise<string> {
+  const current = String(row.store_name || '').trim()
+  if (current) {
+    const normalized = await resolveStoreDisplayNameForVatLedger(current)
+    return normalized || current
+  }
+  const sourceKey = parseAutoMemoSourceKey(String(row.memo || ''), maps)
+  if (!sourceKey) return ''
+  return resolveStoreDisplayNameForVatLedger(sourceKey)
+}
+
+/** 조회·백필 전 memo에서 자동 원장 소스 id 수집 */
+function collectVatLedgerAutoMemoIds(rows: { store_name?: string | null; memo?: string | null }[]): {
+  posOrderIds: number[]
+  stockLogIds: number[]
+  expenseIds: number[]
+} {
+  const posOrderIds: number[] = []
+  const stockLogIds: number[] = []
+  const expenseIds: number[] = []
+  for (const row of rows || []) {
+    const memo = String(row.memo || '')
+    const posM = memo.match(/\[AUTO:POS_ORDER:(\d+)\]/i)
+    if (posM) {
+      const oid = Math.floor(Number(posM[1]) || 0)
+      if (oid > 0) posOrderIds.push(oid)
+    }
+    const stockM = memo.match(/\[AUTO:STOCK_LOG:(\d+)\]/i)
+    if (stockM) {
+      const sid = Math.floor(Number(stockM[1]) || 0)
+      if (sid > 0) stockLogIds.push(sid)
+    }
+    const expM = memo.match(/\[AUTO:EXPENSE_ACCRUAL:(\d+)\]/i)
+    if (expM) {
+      const eid = Math.floor(Number(expM[1]) || 0)
+      if (eid > 0) expenseIds.push(eid)
+    }
+  }
+  return { posOrderIds, stockLogIds, expenseIds }
+}
+
+/** 조회 직전 store_name 보강 — backfill 후에도 공란·레거시 표기인 자동 행 */
 export async function enrichVatLedgerRowsStoreNames(
   rows: Record<string, unknown>[]
 ): Promise<Record<string, unknown>[]> {
-  const emptyPosOrderIds: number[] = []
-  for (const row of rows || []) {
-    if (String(row.store_name || '').trim()) continue
-    const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
-    if (!m) continue
-    const oid = Math.floor(Number(m[1]) || 0)
-    if (oid > 0) emptyPosOrderIds.push(oid)
+  const { posOrderIds, stockLogIds, expenseIds } = collectVatLedgerAutoMemoIds(rows || [])
+  if (!posOrderIds.length && !stockLogIds.length && !expenseIds.length) {
+    const out: Record<string, unknown>[] = []
+    for (const row of rows || []) {
+      const current = String(row.store_name || '').trim()
+      if (!current) {
+        out.push(row)
+        continue
+      }
+      const normalized = await resolveStoreDisplayNameForVatLedger(current)
+      if (normalized && normalized !== current) out.push({ ...row, store_name: normalized })
+      else out.push(row)
+    }
+    return out
   }
-  if (!emptyPosOrderIds.length) return rows || []
-  const posStoreByOrderId = await buildPosOrderStoreCodeMap(emptyPosOrderIds)
+  const [posStoreByOrderId, stockLocationByLogId, expenseStoreById] = await Promise.all([
+    buildPosOrderStoreCodeMap(posOrderIds),
+    buildStockLogLocationMap(stockLogIds),
+    buildExpenseAccrualStoreMap(expenseIds),
+  ])
+  const maps: VatLedgerStoreResolveMaps = { posStoreByOrderId, stockLocationByLogId, expenseStoreById }
   const out: Record<string, unknown>[] = []
   for (const row of rows || []) {
-    const current = String(row.store_name || '').trim()
-    if (current) {
-      out.push(row)
-      continue
-    }
-    const resolved = await resolveVatLedgerEntryStoreNameForScope(row, posStoreByOrderId)
+    const resolved = await resolveVatLedgerEntryStoreNameForScope(row, maps)
     if (resolved) out.push({ ...row, store_name: resolved })
     else out.push(row)
   }
@@ -120,32 +210,20 @@ export async function backfillVatLedgerStoreNames(validMonths: string[]): Promis
     maxRows: 100000,
   })) as { id?: number; store_name?: string | null; memo?: string | null }[]
 
-  const posOrderIds = new Set<number>()
-  for (const row of rows || []) {
-    if (String(row.store_name || '').trim()) continue
-    const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
-    if (!m) continue
-    const oid = Math.floor(Number(m[1]) || 0)
-    if (oid > 0) posOrderIds.add(oid)
-  }
-
-  const posStoreByOrderId = await buildPosOrderStoreCodeMap(Array.from(posOrderIds))
+  const { posOrderIds, stockLogIds, expenseIds } = collectVatLedgerAutoMemoIds(rows || [])
+  const [posStoreByOrderId, stockLocationByLogId, expenseStoreById] = await Promise.all([
+    buildPosOrderStoreCodeMap(posOrderIds),
+    buildStockLogLocationMap(stockLogIds),
+    buildExpenseAccrualStoreMap(expenseIds),
+  ])
+  const maps: VatLedgerStoreResolveMaps = { posStoreByOrderId, stockLocationByLogId, expenseStoreById }
 
   let updated = 0
   for (const row of rows || []) {
     const id = Math.floor(Number(row.id) || 0)
     if (id <= 0) continue
     const current = String(row.store_name || '').trim()
-    let sourceKey = current
-    if (!sourceKey) {
-      const m = String(row.memo || '').match(/\[AUTO:POS_ORDER:(\d+)\]/i)
-      if (m) {
-        const oid = Math.floor(Number(m[1]) || 0)
-        sourceKey = (oid > 0 ? posStoreByOrderId.get(oid) : '') || ''
-      }
-    }
-    if (!sourceKey) continue
-    const resolved = await resolveStoreDisplayNameForVatLedger(sourceKey)
+    const resolved = await resolveVatLedgerEntryStoreNameForScope(row, maps)
     if (!resolved || resolved === current) continue
     await supabaseUpdate('vat_ledger_entries', id, {
       store_name: resolved.slice(0, 500),

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
-import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
+import { resolveStoresFromParams, appendStoreCodeFilterAsync } from '@/lib/pos-sales-store-filter'
+import { applyPosSalesStoreSelectionFilterAsync } from '@/lib/pos-sales-fetch-rows'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { normalizePosCancelReasonKey } from '@/lib/pos-cancel-reason-key'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const bizCtx = await loadPosBusinessDaySettingsContext()
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    filter = await appendStoreCodeFilterAsync(filter, stores)
 
     const ordersRaw = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_orders',
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     let orders = filterRowsByPosSalesBusinessDateRange(ordersRaw, bizCtx, startStr, endStr)
     orders = excludePosSalesTestOfficeRows(orders)
-    orders = applyPosSalesStoreSelectionFilter(orders, stores.length > 0 ? stores : undefined)
+    orders = await applyPosSalesStoreSelectionFilterAsync(orders, stores.length > 0 ? stores : undefined)
 
     const lineBucket = new Map<string, { count: number; amount: number }>()
     const orderBucket = new Map<string, { count: number; amount: number }>()

@@ -32,6 +32,14 @@ import {
   pickBalanceSheetLastMonthPerYear,
 } from "@/lib/financial-statements-compare"
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
+import {
+  accountingFinancialRowCn,
+  accountingFinancialTableCn,
+  accountingFinancialTheadCn,
+} from "@/lib/accounting-result-ui"
+import {
+  AccountingPeriodChip,
+} from "@/components/admin/accounting-result-primitives"
 
 type BalanceSheetTabProps = {
   /** @deprecated 시작·종료월을 쓰세요 */
@@ -422,24 +430,21 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       {t("fs_compareByYear")}
                     </Button>
                   </div>
-                  {compareGranularity === "year" && (
-                    <p className="text-xs text-muted-foreground">{t("fs_compareYearBsNote")}</p>
-                  )}
-                  <div className="text-xs text-muted-foreground">
+                  <AccountingPeriodChip>
                     {yearMonthStart === yearMonthEnd
                       ? yearMonthEnd
                       : `${yearMonthStart} ~ ${yearMonthEnd}`}{" "}
                     · {storeLabel}
-                  </div>
+                  </AccountingPeriodChip>
                   {balanceCompareCols.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       {t("inNoData") || "No data found."}
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-md border">
-                      <table className="text-sm w-full min-w-max">
+                    <div className="overflow-x-auto rounded-lg border border-border/80 bg-card shadow-sm">
+                      <table className={accountingFinancialTableCn}>
                         <thead>
-                          <tr className="border-b bg-muted/40">
+                          <tr className={accountingFinancialTheadCn}>
                             <th className="text-left p-2 font-medium sticky left-0 bg-muted/40 z-10 min-w-[160px]">
                               {t("pL_colItem")}
                             </th>
@@ -460,7 +465,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                         </thead>
                         <tbody>
                           {balanceCompareMetricRows.map((row) => (
-                            <tr key={row.key} className="border-b last:border-0">
+                            <tr key={row.key} className={accountingFinancialRowCn}>
                               <td className="p-2 font-medium sticky left-0 bg-background z-10">{row.label}</td>
                               {balanceCompareCols.map((c) => {
                                 const m = c.metrics
@@ -504,12 +509,12 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
 
               {!isRangeCompare && isBalanceSheetData(data) ? (
                 <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">
+                  <AccountingPeriodChip>
                     {data.yearMonth} · {storeLabel}
-                  </div>
+                  </AccountingPeriodChip>
                   <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-lg border p-3">
-                      <div className="text-sm font-semibold mb-2">{t("bs_assets")}</div>
+                    <div className="rounded-lg border border-border/80 bg-card p-4 shadow-sm">
+                      <div className="text-sm font-semibold mb-3">{t("bs_assets")}</div>
                       <div className="text-xs text-muted-foreground">{t("bs_cashAndBanks")}</div>
                       <div className="font-mono text-right">{formatBaht(data.assets.cashAndBanks)}</div>
                       <div className="text-xs text-muted-foreground mt-1">{t("bs_inventory")}</div>
@@ -538,8 +543,8 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       </div>
                     </div>
 
-                    <div className="rounded-lg border p-3">
-                      <div className="text-sm font-semibold mb-2">{t("bs_liabilities")}</div>
+                    <div className="rounded-lg border border-border/80 bg-card p-4 shadow-sm">
+                      <div className="text-sm font-semibold mb-3">{t("bs_liabilities")}</div>
                       <div className="text-xs text-muted-foreground">{t("bs_payables")}</div>
                       <div className="font-mono text-right">{formatBaht(data.liabilities.payables)}</div>
                       {data.ledgerBreakdown ? (
@@ -564,8 +569,8 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       </div>
                     </div>
 
-                    <div className="rounded-lg border p-3">
-                      <div className="text-sm font-semibold mb-2">{t("bs_equity")}</div>
+                    <div className="rounded-lg border border-border/80 bg-card p-4 shadow-sm">
+                      <div className="text-sm font-semibold mb-3">{t("bs_equity")}</div>
                       <div className="text-xs text-muted-foreground">{t("bs_openingCapital")}</div>
                       <div className="font-mono text-right">{formatBaht(data.equity.openingCapital)}</div>
                       <div className="text-xs text-muted-foreground mt-1">{t("bs_currentPeriodProfit")}</div>
@@ -579,9 +584,6 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                     </div>
                   </div>
 
-                  {data.ledgerBreakdown ? (
-                    <p className="text-[11px] text-muted-foreground leading-snug">{t("bs_ledgerBreakdownHint")}</p>
-                  ) : null}
 
                   <div
                     className={`rounded-lg border px-3 py-2 text-sm ${

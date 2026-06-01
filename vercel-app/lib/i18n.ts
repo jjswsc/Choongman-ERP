@@ -7589,9 +7589,9 @@ export const i18n = {
     helpHow_admin_crm_rfm:
       '① R/F/M 개별 점수와 RFM 3자리 코드를 확인합니다.\n② 555/554 같은 상위군은 VIP 혜택, 1xx 군은 재활성화 캠페인을 우선 적용합니다.\n③ 점수는 주기적으로 다시 계산해 고객 이동을 추적합니다.',
     helpSum_admin_crm_member_app:
-      '회원앱의 로그인 배경, 접속 후 배경, 팝업/정보/매장사진, 문의 채널(Facebook/Instagram)을 통합 관리하는 화면입니다.',
+      '회원앱의 로그인 배경, 접속 후 배경, 팝업/정보, 매장 정보(목록·위치·사진), 문의 채널(Facebook/Instagram)을 통합 관리하는 화면입니다.',
     helpHow_admin_crm_member_app:
-      '① 디자인 탭: 로그인 배경/접속 후 배경 이미지를 권장 해상도(1080x1920)로 업로드하고 저장합니다.\n② 팝업·정보·매장사진 탭: 유형별 콘텐츠를 등록하고 노출 기간·정렬·활성 상태를 관리합니다.\n③ 문의 채널 탭: Contact us에 노출될 Facebook/Instagram 링크를 저장합니다.\n④ 저장 후 회원앱(/m)에서 실제 반영 여부를 확인합니다.',
+      '① 디자인 탭: 로그인 배경/접속 후 배경 이미지를 권장 해상도(1080x1920)로 업로드하고 저장합니다.\n② 매장 정보 탭: 회원앱·픽업 주문에 노출할 매장을 추가·수정·비활성화하고 주소·지도 검색어·사진을 관리합니다.\n③ 팝업·정보 탭: 유형별 콘텐츠를 등록하고 노출 기간·정렬·활성 상태를 관리합니다. 홈 신메뉴 타일은 정보 유형 + 노출 탭 home_feature(또는 home_promo) + 이미지·본문으로 설정합니다.\n④ 문의 채널 탭: Contact us에 노출될 Facebook/Instagram 링크를 저장합니다.\n⑤ 저장 후 회원앱(/m)에서 실제 반영 여부를 확인합니다.',
     workLogLoginRequired: '로그인이 필요합니다.',
     workLogDate: '날짜',
     workLogEmployee: '직원',
@@ -16471,9 +16471,9 @@ orderItemQty: 'Qty',
     helpHow_admin_crm_rfm:
       '① Review each R/F/M score and the combined 3-digit RFM code.\n② Use top codes (e.g. 555) for VIP retention and low recency groups for reactivation.\n③ Recalculate regularly and track migration between segments.',
     helpSum_admin_crm_member_app:
-      'Manage member-app design and content in one place: login/app backgrounds, popup/info/store photos, and contact channels (Facebook/Instagram).',
+      'Manage member-app design and content: login/app backgrounds, popup/info, store list (location & photos), and contact channels (Facebook/Instagram).',
     helpHow_admin_crm_member_app:
-      '① Design tab: upload login and post-login backgrounds (recommended 1080x1920) and save.\n② Popup/Info/Store photo tabs: manage each content type with schedule, sort, and active status.\n③ Contact tab: set Facebook/Instagram links shown in Contact us.\n④ After saving, verify changes in the member portal (/m).',
+      '① Design tab: upload login and post-login backgrounds (recommended 1080x1920) and save.\n② Store info tab: add, edit, or deactivate stores shown in the member app and pickup flow; set address, map query, and photo.\n③ Popup/Info tabs: manage content with schedule, sort, and active status.\n④ Contact tab: set Facebook/Instagram links shown in Contact us.\n⑤ After saving, verify changes in the member portal (/m).',
     workLogLoginRequired: 'Login required.',
     workLogDate: 'Date',
     workLogEmployee: 'Employee',

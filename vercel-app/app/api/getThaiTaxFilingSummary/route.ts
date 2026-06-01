@@ -9,6 +9,7 @@ import {
   syncTaxWithholdingLedgersFromExpenses,
   syncTaxWithholdingLedgersFromPurchaseOrders,
 } from '@/lib/tax-ledger-auto-sync'
+import { enrichVatLedgerRowsStoreNames } from '@/lib/pos-ledger-drafts'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -83,9 +84,6 @@ export async function GET(request: NextRequest) {
     isOfficeStore(userStore) ||
     isHeadOfficeLikeStoreName(userStore)
   let storeFilter = requestedStoreFilter
-  if (storeFilter && (isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter))) {
-    storeFilter = 'All'
-  }
   if (!isOfficeLevel) {
     if (!requestedStoreFilter || requestedStoreFilter === 'All') {
       storeFilter = String(allowedStores[0] || '').trim()
@@ -112,22 +110,23 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     try {
       await syncTaxVatLedgersFromStockAndExpenses({
         months: period.months,
-        storeFilter,
+        storeFilter: syncStoreFilter,
       })
       await syncTaxWithholdingLedgersFromExpenses({
         months: period.months,
-        storeFilter,
+        storeFilter: syncStoreFilter,
       })
       await syncTaxWithholdingLedgersFromPayroll({
         months: period.months,
-        storeFilter,
+        storeFilter: syncStoreFilter,
       })
       await syncTaxWithholdingLedgersFromPurchaseOrders({
         months: period.months,
-        storeFilter,
+        storeFilter: syncStoreFilter,
       })
     } catch (e) {
       console.warn('getThaiTaxFilingSummary auto-sync skipped:', e)
@@ -181,13 +180,13 @@ export async function GET(request: NextRequest) {
     }
 
     const monthBase = buildTaxMonthPostgrestFilter(period.months)
-    const [vatRows, whtRows] = await Promise.all([
+    const [vatRowsRaw, whtRows] = await Promise.all([
       supabaseSelectFilterAllPages('vat_ledger_entries', monthBase, {
-        select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number,store_name',
+        select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number,store_name,memo',
         order: 'id.asc',
         pageSize: 4000,
         maxRows: 100000,
-      }) as Promise<VatRow[] | null>,
+      }) as Promise<(VatRow & { memo?: string | null })[] | null>,
       supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthBase, {
         select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name',
         order: 'id.asc',
@@ -195,6 +194,8 @@ export async function GET(request: NextRequest) {
         maxRows: 100000,
       }) as Promise<WhtRow[] | null>,
     ])
+
+    const vatRowsEnriched = await enrichVatLedgerRowsStoreNames((vatRowsRaw || []) as Record<string, unknown>[])
 
     const vat = {
       outputNet: 0,
@@ -206,7 +207,7 @@ export async function GET(request: NextRequest) {
       missingInvoiceCount: 0,
       rowCount: 0,
     }
-    for (const row of vatRows || []) {
+    for (const row of vatRowsEnriched || []) {
       if (!storeScope.matches(String(row.store_name || ''))) continue
       const dir = String(row.direction || '').toLowerCase()
       const net = Number(row.net_amount) || 0

@@ -5,6 +5,7 @@
 export type PosCouponRedemptionMode = 'reusable_code' | 'single_use_serial' | 'member_issue'
 export type PosCouponStackMode = 'fixed_only' | 'percent_only' | 'any'
 export type PosCouponCalcBase = 'remaining' | 'subtotal'
+export type PosCouponDiscountType = 'percent' | 'fixed' | 'bogo' | 'set_fixed' | 'item_fixed'
 
 export interface PosLoyaltySettings {
   brandKey: string
@@ -26,7 +27,7 @@ export interface PosCouponTemplate {
   id?: number
   code: string
   name?: string
-  discountType: 'percent' | 'fixed'
+  discountType: PosCouponDiscountType
   discountValue: number
   validFrom?: string | null
   validTo?: string | null
@@ -39,6 +40,13 @@ export interface PosCouponTemplate {
   maxUses?: number | null
   usedCount?: number
   maxDiscountAmt?: number | null
+  setQty?: number
+  itemScope?: {
+    menuIds?: string[]
+    categoryCodes?: string[]
+  }
+  priority?: number
+  allowWithManualDiscount?: boolean
 }
 
 export interface PosAppliedCouponLine {
@@ -49,6 +57,14 @@ export interface PosAppliedCouponLine {
   couponId?: number
   serialId?: number
   memberCouponIssueId?: number
+  priority?: number
+}
+
+export interface PosCouponCartLine {
+  menuId?: string
+  categoryCode?: string
+  quantity: number
+  lineSubtotal: number
 }
 
 export interface PosCouponValidationContext {
@@ -56,6 +72,7 @@ export interface PosCouponValidationContext {
   manualDiscountAmt: number
   collabDiscountAmt?: number
   applied: PosAppliedCouponLine[]
+  cartLines?: PosCouponCartLine[]
   todayYmd: string
   loyalty: PosLoyaltySettings
 }
@@ -125,6 +142,56 @@ function computeRemainingSubtotal(ctx: PosCouponValidationContext): number {
   return round2(Math.max(0, subtotal - manual - collab - couponPart))
 }
 
+function normalizeList(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return values.map((v) => String(v ?? '').trim()).filter(Boolean)
+}
+
+function cartLineMatchesScope(
+  line: PosCouponCartLine,
+  scope: PosCouponTemplate['itemScope']
+): boolean {
+  if (!scope) return true
+  const menuIds = normalizeList(scope.menuIds)
+  const categories = normalizeList(scope.categoryCodes).map((v) => v.toUpperCase())
+  if (menuIds.length === 0 && categories.length === 0) return true
+  const menuId = String(line.menuId ?? '').trim()
+  const category = String(line.categoryCode ?? '').trim().toUpperCase()
+  if (menuIds.length > 0 && menuId && menuIds.includes(menuId)) return true
+  if (categories.length > 0 && category && categories.includes(category)) return true
+  return false
+}
+
+function resolveEligibleCartStats(
+  template: PosCouponTemplate,
+  cartLines: PosCouponCartLine[] | undefined
+): {
+  eligibleSubtotal: number
+  eligibleQty: number
+  unitPrices: number[]
+} {
+  if (!Array.isArray(cartLines) || cartLines.length === 0) {
+    return { eligibleSubtotal: 0, eligibleQty: 0, unitPrices: [] }
+  }
+  let eligibleSubtotal = 0
+  let eligibleQty = 0
+  const unitPrices: number[] = []
+  for (const rawLine of cartLines) {
+    const qty = Math.max(1, Math.trunc(Number(rawLine.quantity ?? 1) || 1))
+    const lineSubtotal = Math.max(0, Number(rawLine.lineSubtotal ?? 0) || 0)
+    if (!cartLineMatchesScope(rawLine, template.itemScope)) continue
+    eligibleSubtotal += lineSubtotal
+    eligibleQty += qty
+    const unit = qty > 0 ? lineSubtotal / qty : 0
+    for (let i = 0; i < qty; i += 1) unitPrices.push(unit)
+  }
+  return {
+    eligibleSubtotal: round2(eligibleSubtotal),
+    eligibleQty,
+    unitPrices,
+  }
+}
+
 function computeDiscountForTemplate(
   template: PosCouponTemplate,
   ctx: PosCouponValidationContext,
@@ -137,24 +204,66 @@ function computeDiscountForTemplate(
     ctx.loyalty.couponCalcBase === 'subtotal'
       ? baseSubtotal
       : remaining
+  const eligible = resolveEligibleCartStats(template, ctx.cartLines)
+
+  if (template.discountType === 'bogo') {
+    const units = [...eligible.unitPrices].sort((a, b) => a - b)
+    const freeQty = Math.floor(units.length / 2)
+    let amt = 0
+    for (let i = 0; i < freeQty; i += 1) amt += units[i] || 0
+    const cap = Number(template.maxDiscountAmt ?? 0)
+    if (cap > 0) amt = Math.min(amt, cap)
+    return round2(Math.min(remaining, amt))
+  }
+
+  if (template.discountType === 'set_fixed') {
+    const setQty = Math.max(2, Math.trunc(Number(template.setQty ?? 2) || 2))
+    const sets = Math.floor(eligible.eligibleQty / setQty)
+    const perSetDiscount = Math.max(0, Number(template.discountValue) || 0)
+    let amt = sets * perSetDiscount
+    const cap = Number(template.maxDiscountAmt ?? 0)
+    if (cap > 0) amt = Math.min(amt, cap)
+    return round2(Math.min(remaining, amt))
+  }
+
+  if (template.discountType === 'item_fixed') {
+    const perItemDiscount = Math.max(0, Number(template.discountValue) || 0)
+    let amt = eligible.eligibleQty * perItemDiscount
+    const cap = Number(template.maxDiscountAmt ?? 0)
+    if (cap > 0) amt = Math.min(amt, cap)
+    return round2(Math.min(remaining, amt))
+  }
 
   if (template.discountType === 'percent') {
     const pct = Math.max(0, Number(template.discountValue) || 0)
-    let amt = Math.round(base * pct / 100)
+    const scopedBase = template.itemScope ? Math.min(base, eligible.eligibleSubtotal) : base
+    let amt = Math.round(scopedBase * pct / 100)
     const cap = Number(template.maxDiscountAmt ?? 0)
     if (cap > 0) amt = Math.min(amt, cap)
     return round2(Math.min(remaining, amt))
   }
 
   const unit = Math.max(0, Number(template.discountValue) || 0)
-  const raw = unit * qty
+  const qtyForFixed =
+    template.itemScope && eligible.eligibleQty > 0
+      ? Math.min(qty, eligible.eligibleQty)
+      : qty
+  const raw = unit * qtyForFixed
   return round2(Math.min(remaining, raw))
 }
 
-function canStackTemplate(template: PosCouponTemplate, applied: PosAppliedCouponLine[]): string | null {
+function canStackTemplate(
+  template: PosCouponTemplate,
+  ctx: PosCouponValidationContext
+): string | null {
+  const applied = ctx.applied
   const stackMode = template.stackMode || 'fixed_only'
+  if (template.allowWithManualDiscount === false && (ctx.manualDiscountAmt || 0) > 0.0001) {
+    return '이 쿠폰은 수동 할인과 함께 사용할 수 없습니다.'
+  }
+  const fixedLike = ['fixed', 'set_fixed', 'item_fixed', 'bogo']
   if (applied.length === 0) return null
-  if (stackMode === 'fixed_only' && template.discountType !== 'fixed') {
+  if (stackMode === 'fixed_only' && !fixedLike.includes(template.discountType)) {
     return '이 쿠폰은 다른 쿠폰과 함께 사용할 수 없습니다.'
   }
   if (stackMode === 'percent_only' && template.discountType !== 'percent') {
@@ -240,7 +349,7 @@ export function validatePosCouponCandidate(
     return { valid: false, message: `최소 주문 금액 ${minOrder}바트 이상이어야 합니다.` }
   }
 
-  const stackErr = canStackTemplate(c, ctx.applied)
+  const stackErr = canStackTemplate(c, ctx)
   if (stackErr) return { valid: false, message: stackErr }
 
   const maxPerOrder = Math.max(1, Math.trunc(Number(c.maxPerOrder ?? 1) || 1))
@@ -272,6 +381,7 @@ export function validatePosCouponCandidate(
     discountAmt,
     quantity,
     couponId: c.id,
+    priority: Number(c.priority ?? 0) || 0,
     ...(opts?.memberIssueId ? { memberCouponIssueId: opts.memberIssueId } : {}),
     ...(opts?.serialId ? { serialId: opts.serialId } : {}),
   }
@@ -299,8 +409,16 @@ export function revalidateAppliedPosCoupons(
   ctx: Omit<PosCouponValidationContext, 'applied'>,
   applied: PosAppliedCouponLine[]
 ): PosAppliedCouponLine[] {
+  const sorted = [...applied].sort((a, b) => {
+    const aTemplate = templatesByCode.get(normalizeCode(a.code))
+    const bTemplate = templatesByCode.get(normalizeCode(b.code))
+    const aPriority = Number(a.priority ?? aTemplate?.priority ?? 0)
+    const bPriority = Number(b.priority ?? bTemplate?.priority ?? 0)
+    if (aPriority === bPriority) return 0
+    return bPriority - aPriority
+  })
   const kept: PosAppliedCouponLine[] = []
-  for (const row of applied) {
+  for (const row of sorted) {
     const template = templatesByCode.get(normalizeCode(row.code))
     const result = validatePosCouponCandidate(template, { ...ctx, applied: kept }, {
       code: row.code,
@@ -353,6 +471,7 @@ export function parseAppliedCouponsFromBody(body: unknown): PosAppliedCouponLine
       serialId: Number(row.serialId ?? row.serial_id ?? 0) || undefined,
       memberCouponIssueId:
         Number(row.memberCouponIssueId ?? row.member_coupon_issue_id ?? 0) || undefined,
+      priority: Number(row.priority ?? row.coupon_priority ?? 0) || undefined,
     })
   }
   return out

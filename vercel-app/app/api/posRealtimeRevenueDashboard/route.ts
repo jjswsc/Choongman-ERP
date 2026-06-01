@@ -5,12 +5,12 @@ import {
   posSalesBusinessDateRangeUtcEnvelope,
 } from '@/lib/pos-sales-business-day-range'
 import {
-  appendStoreCodeFilter,
+  appendStoreCodeFilterAsync,
   canonicalSalesStoreRowKey,
   resolveStoresFromParams,
   rowMatchesSalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
-import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
+import { applyPosSalesStoreSelectionFilterAsync } from '@/lib/pos-sales-fetch-rows'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
     const bizCtx = await loadPosBusinessDaySettingsContext()
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    filter = await appendStoreCodeFilterAsync(filter, stores)
     const rowsRaw = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_orders',
       filter,
@@ -231,7 +231,7 @@ export async function GET(request: NextRequest) {
     )) as DashboardOrderRow[]
     let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
     rows = excludePosSalesTestOfficeRows(rows)
-    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
+    rows = await applyPosSalesStoreSelectionFilterAsync(rows, stores.length > 0 ? stores : undefined)
     if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const byStore = new Map<string, StoreAccumulator>()

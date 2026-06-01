@@ -224,9 +224,6 @@ export async function GET(request: NextRequest) {
     isOfficeStore(userStore) ||
     isHeadOfficeLikeStoreName(userStore)
   let storeFilter = requestedStoreFilter
-  if (storeFilter && (isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter))) {
-    storeFilter = 'All'
-  }
   if (!isOfficeLevel) {
     if (!requestedStoreFilter || requestedStoreFilter === 'All') {
       storeFilter = String(allowedStores[0] || '').trim()

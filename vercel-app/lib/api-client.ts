@@ -8778,13 +8778,14 @@ export interface PosAppliedCoupon {
   discountAmt: number
   quantity?: number
   couponId?: number
+  priority?: number
 }
 
 export interface PosCoupon {
   id?: number
   code: string
   name?: string
-  discountType: 'percent' | 'amount' | 'fixed'
+  discountType: 'percent' | 'amount' | 'fixed' | 'bogo' | 'set_fixed' | 'item_fixed'
   discountValue: number
   startDate?: string | null
   endDate?: string | null
@@ -8800,6 +8801,10 @@ export interface PosCoupon {
   allowQuantityEntry?: boolean
   stackMode?: 'fixed_only' | 'percent_only' | 'any'
   maxDiscountAmt?: number | null
+  setQty?: number
+  itemScope?: { menuIds?: string[]; categoryCodes?: string[] }
+  priority?: number
+  allowWithManualDiscount?: boolean
 }
 
 export async function getPosCoupons() {
@@ -8811,7 +8816,7 @@ export async function savePosCoupon(params: {
   id?: number
   code: string
   name?: string
-  discountType?: 'percent' | 'amount' | 'fixed'
+  discountType?: 'percent' | 'amount' | 'fixed' | 'bogo' | 'set_fixed' | 'item_fixed'
   discountValue: number
   startDate?: string | null
   endDate?: string | null
@@ -8826,6 +8831,10 @@ export async function savePosCoupon(params: {
   allowQuantityEntry?: boolean
   stackMode?: 'fixed_only' | 'percent_only' | 'any'
   maxDiscountAmt?: number | null
+  setQty?: number
+  itemScope?: { menuIds?: string[]; categoryCodes?: string[] }
+  priority?: number
+  allowWithManualDiscount?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/savePosCoupon', {
     method: 'POST',
@@ -8855,6 +8864,12 @@ export async function validatePosCoupons(params: {
   subtotal: number
   manualDiscountAmt?: number
   collabDiscountAmt?: number
+  cartLines?: Array<{
+    menuId?: string
+    categoryCode?: string
+    quantity: number
+    lineSubtotal: number
+  }>
   applied?: PosAppliedCoupon[]
   appliedCoupons?: PosAppliedCoupon[]
   candidate?: { code: string; quantity?: number }

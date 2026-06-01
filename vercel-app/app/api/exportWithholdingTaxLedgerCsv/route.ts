@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import {
   normalizePndFormHint,
@@ -78,16 +78,18 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const filter = appendStoreNameFilter(monthFilter, storeFilter)
-    const rows = (await supabaseSelectFilter('withholding_tax_ledger_entries', filter, {
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const rows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthFilter, {
       select: '*',
-      limit: 20000,
+      pageSize: 4000,
+      maxRows: 100000,
       order: 'payment_date.asc,id.asc',
     })) as WithholdingTaxLedgerRow[] | null
+    const scopedRows = (rows || []).filter((row) => storeScope.matches(String(row.store_name || '')))
     const filteredRows =
       filingStatus === ''
-        ? rows || []
-        : (rows || []).filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
+        ? scopedRows
+        : scopedRows.filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
 
     const csv =
       exportFormat === 'submission'

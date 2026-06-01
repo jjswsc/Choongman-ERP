@@ -1,5 +1,6 @@
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
+import { enrichVatLedgerRowsStoreNames } from '@/lib/pos-ledger-drafts'
 
 export type VatLedgerStoreNameGapSample = {
   id?: number
@@ -75,13 +76,14 @@ export async function analyzeVatLedgerStoreNameGaps(params: {
   }
 
   const monthFilter = buildTaxMonthPostgrestFilter(months)
-  const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+  const rowsRaw = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
     select:
       'id,doc_date,tax_month,direction,net_amount,vat_amount,counterparty_name,invoice_number,memo,store_name',
     order: 'doc_date.asc,id.asc',
     pageSize: 4000,
     maxRows: 100000,
   })) as VatRowLite[]
+  const rows = (await enrichVatLedgerRowsStoreNames((rowsRaw || []) as Record<string, unknown>[])) as VatRowLite[]
 
   let inScopeRowCount = 0
   let emptyStoreNameRowCount = 0

@@ -28,6 +28,11 @@ export async function GET(_req: NextRequest) {
       max_discount_amt?: number | null
       max_uses?: number | null
       used_count?: number
+      benefit_kind?: string | null
+      set_qty?: number | null
+      item_scope_json?: Record<string, unknown> | null
+      priority?: number | null
+      combinable_with_manual_discount?: boolean | null
     }[]
     const list = (rows || []).map((r) => {
       const mapped = mapPosCouponDbRow(r)
@@ -50,6 +55,10 @@ export async function GET(_req: NextRequest) {
         maxDiscountAmt: mapped.maxDiscountAmt ?? null,
         maxUses: mapped.maxUses ?? null,
         usedCount: mapped.usedCount ?? 0,
+        setQty: mapped.setQty ?? null,
+        itemScope: mapped.itemScope ?? null,
+        priority: mapped.priority ?? 0,
+        allowWithManualDiscount: mapped.allowWithManualDiscount !== false,
       }
     }).filter(Boolean)
     return NextResponse.json(list, { headers })

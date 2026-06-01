@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
 import { apiFetch } from "@/lib/api/fetch"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 
@@ -147,7 +148,7 @@ function validateImageByRule(
 }
 
 export default function CrmMemberAppContentPage() {
-  const [activeTab, setActiveTab] = React.useState<"design" | "popup" | "info" | "store_photo" | "contact" | "delivery">("design")
+  const [activeTab, setActiveTab] = React.useState<"design" | "popup" | "info" | "stores" | "contact" | "delivery">("design")
   const [items, setItems] = React.useState<ContentItem[]>([])
   const [form, setForm] = React.useState<FormState>(emptyForm())
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
@@ -252,7 +253,7 @@ export default function CrmMemberAppContentPage() {
   }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, refresh])
 
   React.useEffect(() => {
-    if (activeTab === "popup" || activeTab === "info" || activeTab === "store_photo") {
+    if (activeTab === "popup" || activeTab === "info") {
       setForm((prev) => ({ ...prev, contentType: activeTab }))
     }
   }, [activeTab])
@@ -460,7 +461,7 @@ export default function CrmMemberAppContentPage() {
   }, [])
 
   const filteredItems = React.useMemo(() => {
-    if (activeTab === "popup" || activeTab === "info" || activeTab === "store_photo") {
+    if (activeTab === "popup" || activeTab === "info") {
       return items.filter((x) => x.contentType === activeTab)
     }
     return items
@@ -474,7 +475,7 @@ export default function CrmMemberAppContentPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">회원앱 운영</h1>
-            <p className="text-sm text-muted-foreground">매장 사진, 팝업, 안내 정보를 ERP에서 통합 관리합니다.</p>
+            <p className="text-sm text-muted-foreground">디자인, 팝업, 매장 정보, 문의 채널을 ERP에서 통합 관리합니다.</p>
           </div>
           <Button variant="outline" onClick={() => refresh()} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
@@ -491,7 +492,7 @@ export default function CrmMemberAppContentPage() {
             <TabsTrigger value="design">디자인</TabsTrigger>
             <TabsTrigger value="popup">팝업</TabsTrigger>
             <TabsTrigger value="info">정보 업데이트</TabsTrigger>
-            <TabsTrigger value="store_photo">매장 사진</TabsTrigger>
+            <TabsTrigger value="stores">매장 정보</TabsTrigger>
             <TabsTrigger value="contact">문의 채널</TabsTrigger>
             <TabsTrigger value="delivery">배달 앱</TabsTrigger>
           </TabsList>
@@ -660,23 +661,25 @@ export default function CrmMemberAppContentPage() {
                 <CardTitle>정보 업데이트 관리</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">공지/이벤트/운영 안내 등 텍스트 중심 콘텐츠를 관리합니다.</p>
+                <p className="text-sm text-muted-foreground">공지/이벤트/운영 안내 등 텍스트 중심 콘텐츠를 관리합니다. 홈 <strong>신메뉴·프로모션</strong> 타일은 노출 탭에 <code className="rounded bg-muted px-1">home_feature</code> 또는 <code className="rounded bg-muted px-1">home_promo</code>를 입력하고 이미지·본문을 등록하세요.</p>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="store_photo" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>매장 사진 관리</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">권장 이미지 사이즈: 1200x800(px), 3:2 비율.</p>
-              </CardContent>
-            </Card>
+          <TabsContent value="stores" className="space-y-4">
+            <MemberPortalStoresPanel
+              onNotice={(msg) => {
+                setNotice(msg)
+                setError("")
+              }}
+              onError={(msg) => {
+                setError(msg)
+                setNotice("")
+              }}
+            />
           </TabsContent>
 
-          {(activeTab === "popup" || activeTab === "info" || activeTab === "store_photo") && (
+          {(activeTab === "popup" || activeTab === "info") && (
             <>
               <Card>
                 <CardHeader>
@@ -701,7 +704,7 @@ export default function CrmMemberAppContentPage() {
                       <Input
                         value={form.targetTab}
                         onChange={(e) => setForm((p) => ({ ...p, targetTab: e.target.value }))}
-                        placeholder="예: home / location / privilege"
+                        placeholder="예: home / home_feature / home_promo / location"
                       />
                     </div>
                   </div>

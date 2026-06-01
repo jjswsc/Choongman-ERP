@@ -4,6 +4,9 @@ export const DEFAULT_MEMBER_LOGIN_BG = '/member-portal/app-bg-premium.jpg'
 
 export const MP_MAX_WIDTH = 'max-w-[430px]'
 
+/** 멤버십 카드 가로:세로 — 황금비 φ (신용카드형) */
+export const MEMBERSHIP_CARD_GOLDEN_RATIO = 1.618033988749895
+
 export const mpGlassCard =
   'rounded-[1.35rem] border border-white/[0.11] bg-[rgba(8,8,10,0.52)] shadow-[0_12px_40px_rgba(0,0,0,0.38)] backdrop-blur-2xl'
 

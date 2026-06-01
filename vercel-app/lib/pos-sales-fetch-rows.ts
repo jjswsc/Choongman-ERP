@@ -20,14 +20,22 @@ import {
   type PosBusinessDaySettingsContext,
 } from '@/lib/pos-business-day-server'
 import {
-  appendStoreCodeFilter,
-  expandSalesStoreCodesForFilter,
-  rowMatchesSalesStoreSelection,
+  appendStoreCodeFilterFromExpanded,
+  expandSalesStoreCodesForFilterAsync,
+  rowMatchesAnySalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
 
 /** posSalesByStore·손익·기간 집계 공통 select */
 export const POS_SALES_ORDER_ROW_SELECT =
   'created_at,store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type'
+
+export const POS_SALES_MENU_ROW_SELECT = `${POS_SALES_ORDER_ROW_SELECT},items_json`
+
+export const POS_SALES_DELIVERY_ROW_SELECT =
+  `${POS_SALES_ORDER_ROW_SELECT},delivery_app_code,items_json`
+
+export const POS_SALES_PAYMENT_ROW_SELECT =
+  `${POS_SALES_ORDER_ROW_SELECT},payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel`
 
 /** 단일 select 상한(레거시). 실제 조회는 페이지 반복으로 수집 */
 export const POS_SALES_BY_STORE_FETCH_LIMIT = 50_000
@@ -68,11 +76,11 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
   )
   const expanded =
     params.storeCodes && params.storeCodes.length > 0
-      ? expandSalesStoreCodesForFilter(params.storeCodes)
+      ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
       : []
 
   let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-  filter = appendStoreCodeFilter(filter, expanded.length > 0 ? params.storeCodes! : [])
+  filter = appendStoreCodeFilterFromExpanded(filter, expanded)
 
   const maxRows =
     params.storeCodes && params.storeCodes.length > 0
@@ -97,7 +105,7 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
 
   if (params.storeCodes && params.storeCodes.length > 0) {
     rows = rows.filter((r) =>
-      params.storeCodes!.some((code) => rowMatchesSalesStoreSelection(r.store_code, code))
+      rowMatchesAnySalesStoreSelection(r.store_code, params.storeCodes!, expanded)
     )
   }
 
@@ -112,12 +120,20 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
   }
 }
 
-/** 영업일 필터 이후 매장 UI 코드와 DB store_code 표기(CM 접두 등) 재매칭 */
+/** 영업일 필터 이후 매장 UI 코드와 DB store_code 표기(CM 접두·erp 별칭 등) 재매칭 */
+export async function applyPosSalesStoreSelectionFilterAsync<
+  T extends { store_code?: string | null },
+>(rows: T[], storeCodes: string[] | undefined): Promise<T[]> {
+  if (!storeCodes?.length) return rows
+  const expanded = await expandSalesStoreCodesForFilterAsync(storeCodes)
+  return rows.filter((r) => rowMatchesAnySalesStoreSelection(r.store_code, storeCodes, expanded))
+}
+
 export function applyPosSalesStoreSelectionFilter<
   T extends { store_code?: string | null },
 >(rows: T[], storeCodes: string[] | undefined): T[] {
   if (!storeCodes?.length) return rows
   return rows.filter((r) =>
-    storeCodes.some((code) => rowMatchesSalesStoreSelection(r.store_code, code))
+    storeCodes.some((code) => rowMatchesAnySalesStoreSelection(r.store_code, [code]))
   )
 }

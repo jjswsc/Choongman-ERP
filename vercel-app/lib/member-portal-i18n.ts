@@ -28,6 +28,9 @@ export type MemberPortalKey =
   | 'tierMax'
   | 'tierProgress'
   | 'statLifetime'
+  | 'homeFeatureLabel'
+  | 'homeFeatureEmpty'
+  | 'homeFeatureTap'
   | 'statVisits'
   | 'statAvgTicket'
   | 'statCoupons'
@@ -87,6 +90,7 @@ export type MemberPortalKey =
   | 'locationTitle'
   | 'locationDesc'
   | 'locationComing'
+  | 'locationEmpty'
   | 'locationSearchPh'
   | 'locationNoResult'
   | 'locationOpenMap'
@@ -123,6 +127,9 @@ export type MemberPortalKey =
   | 'referralInputLabel'
   | 'consentMarketing'
   | 'saveProfile'
+  | 'saveProfileChanges'
+  | 'profileReferralLocked'
+  | 'myReferralCode'
   | 'saving'
   | 'memberNo'
   | 'joined'
@@ -162,6 +169,15 @@ export type MemberPortalKey =
   | 'coupon_issued'
   | 'coupon_used'
   | 'coupon_expired'
+  | 'coupon_restored'
+  | 'coupon_cancelled'
+  | 'couponExpiresAt'
+  | 'couponCampaign'
+  | 'couponCondition'
+  | 'couponScope'
+  | 'couponBenefit'
+  | 'couponMinOrder'
+  | 'couponStackRule'
   | 'langLabel'
   | 'birthDayLabel'
   | 'birthMonthLabel'
@@ -293,6 +309,9 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '{tier}까지 {amount} 남음',
   },
   statLifetime: { en: 'Lifetime spend', th: 'ยอดใช้จ่ายสะสม', ko: '누적 이용 금액' },
+  homeFeatureLabel: { en: 'New & promo', th: 'เมนูใหม่·โปร', ko: '신메뉴·프로모션' },
+  homeFeatureEmpty: { en: 'Coming soon', th: 'เร็วๆ นี้', ko: '곧 공개' },
+  homeFeatureTap: { en: 'Tap for details', th: 'แตะเพื่อดูรายละเอียด', ko: '탭하여 자세히 보기' },
   statVisits: { en: 'Visits', th: 'จำนวนครั้งที่มา', ko: '방문 횟수' },
   statAvgTicket: { en: 'Avg.', th: 'เฉลี่ย', ko: '평균' },
   statCoupons: { en: 'Coupons ready', th: 'คูปองพร้อมใช้', ko: '사용 가능 쿠폰' },
@@ -424,6 +443,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'แผนที่จะเปิดใช้งานในเฟสถัดไป',
     ko: '지도 보기 기능은 다음 단계에서 제공됩니다.',
   },
+  locationEmpty: {
+    en: 'No stores are registered yet. Add stores in ERP → Member app → Store info.',
+    th: 'ยังไม่มีสาขาที่ลงทะเบียน กรุณาเพิ่มใน ERP',
+    ko: '등록된 매장이 없습니다. ERP 회원앱 운영 → 매장 정보에서 등록해 주세요.',
+  },
   locationSearchPh: {
     en: 'Search store name',
     th: 'ค้นหาชื่อสาขา',
@@ -507,9 +531,9 @@ const MS: Record<MemberPortalKey, Dict> = {
   noPoints: { en: 'No points history', th: 'ยังไม่มีประวัติแต้ม', ko: '포인트 내역 없음' },
   profileTitle: { en: 'Member profile', th: 'โปรไฟล์สมาชิก', ko: '회원 프로필' },
   profileSub: {
-    en: 'Update your info for better benefits',
-    th: 'อัปเดตข้อมูลเพื่อรับสิทธิประโยชน์ที่เหมาะกับคุณ',
-    ko: '맞춤 혜택을 위해 정보를 업데이트하세요',
+    en: 'Your saved details appear below. Update and save changes.',
+    th: 'ข้อมูลที่บันทึกไว้จะแสดงด้านล่าง แก้ไขแล้วกดบันทึก',
+    ko: '등록된 정보가 자동으로 채워집니다. 수정 후 저장하세요.',
   },
   nameLabel: { en: 'Name', th: 'ชื่อ', ko: '이름' },
   emailLabel: { en: 'Email', th: 'อีเมล', ko: '이메일' },
@@ -524,6 +548,13 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '마케팅 수신에 동의합니다',
   },
   saveProfile: { en: 'Save profile', th: 'บันทึกข้อมูล', ko: '저장' },
+  saveProfileChanges: { en: 'Save changes', th: 'บันทึกการเปลี่ยนแปลง', ko: '변경사항 저장' },
+  profileReferralLocked: {
+    en: 'Referral code was already registered and cannot be changed.',
+    th: 'ลงทะเบียนรหัสแนะนำแล้ว ไม่สามารถแก้ไขได้',
+    ko: '추천인 코드는 이미 등록되어 변경할 수 없습니다.',
+  },
+  myReferralCode: { en: 'My referral code', th: 'รหัสแนะนำของฉัน', ko: '내 추천 코드' },
   saving: { en: 'Saving…', th: 'กำลังบันทึก...', ko: '저장 중…' },
   memberNo: { en: 'Member No.', th: 'Member No.', ko: '회원번호' },
   joined: { en: 'Joined', th: 'Joined', ko: '가입일' },
@@ -619,6 +650,15 @@ const MS: Record<MemberPortalKey, Dict> = {
   coupon_issued: { en: 'Ready', th: 'พร้อมใช้', ko: '사용 가능' },
   coupon_used: { en: 'Used', th: 'ใช้แล้ว', ko: '사용됨' },
   coupon_expired: { en: 'Expired', th: 'หมดอายุ', ko: '만료' },
+  coupon_restored: { en: 'Restored', th: 'คืนสิทธิ์แล้ว', ko: '복원됨' },
+  coupon_cancelled: { en: 'Cancelled', th: 'ยกเลิก', ko: '취소됨' },
+  couponExpiresAt: { en: 'Expires', th: 'หมดอายุ', ko: '만료일' },
+  couponCampaign: { en: 'Campaign', th: 'แคมเปญ', ko: '캠페인' },
+  couponCondition: { en: 'Condition', th: 'เงื่อนไข', ko: '조건' },
+  couponScope: { en: 'Store scope', th: 'สาขาที่ใช้ได้', ko: '사용 가능 매장' },
+  couponBenefit: { en: 'Benefit', th: 'สิทธิ์', ko: '혜택' },
+  couponMinOrder: { en: 'Min order', th: 'ขั้นต่ำ', ko: '최소주문' },
+  couponStackRule: { en: 'Stack rule', th: 'กฎการซ้อน', ko: '중복규칙' },
   langLabel: { en: 'Language', th: 'ภาษา', ko: '언어' },
   birthDayLabel: { en: 'Day', th: 'วัน', ko: '일' },
   birthMonthLabel: { en: 'Month', th: 'เดือน', ko: '월' },
@@ -792,5 +832,7 @@ export function memberPortalCouponStatusLabel(lang: LangCode, status: string): s
   if (s === 'issued') return memberPortalT(lang, 'coupon_issued')
   if (s === 'used') return memberPortalT(lang, 'coupon_used')
   if (s === 'expired') return memberPortalT(lang, 'coupon_expired')
+  if (s === 'restored') return memberPortalT(lang, 'coupon_restored')
+  if (s === 'cancelled') return memberPortalT(lang, 'coupon_cancelled')
   return status || '-'
 }

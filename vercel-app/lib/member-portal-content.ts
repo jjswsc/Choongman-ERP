@@ -70,3 +70,26 @@ export function isMemberPortalContentVisibleNow(item: MemberPortalContentItem, n
   return true
 }
 
+/** 홈 통계 타일 — 신메뉴·프로모션 (target_tab=home_feature 우선) */
+export function pickHomeFeatureContent(items: MemberPortalContentItem[]): MemberPortalContentItem | null {
+  const sorted = [...items].sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+    return b.updatedAt.localeCompare(a.updatedAt)
+  })
+  const featured = sorted.find((x) => x.contentType === 'info' && x.targetTab === 'home_feature')
+  if (featured) return featured
+  const promo = sorted.find(
+    (x) => x.contentType === 'info' && x.targetTab === 'home_promo' && (x.title || x.imageUrl)
+  )
+  if (promo) return promo
+  return (
+    sorted.find(
+      (x) =>
+        x.contentType === 'info' &&
+        x.imageUrl &&
+        (!x.targetTab || x.targetTab === 'home') &&
+        (x.title || x.body)
+    ) || null
+  )
+}
+

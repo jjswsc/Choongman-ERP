@@ -555,6 +555,11 @@ function extractPartnerStoreDigits(raw: string): string {
   if (!s) return ''
   const noPrefix = s.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
   if (/^\d{3,6}$/.test(noPrefix)) return noPrefix
+  // Composite IDs like "GFSBPOS-204-253" are not guaranteed to be partner store IDs.
+  // Returning the first numeric token can mis-map policies to a wrong store (e.g. "204").
+  // Only accept explicit "partner store id" patterns, otherwise keep original string path.
+  const hadPartnerPrefix = /^partner\s*store\s*id\s*[-:]\s*/i.test(s)
+  if (!hadPartnerPrefix) return ''
   const digits = noPrefix.match(/\b(\d{3,6})\b/)
   return digits?.[1] || ''
 }

@@ -2,18 +2,19 @@
  * 메뉴 판매 집계 — 대분류 / 카테고리 / 메인 메뉴 / 옵션 4단계 (pos_orders items_json).
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
+import { supabaseSelect } from '@/lib/supabase-server'
 import {
   POS_ORDER_TYPE_DB_VALUES,
   parseOrderTypesParam,
   rowMatchesOrderFilter,
   type PosOrderTypeValue,
 } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
-import { applyPosSalesStoreSelectionFilter } from '@/lib/pos-sales-fetch-rows'
-import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import {
+  fetchPosSalesOrdersForBusinessRange,
+  POS_SALES_MENU_ROW_SELECT,
+} from '@/lib/pos-sales-fetch-rows'
+import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import {
   aggregatePosSalesMenuHierarchy,
   filterHierarchyRows,
@@ -21,7 +22,6 @@ import {
 } from '@/lib/pos-sales-menu-hierarchy-aggregate'
 import { loadPosSalesOptionCatalog } from '@/lib/pos-sales-option-catalog-server'
 
-const ORDER_FETCH_LIMIT = 10000
 const HIERARCHY_LEVELS: PosSalesHierarchyLevel[] = ['main', 'category', 'menu', 'option']
 
 function parseSearchTokens(raw: string | null): string[] {
@@ -78,28 +78,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
-    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
-    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, stores)
+    const { rows: rawRows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      select: POS_SALES_MENU_ROW_SELECT,
+      queryLabel: 'posSalesByMenuHierarchy',
+    })
 
-    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: ORDER_FETCH_LIMIT,
-      select: 'created_at,items_json,status,order_type,store_code',
-    })) as {
-      created_at?: string
-      items_json?: string
-      status?: string
-      order_type?: string
-      store_code?: string
-    }[]
-
-    let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
-    rows = excludePosSalesTestOfficeRows(rows)
-    rows = applyPosSalesStoreSelectionFilter(rows, stores.length > 0 ? stores : undefined)
-
-    const truncated = rowsRaw.length >= ORDER_FETCH_LIMIT
     if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
+
+    const rows = filterCompletedPosSalesRows(rawRows, orderTypesAllowed)
 
     const menus = (await supabaseSelect('pos_menus', {
       limit: 5000,
@@ -115,12 +105,8 @@ export async function GET(request: NextRequest) {
     const menuList = Array.isArray(menus) ? menus : []
     const sliceLimit = 500
 
-    const rowsForMain = orderTypesAllowed
-      ? rows.filter((r) => rowMatchesOrderFilter(r.order_type, orderTypesAllowed))
-      : rows
-
     const aggregated = aggregatePosSalesMenuHierarchy({
-      orderRows: rowsForMain,
+      orderRows: rows,
       menus: menuList,
       options: Array.isArray(options) ? options : [],
     })

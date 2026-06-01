@@ -1,5 +1,4 @@
-import { fetchErpStoresMaster, buildLegacyToCanonicalMap } from '@/lib/erp-store-master'
-import { normStoreKey } from '@/lib/store-list-keys'
+import { resolveErpStoreIdentity } from '@/lib/erp-store-identity'
 import {
   findExplicitVendorForStore,
   normalizeVendorCode,
@@ -152,13 +151,8 @@ function vendorTaxIdFromInput(v: VendorTaxLinkInput): string {
 export async function canonicalizeStoreCodeForTaxProfile(storeKey: string): Promise<string> {
   const raw = String(storeKey || '').trim()
   if (!raw || raw === 'All' || raw === '*') return ''
-  try {
-    const masters = await fetchErpStoresMaster()
-    const map = buildLegacyToCanonicalMap(masters || [])
-    return map[normStoreKey(raw)] || raw
-  } catch {
-    return raw
-  }
+  const id = await resolveErpStoreIdentity(raw)
+  return id.storeCode || raw
 }
 
 export async function fetchStoreTaxFilingProfiles(): Promise<StoreTaxFilingProfile[]> {

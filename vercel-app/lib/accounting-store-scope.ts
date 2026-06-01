@@ -1,8 +1,16 @@
-import { buildLegacyToCanonicalMap, fetchErpStoresMaster, type ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { type ErpStoreMasterRow } from '@/lib/erp-store-master'
+import {
+  findErpStoreMasterForScopeKey,
+  resolveErpStoreIdentitySync,
+} from '@/lib/erp-store-identity'
+import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
+import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
-import { addStoreNameAliasVariants, extractStoreDisplayTail, normStoreKey } from '@/lib/store-list-keys'
+import { addStoreNameAliasVariants, normStoreKey } from '@/lib/store-list-keys'
+
+export { findErpStoreMasterForScopeKey } from '@/lib/erp-store-identity'
 
 /** 매장·가맹 등 — 요청 매장이 허용 범위 밖일 때 */
 export class AccountingStoreScopeForbidden extends Error {
@@ -97,49 +105,6 @@ function canonicalizeStoreName(value: string, legacyToCanonical: Record<string, 
   return legacyToCanonical[normStoreKey(raw)] || raw
 }
 
-function isOfficeEquivalentStore(a: string, b: string): boolean {
-  const aa = String(a || '').trim()
-  const bb = String(b || '').trim()
-  if (!aa || !bb) return false
-  return isHeadOfficeLikeStoreName(aa) && isHeadOfficeLikeStoreName(bb)
-}
-
-function masterRowMatchesScopeKey(
-  row: ErpStoreMasterRow,
-  key: string,
-  legacyToCanonical: Record<string, string>
-): boolean {
-  const probe = String(key || '').trim()
-  if (!probe) return false
-  const canonical = canonicalizeStoreName(probe, legacyToCanonical)
-  const candidates = Array.from(new Set([probe, canonical].filter(Boolean)))
-  const sc = String(row.store_code || '').trim()
-  const dn = String(row.display_name || '').trim()
-  for (const c of candidates) {
-    if (sc && storesMatchForGradeLookup(sc, c)) return true
-    if (dn && storesMatchForGradeLookup(dn, c)) return true
-    for (const alias of row.aliases || []) {
-      const a = String(alias || '').trim()
-      if (a && storesMatchForGradeLookup(a, c)) return true
-    }
-  }
-  return false
-}
-
-/** display_name·별칭·레거시 입력으로 erp_stores 행 찾기 */
-export function findErpStoreMasterForScopeKey(
-  key: string,
-  masters: ErpStoreMasterRow[],
-  legacyToCanonical: Record<string, string>
-): ErpStoreMasterRow | null {
-  const raw = String(key || '').trim()
-  if (!raw) return null
-  for (const row of masters || []) {
-    if (masterRowMatchesScopeKey(row, raw, legacyToCanonical)) return row
-  }
-  return null
-}
-
 /** store_code 기준 display_name·별칭·레거시 키 — VAT 원장 store_name(표시명·location) 매칭용 */
 export function buildStoreScopeAliasKeys(
   storeCode: string,
@@ -173,6 +138,8 @@ export function buildStoreScopeAliasKeys(
   return Array.from(keys)
 }
 
+export { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
+
 export async function createAccountingStoreScopeMatcher(storeFilter?: string | null) {
   const requested = normalizeStoreFilter(storeFilter)
   if (!requested) {
@@ -186,52 +153,21 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
   let legacyToCanonical: Record<string, string> = {}
   let masters: ErpStoreMasterRow[] = []
   try {
-    masters = await fetchErpStoresMaster()
-    legacyToCanonical = buildLegacyToCanonicalMap(masters || [])
+    const index = await ensureErpStoreMatchIndex()
+    masters = index.masters
+    legacyToCanonical = index.legacyToCanonical
   } catch {
     legacyToCanonical = {}
     masters = []
   }
 
-  const requestedCanonical = canonicalizeStoreName(requested, legacyToCanonical)
-  const master = findErpStoreMasterForScopeKey(requested, masters, legacyToCanonical)
-  const scopeStoreCode = String(master?.store_code || requestedCanonical || requested).trim()
-  const aliasKeys = buildStoreScopeAliasKeys(scopeStoreCode || requested, masters, legacyToCanonical)
+  const scopeIdentity = resolveErpStoreIdentitySync(requested, masters, legacyToCanonical)
+  const scopeStoreCode = scopeIdentity.storeCode
 
   return {
     requested,
-    requestedCanonical: scopeStoreCode || requestedCanonical,
-    matches: (storeName: string): boolean => {
-      const rowStore = String(storeName || '').trim()
-      if (!rowStore) return false
-      const rowCanonical = canonicalizeStoreName(rowStore, legacyToCanonical)
-      const rowTail = extractStoreDisplayTail(rowStore)
-      const scopeKey = scopeStoreCode || requestedCanonical || requested
-      if (isOfficeEquivalentStore(rowStore, requested)) return true
-      if (scopeKey && isOfficeEquivalentStore(rowStore, scopeKey)) return true
-      if (rowCanonical && isOfficeEquivalentStore(rowCanonical, requested)) return true
-      if (scopeKey && rowCanonical && scopeKey === rowCanonical) return true
-      if (requestedCanonical && rowCanonical && requestedCanonical === rowCanonical) return true
-      if (storesMatchForGradeLookup(rowStore, requested)) return true
-      if (scopeKey && storesMatchForGradeLookup(rowStore, scopeKey)) return true
-      if (requestedCanonical && storesMatchForGradeLookup(rowStore, requestedCanonical)) return true
-      if (rowCanonical && storesMatchForGradeLookup(rowCanonical, requested)) return true
-      if (scopeKey && rowCanonical && storesMatchForGradeLookup(rowCanonical, scopeKey)) return true
-      if (rowTail && rowTail !== rowStore) {
-        if (scopeKey && storesMatchForGradeLookup(rowTail, scopeKey)) return true
-        if (requestedCanonical && storesMatchForGradeLookup(rowTail, requestedCanonical)) return true
-        if (storesMatchForGradeLookup(rowTail, requested)) return true
-      }
-      for (const key of aliasKeys) {
-        if (storesMatchForGradeLookup(rowStore, key)) return true
-        if (rowCanonical && storesMatchForGradeLookup(rowCanonical, key)) return true
-        if (rowTail && storesMatchForGradeLookup(rowTail, key)) return true
-        const nk = normStoreKey(key)
-        if (nk && normStoreKey(rowStore) === nk) return true
-        if (rowCanonical && nk && normStoreKey(rowCanonical) === nk) return true
-        if (rowTail && nk && normStoreKey(rowTail) === nk) return true
-      }
-      return false
-    },
+    requestedCanonical: scopeStoreCode,
+    matches: (storeName: string): boolean =>
+      matchesAccountingStoreScopeRow(storeName, requested, masters, legacyToCanonical),
   }
 }
