@@ -625,7 +625,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ]
           : []
         const lineNote = grabInbound
-          ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode)
+          ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, t)
           : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
         const detailLines = [...baseOptionLine, ...banbanFlavorLines, ...promoComposeLinesExpanded]
         const detailRows = detailLines
@@ -833,7 +833,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const baseLineSplit = splitPosPrintItemLine(it.name)
             const grabPrintNote = grabInbound ? resolveGrabItemPrintNote(it) : String(it.note ?? '')
             const lineNote = grabInbound
-              ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode)
+              ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, t)
               : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''

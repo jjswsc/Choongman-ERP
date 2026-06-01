@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  ingredientRowMatchesScope,
+  isBaseMenuIngredientOptionId,
+  posMenuIngredientScopeFilter,
+} from '@/lib/pos-menu-ingredient-scope'
 
 /** POS 메뉴 재료(BOM) 조회 */
 export async function GET(request: NextRequest) {
@@ -13,8 +18,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const optionId = searchParams.get('optionId')?.trim()
-    const midEnc = encodeURIComponent(menuId)
+    const optionIdRaw = searchParams.get('optionId')?.trim()
+    const wantBase = !optionIdRaw || optionIdRaw === 'null'
+    const optionIdNum = wantBase ? null : Number(optionIdRaw)
+    const midNum = Number(menuId)
+    const scopeMenuId = Number.isFinite(midNum) && midNum > 0 ? Math.floor(midNum) : null
 
     type IngredientRow = {
       id?: number
@@ -25,42 +33,62 @@ export async function GET(request: NextRequest) {
       option_id?: number | null
       ingredient_type?: string
     }
-    let rows: IngredientRow[] | null
+    let rows: IngredientRow[] | null = null
+    const scopeOptionId = wantBase ? null : Number.isFinite(optionIdNum) ? optionIdNum : null
 
-    const fetchByFilter = (extra: string) =>
-      supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${midEnc}&${extra}`, {
-        order: 'id.asc',
-        limit: 200,
-      }) as Promise<IngredientRow[] | null>
-
-    try {
-      if (!optionId || optionId === 'null') {
-        /** null 행만 있으면 eq.0 폴백을 안 하던 틈으로 0 전용 행이 빠지지 않게 병합 */
-        const nullRows = (await fetchByFilter('option_id=is.null')) || []
-        const zeroRows = (await fetchByFilter('option_id=eq.0')) || []
-        const merged = new Map<string, IngredientRow>()
-        const rowKey = (r: IngredientRow) =>
-          r.id != null ? `id:${r.id}` : `f:${r.menu_id}|${String(r.item_code)}|${String(r.option_id ?? '')}|${String(r.quantity)}`
-        for (const r of [...nullRows, ...zeroRows]) merged.set(rowKey(r), r)
-        rows = Array.from(merged.values())
-      } else {
-        rows = await fetchByFilter(`option_id=eq.${encodeURIComponent(optionId)}`)
+    if (scopeMenuId != null) {
+      const scopeFilter = posMenuIngredientScopeFilter(scopeMenuId, scopeOptionId)
+      try {
+        rows = (await supabaseSelectFilter('pos_menu_ingredients', scopeFilter, {
+          order: 'id.asc',
+          limit: 200,
+        })) as IngredientRow[] | null
+      } catch {
+        rows = null
       }
-    } catch {
-      rows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${midEnc}`, { order: 'id.asc', limit: 200 })) as IngredientRow[] | null
     }
 
-    /** 폴백으로 menu 전체를 가져온 경우: 요청한 옵션에 맞는 행만 (기본 = null/0/빈문자) */
-    if (rows?.length && (!optionId || optionId === 'null')) {
-      const isBaseOpt = (raw: unknown) => {
-        if (raw == null) return true
-        if (typeof raw === 'number' && raw === 0) return true
-        const s = String(raw).trim()
-        return s === '' || s === '0'
+    /** 스코프 조회 성공·0건이면 빈 BOM — 폴백 금지(옵션 없을 때 기본 BOM이 섞여 보이는 버그 방지) */
+    if (rows === null) {
+      const midEnc = encodeURIComponent(menuId)
+      try {
+        if (wantBase) {
+          const nullRows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${midEnc}&option_id=is.null`, {
+            order: 'id.asc',
+            limit: 200,
+          })) as IngredientRow[] | null
+          const zeroRows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${midEnc}&option_id=eq.0`, {
+            order: 'id.asc',
+            limit: 200,
+          })) as IngredientRow[] | null
+          const merged = new Map<string, IngredientRow>()
+          const rowKey = (r: IngredientRow) =>
+            r.id != null ? `id:${r.id}` : `f:${r.menu_id}|${String(r.item_code)}|${String(r.option_id ?? '')}|${String(r.quantity)}`
+          for (const r of [...(nullRows || []), ...(zeroRows || [])]) merged.set(rowKey(r), r)
+          rows = Array.from(merged.values())
+        } else {
+          rows = (await supabaseSelectFilter(
+            'pos_menu_ingredients',
+            `menu_id=eq.${midEnc}&option_id=eq.${encodeURIComponent(optionIdRaw!)}`,
+            { order: 'id.asc', limit: 200 }
+          )) as IngredientRow[] | null
+        }
+      } catch {
+        rows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${midEnc}`, {
+          order: 'id.asc',
+          limit: 200,
+        })) as IngredientRow[] | null
       }
-      rows = rows.filter((r) => isBaseOpt(r.option_id))
-    } else if (rows?.length && optionId && optionId !== 'null') {
-      rows = rows.filter((r) => String(r.option_id ?? '') === String(optionId))
+    }
+
+    if (rows?.length && scopeMenuId != null) {
+      rows = rows.filter((r) => ingredientRowMatchesScope(r, scopeMenuId, scopeOptionId))
+    } else if (rows?.length) {
+      if (wantBase) {
+        rows = rows.filter((r) => isBaseMenuIngredientOptionId(r.option_id))
+      } else if (optionIdRaw) {
+        rows = rows.filter((r) => String(r.option_id ?? '') === String(optionIdRaw))
+      }
     }
 
     const list = (rows || []).map((r) => ({

@@ -40,10 +40,7 @@ describe('parseGrabStoreMap merge', () => {
     expect(parseGrabStoreMap()['3-C6DWPB4VCKK1GT']).toBe('1040')
   })
 
-  it('resolves both merchant ids for partner 1040', () => {
-    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual([
-      '3-C6DWPB4VCKK1GT',
-      'GFSBPOS-811-087',
-    ])
+  it('resolves partner api id for partner 1040 (portal excluded from sync list)', () => {
+    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual(['GFSBPOS-811-087'])
   })
 })

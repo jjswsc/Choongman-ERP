@@ -1,7 +1,7 @@
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
 import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
-  isGrabFoodMerchantMapKey,
+  isGrabPartnerApiMerchantId,
   resolveGrabMenuNotificationMerchantIDs,
 } from '@/lib/grab-resolve-menu-notification-merchants'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
@@ -57,7 +57,7 @@ async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promi
   }
 
   for (const grabMerchantID of Object.keys(map)) {
-    if (isGrabFoodMerchantMapKey(grabMerchantID)) out.add(grabMerchantID)
+    if (isGrabPartnerApiMerchantId(grabMerchantID)) out.add(grabMerchantID)
   }
   return Array.from(out).sort()
 }
@@ -86,7 +86,10 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
       })
       if (shouldSyncPromoCampaigns) {
         try {
-          const result = await syncGrabPromoTargetPriceCampaigns({ merchantID })
+          const result = await syncGrabPromoTargetPriceCampaigns({
+            merchantID,
+            immediatePromoDisplay: true,
+          })
           promoCampaignSynced += 1
           console.info('[grab-menu-sync] promo_target_price_campaigns', {
             merchantID,

@@ -463,13 +463,104 @@ export function collectGrabPrintOptionLines(input: {
   return out
 }
 
+/** Grab 1회용 수저·포크 선택 — 주방 슬립에는 표시하지 않음 */
+export function isGrabEcoCutleryNoteChunk(chunk: string): boolean {
+  return /^eco:/i.test(String(chunk ?? '').trim())
+}
+
+export type GrabEcoCutleryKind = 'requested' | 'not_requested'
+
+const GRAB_ECO_CUTLERY_I18N_KEY: Record<GrabEcoCutleryKind, string> = {
+  requested: 'posGrabEcoCutleryRequested',
+  not_requested: 'posGrabEcoCutleryNotRequested',
+}
+
+const GRAB_ECO_CUTLERY_FALLBACK_EN: Record<GrabEcoCutleryKind, string> = {
+  requested: 'Disposable cutlery needed',
+  not_requested: 'No disposable cutlery',
+}
+
+/** `eco:plastic cutlery requested` 등 저장 청크 → requested / not_requested */
+export function parseGrabEcoCutleryKind(chunk: string): GrabEcoCutleryKind | null {
+  const s = String(chunk ?? '').trim().toLowerCase()
+  if (!/^eco:/.test(s)) return null
+  if (
+    /\bno\b/.test(s) &&
+    (s.includes('plastic') || s.includes('cutlery') || s.includes('utensil'))
+  ) {
+    return 'not_requested'
+  }
+  if (s.includes('plastic') || s.includes('cutlery') || s.includes('utensil')) {
+    return 'requested'
+  }
+  return null
+}
+
+/** POS UI 언어로 1회용 선택 문구 표시 (i18n 키: posGrabEcoCutlery*) */
+export function translateGrabEcoCutleryChunk(
+  chunk: string,
+  t?: (key: string) => string
+): string {
+  const raw = String(chunk ?? '').trim()
+  if (!raw || !t) return raw
+  const kind = parseGrabEcoCutleryKind(raw)
+  if (!kind) return raw
+  const key = GRAB_ECO_CUTLERY_I18N_KEY[kind]
+  const value = t(key)
+  return value && value !== key ? value : GRAB_ECO_CUTLERY_FALLBACK_EN[kind]
+}
+
+/** 요청사항 `·` 연결 문자열에서 eco 청크만 번역 */
+export function translateGrabRequestSummaryChunks(
+  summary: string,
+  t?: (key: string) => string
+): string {
+  const text = String(summary ?? '').trim()
+  if (!text || !t) return text
+  return text
+    .split('·')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((chunk) => (isGrabEcoCutleryNoteChunk(chunk) ? translateGrabEcoCutleryChunk(chunk, t) : chunk))
+    .join(' · ')
+}
+
+/** `·`로 이어진 요청/메모에서 eco: 청크만 제거 (주방 인쇄용) */
+export function omitGrabEcoFromJoinedNote(text: string): string {
+  return String(text ?? '')
+    .split('·')
+    .map((s) => s.trim())
+    .filter((c) => c && !isGrabEcoCutleryNoteChunk(c))
+    .join(' · ')
+}
+
 /** Grab 인쇄: 고객 요청문만(Item: 한 줄). 옵션 칩은 collectGrabPrintOptionLines 사용 */
 export function resolveGrabPrintNoteRequest(
   rawNote: string | null | undefined,
-  optionNameByCode?: Map<string, string> | Record<string, string>
+  optionNameByCode?: Map<string, string> | Record<string, string>,
+  t?: (key: string) => string
 ): string {
   const map = toOptionNameByCodeMap(optionNameByCode)
-  return String(resolveGrabDeliveryLineNote(rawNote, map).requestSummary ?? '').trim()
+  const summary = String(resolveGrabDeliveryLineNote(rawNote, map).requestSummary ?? '').trim()
+  return translateGrabRequestSummaryChunks(summary, t)
+}
+
+/** 주방 슬립·주방 줄 메모: 옵션 + 고객 요청(1회용 eco: 제외) */
+export function formatGrabLineNoteForKitchenPrint(
+  rawNote: string | null | undefined,
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const raw = String(rawNote ?? '').trim()
+  if (!raw) return ''
+  const map = toOptionNameByCodeMap(optionNameByCode)
+  const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(raw)
+  const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(raw) || hasGrabOptionToken
+  if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
+  const grabMeta = resolveGrabDeliveryLineNote(raw, map)
+  const option = String(grabMeta.optionSummary || '').trim()
+  const request = omitGrabEcoFromJoinedNote(String(grabMeta.requestSummary || ''))
+  if (option || request) return [option, request].filter(Boolean).join(' · ')
+  return normalizePosLineNote(raw, { keepOptionSummary: false })
 }
 
 function normalizeGrabPrintNameKey(raw: string): string {
@@ -610,7 +701,8 @@ export function formatGrabPromoComposeLinesForPrint(
 /** 영수증·주방 인쇄: Grab 줄 note(optc/mods/코드 나열)를 사람이 읽는 옵션 문구로 */
 export function formatGrabOrderLineNoteForPrint(
   rawNote: string | null | undefined,
-  optionNameByCode?: Map<string, string> | Record<string, string>
+  optionNameByCode?: Map<string, string> | Record<string, string>,
+  t?: (key: string) => string
 ): string {
   const raw = String(rawNote ?? '').trim()
   if (!raw) return ''
@@ -620,7 +712,7 @@ export function formatGrabOrderLineNoteForPrint(
   if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
   const grabMeta = resolveGrabDeliveryLineNote(raw, map)
   const option = String(grabMeta.optionSummary || '').trim()
-  const request = String(grabMeta.requestSummary || '').trim()
+  const request = translateGrabRequestSummaryChunks(String(grabMeta.requestSummary || '').trim(), t)
   if (option || request) return [option, request].filter(Boolean).join(' · ')
   if (hasGrabOptionToken || /(?:^|\s)(mods?:|optc:)/i.test(raw)) return ''
   return normalizePosLineNote(raw, { keepOptionSummary: false })

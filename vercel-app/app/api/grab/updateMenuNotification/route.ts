@@ -22,8 +22,12 @@ type UpdateMenuNotificationBody = {
    * menu-sync-state 웹훅 누락/지연 시 운영 우회용.
    */
   syncPromoTargetPriceCampaigns?: unknown
-  /** true면 fixPrice 캠페인을 일치 여부와 관계없이 삭제·재생성 */
+  /** true(기본)면 fixPrice 캠페인을 일치 여부와 관계없이 삭제·재생성 */
   forcePromoCampaignResync?: unknown
+  /** true(기본): 모든 활성 Grab 세트·프로모 컷프라이스 즉시 반영 */
+  immediatePromoDisplay?: unknown
+  /** 캠페인 시작 리드타임(분). immediate면 기본 5 */
+  campaignStartLeadMinutes?: unknown
 }
 
 function coerceMerchantIdInputs(body: UpdateMenuNotificationBody): string[] {
@@ -80,9 +84,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const success = failures.length === 0
     const failedSet = new Set(failures.map((f) => f.merchantID))
     const succeededMerchantIDs = Array.from(toNotify).filter((id) => !failedSet.has(id))
+    /** Partner API 대상 중 하나라도 성공하면 200 (포털 ID 404 등 부분 실패 허용) */
+    const success = succeededMerchantIDs.length > 0
     const shouldSyncPromoCampaigns =
       body.syncPromoTargetPriceCampaigns === true ||
       body.syncPromoTargetPriceCampaigns === 'true' ||
@@ -91,6 +96,15 @@ export async function POST(req: NextRequest) {
       body.forcePromoCampaignResync === true ||
       body.forcePromoCampaignResync === 'true' ||
       body.forcePromoCampaignResync === 1
+    const immediatePromoDisplay =
+      body.immediatePromoDisplay !== false &&
+      body.immediatePromoDisplay !== 'false' &&
+      body.immediatePromoDisplay !== 0
+    const campaignStartLeadRaw = body.campaignStartLeadMinutes
+    const campaignStartLeadMinutes =
+      campaignStartLeadRaw != null && campaignStartLeadRaw !== ''
+        ? Number(campaignStartLeadRaw)
+        : undefined
     const promoCampaignSyncResults: Record<
       string,
       | { created: number; updated: number; skipped: number; deleted: number; targets: number }
@@ -104,6 +118,10 @@ export async function POST(req: NextRequest) {
           promoCampaignSyncResults[merchantID] = await syncGrabPromoTargetPriceCampaigns({
             merchantID,
             force: forcePromoCampaignResync,
+            immediatePromoDisplay,
+            ...(Number.isFinite(campaignStartLeadMinutes)
+              ? { campaignStartLeadMinutes: campaignStartLeadMinutes as number }
+              : {}),
           })
         } catch (e) {
           promoCampaignSyncResults[merchantID] = { error: String(e ?? 'unknown_error') }

@@ -7030,6 +7030,33 @@ export async function savePosMenuIngredient(
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function replacePosMenuIngredients(
+  params: {
+    menuId: number
+    optionId?: number | null
+    items: Array<{
+      itemCode: string
+      quantity: number
+      lossRate?: number
+      ingredientType?: 'food' | 'packaging'
+    }>
+  },
+  opts?: { requireOnline?: boolean }
+) {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  }
+  const res = opts?.requireOnline
+    ? await apiFetch('/api/replacePosMenuIngredients', init)
+    : await apiFetchWithOffline('/api/replacePosMenuIngredients', init)
+  if (opts?.requireOnline) {
+    return parsePosMutationResponse(res)
+  }
+  return res.json() as Promise<{ success: boolean; message?: string; deleted?: number; inserted?: number }>
+}
+
 export interface MenuCostBreakdown {
   itemCode: string
   itemName: string

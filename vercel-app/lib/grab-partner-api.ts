@@ -1,5 +1,5 @@
 import { grabJsonRequest } from '@/lib/grab-openapi'
-import { isGrabFoodMerchantMapKey } from '@/lib/grab-resolve-menu-notification-merchants'
+import { isGrabPartnerApiMerchantId } from '@/lib/grab-resolve-menu-notification-merchants'
 
 export type GrabCreateSelfServeJourneyResponse = {
   activationUrl: string
@@ -15,7 +15,7 @@ export async function grabCreateSelfServeJourney(partnerMerchantID: string) {
 
 export async function grabUpdateMenuNotification(merchantID: string): Promise<void> {
   const id = String(merchantID || '').trim()
-  if (!id || !isGrabFoodMerchantMapKey(id)) {
+  if (!id || !isGrabPartnerApiMerchantId(id)) {
     console.warn('[grab] updateMenuNotification: invalid merchantID (check GRAB_STORE_MAP_JSON)', {
       merchantID,
     })

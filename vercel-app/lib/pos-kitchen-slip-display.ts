@@ -1,6 +1,7 @@
 import {
   collectGrabPrintOptionLines,
   enrichGrabPromoItemsForPrint,
+  formatGrabLineNoteForKitchenPrint,
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
@@ -585,7 +586,7 @@ export function mapKitchenSlipGroupItemsForPrint(
           })
           return lines.length > 0 ? lines.join('\n') : undefined
         }
-      : (note?: string) => formatGrabOrderLineNoteForPrint(note, opts.optionNameByCode) || undefined)
+      : (note?: string) => formatGrabLineNoteForKitchenPrint(note, opts.optionNameByCode) || undefined)
   const hallLines = buildKitchenHallStyleSlipLines(slipItems, {
     orderItems: opts.orderItems,
     menuNameByMenuId: opts.menuNameByMenuId,

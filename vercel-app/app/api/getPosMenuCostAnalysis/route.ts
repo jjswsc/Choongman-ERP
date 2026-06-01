@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
+import {
+  normalizeMenuIngredientOptionKeySeg,
+  resolveIngredientMenuIdFromCode,
+} from '@/lib/pos-menu-ingredient-scope'
 
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
 export const maxDuration = 120
@@ -369,36 +373,21 @@ export async function GET(request: NextRequest) {
       optsByMenu[mid].push(o)
     }
 
-    /** pos_menu_ingredients.option_id: null·0·'' 는 모두 "메뉴 기본"으로 묶음 (레거시 DB 호환) */
-    const normalizeIngOptionKeySeg = (raw: unknown): string => {
-      if (raw == null) return 'null'
-      if (typeof raw === 'number' && raw === 0) return 'null'
-      const s = String(raw).trim()
-      if (s === '' || s === '0') return 'null'
-      if (/^\d+$/.test(s)) return String(Number(s))
-      return s
-    }
-
     const ingByMenuOpt: Record<string, (typeof ingRows) extends (infer R)[] | null ? R[] : never> = {}
     let remappedByCodeCount = 0
     for (const ing of ingRows || []) {
       let mid = parseMenuIdNum(ing.menu_id)
       const ingCodeKey = normalizeMenuCodeKey(ing.menu_code)
-      if (ingCodeKey) {
-        const mappedMid = menuIdByCodeKey[ingCodeKey]
-        if (Number.isFinite(mappedMid) && mappedMid > 0) {
-          const currentCodeKey =
-            Number.isFinite(mid) && mid > 0 && menusById[mid]
-              ? normalizeMenuCodeKey(menusById[mid].code)
-              : ''
-          if (!Number.isFinite(mid) || mid <= 0 || !menusById[mid] || (currentCodeKey && currentCodeKey !== ingCodeKey)) {
-            mid = mappedMid
-            remappedByCodeCount += 1
-          }
-        }
-      }
+      const resolvedMid = resolveIngredientMenuIdFromCode({
+        menuId: mid,
+        menuCodeOnRow: ingCodeKey,
+        mappedMenuIdFromCode: ingCodeKey ? menuIdByCodeKey[ingCodeKey] : undefined,
+        menuExistsForMenuId: Number.isFinite(mid) && mid > 0 && !!menusById[mid],
+      })
+      if (resolvedMid.remapped) remappedByCodeCount += 1
+      mid = resolvedMid.menuId
       if (!Number.isFinite(mid) || mid <= 0) continue
-      const oidSeg = normalizeIngOptionKeySeg(ing.option_id)
+      const oidSeg = normalizeMenuIngredientOptionKeySeg(ing.option_id)
       const key = `${mid}:${oidSeg}`
       if (!ingByMenuOpt[key]) ingByMenuOpt[key] = []
       ingByMenuOpt[key].push(ing)
@@ -461,7 +450,7 @@ export async function GET(request: NextRequest) {
         params?: { substitutionFallbackBase?: boolean }
       ): { costHall: number; costDelivery: number; breakdown: BreakdownRow[] } => {
         const oid = optionId === '' || optionId === 'null' ? null : optionId
-        const seg = oid == null ? 'null' : normalizeIngOptionKeySeg(oid)
+        const seg = oid == null ? 'null' : normalizeMenuIngredientOptionKeySeg(oid)
         const key = `${mid}:${seg}`
         let ings = ingByMenuOpt[key] || []
         /** 대체형: 옵션 전용 레시피 행이 없으면 메뉴 기본(option null) 레시피와 동일 원가 */
@@ -595,8 +584,8 @@ export async function GET(request: NextRequest) {
         }
         const optId = Number(opt.id ?? NaN)
         const addOptSeg = Number.isFinite(optId)
-          ? normalizeIngOptionKeySeg(String(opt.id ?? ''))
-          : normalizeIngOptionKeySeg(String(opt.id ?? ''))
+          ? normalizeMenuIngredientOptionKeySeg(String(opt.id ?? ''))
+          : normalizeMenuIngredientOptionKeySeg(String(opt.id ?? ''))
         if (addOptSeg !== 'null') {
           for (const ing of ingByMenuOpt[`${mid}:${addOptSeg}`] || []) {
             const code = String(ing.item_code ?? '').trim()
@@ -745,7 +734,7 @@ export async function GET(request: NextRequest) {
     const rowMapByKey = new Map<string, MenuCostRow>()
     for (const r of result) {
       const optSeg =
-        r.optionId == null || String(r.optionId).trim() === '' ? 'null' : normalizeIngOptionKeySeg(r.optionId)
+        r.optionId == null || String(r.optionId).trim() === '' ? 'null' : normalizeMenuIngredientOptionKeySeg(r.optionId)
       rowMapByKey.set(`${r.menuId}:${optSeg}`, r)
     }
     for (const r of result) {
@@ -762,7 +751,7 @@ export async function GET(request: NextRequest) {
       for (const c of comp) {
         const cMid = Number(c.menu_id ?? 0)
         if (!Number.isFinite(cMid) || cMid <= 0) continue
-        const cOptSeg = normalizeIngOptionKeySeg(c.option_id)
+        const cOptSeg = normalizeMenuIngredientOptionKeySeg(c.option_id)
         const qty = Number(c.quantity ?? 1)
         const child =
           rowMapByKey.get(`${cMid}:${cOptSeg}`) ??

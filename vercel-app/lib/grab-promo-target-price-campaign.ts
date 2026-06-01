@@ -21,8 +21,88 @@ const GRAB_CAMPAIGN_QUOTAS = { totalCount: 9999, totalCountPerUser: 99 } as cons
 const GRAB_CAMPAIGN_MIN_DURATION_MS = 2 * 60 * 60_000
 /** Grab Create Campaign: 운영 안전 상한(보수적 59일; "too long" 회피) */
 const GRAB_CAMPAIGN_SAFE_MAX_DURATION_MS = 59 * 24 * 60 * 60_000
-/** startTime은 생성 시각보다 약 1시간 이후 (Grab 검증·기존 운영값) */
-const GRAB_CAMPAIGN_MIN_START_LEAD_MS = 65 * 60_000
+/** Grab Create Campaign: startTime은 “지금+리드타임” 이후 (너무 가까우면 START_TIME_INVALID) */
+const GRAB_CAMPAIGN_DEFAULT_START_LEAD_MS = 65 * 60_000
+const GRAB_CAMPAIGN_IMMEDIATE_START_LEAD_MS = 5 * 60_000
+const GRAB_CAMPAIGN_MIN_ALLOWED_START_LEAD_MS = 5 * 60_000
+const GRAB_CAMPAIGN_MAX_ALLOWED_START_LEAD_MS = 120 * 60_000
+
+/** Vercel `GRAB_CAMPAIGN_START_LEAD_MINUTES`. immediate면 기본 5분, 아니면 65분. Grab 거절 시 65분 재시도 */
+export function getGrabCampaignStartLeadMs(
+  overrideMinutes?: number,
+  options?: { immediatePromoDisplay?: boolean }
+): number {
+  const envRaw = Number(process.env.GRAB_CAMPAIGN_START_LEAD_MINUTES ?? '')
+  const defaultMinutes =
+    options?.immediatePromoDisplay !== false
+      ? GRAB_CAMPAIGN_IMMEDIATE_START_LEAD_MS / 60_000
+      : GRAB_CAMPAIGN_DEFAULT_START_LEAD_MS / 60_000
+  const raw =
+    overrideMinutes != null && Number.isFinite(overrideMinutes)
+      ? overrideMinutes
+      : Number.isFinite(envRaw) && envRaw > 0
+        ? envRaw
+        : defaultMinutes
+  const minutes = Number.isFinite(raw) && raw > 0 ? raw : defaultMinutes
+  const clamped = Math.min(
+    GRAB_CAMPAIGN_MAX_ALLOWED_START_LEAD_MS / 60_000,
+    Math.max(GRAB_CAMPAIGN_MIN_ALLOWED_START_LEAD_MS / 60_000, minutes)
+  )
+  return Math.round(clamped * 60_000)
+}
+
+/** 캠페인 conditions.startTime / endTime (방콕 valid_from·valid_to 반영) */
+/** Grab 즉시 표시: ERP 시작일이 내일이어도 캠페인·미리보기는 오늘부터 */
+export function clampPromoValidFromYmdToToday(ymd: string | null | undefined): string {
+  const today = bangkokDateStrISO()
+  const from = String(ymd ?? '').trim() || today
+  return from > today ? today : from
+}
+
+export function resolveGrabCampaignScheduleMs(params: {
+  validFrom?: string | null
+  validTo?: string | null
+  /** 분 단위 리드타임(미지정 시 env·기본 65) */
+  startLeadMinutes?: number
+  nowMs?: number
+  /** true면 valid_from을 오늘(방콕) 이후로 당김 */
+  clampValidFromToToday?: boolean
+}): { startMs: number; endMs: number; fromYmd: string; toYmd: string } {
+  const today = bangkokDateStrISO()
+  const rawFrom = String(params.validFrom ?? '').trim() || today
+  const fromYmd = params.clampValidFromToToday ? clampPromoValidFromYmdToToday(rawFrom) : rawFrom
+  const toYmd = String(params.validTo ?? '').trim() || '2099-12-31'
+  const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(fromYmd, toYmd)
+  const nowMs = params.nowMs ?? Date.now()
+  const minStartMs = nowMs + getGrabCampaignStartLeadMs(params.startLeadMinutes, {
+    immediatePromoDisplay: params.clampValidFromToToday,
+  })
+  const startMs = Math.max(new Date(gteIso).getTime(), minStartMs)
+  const promoEndMs = new Date(lteIso).getTime()
+
+  const addUtcCalendarMonths = (baseMs: number, months: number): number => {
+    const d = new Date(baseMs)
+    const day = d.getUTCDate()
+    const hh = d.getUTCHours()
+    const mm = d.getUTCMinutes()
+    const ss = d.getUTCSeconds()
+    const ms = d.getUTCMilliseconds()
+    const shifted = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1, hh, mm, ss, ms))
+    const lastDay = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate()
+    shifted.setUTCDate(Math.min(day, lastDay))
+    return shifted.getTime()
+  }
+
+  const grabMaxEndMs = Math.min(
+    addUtcCalendarMonths(startMs, 2),
+    startMs + GRAB_CAMPAIGN_SAFE_MAX_DURATION_MS
+  )
+  const endMs = Math.max(
+    Math.min(promoEndMs, grabMaxEndMs),
+    startMs + GRAB_CAMPAIGN_MIN_DURATION_MS
+  )
+  return { startMs, endMs, fromYmd, toYmd }
+}
 const ALL_DAY_WORKING_HOUR = {
   sun: { periods: [{ startTime: '00:00', endTime: '23:59' }] },
   mon: { periods: [{ startTime: '00:00', endTime: '23:59' }] },
@@ -127,37 +207,18 @@ export function buildGrabTargetPriceCampaignBody(params: {
   salePriceMajor: number
   validFrom?: string | null
   validTo?: string | null
+  /** 분 단위 start 리드타임(Grab 즉시 반영 시도용, 기본 env·65분) */
+  campaignStartLeadMinutes?: number
+  /** true면 valid_from을 오늘로 당겨 캠페인·미리보기를 당일부터 */
+  immediatePromoDisplay?: boolean
 }): Record<string, unknown> {
-  const addUtcCalendarMonths = (baseMs: number, months: number): number => {
-    const d = new Date(baseMs)
-    const day = d.getUTCDate()
-    const hh = d.getUTCHours()
-    const mm = d.getUTCMinutes()
-    const ss = d.getUTCSeconds()
-    const ms = d.getUTCMilliseconds()
-
-    const shifted = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1, hh, mm, ss, ms))
-    const lastDay = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate()
-    shifted.setUTCDate(Math.min(day, lastDay))
-    return shifted.getTime()
-  }
-
-  const today = bangkokDateStrISO()
-  const fromYmd = String(params.validFrom ?? '').trim() || today
-  const toYmd = String(params.validTo ?? '').trim() || '2099-12-31'
-  const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(fromYmd, toYmd)
-  const minStartMs = Date.now() + GRAB_CAMPAIGN_MIN_START_LEAD_MS
-  const startMs = Math.max(new Date(gteIso).getTime(), minStartMs)
-  const promoEndMs = new Date(lteIso).getTime()
-  /** Grab 규칙 "2개월" 해석 차이로 거절되는 케이스 회피: 달력 2개월과 59일 중 더 이른 시각 사용 */
-  const grabMaxEndMs = Math.min(
-    addUtcCalendarMonths(startMs, 2),
-    startMs + GRAB_CAMPAIGN_SAFE_MAX_DURATION_MS
-  )
-  const endMs = Math.max(
-    Math.min(promoEndMs, grabMaxEndMs),
-    startMs + GRAB_CAMPAIGN_MIN_DURATION_MS
-  )
+  const immediate = params.immediatePromoDisplay !== false
+  const { startMs, endMs } = resolveGrabCampaignScheduleMs({
+    validFrom: params.validFrom,
+    validTo: params.validTo,
+    startLeadMinutes: params.campaignStartLeadMinutes,
+    clampValidFromToToday: immediate,
+  })
 
   const body: Record<string, unknown> = {
     merchantID: params.merchantID,
@@ -323,69 +384,64 @@ async function loadPromoBundle(): Promise<{
   }
 }
 
-function listCampaignRows(payload: unknown): GrabCampaignListRow[] {
-  if (!payload || typeof payload !== 'object') return []
-  const o = payload as Record<string, unknown>
-  const ongoing = Array.isArray(o.ongoing) ? o.ongoing : []
-  const upcoming = Array.isArray(o.upcoming) ? o.upcoming : []
-  return [...ongoing, ...upcoming].filter((r) => r && typeof r === 'object') as GrabCampaignListRow[]
+export type GrabPromoCutPriceTarget = {
+  promoId: number
+  grabItemId: string
+  salePrice: number
+  regularPrice: number
+  promoName: string
+  validFrom: string | null
+  validTo: string | null
 }
 
-export async function syncGrabPromoTargetPriceCampaigns(params: {
-  merchantID: string
-  /** true면 Grab에 동일 캠페인이 있어도 삭제 후 재생성(메뉴 item id 변경·표시 불일치 우회) */
-  force?: boolean
-}): Promise<{
-  created: number
-  updated: number
-  skipped: number
-  deleted: number
-  targets: number
-  menuRecordsPushed: number
-  menuRecordsFailed: number
-}> {
-  const merchantID = String(params.merchantID || '').trim()
-  const force = params.force === true
-  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0, targets: 0, menuRecordsPushed: 0, menuRecordsFailed: 0 }
+function isPromoExpiredForGrab(validTo: string | null | undefined, businessDateYmd: string): boolean {
+  const to = String(validTo ?? '').trim()
+  if (!to) return false
+  return businessDateYmd > to
+}
 
-  const bundle = await loadPromoBundle()
-  const businessDateYmd = bangkokDateStrISO()
+/**
+ * Grab 컷프라이스 대상 프로모 수집.
+ * `immediateDisplay`(기본 true): ERP 시작일(valid_from) 전이어도 세트·프로모 포함(만료 valid_to만 제외).
+ */
+export function collectGrabPromoCutPriceTargets(
+  bundle: Awaited<ReturnType<typeof loadPromoBundle>>,
+  options?: { immediateDisplay?: boolean; businessDateYmd?: string }
+): GrabPromoCutPriceTarget[] {
+  const businessDateYmd = options?.businessDateYmd ?? bangkokDateStrISO()
+  const immediateDisplay = options?.immediateDisplay !== false
   const menuRows = bundle.menus.map((m) => ({
     id: String(m.id ?? ''),
     price: Number(m.price ?? 0),
     priceDelivery: m.price_delivery != null ? Number(m.price_delivery) : null,
   }))
-
-  const targets: Array<{
-    promoId: number
-    grabItemId: string
-    salePrice: number
-    regularPrice: number
-    promoName: string
-    validFrom: string | null
-    validTo: string | null
-  }> = []
+  const targets: GrabPromoCutPriceTarget[] = []
 
   for (const promo of bundle.promos) {
     const promoId = Number(promo.id ?? 0)
-    if (!promoId) continue
+    if (!promoId || promo.is_active === false) continue
+    if (isPromoExpiredForGrab(promo.valid_to, businessDateYmd)) continue
+
     const mirror = bundle.mirrorByPromoId.get(promoId)
     if (!mirror || mirror.is_active === false || mirror.sell_delivery === false) continue
-
-    const visible = isPromoVisibleInContext(
-      {
-        isActive: promo.is_active !== false,
-        validFrom: promo.valid_from ?? null,
-        validTo: promo.valid_to ?? null,
-        channelHall: true,
-        channelTakeout: true,
-        channelDelivery: promo.channel_delivery !== false,
-        deliveryAppCodes: promo.delivery_app_codes ?? null,
-      },
-      { businessDateYmd, orderType: 'delivery', deliveryAppCode: 'grab' }
-    )
-    if (!visible) continue
+    if (promo.channel_delivery === false) continue
     if (!isPromoEligibleForGrabDeliveryApp(promo.delivery_app_codes)) continue
+
+    if (!immediateDisplay) {
+      const visible = isPromoVisibleInContext(
+        {
+          isActive: true,
+          validFrom: promo.valid_from ?? null,
+          validTo: promo.valid_to ?? null,
+          channelHall: true,
+          channelTakeout: true,
+          channelDelivery: true,
+          deliveryAppCodes: promo.delivery_app_codes ?? null,
+        },
+        { businessDateYmd, orderType: 'delivery', deliveryAppCode: 'grab' }
+      )
+      if (!visible) continue
+    }
 
     const itemRows = bundle.itemsByPromoId.get(promoId) || []
     const pricingItems = promoItemsToPricingLines(itemRows)
@@ -414,6 +470,99 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     })
   }
 
+  return targets
+}
+
+async function pushGrabMenuRecordForCutTarget(
+  merchantID: string,
+  target: GrabPromoCutPriceTarget
+): Promise<boolean> {
+  const cut = resolvePromoCutPrice({
+    salePrice: target.salePrice,
+    regularPrice: target.regularPrice,
+  })
+  if (!cut.showCutPrice) return false
+  const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
+  const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
+  if (regularMinor <= saleMinor) return false
+  await grabUpdateMenuRecord({
+    merchantID,
+    field: 'ITEM',
+    id: target.grabItemId,
+    price: regularMinor,
+    advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+      key,
+      price: saleMinor,
+    })),
+  })
+  return true
+}
+
+/** 모든 세트·프로모 컷프라이스(정가+할인가)를 Grab 메뉴에 즉시 push */
+export async function pushGrabPromoCutPriceMenuRecords(params: {
+  merchantID: string
+  targets?: GrabPromoCutPriceTarget[]
+}): Promise<{ pushed: number; failed: number; targets: number }> {
+  const merchantID = String(params.merchantID || '').trim()
+  if (!merchantID) return { pushed: 0, failed: 0, targets: 0 }
+
+  const targets =
+    params.targets ??
+    collectGrabPromoCutPriceTargets(await loadPromoBundle(), { immediateDisplay: true })
+
+  let pushed = 0
+  let failed = 0
+  for (const target of targets) {
+    try {
+      if (await pushGrabMenuRecordForCutTarget(merchantID, target)) pushed += 1
+    } catch (e) {
+      failed += 1
+      console.warn('[grab-promo-campaign] push_menu_record_failed', {
+        merchantID,
+        grabItemId: target.grabItemId,
+        error: String(e),
+      })
+    }
+  }
+  return { pushed, failed, targets: targets.length }
+}
+
+function listCampaignRows(payload: unknown): GrabCampaignListRow[] {
+  if (!payload || typeof payload !== 'object') return []
+  const o = payload as Record<string, unknown>
+  const ongoing = Array.isArray(o.ongoing) ? o.ongoing : []
+  const upcoming = Array.isArray(o.upcoming) ? o.upcoming : []
+  return [...ongoing, ...upcoming].filter((r) => r && typeof r === 'object') as GrabCampaignListRow[]
+}
+
+export async function syncGrabPromoTargetPriceCampaigns(params: {
+  merchantID: string
+  /** true면 Grab에 동일 캠페인이 있어도 삭제 후 재생성(메뉴 item id 변경·표시 불일치 우회) */
+  force?: boolean
+  /** 분 단위 캠페인 시작 리드타임(미지정 시 immediate면 5분, Grab 거절 시 65분 재시도) */
+  campaignStartLeadMinutes?: number
+  /** true(기본): 모든 활성 Grab 프로모·세트 컷프라이스 즉시 push + 캠페인 시작일 오늘까지 */
+  immediatePromoDisplay?: boolean
+}): Promise<{
+  created: number
+  updated: number
+  skipped: number
+  deleted: number
+  targets: number
+  menuRecordsPushed: number
+  menuRecordsFailed: number
+}> {
+  const merchantID = String(params.merchantID || '').trim()
+  const force = params.force === true
+  const immediatePromoDisplay = params.immediatePromoDisplay !== false
+  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0, targets: 0, menuRecordsPushed: 0, menuRecordsFailed: 0 }
+
+  const bundle = await loadPromoBundle()
+  const targets = collectGrabPromoCutPriceTargets(bundle, { immediateDisplay: immediatePromoDisplay })
+  const campaignLeadMinutes =
+    params.campaignStartLeadMinutes ??
+    (immediatePromoDisplay ? GRAB_CAMPAIGN_IMMEDIATE_START_LEAD_MS / 60_000 : undefined)
+
   let existing: GrabCampaignListRow[] = []
   let existingByPrefix = new Map<string, IndexedGrabCampaign>()
   try {
@@ -440,70 +589,26 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   let skipped = 0
   const keepNames = new Set<string>()
 
-  /** 캠페인 전·후 모두 정가+advancedPricing push — fixPrice만 있으면 앱에 111만 보이고 취소선 없음 */
-  const pushMenuRecordForTarget = async (target: (typeof targets)[number]) => {
-    const cut = resolvePromoCutPrice({
-      salePrice: target.salePrice,
-      regularPrice: target.regularPrice,
-    })
-    if (!cut.showCutPrice) return false
-    const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
-    const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
-    if (regularMinor <= saleMinor) return false
-    await grabUpdateMenuRecord({
-      merchantID,
-      field: 'ITEM',
-      id: target.grabItemId,
-      price: regularMinor,
-      advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
-        key,
-        price: saleMinor,
-      })),
-    })
-    return true
-  }
-
-  let menuRecordsPushed = 0
-  let menuRecordsFailed = 0
-  const menuRecordPushedIds = new Set<string>()
-  const tryPushMenuRecord = async (
-    target: (typeof targets)[number],
-    phase: string,
-    options?: { allowRepeat?: boolean }
-  ) => {
-    if (!options?.allowRepeat && menuRecordPushedIds.has(target.grabItemId)) return
-    try {
-      if (await pushMenuRecordForTarget(target)) {
-        if (!menuRecordPushedIds.has(target.grabItemId)) menuRecordsPushed += 1
-        menuRecordPushedIds.add(target.grabItemId)
-      }
-    } catch (e) {
-      menuRecordsFailed += 1
-      console.warn('[grab-promo-campaign] push_menu_record_failed', {
-        merchantID,
-        phase,
-        grabItemId: target.grabItemId,
-        error: String(e),
-      })
-    }
-  }
-
-  for (const target of targets) {
-    await tryPushMenuRecord(target, 'before_campaign')
-  }
+  const menuPushBefore = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+  let menuRecordsPushed = menuPushBefore.pushed
+  let menuRecordsFailed = menuPushBefore.failed
 
   for (const target of targets) {
     const campaignName = buildGrabPromoCampaignName(target.promoId)
     keepNames.add(campaignName)
-    const body = buildGrabTargetPriceCampaignBody({
-      merchantID,
-      promoId: target.promoId,
-      promoName: target.promoName,
-      grabItemId: target.grabItemId,
-      salePriceMajor: target.salePrice,
-      validFrom: target.validFrom,
-      validTo: target.validTo,
-    })
+    const buildBody = (leadMinutes?: number) =>
+      buildGrabTargetPriceCampaignBody({
+        merchantID,
+        promoId: target.promoId,
+        promoName: target.promoName,
+        grabItemId: target.grabItemId,
+        salePriceMajor: target.salePrice,
+        validFrom: target.validFrom,
+        validTo: target.validTo,
+        campaignStartLeadMinutes: leadMinutes ?? campaignLeadMinutes,
+        immediatePromoDisplay,
+      })
+    let body = buildBody()
     const fullName = String(body.name ?? '')
     const indexed =
       existingByPrefix.get(campaignName) ||
@@ -558,8 +663,20 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         created += 1
       }
     } catch (e) {
+      let errorCode = classifyGrabCampaignApiError(e)
+      const leadMinutesUsed = getGrabCampaignStartLeadMs(campaignLeadMinutes, { immediatePromoDisplay })
+      if (errorCode === 'START_TIME_INVALID' && leadMinutesUsed < 65) {
+        try {
+          body = buildBody(65)
+          await grabJsonRequest({ path: '/partner/v1/campaigns', method: 'POST', body })
+          created += 1
+          continue
+        } catch (retryErr) {
+          e = retryErr
+          errorCode = classifyGrabCampaignApiError(retryErr)
+        }
+      }
       skipped += 1
-      const errorCode = classifyGrabCampaignApiError(e)
       const errorMessage = formatGrabCampaignApiError(e)
       const timeDebug = extractCampaignTimeDebug(body)
       console.warn('[grab-promo-campaign] upsert_failed', {
@@ -603,10 +720,9 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
   }
 
-  /** 캠페인 반영 후에도 정가·할인가 쌍 유지(Grab 앱 컷프라이스) */
-  for (const target of targets) {
-    await tryPushMenuRecord(target, 'after_campaign', { allowRepeat: true })
-  }
+  const menuPushAfter = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+  menuRecordsPushed += menuPushAfter.pushed
+  menuRecordsFailed += menuPushAfter.failed
 
   return { created, updated, skipped, deleted, targets: targets.length, menuRecordsPushed, menuRecordsFailed }
 }
@@ -623,29 +739,13 @@ export async function loadGrabPromoCutPriceByPromoId(): Promise<
   >
 > {
   const bundle = await loadPromoBundle()
-  const menuRows = bundle.menus.map((m) => ({
-    id: String(m.id ?? ''),
-    price: Number(m.price ?? 0),
-    priceDelivery: m.price_delivery != null ? Number(m.price_delivery) : null,
-  }))
   const out = new Map<number, { salePrice: number; regularPrice: number; showCutPrice: boolean }>()
-
-  for (const [promoId, itemRows] of bundle.itemsByPromoId.entries()) {
-    const promo = bundle.promos.find((p) => Number(p.id ?? 0) === promoId)
-    if (!promo) continue
-    const pricingItems = promoItemsToPricingLines(itemRows)
-    if (!pricingItems.length) continue
-    const salePrice =
-      promo.price_delivery != null && Number.isFinite(Number(promo.price_delivery))
-        ? Number(promo.price_delivery)
-        : Number(promo.price ?? 0)
-    const regularPrice = calcPromoRegularPriceForGrabCut({
-      items: pricingItems,
-      menus: menuRows,
-      optionsByMenuId: bundle.optionsByMenuId,
+  for (const target of collectGrabPromoCutPriceTargets(bundle, { immediateDisplay: true })) {
+    out.set(target.promoId, {
+      salePrice: target.salePrice,
+      regularPrice: target.regularPrice,
+      showCutPrice: true,
     })
-    const cut = resolvePromoCutPrice({ salePrice, regularPrice })
-    if (cut.showCutPrice) out.set(promoId, cut)
   }
   return out
 }

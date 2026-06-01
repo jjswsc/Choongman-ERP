@@ -29,7 +29,7 @@ import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
-import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis } from "@/lib/api-client"
+import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
@@ -306,13 +306,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
     setSaving(true)
     try {
-      const existing = await getPosMenuIngredients(
-        {
-          menuId: String(menuId),
-          optionId: ingredientsQueryOptionId(initialLoadFromRow),
-        },
-        { requireOnline: true }
-      )
       const uiIngredientRows = foodItems.length + packagingItems.length
       if (uiIngredientRows > 0 && toSave.length === 0) {
         throw new Error(
@@ -320,28 +313,32 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             "재료 품목코드를 확인할 수 없어 저장할 수 없습니다. 목록에서 메뉴를 다시 선택한 뒤 수정해 주세요."
         )
       }
-      if (existing.length > 0 && toSave.length === 0) {
-        const ok = await appConfirm(
-          t("posCostSaveConfirmClearAllBom") ||
-            "There are no ingredients on the form but the menu still has BOM rows in the database. Save will delete all of them. Continue?"
-        )
-        if (!ok) return
-      }
-      for (const ing of existing) {
-        await deletePosMenuIngredient({ id: String(ing.id) }, { requireOnline: true })
-      }
-      for (const row of toSave) {
-        await savePosMenuIngredient(
+      if (toSave.length === 0) {
+        const existing = await getPosMenuIngredients(
           {
-            menuId,
-            optionId,
-            itemCode: row.itemCode,
-            quantity: row.quantity,
-            lossRate: row.lossRate,
-            ingredientType: row.ingredientType,
+            menuId: String(menuId),
+            optionId: ingredientsQueryOptionId(initialLoadFromRow),
           },
           { requireOnline: true }
         )
+        if (existing.length > 0) {
+          const ok = await appConfirm(
+            t("posCostSaveConfirmClearAllBom") ||
+              "There are no ingredients on the form but the menu still has BOM rows in the database. Save will delete all of them. Continue?"
+          )
+          if (!ok) return
+        }
+      }
+      const replaceRes = await replacePosMenuIngredients(
+        {
+          menuId,
+          optionId,
+          items: toSave,
+        },
+        { requireOnline: true }
+      )
+      if (!replaceRes?.success) {
+        throw new Error(replaceRes?.message || t("msg_save_fail") || "저장에 실패했습니다.")
       }
 
       const pHall = menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0

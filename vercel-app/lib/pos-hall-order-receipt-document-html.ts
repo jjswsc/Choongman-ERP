@@ -546,8 +546,8 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           ? grabOptionLines
           : splitReceiptOptionTokens(lineOption)
       const lineNote = grabInbound
-        ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode)
-        : formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode) ||
+        ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, (k) => t(k))
+        : formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode, (k) => t(k)) ||
           normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
       const lineNoteLabel = /^item\s*note$/i.test(rawLineNoteLabel) ? 'Item' : rawLineNoteLabel

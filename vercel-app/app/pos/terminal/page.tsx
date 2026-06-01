@@ -98,13 +98,16 @@ import {
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { buildOptionNameByCodeFromMenus, resolveGrabDeliveryLineNote, resolveGrabItemPrintNote } from '@/lib/grab-pos-order-enrich'
+import {
+  buildOptionNameByCodeFromMenus,
+  formatGrabLineNoteForKitchenPrint,
+  resolveGrabItemPrintNote,
+} from '@/lib/grab-pos-order-enrich'
 import {
   parsePosOrderMemo,
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
-import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -1239,18 +1242,7 @@ export default function PosTerminalPage() {
     [hasExplicitSizeToken, inferDefaultSizeLabelForMenuId, menuCodeById, menuCodeByName]
   )
   const formatLineNoteForPrint = useCallback(
-    (rawNote?: string | null): string => {
-      const raw = String(rawNote ?? '').trim()
-      if (!raw) return ''
-      const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(raw)
-      const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(raw) || hasGrabOptionToken
-      if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
-      const grabMeta = resolveGrabDeliveryLineNote(raw, optionNameByCode)
-      const option = String(grabMeta.optionSummary || '').trim()
-      const request = String(grabMeta.requestSummary || '').trim()
-      if (option || request) return [option, request].filter(Boolean).join(' · ')
-      return normalizePosLineNote(raw, { keepOptionSummary: false })
-    },
+    (rawNote?: string | null): string => formatGrabLineNoteForKitchenPrint(rawNote, optionNameByCode),
     [optionNameByCode]
   )
   const promoCatalogById = useMemo(() => {

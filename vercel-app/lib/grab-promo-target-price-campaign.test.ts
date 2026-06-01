@@ -4,6 +4,7 @@ import {
   buildGrabTargetPriceCampaignBody,
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
+  resolveGrabCampaignScheduleMs,
 } from '@/lib/grab-promo-target-price-campaign'
 
 describe('buildGrabTargetPriceCampaignBody', () => {
@@ -56,6 +57,44 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         { grabItemId: 'item-99', salePriceMajor: 258 }
       )
     ).toBe(false)
+  })
+})
+
+describe('resolveGrabCampaignScheduleMs', () => {
+  it('starts today when valid_from is tomorrow and clampValidFromToToday', () => {
+    const nowMs = new Date('2026-06-01T08:00:00.000Z').getTime()
+    const { startMs, fromYmd } = resolveGrabCampaignScheduleMs({
+      validFrom: '2026-06-02',
+      validTo: '2026-12-31',
+      startLeadMinutes: 5,
+      nowMs,
+      clampValidFromToToday: true,
+    })
+    expect(fromYmd).toBe('2026-06-01')
+    expect(startMs).toBe(nowMs + 5 * 60_000)
+  })
+
+  it('starts tomorrow when valid_from is tomorrow without clamp', () => {
+    const nowMs = new Date('2026-06-01T08:00:00.000Z').getTime()
+    const { startMs, fromYmd } = resolveGrabCampaignScheduleMs({
+      validFrom: '2026-06-02',
+      validTo: '2026-12-31',
+      startLeadMinutes: 65,
+      nowMs,
+    })
+    expect(fromYmd).toBe('2026-06-02')
+    expect(startMs).toBeGreaterThanOrEqual(new Date('2026-06-02T00:00:00.000+07:00').getTime() - 1000)
+  })
+
+  it('uses now+lead when valid_from is today', () => {
+    const nowMs = new Date('2026-06-01T08:00:00.000Z').getTime()
+    const { startMs } = resolveGrabCampaignScheduleMs({
+      validFrom: '2026-06-01',
+      validTo: '2026-12-31',
+      startLeadMinutes: 10,
+      nowMs,
+    })
+    expect(startMs).toBe(nowMs + 10 * 60_000)
   })
 })
 

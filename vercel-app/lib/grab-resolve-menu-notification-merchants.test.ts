@@ -35,22 +35,14 @@ describe('resolveGrabMenuNotificationMerchantIDs', () => {
   })
 
   it('returns both merchant ids for partner store 1040', () => {
-    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual([
-      '3-C6DWPB4VCKK1GT',
-      'GFSBPOS-811-087',
-    ])
+    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual(['GFSBPOS-811-087'])
   })
 
-  it('expands GFSBPOS to linked portal id', () => {
-    const ids = resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')
-    expect(ids).toContain('GFSBPOS-811-087')
-    expect(ids).toContain('3-C6DWPB4VCKK1GT')
+  it('expands GFSBPOS from linked portal id in map', () => {
+    expect(resolveGrabMenuNotificationMerchantIDs('3-C6DWPB4VCKK1GT')).toEqual(['GFSBPOS-811-087'])
   })
 
-  it('accepts portal id directly', () => {
-    expect(resolveGrabMenuNotificationMerchantIDs('3-C6DWPB4VCKK1GT')).toEqual([
-      '3-C6DWPB4VCKK1GT',
-      'GFSBPOS-811-087',
-    ])
+  it('accepts GFSBPOS directly', () => {
+    expect(resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')).toEqual(['GFSBPOS-811-087'])
   })
 })

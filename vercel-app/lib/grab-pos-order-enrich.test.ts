@@ -5,9 +5,11 @@ import {
   grabItemNameImpliesAllInPrice,
   parseGrabPartnerItemMenuRef,
   collectGrabPrintOptionLines,
+  formatGrabLineNoteForKitchenPrint,
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
   resolveGrabDeliveryLineNote,
+  resolveGrabPrintNoteRequest,
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
   resolveOptionCodesToLabels,
@@ -207,6 +209,38 @@ describe('grab-pos-order-enrich', () => {
     )
     expect(meta.optionChips).toEqual(['CHEESE TORNADO', 'RED HOT CHICKEN', 'Pickled Radish'])
     expect(meta.requestSummary).toBe('')
+  })
+
+  it('resolveGrabPrintNoteRequest keeps eco cutlery on hall/customer receipts', () => {
+    const note = 'mods:Size S · eco:no plastic cutlery requested'
+    expect(resolveGrabPrintNoteRequest(note)).toBe('eco:no plastic cutlery requested')
+    expect(formatGrabOrderLineNoteForPrint(note)).toContain('eco:no plastic cutlery requested')
+  })
+
+  it('resolveGrabPrintNoteRequest translates eco cutlery with t', () => {
+    const t = (key: string) =>
+      key === 'posGrabEcoCutleryNotRequested' ? '1회용 수저·포크 불필요' : key
+    expect(resolveGrabPrintNoteRequest('eco:no plastic cutlery requested', undefined, t)).toBe(
+      '1회용 수저·포크 불필요'
+    )
+    expect(
+      resolveGrabPrintNoteRequest(
+        'less spicy · eco:plastic cutlery requested',
+        undefined,
+        (k) => (k === 'posGrabEcoCutleryRequested' ? '1회용 수저·포크 필요' : k)
+      )
+    ).toBe('less spicy · 1회용 수저·포크 필요')
+  })
+
+  it('formatGrabLineNoteForKitchenPrint omits eco cutlery', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C011-1', name: 'S Boneless' }])
+    const note = 'mods:S Boneless · optc:C011-1 · eco:plastic cutlery requested · less spicy'
+    expect(formatGrabLineNoteForKitchenPrint(note, catalog.optionNameByCode)).toBe(
+      'S Boneless · less spicy'
+    )
+    expect(collectGrabPrintOptionLines({ note, optionNameByCode: catalog.optionNameByCode })).toEqual([
+      'S Boneless',
+    ])
   })
 
   it('collectGrabPrintOptionLines returns one chip per option', () => {

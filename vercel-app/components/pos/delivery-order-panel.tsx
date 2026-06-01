@@ -16,6 +16,7 @@ import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display
 import {
   buildOptionNameByCodeFromMenus,
   resolveGrabDeliveryLineNote,
+  translateGrabRequestSummaryChunks,
 } from '@/lib/grab-pos-order-enrich'
 import {
   getPosPackagingChecklistByOrder,
@@ -126,11 +127,16 @@ export function DeliveryOrderPanel({
     [menusFromProps, menuOptionsFromProps]
   )
 
-  const parseItemMeta = (rawNote?: string) => {
+  const parseItemMeta = useCallback(
+    (rawNote?: string) => {
     const raw = String(rawNote || '').trim()
     if (!raw) return { optionSummary: '', optionChips: [] as string[], requestSummary: '' }
     if (isGrabDeliveryOrder || /optc:/i.test(raw)) {
-      return resolveGrabDeliveryLineNote(raw, optionNameByCode)
+      const meta = resolveGrabDeliveryLineNote(raw, optionNameByCode)
+      return {
+        ...meta,
+        requestSummary: translateGrabRequestSummaryChunks(meta.requestSummary, ti),
+      }
     }
     const note = normalizePosLineNote(raw, { keepOptionSummary: true })
     if (!note) return { optionSummary: '', optionChips: [] as string[], requestSummary: '' }
@@ -156,7 +162,9 @@ export function DeliveryOrderPanel({
         .filter(Boolean),
       requestSummary: requests.join(' · '),
     }
-  }
+  },
+    [isGrabDeliveryOrder, optionNameByCode, ti]
+  )
 
   const menuNameById = useMemo(() => {
     const m = new Map<string, string>()
