@@ -351,6 +351,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     const extra = Object.keys(qrBreakdown).filter((k) => !QR_KEYS.includes(k))
     return [...QR_KEYS, ...extra.sort()]
   }, [QR_KEYS, qrBreakdown])
+  const displayOtherKeyList = React.useMemo(() => {
+    const extra = Object.keys(otherBreakdown).filter((k) => !OTHER_KEYS.includes(k))
+    return [...OTHER_KEYS, ...extra.sort()]
+  }, [OTHER_KEYS, otherBreakdown])
   const { platformKeys: PLATFORM_DELIVERY_KEYS, dineInKeys: DINE_IN_DELIVERY_KEYS } = React.useMemo(
     () => computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps),
     [deliveryAppKeys, deliveryApps]
@@ -839,7 +843,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     cardFromBreakdownLines > 0.005 ? cardFromBreakdownLines : parseBahtAmount(cardAmt)
   const qrFromLines = displayQrKeyList.reduce((s, k) => s + parseBahtAmount(qrBreakdown[k]), 0)
   const qrNum = qrFromLines > 0.005 ? qrFromLines : parseBahtAmount(qrAmt)
-  const otherFromLines = OTHER_KEYS.reduce((s, k) => s + parseBahtAmount(otherBreakdown[k]), 0)
+  const otherFromLines = displayOtherKeyList.reduce((s, k) => s + parseBahtAmount(otherBreakdown[k]), 0)
   const otherNum = otherFromLines > 0.005 ? otherFromLines : parseBahtAmount(otherAmt)
   const deliveryNum =
     PLATFORM_DELIVERY_KEYS.reduce((s, k) => s + parseBahtAmount(deliveryAppBreakdown[k]), 0) ||
@@ -1780,7 +1784,7 @@ ${footerStamp}
                       </p>
                     )}
                     <div className="grid grid-cols-2 gap-2 pl-2 pt-2 border-t mt-2">
-                      {OTHER_KEYS.map((k) => (
+                      {displayOtherKeyList.map((k) => (
                         <label key={k} className="flex items-center gap-2 text-xs">
                           <span className="w-16 shrink-0">{k}</span>
                           <Input

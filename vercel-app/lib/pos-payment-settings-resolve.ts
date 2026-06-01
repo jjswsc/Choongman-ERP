@@ -14,6 +14,7 @@ export {
 } from '@/lib/pos-payment-default-keys'
 
 type PaymentItemRow = {
+  id?: number
   store_code: string | null
   category: string
   name: string
@@ -156,4 +157,53 @@ export function syntheticPaymentMethodItemsFromKeys(
 
 export function isSyntheticPosPaymentMethodId(id: string): boolean {
   return String(id || '').trim().startsWith('syn:')
+}
+
+/** 결산 AUTO: payment_other_breakdown.admin id → 분류·표시명 */
+export async function loadPosPaymentMethodCatalog(
+  storeCode: string
+): Promise<Array<{ id: string; name: string; category: 'card' | 'qr' | 'delivery' | 'other' }>> {
+  const code = String(storeCode || '').trim()
+  const keys = await resolvePosPaymentKeysForStore(code)
+  const toCatalog = (rows: SyntheticPosPaymentMethodItem[]) =>
+    rows
+      .filter((r) => !r.hidden && (r.category === 'qr' || r.category === 'other'))
+      .map((r) => ({ id: String(r.id), name: r.name, category: r.category }))
+
+  if (!code) {
+    return toCatalog(syntheticPaymentMethodItemsFromKeys(keys, null))
+  }
+
+  try {
+    const filter = `or(store_code.eq.${encodeURIComponent(code)},store_code.is.null)`
+    const itemRows = (await supabaseSelectFilter('pos_payment_method_items', filter, {
+      limit: 300,
+      select: 'id,store_code,category,name,hidden,sort_order',
+      order: 'category.asc,sort_order.asc,name.asc',
+    })) as PaymentItemRow[] | null
+
+    const globalItems: PaymentItemRow[] = []
+    const storeItems: PaymentItemRow[] = []
+    for (const r of itemRows || []) {
+      if (r.store_code) storeItems.push(r)
+      else globalItems.push(r)
+    }
+    const byKey = new Map<string, PaymentItemRow>()
+    for (const r of globalItems) byKey.set(`${r.category}:${r.name}`, r)
+    for (const r of storeItems) byKey.set(`${r.category}:${r.name}`, r)
+    const merged = Array.from(byKey.values())
+    if (merged.length > 0) {
+      return merged
+        .filter((r) => (r.category === 'qr' || r.category === 'other') && !r.hidden)
+        .map((r) => ({
+          id: String(r.id),
+          name: r.name,
+          category: r.category as 'qr' | 'other',
+        }))
+    }
+  } catch {
+    /* synthetic fallback */
+  }
+
+  return toCatalog(syntheticPaymentMethodItemsFromKeys(keys, code))
 }

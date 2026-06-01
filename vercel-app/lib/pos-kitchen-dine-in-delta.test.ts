@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildDineInAddKitchenAutoPrintDedupeKey,
+  buildDineInAddKitchenPrintDedupeSuffix,
   buildKitchenCartLinesFromSnapshotDelta,
   collectDineInSnapshotIncreasedKeys,
   filterKitchenCartLinesForDineInAdd,
@@ -117,5 +119,26 @@ describe('collectDineInSnapshotIncreasedKeys', () => {
     const prev = new Map([['a', 1]])
     const next = new Map([['a', 1], ['b', 1]])
     expect(collectDineInSnapshotIncreasedKeys(prev, next)).toEqual(new Set(['b']))
+  })
+})
+
+describe('buildDineInAddKitchenPrintDedupeSuffix', () => {
+  it('differs for different menu ids even when line count is 1', () => {
+    const a = buildDineInAddKitchenPrintDedupeSuffix([
+      { menuId: '15', name: 'Cejun Fries', price: 99, quantity: 1 },
+    ])
+    const b = buildDineInAddKitchenPrintDedupeSuffix([
+      { menuId: '44', name: 'SOY SAUCE BULGOGI SET', price: 250, quantity: 1 },
+    ])
+    expect(a).not.toBe(b)
+    expect(a).toContain('m:15@1')
+    expect(b).toContain('m:44@1')
+  })
+
+  it('buildDineInAddKitchenAutoPrintDedupeKey is stable across paths', () => {
+    const lines = [{ menuId: '44', name: 'SET', price: 250, quantity: 1 }]
+    expect(buildDineInAddKitchenAutoPrintDedupeKey(58, lines)).toBe(
+      'order:58:kitchen:add:m:44@1:'
+    )
   })
 })

@@ -2494,7 +2494,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         target === 'linepay' ||
         target === 'shopeepay')
     if (walletToAdmin) {
-      setPayAdminLineAmounts(Object.fromEntries(lines.map((li, idx) => [li.id, idx === 0 ? String(amount) : '0'])))
+      const firstOther = lines.find((li) => li.category === 'other')
+      const targetLine = target === 'other' && firstOther ? firstOther : lines[0]
+      setPayAdminLineAmounts(
+        Object.fromEntries(lines.map((li) => [li.id, li.id === targetLine?.id ? String(amount) : '0']))
+      )
       return
     }
     if (target === 'cash') setPayCash(String(amount))
@@ -2580,11 +2584,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const walletTarget = isWalletMoveTarget(target)
     if (lines.length > 0 && walletTarget) {
       setShowOtherPayments(true)
-      const id0 = lines[0].id
+      const firstOther = lines.find((li) => li.category === 'other')
+      const focusId =
+        target === 'other' && firstOther
+          ? firstOther.id
+          : lines.find((li) => li.category === 'qr')?.id ?? lines[0].id
       setPayAdminLineAmounts((prev) => {
         const next: Record<string, string> = {}
         for (const li of lines) next[li.id] = String(Math.max(0, parseFloat(prev[li.id] || '0') || 0))
-        next[id0] = String(Math.max(0, (parseFloat(next[id0]) || 0) + delta))
+        next[focusId] = String(Math.max(0, (parseFloat(next[focusId]) || 0) + delta))
         return next
       })
       return

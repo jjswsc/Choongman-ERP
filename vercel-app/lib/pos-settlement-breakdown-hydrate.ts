@@ -1,6 +1,14 @@
 import { LEGACY_QR_BREAKDOWN_KEYS_AS_OTHER } from '@/lib/pos-payment-default-keys'
 
-const legacyOtherInQr = new Set<string>(LEGACY_QR_BREAKDOWN_KEYS_AS_OTHER as unknown as string[])
+const legacyOtherInQr = new Set<string>(
+  (LEGACY_QR_BREAKDOWN_KEYS_AS_OTHER as readonly string[]).map((k) =>
+    String(k).toLowerCase().replace(/\s+/g, '')
+  )
+)
+
+function normKey(k: string): string {
+  return String(k || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+}
 
 /**
  * 저장된 결산 + 현재 매장의 QR/기타 키 목록으로 폼 state용 breakdown 생성.
@@ -60,7 +68,7 @@ export function hydrateSettlementQrOtherBreakdowns(
       qb.PromptPay = String((parseFloat(qb.PromptPay || '0') || 0) + n)
       continue
     }
-    if (legacyOtherInQr.has(k)) {
+    if (legacyOtherInQr.has(normKey(k))) {
       const tgt = otherSet.has(k) ? k : fallbackOther
       if (otherSet.has(tgt)) {
         ob[tgt] = String((parseFloat(ob[tgt] || '0') || 0) + n)

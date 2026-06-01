@@ -28,10 +28,37 @@ function lineSignature(line: KitchenComparableLine): string {
 }
 
 function lineContentSignature(line: KitchenComparableLine): string {
+  const menuId = String(line.menuId ?? line.menuId1 ?? '').trim()
   const name = String(line.name ?? '').trim()
   const price = Number(line.price ?? 0) || 0
   const note = String(line.note ?? '').trim()
-  return [name, price, note].join('\u001f')
+  return [menuId, name, price, note].join('\u001f')
+}
+
+/** 추가 주문 주방·홀 자동인쇄 dedupe — 줄 수만 쓰면 연속 1품목 추가가 막힘 */
+export function buildDineInAddKitchenPrintDedupeSuffix(lines: KitchenComparableLine[]): string {
+  if (!lines.length) return '0'
+  const parts = lines.map((line) => {
+    const menuId = String(line.menuId ?? line.menuId1 ?? '').trim()
+    const qty = lineQty(line)
+    const note = String(line.note ?? '').trim()
+    const name = String(line.name ?? '').trim()
+    const price = Number(line.price ?? 0) || 0
+    const id = resolveExistingId(line)
+    if (menuId) return `m:${menuId}@${qty}:${note}`
+    return `s:${name}\u001f${price}\u001f${note}@${qty}:${id}`
+  })
+  parts.sort()
+  return parts.join('|')
+}
+
+/** 로컬·Realtime·폴링 공통 — 동일 추가분 주방 중복 인쇄 방지 */
+export function buildDineInAddKitchenAutoPrintDedupeKey(
+  orderId: number | string,
+  lines: KitchenComparableLine[]
+): string {
+  const id = String(orderId ?? '').trim()
+  return `order:${id}:kitchen:add:${buildDineInAddKitchenPrintDedupeSuffix(lines)}`
 }
 
 function lineQty(line: KitchenComparableLine): number {

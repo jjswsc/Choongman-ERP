@@ -5,7 +5,14 @@ import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { isPosPaidLikeStatus } from '@/lib/pos-order-policy'
 import { fromHex, parseHypercomFrame } from '@/lib/payments/hypercom-v2'
-import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
+import {
+  aggregateOrderPaymentsToSettlementBuckets,
+  routeSettlementLineAmount,
+} from '@/lib/pos-settlement-auto-breakdown'
+import {
+  loadPosPaymentMethodCatalog,
+  resolvePosPaymentKeysForStore,
+} from '@/lib/pos-payment-settings-resolve'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -204,10 +211,11 @@ export async function GET(request: NextRequest) {
     let linkposRequestedTotal = 0
     let linkposApprovedTotal = 0
     let cardReportedTotal = 0
-    const autoQrBreakdownFromOrders: Record<string, number> = {}
     const autoDeliveryAppBreakdown: Record<string, number> = {}
     const autoDineInDeliveryBreakdown: Record<string, number> = {}
-    const autoOtherBreakdown: Record<string, number> = {}
+    const paymentKeys = await resolvePosPaymentKeysForStore(storeCode)
+    const paymentCatalog = await loadPosPaymentMethodCatalog(storeCode)
+    const paidOrdersForPayment: typeof orders = []
 
     const normalizeDeliveryCode = (raw: string): string => {
       const v = String(raw || '').trim().toLowerCase()
@@ -220,15 +228,12 @@ export async function GET(request: NextRequest) {
 
     for (const o of orders || []) {
       if (!isPosPaidLikeStatus(String(o.status ?? ''))) continue
+      paidOrdersForPayment.push(o)
       systemTotal += Number(o.total) || 0
       systemSubtotal += Number(o.subtotal ?? o.total) || 0
       systemVat += Number(o.vat ?? 0) || 0
       systemCashFromOrders += Number(o.payment_cash) || 0
       cardReportedTotal += Number(o.payment_card) || 0
-      const qrAmt = Number(o.payment_qr) || 0
-      if (qrAmt > 0) {
-        autoQrBreakdownFromOrders.PromptPay = (autoQrBreakdownFromOrders.PromptPay || 0) + qrAmt
-      }
       const deliveryAmt = Number(o.payment_delivery_app) || 0
       if (deliveryAmt > 0) {
         const channel = String(o.delivery_payment_channel || '').trim().toLowerCase()
@@ -244,30 +249,6 @@ export async function GET(request: NextRequest) {
           autoDeliveryAppBreakdown[key] = (autoDeliveryAppBreakdown[key] || 0) + deliveryAmt
         }
       }
-      const otherAmt = Number(o.payment_other) || 0
-      if (otherAmt > 0) {
-        const bo = parsePaymentOtherBreakdown(o.payment_other_breakdown)
-        if (bo && Math.abs(sumPaymentOtherBreakdown(bo) - otherAmt) <= 0.02) {
-          const addO = (label: string, n: number) => {
-            if (n > 0.005) autoOtherBreakdown[label] = (autoOtherBreakdown[label] || 0) + n
-          }
-          addO('TrueMoney', Number(bo.trueMoney) || 0)
-          addO('WeChat', Number(bo.weChat) || 0)
-          addO('Alipay', Number(bo.alipay) || 0)
-          addO('UnionPay', Number(bo.unionPay) || 0)
-          addO('Line Pay', Number(bo.linePay) || 0)
-          addO('Shopee Pay', Number(bo.shopeePay) || 0)
-          addO('Misc', Number(bo.misc) || 0)
-          if (bo.admin && typeof bo.admin === 'object') {
-            for (const [wid, rawAmt] of Object.entries(bo.admin)) {
-              const label = `Wallet ${String(wid || '').trim()}`.trim()
-              if (label.length > 3) addO(label, Number(rawAmt) || 0)
-            }
-          }
-        } else {
-          autoOtherBreakdown.Other = (autoOtherBreakdown.Other || 0) + otherAmt
-        }
-      }
       const responseCode = String(o.linkpos_response_code ?? '').trim()
       const hasLinkpos = responseCode.length > 0
       if (!hasLinkpos) continue
@@ -279,6 +260,14 @@ export async function GET(request: NextRequest) {
         linkposFailedCount += 1
       }
     }
+
+    const { autoQrFromOrders: autoQrBreakdownFromOrders, autoOtherFromOrders: autoOtherBreakdown } =
+      aggregateOrderPaymentsToSettlementBuckets(
+        paidOrdersForPayment,
+        paymentKeys.qrKeys,
+        paymentKeys.otherKeys,
+        paymentCatalog
+      )
 
     const attemptsFilter = [
       `created_at=gte.${encodeURIComponent(startISO)}`,
@@ -316,8 +305,18 @@ export async function GET(request: NextRequest) {
         String(a.bank_id ?? '')
       )
       const tender = classifyByRules(haystack, attemptStoreCode, sharedRules, storeRulesMap) || classifyLinkposTender(haystack)
-      const bucket = tender.group === 'qr' ? autoQrBreakdown : autoCardBreakdown
-      bucket[tender.key] = (bucket[tender.key] || 0) + amount
+      if (tender.group === 'card') {
+        autoCardBreakdown[tender.key] = (autoCardBreakdown[tender.key] || 0) + amount
+      } else {
+        routeSettlementLineAmount(
+          tender.key,
+          amount,
+          paymentKeys.qrKeys,
+          paymentKeys.otherKeys,
+          autoQrBreakdown,
+          autoOtherBreakdown
+        )
+      }
     }
 
     // LinkPOS 분류값 + 주문 결제수단(비-LinkPOS 포함) 합산.
