@@ -32,6 +32,11 @@ describe('reservePosAutoPrintKey', () => {
     expect(reservePosAutoPrintKey('OTHER', 'order:1:hall:auto')).toBe(true)
   })
 
+  it('blocks synchronous double reservation (realtime + poll race)', () => {
+    expect(reservePosAutoPrintKey('MBK', 'order:53:hall:auto')).toBe(true)
+    expect(reservePosAutoPrintKey('MBK', 'order:53:hall:auto')).toBe(false)
+  })
+
   it('allows different keys for same order', () => {
     expect(reservePosAutoPrintKey('MBK', 'order:1:hall:auto')).toBe(true)
     expect(reservePosAutoPrintKey('MBK', 'order:1:kitchen')).toBe(true)

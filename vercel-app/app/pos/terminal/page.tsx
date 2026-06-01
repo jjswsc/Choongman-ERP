@@ -151,6 +151,11 @@ import {
   translateTakeoutOrderDisplayLabel,
 } from '@/lib/pos-print-translate'
 import {
+  layoutHasMultipleFloors,
+  parsePosTableFloorFromLabel,
+  posDineInTableMatchKey,
+} from '@/lib/pos-table-floor-match'
+import {
   buildPosHallOrderReceiptDocumentHtml,
   mergeSetChildrenForReceipt,
 } from '@/lib/pos-hall-order-receipt-document-html'
@@ -905,6 +910,7 @@ export default function PosTerminalPage() {
           orderNo: input.orderNo,
           orderType: input.orderType,
           tableName: input.tableName,
+          tableLayoutFloor: parsePosTableFloorFromLabel(input.tableName) ?? undefined,
           memo: input.memo,
           status: input.status ?? 'pending',
           total: input.total,
@@ -1806,6 +1812,8 @@ export default function PosTerminalPage() {
     const raw = floorLayoutForView.find((tbl) => tbl.id === tableId)?.floor
     return Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
   }
+
+  const dineInMultiFloorLayout = useMemo(() => layoutHasMultipleFloors(currentLayout), [currentLayout])
 
   const floorLayoutForView = useMemo<PosTableItem[]>(() => {
     if (!isPosDemo) return currentLayout
@@ -3251,20 +3259,14 @@ export default function PosTerminalPage() {
     if (posDemoRef.current) return
     const autoPrintDedupeKey = String(payload._autoPrintDedupeKey ?? '').trim()
     if (directPrint && autoPrintDedupeKey) {
-      const storeForDedupe = String(payload.storeCode || currentStoreId || '').trim()
+      const storeForDedupe = String(currentStoreId || payload.storeCode || '').trim()
       if (!reservePosAutoPrintKey(storeForDedupe, autoPrintDedupeKey)) {
         logPosPrintDebug('hall_autoprint_skip_dedupe', {
           orderNo: payload.orderNo,
           dedupeKey: autoPrintDedupeKey,
           storeCode: storeForDedupe,
         })
-        if (typeof onAfterDirectPrint === 'function') {
-          const postReceiptDelayMs =
-            typeof window !== 'undefined' && window.cmPosShell
-              ? resolveAfterReceiptToKitchenDelayMs()
-              : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-          window.setTimeout(onAfterDirectPrint, postReceiptDelayMs)
-        }
+        /** 중복 홀 건너뛸 때 주방 콜백까지 실행하면 Realtime+폴링에서 주방만 2장 나감 */
         return
       }
     }
@@ -4198,22 +4200,25 @@ export default function PosTerminalPage() {
 
     realtimeChannelStateRef.current.clear()
     realtimeChannelHealthyRef.current = false
-    const channels = currentStoreCodeVariants.flatMap((storeCode) => {
-      const insertKey = `insert:${storeCode}`
-      const updateKey = `insert-items:${storeCode}`
+    /** store_code 별칭(CM MBK/MBK)마다 INSERT 구독하면 동일 행이 2회 올 수 있음 → canonical 1개만 */
+    const realtimeStoreCode = String(currentStoreId || '').trim()
+    const channels = (() => {
+      if (!realtimeStoreCode) return []
+      const insertKey = `insert:${realtimeStoreCode}`
+      const updateKey = `insert-items:${realtimeStoreCode}`
       const list = []
       const chInsert = subscribePosOrdersInsert(onInsert, {
-        store: storeCode,
+        store: realtimeStoreCode,
         onStatus: makeRealtimeStatusHandler(insertKey),
       })
       if (chInsert) list.push(chInsert)
       const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
-        store: storeCode,
+        store: realtimeStoreCode,
         onStatus: makeRealtimeStatusHandler(updateKey),
       })
       if (chUpdate) list.push(chUpdate)
       return list
-    })
+    })()
     return () => {
       channels.forEach((channel) => channel?.unsubscribe())
       if (realtimeResubscribeTimerRef.current) {
@@ -6812,6 +6817,7 @@ export default function PosTerminalPage() {
               stores={stores}
             currentStoreId={currentStoreId}
             selectedTable={selectedTable}
+            dineInMultiFloorLayout={dineInMultiFloorLayout}
             onStoreChange={() => {}}
             t={t}
             onSplitCashPaymentStep={handleSplitCashPaymentStep}
@@ -7111,8 +7117,14 @@ export default function PosTerminalPage() {
               let existingOrder = selectedTable?.order ?? null
               let existingOrderId = Number(existingOrder?.id ?? 0)
               const pendingExistingOrderId = Number(pendingDineInOrderId ?? 0)
-              const payloadTableKey = normalizePosTableNameForMatch(payload.tableName)
-              const pendingTableKey = normalizePosTableNameForMatch(pendingDineInOrderTableRef.current)
+              const payloadTableKey = posDineInTableMatchKey(
+                payload.tableName,
+                getTableFloor(selectedTableId ?? servingTableId)
+              )
+              const pendingTableKey = posDineInTableMatchKey(
+                pendingDineInOrderTableRef.current,
+                getTableFloor(selectedTableId ?? servingTableId)
+              )
               if (
                 !(Number.isFinite(existingOrderId) && existingOrderId > 0) &&
                 Number.isFinite(pendingExistingOrderId) &&
@@ -7325,6 +7337,9 @@ export default function PosTerminalPage() {
                       orderNo: savedOrderNo,
                       orderType: 'dine_in',
                       tableName: payload.tableName,
+                      tableLayoutFloor:
+                        parsePosTableFloorFromLabel(payload.tableName) ??
+                        getTableFloor(selectedTableId ?? servingTableId),
                       memo: payload.memo,
                       status: 'pending',
                       total: incomingItems.reduce(

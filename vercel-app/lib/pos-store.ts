@@ -18,6 +18,14 @@ import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
+import {
+  parsePosTableFloorFromLabel,
+  posDineInTableLabelsMatch,
+  posDineInTableMatchKey,
+  resolveDineInOrderForLayoutTable,
+  type PosDineInTableRef,
+  type PosTableFloor,
+} from '@/lib/pos-table-floor-match'
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 
@@ -216,25 +224,20 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
   }
 }
 
+function layoutItemToTableRef(t: PosTableItem): PosDineInTableRef {
+  const floor = Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) as PosTableFloor
+  return {
+    id: String(t.id ?? ''),
+    name: String(t.name ?? '').trim() || String(t.id ?? ''),
+    floor,
+  }
+}
+
 function layoutToTables(
   layout: PosTableItem[],
   dineInOrders: PosOrder[]
 ): Table[] {
-  const orderByTable = new Map<string, PosOrder>()
-  for (const o of dineInOrders) {
-    const raw = String(o.tableName ?? '').trim()
-    if (!raw) continue
-    const keys = new Set<string>()
-    keys.add(raw)
-    const norm = normalizePosTableNameForMatch(raw)
-    if (norm) keys.add(norm)
-    for (const key of keys) {
-      const existing = orderByTable.get(key)
-      if (!existing || new Date(o.createdAt || 0) > new Date(existing.createdAt || 0)) {
-        orderByTable.set(key, o)
-      }
-    }
-  }
+  const layoutPeers = (layout || []).map(layoutItemToTableRef)
   return (layout || []).map((t) => {
     const gridX = Math.round((t.x ?? 0) / GRID_SIZE)
     const gridY = Math.round((t.y ?? 0) / GRID_SIZE)
@@ -248,18 +251,14 @@ function layoutToTables(
           ? 'round'
           : 'rectangle'
     const name = String(t.name ?? '').trim() || String(t.id ?? '')
-    const idStr = String(t.id ?? '')
-    const nameNorm = normalizePosTableNameForMatch(name)
-    const idNorm = normalizePosTableNameForMatch(idStr)
-    const posOrder =
-      orderByTable.get(name) ??
-      orderByTable.get(idStr) ??
-      (nameNorm ? orderByTable.get(nameNorm) : undefined) ??
-      (idNorm ? orderByTable.get(idNorm) : undefined)
+    const tableRef = layoutItemToTableRef(t)
+    const posOrder = resolveDineInOrderForLayoutTable(tableRef, dineInOrders, layoutPeers)
     const order = posOrder ? posOrderToOrder(posOrder) : undefined
+    const floor = tableRef.floor
     return {
       id: String(t.id ?? ''),
       name,
+      floor,
       seats: Number(t.seats ?? 0) || 0,
       x: Math.max(0, gridX),
       y: Math.max(0, gridY),
@@ -294,6 +293,8 @@ type OptimisticOrderInput = {
   orderNo?: string
   orderType?: string
   tableName?: string
+  /** 다층 매장: `table_name`에 층 접두가 없을 때 낙관적 병합·중복 제거용 */
+  tableLayoutFloor?: number
   memo?: string
   status?: Order['status']
   createdAt?: Date | number
@@ -402,15 +403,13 @@ function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
 }
 
 function findPrevTableForMerge(tbl: Table, prevStore: Store): Table | undefined {
-  const nameNorm = normalizePosTableNameForMatch(String(tbl.name ?? ''))
-  const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
+  const tblFloor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+  const tblNorm = normalizePosTableNameForMatch(tbl.name)
   return prevStore.tables.find((pt) => {
-    const pn = normalizePosTableNameForMatch(String(pt.name ?? ''))
-    const pid = normalizePosTableNameForMatch(String(pt.id ?? ''))
-    return Boolean(
-      (nameNorm && (pn === nameNorm || pid === nameNorm)) ||
-        (idNorm && (pn === idNorm || pid === idNorm))
-    )
+    if (pt.id === tbl.id) return true
+    const ptFloor = Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor
+    if (ptFloor !== tblFloor) return false
+    return tblNorm ? normalizePosTableNameForMatch(pt.name) === tblNorm : false
   })
 }
 
@@ -688,26 +687,23 @@ export function usePosStore() {
   const clearTableOrder = useCallback((storeId: string, tableName: string) => {
     const name = String(tableName ?? '').trim()
     if (!name) return
-    const nameNorm = normalizePosTableNameForMatch(name)
     setStores((prev) =>
-      prev.map((store) =>
-        store.id === storeId
-          ? {
-              ...store,
-              tables: store.tables.map((t) => {
-                const tn = String(t.name ?? '').trim()
-                const tid = String(t.id ?? '').trim()
-                const match =
-                  tn === name ||
-                  tid === name ||
-                  (nameNorm &&
-                    (normalizePosTableNameForMatch(tn) === nameNorm ||
-                      normalizePosTableNameForMatch(tid) === nameNorm))
-                return match ? { ...t, order: undefined, isOccupied: false } : t
-              }),
-            }
-          : store
-      )
+      prev.map((store) => {
+        if (store.id !== storeId) return store
+        const peers: PosDineInTableRef[] = store.tables.map((pt) => ({
+          id: pt.id,
+          name: pt.name,
+          floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+        }))
+        return {
+          ...store,
+          tables: store.tables.map((t) => {
+            const floor = Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) as PosTableFloor
+            const match = posDineInTableLabelsMatch(name, { id: t.id, name: t.name, floor }, { layoutPeers: peers })
+            return match ? { ...t, order: undefined, isOccupied: false } : t
+          }),
+        }
+      })
     )
   }, [])
 
@@ -886,9 +882,20 @@ export function usePosStore() {
         if (hasServerId && String(o.id ?? '').trim() === String(serverOrderId)) return false
         if (orderNo && String(o.orderNo ?? '').trim() === orderNo) return false
         if (!orderNo && tableName && type === 'dine-in') {
-          const t1 = normalizePosTableNameForMatch(String(o.tableName ?? ''))
-          const t2 = normalizePosTableNameForMatch(tableName)
-          if (t1 && t2 && t1 === t2 && o.type === 'dine-in') return false
+          const floor = Math.min(
+            3,
+            Math.max(
+              1,
+              Number(
+                parsePosTableFloorFromLabel(tableName) ??
+                  input.tableLayoutFloor ??
+                  1
+              ) || 1
+            )
+          )
+          const k1 = posDineInTableMatchKey(String(o.tableName ?? ''), floor)
+          const k2 = posDineInTableMatchKey(tableName, floor)
+          if (k1 && k2 && k1 === k2 && o.type === 'dine-in') return false
         }
         return true
       })
@@ -897,16 +904,23 @@ export function usePosStore() {
     })
 
     if (type === 'dine-in' && tableName) {
-      const targetNorm = normalizePosTableNameForMatch(tableName)
       setStores((prev) =>
         prev.map((store) => {
           if (store.id !== storeCode) return store
+          const peers: PosDineInTableRef[] = store.tables.map((pt) => ({
+            id: pt.id,
+            name: pt.name,
+            floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+          }))
           return {
             ...store,
             tables: store.tables.map((tbl) => {
-              const nameNorm = normalizePosTableNameForMatch(String(tbl.name ?? ''))
-              const idNorm = normalizePosTableNameForMatch(String(tbl.id ?? ''))
-              const matched = Boolean(targetNorm && (nameNorm === targetNorm || idNorm === targetNorm))
+              const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+              const matched = posDineInTableLabelsMatch(
+                tableName,
+                { id: tbl.id, name: tbl.name, floor },
+                { layoutPeers: peers }
+              )
               return matched ? { ...tbl, order: optimistic, isOccupied: true } : tbl
             }),
           }

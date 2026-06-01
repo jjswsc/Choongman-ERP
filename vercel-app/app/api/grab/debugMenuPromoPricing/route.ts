@@ -104,15 +104,23 @@ export async function GET(req: NextRequest) {
 
     const cutReady = items.some((i) => i.cutPriceReady)
     const campaignCount = grabCampaigns.length
+    const ongoingCount = grabCampaigns.filter((c) => c.section === 'ongoing').length
+    const upcomingCount = grabCampaigns.filter((c) => c.section === 'upcoming').length
+    const earliestStartBkk = grabCampaigns
+      .map((c) => c.startTimeBkk)
+      .filter(Boolean)
+      .sort()[0]
     let hint: string
     if (!cutReady) {
       hint =
         'cutPriceReady=false → ERP가 정가+할인가 쌍을 안 보냄. promoCut.showCutPrice 또는 advancedPricing 확인.'
+    } else if (ongoingCount === 0 && upcomingCount > 0) {
+      hint = `Grab App Simulator "Now"는 캠페인 ongoing 전엔 취소선 없음(할인가만). upcoming ${upcomingCount}개 — earliest startTimeBkk=${earliestStartBkk ?? '?'}. force sync 반복 시 시작 시각이 계속 밀림.`
     } else if (campaignCount === 0) {
       hint =
-        '메뉴 가격(정가+할인가)은 정상이나 Grab CM-POS-PROMO 캠페인 0개 — 취소선 없음. fixPrice 캠페인 재생성(force sync) 필요.'
+        '메뉴 가격(정가+할인가)은 정상이나 Grab CM-POS-PROMO 캠페인 0개 — 취소선 없음. fixPrice 캠페인 재생성 필요.'
     } else {
-      hint = 'cutPriceReady=true + Grab 캠페인 있음 → 앱·테스트 화면에서 취소선+할인가 확인.'
+      hint = `ongoing ${ongoingCount}개 — App Simulator "Now"에서 취소선+할인가 확인 가능.`
     }
 
     return NextResponse.json(
@@ -124,6 +132,9 @@ export async function GET(req: NextRequest) {
         resolvedMerchantIDs,
         grabMerchantID,
         grabCampaignCount: campaignCount,
+        grabCampaignOngoingCount: ongoingCount,
+        grabCampaignUpcomingCount: upcomingCount,
+        grabCampaignEarliestStartBkk: earliestStartBkk ?? null,
         grabCampaigns: grabCampaigns.slice(0, 20),
         filter: nameFilter,
         itemCount: items.length,

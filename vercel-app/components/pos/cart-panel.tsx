@@ -68,6 +68,7 @@ import {
   Clock3,
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
+import { formatPosDineInTableNameForStorage } from '@/lib/pos-table-floor-match'
 import { cn, formatBahtNum, formatBahtWhole, formatPosQtyCompact } from '@/lib/utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
@@ -430,6 +431,8 @@ interface CartPanelProps {
    * selectedTable 객체가 늦게 채워져도 키가 안 흔들림 (장바구니 초기화 방지).
    */
   cartSessionTableId?: string | null
+  /** 2층 이상 테이블 배치 — 홀 주문 `table_name`에 층 접두(예: `2F-3`) 저장 */
+  dineInMultiFloorLayout?: boolean
   /** 홀(테이블) 주문 시 플로어로 돌아가기 — 터미널에서 메뉴 상단과 중복 방지용 */
   onBackToTableSelection?: () => void
   /** 부모에서 POS 저장 API 처리 중(중복 탭·이중 요청 방지) */
@@ -826,6 +829,16 @@ function PosPaymentModalAmountCard({
   )
 }
 
+function resolveDineInTableNameForStorage(
+  table: Pick<Table, 'name' | 'floor'> | null | undefined,
+  fallbackName: string,
+  multiFloorLayout: boolean
+): string {
+  const raw = (String(fallbackName ?? '').trim() || String(table?.name ?? '').trim()).trim()
+  if (!raw) return ''
+  return formatPosDineInTableNameForStorage(raw, table?.floor, multiFloorLayout)
+}
+
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
   stores: _stores,
   currentStoreId,
@@ -839,6 +852,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   deliveryOrderNo: deliveryOrderNoProp,
   takeoutLabel: takeoutLabelProp,
   cartSessionTableId: cartSessionTableIdProp,
+  dineInMultiFloorLayout = false,
   onBackToTableSelection,
   posBackendActionInFlight = false,
   onOrderSubmit,
@@ -3168,12 +3182,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       const deliveryLabelForPrint = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
         .filter(Boolean)
         .join(' ')
-      const dineInTableName = (
-        receiptOpts?.receiptTableName ||
-        selectedTable?.name ||
-        paymentTableNameOverride ||
-        ''
-      ).trim()
+      const dineInTableName = resolveDineInTableNameForStorage(
+        selectedTable,
+        receiptOpts?.receiptTableName || paymentTableNameOverride || '',
+        dineInMultiFloorLayout
+      )
       const orderTypeLabel =
         orderType === 'dine-in'
           ? t('posOrderTypeDineIn') || '매장'
@@ -3384,7 +3397,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (paymentSubmitInFlight || posBackendActionInFlight) return
     setPaymentSubmitInFlight(true)
     try {
-    const dineInTableName = selectedTable?.name || paymentTableNameOverride
+    const dineInTableName = resolveDineInTableNameForStorage(
+      selectedTable,
+      paymentTableNameOverride || '',
+      dineInMultiFloorLayout
+    )
     finalizeSplitPaymentsForReceipt()
     const resolvedPayment = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
     const payDel = resolvedPayment.paymentDeliveryApp ?? 0
@@ -4706,7 +4723,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 const submitItems = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx))
                 onOrderSubmit?.({
                   items: submitItems,
-                  tableName: selectedTable.name,
+                  tableName: resolveDineInTableNameForStorage(
+                    selectedTable,
+                    '',
+                    dineInMultiFloorLayout
+                  ),
                   memo: buildOrderMemo(customerMemo),
                   discountAmt: discount,
                   discountReason: paymentDiscountReason,

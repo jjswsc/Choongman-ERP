@@ -22,7 +22,7 @@ type UpdateMenuNotificationBody = {
    * menu-sync-state 웹훅 누락/지연 시 운영 우회용.
    */
   syncPromoTargetPriceCampaigns?: unknown
-  /** true(기본)면 fixPrice 캠페인을 일치 여부와 관계없이 삭제·재생성 */
+  /** true면 fixPrice 캠페인을 삭제·재생성(startTime이 now+65분으로 리셋 → Simulator "Now" 취소선 사라짐) */
   forcePromoCampaignResync?: unknown
   /** true(기본): 모든 활성 Grab 세트·프로모 컷프라이스 즉시 반영 */
   immediatePromoDisplay?: unknown

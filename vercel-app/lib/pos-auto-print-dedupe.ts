@@ -9,6 +9,9 @@ const MAX_ENTRIES = 400
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000
 const STALE_ENTRY_MS = 24 * 60 * 60 * 1000
 
+/** Realtime·폴링이 같은 탭에서 동시에 reserve 하면 localStorage 만으로는 둘 다 통과할 수 있음 */
+const memoryReservedAt = new Map<string, number>()
+
 type DedupeMap = Record<string, number>
 
 function readMap(): DedupeMap {
@@ -63,6 +66,18 @@ function fullKey(storeCode: string, key: string): string {
 /**
  * @returns true 이면 이번에 인쇄해도 됨(예약 성공). false 이면 최근에 같은 키로 이미 인쇄됨.
  */
+function pruneMemory(now: number): void {
+  for (const [k, ts] of memoryReservedAt.entries()) {
+    if (!Number.isFinite(ts) || now - ts > STALE_ENTRY_MS) memoryReservedAt.delete(k)
+  }
+}
+
+export function posHallAutoPrintDedupeKey(orderId: number, variant: 'auto' | `add:${string}` = 'auto'): string {
+  const id = Math.floor(Number(orderId))
+  if (!Number.isFinite(id) || id <= 0) return ''
+  return variant === 'auto' ? `order:${id}:hall:auto` : `order:${id}:hall:${variant}`
+}
+
 export function reservePosAutoPrintKey(
   storeCode: string,
   key: string,
@@ -72,9 +87,13 @@ export function reservePosAutoPrintKey(
   if (!fk) return true
   const now = Date.now()
   const ttl = Math.max(1000, Number(ttlMs) || DEFAULT_TTL_MS)
+  pruneMemory(now)
+  const memPrev = memoryReservedAt.get(fk)
+  if (typeof memPrev === 'number' && now - memPrev < ttl) return false
   const map = pruneMap(readMap(), now)
   const prev = map[fk]
   if (typeof prev === 'number' && now - prev < ttl) return false
+  memoryReservedAt.set(fk, now)
   map[fk] = now
   writeMap(map)
   return true
@@ -82,6 +101,7 @@ export function reservePosAutoPrintKey(
 
 /** 테스트·디버그용 */
 export function clearPosAutoPrintDedupeForTests(): void {
+  memoryReservedAt.clear()
   if (typeof window === 'undefined') return
   try {
     window.localStorage.removeItem(STORAGE_KEY)

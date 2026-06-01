@@ -2963,26 +2963,26 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {tr("salesTotal", "총")} {tr("pL_sales", "매출")} {formatSalesAmount(deliveryAppData.total)}
                     </p>
                     <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="py-2 text-left">{tr("salesDeliveryChannel", "배달앱/채널")}</th>
-                          <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
-                          <th className="py-2 text-right">{tr("salesRatio", "비율")}</th>
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="py-2 text-center">{tr("salesDeliveryChannel", "배달앱/채널")}</th>
+                        <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                        <th className="py-2 text-right">{tr("salesRatio", "비율")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deliveryPieRows.map((r) => (
+                        <tr key={r.channelKey} className="border-b">
+                          <td className="py-1.5 text-center">{r.axisLabel}</td>
+                          <td className="py-1.5 text-right font-erp-numeric">
+                            {formatSalesAmount(r.sales)}
+                          </td>
+                          <td className="py-1.5 text-right text-muted-foreground">
+                            {r.pct.toFixed(1)}%
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {deliveryPieRows.map((r) => (
-                          <tr key={r.channelKey} className="border-b">
-                            <td className="py-1.5">{r.axisLabel}</td>
-                            <td className="py-1.5 text-right font-erp-numeric">
-                              {formatSalesAmount(r.sales)}
-                            </td>
-                            <td className="py-1.5 text-right text-muted-foreground">
-                              {r.pct.toFixed(1)}%
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
+                      ))}
+                    </tbody>
                     </table>
                     {deliveryPlatformBreakdown.length > 0 ? (
                       <Collapsible defaultOpen className="mt-4 rounded-md border bg-muted/10">
@@ -3025,7 +3025,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b text-muted-foreground">
-                                    <th className="py-2 text-left">
+                                    <th className="py-2 text-center">
                                       {tr("salesDeliveryPlatformBreakdown", "배달 플랫폼별")}
                                     </th>
                                     <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
@@ -3035,7 +3035,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                 <tbody>
                                   {deliveryPlatformPieRows.map((r) => (
                                     <tr key={r.code} className="border-b">
-                                      <td className="py-1.5">{r.axisLabel}</td>
+                                      <td className="py-1.5 text-center">{r.axisLabel}</td>
                                       <td className="py-1.5 text-right font-erp-numeric">
                                         {formatSalesAmount(r.sales)}
                                       </td>
@@ -3095,14 +3095,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="py-2 text-left">{tr("salesChannel", "채널")}</th>
+                        <th className="py-2 text-center">{tr("salesChannel", "채널")}</th>
                         <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {channelChartRows.slice(0, 30).map((r) => (
                         <tr key={r.channelKey} className="border-b">
-                          <td className="py-1.5">{r.axisLabel}</td>
+                          <td className="py-1.5 text-center">{r.axisLabel}</td>
                           <td className="py-1.5 text-right font-erp-numeric">
                             {formatSalesAmount(r.sales)}
                           </td>
@@ -3446,14 +3446,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50">
                           <tr>
-                            <th className="px-3 py-2 text-left">{tr("salesCategoryName", "분류명")}</th>
+                            <th className="px-3 py-2 text-center">{tr("salesCategoryName", "분류명")}</th>
                             <th className="px-3 py-2 text-right">{tr("salesSalesAmount", "판매 금액")}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {channelChartRows.map((r) => (
                             <tr key={r.channelKey} className="border-t">
-                              <td className="px-3 py-1.5">{r.axisLabel}</td>
+                              <td className="px-3 py-1.5 text-center">{r.axisLabel}</td>
                               <td className="px-3 py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.sales)}</td>
                             </tr>
                           ))}

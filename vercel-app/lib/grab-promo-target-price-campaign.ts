@@ -21,13 +21,13 @@ const GRAB_CAMPAIGN_QUOTAS = { totalCount: 9999, totalCountPerUser: 99 } as cons
 const GRAB_CAMPAIGN_MIN_DURATION_MS = 2 * 60 * 60_000
 /** Grab Create Campaign: 운영 안전 상한(보수적 59일; "too long" 회피) */
 const GRAB_CAMPAIGN_SAFE_MAX_DURATION_MS = 59 * 24 * 60 * 60_000
-/** Grab Create Campaign: startTime은 “지금+리드타임” 이후 (너무 가까우면 START_TIME_INVALID) */
+/** Grab Create Campaign: startTime은 “지금+리드타임” 이후. immediate도 최소 65분(Grab 거절 방지) */
 const GRAB_CAMPAIGN_DEFAULT_START_LEAD_MS = 65 * 60_000
-const GRAB_CAMPAIGN_IMMEDIATE_START_LEAD_MS = 5 * 60_000
+const GRAB_CAMPAIGN_IMMEDIATE_START_LEAD_MS = 65 * 60_000
 const GRAB_CAMPAIGN_MIN_ALLOWED_START_LEAD_MS = 5 * 60_000
 const GRAB_CAMPAIGN_MAX_ALLOWED_START_LEAD_MS = 120 * 60_000
 
-/** Vercel `GRAB_CAMPAIGN_START_LEAD_MINUTES`. immediate면 기본 5분, 아니면 65분. Grab 거절 시 65분 재시도 */
+/** Vercel `GRAB_CAMPAIGN_START_LEAD_MINUTES`. 기본 65분(Grab 최소). */
 export function getGrabCampaignStartLeadMs(
   overrideMinutes?: number,
   options?: { immediatePromoDisplay?: boolean }
@@ -158,6 +158,7 @@ type GrabCampaignListRow = {
   id?: string
   name?: string
   discount?: { type?: string; value?: number; scope?: { objectIDs?: string[] } }
+  conditions?: { startTime?: string; endTime?: string }
 }
 
 type IndexedGrabCampaign = {
@@ -641,6 +642,36 @@ async function createGrabCampaign(body: Record<string, unknown>): Promise<void> 
   })
 }
 
+async function updateGrabCampaign(existingId: string, body: Record<string, unknown>): Promise<void> {
+  await grabJsonRequest({
+    path: `/partner/v1/campaigns/${encodeURIComponent(existingId)}`,
+    method: 'PUT',
+    body,
+    expectNoContentOk: true,
+  })
+}
+
+/** ongoing/upcoming 캠페인 갱신 시 startTime 유지 — force 재생성하면 Now 미리보기가 다시 upcoming으로 돌아감 */
+function preserveGrabCampaignScheduleInBody(
+  body: Record<string, unknown>,
+  existingRow: GrabCampaignListRow
+): Record<string, unknown> {
+  const startTime = String(existingRow.conditions?.startTime ?? '').trim()
+  if (!startTime) return body
+  const conditions = (body.conditions && typeof body.conditions === 'object'
+    ? body.conditions
+    : {}) as Record<string, unknown>
+  const endTime = String(existingRow.conditions?.endTime ?? conditions.endTime ?? '').trim()
+  return {
+    ...body,
+    conditions: {
+      ...conditions,
+      startTime,
+      ...(endTime ? { endTime } : {}),
+    },
+  }
+}
+
 /** DELETE 후 POST — POST 실패 시 fixPrice fallback으로 복구 */
 async function replaceGrabCampaign(params: {
   existingId?: string
@@ -667,31 +698,24 @@ async function replaceGrabCampaign(params: {
 
 const GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES = 65
 
-/** 캠페인 생성·교체 — 5분 리드 거절 시 65분으로 재시도, percentage 실패 시 fixPrice fallback */
+/** 캠페인 생성·교체 — force 시에만 DELETE+POST, 평소 PUT(시작 시각 유지) */
 async function upsertGrabPromoCampaignForTarget(params: {
   existingId?: string
+  existingRow?: GrabCampaignListRow
+  campaignSection?: 'ongoing' | 'upcoming'
+  forceReplace?: boolean
   buildBody: (opts?: {
     leadMinutes?: number
     discountType?: GrabPromoCampaignDiscountType
   }) => Record<string, unknown>
   initialLeadMinutes?: number
-}): Promise<{ usedFallback: boolean; usedExtendedLead: boolean }> {
-  const initialLead = params.initialLeadMinutes
+}): Promise<{ usedFallback: boolean; usedExtendedLead: boolean; mode: 'created' | 'updated' | 'replaced' }> {
+  const existingId = String(params.existingId ?? '').trim()
+  const forceReplace = params.forceReplace === true
+  const section = params.campaignSection
 
-  const postOnce = async (leadMinutes: number, discountType?: GrabPromoCampaignDiscountType) => {
+  const postNew = async (leadMinutes: number, discountType?: GrabPromoCampaignDiscountType) => {
     const body = params.buildBody({ leadMinutes, discountType })
-    const existingId = String(params.existingId ?? '').trim()
-    if (existingId) {
-      const primaryType = (body.discount as { type?: string })?.type
-      return replaceGrabCampaign({
-        existingId,
-        body,
-        fallbackBody:
-          primaryType === 'percentage'
-            ? params.buildBody({ leadMinutes, discountType: 'fixPrice' })
-            : undefined,
-      })
-    }
     try {
       await createGrabCampaign(body)
       return { usedFallback: false }
@@ -702,10 +726,57 @@ async function upsertGrabPromoCampaignForTarget(params: {
     }
   }
 
-  const leadMs = getGrabCampaignStartLeadMs(initialLead, { immediatePromoDisplay: true })
+  if (existingId && !forceReplace) {
+    const putBody = preserveGrabCampaignScheduleInBody(
+      params.buildBody(),
+      params.existingRow ?? { id: existingId }
+    )
+    try {
+      await updateGrabCampaign(existingId, putBody)
+      return { usedFallback: false, usedExtendedLead: false, mode: 'updated' }
+    } catch (e) {
+      /** ongoing은 시작 시각 보존 — DELETE+POST 금지(Now 취소선 유지) */
+      if (section === 'ongoing') throw e
+      console.warn('[grab-promo-campaign] put_failed_try_replace', {
+        existingId,
+        error: String(e),
+      })
+      const leadMs = getGrabCampaignStartLeadMs(params.initialLeadMinutes, { immediatePromoDisplay: true })
+      const leadMinutes = leadMs / 60_000
+      const body = params.buildBody({ leadMinutes })
+      const primaryType = (body.discount as { type?: string })?.type
+      const result = await replaceGrabCampaign({
+        existingId,
+        body,
+        fallbackBody:
+          primaryType === 'percentage'
+            ? params.buildBody({ leadMinutes, discountType: 'fixPrice' })
+            : undefined,
+      })
+      return { ...result, usedExtendedLead: false, mode: 'replaced' }
+    }
+  }
+
+  if (existingId && forceReplace) {
+    const leadMs = getGrabCampaignStartLeadMs(params.initialLeadMinutes, { immediatePromoDisplay: true })
+    const leadMinutes = leadMs / 60_000
+    const body = params.buildBody({ leadMinutes })
+    const primaryType = (body.discount as { type?: string })?.type
+    const result = await replaceGrabCampaign({
+      existingId,
+      body,
+      fallbackBody:
+        primaryType === 'percentage'
+          ? params.buildBody({ leadMinutes, discountType: 'fixPrice' })
+          : undefined,
+    })
+    return { ...result, usedExtendedLead: false, mode: 'replaced' }
+  }
+
+  const leadMs = getGrabCampaignStartLeadMs(params.initialLeadMinutes, { immediatePromoDisplay: true })
   try {
-    const result = await postOnce(leadMs / 60_000)
-    return { ...result, usedExtendedLead: false }
+    const result = await postNew(leadMs / 60_000)
+    return { ...result, usedExtendedLead: false, mode: 'created' }
   } catch (e) {
     if (
       classifyGrabCampaignApiError(e) !== 'START_TIME_INVALID' ||
@@ -713,16 +784,13 @@ async function upsertGrabPromoCampaignForTarget(params: {
     ) {
       throw e
     }
-    /** 첫 replace에서 DELETE만 성공한 경우 — CREATE만 재시도 */
     const extendedLead = GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES
     try {
-      await createGrabCampaign(params.buildBody({ leadMinutes: extendedLead }))
-      return { usedFallback: false, usedExtendedLead: true }
-    } catch (e2) {
-      await createGrabCampaign(
-        params.buildBody({ leadMinutes: extendedLead, discountType: 'fixPrice' })
-      )
-      return { usedFallback: true, usedExtendedLead: true }
+      const result = await postNew(extendedLead)
+      return { ...result, usedExtendedLead: true, mode: 'created' }
+    } catch {
+      const result = await postNew(extendedLead, 'fixPrice')
+      return { ...result, usedExtendedLead: true, mode: 'created' }
     }
   }
 }
@@ -822,7 +890,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         validFrom: target.validFrom,
         validTo: target.validTo,
         campaignStartLeadMinutes: opts?.leadMinutes ?? campaignLeadMinutes,
-        clampCampaignValidFromToToday: false,
+        clampCampaignValidFromToToday: immediatePromoDisplay,
         discountType: opts?.discountType,
       })
     const primaryBody = buildBody()
@@ -853,11 +921,14 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     try {
       const result = await upsertGrabPromoCampaignForTarget({
         existingId: hit?.id ? String(hit.id) : undefined,
+        existingRow: hit,
+        campaignSection: indexed?.section,
+        forceReplace: force,
         buildBody: (opts) => buildBody(opts),
         initialLeadMinutes: campaignLeadMinutes,
       })
       if (result.usedFallback) campaignFallbackUsed += 1
-      if (hit?.id && !force) updated += 1
+      if (result.mode === 'updated') updated += 1
       else created += 1
     } catch (e) {
       skipped += 1

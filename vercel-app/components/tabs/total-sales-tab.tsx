@@ -1094,18 +1094,18 @@ export function TotalSalesTab() {
                     <>
                       {compareChannelsList.map((ch) => (
                         <React.Fragment key={`${ch}-sub`}>
-                          <th className="border-l border-border/60 px-1.5 py-1 text-right text-[11px] font-normal">
+                          <th className="border-l border-border/60 px-1.5 py-1 text-center text-[11px] font-normal">
                             {tr("salesQuantity", "수량")}
                           </th>
-                          <th className="px-1.5 py-1 text-right text-[11px] font-normal">
+                          <th className="px-1.5 py-1 text-center text-[11px] font-normal">
                             {tr("pL_sales", "매출")}
                           </th>
                         </React.Fragment>
                       ))}
-                      <th className="border-l border-border/60 px-1.5 py-1 text-right text-[11px] font-normal">
+                      <th className="border-l border-border/60 px-1.5 py-1 text-center text-[11px] font-normal">
                         {tr("salesQuantity", "수량")}
                       </th>
-                      <th className="px-1.5 py-1 pr-2 text-right text-[11px] font-normal">
+                      <th className="px-1.5 py-1 pr-2 text-center text-[11px] font-normal">
                         {tr("pL_sales", "매출")}
                       </th>
                     </>

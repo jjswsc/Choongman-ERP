@@ -97,6 +97,9 @@ export function translateTakeoutOrderDisplayLabel(
 export function translateReceiptTableDisplayName(tableName: string, t?: (key: string) => string): string {
   let s = String(tableName || '').trim()
   if (!s) return s
+  s = s
+    .replace(/^(?:\d+\s*f(?:loor)?|f\s*\d+|\d+\s*층|b\d+)\s*[-_/]?\s*/iu, '')
+    .trimStart()
   if (/\s*번\s*$/u.test(s)) {
     s = s.replace(/\s*번\s*$/u, '').trimEnd()
   }
