@@ -167,12 +167,12 @@ type IndexedGrabCampaign = {
 
 export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
 
-/** 컷프라이스 캠페인: 기본 percentage(취소선). `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=fixPrice` 로 되돌림 */
+/** 컷프라이스 캠페인: 기본 fixPrice(태국 Grab 검증됨). `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage` 로 할인율 시도 */
 export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
-  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
+  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'fixPrice')
     .trim()
     .toLowerCase()
-  return raw === 'fixprice' ? 'fixPrice' : 'percentage'
+  return raw === 'percentage' ? 'percentage' : 'fixPrice'
 }
 
 /** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
@@ -256,16 +256,15 @@ export function buildGrabTargetPriceCampaignBody(params: {
   validTo?: string | null
   /** 분 단위 start 리드타임(Grab 즉시 반영 시도용, 기본 env·65분) */
   campaignStartLeadMinutes?: number
-  /** true면 valid_from을 오늘로 당겨 캠페인·미리보기를 당일부터 */
-  immediatePromoDisplay?: boolean
+  /** true면 ERP valid_from·valid_to 그대로(Grab 테스트 화면 ‘내일’ 미리보기 유지). false일 때만 오늘로 당김 */
+  clampCampaignValidFromToToday?: boolean
   discountType?: GrabPromoCampaignDiscountType
 }): Record<string, unknown> {
-  const immediate = params.immediatePromoDisplay !== false
   const { startMs, endMs } = resolveGrabCampaignScheduleMs({
     validFrom: params.validFrom,
     validTo: params.validTo,
     startLeadMinutes: params.campaignStartLeadMinutes,
-    clampValidFromToToday: immediate,
+    clampValidFromToToday: params.clampCampaignValidFromToToday === true,
   })
 
   const body: Record<string, unknown> = {
@@ -573,6 +572,98 @@ export async function pushGrabPromoCutPriceMenuRecords(params: {
   return { pushed, failed, targets: targets.length }
 }
 
+export async function listGrabManagedPromoCampaigns(merchantID: string): Promise<
+  Array<{
+    id: string
+    name: string
+    section: 'ongoing' | 'upcoming'
+    discountType: string
+    discountValue: number
+    itemIds: string[]
+    startTimeUtc: string
+    endTimeUtc: string
+    startTimeBkk: string
+    endTimeBkk: string
+  }>
+> {
+  const id = String(merchantID || '').trim()
+  if (!id) return []
+  const listed = await grabJsonRequest<unknown>({
+    path: '/partner/v1/campaigns',
+    method: 'GET',
+    query: { merchantID: id },
+  })
+  const out: Array<{
+    id: string
+    name: string
+    section: 'ongoing' | 'upcoming'
+    discountType: string
+    discountValue: number
+    itemIds: string[]
+    startTimeUtc: string
+    endTimeUtc: string
+    startTimeBkk: string
+    endTimeBkk: string
+  }> = []
+  if (!listed || typeof listed !== 'object') return out
+  const root = listed as Record<string, unknown>
+  for (const section of ['ongoing', 'upcoming'] as const) {
+    const rows = Array.isArray(root[section]) ? root[section] : []
+    for (const raw of rows) {
+      if (!raw || typeof raw !== 'object') continue
+      const row = raw as GrabCampaignListRow & { conditions?: { startTime?: string; endTime?: string } }
+      const name = String(row.name ?? '').trim()
+      if (!name.startsWith(CAMPAIGN_NAME_PREFIX)) continue
+      const times = extractCampaignTimeDebug({ conditions: row.conditions ?? {} })
+      out.push({
+        id: String(row.id ?? '').trim(),
+        name,
+        section,
+        discountType: String(row.discount?.type ?? '').trim(),
+        discountValue: Math.round(Number(row.discount?.value ?? 0)),
+        itemIds: row.discount?.scope?.objectIDs ?? [],
+        startTimeUtc: times.startTimeUtc,
+        endTimeUtc: times.endTimeUtc,
+        startTimeBkk: times.startTimeBkk,
+        endTimeBkk: times.endTimeBkk,
+      })
+    }
+  }
+  return out
+}
+
+async function createGrabCampaign(body: Record<string, unknown>): Promise<void> {
+  await grabJsonRequest({
+    path: '/partner/v1/campaigns',
+    method: 'POST',
+    body,
+  })
+}
+
+/** DELETE 후 POST — POST 실패 시 fixPrice fallback으로 복구 */
+async function replaceGrabCampaign(params: {
+  existingId?: string
+  body: Record<string, unknown>
+  fallbackBody?: Record<string, unknown>
+}): Promise<{ usedFallback: boolean }> {
+  const existingId = String(params.existingId ?? '').trim()
+  if (existingId) {
+    await grabJsonRequest({
+      path: `/partner/v1/campaigns/${encodeURIComponent(existingId)}`,
+      method: 'DELETE',
+      expectNoContentOk: true,
+    })
+  }
+  try {
+    await createGrabCampaign(params.body)
+    return { usedFallback: false }
+  } catch (e) {
+    if (!params.fallbackBody) throw e
+    await createGrabCampaign(params.fallbackBody)
+    return { usedFallback: true }
+  }
+}
+
 function listCampaignRows(payload: unknown): GrabCampaignListRow[] {
   if (!payload || typeof payload !== 'object') return []
   const o = payload as Record<string, unknown>
@@ -587,7 +678,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   force?: boolean
   /** 분 단위 캠페인 시작 리드타임(미지정 시 immediate면 5분, Grab 거절 시 65분 재시도) */
   campaignStartLeadMinutes?: number
-  /** true(기본): 모든 활성 Grab 프로모·세트 컷프라이스 즉시 push + 캠페인 시작일 오늘까지 */
+  /** true(기본): 메뉴 컷프라이스 push 대상 — valid_from 전 프로모 포함. 캠페인 날짜는 ERP 그대로 */
   immediatePromoDisplay?: boolean
 }): Promise<{
   created: number
@@ -597,11 +688,24 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   targets: number
   menuRecordsPushed: number
   menuRecordsFailed: number
+  campaignErrors: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }>
+  campaignFallbackUsed: number
 }> {
   const merchantID = String(params.merchantID || '').trim()
   const force = params.force === true
   const immediatePromoDisplay = params.immediatePromoDisplay !== false
-  if (!merchantID) return { created: 0, updated: 0, skipped: 0, deleted: 0, targets: 0, menuRecordsPushed: 0, menuRecordsFailed: 0 }
+  const empty = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    deleted: 0,
+    targets: 0,
+    menuRecordsPushed: 0,
+    menuRecordsFailed: 0,
+    campaignErrors: [] as Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }>,
+    campaignFallbackUsed: 0,
+  }
+  if (!merchantID) return empty
 
   const bundle = await loadPromoBundle()
   const targets = collectGrabPromoCutPriceTargets(bundle, { immediateDisplay: immediatePromoDisplay })
@@ -621,7 +725,11 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     existingByPrefix = indexManagedCampaigns(listed)
   } catch (e) {
     console.warn('[grab-promo-campaign] list_failed', { merchantID, error: String(e) })
-    return { created: 0, updated: 0, skipped: targets.length, deleted: 0, targets: targets.length, menuRecordsPushed: 0, menuRecordsFailed: 0 }
+    return {
+      ...empty,
+      skipped: targets.length,
+      targets: targets.length,
+    }
   }
 
   const existingByName = new Map<string, GrabCampaignListRow>()
@@ -633,16 +741,14 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   let created = 0
   let updated = 0
   let skipped = 0
+  let campaignFallbackUsed = 0
+  const campaignErrors: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }> = []
   const keepNames = new Set<string>()
-
-  const menuPushBefore = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
-  let menuRecordsPushed = menuPushBefore.pushed
-  let menuRecordsFailed = menuPushBefore.failed
 
   for (const target of targets) {
     const campaignName = buildGrabPromoCampaignName(target.promoId)
     keepNames.add(campaignName)
-    const buildBody = (leadMinutes?: number) =>
+    const buildBody = (opts?: { leadMinutes?: number; discountType?: GrabPromoCampaignDiscountType }) =>
       buildGrabTargetPriceCampaignBody({
         merchantID,
         promoId: target.promoId,
@@ -652,11 +758,12 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         regularPriceMajor: target.regularPrice,
         validFrom: target.validFrom,
         validTo: target.validTo,
-        campaignStartLeadMinutes: leadMinutes ?? campaignLeadMinutes,
-        immediatePromoDisplay,
+        campaignStartLeadMinutes: opts?.leadMinutes ?? campaignLeadMinutes,
+        clampCampaignValidFromToToday: false,
+        discountType: opts?.discountType,
       })
-    let body = buildBody()
-    const fullName = String(body.name ?? '')
+    const primaryBody = buildBody()
+    const fixPriceFallbackBody = buildBody({ discountType: 'fixPrice' })
     const indexed =
       existingByPrefix.get(campaignName) ||
       (() => {
@@ -667,83 +774,59 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         return { row, section: 'upcoming' as const }
       })()
     const hit = indexed?.row
+    const matches =
+      hit?.id &&
+      !force &&
+      grabCampaignDiscountMatchesTarget(hit, {
+        grabItemId: target.grabItemId,
+        salePriceMajor: target.salePrice,
+        regularPriceMajor: target.regularPrice,
+      })
+
+    if (matches) {
+      skipped += 1
+      continue
+    }
 
     try {
       if (hit?.id) {
-        if (
-          !force &&
-          grabCampaignDiscountMatchesTarget(hit, {
-            grabItemId: target.grabItemId,
-            salePriceMajor: target.salePrice,
-            regularPriceMajor: target.regularPrice,
-          })
-        ) {
-          skipped += 1
-          continue
-        }
-        if (force || indexed?.section === 'ongoing') {
-          await grabJsonRequest({
-            path: `/partner/v1/campaigns/${encodeURIComponent(String(hit.id))}`,
-            method: 'DELETE',
-            expectNoContentOk: true,
-          })
-          await grabJsonRequest({
-            path: '/partner/v1/campaigns',
-            method: 'POST',
-            body,
-          })
-          created += 1
-          continue
-        }
-        await grabJsonRequest({
-          path: `/partner/v1/campaigns/${encodeURIComponent(String(hit.id))}`,
-          method: 'PUT',
-          body,
-          expectNoContentOk: true,
+        const primaryDiscountType = (primaryBody.discount as { type?: string })?.type
+        const needsFallback =
+          primaryDiscountType === 'percentage' ? fixPriceFallbackBody : undefined
+        const result = await replaceGrabCampaign({
+          existingId: String(hit.id),
+          body: primaryBody,
+          fallbackBody: needsFallback,
         })
+        if (result.usedFallback) campaignFallbackUsed += 1
         updated += 1
       } else {
-        await grabJsonRequest({
-          path: '/partner/v1/campaigns',
-          method: 'POST',
-          body,
-        })
-        created += 1
-      }
-    } catch (e) {
-      let errorCode = classifyGrabCampaignApiError(e)
-      const leadMinutesUsed = getGrabCampaignStartLeadMs(campaignLeadMinutes, { immediatePromoDisplay })
-      if (errorCode === 'START_TIME_INVALID' && leadMinutesUsed < 65) {
         try {
-          body = buildBody(65)
-          await grabJsonRequest({ path: '/partner/v1/campaigns', method: 'POST', body })
+          await createGrabCampaign(primaryBody)
           created += 1
-          continue
-        } catch (retryErr) {
-          e = retryErr
-          errorCode = classifyGrabCampaignApiError(retryErr)
+        } catch {
+          await createGrabCampaign(fixPriceFallbackBody)
+          campaignFallbackUsed += 1
+          created += 1
         }
       }
+    } catch (e) {
       skipped += 1
+      const errorCode = classifyGrabCampaignApiError(e)
       const errorMessage = formatGrabCampaignApiError(e)
-      const timeDebug = extractCampaignTimeDebug(body)
+      campaignErrors.push({
+        promoId: target.promoId,
+        grabItemId: target.grabItemId,
+        error: errorMessage,
+        errorCode,
+      })
       console.warn('[grab-promo-campaign] upsert_failed', {
         merchantID,
         promoId: target.promoId,
         grabItemId: target.grabItemId,
-        salePriceMajor: target.salePrice,
-        campaignName: fullName,
-        ...timeDebug,
+        ...extractCampaignTimeDebug(primaryBody),
         errorCode,
         error: errorMessage,
-        actionHint:
-          errorCode === 'ITEMS_NOT_FOUND'
-            ? 'check_menu_sync_success_and_merchant_match'
-            : errorCode === 'START_TIME_INVALID'
-              ? 'regenerate_payload_with_fresh_start_time'
-              : errorCode === 'EFFECTIVE_DATE_OVERLAP'
-                ? 'delete_or_adjust_existing_campaign_period'
-                : undefined,
       })
     }
   }
@@ -768,11 +851,19 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
     }
   }
 
-  const menuPushAfter = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
-  menuRecordsPushed += menuPushAfter.pushed
-  menuRecordsFailed += menuPushAfter.failed
+  const menuPush = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
 
-  return { created, updated, skipped, deleted, targets: targets.length, menuRecordsPushed, menuRecordsFailed }
+  return {
+    created,
+    updated,
+    skipped,
+    deleted,
+    targets: targets.length,
+    menuRecordsPushed: menuPush.pushed,
+    menuRecordsFailed: menuPush.failed,
+    campaignErrors,
+    campaignFallbackUsed,
+  }
 }
 
 /** 메뉴 빌드용: promo_id → 정가·할인가 (Grab 메뉴 item price = 정가) */

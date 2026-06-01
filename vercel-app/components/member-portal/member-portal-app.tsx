@@ -65,9 +65,11 @@ import {
   type PortalTab,
   type PortalVisitRow,
 } from "@/components/member-portal/portal-ui"
-import { clearMemberPortalMemberLocalData } from "@/lib/member-portal-client-storage"
+import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
+import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
 import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
 import {
+  memberPortalGoogleMapsUrl,
   memberPortalStoreMatchesQuery,
   type MemberPortalStoreDto,
 } from "@/lib/member-portal-stores"
@@ -166,7 +168,7 @@ export function MemberPortalApp() {
   const [stores, setStores] = React.useState<MemberPortalStoreRow[]>([])
   const [contentItems, setContentItems] = React.useState<MemberPortalContentItem[]>([])
   const [locationSearch, setLocationSearch] = React.useState("")
-  const [favoriteStoreCode, setFavoriteStoreCode] = React.useState("")
+  const [favoriteStoreCodes, setFavoriteStoreCodes] = React.useState<string[]>([])
   const [showQr, setShowQr] = React.useState(false)
   const [homeFeatureOpen, setHomeFeatureOpen] = React.useState(false)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
@@ -206,17 +208,19 @@ export function MemberPortalApp() {
 
   const loadFavoriteStorePreference = React.useCallback(async () => {
     try {
-      const r = await getJson<{ success: boolean; favoriteStoreCode?: string }>(
+      const r = await getJson<{ success: boolean; favoriteStoreCodes?: string[]; favoriteStoreCode?: string }>(
         "/api/member-portal/preferences/favorite-store"
       )
-      const code = String(r.favoriteStoreCode || "").trim()
-      if (r.success && code) {
-        setFavoriteStoreCode(code)
-        try {
-          localStorage.setItem("cm_member_favorite_store", code)
-        } catch {
-          /* ignore */
-        }
+      const serverCodes = Array.isArray(r.favoriteStoreCodes)
+        ? r.favoriteStoreCodes.map((code) => String(code || "").trim()).filter(Boolean)
+        : String(r.favoriteStoreCode || "").trim()
+          ? [String(r.favoriteStoreCode || "").trim()]
+          : []
+      if (r.success) {
+        const localCodes = readFavoriteStoreCodesFromLocalStorage()
+        const codes = serverCodes.length > 0 ? serverCodes : localCodes
+        setFavoriteStoreCodes(codes)
+        writeFavoriteStoreCodesToLocalStorage(codes)
       }
     } catch {
       /* ignore */
@@ -226,10 +230,9 @@ export function MemberPortalApp() {
   const loadSession = React.useCallback(async () => {
     const me = await getJson<{ success: boolean; member?: MemberSummary }>("/api/member-portal/me")
     if (!me.success || !me.member) {
-      clearMemberPortalMemberLocalData()
       setMember(null)
       setDashboard(null)
-      setFavoriteStoreCode("")
+      setFavoriteStoreCodes(readFavoriteStoreCodesFromLocalStorage())
       setStores([])
       setContentItems([])
       return false
@@ -308,11 +311,7 @@ export function MemberPortalApp() {
   }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, loadSession])
 
   React.useEffect(() => {
-    try {
-      setFavoriteStoreCode(localStorage.getItem("cm_member_favorite_store") || "")
-    } catch {
-      /* ignore */
-    }
+    setFavoriteStoreCodes(readFavoriteStoreCodesFromLocalStorage())
   }, [])
 
   React.useEffect(() => {
@@ -414,8 +413,30 @@ export function MemberPortalApp() {
   }
 
   const filteredStores = React.useMemo(() => {
-    return stores.filter((s) => memberPortalStoreMatchesQuery(s, locationSearch))
-  }, [locationSearch, stores])
+    const matched = stores.filter((s) => memberPortalStoreMatchesQuery(s, locationSearch))
+    return sortStoresWithFavoritesFirst(matched, favoriteStoreCodes)
+  }, [locationSearch, stores, favoriteStoreCodes])
+
+  const toggleFavoriteStore = React.useCallback(
+    (storeCode: string) => {
+      const wasFavorite = favoriteStoreCodes.includes(storeCode)
+      const optimistic = toggleFavoriteStoreCode(favoriteStoreCodes, storeCode)
+      setFavoriteStoreCodes(optimistic)
+      writeFavoriteStoreCodesToLocalStorage(optimistic)
+      setNotice(t(wasFavorite ? "locationFavoriteRemoved" : "locationFavoriteSaved"))
+      void postJson<{ success: boolean; favoriteStoreCodes?: string[] }>(
+        "/api/member-portal/preferences/favorite-store",
+        { storeCode, action: "toggle" }
+      )
+        .then((r) => {
+          if (!r.success || !Array.isArray(r.favoriteStoreCodes)) return
+          setFavoriteStoreCodes(r.favoriteStoreCodes)
+          writeFavoriteStoreCodesToLocalStorage(r.favoriteStoreCodes)
+        })
+        .catch(() => {})
+    },
+    [favoriteStoreCodes, t]
+  )
 
   React.useEffect(() => {
     if (!member?.id) return
@@ -474,7 +495,7 @@ export function MemberPortalApp() {
     setCoupons([])
     setVisits([])
     setStores([])
-    setFavoriteStoreCode("")
+    setFavoriteStoreCodes([])
     setShowQr(false)
     setTab("home")
     setPhone("")
@@ -959,7 +980,7 @@ export function MemberPortalApp() {
             t={t}
             member={member}
             stores={stores}
-            favoriteStoreCode={favoriteStoreCode}
+            favoriteStoreCodes={favoriteStoreCodes}
           />
         ) : null}
 
@@ -1010,8 +1031,7 @@ export function MemberPortalApp() {
                       <button
                         type="button"
                         onClick={() => {
-                          const q = encodeURIComponent(s.mapQuery || s.displayName)
-                          window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank")
+                          window.open(memberPortalGoogleMapsUrl(s), "_blank")
                         }}
                         className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10"
                       >
@@ -1021,26 +1041,15 @@ export function MemberPortalApp() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setFavoriteStoreCode(s.storeCode)
-                        try {
-                          localStorage.setItem("cm_member_favorite_store", s.storeCode)
-                        } catch {
-                          /* ignore */
-                        }
-                        void postJson<{ success: boolean }>("/api/member-portal/preferences/favorite-store", {
-                          storeCode: s.storeCode,
-                        }).catch(() => {})
-                        setNotice(t("locationFavoriteSaved"))
-                      }}
+                      onClick={() => toggleFavoriteStore(s.storeCode)}
                       className={`mt-2 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
-                        favoriteStoreCode === s.storeCode
+                        favoriteStoreCodes.includes(s.storeCode)
                           ? "border-amber-300/40 bg-amber-300/15 text-amber-100"
                           : "border-white/15 bg-white/5 text-white/80 hover:bg-white/10"
                       }`}
                     >
-                      <Star className={`h-3.5 w-3.5 ${favoriteStoreCode === s.storeCode ? "fill-current" : ""}`} />
-                      {favoriteStoreCode === s.storeCode ? t("locationFavorite") : t("locationFavoriteSet")}
+                      <Star className={`h-3.5 w-3.5 ${favoriteStoreCodes.includes(s.storeCode) ? "fill-current" : ""}`} />
+                      {favoriteStoreCodes.includes(s.storeCode) ? t("locationFavorite") : t("locationFavoriteSet")}
                     </button>
                   </GlassCard>
                   )

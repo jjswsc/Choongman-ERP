@@ -15,6 +15,57 @@ export function defaultMemberPortalMapQuery(displayName: string): string {
   return name ? `Choongman Chicken ${name}` : 'Choongman Chicken'
 }
 
+const GENERIC_MEMBER_PORTAL_MAP_QUERIES = new Set([
+  'choongman chicken',
+  'choongman',
+  'chungman chicken',
+  '충만',
+  '충만치킨',
+])
+
+function isGenericMemberPortalMapQuery(mapQuery: string): boolean {
+  const norm = String(mapQuery || '').trim().toLowerCase()
+  return !norm || GENERIC_MEMBER_PORTAL_MAP_QUERIES.has(norm)
+}
+
+function mapQueryMentionsStoreName(mapQuery: string, displayName: string): boolean {
+  const q = String(mapQuery || '').trim().toLowerCase()
+  const dn = String(displayName || '').trim().toLowerCase()
+  if (!q || !dn) return false
+  if (q.includes(dn)) return true
+  return dn
+    .split(/\s+/)
+    .filter((part) => part.length >= 3)
+    .some((part) => q.includes(part))
+}
+
+/** 회원앱 매장탭 — 클릭한 매장 1곳만 Google Maps에 표시되도록 검색어 구성 */
+export function memberPortalGoogleMapsSearchQuery(
+  store: Pick<MemberPortalStoreDto, 'displayName' | 'address' | 'mapQuery'>
+): string {
+  const displayName = String(store.displayName || '').trim()
+  const address = String(store.address || '').trim()
+  const mapQuery = String(store.mapQuery || '').trim()
+  const storeDefaultQuery = defaultMemberPortalMapQuery(displayName)
+
+  if (address) {
+    return displayName ? `${displayName}, ${address}` : address
+  }
+
+  if (mapQuery && !isGenericMemberPortalMapQuery(mapQuery) && mapQueryMentionsStoreName(mapQuery, displayName)) {
+    return mapQuery
+  }
+
+  return storeDefaultQuery
+}
+
+export function memberPortalGoogleMapsUrl(
+  store: Pick<MemberPortalStoreDto, 'displayName' | 'address' | 'mapQuery'>
+): string {
+  const q = encodeURIComponent(memberPortalGoogleMapsSearchQuery(store))
+  return `https://www.google.com/maps/search/?api=1&query=${q}`
+}
+
 export function mapErpStoreToMemberPortal(row: ErpStoreMasterRow): MemberPortalStoreDto | null {
   const storeCode = String(row.store_code || '').trim()
   if (!storeCode) return null

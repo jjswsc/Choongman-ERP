@@ -107,7 +107,17 @@ export async function POST(req: NextRequest) {
         : undefined
     const promoCampaignSyncResults: Record<
       string,
-      | { created: number; updated: number; skipped: number; deleted: number; targets: number }
+      | {
+          created: number
+          updated: number
+          skipped: number
+          deleted: number
+          targets: number
+          menuRecordsPushed?: number
+          menuRecordsFailed?: number
+          campaignErrors?: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }>
+          campaignFallbackUsed?: number
+        }
       | { error: string }
     > = {}
     const menuNotificationAfterCampaignSync: string[] = []

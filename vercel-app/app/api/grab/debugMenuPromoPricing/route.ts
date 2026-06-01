@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildGrabMenuFromPos } from '@/lib/grab-menu-from-pos'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
-import { loadGrabPromoCutPriceByPromoId } from '@/lib/grab-promo-target-price-campaign'
+import { loadGrabPromoCutPriceByPromoId, listGrabManagedPromoCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import { resolveGrabMenuNotificationMerchantIDs } from '@/lib/grab-resolve-menu-notification-merchants'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
@@ -48,7 +48,10 @@ export async function GET(req: NextRequest) {
     const partnerMerchantID = String(url.searchParams.get('partnerMerchantID') || '1040').trim()
     const nameFilter = String(url.searchParams.get('q') || 'april').trim().toLowerCase()
 
-    const [menu, promoCutByPromoId, mirrorMenus] = await Promise.all([
+    const resolvedMerchantIDs = resolveGrabMenuNotificationMerchantIDs(partnerMerchantID)
+    const grabMerchantID = resolvedMerchantIDs[0] || merchantID
+
+    const [menu, promoCutByPromoId, mirrorMenus, grabCampaigns] = await Promise.all([
       buildGrabMenuFromPos({ merchantID, partnerMerchantID }),
       loadGrabPromoCutPriceByPromoId().catch(() => new Map()),
       supabaseSelectFilterAllPages('pos_menus', 'promo_id=not.is.null', {
@@ -58,6 +61,7 @@ export async function GET(req: NextRequest) {
       }).catch(() => []) as Promise<
         Array<{ id?: number; code?: string; name?: string; promo_id?: number | null }>
       >,
+      listGrabManagedPromoCampaigns(grabMerchantID).catch(() => []),
     ])
 
     const promoIdByGrabItemId = new Map<string, number>()
@@ -98,20 +102,33 @@ export async function GET(req: NextRequest) {
         }
       })
 
+    const cutReady = items.some((i) => i.cutPriceReady)
+    const campaignCount = grabCampaigns.length
+    let hint: string
+    if (!cutReady) {
+      hint =
+        'cutPriceReady=false → ERP가 정가+할인가 쌍을 안 보냄. promoCut.showCutPrice 또는 advancedPricing 확인.'
+    } else if (campaignCount === 0) {
+      hint =
+        '메뉴 가격(정가+할인가)은 정상이나 Grab CM-POS-PROMO 캠페인 0개 — 취소선 없음. fixPrice 캠페인 재생성(force sync) 필요.'
+    } else {
+      hint = 'cutPriceReady=true + Grab 캠페인 있음 → 앱·테스트 화면에서 취소선+할인가 확인.'
+    }
+
     return NextResponse.json(
       {
         success: true,
         merchantID,
         partnerMerchantID,
         /** `1040` 등 파트너 ID로 sync 시 실제 Grab에 알릴 merchantID 목록 */
-        resolvedMerchantIDs: resolveGrabMenuNotificationMerchantIDs(partnerMerchantID),
+        resolvedMerchantIDs,
+        grabMerchantID,
+        grabCampaignCount: campaignCount,
+        grabCampaigns: grabCampaigns.slice(0, 20),
         filter: nameFilter,
         itemCount: items.length,
         items,
-        hint:
-          items.every((i) => !i.cutPriceReady)
-            ? 'cutPriceReady=false → ERP가 정가+할인가 쌍을 안 보냄. promoCut.showCutPrice 또는 advancedPricing 확인.'
-            : 'cutPriceReady=true면 Grab 재동기화 후 앱에서 취소선+할인가 확인.',
+        hint,
       },
       { headers }
     )

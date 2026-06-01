@@ -16,7 +16,18 @@ describe('calcGrabPercentageOffMajor', () => {
 })
 
 describe('buildGrabCampaignDiscountForTarget', () => {
-  it('uses percentage by default for cut price', () => {
+  it('uses fixPrice by default', () => {
+    const d = buildGrabCampaignDiscountForTarget({
+      grabItemId: 'item-1',
+      salePriceMajor: 111,
+      regularPriceMajor: 179,
+      discountType: 'fixPrice',
+    })
+    expect(d.type).toBe('fixPrice')
+    expect(d.value).toBe(111)
+  })
+
+  it('uses percentage when requested', () => {
     const d = buildGrabCampaignDiscountForTarget({
       grabItemId: 'item-1',
       salePriceMajor: 111,
@@ -29,7 +40,7 @@ describe('buildGrabCampaignDiscountForTarget', () => {
 })
 
 describe('buildGrabTargetPriceCampaignBody', () => {
-  it('uses percentage discount scoped to grab item id', () => {
+  it('uses fixPrice discount scoped to grab item id', () => {
     const body = buildGrabTargetPriceCampaignBody({
       merchantID: 'GF-TEST',
       promoId: 12,
@@ -39,11 +50,10 @@ describe('buildGrabTargetPriceCampaignBody', () => {
       regularPriceMajor: 179,
       validFrom: '2026-05-01',
       validTo: '2026-12-31',
-      discountType: 'percentage',
+      discountType: 'fixPrice',
     })
-    expect(body.merchantID).toBe('GF-TEST')
-    expect((body.discount as { type?: string }).type).toBe('percentage')
-    expect((body.discount as { value?: number }).value).toBe(38)
+    expect((body.discount as { type?: string }).type).toBe('fixPrice')
+    expect((body.discount as { value?: number }).value).toBe(111)
     expect((body.discount as { scope?: { objectIDs?: string[] } }).scope?.objectIDs).toEqual([
       'item-99-set1',
     ])
@@ -60,26 +70,22 @@ describe('buildGrabTargetPriceCampaignBody', () => {
 })
 
 describe('grabCampaignDiscountMatchesTarget', () => {
-  it('returns true when percentage and item id match', () => {
-    expect(
-      grabCampaignDiscountMatchesTarget(
-        {
-          discount: {
-            type: 'percentage',
-            value: 38,
-            scope: { objectIDs: ['item-356-260457-s03'] },
-          },
-        },
-        { grabItemId: 'item-356-260457-s03', salePriceMajor: 111, regularPriceMajor: 179 }
-      )
-    ).toBe(true)
-  })
-
-  it('returns false when old fixPrice campaign still on Grab', () => {
+  it('returns true when fixPrice and item id match', () => {
     expect(
       grabCampaignDiscountMatchesTarget(
         {
           discount: { type: 'fixPrice', value: 111, scope: { objectIDs: ['item-99'] } },
+        },
+        { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
+      )
+    ).toBe(true)
+  })
+
+  it('returns false when discount type differs', () => {
+    expect(
+      grabCampaignDiscountMatchesTarget(
+        {
+          discount: { type: 'percentage', value: 38, scope: { objectIDs: ['item-99'] } },
         },
         { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
       )

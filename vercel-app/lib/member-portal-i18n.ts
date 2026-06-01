@@ -74,6 +74,14 @@ export type MemberPortalKey =
   | 'orderMenuEmpty'
   | 'orderMenuOptionsNote'
   | 'orderCategoryAll'
+  | 'orderMainCategory'
+  | 'orderSubCategory'
+  | 'orderSelectSubCategory'
+  | 'orderClearCart'
+  | 'orderCartConfirmTitle'
+  | 'orderCartConfirmBody'
+  | 'orderCartConfirmBtn'
+  | 'orderPayAtPickup'
   | 'orderViewCart'
   | 'orderItemCount'
   | 'orderSelectOption'
@@ -101,6 +109,7 @@ export type MemberPortalKey =
   | 'locationFavorite'
   | 'locationFavoriteSet'
   | 'locationFavoriteSaved'
+  | 'locationFavoriteRemoved'
   | 'quickOrderTitle'
   | 'quickOrderDesc'
   | 'quickOrderPickup'
@@ -406,6 +415,26 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '반반 메뉴는 매장에서 주문해 주세요.',
   },
   orderCategoryAll: { en: 'All', th: 'ทั้งหมด', ko: '전체' },
+  orderMainCategory: { en: 'Main', th: 'หมวดหลัก', ko: '대분류' },
+  orderSubCategory: { en: 'Category', th: 'หมวดย่อย', ko: '카테고리' },
+  orderSelectSubCategory: {
+    en: 'Choose a category below.',
+    th: 'เลือกหมวดย่อยด้านล่าง',
+    ko: '아래에서 카테고리를 선택해 주세요.',
+  },
+  orderClearCart: { en: 'Clear cart', th: 'ล้างตะกร้า', ko: '장바구니 비우기' },
+  orderCartConfirmTitle: { en: 'Place pickup order?', th: 'ยืนยันสั่งรับที่ร้าน?', ko: '픽업 주문을 접수할까요?' },
+  orderCartConfirmBody: {
+    en: 'Your order goes to the store POS. Pay when you pick up.',
+    th: 'คำสั่งซื้อจะส่งไป POS ร้าน ชำระเมื่อมารับ',
+    ko: '주문은 매장 POS로 전달됩니다. 픽업 시 매장에서 결제해 주세요.',
+  },
+  orderCartConfirmBtn: { en: 'Confirm order', th: 'ยืนยันสั่ง', ko: '주문 확정' },
+  orderPayAtPickup: {
+    en: 'Pay at store on pickup',
+    th: 'ชำระที่ร้านเมื่อมารับ',
+    ko: '픽업 시 매장 결제',
+  },
   orderViewCart: { en: 'View cart', th: 'ดูตะกร้า', ko: '장바구니 보기' },
   orderItemCount: {
     en: '{count} items',
@@ -492,6 +521,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Favorite store saved.',
     th: 'บันทึกสาขาประจำแล้ว',
     ko: '즐겨찾는 매장을 저장했습니다.',
+  },
+  locationFavoriteRemoved: {
+    en: 'Removed from favorites.',
+    th: 'นำออกจากสาขาประจำแล้ว',
+    ko: '즐겨찾기를 해제했습니다.',
   },
   quickOrderTitle: {
     en: 'Quick order',
