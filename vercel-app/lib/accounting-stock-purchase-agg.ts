@@ -1,6 +1,8 @@
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 
+const STOCK_PURCHASE_FALLBACK_MAX_ROWS = 1_000_000
+
 export type StockLogPurchaseAggRow = {
   item_code: string
   vendor_target: string
@@ -60,7 +62,7 @@ async function fetchStockLogsPurchaseAggSelect(params: {
     select: selectCols,
     order: 'id.asc',
     pageSize: 8000,
-    maxRows: 200_000,
+    maxRows: STOCK_PURCHASE_FALLBACK_MAX_ROWS,
   })) as {
     item_code?: string
     qty?: number

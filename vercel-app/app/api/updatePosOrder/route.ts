@@ -16,7 +16,9 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { buildKitchenJobUpdateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   parseAppliedCouponsFromBody,
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total,paid_at',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json',
       },
       'updatePosOrder'
     )) as {
@@ -141,6 +143,7 @@ export async function POST(req: NextRequest) {
       vat?: number
       total?: number
       paid_at?: string | null
+      items_json?: unknown
     }[] | null
 
     if (!existing?.length) {
@@ -489,15 +492,37 @@ export async function POST(req: NextRequest) {
       reason: fromOfflineQueueSync ? 'offline_sync_update' : 'manual_order_update',
     })
 
+    const prevOrderItems = (() => {
+      const raw = current?.items_json
+      if (Array.isArray(raw)) return raw
+      if (raw && typeof raw === 'object') {
+        const maybeItems = (raw as { items?: unknown }).items
+        return Array.isArray(maybeItems) ? maybeItems : []
+      }
+      try {
+        const parsed = JSON.parse(String(raw ?? '[]')) as unknown
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    })()
+    const kitchenDeltaLines = filterKitchenCartLinesForDineInAdd(
+      items as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
+      prevOrderItems as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
+    )
     await enqueueKitchenPrintJob({
       storeCode: String(current?.store_code || '').trim(),
       orderId: id,
       orderNo: String(current?.order_no || `POS-${id}`),
       source: fromOfflineQueueSync ? 'offline_queue_update' : 'updatePosOrder',
-      dedupeKey: `order:${id}:kitchen:auto`,
+      dedupeKey: buildKitchenJobUpdateDedupeKey(id, items),
       payload: {
         action: 'update_order',
         status,
+        ...(String(current?.order_type ?? '').trim().toLowerCase() === 'dine_in' &&
+        kitchenDeltaLines.length > 0
+          ? { kitchenLines: kitchenDeltaLines }
+          : {}),
       },
     })
 

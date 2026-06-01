@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
+const BANK_TX_SUMMARY_SCAN_MAX_ROWS = 1_000_000
 
 /** 통장 거래 목록 + 잔액 검증용 집계 */
 export async function GET(request: NextRequest) {
@@ -120,9 +121,10 @@ export async function GET(request: NextRequest) {
     const periodWithdrawals = list.filter((t) => t.transType === 'withdraw').reduce((s, t) => s + Math.abs(t.amount), 0)
 
     const beforeStartFilter = `account_id=eq.${accountId}&trans_date=lt.${startStr}`
-    const beforeRows = (await supabaseSelectFilter('bank_transactions', beforeStartFilter, {
+    const beforeRows = (await supabaseSelectFilterAllPages('bank_transactions', beforeStartFilter, {
       select: 'trans_type,amount,note',
-      limit: 50000,
+      pageSize: 8000,
+      maxRows: BANK_TX_SUMMARY_SCAN_MAX_ROWS,
     })) as { trans_type?: string; amount?: number; note?: string }[]
     const visibleBeforeRows = (beforeRows || []).filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
     const beforeDeposits = visibleBeforeRows.filter((r) => (r.trans_type || '').toLowerCase() === 'deposit').reduce((s, r) => s + Number(r.amount || 0), 0)

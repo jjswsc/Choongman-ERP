@@ -7,11 +7,13 @@
  * 기간 내 주문이 없어도 erp_stores 활성 매장은 목록에 포함(매장 선택 불가 방지).
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
+
+const POS_SALES_FILTER_OPTIONS_SCAN_MAX_ROWS = 1_000_000
 
 async function mergeErpStoreCodesIntoSet(posSet: Set<string>): Promise<void> {
   try {
@@ -61,8 +63,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ posOptions, source: 'rpc' as const }, { headers })
     } catch (_rpcErr) {
       const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-      const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
-        limit: 50000,
+      const rowsRaw = (await supabaseSelectFilterAllPages('pos_orders', filter, {
+        pageSize: 8000,
+        maxRows: POS_SALES_FILTER_OPTIONS_SCAN_MAX_ROWS,
         select: 'store_code,created_at',
       })) as { store_code?: string; created_at?: string }[]
 
@@ -75,7 +78,7 @@ export async function GET(request: NextRequest) {
       }
       await mergeErpStoreCodesIntoSet(posSet)
       const posOptions = finalizePosOptions(posSet)
-      if (rowsRaw.length >= 50000) headers.set('X-Sales-Truncated', '1')
+      if (rowsRaw.length >= POS_SALES_FILTER_OPTIONS_SCAN_MAX_ROWS) headers.set('X-Sales-Truncated', '1')
 
       return NextResponse.json({ posOptions, source: 'select' as const }, { headers })
     }

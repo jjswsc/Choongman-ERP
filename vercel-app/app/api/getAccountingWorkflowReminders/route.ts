@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { THAI_FILING_DEFINITIONS, type ThaiFilingType } from '@/lib/thai-filing-scope'
 import { requireAuth } from '@/lib/verify-auth'
@@ -33,6 +33,8 @@ type WhtLedgerRow = {
   form_hint?: string | null
   memo?: string | null
 }
+
+const WHT_REMINDER_SCAN_MAX_ROWS = 1_000_000
 
 function shiftYearMonth(ym: string, deltaMonths: number): string {
   if (!/^\d{4}-\d{2}$/.test(ym)) return ''
@@ -192,10 +194,14 @@ export async function GET(request: NextRequest) {
       })
 
       if (filingType === 'wht_ppnd') {
-        const whtRows = (await supabaseSelectFilter(
+        const whtRows = (await supabaseSelectFilterAllPages(
           'withholding_tax_ledger_entries',
           `tax_month=eq.${encodeURIComponent(ym)}`,
-          { select: 'id,payee_name,payee_tax_id,form_hint,memo', limit: 50000 }
+          {
+            select: 'id,payee_name,payee_tax_id,form_hint,memo',
+            pageSize: 8000,
+            maxRows: WHT_REMINDER_SCAN_MAX_ROWS,
+          }
         )) as WhtLedgerRow[] | null
         const payrollRows = (whtRows || []).filter(isPayrollWhtLedgerRow)
         const missingTinRows = payrollRows.filter((r) => !hasValidTin(r.payee_tax_id))

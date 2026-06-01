@@ -5,6 +5,7 @@ import {
   supabaseInsert,
   supabaseRpc,
   supabaseSelect,
+  supabaseSelectAllPages,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
   supabaseUpsert,
@@ -800,7 +801,12 @@ export async function recalculateMemberTier(memberId: number): Promise<{ tierCod
 }
 
 export async function recalculateAllMemberTiers(): Promise<number> {
-  const members = (await supabaseSelect('members', { limit: 50000, select: 'id' })) as { id?: number }[]
+  const members = (await supabaseSelectAllPages('members', {
+    order: 'id.asc',
+    select: 'id',
+    pageSize: 8000,
+    maxRows: 2_000_000,
+  })) as { id?: number }[]
   let count = 0
   for (const member of members || []) {
     const id = Number(member.id || 0)

@@ -1,6 +1,8 @@
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 
+const ACCOUNTING_FALLBACK_MAX_ROWS = 2_000_000
+
 function isMissingBalanceRpcError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
   return (
@@ -41,7 +43,7 @@ export async function sumReceivablesBalance(params: {
   const rows = (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
     select: 'amount',
     pageSize: 8000,
-    maxRows: 500_000,
+    maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
   })) as { amount?: number }[]
   const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
   return { total, source: 'select' }
@@ -78,7 +80,7 @@ export async function sumPayablesBalance(params: {
     rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
       select: 'amount',
       pageSize: 8000,
-      maxRows: 500_000,
+      maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
     })) as { amount?: number }[]
   } catch (firstErr) {
     if (!useStoreScoped) throw firstErr
@@ -86,7 +88,7 @@ export async function sumPayablesBalance(params: {
     rows = (await supabaseSelectFilterAllPages('payable_transactions', fallback, {
       select: 'amount',
       pageSize: 8000,
-      maxRows: 500_000,
+      maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
     })) as { amount?: number }[]
   }
   const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
@@ -104,9 +106,9 @@ export async function sumBankTransactionsForAccounts(
   const rows = (await supabaseSelectFilterAllPages('bank_transactions', filter, {
     select: 'amount',
     pageSize: 8000,
-    maxRows: 500_000,
+    maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
   })) as { amount?: number }[]
-  const cap = 500_000
+  const cap = ACCOUNTING_FALLBACK_MAX_ROWS
   return {
     total: rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
     truncated: rows.length >= cap,

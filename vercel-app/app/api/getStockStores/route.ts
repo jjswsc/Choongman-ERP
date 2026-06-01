@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectAllPages } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
 /** 재고 현황용 매장 목록 - stock_logs location만. 매니저는 자기 매장만 반환 */
@@ -25,7 +25,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(list, { headers })
   } catch (_rpcErr) {
     // RPC 미배포 시 fallback: 기존 select 방식
-    const logs = (await supabaseSelect('stock_logs', { limit: 50000, select: 'location' })) as { location?: string }[] | null
+    const logs = (await supabaseSelectAllPages('stock_logs', {
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: 1_000_000,
+      select: 'location',
+    })) as { location?: string }[] | null
     const fromLogs = new Set<string>()
     for (const row of logs || []) {
       const loc = String(row.location || '').trim()

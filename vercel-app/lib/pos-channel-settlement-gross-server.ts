@@ -1,7 +1,8 @@
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import type { PosChannelGrossRow, PosChannelSettlementChannel } from '@/lib/pos-channel-settlement'
 
 const COMPLETED = new Set(['paid', 'preparing', 'cooking', 'ready', 'completed'])
+const POS_CHANNEL_SETTLEMENT_SCAN_MAX_ROWS = 1_000_000
 
 function isGrabCode(code: string): boolean {
   return code.includes('grab')
@@ -85,9 +86,10 @@ export async function fetchPosChannelSettlementGross(params: {
   const start = `${settleDate}T00:00:00+07:00`
   const end = `${settleDate}T23:59:59+07:00`
   const filter = `store_code=eq.${encodeURIComponent(storeCode)}&created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(end)}`
-  const orders = (await supabaseSelectFilter('pos_orders', filter, {
+  const orders = (await supabaseSelectFilterAllPages('pos_orders', filter, {
     select: 'payment_card,payment_delivery_app,delivery_app_code,card_fee_amt,status',
-    limit: 50000,
+    pageSize: 8000,
+    maxRows: POS_CHANNEL_SETTLEMENT_SCAN_MAX_ROWS,
     order: 'id.asc',
   })) as {
     payment_card?: number

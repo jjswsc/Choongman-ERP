@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 type PayrollLikeRow = {
@@ -28,6 +28,24 @@ type Kt20kMonthSummary = {
   totalWage: number
   excessOver20000: number
   netWageToReport: number
+}
+
+type Kt20kMonthlyRpcRow = {
+  month?: string | null
+  employee_count?: number | null
+  salary_amount?: number | null
+  daily_wage_amount?: number | null
+  other_comp_amount?: number | null
+  total_wage?: number | null
+  excess_over_20000?: number | null
+  net_wage_to_report?: number | null
+}
+
+const KT20K_EXPORT_SCAN_MAX_ROWS = 1_000_000
+
+function isMissingKt20kRpcError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('get_kt20k_monthly_agg') || msg.includes('42883')
 }
 
 function toFinite(n: unknown): number {
@@ -97,6 +115,95 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    try {
+      const monthlyRows = await supabaseRpc<Kt20kMonthlyRpcRow[]>('get_kt20k_monthly_agg', {
+        p_year: year,
+        p_store: storeFilter || 'All',
+      })
+      const monthRows: Kt20kMonthSummary[] = (monthlyRows || []).map((r) => ({
+        month: String(r.month || ''),
+        employeeCount: Number(r.employee_count || 0),
+        salaryAmount: round2(Number(r.salary_amount || 0)),
+        dailyWageAmount: round2(Number(r.daily_wage_amount || 0)),
+        otherCompAmount: round2(Number(r.other_comp_amount || 0)),
+        totalWage: round2(Number(r.total_wage || 0)),
+        excessOver20000: round2(Number(r.excess_over_20000 || 0)),
+        netWageToReport: round2(Number(r.net_wage_to_report || 0)),
+      }))
+      const annual = monthRows.reduce(
+        (acc, cur) => {
+          acc.employeeCountPeak = Math.max(acc.employeeCountPeak, cur.employeeCount)
+          acc.salaryAmount += cur.salaryAmount
+          acc.dailyWageAmount += cur.dailyWageAmount
+          acc.otherCompAmount += cur.otherCompAmount
+          acc.totalWage += cur.totalWage
+          acc.excessOver20000 += cur.excessOver20000
+          acc.netWageToReport += cur.netWageToReport
+          return acc
+        },
+        {
+          employeeCountPeak: 0,
+          salaryAmount: 0,
+          dailyWageAmount: 0,
+          otherCompAmount: 0,
+          totalWage: 0,
+          excessOver20000: 0,
+          netWageToReport: 0,
+        }
+      )
+      const lines: string[] = []
+      lines.push(
+        [
+          'month',
+          'employee_count',
+          'salary_amount',
+          'daily_wage_amount',
+          'other_comp_amount',
+          'total_wage_(1)',
+          'excess_over_20000_(2)',
+          'net_wage_to_report_(3)',
+        ].join(',')
+      )
+      for (const r of monthRows) {
+        lines.push(
+          [
+            csvCell(r.month),
+            r.employeeCount,
+            r.salaryAmount,
+            r.dailyWageAmount,
+            r.otherCompAmount,
+            r.totalWage,
+            r.excessOver20000,
+            r.netWageToReport,
+          ].join(',')
+        )
+      }
+      lines.push(
+        [
+          'ANNUAL',
+          annual.employeeCountPeak,
+          round2(annual.salaryAmount),
+          round2(annual.dailyWageAmount),
+          round2(annual.otherCompAmount),
+          round2(annual.totalWage),
+          round2(annual.excessOver20000),
+          round2(annual.netWageToReport),
+        ].join(',')
+      )
+      const csv = `\uFEFF${lines.join('\r\n')}`
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          ...Object.fromEntries(headers.entries()),
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="kt20k-${year}.csv"`,
+        },
+      })
+    } catch (rpcErr) {
+      if (!isMissingKt20kRpcError(rpcErr)) throw rpcErr
+      console.warn('exportKt20kCsv rpc fallback: missing function')
+    }
+
     const start = `${year}-01`
     const end = `${year}-12`
     const filters = [`month=gte.${encodeURIComponent(start)}`, `month=lte.${encodeURIComponent(end)}`]
@@ -104,10 +211,11 @@ export async function GET(request: NextRequest) {
       filters.push(`store=eq.${encodeURIComponent(storeFilter)}`)
     }
     const filter = filters.join('&')
-    const rows = (await supabaseSelectFilter('payroll_records', filter, {
+    const rows = (await supabaseSelectFilterAllPages('payroll_records', filter, {
       select:
         'month,store,name,employee_id,salary,pos_allow,haz_allow,diligence_allow,birth_bonus,spl_bonus,ot_amt,holiday_pay,status',
-      limit: 50000,
+      pageSize: 8000,
+      maxRows: KT20K_EXPORT_SCAN_MAX_ROWS,
       order: 'month.asc,store.asc,name.asc',
     })) as PayrollLikeRow[] | null
 

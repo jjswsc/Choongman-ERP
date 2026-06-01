@@ -2,7 +2,7 @@
  * 매장·기간 POS 매출 + po_billing_settings 로 청구 라인 초안 (발주 카트에 넣기용)
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { appendStoreCodeFilter, storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 import {
@@ -19,7 +19,7 @@ function parseDraftMode(raw: string | null): PoBillingDraftMode {
   return 'all'
 }
 
-const FETCH_LIMIT = 50000
+const FETCH_LIMIT = 1_000_000
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -47,8 +47,9 @@ export async function GET(request: NextRequest) {
     let orderRows: PoBillingOrderRow[] = []
     for (const storeVariant of storeCodeSearchVariants(store)) {
       const filter = appendStoreCodeFilter(baseTimeFilter, [storeVariant])
-      orderRows = (await supabaseSelectFilter('pos_orders', filter, {
-        limit: FETCH_LIMIT,
+      orderRows = (await supabaseSelectFilterAllPages('pos_orders', filter, {
+        pageSize: 8000,
+        maxRows: FETCH_LIMIT,
         select:
           'order_type,total,status,store_code,delivery_app_code,delivery_payment_channel,items_json',
       })) as PoBillingOrderRow[]

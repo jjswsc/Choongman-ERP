@@ -2,6 +2,8 @@ import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
 
+const GL_FALLBACK_MAX_ROWS = 1_000_000
+
 export type GlBalanceRow = {
   accountCode: string
   debitTotal: number
@@ -34,7 +36,7 @@ async function sumGlBalancesSelectFallback(params: {
   const entries = (await supabaseSelectFilterAllPages('journal_entries', jeFilter, {
     select: 'id,store_name',
     pageSize: 5000,
-    maxRows: 200_000,
+    maxRows: GL_FALLBACK_MAX_ROWS,
   })) as { id?: number; store_name?: string | null }[]
 
   const ids = (entries || [])
@@ -62,7 +64,7 @@ async function sumGlBalancesSelectFallback(params: {
     const lines = (await supabaseSelectFilterAllPages(
       'journal_lines',
       `journal_entry_id=in.(${idList})&or=(${codeOr})`,
-      { select: 'account_code,side,amount', pageSize: 8000, maxRows: 500_000 }
+      { select: 'account_code,side,amount', pageSize: 8000, maxRows: GL_FALLBACK_MAX_ROWS }
     )) as { account_code?: string; side?: string; amount?: number }[]
 
     for (const ln of lines || []) {

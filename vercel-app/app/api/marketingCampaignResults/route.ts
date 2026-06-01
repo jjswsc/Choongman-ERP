@@ -3,10 +3,11 @@
  * campaignId 필수. pos_orders에서 캠페인 기간·지점 매칭 후 매출 반환.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+const MARKETING_CAMPAIGN_RESULT_SCAN_MAX_ROWS = 1_000_000
 
 function isColumnSchemaError(e: unknown): boolean {
   const s = String(e)
@@ -130,8 +131,9 @@ export async function GET(request: NextRequest) {
 
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
     const fallbackFilter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    const fallbackRows = (await supabaseSelectFilter('pos_orders', fallbackFilter, {
-      limit: 50000,
+    const fallbackRows = (await supabaseSelectFilterAllPages('pos_orders', fallbackFilter, {
+      pageSize: 8000,
+      maxRows: MARKETING_CAMPAIGN_RESULT_SCAN_MAX_ROWS,
       select: 'order_type,total,store_code,status',
     })) as OrderRow[]
     const fallback = aggregateOrders(fallbackRows || [], branches, true)
@@ -139,11 +141,12 @@ export async function GET(request: NextRequest) {
     let linkedRows: OrderRow[] = []
     let linkedSupported = true
     try {
-      linkedRows = (await supabaseSelectFilter(
+      linkedRows = (await supabaseSelectFilterAllPages(
         'pos_orders',
         `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}&created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`,
         {
-          limit: 50000,
+          pageSize: 8000,
+          maxRows: MARKETING_CAMPAIGN_RESULT_SCAN_MAX_ROWS,
           select: 'order_type,total,store_code,status,marketing_campaign_id',
         }
       )) as OrderRow[]

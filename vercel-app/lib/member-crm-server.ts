@@ -9,6 +9,7 @@ import {
   supabaseInsert,
   supabaseRpc,
   supabaseSelect,
+  supabaseSelectFilterAllPages,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
@@ -62,6 +63,7 @@ export async function getCrmSummary(params?: { recentDays?: number; dormantDays?
 }
 
 export type CrmSegmentType = 'vip' | 'recent30' | 'dormant90' | 'new30' | 'atRisk'
+const MEMBER_RECENT_ORDER_SCAN_MAX_ROWS = 1_000_000
 
 export async function listSegmentMembers(params: {
   segment: CrmSegmentType
@@ -107,10 +109,10 @@ export async function listSegmentMembers(params: {
     }))
   }
   if (params.segment === 'recent30') {
-    const orderRows = (await supabaseSelectFilter(
+    const orderRows = (await supabaseSelectFilterAllPages(
       'pos_orders',
       `member_id=not.is.null&created_at=gte.${encodeURIComponent(recent30)}`,
-      { order: 'created_at.desc', limit: 50000, select: 'member_id' }
+      { order: 'created_at.desc', pageSize: 8000, maxRows: MEMBER_RECENT_ORDER_SCAN_MAX_ROWS, select: 'member_id' }
     )) as Array<{ member_id?: number }>
     const memberIds = Array.from(new Set(orderRows.map((x) => Number(x.member_id || 0)).filter((x) => x > 0))).slice(0, limit)
     if (!memberIds.length) return []

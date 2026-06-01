@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
 
 /** POS 메뉴 원가 계산 (로스율 적용, 소수점 첫째자리) - 대체형/추가형 옵션 지원 */
 export async function GET(request: NextRequest) {
@@ -15,9 +15,10 @@ export async function GET(request: NextRequest) {
 
   try {
     type ItemRow = { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; name?: string; category?: string }
-    const itemRows = (await supabaseSelect('items', {
+    const itemRows = (await supabaseSelectAllPages('items', {
       order: 'code.asc',
-      limit: 50000,
+      pageSize: 8000,
+      maxRows: 1_000_000,
       select: 'code,cost,price,total_quantity,unit,name,category',
     })) as ItemRow[] | null
 

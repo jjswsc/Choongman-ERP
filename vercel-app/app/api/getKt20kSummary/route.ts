@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 type PayrollLikeRow = {
@@ -37,6 +37,8 @@ type Kt20kMonthSummary = {
   excessOver20000: number
   netWageToReport: number
 }
+
+const KT20K_SCAN_MAX_ROWS = 1_000_000
 
 type Kt20kPnd1aMonthlyDiff = {
   month: string
@@ -282,10 +284,11 @@ export async function GET(request: NextRequest) {
     }
     const filter = filters.join('&')
     const [rows, whtRows] = await Promise.all([
-      supabaseSelectFilter('payroll_records', filter, {
+      supabaseSelectFilterAllPages('payroll_records', filter, {
         select:
           'month,store,name,employee_id,salary,pos_allow,haz_allow,diligence_allow,birth_bonus,spl_bonus,ot_amt,holiday_pay,status',
-        limit: 50000,
+        pageSize: 8000,
+        maxRows: KT20K_SCAN_MAX_ROWS,
         order: 'month.asc,store.asc,name.asc',
       }) as Promise<PayrollLikeRow[] | null>,
       (() => {
@@ -293,9 +296,10 @@ export async function GET(request: NextRequest) {
         if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체') {
           whtFilters.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
         }
-        return supabaseSelectFilter('withholding_tax_ledger_entries', whtFilters.join('&'), {
+        return supabaseSelectFilterAllPages('withholding_tax_ledger_entries', whtFilters.join('&'), {
           select: 'tax_month,store_name,payee_name,form_hint,gross_amount',
-          limit: 50000,
+          pageSize: 8000,
+          maxRows: KT20K_SCAN_MAX_ROWS,
           order: 'tax_month.asc,payee_name.asc',
         }) as Promise<WhtLedgerLikeRow[] | null>
       })(),

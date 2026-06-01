@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
+const UNLINKED_BANK_SCAN_MAX_ROWS = 1_000_000
 
 /** 미연결 출금 거래 목록 (지출/매입 관리 연결용) */
 export async function GET(request: NextRequest) {
@@ -28,9 +29,10 @@ export async function GET(request: NextRequest) {
 
     const linkedIds = new Set<number>()
     if (rows?.length) {
-      const ptRows = (await supabaseSelectFilter('payable_transactions', 'bank_transaction_id=not.is.null', {
+      const ptRows = (await supabaseSelectFilterAllPages('payable_transactions', 'bank_transaction_id=not.is.null', {
         select: 'bank_transaction_id',
-        limit: 50000,
+        pageSize: 8000,
+        maxRows: UNLINKED_BANK_SCAN_MAX_ROWS,
       })) as { bank_transaction_id?: number }[]
       for (const r of ptRows || []) {
         const bid = Number(r.bank_transaction_id)

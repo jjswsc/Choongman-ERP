@@ -121,7 +121,7 @@ async function fetchOutboundLogsPage(
       order: 'log_date.desc',
       select,
       pageSize: 8000,
-      maxRows: 100_000,
+      maxRows: 1_000_000,
     })) as OutboundLogRow[]
   } catch (e) {
     const msg = String(e || '').toLowerCase()
@@ -131,7 +131,7 @@ async function fetchOutboundLogsPage(
       order: 'log_date.desc',
       select,
       pageSize: 8000,
-      maxRows: 100_000,
+      maxRows: 1_000_000,
     })) as OutboundLogRow[]
   }
 }

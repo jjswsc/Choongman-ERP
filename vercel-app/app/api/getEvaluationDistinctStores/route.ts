@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
+const EVAL_DISTINCT_STORE_SCAN_MAX_ROWS = 1_000_000
+
 /**
  * RPC 미배포 시: evaluation_results 전 페이지 스캔으로 매장명 수집(느리지만 RPC 없이 동작).
  */
@@ -12,7 +14,7 @@ async function distinctStoresFromTableScan(): Promise<string[]> {
       order: 'store_name.asc,id.asc',
       select: 'store_name',
       pageSize: 5000,
-      maxRows: 100_000,
+      maxRows: EVAL_DISTINCT_STORE_SCAN_MAX_ROWS,
     }
   )) as { store_name?: string }[]
   const set = new Set<string>()

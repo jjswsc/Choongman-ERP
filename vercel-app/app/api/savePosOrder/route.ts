@@ -22,6 +22,7 @@ import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import {
   parseAppliedCouponsFromBody,
   persistPosOrderCouponRedemptions,
@@ -601,7 +602,7 @@ export async function POST(req: NextRequest) {
         orderId: Number(created.id),
         orderNo,
         source: 'savePosOrder',
-        dedupeKey: `order:${Number(created.id)}:kitchen:auto`,
+        dedupeKey: buildKitchenJobCreateDedupeKey(Number(created.id)),
         payload: {
           action: 'create_order',
           status: orderStatus,

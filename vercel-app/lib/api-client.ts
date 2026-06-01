@@ -10483,6 +10483,37 @@ export async function updatePosOrderStatus(params: {
   return res.json() as Promise<PosOrderStatusUpdateResult>
 }
 
+export type PosKitchenPrintJobClaim = {
+  id: number
+  order_id: number
+  payload_json: Record<string, unknown> | null
+}
+
+export async function claimKitchenPrintJob(params: {
+  storeCode: string
+  workerId?: string
+}): Promise<{ success: boolean; job: PosKitchenPrintJobClaim | null; message?: string }> {
+  const res = await apiFetchWithOffline('/api/posPrintJobs/claimKitchen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; job: PosKitchenPrintJobClaim | null; message?: string }>
+}
+
+export async function markKitchenPrintJob(params: {
+  jobId: number
+  status: 'printed' | 'failed'
+  reason?: string
+}): Promise<{ success: boolean; message?: string }> {
+  const res = await apiFetchWithOffline('/api/posPrintJobs/markKitchen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function grabMarkOrderReadyApi(params: { orderID: string; markStatus: 1 | 2 }) {
   const res = await apiFetchWithOffline('/api/grab/markOrderReady', {
     method: 'POST',

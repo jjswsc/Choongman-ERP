@@ -5,6 +5,7 @@ import {
 } from '@/lib/bangkok-time'
 import {
   supabaseInsert,
+  supabaseSelectFilterAllPages,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
@@ -58,6 +59,8 @@ type CouponRow = {
   valid_from?: string | null
   is_active?: boolean | null
 }
+
+const CRM_CAMPAIGN_RECENT_ORDER_SCAN_MAX_ROWS = 1_000_000
 
 function toText(v: unknown): string {
   return String(v ?? '').trim()
@@ -211,10 +214,15 @@ async function resolveTargetMembers(campaign: ReturnType<typeof mapCampaign>): P
   if (audience === 'recent') {
     const days = Math.max(1, Math.min(toInt(payload.days, 30), 365))
     const recentStart = addBangkokCalendarDays(getBangkokTodayDateString(), -days)
-    const rows = (await supabaseSelectFilter(
+    const rows = (await supabaseSelectFilterAllPages(
       'pos_orders',
       `member_id=not.is.null&created_at=gte.${encodeURIComponent(`${recentStart}T00:00:00`)}`,
-      { order: 'created_at.desc', limit: 50000, select: 'member_id' }
+      {
+        order: 'created_at.desc',
+        pageSize: 8000,
+        maxRows: CRM_CAMPAIGN_RECENT_ORDER_SCAN_MAX_ROWS,
+        select: 'member_id',
+      }
     )) as Array<{ member_id?: number }>
     return Array.from(new Set(rows.map((x) => Number(x.member_id || 0)).filter((x) => x > 0))).slice(0, limit)
   }

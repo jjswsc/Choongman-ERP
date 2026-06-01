@@ -8,8 +8,8 @@ import {
   postPosOrderJournal,
   postStorePurchaseJournal,
 } from '@/lib/accounting-posting'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPagesStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 
 function isPeriodClosedError(e: unknown): boolean {
   return e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
@@ -24,6 +24,8 @@ function getRangeByMonths(months: number): { startStr: string; endStr: string } 
   const startStr = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}-01`
   return { startStr, endStr }
 }
+
+const ACCOUNTING_BACKFILL_SCAN_MAX_ROWS = 1_000_000
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -41,10 +43,14 @@ export async function POST(request: NextRequest) {
     let purchaseCreated = 0
     let skipped = 0
 
-    const bankRows = (await supabaseSelectFilter(
+    const bankRows = (await supabaseSelectFilterAllPages(
       'bank_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}`,
-      { select: 'id,trans_date,trans_type,amount,category,memo,store,user_name,account_subject_id', limit: 50000 }
+      {
+        select: 'id,trans_date,trans_type,amount,category,memo,store,user_name,account_subject_id',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_BACKFILL_SCAN_MAX_ROWS,
+      }
     )) as {
       id?: number
       trans_date?: string
@@ -90,10 +96,14 @@ export async function POST(request: NextRequest) {
       bankCreated += 1
     }
 
-    const pettyRows = (await supabaseSelectFilter(
+    const pettyRows = (await supabaseSelectFilterAllPages(
       'petty_cash_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`,
-      { select: 'id,trans_date,trans_type,amount,memo,store,user_name,account_subject_id', limit: 50000 }
+      {
+        select: 'id,trans_date,trans_type,amount,memo,store,user_name,account_subject_id',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_BACKFILL_SCAN_MAX_ROWS,
+      }
     )) as {
       id?: number
       trans_date?: string
@@ -137,10 +147,14 @@ export async function POST(request: NextRequest) {
       pettyCreated += 1
     }
 
-    const cardRows = (await supabaseSelectFilter(
+    const cardRows = (await supabaseSelectFilterAllPages(
       'card_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}`,
-      { select: 'id,trans_date,trans_type,amount,memo,account_subject_id', limit: 50000 }
+      {
+        select: 'id,trans_date,trans_type,amount,memo,account_subject_id',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_BACKFILL_SCAN_MAX_ROWS,
+      }
     )) as {
       id?: number
       trans_date?: string
@@ -180,10 +194,14 @@ export async function POST(request: NextRequest) {
       cardCreated += 1
     }
 
-    const posRows = (await supabaseSelectFilterStrippingUnknownColumns(
+    const posRows = (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
       'pos_orders',
       `created_at=gte.${startStr}T00:00:00.000Z&created_at=lte.${endStr}T23:59:59.999Z&status=in.(completed,paid,ready)`,
-      { select: 'id,total,store_code,created_at,service_amt', limit: 50000 },
+      {
+        select: 'id,total,store_code,created_at,service_amt',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_BACKFILL_SCAN_MAX_ROWS,
+      },
       'accountingBackfillPosOrders'
     )) as { id?: number; total?: number; store_code?: string; created_at?: string; service_amt?: number }[] | null
     for (const row of posRows || []) {
@@ -209,10 +227,14 @@ export async function POST(request: NextRequest) {
       posCreated += 1
     }
 
-    const recvRows = (await supabaseSelectFilter(
+    const recvRows = (await supabaseSelectFilterAllPages(
       'receivable_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}&ref_type=eq.Order`,
-      { select: 'ref_id,store_name,amount,trans_date', limit: 50000 }
+      {
+        select: 'ref_id,store_name,amount,trans_date',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_BACKFILL_SCAN_MAX_ROWS,
+      }
     )) as { ref_id?: number; store_name?: string; amount?: number; trans_date?: string }[] | null
     for (const row of recvRows || []) {
       const orderId = Number(row.ref_id || 0)

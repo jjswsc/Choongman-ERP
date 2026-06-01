@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { supabaseSelectFilterAllPagesStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilterAsync } from '@/lib/pos-sales-store-filter'
@@ -9,7 +9,7 @@ import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { normalizePosCancelReasonKey } from '@/lib/pos-cancel-reason-key'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
-const FETCH_LIMIT = 50000
+const FETCH_LIMIT = 1_000_000
 
 type CancelReasonRow = {
   reason: string
@@ -52,11 +52,12 @@ export async function GET(request: NextRequest) {
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = await appendStoreCodeFilterAsync(filter, stores)
 
-    const ordersRaw = (await supabaseSelectFilterStrippingUnknownColumns(
+    const ordersRaw = (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
       'pos_orders',
       filter,
       {
-        limit: FETCH_LIMIT,
+        pageSize: 8000,
+        maxRows: FETCH_LIMIT,
         select: 'created_at,store_code,order_type,status,total,memo,items_json',
       },
       'posCancelReasonSummary'

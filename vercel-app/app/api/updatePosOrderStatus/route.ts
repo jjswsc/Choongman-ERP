@@ -17,6 +17,7 @@ import {
 } from '@/lib/pos-order-policy'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { buildKitchenJobStatusDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   extractGrabOrderIdFromMemo,
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest) {
             orderId: id,
             orderNo: String(prev?.order_no || `POS-${id}`),
             source: 'updatePosOrderStatus_retry',
-            dedupeKey: `order:${id}:kitchen:auto`,
+            dedupeKey: buildKitchenJobStatusDedupeKey(id, nextStatus),
             payload: {
               action: 'retry_side_effects',
               status: nextStatus,
@@ -405,7 +406,7 @@ export async function POST(req: NextRequest) {
           orderId: id,
           orderNo: String(prev?.order_no || `POS-${id}`),
           source: fromOfflineQueueSync ? 'offline_queue' : 'updatePosOrderStatus',
-          dedupeKey: `order:${id}:kitchen:auto`,
+          dedupeKey: buildKitchenJobStatusDedupeKey(id, nextStatus),
           payload: {
             action: 'update_status',
             status: nextStatus,

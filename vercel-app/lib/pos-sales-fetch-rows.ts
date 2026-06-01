@@ -41,9 +41,9 @@ export const POS_SALES_PAYMENT_ROW_SELECT =
 export const POS_SALES_BY_STORE_FETCH_LIMIT = 50_000
 
 /** 매장 지정 시 월간 주문 전량 수집 상한(초과 시 truncated) */
-const POS_SALES_FETCH_MAX_ROWS_STORE = 500_000
+const POS_SALES_FETCH_MAX_ROWS_STORE = 2_000_000
 /** 전 매장 조회 상한 */
-const POS_SALES_FETCH_MAX_ROWS_ALL = 200_000
+const POS_SALES_FETCH_MAX_ROWS_ALL = 1_000_000
 
 export type PosSalesFetchedRows = {
   rows: PeriodOrderRow[]

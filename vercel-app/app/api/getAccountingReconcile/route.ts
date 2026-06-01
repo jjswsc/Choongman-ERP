@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
 import { getBangkokMonthRange } from '@/lib/bangkok-time'
 import { isAccountingStoreScopeForbidden } from '@/lib/accounting-store-scope'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
@@ -36,9 +36,10 @@ export async function GET(request: NextRequest) {
     if (legacy.storeFilter && legacy.storeFilter !== 'All') {
       filter += `&store_name=ilike.${encodeURIComponent(legacy.storeFilter)}`
     }
-    const entries = (await supabaseSelectFilter('journal_entries', filter, {
+    const entries = (await supabaseSelectFilterAllPages('journal_entries', filter, {
       select: 'id,store_name',
-      limit: 50000,
+      pageSize: 8000,
+      maxRows: 1_000_000,
     })) as { id?: number }[] | null
     const ids = (entries || []).map((x) => x.id).filter((id): id is number => id != null)
 
@@ -46,21 +47,24 @@ export async function GET(request: NextRequest) {
     let journalExpenses = 0
     let journalCogs = 0
     if (ids.length > 0) {
-      const idList = ids.join(',')
-      // 합산에 사용되는 계정(41xx 매출, 5xx 비용)만 조회해 egress를 줄인다.
-      const lineFilter = `journal_entry_id=in.(${idList})&or=(account_code.like.41*,account_code.like.5*)`
-      const lines = (await supabaseSelectFilter(
-        'journal_lines',
-        lineFilter,
-        { select: 'account_code,side,amount', limit: 100000 }
-      )) as { account_code?: string; side?: string; amount?: number }[] | null
-      for (const l of lines || []) {
-        const code = String(l.account_code || '')
-        const side = String(l.side || '').toLowerCase()
-        const amount = Math.abs(Number(l.amount) || 0)
-        if (code.startsWith('41') && side === 'credit') journalRevenue += amount
-        if (code === '5110' && side === 'debit') journalCogs += amount
-        if (code.startsWith('5') && code !== '5110' && side === 'debit') journalExpenses += amount
+      const chunkSize = 400
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const idList = ids.slice(i, i + chunkSize).join(',')
+        // 합산에 사용되는 계정(41xx 매출, 5xx 비용)만 조회해 egress를 줄인다.
+        const lineFilter = `journal_entry_id=in.(${idList})&or=(account_code.like.41*,account_code.like.5*)`
+        const lines = (await supabaseSelectFilterAllPages(
+          'journal_lines',
+          lineFilter,
+          { select: 'account_code,side,amount', pageSize: 8000, maxRows: 1_000_000 }
+        )) as { account_code?: string; side?: string; amount?: number }[] | null
+        for (const l of lines || []) {
+          const code = String(l.account_code || '')
+          const side = String(l.side || '').toLowerCase()
+          const amount = Math.abs(Number(l.amount) || 0)
+          if (code.startsWith('41') && side === 'credit') journalRevenue += amount
+          if (code === '5110' && side === 'debit') journalCogs += amount
+          if (code.startsWith('5') && code !== '5110' && side === 'debit') journalExpenses += amount
+        }
       }
     }
 

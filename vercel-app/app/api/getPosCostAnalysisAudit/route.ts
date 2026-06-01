@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosCostAnalysis } from '@/lib/permissions'
 
@@ -85,10 +85,30 @@ export async function GET(request: NextRequest) {
     ).catch(() => [])) as AuditRow[]
 
     const [menus, options, items, sauces] = await Promise.all([
-      (supabaseSelect('pos_menus', { select: 'id,code,name', limit: 10000 }).catch(() => [])) as Promise<MenuRow[]>,
-      (supabaseSelect('pos_menu_options', { select: 'id,name,option_code', limit: 50000 }).catch(() => [])) as Promise<OptionRow[]>,
-      (supabaseSelect('items', { select: 'code,name', limit: 50000 }).catch(() => [])) as Promise<ItemRow[]>,
-      (supabaseSelect('sauces', { select: 'code,name', limit: 5000 }).catch(() => [])) as Promise<SauceRow[]>,
+      (supabaseSelectAllPages('pos_menus', {
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: 1_000_000,
+        select: 'id,code,name',
+      }).catch(() => [])) as Promise<MenuRow[]>,
+      (supabaseSelectAllPages('pos_menu_options', {
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: 1_000_000,
+        select: 'id,name,option_code',
+      }).catch(() => [])) as Promise<OptionRow[]>,
+      (supabaseSelectAllPages('items', {
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: 1_000_000,
+        select: 'code,name',
+      }).catch(() => [])) as Promise<ItemRow[]>,
+      (supabaseSelectAllPages('sauces', {
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: 1_000_000,
+        select: 'code,name',
+      }).catch(() => [])) as Promise<SauceRow[]>,
     ])
 
     const menuById: Record<number, MenuRow> = {}

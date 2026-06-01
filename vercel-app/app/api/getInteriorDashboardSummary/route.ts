@@ -6,6 +6,8 @@ import {
   isInteriorWorkPackageScheduleRisk,
 } from "@/lib/interior-dashboard-metrics"
 
+const INTERIOR_DASHBOARD_SCAN_MAX_ROWS = 1_000_000
+
 export async function GET() {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
@@ -39,7 +41,7 @@ export async function GET() {
       order: "id.asc",
       select: "id,project_id,end_date,status",
       pageSize: 4000,
-      maxRows: 50_000,
+      maxRows: INTERIOR_DASHBOARD_SCAN_MAX_ROWS,
     })) as {
       project_id?: number
       end_date?: string | null
@@ -50,7 +52,7 @@ export async function GET() {
       order: "id.asc",
       select: "project_id,end_date",
       pageSize: 4000,
-      maxRows: 50_000,
+      maxRows: INTERIOR_DASHBOARD_SCAN_MAX_ROWS,
     })) as { project_id?: number; end_date?: string | null }[]
 
     const projectsWithWorkPackages = new Set<number>()
@@ -94,7 +96,7 @@ export async function GET() {
       select:
         "id,project_id,status,payment_due_date,payment_paid_date,material_eta_date,material_received_date,work_completed_date",
       pageSize: 4000,
-      maxRows: 50_000,
+      maxRows: INTERIOR_DASHBOARD_SCAN_MAX_ROWS,
     })) as {
       project_id?: number
       status?: string | null
@@ -128,7 +130,7 @@ export async function GET() {
       order: "id.asc",
       select: "project_id,paid",
       pageSize: 4000,
-      maxRows: 100_000,
+      maxRows: INTERIOR_DASHBOARD_SCAN_MAX_ROWS,
     })) as { project_id?: number; paid?: number | null }[]
 
     const paidSumByProject = new Map<number, number>()

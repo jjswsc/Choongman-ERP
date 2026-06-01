@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseRpc } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseRpc } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { isPosAdditiveOptionItemCategory } from '@/lib/pos-additive-item-category'
 import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
@@ -178,7 +178,7 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
       }
       return m
     } catch (_rpcErr) {
-      // RPC 미배포 시 fallback: 기존 select 방식 (limit 50000)
+      // RPC 미배포 시 fallback: 전페이지 조회로 누락 최소화
       const locFilter =
         patterns.length === 1
           ? `location=ilike.${encodeURIComponent(patterns[0])}`
@@ -186,10 +186,10 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
       const dateSuffix = asOfTimestamp
         ? `&log_date=lte.${encodeURIComponent(asOfTimestamp)}`
         : ''
-      const rows = (await supabaseSelectFilter(
+      const rows = (await supabaseSelectFilterAllPages(
         'stock_logs',
         `${locFilter}${dateSuffix}`,
-        { order: 'id.asc', limit: 50000, select: 'item_code,qty' }
+        { order: 'id.asc', pageSize: 8000, maxRows: 1_000_000, select: 'item_code,qty' }
       )) as { item_code?: string; qty?: number }[] | null
       const m: Record<string, number> = {}
       for (let i = 0; i < (rows || []).length; i++) {

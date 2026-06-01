@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { supabaseSelectFilterAllPagesStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import {
   filterRowsByPosSalesBusinessDateRange,
   posSalesBusinessDateRangeUtcEnvelope,
@@ -17,7 +17,7 @@ import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { resolvePosSalesStoresForAuth } from '@/lib/pos-sales-request-scope'
 
-const FETCH_LIMIT = 50000
+const FETCH_LIMIT = 1_000_000
 const COMPLETED_STATUSES = new Set(['completed', 'paid', 'ready'])
 const WAITING_STATUSES = new Set(['pending', 'cooking', 'preparing'])
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'refunded'])
@@ -215,11 +215,12 @@ export async function GET(request: NextRequest) {
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = await appendStoreCodeFilterAsync(filter, stores)
-    const rowsRaw = (await supabaseSelectFilterStrippingUnknownColumns(
+    const rowsRaw = (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
       'pos_orders',
       filter,
       {
-        limit: FETCH_LIMIT,
+        pageSize: 8000,
+        maxRows: FETCH_LIMIT,
         select: 'id,order_no,created_at,store_code,order_type,status,total,memo,items_json',
       },
       'posRealtimeRevenueDashboard'

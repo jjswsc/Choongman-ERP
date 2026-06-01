@@ -36,6 +36,7 @@ import {
   supabaseCountFilter,
   supabaseRpc,
   supabaseSelect,
+  supabaseSelectAllPages,
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
@@ -53,6 +54,7 @@ export {
 
 const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 const BASE_LIMIT = 20000
+const ACCOUNTING_ROWS_MAX = 1_000_000
 const DELIVERY_APP_FEE_VENDOR_CODES = new Set([
   'GRAB_FEE',
   'LINEMAN_FEE',
@@ -565,9 +567,11 @@ async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaR
 async function loadItemAccountSubjectMap(): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   try {
-    const rows = (await supabaseSelect('items', {
+    const rows = (await supabaseSelectAllPages('items', {
       select: 'code,account_subject_id',
-      limit: 50000,
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: ACCOUNTING_ROWS_MAX,
     })) as { code?: string; account_subject_id?: number | null }[] | null
     for (const r of rows || []) {
       const code = String(r.code || '').trim()
@@ -688,9 +692,10 @@ async function fetchStoreStockQtyByItem(
       locFilter = `or=(${locationPatterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
     }
     const dateSuffix = `&log_date=lte.${encodeURIComponent(asOfUtcIso)}`
-    const rows = (await supabaseSelectFilter('stock_logs', `${locFilter}${dateSuffix}`, {
+    const rows = (await supabaseSelectFilterAllPages('stock_logs', `${locFilter}${dateSuffix}`, {
       order: 'id.asc',
-      limit: 50000,
+      pageSize: 8000,
+      maxRows: ACCOUNTING_ROWS_MAX,
       select: 'item_code,qty',
     })) as { item_code?: string; qty?: number }[] | null
     const m: Record<string, number> = {}
@@ -704,7 +709,12 @@ async function fetchStoreStockQtyByItem(
 }
 
 async function loadItemValuationUnitCostMap(): Promise<Record<string, number>> {
-  const rows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost,price' })) as
+  const rows = (await supabaseSelectAllPages('items', {
+    order: 'id.asc',
+    pageSize: 8000,
+    maxRows: ACCOUNTING_ROWS_MAX,
+    select: 'code,cost,price',
+  })) as
     | { code?: string; cost?: number | null; price?: number | null }[]
     | null
   const out: Record<string, number> = {}
@@ -794,7 +804,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     salesByCustomer = hqSalesAgg.salesByCustomer
     limits.hq_outbound_sales = {
       fetched: hqSalesAgg.lineCount,
-      limit: 100_000,
+      limit: ACCOUNTING_ROWS_MAX,
     }
     if (hqSalesAgg.hitRowCap) {
       warnings.push(
@@ -906,7 +916,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     salesByDay = posSalesSum.salesByDay.filter((r) => r.amount > 0)
     limits.pos_orders = {
       fetched: posSalesSum.completedCount,
-      limit: 50000,
+      limit: 2_000_000,
     }
     if (posSalesSum.truncated) {
       warnings.push(
@@ -921,7 +931,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       supabaseSelectFilterAllPages('orders', orderFilter, {
         select: 'total',
         pageSize: 8000,
-        maxRows: 200_000,
+        maxRows: ACCOUNTING_ROWS_MAX,
       }) as Promise<{ total?: number }[]>,
       loadHqVendorMatchIndex(),
     ])
@@ -945,7 +955,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     let ordersApprovedSubtotal = 0
     for (const o of orders) ordersApprovedSubtotal += Number(o.total) || 0
     limits.orders_purchase = { fetched: orders.length, limit: BASE_LIMIT }
-    if (orders.length >= 200_000) {
+    if (orders.length >= ACCOUNTING_ROWS_MAX) {
       warnings.push('orders(승인 발주) 조회 상한에 도달해 참고 합계가 과소할 수 있습니다.')
     }
     try {
@@ -1268,7 +1278,12 @@ function drillVendorMatchesBankRow(vendorKey: string, vendorCode: string | null 
 }
 
 async function loadItemCostMapForDrill(): Promise<Record<string, number>> {
-  const itemRows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost' })) as { code?: string; cost?: number }[] | null
+  const itemRows = (await supabaseSelectAllPages('items', {
+    order: 'id.asc',
+    pageSize: 8000,
+    maxRows: ACCOUNTING_ROWS_MAX,
+    select: 'code,cost',
+  })) as { code?: string; cost?: number }[] | null
   const itemCostMap: Record<string, number> = {}
   for (const r of itemRows || []) {
     const code = String(r.code || '').trim()
@@ -1326,7 +1341,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
     const orders = (await supabaseSelectFilterAllPages('orders', orderFilter, {
       select: 'id,order_date,total,store_name,status',
       pageSize: 8000,
-      maxRows: 200_000,
+      maxRows: ACCOUNTING_ROWS_MAX,
       order: 'order_date.desc',
     })) as { id?: number; order_date?: string; total?: number; store_name?: string; status?: string }[]
     const hqOrders: IncomeStatementPurchaseDrillOrderRow[] = []
@@ -1342,7 +1357,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
         status: o.status != null ? String(o.status) : null,
       })
     }
-    const ordTruncated = orders.length >= 200_000 || hqOrders.length > PURCHASE_DRILL_LIMIT
+    const ordTruncated = orders.length >= ACCOUNTING_ROWS_MAX || hqOrders.length > PURCHASE_DRILL_LIMIT
     const hqOrdersSlice = ordTruncated ? hqOrders.slice(0, PURCHASE_DRILL_LIMIT) : hqOrders
 
     return {
