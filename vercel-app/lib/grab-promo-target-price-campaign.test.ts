@@ -3,6 +3,7 @@ import {
   buildGrabCampaignDiscountForTarget,
   buildGrabPromoCampaignName,
   buildGrabTargetPriceCampaignBody,
+  buildPutBodyForExistingGrabCampaign,
   calcGrabPercentageOffMajor,
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
@@ -113,6 +114,34 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
       )
     ).toBe(false)
+  })
+})
+
+describe('buildPutBodyForExistingGrabCampaign', () => {
+  it('strips startTime for ongoing campaigns', () => {
+    const fresh = buildGrabTargetPriceCampaignBody({
+      merchantID: 'GF-1',
+      promoId: 1,
+      promoName: 'Set',
+      grabItemId: 'item-1',
+      salePriceMajor: 111,
+      regularPriceMajor: 179,
+      discountType: 'percentage',
+    })
+    const out = buildPutBodyForExistingGrabCampaign(
+      fresh,
+      {
+        conditions: {
+          startTime: '2026-06-01T11:00:00.000Z',
+          endTime: '2026-07-30T11:00:00.000Z',
+        },
+      },
+      'ongoing'
+    )
+    const cond = out.conditions as Record<string, unknown>
+    expect(cond.startTime).toBeUndefined()
+    expect(cond.endTime).toBeUndefined()
+    expect((out.discount as { type?: string }).type).toBe('percentage')
   })
 })
 

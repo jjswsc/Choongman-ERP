@@ -670,7 +670,27 @@ async function updateGrabCampaign(existingId: string, body: Record<string, unkno
   })
 }
 
-/** ongoing/upcoming 캠페인 갱신 시 startTime 유지 — force 재생성하면 Now 미리보기가 다시 upcoming으로 돌아감 */
+/** PUT 시 ongoing(이미 시작) 캠페인은 startTime/endTime 제외 — Grab이 과거 startTime PUT 거절함 */
+export function buildPutBodyForExistingGrabCampaign(
+  freshBody: Record<string, unknown>,
+  existingRow: GrabCampaignListRow,
+  section?: 'ongoing' | 'upcoming'
+): Record<string, unknown> {
+  const existingStart = String(existingRow.conditions?.startTime ?? '').trim()
+  const startMs = existingStart ? new Date(existingStart).getTime() : NaN
+  const alreadyStarted = Number.isFinite(startMs) && startMs <= Date.now()
+  if (section !== 'ongoing' && !alreadyStarted) {
+    return preserveGrabCampaignScheduleInBody(freshBody, existingRow)
+  }
+  const conditions = (freshBody.conditions && typeof freshBody.conditions === 'object'
+    ? { ...(freshBody.conditions as Record<string, unknown>) }
+    : {}) as Record<string, unknown>
+  delete conditions.startTime
+  delete conditions.endTime
+  return { ...freshBody, conditions }
+}
+
+/** ongoing/upcoming 캠페인 갱신 시 startTime 유지 (아직 시작 전 upcoming 전용) */
 function preserveGrabCampaignScheduleInBody(
   body: Record<string, unknown>,
   existingRow: GrabCampaignListRow
@@ -746,14 +766,24 @@ async function upsertGrabPromoCampaignForTarget(params: {
   }
 
   if (existingId && !forceReplace) {
-    const putBody = preserveGrabCampaignScheduleInBody(
+    const putBody = buildPutBodyForExistingGrabCampaign(
       params.buildBody(),
-      params.existingRow ?? { id: existingId }
+      params.existingRow ?? { id: existingId },
+      section
     )
     try {
       await updateGrabCampaign(existingId, putBody)
       return { usedFallback: false, usedExtendedLead: false, mode: 'updated' }
     } catch (e) {
+      if (classifyGrabCampaignApiError(e) === 'START_TIME_INVALID') {
+        const discountOnly = buildPutBodyForExistingGrabCampaign(
+          params.buildBody(),
+          params.existingRow ?? { id: existingId },
+          'ongoing'
+        )
+        await updateGrabCampaign(existingId, discountOnly)
+        return { usedFallback: false, usedExtendedLead: false, mode: 'updated' }
+      }
       /** ongoing은 시작 시각 보존 — DELETE+POST 금지(Now 취소선 유지) */
       if (section === 'ongoing') throw e
       console.warn('[grab-promo-campaign] put_failed_try_replace', {
