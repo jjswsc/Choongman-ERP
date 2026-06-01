@@ -71,6 +71,7 @@ import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
   registerLocallyPrintedQueuedOrderNo,
 } from '@/lib/offline/pos-queued-sync-print-suppress'
+import { reservePosAutoPrintKey } from '@/lib/pos-auto-print-dedupe'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import {
   cartLinesToPosOrderItems,
@@ -2059,19 +2060,19 @@ export default function PosTerminalPage() {
     mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
 
-  const reserveKitchenAutoPrintKey = useCallback((rawKey: string, ttlMs = 6 * 60 * 60 * 1000) => {
-    const key = String(rawKey || '').trim()
-    if (!key) return true
-    const now = Date.now()
-    const map = printedKitchenSlipKeysRef.current
-    for (const [k, ts] of map.entries()) {
-      if (!Number.isFinite(ts) || now - ts > 24 * 60 * 60 * 1000) map.delete(k)
-    }
-    const prev = map.get(key)
-    if (typeof prev === 'number' && now - prev < ttlMs) return false
-    map.set(key, now)
-    return true
-  }, [])
+  const reserveKitchenAutoPrintKey = useCallback(
+    (rawKey: string, ttlMs = 6 * 60 * 60 * 1000) => {
+      const key = String(rawKey || '').trim()
+      if (!key) return true
+      const store = String(currentStoreId || '').trim()
+      const reserved = reservePosAutoPrintKey(store, key, ttlMs)
+      if (reserved) {
+        printedKitchenSlipKeysRef.current.set(key, Date.now())
+      }
+      return reserved
+    },
+    [currentStoreId]
+  )
 
   /**
    * 신규 주문 알림음 (브라우저 autoplay 정책에 따라 무음 처리될 수 있음)
@@ -2325,11 +2326,14 @@ export default function PosTerminalPage() {
         })()
       }
       if (autoPrintReceiptOnOrder) {
-        const hallPayload = hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
-          ...posReceiptLineOpts,
-          orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
-          storeCodeFallback: currentStoreId,
-        })
+        const hallPayload = {
+          ...hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+            ...posReceiptLineOpts,
+            orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+            storeCodeFallback: currentStoreId,
+          }),
+          _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
+        }
         await printReceiptNow(
           hallPayload,
           undefined,
@@ -2539,11 +2543,14 @@ export default function PosTerminalPage() {
                 })()
               }
               if (autoPrintReceiptOnOrder) {
-                const hallPayload = hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
-                  ...posReceiptLineOpts,
-                  orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
-                  storeCodeFallback: currentStoreId,
-                })
+                const hallPayload = {
+                  ...hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+                    ...posReceiptLineOpts,
+                    orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+                    storeCodeFallback: currentStoreId,
+                  }),
+                  _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
+                }
                 await printReceiptNow(
                   hallPayload,
                   undefined,
@@ -3227,6 +3234,8 @@ export default function PosTerminalPage() {
       otherFeeAmt?: number
       otherFeeMode?: 'included' | 'separate'
       guestCount?: number
+      /** 자동 인쇄 dedupe(탭·PC 공유). HTML·영수증 본문에는 사용하지 않음 */
+      _autoPrintDedupeKey?: string
     },
     /** 사용자 클릭 직후 열어둔 창을 넘기면 팝업 차단/자동 인쇄 제한을 피할 수 있음 */
     existingWindow?: Window | null,
@@ -3240,10 +3249,30 @@ export default function PosTerminalPage() {
     onAfterDirectPrint?: () => void
   ) {
     if (posDemoRef.current) return
+    const autoPrintDedupeKey = String(payload._autoPrintDedupeKey ?? '').trim()
+    if (directPrint && autoPrintDedupeKey) {
+      const storeForDedupe = String(payload.storeCode || currentStoreId || '').trim()
+      if (!reservePosAutoPrintKey(storeForDedupe, autoPrintDedupeKey)) {
+        logPosPrintDebug('hall_autoprint_skip_dedupe', {
+          orderNo: payload.orderNo,
+          dedupeKey: autoPrintDedupeKey,
+          storeCode: storeForDedupe,
+        })
+        if (typeof onAfterDirectPrint === 'function') {
+          const postReceiptDelayMs =
+            typeof window !== 'undefined' && window.cmPosShell
+              ? resolveAfterReceiptToKitchenDelayMs()
+              : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+          window.setTimeout(onAfterDirectPrint, postReceiptDelayMs)
+        }
+        return
+      }
+    }
+    const { _autoPrintDedupeKey: _dedupeOmit, ...payloadWithoutDedupeKey } = payload
     const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
     type ReceiptPrintItem = (typeof payload)['items'][number]
     const mergedForReceipt = (() => {
-      const base = payload.items ?? []
+      const base = payloadWithoutDedupeKey.items ?? []
       const hasSetChild = base.some((it) => parseGrabSetChildLineName(String(it.name ?? '')))
       if (!hasSetChild) return base
       return mergeGrabSetChildLinesIntoPromoParents(
@@ -3289,8 +3318,8 @@ export default function PosTerminalPage() {
         }
       })
     logPosPrintDebug('receipt_print_item_resolution', {
-      orderNo: payload.orderNo,
-      storeCode: payload.storeCode,
+      orderNo: payloadWithoutDedupeKey.orderNo,
+      storeCode: payloadWithoutDedupeKey.storeCode,
       beforeCount: mergedForReceipt.length,
       afterCount: enrichedForReceipt.length,
       items: enrichedForReceipt.slice(0, 30).map((it) => {
@@ -3337,7 +3366,7 @@ export default function PosTerminalPage() {
       }),
     })
     const payloadForPrint = {
-      ...payload,
+      ...payloadWithoutDedupeKey,
       items: enrichedForReceipt,
     }
     let receiptHtml = buildPosHallOrderReceiptDocumentHtml({
@@ -3406,6 +3435,123 @@ export default function PosTerminalPage() {
         : {}),
     })
   }
+
+  async function printOnePaymentReceiptFromModalData(data: ReceiptModalData): Promise<boolean> {
+    if (posDemoRef.current) return false
+    try {
+      const storeCode = String(data.storeCode || currentStoreId || '').trim()
+      const settings =
+        posPrinterSettingsRef.current ??
+        (await getPrinterSettingsForStore(storeCode || currentStoreId))
+      const enriched = {
+        ...data,
+        items: enrichReceiptModalItemsForPromoDisplay(data.items, posReceiptLineOpts),
+      }
+      const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+        receiptData: enriched,
+        menus,
+        optionNameByCode,
+        orderTypeLabels: {
+          dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
+          takeout: tPrint('posOrderTypeTakeout') ?? '포장',
+          delivery: tPrint('posOrderTypeDelivery') ?? '배달',
+        },
+        t: tPrint,
+        lang: printLang,
+        origin: typeof window !== 'undefined' ? window.location.origin : '',
+        printedAt: (() => {
+          const raw = data.receiptPrintedAt?.trim()
+          if (raw) {
+            const d = new Date(raw)
+            if (!Number.isNaN(d.getTime())) return d
+          }
+          return new Date()
+        })(),
+        printerSettings: settings,
+        forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(storeCode || currentStoreId),
+      })
+      await printPosHtmlDocument(receiptHtml, {
+        title: tPrint('posReceipt') || '영수증',
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        focusIframeBeforePrint: false,
+        printRole: 'receipt',
+        printReceiptKind: 'payment',
+        escPosCutOverride: resolveEscPosCutOverride(settings, {
+          printRole: 'receipt',
+          printReceiptKind: 'payment',
+        }),
+        onPrintUnavailable: () => {
+          void appAlert(t('posPrintUnavailable'))
+        },
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function printPaymentReceiptBatchDirect(batch: ReceiptModalData[]): Promise<boolean> {
+    if (!batch.length) return false
+    let ok = true
+    for (let i = 0; i < batch.length; i += 1) {
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, resolveBetweenSplitReceiptsDelayMs()))
+      }
+      const oneOk = await printOnePaymentReceiptFromModalData(batch[i]!)
+      if (!oneOk) ok = false
+    }
+    return ok
+  }
+
+  /** 결제 직후 영수증: 주문 접수와 동일하게 printPosHtmlDocument 직접 호출(모달 180ms 지연·중복 방지 ref 선등록 회피) */
+  const dispatchCheckoutPaymentReceipt = useCallback(
+    (params: {
+      receiptPayload: ReceiptModalData
+      splitBatch: ReceiptModalData[]
+      orderId?: number | null
+    }) => {
+      const { receiptPayload, splitBatch, orderId } = params
+      const batch = splitBatch.length > 0 ? splitBatch : [receiptPayload]
+
+      if (!isMainPosDevice) {
+        if (splitBatch.length > 0) {
+          startReceiptBatch(splitBatch)
+        } else {
+          setReceiptData({
+            ...receiptPayload,
+            receiptAutoPrintContext: 'payment',
+            suppressReceiptModalAutoPrint: true,
+          })
+        }
+        return
+      }
+
+      const autoFlags = readStoreAutoPrintFlagsSync()
+      if (autoFlags.receiptOnPayment) {
+        void printPaymentReceiptBatchDirect(batch).then((printed) => {
+          if (printed && orderId != null && orderId > 0) {
+            printedPaymentReceiptIdsRef.current.add(orderId)
+          }
+        })
+        return
+      }
+
+      if (splitBatch.length > 0) {
+        startReceiptBatch(splitBatch)
+      } else {
+        setReceiptData({
+          ...receiptPayload,
+          receiptAutoPrintContext: 'payment',
+          suppressReceiptModalAutoPrint: false,
+        })
+      }
+      if (orderId != null && orderId > 0) {
+        printedPaymentReceiptIdsRef.current.add(orderId)
+      }
+    },
+    [isMainPosDevice, readStoreAutoPrintFlagsSync, startReceiptBatch]
+  )
 
   /** 전체 취소 직후: void 영수증 자동 인쇄(결제 있으면 결제 영수증, 없으면 홀 주문표) */
   async function runAfterFullOrderCancelVoidReceiptPrint(orderId: number) {
@@ -3902,23 +4048,26 @@ export default function PosTerminalPage() {
       const discountAmt = Number(row.discount_amt ?? 0)
       const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
       const total = Number(row.total ?? 0)
-      const receiptPayloadRealtime = hallOrderReceiptPayloadFromOrderFields(
-        {
-          orderNo,
-          storeCode,
-          orderType: resolvePosOrderTypeReceiptLabel(orderType, t),
-          tableName,
-          memo,
-          items,
-          subtotal,
-          discountAmt,
-          couponDiscountAmt,
-          discountReason: String(row.discount_reason ?? '').trim() || undefined,
-          total,
-          ...posGuestCountSpread(row.guest_count),
-        },
-        pricingAdjustments
-      )
+      const receiptPayloadRealtime = {
+        ...hallOrderReceiptPayloadFromOrderFields(
+          {
+            orderNo,
+            storeCode,
+            orderType: resolvePosOrderTypeReceiptLabel(orderType, t),
+            tableName,
+            memo,
+            items,
+            subtotal,
+            discountAmt,
+            couponDiscountAmt,
+            discountReason: String(row.discount_reason ?? '').trim() || undefined,
+            total,
+            ...posGuestCountSpread(row.guest_count),
+          },
+          pricingAdjustments
+        ),
+        _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
+      }
       const runKitchenFromRealtimeOrderInsert = () => {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
         const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
@@ -4434,6 +4583,7 @@ export default function PosTerminalPage() {
         couponDiscountAmt,
         discountReason: String(row.discount_reason ?? '').trim() || undefined,
         total: pricing.finalTotal,
+        _autoPrintDedupeKey: `order:${orderId}:hall:add:${changedIds.join('|')}`,
         vatFeeAmt: pricing.vatFeeAmt,
         vatFeeMode: pricing.vatFeeMode,
         ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -4804,11 +4954,14 @@ export default function PosTerminalPage() {
             memo: String(order.memo ?? ''),
           })
           shouldRefreshCurrentStore = true
-          const receiptPayloadPoll = hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
-            ...posReceiptLineOpts,
-            orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
-            storeCodeFallback: currentStoreId,
-          })
+          const receiptPayloadPoll = {
+            ...hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+              ...posReceiptLineOpts,
+              orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+              storeCodeFallback: currentStoreId,
+            }),
+            _autoPrintDedupeKey: `order:${oid}:hall:auto`,
+          }
           const runKitchenForPolledOrder = () => {
             if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
             void (async () => {
@@ -5028,6 +5181,7 @@ export default function PosTerminalPage() {
                   couponDiscountAmt,
                   discountReason: String(o.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
+                  _autoPrintDedupeKey: `order:${oid}:hall:add:${changedIds.join('|')}`,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
                   ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -6799,14 +6953,11 @@ export default function PosTerminalPage() {
                   payload.splitReceipts,
                   !isMainPosDevice
                 )
-                if (splitBatch.length > 0) {
-                  startReceiptBatch(splitBatch)
-                } else {
-                  setReceiptData(receiptPayload)
-                }
-                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
-                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
-                }
+                dispatchCheckoutPaymentReceipt({
+                  receiptPayload,
+                  splitBatch,
+                  orderId: existingOrderId,
+                })
                 setPendingReceiptOrderNo(null)
                 setPendingDeliveryOrderId(null)
                 setSelectedDeliveryTargetId(null)
@@ -6929,14 +7080,11 @@ export default function PosTerminalPage() {
                   payload.splitReceipts,
                   !isMainPosDevice
                 )
-                if (splitBatch.length > 0) {
-                  startReceiptBatch(splitBatch)
-                } else {
-                  setReceiptData(receiptPayload)
-                }
-                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
-                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
-                }
+                dispatchCheckoutPaymentReceipt({
+                  receiptPayload,
+                  splitBatch,
+                  orderId: existingOrderId,
+                })
                 setPendingReceiptOrderNo(null)
                 setPendingTakeoutOrderId(null)
                 setSelectedTakeoutTargetId(null)
@@ -7278,6 +7426,12 @@ export default function PosTerminalPage() {
                   isAddOrder && existingOrder
                     ? filterKitchenCartLinesForDineInAdd(payloadItemsNormalized, existingOrder.items)
                     : payloadItemsNormalized
+                const hallDedupeKeyForSubmit =
+                  savedOrderId != null && savedOrderId > 0
+                    ? isAddOrder
+                      ? `order:${savedOrderId}:hall:add:${kitchenCartLines.length}`
+                      : `order:${savedOrderId}:hall:auto`
+                    : `submit:hall:${orderNoStr}`
                 const receiptPayloadSubmit = {
                   orderNo: savedOrderNo,
                   storeCode: currentStoreId,
@@ -7300,6 +7454,7 @@ export default function PosTerminalPage() {
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
                   ...posGuestCountSpread(payload.guestCount),
+                  _autoPrintDedupeKey: hallDedupeKeyForSubmit,
                 }
                 const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
                 const shouldAutoPrintReceipt = isAddOrder
@@ -7737,14 +7892,11 @@ export default function PosTerminalPage() {
                   payload.splitReceipts,
                   !isMainPosDevice
                 )
-                if (splitBatch.length > 0) {
-                  startReceiptBatch(splitBatch)
-                } else {
-                  setReceiptData(receiptPayload)
-                }
-                if (orderIdToComplete != null && orderIdToComplete > 0 && isMainPosDevice) {
-                  printedPaymentReceiptIdsRef.current.add(orderIdToComplete)
-                }
+                dispatchCheckoutPaymentReceipt({
+                  receiptPayload,
+                  splitBatch,
+                  orderId: orderIdToComplete,
+                })
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
                 pendingDineInOrderTableRef.current = ''
@@ -7912,6 +8064,9 @@ export default function PosTerminalPage() {
                   ...(hasPayment && payload.payment
                     ? receiptPaymentFieldsFromSnapshot(payload.payment)
                     : {}),
+                  ...(newOrderId != null && newOrderId > 0
+                    ? { _autoPrintDedupeKey: `order:${newOrderId}:hall:auto` }
+                    : { _autoPrintDedupeKey: `submit:hall:${orderNo}` }),
                 }
                 const runKitchenAfterNonDineSubmit = () => {
                   const kitchenPrintKey =
@@ -8048,15 +8203,15 @@ export default function PosTerminalPage() {
                       payload.splitReceipts,
                       suppressReceiptModalAutoPrint
                     )
-                    if (splitBatch.length > 0) {
-                      startReceiptBatch(splitBatch)
-                    } else {
-                      setReceiptData({
+                    dispatchCheckoutPaymentReceipt({
+                      receiptPayload: {
                         ...receiptPayloadSubmit,
                         receiptAutoPrintContext: 'payment',
                         suppressReceiptModalAutoPrint,
-                      })
-                    }
+                      },
+                      splitBatch,
+                      orderId: newOrderId,
+                    })
                   } else {
                     setReceiptData({
                       ...receiptPayloadSubmit,

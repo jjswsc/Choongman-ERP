@@ -6986,6 +6986,8 @@ export interface PosMenuIngredient {
   quantity: number
   lossRate?: number
   optionId?: string | null
+  /** 원가 계산기 입력 단위 (g::1, kg::1000 등) */
+  quantityUnitKey?: string
 }
 
 export async function getPosMenuIngredients(
@@ -7039,6 +7041,7 @@ export async function replacePosMenuIngredients(
       quantity: number
       lossRate?: number
       ingredientType?: 'food' | 'packaging'
+      quantityUnitKey?: string | null
     }>
   },
   opts?: { requireOnline?: boolean }
@@ -7111,6 +7114,7 @@ export interface PosMenuCostAnalysisRow {
     costTotal: number
     source: 'hq' | 'store'
     ingredientType: 'food' | 'packaging'
+    quantityUnitKey?: string
   }[]
 }
 

@@ -1,3 +1,5 @@
+import { getStoreQuantityFactor } from '@/lib/pos-menu-ingredient-quantity-unit'
+
 // Types
 export interface Ingredient {
   code: number
@@ -12,6 +14,8 @@ export interface RecipeItem {
   misePercent?: number // 로스/미세 %, 기본 3
   /** 목록에서 불러온 품목코드. 전역 runtime 맵이 비어도 저장 시 매핑 유지 */
   savedItemCode?: string
+  /** 원가 계산기 입력 단위 (예 g::1, ml::1, kg::1000). DB quantity_unit_key와 동기 */
+  quantityUnitKey?: string
 }
 
 export interface MenuItem {
@@ -439,31 +443,13 @@ export function getBahtPerStandardUnit(code: number, unitKey: string): number | 
  * storedQuantity = displayValue * factor
  */
 export function getQuantityFactorToStore(code: number, unitKey: string): number {
-  if (!unitKey || unitKey === "spec") return 1
   const apiItem = runtimeApiItemsMap.get(code)
-  const [unit, tqStr] = unitKey.split("::")
-  const stdTotalQty = Number(tqStr) || 1
-  const u = String(unit || "").toLowerCase().trim()
-
-  if (apiItem?.category === "packaging") {
-    return 1
-  }
-
-  if (u === "g" || u === "ml") return 1
-  if (u === "kg") return 1000
-  if (u === "l") return 1000
-  if (u === "oz") return 28.35
-  if (u === "lb") return 453.6
-  if (/개|ea|팩|pack|박스/.test(u)) return 1
-
-  const itemTq = apiItem?.itemTotalQuantity
-  const itemUnit = String(apiItem?.itemUnit ?? "").toLowerCase().trim()
-  if (itemTq != null && itemTq > 0 && itemUnit) {
-    const gramsPerSpec = itemUnit === "kg" ? itemTq * 1000 : itemUnit === "g" || itemUnit === "ml" ? itemTq : itemTq
-    const specPerStdUnit = 1 / stdTotalQty
-    return gramsPerSpec * specPerStdUnit
-  }
-  return 1
+  const ingredientType = apiItem?.category === "packaging" ? "packaging" : "food"
+  return getStoreQuantityFactor(unitKey, ingredientType, {
+    unit: apiItem?.itemUnit,
+    totalQuantity: apiItem?.itemTotalQuantity,
+    category: apiItem?.categoryRaw,
+  })
 }
 
 /**

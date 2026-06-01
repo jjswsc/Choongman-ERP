@@ -31,6 +31,7 @@ import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
 import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, getBahtPerStandardUnit, getQuantityFactorToStore, getQuantityFactorToDisplay, registerRuntimeSauceIfAbsent, pickDefaultStandardUnitKey, MISE_DEFAULT } from "@/lib/cost-data"
+import { coerceQuantityUnitKeyForStandardUnits, parseQuantityUnitKey } from "@/lib/pos-menu-ingredient-quantity-unit"
 
 type IngredientSource = "api" | "ingredient" | "sauce"
 
@@ -219,8 +220,46 @@ export function IngredientTable({
   const [addSauceDialogOpen, setAddSauceDialogOpen] = useState(false)
   const [addSearchTerm, setAddSearchTerm] = useState("")
   const [addCategoryFilter, setAddCategoryFilter] = useState<string>("all")
-  /** 행별 입력 단위. "spec" = 규격 1개, "unit::totalQty" = 표준 단위 (입력÷totalQty = 규격) */
-  const [rowUnitKeys, setRowUnitKeys] = useState<Record<number, string>>({})
+
+  const rowUnitKeyFor = useCallback(
+    (item: RecipeItem) => {
+      const fallback =
+        type === "packaging"
+          ? "ea::1"
+          : (() => {
+              const def = pickDefaultStandardUnitKey(item.ingredientCode)
+              return def && def !== "spec" ? def : "g::1"
+            })()
+      const raw = item.quantityUnitKey?.trim() || fallback
+      const standardUnits = getIngredientStandardUnits(item.ingredientCode)
+      return standardUnits?.length ? coerceQuantityUnitKeyForStandardUnits(raw, standardUnits) : raw
+    },
+    [type]
+  )
+
+  const setRowUnitKey = useCallback(
+    (index: number, unitKey: string) => {
+      const updated = [...items]
+      updated[index] = { ...updated[index], quantityUnitKey: unitKey }
+      onItemsChange(updated)
+    },
+    [items, onItemsChange]
+  )
+
+  const quantityColumnHeader = useMemo(() => {
+    if (type === "packaging") return t("posCostQty") || "수량"
+    const units = new Set(
+      items.map((it) => {
+        const parsed = parseQuantityUnitKey(rowUnitKeyFor(it))
+        return parsed?.unit?.toLowerCase() ?? "g"
+      })
+    )
+    if (units.size === 1) {
+      const u = [...units][0]
+      return `${t("posCostQty") || "수량"} (${u})`
+    }
+    return t("posCostQty") || "수량"
+  }, [items, type, t, rowUnitKeyFor])
 
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
   const sauceIngsAll = type === "food" ? getRuntimeSauces() : []
@@ -282,21 +321,23 @@ export function IngredientTable({
   )
 
   const getRowDisplayQuantity = useCallback(
-    (index: number, quantity: number) => {
-      const key = rowUnitKeys[index] ?? "spec"
-      const code = items[index]?.ingredientCode
+    (item: RecipeItem, quantity: number) => {
+      const key = rowUnitKeyFor(item)
+      const code = item.ingredientCode
       if (!code) return quantity
       if (!key || key === "spec") return quantity
       const factor = getQuantityFactorToDisplay(code, key)
       return quantity / factor
     },
-    [rowUnitKeys, items]
+    [rowUnitKeyFor]
   )
 
   const setRowQuantityFromDisplay = useCallback(
     (index: number, displayValue: number) => {
-      const key = rowUnitKeys[index] ?? "spec"
-      const code = items[index]?.ingredientCode
+      const item = items[index]
+      if (!item) return
+      const key = rowUnitKeyFor(item)
+      const code = item.ingredientCode
       if (!code) return
       if (!key || key === "spec") {
         updateQuantity(index, displayValue)
@@ -305,7 +346,7 @@ export function IngredientTable({
       const factor = getQuantityFactorToStore(code, key)
       updateQuantity(index, displayValue * factor)
     },
-    [rowUnitKeys, items, updateQuantity]
+    [items, rowUnitKeyFor, updateQuantity]
   )
 
   const updateMisePercent = useCallback(
@@ -351,9 +392,10 @@ export function IngredientTable({
   /** 배합 행 클릭 시 즉시 테이블에 추가 (기본 10g) */
   const addSauceImmediately = useCallback(
     (code: number) => {
-      const newIndex = items.length
-      onItemsChange([...items, { ingredientCode: code, quantity: 10, misePercent: MISE_DEFAULT }])
-      setRowUnitKeys((prev) => ({ ...prev, [newIndex]: "spec" }))
+      onItemsChange([
+        ...items,
+        { ingredientCode: code, quantity: 10, misePercent: MISE_DEFAULT, quantityUnitKey: "g::1" },
+      ])
       setAddSauceDialogOpen(false)
     },
     [items, onItemsChange]
@@ -378,9 +420,10 @@ export function IngredientTable({
       const unitKey = pickDefaultStandardUnitKey(code)
       const factor = getQuantityFactorToStore(code, unitKey)
       const quantity = factor > 0 ? factor : 0
-      const newIndex = items.length
-      onItemsChange([...items, { ingredientCode: code, quantity, misePercent: MISE_DEFAULT }])
-      setRowUnitKeys((prev) => ({ ...prev, [newIndex]: unitKey }))
+      onItemsChange([
+        ...items,
+        { ingredientCode: code, quantity, misePercent: MISE_DEFAULT, quantityUnitKey: unitKey },
+      ])
       setAddDialogOpen(false)
       setAddSearchTerm("")
     },
@@ -400,24 +443,6 @@ export function IngredientTable({
     })()
   }, [refreshApiItemsBeforeAddDialog])
 
-  useEffect(() => {
-    setRowUnitKeys((prev) => {
-      let changed = false
-      const next = { ...prev }
-      items.forEach((item, i) => {
-        const key = prev[i] ?? "spec"
-        if (key === "spec") {
-          const defaultKey = pickDefaultStandardUnitKey(item.ingredientCode)
-          if (defaultKey !== "spec") {
-            next[i] = defaultKey
-            changed = true
-          }
-        }
-      })
-      return changed ? next : prev
-    })
-  }, [items])
-
   const removeItem = useCallback(
     (index: number) => {
       onItemsChange(items.filter((_, i) => i !== index))
@@ -428,7 +453,12 @@ export function IngredientTable({
   const changeIngredient = useCallback(
     (index: number, code: number) => {
       const updated = [...items]
-      updated[index] = { ...updated[index], ingredientCode: code, savedItemCode: undefined }
+      updated[index] = {
+        ...updated[index],
+        ingredientCode: code,
+        savedItemCode: undefined,
+        quantityUnitKey: undefined,
+      }
       onItemsChange(updated)
     },
     [items, onItemsChange]
@@ -495,7 +525,7 @@ export function IngredientTable({
                 {t("posCostUnit") || "단위"}
               </TableHead>
               <TableHead className="text-center text-xs font-medium text-muted-foreground w-24">
-                {type === "food" ? (t("posCostQtyG") || "수량 (g)") : (t("posCostQty") || "수량")}
+                {quantityColumnHeader}
               </TableHead>
               <TableHead className="text-center text-xs font-medium text-muted-foreground w-20">
                 {t("posCostMise")}
@@ -541,7 +571,7 @@ export function IngredientTable({
                   </TableCell>
                   <TableCell className={cn("text-right font-mono text-sm", costTextDark ? "text-foreground" : "text-muted-foreground")}>
                     {(() => {
-                      const unitKey = rowUnitKeys[index] ?? "spec"
+                      const unitKey = rowUnitKeyFor(item)
                       const stdBaht = unitKey && unitKey !== "spec" ? getBahtPerStandardUnit(item.ingredientCode, unitKey) : undefined
                       const val = stdBaht ?? ingredient?.bahtPerUnit
                       return val != null ? val.toFixed(3) : "-"
@@ -551,11 +581,11 @@ export function IngredientTable({
                     {(() => {
                       const standardUnits = getIngredientStandardUnits(item.ingredientCode)
                       const hasUnits = standardUnits && standardUnits.length > 0
-                      const unitKey = rowUnitKeys[index] ?? "spec"
+                      const unitKey = rowUnitKeyFor(item)
                       return hasUnits ? (
                         <Select
                           value={unitKey}
-                          onValueChange={(v) => setRowUnitKeys((prev) => ({ ...prev, [index]: v }))}
+                          onValueChange={(v) => setRowUnitKey(index, v)}
                         >
                           <SelectTrigger className="h-8 w-full min-w-[72px] text-[11px] border-dashed">
                             <SelectValue />
@@ -569,6 +599,15 @@ export function IngredientTable({
                                 {o.unit}
                               </SelectItem>
                             ))}
+                            {item.quantityUnitKey &&
+                              item.quantityUnitKey !== unitKey &&
+                              !standardUnits!.some(
+                                (o) => `${o.unit}::${o.totalQuantity}` === item.quantityUnitKey
+                              ) && (
+                                <SelectItem value={item.quantityUnitKey}>
+                                  {parseQuantityUnitKey(item.quantityUnitKey)?.unit ?? item.quantityUnitKey}
+                                </SelectItem>
+                              )}
                           </SelectContent>
                         </Select>
                       ) : (
@@ -582,7 +621,7 @@ export function IngredientTable({
                     {(() => {
                       const standardUnits = getIngredientStandardUnits(item.ingredientCode)
                       const hasUnits = standardUnits && standardUnits.length > 0
-                      const displayQty = getRowDisplayQuantity(index, item.quantity)
+                      const displayQty = getRowDisplayQuantity(item, item.quantity)
                       return (
                         <Input
                           type="number"

@@ -10,12 +10,14 @@ import {
   ingredientRowMatchesScope,
   posMenuIngredientScopeFilter,
 } from '@/lib/pos-menu-ingredient-scope'
+import { normalizeQuantityUnitKey } from '@/lib/pos-menu-ingredient-quantity-unit'
 
 type IngredientInput = {
   itemCode: string
   quantity: number
   lossRate: number
   ingredientType: 'food' | 'packaging'
+  quantityUnitKey?: string | null
 }
 
 async function deleteIngredientsInScope(menuId: number, optionId: number | null): Promise<void> {
@@ -65,11 +67,13 @@ export async function POST(req: NextRequest) {
       const itemCode = String(row?.itemCode ?? '').trim()
       const quantity = Math.max(0, Number(row?.quantity) ?? 0)
       if (!itemCode || quantity <= 0) continue
+      const ingredientType = row?.ingredientType === 'packaging' ? 'packaging' : 'food'
       normalizedItems.push({
         itemCode,
         quantity,
         lossRate: Math.max(0, Math.min(100, Number(row?.lossRate) ?? 0)),
-        ingredientType: row?.ingredientType === 'packaging' ? 'packaging' : 'food',
+        ingredientType,
+        quantityUnitKey: normalizeQuantityUnitKey(row?.quantityUnitKey, ingredientType),
       })
     }
 
@@ -124,27 +128,36 @@ export async function POST(req: NextRequest) {
     }
 
     for (const row of normalizedItems) {
-      const ingredientRow = {
+      const ingredientRowBase = {
         menu_id: menuId,
         item_code: row.itemCode,
         quantity: row.quantity,
         loss_rate: row.lossRate,
         ingredient_type: row.ingredientType,
         option_id: optionId,
+        quantity_unit_key: row.quantityUnitKey,
         ...(menuCode ? { menu_code: menuCode } : {}),
       }
       let insertedId = ''
       try {
-        const inserted = (await supabaseInsert('pos_menu_ingredients', ingredientRow)) as
+        const inserted = (await supabaseInsert('pos_menu_ingredients', ingredientRowBase)) as
           | { id?: number | string }[]
           | null
         insertedId = String(inserted?.[0]?.id ?? '').trim()
       } catch {
-        const { menu_code: _ignored, ...legacyRow } = ingredientRow
-        const inserted = (await supabaseInsert('pos_menu_ingredients', legacyRow)) as
-          | { id?: number | string }[]
-          | null
-        insertedId = String(inserted?.[0]?.id ?? '').trim()
+        const { quantity_unit_key: _u, menu_code: _m, ...withoutUnitKey } = ingredientRowBase
+        try {
+          const inserted = (await supabaseInsert('pos_menu_ingredients', withoutUnitKey)) as
+            | { id?: number | string }[]
+            | null
+          insertedId = String(inserted?.[0]?.id ?? '').trim()
+        } catch {
+          const { menu_code: _ignored, ...legacyRow } = ingredientRowBase as Record<string, unknown>
+          const inserted = (await supabaseInsert('pos_menu_ingredients', legacyRow)) as
+            | { id?: number | string }[]
+            | null
+          insertedId = String(inserted?.[0]?.id ?? '').trim()
+        }
       }
 
       const afterRows = insertedId

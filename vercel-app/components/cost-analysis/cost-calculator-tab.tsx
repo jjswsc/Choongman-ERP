@@ -22,9 +22,16 @@ import {
   getIngredientItemCode,
   getIngredientCodeByItemCode,
   getIngredient,
+  getIngredientStandardUnits,
+  getQuantityFactorToStore,
   MISE_DEFAULT,
   resolveDeliveryAppFeePercent,
+  pickDefaultStandardUnitKey,
 } from "@/lib/cost-data"
+import {
+  coerceQuantityUnitKeyForStandardUnits,
+  normalizeQuantityUnitKey,
+} from "@/lib/pos-menu-ingredient-quantity-unit"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
@@ -58,11 +65,28 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
     if (!resolved) {
       runtimeItems.push({ code, name: b.itemName, bahtPerUnit: b.costPerUnit, category: cat, itemCode })
     }
+    if (itemCode.startsWith("MENU:")) {
+      const item: RecipeItem = {
+        ingredientCode: code,
+        quantity: Number(b.quantity) || 0,
+        misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
+        savedItemCode: itemCode,
+      }
+      if (cat === "packaging") packaging.push(item)
+      else food.push(item)
+      return
+    }
+    const fallbackKey = cat === "packaging" ? "ea::1" : pickDefaultStandardUnitKey(code) || "g::1"
+    const rawKey = b.quantityUnitKey ?? fallbackKey
+    const units = getIngredientStandardUnits(code)
+    const unitKey = units?.length ? coerceQuantityUnitKeyForStandardUnits(rawKey, units) : rawKey
+    const factor = getQuantityFactorToStore(code, unitKey)
     const item: RecipeItem = {
       ingredientCode: code,
-      quantity: b.quantity,
+      quantity: (Number(b.quantity) || 0) * factor,
       misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
       savedItemCode: String(b.itemCode ?? "").trim() || undefined,
+      quantityUnitKey: unitKey,
     }
     if (cat === "packaging") packaging.push(item)
     else food.push(item)
@@ -91,11 +115,16 @@ function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: Rec
     if (!resolved) {
       runtimeItems.push({ code, name, bahtPerUnit, category: cat, itemCode })
     }
+    const fallbackKey = cat === "packaging" ? "ea::1" : pickDefaultStandardUnitKey(code) || "g::1"
+    const rawKey = ing.quantityUnitKey ?? fallbackKey
+    const units = getIngredientStandardUnits(code)
+    const quantityUnitKey = units?.length ? coerceQuantityUnitKeyForStandardUnits(rawKey, units) : rawKey
     const item: RecipeItem = {
       ingredientCode: code,
       quantity: Number(ing.quantity) || 0,
       misePercent: (ing.lossRate ?? 0) || MISE_DEFAULT,
       savedItemCode: itemCode,
+      quantityUnitKey,
     }
     if (cat === "packaging") packaging.push(item)
     else food.push(item)
@@ -290,17 +319,28 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       ...foodItems.map((r) => ({ ...r, ingredientType: "food" as const })),
       ...packagingItems.map((r) => ({ ...r, ingredientType: "packaging" as const })),
     ]
-    const toSave: { itemCode: string; quantity: number; lossRate: number; ingredientType: "food" | "packaging" }[] = []
+    const toSave: {
+      itemCode: string
+      quantity: number
+      lossRate: number
+      ingredientType: "food" | "packaging"
+      quantityUnitKey: string
+    }[] = []
     for (const r of allItems) {
       const resolved = getIngredientItemCode(r.ingredientCode) ?? r.savedItemCode
       const itemCode = String(resolved ?? "").trim()
       if (!itemCode) continue
       if (!(Number(r.quantity) > 0)) continue
+      const unitKey = normalizeQuantityUnitKey(
+        r.quantityUnitKey ?? pickDefaultStandardUnitKey(r.ingredientCode),
+        r.ingredientType
+      )
       toSave.push({
         itemCode,
         quantity: r.quantity,
         lossRate: r.misePercent ?? MISE_DEFAULT,
         ingredientType: r.ingredientType,
+        quantityUnitKey: unitKey,
       })
     }
 

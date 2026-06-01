@@ -5,6 +5,7 @@ import {
   normalizeMenuIngredientOptionKeySeg,
   resolveIngredientMenuIdFromCode,
 } from '@/lib/pos-menu-ingredient-scope'
+import { bomStoredToDisplay, normalizeQuantityUnitKey } from '@/lib/pos-menu-ingredient-quantity-unit'
 
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
 export const maxDuration = 120
@@ -48,6 +49,7 @@ type IngRow = {
   quantity?: number
   loss_rate?: number
   ingredient_type?: string
+  quantity_unit_key?: string | null
 }
 type OptRow = {
   id?: number
@@ -136,6 +138,27 @@ function resolveItemInfo(rawCode: string, lookup: Record<string, ItemMapEntry>):
   return undefined
 }
 
+function bomBreakdownDisplay(
+  ing: { quantity?: number; quantity_unit_key?: string | null; ingredient_type?: string },
+  itype: 'food' | 'packaging',
+  info?: ItemMapEntry,
+  qtyMultiplier = 1
+): { storedQty: number; displayQty: number; displayUnit: string; quantityUnitKey: string } {
+  const baseStored = Number(ing.quantity) ?? 1
+  const key = String(ing.quantity_unit_key ?? '').trim() || null
+  const itemMeta = info?.raw
+    ? { unit: info.raw.unit, totalQuantity: info.raw.total_quantity, category: info.raw.category }
+    : undefined
+  const { quantity, unit } = bomStoredToDisplay(baseStored, key, itype, itemMeta)
+  const mult = qtyMultiplier !== 1 ? qtyMultiplier : 1
+  return {
+    storedQty: baseStored * mult,
+    displayQty: quantity * mult,
+    displayUnit: unit,
+    quantityUnitKey: normalizeQuantityUnitKey(key, itype),
+  }
+}
+
 async function loadPosMenusPaged(): Promise<MenuRow[]> {
   try {
     return (await supabaseSelectAllPages('pos_menus', {
@@ -170,6 +193,7 @@ async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
 async function loadPosMenuIngredientsPaged(): Promise<IngRow[]> {
   const order = 'id.asc'
   const selects = [
+    'id,menu_id,menu_code,option_id,item_code,quantity,loss_rate,ingredient_type,quantity_unit_key',
     'id,menu_id,menu_code,option_id,item_code,quantity,loss_rate,ingredient_type',
     'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
   ]
@@ -406,6 +430,7 @@ export async function GET(request: NextRequest) {
       costTotal: number
       source: 'hq' | 'store'
       ingredientType: 'food' | 'packaging'
+      quantityUnitKey?: string
     }
 
     interface MenuCostRow {
@@ -461,26 +486,29 @@ export async function GET(request: NextRequest) {
         let foodCost = 0
         let packageCost = 0
 
-        const addRow = (ing: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }, additive = false) => {
+        const addRow = (ing: IngRow, additive = false) => {
           const code = String(ing.item_code ?? '').trim()
-          const qty = Number(ing.quantity) ?? 1
           const lossRate = Number(ing.loss_rate) ?? 0
           const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' as const : 'food' as const
           const info = resolveItemInfo(code, itemLookup)
           const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
-          const costTotal = additive ? costPerUnit * qty : costPerUnit * qty * (1 + lossRate / 100)
+          const { storedQty, displayQty, displayUnit, quantityUnitKey } = bomBreakdownDisplay(ing, itype, info)
+          const costTotal = additive
+            ? costPerUnit * storedQty
+            : costPerUnit * storedQty * (1 + lossRate / 100)
           if (itype === 'packaging') packageCost += costTotal
           else foodCost += costTotal
           breakdown.push({
             itemCode: code,
             itemName: info?.name ?? code,
-            unit: info?.unit ?? '',
+            unit: displayUnit,
             costPerUnit,
-            quantity: qty,
+            quantity: displayQty,
             lossRate: additive ? 0 : lossRate,
             costTotal: Math.round(costTotal * 10) / 10,
             source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
             ingredientType: itype,
+            quantityUnitKey,
           })
         }
 
@@ -517,25 +545,31 @@ export async function GET(request: NextRequest) {
           if (srcBaseIngs.length > 0) {
             for (const ing of srcBaseIngs) {
               const code = String(ing.item_code ?? '').trim()
-              const qty = (Number(ing.quantity) ?? 1) * qtyMult
               const lossRate = Number(ing.loss_rate) ?? 0
               const itype: 'food' | 'packaging' =
                 (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
               const info = resolveItemInfo(code, itemLookup)
               const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
-              const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+              const { storedQty, displayQty, displayUnit, quantityUnitKey } = bomBreakdownDisplay(
+                ing,
+                itype,
+                info,
+                qtyMult
+              )
+              const costTotal = costPerUnit * storedQty * (1 + lossRate / 100)
               if (itype === 'packaging') addPkg += costTotal
               else addFood += costTotal
               incBreakdown.push({
                 itemCode: code,
                 itemName: info?.name ?? code,
-                unit: info?.unit ?? '',
+                unit: displayUnit,
                 costPerUnit,
-                quantity: qty,
+                quantity: displayQty,
                 lossRate,
                 costTotal: Math.round(costTotal * 10) / 10,
                 source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
                 ingredientType: itype,
+                quantityUnitKey,
               })
             }
           } else {
@@ -589,25 +623,26 @@ export async function GET(request: NextRequest) {
         if (addOptSeg !== 'null') {
           for (const ing of ingByMenuOpt[`${mid}:${addOptSeg}`] || []) {
             const code = String(ing.item_code ?? '').trim()
-            const qty = Number(ing.quantity) ?? 1
             const lossRate = Number(ing.loss_rate) ?? 0
             const itype: 'food' | 'packaging' =
               (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
             const info = resolveItemInfo(code, itemLookup)
             const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
-            const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+            const { storedQty, displayQty, displayUnit, quantityUnitKey } = bomBreakdownDisplay(ing, itype, info)
+            const costTotal = costPerUnit * storedQty * (1 + lossRate / 100)
             if (itype === 'packaging') addPkg += costTotal
             else addFood += costTotal
             incBreakdown.push({
               itemCode: code,
               itemName: info?.name ?? code,
-              unit: info?.unit ?? '',
+              unit: displayUnit,
               costPerUnit,
-              quantity: qty,
+              quantity: displayQty,
               lossRate,
               costTotal: Math.round(costTotal * 10) / 10,
               source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
               ingredientType: itype,
+              quantityUnitKey,
             })
           }
         }

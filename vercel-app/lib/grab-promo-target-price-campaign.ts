@@ -165,13 +165,59 @@ type IndexedGrabCampaign = {
   section: 'ongoing' | 'upcoming'
 }
 
+export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
+
+/** 컷프라이스 캠페인: 기본 percentage(취소선). `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=fixPrice` 로 되돌림 */
+export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
+  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
+    .trim()
+    .toLowerCase()
+  return raw === 'fixprice' ? 'fixPrice' : 'percentage'
+}
+
+/** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
+export function calcGrabPercentageOffMajor(regularMajor: number, saleMajor: number): number {
+  if (!Number.isFinite(regularMajor) || !Number.isFinite(saleMajor)) return 0
+  if (regularMajor <= 0 || saleMajor >= regularMajor) return 0
+  return Math.min(99, Math.max(1, Math.round((1 - saleMajor / regularMajor) * 100)))
+}
+
+export function buildGrabCampaignDiscountForTarget(params: {
+  grabItemId: string
+  salePriceMajor: number
+  regularPriceMajor: number
+  discountType?: GrabPromoCampaignDiscountType
+}): { type: string; value: number; scope: { type: 'items'; objectIDs: string[] } } {
+  const discountType = params.discountType ?? resolveGrabPromoCampaignDiscountType()
+  const pct = calcGrabPercentageOffMajor(params.regularPriceMajor, params.salePriceMajor)
+  if (discountType === 'percentage' && pct > 0) {
+    return {
+      type: 'percentage',
+      value: pct,
+      scope: { type: 'items', objectIDs: [params.grabItemId] },
+    }
+  }
+  return {
+    type: 'fixPrice',
+    value: Math.round(params.salePriceMajor),
+    scope: { type: 'items', objectIDs: [params.grabItemId] },
+  }
+}
+
 export function grabCampaignDiscountMatchesTarget(
   row: GrabCampaignListRow,
-  target: { grabItemId: string; salePriceMajor: number }
+  target: { grabItemId: string; salePriceMajor: number; regularPriceMajor: number }
 ): boolean {
   const discount = row.discount
-  if (!discount || String(discount.type ?? '').trim() !== 'fixPrice') return false
-  if (Math.round(Number(discount.value ?? 0)) !== Math.round(target.salePriceMajor)) return false
+  if (!discount) return false
+  const expected = buildGrabCampaignDiscountForTarget({
+    grabItemId: target.grabItemId,
+    salePriceMajor: target.salePriceMajor,
+    regularPriceMajor: target.regularPriceMajor,
+  })
+  const type = String(discount.type ?? '').trim()
+  if (type !== expected.type) return false
+  if (Math.round(Number(discount.value ?? 0)) !== Math.round(expected.value)) return false
   const objectIDs = discount.scope?.objectIDs || []
   return objectIDs.length === 1 && objectIDs[0] === target.grabItemId
 }
@@ -205,12 +251,14 @@ export function buildGrabTargetPriceCampaignBody(params: {
   promoName: string
   grabItemId: string
   salePriceMajor: number
+  regularPriceMajor: number
   validFrom?: string | null
   validTo?: string | null
   /** 분 단위 start 리드타임(Grab 즉시 반영 시도용, 기본 env·65분) */
   campaignStartLeadMinutes?: number
   /** true면 valid_from을 오늘로 당겨 캠페인·미리보기를 당일부터 */
   immediatePromoDisplay?: boolean
+  discountType?: GrabPromoCampaignDiscountType
 }): Record<string, unknown> {
   const immediate = params.immediatePromoDisplay !== false
   const { startMs, endMs } = resolveGrabCampaignScheduleMs({
@@ -232,14 +280,12 @@ export function buildGrabTargetPriceCampaignBody(params: {
       bundleQuantity: 0,
       workingHour: ALL_DAY_WORKING_HOUR,
     },
-    discount: {
-      type: 'fixPrice',
-      value: Math.round(params.salePriceMajor),
-      scope: {
-        type: 'items',
-        objectIDs: [params.grabItemId],
-      },
-    },
+    discount: buildGrabCampaignDiscountForTarget({
+      grabItemId: params.grabItemId,
+      salePriceMajor: params.salePriceMajor,
+      regularPriceMajor: params.regularPriceMajor,
+      discountType: params.discountType,
+    }),
   }
   return body
 }
@@ -603,6 +649,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         promoName: target.promoName,
         grabItemId: target.grabItemId,
         salePriceMajor: target.salePrice,
+        regularPriceMajor: target.regularPrice,
         validFrom: target.validFrom,
         validTo: target.validTo,
         campaignStartLeadMinutes: leadMinutes ?? campaignLeadMinutes,
@@ -628,6 +675,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
           grabCampaignDiscountMatchesTarget(hit, {
             grabItemId: target.grabItemId,
             salePriceMajor: target.salePrice,
+            regularPriceMajor: target.regularPrice,
           })
         ) {
           skipped += 1

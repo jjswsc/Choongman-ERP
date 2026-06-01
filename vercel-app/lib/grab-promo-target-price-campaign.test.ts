@@ -1,26 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildGrabCampaignDiscountForTarget,
   buildGrabPromoCampaignName,
   buildGrabTargetPriceCampaignBody,
+  calcGrabPercentageOffMajor,
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
   resolveGrabCampaignScheduleMs,
 } from '@/lib/grab-promo-target-price-campaign'
 
+describe('calcGrabPercentageOffMajor', () => {
+  it('computes percent off for 179 -> 111', () => {
+    expect(calcGrabPercentageOffMajor(179, 111)).toBe(38)
+  })
+})
+
+describe('buildGrabCampaignDiscountForTarget', () => {
+  it('uses percentage by default for cut price', () => {
+    const d = buildGrabCampaignDiscountForTarget({
+      grabItemId: 'item-1',
+      salePriceMajor: 111,
+      regularPriceMajor: 179,
+      discountType: 'percentage',
+    })
+    expect(d.type).toBe('percentage')
+    expect(d.value).toBe(38)
+  })
+})
+
 describe('buildGrabTargetPriceCampaignBody', () => {
-  it('uses fixPrice discount scoped to grab item id', () => {
+  it('uses percentage discount scoped to grab item id', () => {
     const body = buildGrabTargetPriceCampaignBody({
       merchantID: 'GF-TEST',
       promoId: 12,
       promoName: 'April Set 1',
       grabItemId: 'item-99-set1',
       salePriceMajor: 111,
+      regularPriceMajor: 179,
       validFrom: '2026-05-01',
       validTo: '2026-12-31',
+      discountType: 'percentage',
     })
     expect(body.merchantID).toBe('GF-TEST')
-    expect((body.discount as { type?: string }).type).toBe('fixPrice')
-    expect((body.discount as { value?: number }).value).toBe(111)
+    expect((body.discount as { type?: string }).type).toBe('percentage')
+    expect((body.discount as { value?: number }).value).toBe(38)
     expect((body.discount as { scope?: { objectIDs?: string[] } }).scope?.objectIDs).toEqual([
       'item-99-set1',
     ])
@@ -37,24 +60,28 @@ describe('buildGrabTargetPriceCampaignBody', () => {
 })
 
 describe('grabCampaignDiscountMatchesTarget', () => {
-  it('returns true when fixPrice and item id match', () => {
+  it('returns true when percentage and item id match', () => {
     expect(
       grabCampaignDiscountMatchesTarget(
         {
-          discount: { type: 'fixPrice', value: 258, scope: { objectIDs: ['item-356-260457-s03'] } },
+          discount: {
+            type: 'percentage',
+            value: 38,
+            scope: { objectIDs: ['item-356-260457-s03'] },
+          },
         },
-        { grabItemId: 'item-356-260457-s03', salePriceMajor: 258 }
+        { grabItemId: 'item-356-260457-s03', salePriceMajor: 111, regularPriceMajor: 179 }
       )
     ).toBe(true)
   })
 
-  it('returns false when sale price differs', () => {
+  it('returns false when old fixPrice campaign still on Grab', () => {
     expect(
       grabCampaignDiscountMatchesTarget(
         {
           discount: { type: 'fixPrice', value: 111, scope: { objectIDs: ['item-99'] } },
         },
-        { grabItemId: 'item-99', salePriceMajor: 258 }
+        { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
       )
     ).toBe(false)
   })
@@ -79,7 +106,7 @@ describe('resolveGrabCampaignScheduleMs', () => {
     const { startMs, fromYmd } = resolveGrabCampaignScheduleMs({
       validFrom: '2026-06-02',
       validTo: '2026-12-31',
-      startLeadMinutes: 65,
+      startLeadMinutes: 5,
       nowMs,
     })
     expect(fromYmd).toBe('2026-06-02')

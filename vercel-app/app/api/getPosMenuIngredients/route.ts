@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       loss_rate?: number
       option_id?: number | null
       ingredient_type?: string
+      quantity_unit_key?: string | null
     }
     let rows: IngredientRow[] | null = null
     const scopeOptionId = wantBase ? null : Number.isFinite(optionIdNum) ? optionIdNum : null
@@ -99,6 +100,7 @@ export async function GET(request: NextRequest) {
       lossRate: Number(r.loss_rate) ?? 0,
       optionId: r.option_id != null ? String(r.option_id) : null,
       ingredientType: (r.ingredient_type ?? 'food') as 'food' | 'packaging',
+      quantityUnitKey: r.quantity_unit_key != null ? String(r.quantity_unit_key) : undefined,
     }))
 
     return NextResponse.json(list, { headers })
