@@ -117,6 +117,24 @@ describe('enrichPromoMenuNamesFromLineNote', () => {
     )
     expect(rows?.map((x) => x.menuName)).toEqual(['Rice', 'SOY SAUCE CHICKEN (S Boneless)'])
   })
+
+  it('fills missing menuName from Grab mods: note', () => {
+    const rows = enrichPromoMenuNamesFromLineNote(
+      [
+        { menuId: '11', optionId: null, quantity: 1 },
+        { menuId: '22', optionId: null, quantity: 1 },
+        { menuId: '28', optionId: null, quantity: 1 },
+        { menuId: '52', optionId: null, quantity: 1 },
+      ],
+      'mods:Rice, SOY SAUCE CHICKEN (S Boneless), Pepsi, Kimchi · optc:C100-1'
+    )
+    expect(rows?.map((x) => x.menuName)).toEqual([
+      'Rice',
+      'SOY SAUCE CHICKEN (S Boneless)',
+      'Pepsi',
+      'Kimchi',
+    ])
+  })
 })
 
 describe('enrichReceiptModalItemsForPromoDisplay', () => {

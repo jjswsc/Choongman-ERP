@@ -136,20 +136,25 @@ export async function printPosVoidReceiptForOrder(params: PrintPosVoidReceiptPar
   const optionNameByCode = buildOptionNameByCodeFromMenus(params.menus, params.menuOptions ?? [])
   const printedAt = params.printedAt ?? new Date()
 
-  const printHtml = async (fullHtml: string, printReceiptKind: 'payment' | 'hall_order') => {
-    await printPosHtmlDocument(fullHtml, {
-      title: params.t('posReceipt') || '영수증',
-      printDelayMs: 0,
-      fallbackCleanupMs: 120_000,
-      focusIframeBeforePrint: params.focusIframeBeforePrint ?? false,
-      printRole: 'receipt',
-      printReceiptKind,
-      escPosCutOverride: resolveEscPosCutOverride(params.printerSettings, {
+  const printHtml = async (fullHtml: string, printReceiptKind: 'payment' | 'hall_order'): Promise<boolean> => {
+    try {
+      await printPosHtmlDocument(fullHtml, {
+        title: params.t('posReceipt') || '영수증',
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        focusIframeBeforePrint: params.focusIframeBeforePrint ?? false,
         printRole: 'receipt',
         printReceiptKind,
-      }),
-      onPrintUnavailable: params.onPrintUnavailable,
-    })
+        escPosCutOverride: resolveEscPosCutOverride(params.printerSettings, {
+          printRole: 'receipt',
+          printReceiptKind,
+        }),
+      })
+      return true
+    } catch {
+      params.onPrintUnavailable?.()
+      return false
+    }
   }
 
   if (paymentSum > 0.005) {
@@ -158,6 +163,7 @@ export async function printPosVoidReceiptForOrder(params: PrintPosVoidReceiptPar
       ? splitBatch.map((row) => voidReceiptModalData(row))
       : [receiptModalDataForVoidReceipt(order, lineOpts)]
 
+    let allPrinted = true
     for (let idx = 0; idx < receiptRows.length; idx += 1) {
       const voidBase = receiptRows[idx]
       const receiptData = {
@@ -176,12 +182,13 @@ export async function printPosVoidReceiptForOrder(params: PrintPosVoidReceiptPar
         printerSettings: params.printerSettings,
         forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(storeCode),
       })
-      await printHtml(receiptHtml, 'payment')
+      const ok = await printHtml(receiptHtml, 'payment')
+      if (!ok) allPrinted = false
       if (idx < receiptRows.length - 1) {
         await new Promise((resolve) => window.setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
       }
     }
-    return true
+    return allPrinted
   }
 
   const channel = normalizePosOrderTypeKey(order.orderType ?? 'dine_in')
@@ -225,6 +232,5 @@ export async function printPosVoidReceiptForOrder(params: PrintPosVoidReceiptPar
     ),
     optionNameByCode,
   })
-  await printHtml(hallHtml, 'hall_order')
-  return true
+  return printHtml(hallHtml, 'hall_order')
 }

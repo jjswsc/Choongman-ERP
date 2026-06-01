@@ -248,33 +248,51 @@ function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<strin
   return candidates[0].id
 }
 
-/** Shopee·배달앱 note(옵션 그룹:선택)에서 구성 메뉴명 후보 추출 */
-function parseLineNoteMenuFragments(note: string): string[] {
+/** Shopee·Grab·배달앱 note에서 구성/옵션 표시명 후보 추출 */
+function parseLineNoteMenuFragments(
+  note: string,
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string[] {
   const raw = String(note ?? '').trim()
   if (!raw) return []
-  return raw
-    .split(/[,·\n]/)
-    .map((part) => {
-      const text = part.trim()
-      if (!text) return ''
-      const colon = text.indexOf(':')
-      return (colon >= 0 ? text.slice(colon + 1) : text).trim()
-    })
-    .filter(
-      (text) =>
-        text &&
-        !/^(optc:|mods?:)/i.test(text) &&
-        !isLikelyPosOptionCode(text)
-    )
+  const out: string[] = []
+  const push = (text: string) => {
+    const t = String(text ?? '').trim()
+    if (!t || isLikelyPosOptionCode(t)) return
+    if (/^(optc:|mods?:)/i.test(t)) return
+    out.push(t)
+  }
+  const modsMatch = /\bmods:\s*([^·]+)/i.exec(raw)
+  if (modsMatch) {
+    for (const part of modsMatch[1].split(',')) {
+      push(part.trim())
+    }
+  }
+  for (const part of raw.split(/[,·\n]/)) {
+    const text = part.trim()
+    if (!text) continue
+    if (/^mods:/i.test(text)) continue
+    if (/^optc:/i.test(text)) {
+      const fromCode = formatGrabOrderLineNoteForPrint(text, optionNameByCode)
+      if (fromCode) {
+        for (const chip of fromCode.split(',')) push(chip.trim())
+      }
+      continue
+    }
+    const colon = text.indexOf(':')
+    push(colon >= 0 ? text.slice(colon + 1).trim() : text)
+  }
+  return out
 }
 
 /** promoItems 에 menuName 이 없을 때 부모 줄 note 의 사람 읽기 옵션명으로 순서 매칭 */
 export function enrichPromoMenuNamesFromLineNote(
   promoItems: ReceiptPromoLine[] | undefined,
-  note: string
+  note: string,
+  opts?: Pick<PosOrderReceiptLineOptions, 'optionNameByCode'>
 ): ReceiptPromoLine[] | undefined {
   if (!Array.isArray(promoItems) || promoItems.length === 0) return promoItems
-  const fragments = parseLineNoteMenuFragments(note)
+  const fragments = parseLineNoteMenuFragments(note, opts?.optionNameByCode)
   if (!fragments.length) return promoItems
   let fi = 0
   return promoItems.map((p) => {
@@ -438,7 +456,7 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
     const applyPromoEnrich = (promo: ReceiptPromoLine[] | null | undefined): ReceiptPromoLine[] | undefined => {
       if (!promo?.length) return undefined
       const fromSnapshot = enrichPromoSnapshotForPrint(promo, opts) ?? promo
-      const fromNote = enrichPromoMenuNamesFromLineNote(fromSnapshot, note) ?? fromSnapshot
+      const fromNote = enrichPromoMenuNamesFromLineNote(fromSnapshot, note, opts) ?? fromSnapshot
       return fromNote
     }
     const direct = pickPromoItemsFromOrderLine(it)

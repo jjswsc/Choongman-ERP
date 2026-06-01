@@ -750,18 +750,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         lang,
         printerSettings: settings,
         printedAt: new Date(),
-        onPrintUnavailable: () => {
-          void appAlert(t('posPrintUnavailable'))
-        },
       })
       if (!printed) {
         await appAlert(t('posPrintUnavailable'))
       }
     } catch (e) {
-      if (String(e).includes(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE)) {
-        await appAlert(t('posPrintUnavailable'))
-        return
-      }
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }
@@ -1451,9 +1444,6 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               lang,
               printerSettings: settings,
               printedAt: new Date(),
-              onPrintUnavailable: () => {
-                void appAlert(t('posPrintUnavailable'))
-              },
             })
           }
         } catch (printErr) {
