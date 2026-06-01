@@ -1,5 +1,3 @@
-import { resolvePosStoreFilterCandidatesMany } from '@/lib/pos-store-filter-candidates'
-
 /**
  * 매출 API 공통: URL stores / 단일 pos 파싱, Supabase(PostgREST) store_code 필터 조각 생성.
  * - 0개: 필터 없음
@@ -41,12 +39,6 @@ export function expandSalesStoreCodesForFilter(stores: string[]): string[] {
 /** erp_stores 별칭·Grab ID 포함 — 매출 API 권장 */
 export async function expandSalesStoreCodesForFilterAsync(stores: string[]): Promise<string[]> {
   if (!stores.length) return []
-  try {
-    const expanded = await resolvePosStoreFilterCandidatesMany(stores)
-    if (expanded.length > 0) return expanded
-  } catch {
-    // fall through
-  }
   return expandSalesStoreCodesForFilter(stores)
 }
 
