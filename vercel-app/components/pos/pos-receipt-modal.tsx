@@ -112,6 +112,8 @@ export type ReceiptModalData = {
   voidReceiptMode?: boolean
   /** 결제 영수증 Date 행 — 미지정 시 인쇄 시각 */
   receiptPrintedAt?: string
+  /** DB pos_orders.id — 결제 영수증 자동 인쇄 dedupe */
+  serverOrderId?: number
 }
 
 interface PosReceiptModalProps {

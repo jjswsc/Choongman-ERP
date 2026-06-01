@@ -587,6 +587,7 @@ export function receiptModalDataFromPosOrderForPayment(
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: false,
     receiptPrintedAt: resolvePosOrderPaidAt(order),
+    ...(Number(order.id) > 0 ? { serverOrderId: Number(order.id) } : {}),
   }
 }
 

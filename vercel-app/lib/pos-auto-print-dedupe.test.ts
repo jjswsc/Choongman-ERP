@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearPosAutoPrintDedupeForTests, reservePosAutoPrintKey } from './pos-auto-print-dedupe'
+import {
+  clearPosAutoPrintDedupeForTests,
+  posPaymentAutoPrintDedupeKey,
+  reservePosAutoPrintKey,
+} from './pos-auto-print-dedupe'
 
 describe('reservePosAutoPrintKey', () => {
   beforeEach(() => {
@@ -41,5 +45,21 @@ describe('reservePosAutoPrintKey', () => {
     expect(reservePosAutoPrintKey('MBK', 'order:1:hall:auto')).toBe(true)
     expect(reservePosAutoPrintKey('MBK', 'order:1:kitchen')).toBe(true)
     expect(reservePosAutoPrintKey('MBK', 'order:1:hall:add:2')).toBe(true)
+  })
+
+  it('dedupes payment receipt auto print', () => {
+    const key = posPaymentAutoPrintDedupeKey(3190)
+    expect(key).toBe('order:3190:payment:auto')
+    expect(reservePosAutoPrintKey('CM Silom', key)).toBe(true)
+    expect(reservePosAutoPrintKey('CM Silom', key)).toBe(false)
+  })
+
+  it('allows split payment instance keys separately', () => {
+    expect(
+      reservePosAutoPrintKey('CM Silom', posPaymentAutoPrintDedupeKey(10, 'dutch:A:0:x'))
+    ).toBe(true)
+    expect(
+      reservePosAutoPrintKey('CM Silom', posPaymentAutoPrintDedupeKey(10, 'dutch:A:1:y'))
+    ).toBe(true)
   })
 })

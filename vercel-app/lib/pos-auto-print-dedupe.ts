@@ -78,6 +78,17 @@ export function posHallAutoPrintDedupeKey(orderId: number, variant: 'auto' | `ad
   return variant === 'auto' ? `order:${id}:hall:auto` : `order:${id}:hall:${variant}`
 }
 
+/** 결제 영수증 자동 인쇄 — Realtime UPDATE vs payment poll scan 중복 방지 */
+export function posPaymentAutoPrintDedupeKey(
+  orderId: number,
+  printInstanceKey?: string | null
+): string {
+  const id = Math.floor(Number(orderId))
+  if (!Number.isFinite(id) || id <= 0) return ''
+  const inst = String(printInstanceKey ?? '').trim()
+  return inst ? `order:${id}:payment:${inst}` : `order:${id}:payment:auto`
+}
+
 export function reservePosAutoPrintKey(
   storeCode: string,
   key: string,

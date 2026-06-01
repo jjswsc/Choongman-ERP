@@ -71,7 +71,7 @@ import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
   registerLocallyPrintedQueuedOrderNo,
 } from '@/lib/offline/pos-queued-sync-print-suppress'
-import { reservePosAutoPrintKey } from '@/lib/pos-auto-print-dedupe'
+import { posPaymentAutoPrintDedupeKey, reservePosAutoPrintKey } from '@/lib/pos-auto-print-dedupe'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import {
   cartLinesToPosOrderItems,
@@ -1324,11 +1324,15 @@ export default function PosTerminalPage() {
         vatFeeMode?: 'included' | 'separate'
       },
       splitReceipts: CartPanelSplitReceiptPayload[] | undefined,
-      suppressReceiptModalAutoPrint: boolean
+      suppressReceiptModalAutoPrint: boolean,
+      serverOrderId?: number | null
     ): ReceiptModalData[] => {
       const splits = normalizePosSplitReceiptSnapshots(splitReceipts)
       if (!splits) return []
-      return buildSplitPaymentReceiptBatch(base, splits, { suppressReceiptModalAutoPrint })
+      return buildSplitPaymentReceiptBatch(base, splits, {
+        suppressReceiptModalAutoPrint,
+        ...(serverOrderId != null && serverOrderId > 0 ? { serverOrderId } : {}),
+      })
     },
     []
   )
@@ -3440,6 +3444,22 @@ export default function PosTerminalPage() {
 
   async function printOnePaymentReceiptFromModalData(data: ReceiptModalData): Promise<boolean> {
     if (posDemoRef.current) return false
+    if (!data.voidReceiptMode) {
+      const orderId = Number(data.serverOrderId ?? 0)
+      if (orderId > 0) {
+        const dedupeKey = posPaymentAutoPrintDedupeKey(orderId, data.printInstanceKey)
+        const storeForDedupe = String(currentStoreId || data.storeCode || '').trim()
+        if (!reservePosAutoPrintKey(storeForDedupe, dedupeKey)) {
+          logPosPrintDebug('payment_autoprint_skip_dedupe', {
+            orderId,
+            dedupeKey,
+            orderNo: data.orderNo,
+            storeCode: storeForDedupe,
+          })
+          return false
+        }
+      }
+    }
     try {
       const storeCode = String(data.storeCode || currentStoreId || '').trim()
       const settings =
@@ -3506,6 +3526,36 @@ export default function PosTerminalPage() {
     return ok
   }
 
+  /** Realtime INSERT/UPDATE·payment poll — 결제 영수증 자동 인쇄(중복 방지 dedupe + direct print) */
+  async function dispatchPaymentReceiptFromOrder(order: PosOrder): Promise<void> {
+    const orderId = Number(order.id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return
+    if (posOrderPaymentSum(order) <= 0) return
+    if (!(order.items || []).length) return
+
+    printedPaymentReceiptIdsRef.current.add(orderId)
+
+    const data = receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts)
+    const storeCode = String(currentStoreId || order.storeCode || '').trim()
+
+    if (isMainPosDevice) {
+      let receiptOnPayment = autoPrintReceiptOnPayment
+      try {
+        const flags = await resolveStoreAutoPrintFlags(storeCode)
+        receiptOnPayment = flags.receiptOnPayment
+      } catch {
+        /* state fallback */
+      }
+      if (receiptOnPayment) {
+        await printOnePaymentReceiptFromModalData(data)
+        return
+      }
+    }
+
+    setReceiptData(data)
+  }
+
   /** 결제 직후 영수증: 주문 접수와 동일하게 printPosHtmlDocument 직접 호출(모달 180ms 지연·중복 방지 ref 선등록 회피) */
   const dispatchCheckoutPaymentReceipt = useCallback(
     (params: {
@@ -3514,7 +3564,10 @@ export default function PosTerminalPage() {
       orderId?: number | null
     }) => {
       const { receiptPayload, splitBatch, orderId } = params
-      const batch = splitBatch.length > 0 ? splitBatch : [receiptPayload]
+      const serverOrderId = orderId != null && orderId > 0 ? orderId : undefined
+      const withOrderId = (row: ReceiptModalData): ReceiptModalData =>
+        serverOrderId != null ? { ...row, serverOrderId: row.serverOrderId ?? serverOrderId } : row
+      const batch = (splitBatch.length > 0 ? splitBatch : [receiptPayload]).map(withOrderId)
 
       if (!isMainPosDevice) {
         if (splitBatch.length > 0) {
@@ -4163,7 +4216,6 @@ export default function PosTerminalPage() {
         const st = String(row.status ?? '').toLowerCase()
         const paySum = posOrderRowPaymentSum(row)
         if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
-          printedPaymentReceiptIdsRef.current.add(orderId)
           void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
             .then((list) => {
               const order = list[0] as PosOrder | undefined
@@ -4175,7 +4227,7 @@ export default function PosTerminalPage() {
                 printedPaymentReceiptIdsRef.current.delete(orderId)
                 return
               }
-              setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
+              return dispatchPaymentReceiptFromOrder(order)
             })
             .catch(() => {
               printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -4463,7 +4515,6 @@ export default function PosTerminalPage() {
         posOrderRowPaymentSum(row) > 0 &&
         !printedPaymentReceiptIdsRef.current.has(orderId)
       ) {
-        printedPaymentReceiptIdsRef.current.add(orderId)
         void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
           .then((list) => {
             const order = list[0] as PosOrder | undefined
@@ -4475,7 +4526,7 @@ export default function PosTerminalPage() {
               printedPaymentReceiptIdsRef.current.delete(orderId)
               return
             }
-            setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
+            return dispatchPaymentReceiptFromOrder(order)
           })
           .catch(() => {
             printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -4815,7 +4866,6 @@ export default function PosTerminalPage() {
             let staggerMs = 0
             for (const order of candidates) {
               const oid = Number(order.id)
-              printedPaymentReceiptIdsRef.current.add(oid)
               const adj = pricingAdjustments
               setTimeout(() => {
                 void (async () => {
@@ -4830,7 +4880,7 @@ export default function PosTerminalPage() {
                     if (!isPosOrderPaidLikeStatus(String(full.status ?? ''))) return
                     if (posOrderPaymentSum(full) <= 0) return
                     if (!(full.items || []).length) return
-                    setReceiptData(receiptModalDataFromPosOrderForPayment(full, adj, posReceiptLineOpts))
+                    await dispatchPaymentReceiptFromOrder(full)
                   } catch {
                     /* ignore */
                   }
@@ -6957,7 +7007,8 @@ export default function PosTerminalPage() {
                     vatFeeMode: receiptPayload.vatFeeMode,
                   },
                   payload.splitReceipts,
-                  !isMainPosDevice
+                  !isMainPosDevice,
+                  existingOrderId
                 )
                 dispatchCheckoutPaymentReceipt({
                   receiptPayload,
@@ -7084,7 +7135,8 @@ export default function PosTerminalPage() {
                     vatFeeMode: receiptPayload.vatFeeMode,
                   },
                   payload.splitReceipts,
-                  !isMainPosDevice
+                  !isMainPosDevice,
+                  existingOrderId
                 )
                 dispatchCheckoutPaymentReceipt({
                   receiptPayload,
@@ -7905,7 +7957,8 @@ export default function PosTerminalPage() {
                     vatFeeMode: receiptPayload.vatFeeMode,
                   },
                   payload.splitReceipts,
-                  !isMainPosDevice
+                  !isMainPosDevice,
+                  orderIdToComplete
                 )
                 dispatchCheckoutPaymentReceipt({
                   receiptPayload,
@@ -8216,7 +8269,8 @@ export default function PosTerminalPage() {
                         vatFeeMode: receiptPayloadSubmit.vatFeeMode,
                       },
                       payload.splitReceipts,
-                      suppressReceiptModalAutoPrint
+                      suppressReceiptModalAutoPrint,
+                      newOrderId
                     )
                     dispatchCheckoutPaymentReceipt({
                       receiptPayload: {

@@ -56,6 +56,7 @@ export function buildSplitPaymentReceiptBatch(
     orderVat?: number
     orderTotal?: number
     taxInvoiceMemo?: string
+    serverOrderId?: number
   }
 ): ReceiptModalData[] {
   if (!splits || splits.length <= 1) return []
@@ -104,6 +105,7 @@ export function buildSplitPaymentReceiptBatch(
         receiptAutoPrintContext: 'payment' as const,
         suppressReceiptModalAutoPrint: opts?.suppressReceiptModalAutoPrint ?? false,
         printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
+        ...(Number(opts?.serverOrderId) > 0 ? { serverOrderId: Number(opts?.serverOrderId) } : {}),
       },
     ]
   })
@@ -132,6 +134,7 @@ export function buildSplitPaymentReceiptBatchFromOrder(
       orderVat: Number(order.vat ?? 0) || 0,
       orderTotal: Number(order.total ?? 0) || 0,
       taxInvoiceMemo: order.memo,
+      serverOrderId: Number(order.id) > 0 ? Number(order.id) : undefined,
     }
   ).map((row) => ({
     ...row,
