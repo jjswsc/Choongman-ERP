@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildKitchenSlipGroups,
+  kitchenRoutingItemFromOrderItem,
   resolveEffectiveKitchenRouteForMenu,
   type KitchenSlipRoutingItem,
 } from '@/lib/pos-kitchen-slip-routing'
@@ -123,5 +124,42 @@ describe('buildKitchenSlipGroups printer overlay', () => {
     expect((slips[0]?.items[0] as { kitchenPromoGroupId?: string }).kitchenPromoGroupId).toBe(
       'promo-1'
     )
+  })
+
+  it('routes promo components by parent menu printer when parent menuId exists', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      {
+        id: 'promo-2',
+        name: 'Festival Set',
+        qty: 1,
+        menuId: 'setMenu',
+        promoItems: [{ menuId: 'childMenu', optionId: null, menuName: 'Crispy Chicken', quantity: 1 }],
+      },
+    ]
+    const slips = buildKitchenSlipGroups(items, {
+      ...baseOpts({
+        kitchenMode: 2,
+        kitchenPrinterByMenuId: { setMenu: 1, childMenu: 2 },
+        menuNameByMenuId: { setMenu: 'Festival Set', childMenu: 'Crispy Chicken' },
+        menuCodeByMenuId: { setMenu: 'S100', childMenu: 'C024' },
+      }),
+    })
+    expect(slips).toHaveLength(1)
+    expect(slips[0]?.station).toBe(1)
+    expect(slips[0]?.items[0]?.name).toContain('Crispy Chicken')
+  })
+
+  it('adds optionCode as note token for kitchen print line', () => {
+    const row = kitchenRoutingItemFromOrderItem(
+      {
+        id: 'line-1',
+        name: 'Banban Chicken',
+        quantity: 1,
+        price: 259,
+        optionCode1: 'C011-1',
+      },
+      'Banban Chicken'
+    )
+    expect(String(row.note ?? '')).toContain('optc:C011-1')
   })
 })

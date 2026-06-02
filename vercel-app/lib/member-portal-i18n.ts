@@ -36,6 +36,11 @@ export type MemberPortalKey =
   | 'homeFeatureLabel'
   | 'homeFeatureEmpty'
   | 'homeFeatureTap'
+  | 'homePromoTitle'
+  | 'homePromoThisMonth'
+  | 'homePromoEmpty'
+  | 'homePromoPrevMonth'
+  | 'homePromoNextMonth'
   | 'statVisits'
   | 'statAvgTicket'
   | 'statCoupons'
@@ -347,6 +352,31 @@ const MS: Record<MemberPortalKey, Dict> = {
   homeFeatureLabel: { en: 'New & promo', th: 'เมนูใหม่·โปร', ko: '신메뉴·프로모션' },
   homeFeatureEmpty: { en: 'Coming soon', th: 'เร็วๆ นี้', ko: '곧 공개' },
   homeFeatureTap: { en: 'Tap for details', th: 'แตะเพื่อดูรายละเอียด', ko: '탭하여 자세히 보기' },
+  homePromoTitle: {
+    en: 'Monthly promotions',
+    th: 'โปรโมชั่นประจำเดือน',
+    ko: '이달의 프로모션',
+  },
+  homePromoThisMonth: {
+    en: 'This month',
+    th: 'เดือนนี้',
+    ko: '이번 달',
+  },
+  homePromoEmpty: {
+    en: 'No promotions for this month.',
+    th: 'ยังไม่มีโปรโมชั่นในเดือนนี้',
+    ko: '이 달에 등록된 프로모션이 없습니다.',
+  },
+  homePromoPrevMonth: {
+    en: 'Previous month',
+    th: 'เดือนก่อนหน้า',
+    ko: '이전 달',
+  },
+  homePromoNextMonth: {
+    en: 'Next month',
+    th: 'เดือนถัดไป',
+    ko: '다음 달',
+  },
   statVisits: { en: 'Visits', th: 'จำนวนครั้งที่มา', ko: '방문 횟수' },
   statAvgTicket: { en: 'Avg.', th: 'เฉลี่ย', ko: '평균' },
   statCoupons: { en: 'Coupons ready', th: 'คูปองพร้อมใช้', ko: '사용 가능 쿠폰' },

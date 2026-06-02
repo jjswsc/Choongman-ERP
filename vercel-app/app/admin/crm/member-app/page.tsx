@@ -661,7 +661,11 @@ export default function CrmMemberAppContentPage() {
                 <CardTitle>정보 업데이트 관리</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">공지/이벤트/운영 안내 등 텍스트 중심 콘텐츠를 관리합니다. 홈 <strong>신메뉴·프로모션</strong> 타일은 노출 탭에 <code className="rounded bg-muted px-1">home_feature</code> 또는 <code className="rounded bg-muted px-1">home_promo</code>를 입력하고 이미지·본문을 등록하세요.</p>
+                <p className="text-sm text-muted-foreground">
+                  공지/이벤트/운영 안내 등 텍스트 중심 콘텐츠를 관리합니다. 홈 <strong>신메뉴·프로모션</strong> 타일은 노출 탭{" "}
+                  <code className="rounded bg-muted px-1">home_feature</code>, 홈 <strong>이달의 프로모션</strong> 가로 목록은{" "}
+                  <code className="rounded bg-muted px-1">home_promo</code> + 시작·종료일(방콕 기준 월) + 이미지를 등록하세요.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
   isMemberPortalContentVisibleNow,
+  isMemberPortalHomePromoItem,
   mapMemberPortalContentRow,
   type MemberPortalContentRow,
 } from '@/lib/member-portal-content'
@@ -22,7 +23,10 @@ export async function GET(req: NextRequest) {
       limit: 1000,
     })) as MemberPortalContentRow[]
     const now = getBangkokDateTimeString()
-    const items = rows.map(mapMemberPortalContentRow).filter((x) => isMemberPortalContentVisibleNow(x, now))
+    const mapped = rows.map(mapMemberPortalContentRow)
+    const items = mapped.filter(
+      (x) => isMemberPortalHomePromoItem(x) || isMemberPortalContentVisibleNow(x, now)
+    )
     return NextResponse.json({ success: true, items })
   } catch (e) {
     if (isMissingContentTableError(e)) {

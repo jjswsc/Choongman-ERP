@@ -1,6 +1,7 @@
 import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import { resolveCartLineQuantityForSave } from "@/lib/pos-order-item-map"
 import { resolvePosOrderItemMenuDisplayName } from "@/lib/pos-order-item-display-name"
+import { resolveGrabItemPrintNote } from "@/lib/grab-pos-order-enrich"
 import {
   buildKitchenMenuNameLookup,
   kitchenMenuNameOrPlaceholder,
@@ -303,6 +304,13 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
   for (const it of items) {
     const pi = it.promoItems
     if (Array.isArray(pi) && pi.length > 0) {
+      const parentMenuId = String(
+        (it as { menuId?: string; menuId1?: string; menu_id1?: string; menuId2?: string }).menuId ??
+          (it as { menuId1?: string }).menuId1 ??
+          (it as { menu_id1?: string }).menu_id1 ??
+          (it as { menuId2?: string }).menuId2 ??
+          ''
+      ).trim()
       const parentQty = resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown })
       const parentName = String(it.name ?? '').trim()
       let n = 0
@@ -332,8 +340,8 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
         out.push({
           ...it,
           id: `${String(it.id ?? 'promo')}-k${n}`,
-          // 추론 라우팅 금지: 프로모션 구성품은 구성 데이터의 menuId 기준으로만 라우팅한다.
-          kitchenRouteMenuId: mid,
+          // 세트가 특정 주방으로 설정된 경우 부모 메뉴 설정을 우선한다.
+          kitchenRouteMenuId: parentMenuId || mid,
           name: `${displayName}${optionLabel}`,
           qty: q,
           kitchenPromoGroupId: String(it.id ?? '').trim() || undefined,
@@ -568,7 +576,12 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
 /** `OrderItem` → 주방 라우팅용 한 줄 (`displayName`은 이미 POS 표시명으로 만든 값) */
 export function kitchenRoutingItemFromOrderItem(it: OrderItem, displayName: string): KitchenSlipRoutingItem {
   const qty = Math.max(1, Math.trunc(Number(it.quantity) || 1))
-  const note = String(it.note ?? "").trim()
+  const note = resolveGrabItemPrintNote({
+    note: String(it.note ?? "").trim() || null,
+    optionCode: String(it.optionCode ?? "").trim() || null,
+    optionCode1: String(it.optionCode1 ?? "").trim() || null,
+    optionCode2: String(it.optionCode2 ?? "").trim() || null,
+  })
   const menuId = String(it.menuId ?? "").trim()
   const row: KitchenSlipRoutingItem = {
     id: String(it.id ?? ""),

@@ -36,6 +36,7 @@ import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { pickHomeFeatureContent } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
+import { MemberPortalHomeMonthlyPromos } from "@/components/member-portal/member-portal-home-monthly-promos"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -168,6 +169,8 @@ export function MemberPortalApp() {
   const [favoriteStoreCodes, setFavoriteStoreCodes] = React.useState<string[]>([])
   const [showQr, setShowQr] = React.useState(false)
   const [homeFeatureOpen, setHomeFeatureOpen] = React.useState(false)
+  const [homePromoOpen, setHomePromoOpen] = React.useState(false)
+  const [selectedHomePromo, setSelectedHomePromo] = React.useState<MemberPortalContentItem | null>(null)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const [profile, setProfile] = React.useState<PortalProfileForm>({
     name: "",
@@ -880,6 +883,16 @@ export function MemberPortalApp() {
               onToggleQr={() => setShowQr((v) => !v)}
             />
 
+            <MemberPortalHomeMonthlyPromos
+              contentItems={contentItems}
+              lang={lang}
+              t={t}
+              onSelectPromo={(item) => {
+                setSelectedHomePromo(item)
+                setHomePromoOpen(true)
+              }}
+            />
+
             <TierProgressCard
               title={t("tierNext")}
               subtitle={
@@ -1286,6 +1299,15 @@ export function MemberPortalApp() {
         item={homeFeature}
         closeLabel={t("contactMenuClose")}
         onClose={() => setHomeFeatureOpen(false)}
+      />
+      <MemberPortalContentSheet
+        open={homePromoOpen}
+        item={selectedHomePromo}
+        closeLabel={t("contactMenuClose")}
+        onClose={() => {
+          setHomePromoOpen(false)
+          setSelectedHomePromo(null)
+        }}
       />
     </MemberPortalAmbienceBackground>
   )

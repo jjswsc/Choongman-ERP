@@ -70,6 +70,59 @@ export function isMemberPortalContentVisibleNow(item: MemberPortalContentItem, n
   return true
 }
 
+function contentDateYmd(raw: string): string {
+  const s = asText(raw)
+  if (!s) return ''
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  return ''
+}
+
+export function isMemberPortalHomePromoItem(item: MemberPortalContentItem): boolean {
+  return item.contentType === 'info' && item.targetTab === 'home_promo'
+}
+
+/** 방콕 달력 월(YYYY-MM)과 콘텐츠 노출 기간이 겹치는지 */
+export function memberPortalContentOverlapsBangkokMonth(
+  item: MemberPortalContentItem,
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string }
+): boolean {
+  if (!item.isActive || !isMemberPortalHomePromoItem(item)) return false
+
+  const startYmd = contentDateYmd(item.startsAt)
+  const endYmd = contentDateYmd(item.endsAt)
+
+  if (!startYmd && !endYmd) {
+    return yearMonth === monthRange.startStr.slice(0, 7)
+  }
+
+  const periodStart = startYmd || '1970-01-01'
+  const periodEnd = endYmd || '2099-12-31'
+  return periodStart <= monthRange.endStr && periodEnd >= monthRange.startStr
+}
+
+export function listMemberPortalHomePromosForMonth(
+  items: MemberPortalContentItem[],
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string }
+): MemberPortalContentItem[] {
+  return items
+    .filter((x) => memberPortalContentOverlapsBangkokMonth(x, yearMonth, monthRange))
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
+}
+
+export function shiftBangkokYearMonth(yearMonth: string, deltaMonths: number): string {
+  const ym = /^\d{4}-\d{2}$/.test(yearMonth) ? yearMonth : '1970-01'
+  const [y, m] = ym.split('-').map(Number)
+  const total = y * 12 + (m - 1) + deltaMonths
+  const ny = Math.floor(total / 12)
+  const nm = (total % 12) + 1
+  return `${ny}-${String(nm).padStart(2, '0')}`
+}
+
 /** 홈 통계 타일 — 신메뉴·프로모션 (target_tab=home_feature 우선) */
 export function pickHomeFeatureContent(items: MemberPortalContentItem[]): MemberPortalContentItem | null {
   const sorted = [...items].sort((a, b) => {
