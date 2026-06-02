@@ -21,6 +21,7 @@ import {
   getPosDeliveryApps,
   getPosPaymentSettings,
   getPosPrinterSettings,
+  getPosBusinessDaySettings,
   validatePosClose,
   finalizePosClose,
   useStoreList,
@@ -41,7 +42,11 @@ import {
 } from '@/lib/pos-settlement-delivery-split'
 import { hydrateSettlementQrOtherBreakdowns } from '@/lib/pos-settlement-breakdown-hydrate'
 import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
-import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
+import {
+  applyPosSettlementSaveToCache,
+  dispatchPosBusinessOpenUpdated,
+  getPosSettlementWithCache,
+} from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
@@ -59,7 +64,7 @@ import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
-import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import {
   Collapsible,
   CollapsibleContent,
@@ -258,7 +263,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   )
   const { lang, setLang } = useLang()
   const { auth } = useAuth()
-  const { stores } = useStoreList()
+  const { stores, resolveStoreKey } = useStoreList()
   const online = useOnlineStatus()
 
   const [settleDate, setSettleDate] = React.useState(() => getBangkokDateYmd())
@@ -370,7 +375,35 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const payAutoBreakdownStaffLocked =
     !isPosDemoFromQuery(searchParams) &&
     !(isOfficeRole(auth?.role || '') || isAccountingRole(auth?.role || ''))
-  const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
+  const effectiveStore = React.useMemo(() => {
+    const raw = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
+    const trimmed = String(raw || '').trim()
+    return trimmed ? resolveStoreKey(trimmed) || trimmed : ''
+  }, [canSearchAll, storeFilter, auth?.store, resolveStoreKey])
+
+  /** 매장별 영업시간 반영 + 영업 시작 화면은 항상 현재 영업일로 맞춤(터미널 게이트와 동일) */
+  React.useEffect(() => {
+    if (!effectiveStore) return
+    let cancel = false
+    void (async () => {
+      try {
+        const j = await getPosBusinessDaySettings(effectiveStore)
+        if (cancel) return
+        setPosBusinessHoursClient({
+          start: { hour: j.hour, minute: j.minute },
+          end: { hour: j.endHour, minute: j.endMinute },
+        })
+        if (openMode) {
+          setSettleDate(getPosBusinessDateStr())
+        }
+      } catch {
+        /* 기본 영업시간 유지 */
+      }
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [effectiveStore, openMode])
 
   /** loadData는 결제 키 로드 후 재실행되면 권종 입력을 덮어쓰므로 ref로 최신 키만 참조 */
   const cardKeysRef = React.useRef(cardKeys)
@@ -754,8 +787,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     if (canSearchAll) {
       if (storeFilter) return
       const authStoreRaw = String(auth?.store || '').trim()
+      const authStoreResolved = authStoreRaw ? resolveStoreKey(authStoreRaw) || authStoreRaw : ''
       const authStoreMatched =
-        stores.find((s) => s.toLowerCase() === authStoreRaw.toLowerCase()) || authStoreRaw
+        stores.find((s) => resolveStoreKey(s) === authStoreResolved) || authStoreResolved
       if (authStoreMatched) {
         setStoreFilter(authStoreMatched)
         return
@@ -765,8 +799,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       if (first) setStoreFilter(first)
       return
     }
-    if (auth?.store) setStoreFilter(auth.store)
-  }, [canSearchAll, stores, auth?.store, storeFilter])
+    if (auth?.store) setStoreFilter(resolveStoreKey(auth.store) || auth.store)
+  }, [canSearchAll, stores, auth?.store, storeFilter, resolveStoreKey])
 
   React.useEffect(() => {
     loadData()
@@ -1078,6 +1112,14 @@ ${footerStamp}
       if (res.success) {
         if (!canUnclose && closed) {
           setClosedSavedOnce(true)
+        }
+        if (openMode && Number.isFinite(cashActualNum)) {
+          await applyPosSettlementSaveToCache({
+            storeCode: effectiveStore,
+            settleDate,
+            cashActual: cashActualNum,
+          })
+          dispatchPosBusinessOpenUpdated({ storeCode: effectiveStore, settleDate })
         }
         /** 영업 시작 저장 또는 마감 체크 후 결산 저장: 요약(오픈/마감) 영수증 자동 인쇄 — 알림 전, 웹 제스처·하이브리드 ESC/POS */
         if (autoPrintAfterSuccess) {

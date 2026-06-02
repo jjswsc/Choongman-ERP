@@ -849,12 +849,22 @@ export default function PosTerminalPage() {
   const businessOpenBlocked = !businessOpenGate.allowed
   const ensureBusinessOpenForOrder = useCallback(async (): Promise<boolean> => {
     if (isPosDemo || businessOpenGate.allowed) return true
-    await appAlert(
-      t('posBusinessOpenRequiredBody') ||
-        '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
-    )
+    const msg =
+      businessOpenGate.blockReason === 'new_business_day'
+        ? t('posBusinessOpenNewDayBody') ||
+          `아침에 등록한 시제는 이전 영업일${businessOpenGate.prevBusinessDateYmd ? `(${businessOpenGate.prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessOpenGate.businessDateYmd}) 시제를 다시 저장해 주세요.`
+        : t('posBusinessOpenRequiredBody') ||
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+    await appAlert(msg)
     return false
-  }, [isPosDemo, businessOpenGate.allowed, t])
+  }, [
+    isPosDemo,
+    businessOpenGate.allowed,
+    businessOpenGate.blockReason,
+    businessOpenGate.prevBusinessDateYmd,
+    businessOpenGate.businessDateYmd,
+    t,
+  ])
 
   useEffect(() => {
     if (!currentStoreId) return
@@ -9768,6 +9778,8 @@ export default function PosTerminalPage() {
                     blocked={businessOpenBlocked}
                     loading={businessOpenGate.loading}
                     businessDateYmd={businessOpenGate.businessDateYmd}
+                    blockReason={businessOpenGate.blockReason}
+                    prevBusinessDateYmd={businessOpenGate.prevBusinessDateYmd}
                     className="h-full"
                   >
                     <PosTerminalMenuScreen
@@ -9906,6 +9918,8 @@ export default function PosTerminalPage() {
                   blocked={businessOpenBlocked}
                   loading={businessOpenGate.loading}
                   businessDateYmd={businessOpenGate.businessDateYmd}
+                  blockReason={businessOpenGate.blockReason}
+                  prevBusinessDateYmd={businessOpenGate.prevBusinessDateYmd}
                   className="h-full"
                 >
                   <PosTerminalMenuScreen
@@ -9961,6 +9975,8 @@ export default function PosTerminalPage() {
                   blocked={businessOpenBlocked}
                   loading={businessOpenGate.loading}
                   businessDateYmd={businessOpenGate.businessDateYmd}
+                  blockReason={businessOpenGate.blockReason}
+                  prevBusinessDateYmd={businessOpenGate.prevBusinessDateYmd}
                   className="h-full"
                 >
                   <PosTerminalMenuScreen

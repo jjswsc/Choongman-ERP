@@ -7,8 +7,60 @@ import { isOnline } from './network'
 import { getFromCache, setCache } from './cache'
 import { getPosSettlement, type PosCloseRun, type PosSettlement } from '@/lib/api-client'
 
+/** 영업 시작 저장 직후 POS 터미널 게이트가 캐시·상태를 다시 읽도록 알림 */
+export const POS_BUSINESS_OPEN_UPDATED_EVENT = 'cm-pos-business-open-updated'
+
 function cacheKeySettlement(storeCode: string, settleDate: string): string {
   return `settlement:${storeCode}:${settleDate}`
+}
+
+const EMPTY_SETTLEMENT_RESPONSE = (): PosSettlementResponse => ({
+  systemTotal: 0,
+  systemSubtotal: 0,
+  systemVat: 0,
+  systemCashFromOrders: 0,
+  tillNetForSettleDate: 0,
+  linkpos: null,
+  settlement: null,
+  closeRun: null,
+})
+
+export function dispatchPosBusinessOpenUpdated(detail: {
+  storeCode: string
+  settleDate: string
+}): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(POS_BUSINESS_OPEN_UPDATED_EVENT, { detail }))
+}
+
+/** 영업 시작 저장 직후 오프라인 캐시에 cash_actual 반영 — 터미널 게이트가 즉시 통과 */
+export async function applyPosSettlementSaveToCache(params: {
+  storeCode: string
+  settleDate: string
+  cashActual: number
+}): Promise<void> {
+  const storeCode = String(params.storeCode || '').trim()
+  const settleDate = String(params.settleDate || '').trim().slice(0, 10)
+  if (!storeCode || !settleDate) return
+
+  const key = cacheKeySettlement(storeCode, settleDate)
+  const cached = (await getFromCache<PosSettlementResponse>('pos_sales_cache', key)) ?? EMPTY_SETTLEMENT_RESPONSE()
+  const prev = cached.settlement
+  const single = Array.isArray(prev) ? prev[0] : prev
+  const nextSettlement: PosSettlement = single
+    ? { ...single, storeCode, settleDate, cashActual: params.cashActual }
+    : {
+        storeCode,
+        settleDate,
+        cashActual: params.cashActual,
+        cardAmt: 0,
+        qrAmt: 0,
+        deliveryAppAmt: 0,
+        otherAmt: 0,
+        memo: '',
+        closed: false,
+      }
+  await setCache('pos_sales_cache', key, { ...cached, settlement: nextSettlement })
 }
 
 export type PosSettlementResponse = {
@@ -48,32 +100,10 @@ export async function getPosSettlementWithCache(params: {
       return data
     } catch {
       const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)
-      return (
-        cached ?? {
-          systemTotal: 0,
-          systemSubtotal: 0,
-          systemVat: 0,
-          systemCashFromOrders: 0,
-          tillNetForSettleDate: 0,
-          linkpos: null,
-          settlement: null,
-          closeRun: null,
-        }
-      )
+      return cached ?? EMPTY_SETTLEMENT_RESPONSE()
     }
   }
 
   const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)
-  return (
-    cached ?? {
-      systemTotal: 0,
-      systemSubtotal: 0,
-      systemVat: 0,
-      systemCashFromOrders: 0,
-      tillNetForSettleDate: 0,
-      linkpos: null,
-      settlement: null,
-      closeRun: null,
-    }
-  )
+  return cached ?? EMPTY_SETTLEMENT_RESPONSE()
 }
