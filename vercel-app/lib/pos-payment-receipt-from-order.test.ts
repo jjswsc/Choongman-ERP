@@ -15,6 +15,34 @@ type OrderLikeRow = Record<string, unknown> & {
   promoItems?: unknown[]
 }
 
+describe('enrichPromoSnapshotForPrint menu name fallback', () => {
+  it('fills snapshot menuName from promo catalog when menus catalog lacks the menu (store scope independent)', () => {
+    const promoCatalogById = new Map<string, PosPromoWithItems>([
+      [
+        '7',
+        {
+          id: '7',
+          code: 'FESTIVAL2',
+          name: 'Choongman Festival Set 2',
+          items: [
+            { menuId: '26', optionId: null, optionCode: 'C011-1', quantity: 1, menuName: 'GOLDEN FRIED CHICKEN' },
+            { menuId: '31', optionId: null, quantity: 1, menuName: 'SNOW ONION' },
+          ],
+        } as PosPromoWithItems,
+      ],
+    ])
+    const enriched = enrichPromoSnapshotForPrint(
+      [
+        { menuId: '26', optionId: null, optionCode: 'C011-1', quantity: 1 },
+        { menuId: '31', optionId: null, quantity: 1 },
+      ],
+      { menus: [], promoCatalogById }
+    )
+    expect(enriched?.[0].menuName).toBe('GOLDEN FRIED CHICKEN')
+    expect(enriched?.[1].menuName).toBe('SNOW ONION')
+  })
+})
+
 describe('enrichPosOrderLikeItemsWithPromoSnapshot promo detection', () => {
   const promoCatalogById = new Map<string, PosPromoWithItems>([
     [

@@ -316,16 +316,35 @@ function preferNamedReceiptPromoItems(promoItems: ReceiptPromoLine[]): ReceiptPr
   return named.length > 0 ? named : promoItems
 }
 
+/** 프로모 카탈로그(서버 조인 menuName 포함) 에서 menuId → menuName 맵 구성 — 매장 스코프 무관 fallback */
+function buildPromoCatalogMenuNameMap(
+  catalog?: Map<string, PosPromoWithItems>
+): Map<string, string> {
+  const map = new Map<string, string>()
+  if (!catalog?.size) return map
+  for (const promo of catalog.values()) {
+    const items = promo?.items
+    if (!Array.isArray(items)) continue
+    for (const it of items) {
+      const mid = String((it as { menuId?: unknown }).menuId ?? '').trim()
+      const name = String((it as { menuName?: unknown }).menuName ?? '').trim()
+      if (mid && name && !map.has(mid)) map.set(mid, name)
+    }
+  }
+  return map
+}
+
 /** 프로모 구성 줄 — optionCode 기반 optionName 보강 */
 export function enrichPromoSnapshotForPrint(
   promoItems: ReceiptPromoLine[] | undefined,
-  opts?: Pick<PosOrderReceiptLineOptions, 'optionNameByCode' | 'optionNameById' | 'menus'>
+  opts?: Pick<PosOrderReceiptLineOptions, 'optionNameByCode' | 'optionNameById' | 'menus' | 'promoCatalogById'>
 ): ReceiptPromoLine[] | undefined {
   if (!Array.isArray(promoItems) || promoItems.length === 0) return promoItems
   const optionNameByCode = opts?.optionNameByCode
   const optionNameById = opts?.optionNameById
   const menus = opts?.menus
   const menuLookup = menus?.length ? buildKitchenMenuNameLookup(menus) : null
+  const promoCatalogMenuNameById = buildPromoCatalogMenuNameMap(opts?.promoCatalogById)
   return promoItems.map((p) => {
     let optionName = String(p.optionName ?? '').trim()
     let menuName = String(p.menuName ?? '').trim()
@@ -334,6 +353,10 @@ export function enrichPromoSnapshotForPrint(
     const optionId = String(p.optionId ?? '').trim()
     if (!menuName && menuId && menuLookup) {
       menuName = resolveKitchenMenuNameFromLookup(menuId, menuLookup, '')
+    }
+    // 매장 스코프 카탈로그에 없는 세트 구성품: 프로모 카탈로그의 서버 조인 menuName 으로 fallback
+    if (!menuName && menuId) {
+      menuName = String(promoCatalogMenuNameById.get(menuId) ?? '').trim()
     }
     if (!optionName && optionCode && optionNameByCode?.size) {
       const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, optionNameByCode)
@@ -380,13 +403,17 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
   const p = catalog.get(promoId)
   const items = p?.items
   if (!Array.isArray(items) || items.length === 0) return null
-  const rows: CatalogPromoLine[] = items.map((x) => ({
-    menuId: String(x.menuId ?? ''),
-    optionId: x.optionId != null && String(x.optionId).trim() ? String(x.optionId) : null,
-    ...(x.optionCode != null && String(x.optionCode).trim() ? { optionCode: String(x.optionCode).trim() } : {}),
-    quantity: Math.max(1, Number(x.quantity) || 1),
-    choiceGroup: String(x.choiceGroup ?? '').trim() || null,
-  }))
+  const rows: CatalogPromoLine[] = items.map((x) => {
+    const menuName = String((x as { menuName?: unknown }).menuName ?? '').trim()
+    return {
+      menuId: String(x.menuId ?? ''),
+      optionId: x.optionId != null && String(x.optionId).trim() ? String(x.optionId) : null,
+      ...(x.optionCode != null && String(x.optionCode).trim() ? { optionCode: String(x.optionCode).trim() } : {}),
+      ...(menuName ? { menuName } : {}),
+      quantity: Math.max(1, Number(x.quantity) || 1),
+      choiceGroup: String(x.choiceGroup ?? '').trim() || null,
+    }
+  })
 
   // 선택형 그룹 항목(명시 choice_group + 레거시 암묵 그룹)은 카탈로그만으로 선택값 복원이 불가하므로 제외.
   // 스냅샷(promoItems)이 있는 최신 주문은 이 분기까지 오지 않아 기존 선택값을 그대로 사용한다.
@@ -417,6 +444,7 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
       menuId: row.menuId,
       optionId: row.optionId,
       ...(row.optionCode ? { optionCode: row.optionCode } : {}),
+      ...(row.menuName ? { menuName: row.menuName } : {}),
       quantity: row.quantity,
     }))
 }

@@ -7736,6 +7736,9 @@ export interface PosPromoWithItems extends PosPromo {
     quantity: number
     choiceGroup?: string | null
     choicePickCount?: number | null
+    /** 서버에서 pos_menus 조인으로 채움 — 주방 슬립이 #ID 대신 이름을 찍도록 */
+    menuName?: string
+    menuCode?: string
   }[]
 }
 

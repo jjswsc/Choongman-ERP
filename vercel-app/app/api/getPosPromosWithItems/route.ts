@@ -115,6 +115,8 @@ export async function GET(req: NextRequest) {
         quantity: number
         choiceGroup?: string | null
         choicePickCount?: number | null
+        menuName?: string
+        menuCode?: string
       }[]
     > = {}
     for (const p of promoList) itemsByPromo[p.id] = []
@@ -170,8 +172,56 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 구성품 메뉴명·코드 보강: pos_promo_items 에는 menu_id 만 있어 주방 슬립이 #ID 로 찍힌다.
+    // 매장 스코프와 무관하게 항상 이름을 표기하도록 서버에서 pos_menus 를 조인해 채운다.
+    const allMenuIds = new Set<string>()
+    for (const list of Object.values(itemsByPromo)) {
+      for (const it of list) {
+        const mid = String(it.menuId ?? '').trim()
+        if (mid) allMenuIds.add(mid)
+      }
+    }
+    const menuNameById = new Map<string, string>()
+    const menuCodeById = new Map<string, string>()
+    if (allMenuIds.size > 0) {
+      const ids = [...allMenuIds]
+      const menuChunkSize = 300
+      for (let i = 0; i < ids.length; i += menuChunkSize) {
+        const chunk = ids.slice(i, i + menuChunkSize)
+        try {
+          const menuRows = (await supabaseSelectFilter(
+            'pos_menus',
+            `id=in.(${chunk.join(',')})`,
+            { limit: 10000, select: 'id,name,code' }
+          )) as { id?: number; name?: string; code?: string }[] | null
+          for (const m of menuRows || []) {
+            const id = String(m.id ?? '').trim()
+            if (!id) continue
+            const name = String(m.name ?? '').trim()
+            if (name) menuNameById.set(id, name)
+            const code = String(m.code ?? '').trim()
+            if (code) menuCodeById.set(id, code)
+          }
+        } catch {
+          /* 메뉴명 보강 실패 시 menu_id 그대로 (주방에서 #ID 로 표기) */
+        }
+      }
+    }
+
     return NextResponse.json(
-      promoList.map((p) => ({ ...p, items: itemsByPromo[p.id] || [] })),
+      promoList.map((p) => ({
+        ...p,
+        items: (itemsByPromo[p.id] || []).map((it) => {
+          const mid = String(it.menuId ?? '').trim()
+          const menuName = mid ? menuNameById.get(mid) : undefined
+          const menuCode = mid ? menuCodeById.get(mid) : undefined
+          return {
+            ...it,
+            ...(menuName ? { menuName } : {}),
+            ...(menuCode ? { menuCode } : {}),
+          }
+        }),
+      })),
       { headers }
     )
   } catch (e) {
