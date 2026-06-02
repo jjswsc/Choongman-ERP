@@ -2,6 +2,7 @@ import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import { resolveCartLineQuantityForSave } from "@/lib/pos-order-item-map"
 import { resolvePosOrderItemMenuDisplayName } from "@/lib/pos-order-item-display-name"
 import { resolveGrabItemPrintNote } from "@/lib/grab-pos-order-enrich"
+import { splitPosPrintItemLine } from "@/lib/pos-print-item-line"
 import {
   buildKitchenMenuNameLookup,
   kitchenMenuNameOrPlaceholder,
@@ -754,9 +755,25 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
         })
       : undefined
     promoItems = enrichPromoSnapshotForPrint(promoItemsForPrint, opts) ?? promoItemsForPrint
+    // 옵션이 "이름(괄호)"에만 있고 optionCode·note·promoItems 가 모두 없는 단품·반반:
+    // 이름의 옵션을 note 로 주입한다. (표시 단계가 note 를 항상 출력 → 단품 사이즈/반반 맛 누락 방지.
+    //  이름에 이미 있는 값이라 추론이 아니며, 모든 인쇄 경로(홀/포장/배달/재인쇄)에서 동일하게 보인다.)
+    const existingNote = String((it as { note?: unknown }).note ?? '').trim()
+    const hasOptionCodeField = Boolean(
+      String((it as { optionCode?: unknown }).optionCode ?? '').trim() ||
+        String((it as { optionCode1?: unknown }).optionCode1 ?? '').trim() ||
+        String((it as { optionCode2?: unknown }).optionCode2 ?? '').trim()
+    )
+    const hasPromoChildren = Array.isArray(promoItems) && promoItems.length > 0
+    let injectedNote = existingNote
+    if (!existingNote && !hasOptionCodeField && !hasPromoChildren) {
+      const optionFromName = splitPosPrintItemLine(String(resolvedName ?? '')).optionLine
+      if (optionFromName) injectedNote = optionFromName
+    }
     return {
       ...it,
       name: resolvedName,
+      ...(injectedNote ? { note: injectedNote } : {}),
       ...(promoItems ? { promoItems } : {}),
     } as T
   })
