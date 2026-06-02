@@ -7967,10 +7967,23 @@ export default function PosTerminalPage() {
                 const orderNoStr = savedOrderNo
                 const existingItemsBeforeAdd =
                   isAddOrder && existingOrder ? orderUiItemsToPosOrderItems(existingOrder.items) : []
-                const kitchenCartLines =
-                  isAddOrder && existingOrder
-                    ? filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd)
-                    : payloadItemsNormalized
+                const kitchenCartLines = (() => {
+                  if (!(isAddOrder && existingOrder)) return payloadItemsNormalized
+                  const delta = filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd)
+                  /**
+                   * 테이블/리패치 레이스에서 기존 스냅샷이 이미 병합 상태로 보이면 delta가 0줄이 될 수 있다.
+                   * 추가주문에서 입력분이 있는데 주방 미출력을 막기 위해 1회 fallback.
+                   */
+                  if (delta.length === 0 && incomingItems.length > 0) {
+                    logPosPrintDebug('submit_add_kitchen_delta_empty_fallback', {
+                      orderId: existingOrderId,
+                      incomingItems: incomingItems.length,
+                      existingItems: existingItemsBeforeAdd.length,
+                    })
+                    return incomingItems
+                  }
+                  return delta
+                })()
                 const addKitchenDedupeSuffix = isAddOrder
                   ? buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)
                   : ''
@@ -8140,6 +8153,15 @@ export default function PosTerminalPage() {
                       .then((rows) => rows?.[0])
                       .then((latestOrder) => {
                         if (!latestOrder?.items?.length) throw new Error('latest_order_not_ready')
+                        const latestStatus = String(latestOrder.status ?? '').trim().toLowerCase()
+                        if (latestStatus === 'cancelled' || latestStatus === 'canceled' || latestStatus === 'refunded') {
+                          logPosPrintDebug('submit_kitchen_autoprint_skip_cancelled_order', {
+                            orderId: savedOrderId,
+                            orderNo: orderNoStr,
+                            status: latestStatus,
+                          })
+                          return
+                        }
                         logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
                           orderId: savedOrderId,
                           orderNo: orderNoStr,
