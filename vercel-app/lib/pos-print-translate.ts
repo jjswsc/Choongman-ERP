@@ -60,18 +60,29 @@ const TAKEOUT_SLOT_LABEL_PREFIXES = [
 ] as const
 
 function tryTranslateTakeoutTableLabel(s: string, t: (key: string) => string): string | null {
+  const pick = (key: string, fallback = ''): string => {
+    const raw = String(t(key) ?? '').trim()
+    if (!raw) return fallback
+    if (raw === key) return fallback
+    if (/^pos[A-Z]/.test(raw)) return fallback
+    return raw
+  }
   for (const prefix of TAKEOUT_SLOT_LABEL_PREFIXES) {
     const esc = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const slotRe = new RegExp(`^${esc}\\s*#?\\s*(\\d+)\\s*$`, 'iu')
     const slotMatch = s.match(slotRe)
     if (slotMatch) {
-      const tmpl = t('posTakeoutSlotN') || '포장 {{n}}'
+      const tmpl = pick('posTakeoutSlotN', '포장 {{n}}')
       return tmpl.replace(/\{\{n\}\}/g, slotMatch[1])
     }
     if (s.localeCompare(prefix, undefined, { sensitivity: 'accent' }) === 0) {
-      return t('posTakeoutSlot') || t('posOrderTypeTakeout') || prefix
+      return pick('posTakeoutSlot') || pick('posOrderTypeTakeout') || prefix
     }
   }
+  const directTakeoutSlotN = /^posTakeoutSlotN$/i.test(s)
+  if (directTakeoutSlotN) return pick('posTakeoutSlotN', '포장 {{n}}')
+  const directTakeoutSlot = /^posTakeoutSlot$/i.test(s)
+  if (directTakeoutSlot) return pick('posTakeoutSlot') || pick('posOrderTypeTakeout') || '포장'
   return null
 }
 
@@ -84,13 +95,20 @@ export function translateTakeoutOrderDisplayLabel(
   t: (key: string) => string,
   options?: { fallbackOrderId?: number | string }
 ): string {
+  const pick = (key: string, fallback = ''): string => {
+    const raw = String(t(key) ?? '').trim()
+    if (!raw) return fallback
+    if (raw === key) return fallback
+    if (/^pos[A-Z]/.test(raw)) return fallback
+    return raw
+  }
   const s = String(raw ?? '').trim()
   if (s) return translateReceiptTableDisplayName(s, t)
   const id = options?.fallbackOrderId
   if (id != null && String(id).trim() !== '') {
-    return `${t('posOrderTypeTakeout') || '포장'} #${id}`
+    return `${pick('posOrderTypeTakeout', '포장')} #${id}`
   }
-  return t('posOrderTypeTakeout') || '포장'
+  return pick('posOrderTypeTakeout', '포장')
 }
 
 /** 테이블명 끝 한글 접미사 `번` 제거 (1F-2번 → 1F-2). 포장 슬롯명은 `t`가 있으면 현재 언어로 표시. */

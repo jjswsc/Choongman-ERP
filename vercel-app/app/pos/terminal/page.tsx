@@ -1171,108 +1171,6 @@ export default function PosTerminalPage() {
       ),
     [menus, menuOptions, menuOptionsForCodeMap]
   )
-  const menuCodeById = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const menu of menus) {
-      const id = String(menu.id ?? '').trim()
-      const code = String(menu.code ?? '').trim()
-      if (!id || !code) continue
-      m.set(id, code)
-    }
-    return m
-  }, [menus])
-  const menuCodeByName = useMemo(() => {
-    const m = new Map<string, string>()
-    const norm = (raw: string) =>
-      String(raw ?? '')
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-    for (const menu of menus) {
-      const name = norm(String(menu.name ?? ''))
-      const code = String(menu.code ?? '').trim()
-      if (!name || !code) continue
-      if (!m.has(name)) m.set(name, code)
-    }
-    return m
-  }, [menus])
-  const hasExplicitSizeToken = useCallback((rawText?: string | null): boolean => {
-    const text = String(rawText ?? '').trim()
-    if (!text) return false
-    return /(^|[\s(])(?:size\s*)?[sml](?=$|[\s)\-–—,])/i.test(text)
-  }, [])
-  const inferDefaultSizeLabelForMenuId = useCallback(
-    (menuIdRaw?: string | null): string => {
-      const menuId = String(menuIdRaw ?? '').trim()
-      if (!menuId) return ''
-      const menuCode = String(menuCodeById.get(menuId) ?? '').trim().toUpperCase()
-      if (!menuCode) return ''
-      const labels: string[] = []
-      for (const [code, label] of optionNameByCode.entries()) {
-        const key = String(code ?? '').trim().toUpperCase()
-        if (!key.startsWith(`${menuCode}-`)) continue
-        const text = String(label ?? '').trim()
-        if (text) labels.push(text)
-      }
-      if (labels.length === 0) return ''
-      const hasMOrL = labels.some(
-        (lab) =>
-          /(^|[\s\-–—])(size\s*)?(m|l)([\s\-–—]|$)/i.test(lab) || /\bsize\s*(m|l)\b/i.test(lab)
-      )
-      if (!hasMOrL) return ''
-      const sLabel =
-        labels.find((lab) => /(^|[\s\-–—])(size\s*)?s([\s\-–—]|$)/i.test(lab)) || 'Size S'
-      return sLabel
-    },
-    [menuCodeById, optionNameByCode]
-  )
-  const inferDefaultSizeLabelForLine = useCallback(
-    (line: { menuId?: string | null; id?: string | null; name?: string | null; note?: string | null }): string => {
-      const explicitNote = String(line.note ?? '').trim()
-      if (hasExplicitSizeToken(explicitNote)) return ''
-      if (hasExplicitSizeToken(String(line.name ?? ''))) return ''
-      const menuId = String(line.menuId ?? '').trim()
-      if (menuId) {
-        const byId = inferDefaultSizeLabelForMenuId(menuId)
-        if (byId) return byId
-      }
-      const idText = String(line.id ?? '').trim()
-      const codeFromId = /(?:^|[^A-Za-z0-9])([A-Za-z]\d{2,})\b/.exec(idText)?.[1]
-      if (codeFromId) {
-        const syntheticMenuId = (() => {
-          for (const [mid, code] of menuCodeById.entries()) {
-            if (String(code).trim().toUpperCase() === codeFromId.toUpperCase()) return mid
-          }
-          return ''
-        })()
-        if (syntheticMenuId) {
-          const byCode = inferDefaultSizeLabelForMenuId(syntheticMenuId)
-          if (byCode) return byCode
-        }
-      }
-      const nameKey = String(line.name ?? '')
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-      if (nameKey) {
-        const code = String(menuCodeByName.get(nameKey) ?? '').trim()
-        if (code) {
-          const syntheticMenuId = (() => {
-            for (const [mid, c] of menuCodeById.entries()) {
-              if (String(c).trim().toUpperCase() === code.toUpperCase()) return mid
-            }
-            return ''
-          })()
-          if (syntheticMenuId) {
-            const byName = inferDefaultSizeLabelForMenuId(syntheticMenuId)
-            if (byName) return byName
-          }
-        }
-      }
-      return ''
-    },
-    [hasExplicitSizeToken, inferDefaultSizeLabelForMenuId, menuCodeById, menuCodeByName]
-  )
   const formatLineNoteForPrint = useCallback(
     (rawNote?: string | null): string => formatGrabLineNoteForKitchenPrint(rawNote, optionNameByCode),
     [optionNameByCode]
@@ -1377,38 +1275,26 @@ export default function PosTerminalPage() {
           menuId1?: string
           menu_id1?: string
           kitchenRouteMenuId?: string
-          note?: string
         }
-        const menuId = String(
-          line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.kitchenRouteMenuId ?? ''
-        ).trim()
-        const note = String(line.note ?? '').trim()
-        const inferredDefaultSize =
-          !note
-            ? inferDefaultSizeLabelForLine({
-                menuId,
-                id: String((it as { id?: unknown }).id ?? ''),
-                name: String((it as { name?: unknown }).name ?? ''),
-                note,
-              })
-            : ''
+        const menuId = String(line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.kitchenRouteMenuId ?? '').trim()
         const enrichedPromo =
           Array.isArray(list) && list.length > 0
             ? enrichPromoItemsWithOptionName(list).map((p) => {
                 const optionName = String((p as { optionName?: string }).optionName ?? '').trim()
                 const optionCode = String((p as { optionCode?: string | null }).optionCode ?? '').trim()
                 if (optionName || optionCode) return p
-                const inferred = inferDefaultSizeLabelForLine({
-                  menuId: p.menuId,
-                  name: String((p as { menuName?: unknown }).menuName ?? ''),
+                console.error('[POS_PRINT_OPTION_CODE_MISSING]', {
+                  orderItemId: String((it as { id?: unknown }).id ?? ''),
+                  menuId: String(p.menuId ?? '').trim() || menuId,
+                  itemName: String((p as { menuName?: unknown }).menuName ?? (it as { name?: unknown }).name ?? ''),
+                  promo: true,
                 })
-                return inferred ? { ...p, optionName: inferred } : p
+                return p
               })
             : undefined
         return {
           ...it,
           ...(enrichedPromo ? { promoItems: enrichedPromo } : {}),
-          ...(inferredDefaultSize ? { note: inferredDefaultSize } : {}),
         } as unknown as T
       })
       return mergeSetChildrenForReceipt(mapped as unknown as Parameters<typeof mergeSetChildrenForReceipt>[0], {
@@ -1418,7 +1304,6 @@ export default function PosTerminalPage() {
     [
       posReceiptLineOpts,
       enrichPromoItemsWithOptionName,
-      inferDefaultSizeLabelForLine,
       menus,
       optionNameByCode,
     ]
@@ -1427,21 +1312,64 @@ export default function PosTerminalPage() {
     (
       slipItems: KitchenSlipRoutingItem[],
       orderSource: KitchenSlipRoutingItem[],
-      ki: { t: (key: string) => string }
+      ki: { t: (key: string) => string },
+      menuCatalog?: PosMenu[]
     ) =>
-      mapKitchenSlipGroupItemsForPrint(slipItems, {
-        orderItems: orderSource,
-        menuNameByMenuId: Object.fromEntries(
-          menus.map((m) => [String(m.id), String(m.name ?? '').trim()]).filter(([id, name]) => id && name)
-        ),
-        menuCodeByMenuId: Object.fromEntries(
-          menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
-        ),
-        optionNameByCode,
-        translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
-        formatNote: formatLineNoteForPrint,
-      }),
+      {
+        const activeMenus = Array.isArray(menuCatalog) && menuCatalog.length > 0 ? menuCatalog : menus
+        return mapKitchenSlipGroupItemsForPrint(slipItems, {
+          orderItems: orderSource,
+          menuNameByMenuId: Object.fromEntries(
+            activeMenus.map((m) => [String(m.id), String(m.name ?? '').trim()]).filter(([id, name]) => id && name)
+          ),
+          menuCodeByMenuId: Object.fromEntries(
+            activeMenus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
+          ),
+          optionNameByCode,
+          translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
+          formatNote: formatLineNoteForPrint,
+        })
+      },
     [formatLineNoteForPrint, menus, optionNameByCode]
+  )
+  const resolveMenusForKitchenPrint = useCallback(
+    async (
+      rows: Array<Record<string, unknown>>,
+      targetStoreCode?: string | null
+    ): Promise<PosMenu[]> => {
+      const catalog = Array.isArray(menus) ? menus : []
+      const requiredMenuIds = new Set<string>()
+      for (const row of rows) {
+        const menuId = String(
+          (row as { menuId?: unknown; menuId1?: unknown; menu_id1?: unknown; menuId2?: unknown }).menuId1 ??
+            (row as { menuId?: unknown; menuId1?: unknown; menu_id1?: unknown; menuId2?: unknown }).menuId ??
+            (row as { menuId?: unknown; menuId1?: unknown; menu_id1?: unknown; menuId2?: unknown }).menu_id1 ??
+            (row as { menuId?: unknown; menuId1?: unknown; menu_id1?: unknown; menuId2?: unknown }).menuId2 ??
+            ''
+        ).trim()
+        if (menuId) requiredMenuIds.add(menuId)
+      }
+      if (catalog.length > 0) {
+        const catalogIds = new Set(catalog.map((m) => String(m.id ?? '').trim()).filter(Boolean))
+        const missing = [...requiredMenuIds].filter((id) => !catalogIds.has(id))
+        if (missing.length === 0) return catalog
+      }
+      try {
+        const refreshed = await getPosMenus({
+          fresh: true,
+          storeCode: String(targetStoreCode || currentStoreId || '').trim() || undefined,
+        })
+        const refreshedList = Array.isArray(refreshed) ? (refreshed as PosMenu[]) : []
+        if (refreshedList.length > 0) {
+          applyPosMenusList(refreshedList)
+          return refreshedList
+        }
+      } catch {
+        /* 메뉴 카탈로그 재조회 실패 시 현재 스냅샷으로 진행 */
+      }
+      return catalog
+    },
+    [applyPosMenusList, currentStoreId, menus]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
@@ -1569,9 +1497,11 @@ export default function PosTerminalPage() {
         const optionCodes = Array.isArray(pit.optionCodes)
           ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
           : []
-        const optionCode = String(
+        const optionCode1 = String(
           pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
         ).trim()
+        const optionCode2 = String(pit.optionCode2 ?? '').trim()
+        const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
         const displayName = resolvePosOrderItemMenuDisplayName(
           {
             id: String(it.id ?? ''),
@@ -1586,10 +1516,10 @@ export default function PosTerminalPage() {
           /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
         const mergedNote = resolveGrabItemPrintNote({
           note: note || null,
-          optionCode: optionCode || null,
-          optionCode1: optionCode || null,
-          optionCode2: null,
-          optionCodes: optionCodes.length > 0 ? optionCodes : undefined,
+          optionCode: optionCode1 || null,
+          optionCode1: optionCode1 || null,
+          optionCode2: optionCode2 || null,
+          optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
         })
         return {
           id: String(it.id ?? ''),
@@ -1597,8 +1527,9 @@ export default function PosTerminalPage() {
           price: Number(it.price ?? 0),
           qty: Number(it.qty ?? it.quantity ?? 1),
           ...(menuId ? { menuId } : {}),
-          ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
-          ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
+          ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
+          ...(optionCode2 ? { optionCode2 } : {}),
+          ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
           ...(mergedNote ? { note: mergedNote } : {}),
           ...(String(order.deliveryAppCode ?? '').trim()
             ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
@@ -1619,10 +1550,11 @@ export default function PosTerminalPage() {
         }
       })
       const settings = await getPrinterSettingsForStore(effectiveStoreCode)
+      const menusForPrint = await resolveMenusForKitchenPrint(items as Array<Record<string, unknown>>, effectiveStoreCode)
       const ki = kitchenSlipPrintI18n(settings, lang)
       const slips = buildKitchenSlipGroups(
         kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+        buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
       )
       if (!slips.length) throw new Error('no_slips_to_print')
       const slipDesign = resolveKitchenSlipDesign(settings)
@@ -1647,7 +1579,8 @@ export default function PosTerminalPage() {
           items: kitchenSlipItemsForPrint(
             slip.items,
             kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-            ki
+            ki,
+            menusForPrint
           ),
           memoLine: memoLine || null,
           escapeHtml,
@@ -1681,6 +1614,7 @@ export default function PosTerminalPage() {
       lang,
       menus,
       optionNameByCode,
+      resolveMenusForKitchenPrint,
     ]
   )
 
@@ -2663,9 +2597,11 @@ export default function PosTerminalPage() {
         const optionCodes = Array.isArray(pit.optionCodes)
           ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
           : []
-        const optionCode = String(
+        const optionCode1 = String(
           pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
         ).trim()
+        const optionCode2 = String(pit.optionCode2 ?? '').trim()
+        const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
         const displayName = resolvePosOrderItemMenuDisplayName(
           {
             id: String(it.id ?? ''),
@@ -2679,10 +2615,10 @@ export default function PosTerminalPage() {
         const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
         const mergedNote = resolveGrabItemPrintNote({
           note: note || null,
-          optionCode: optionCode || null,
-          optionCode1: optionCode || null,
-          optionCode2: null,
-          optionCodes: optionCodes.length > 0 ? optionCodes : undefined,
+          optionCode: optionCode1 || null,
+          optionCode1: optionCode1 || null,
+          optionCode2: optionCode2 || null,
+          optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
         })
         return {
           id: String(it.id ?? ''),
@@ -2690,8 +2626,9 @@ export default function PosTerminalPage() {
           price: Number(it.price ?? 0),
           qty: Number(it.qty ?? 1),
           ...(menuId ? { menuId } : {}),
-          ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
-          ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
+          ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
+          ...(optionCode2 ? { optionCode2 } : {}),
+          ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
           ...(mergedNote ? { note: mergedNote } : {}),
           ...(String(order.deliveryAppCode ?? '').trim()
             ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
@@ -2719,10 +2656,14 @@ export default function PosTerminalPage() {
           try {
             const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
             const settings = await getPrinterSettingsForStore(effectiveStoreCode)
+            const menusForPrint = await resolveMenusForKitchenPrint(
+              items as Array<Record<string, unknown>>,
+              effectiveStoreCode
+            )
             const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+              buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
             )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
@@ -2748,7 +2689,8 @@ export default function PosTerminalPage() {
                 items: kitchenSlipItemsForPrint(
                   slip.items,
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                  ki
+                  ki,
+                  menusForPrint
                 ),
                 memoLine: memoLine || null,
                 escapeHtml,
@@ -2815,11 +2757,15 @@ export default function PosTerminalPage() {
       t,
       lang,
       kitchenItemsWithResolvedPromo,
+      kitchenSlipItemsForPrint,
       logPosPrintDebug,
       enrichPromoItemsWithOptionName,
+      getPrinterSettingsForStore,
+      resolveMenusForKitchenPrint,
       reserveKitchenAutoPrintKey,
       pricingAdjustments,
       posReceiptLineOpts,
+      optionNameByCode,
     ]
   )
 
@@ -2930,9 +2876,11 @@ export default function PosTerminalPage() {
                 const optionCodes = Array.isArray(pit.optionCodes)
                   ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
                   : []
-                const optionCode = String(
+                const optionCode1 = String(
                   pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
                 ).trim()
+                const optionCode2 = String(pit.optionCode2 ?? '').trim()
+                const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
                 const displayName = resolvePosOrderItemMenuDisplayName({
                   id: String(it.id ?? ''),
                   name: String(it.name ?? ''),
@@ -2943,10 +2891,10 @@ export default function PosTerminalPage() {
                 const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
                 const mergedNote = resolveGrabItemPrintNote({
                   note: note || null,
-                  optionCode: optionCode || null,
-                  optionCode1: optionCode || null,
-                  optionCode2: null,
-                  optionCodes: optionCodes.length > 0 ? optionCodes : undefined,
+                  optionCode: optionCode1 || null,
+                  optionCode1: optionCode1 || null,
+                  optionCode2: optionCode2 || null,
+                  optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
                 })
                 return {
                   id: String(it.id ?? ''),
@@ -2954,8 +2902,9 @@ export default function PosTerminalPage() {
                   price: Number(it.price ?? 0),
                   qty: Number(it.qty ?? 1),
                   ...(menuId ? { menuId } : {}),
-                  ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
-                  ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
+                  ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
+                  ...(optionCode2 ? { optionCode2 } : {}),
+                  ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
                   ...(mergedNote ? { note: mergedNote } : {}),
                   ...(String(order.deliveryAppCode ?? '').trim()
                     ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
@@ -2980,10 +2929,14 @@ export default function PosTerminalPage() {
                   try {
                     const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
                     const settings = await getPrinterSettingsForStore(effectiveStoreCode)
+                    const menusForPrint = await resolveMenusForKitchenPrint(
+                      items as Array<Record<string, unknown>>,
+                      effectiveStoreCode
+                    )
                     const ki = kitchenSlipPrintI18n(settings, lang)
                     const slips = buildKitchenSlipGroups(
                       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                      buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+                      buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
                     )
                     if (!slips.length) return
                     const slipDesign = resolveKitchenSlipDesign(settings)
@@ -3009,7 +2962,8 @@ export default function PosTerminalPage() {
                         items: kitchenSlipItemsForPrint(
                           slip.items,
                           kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                          ki
+                            ki,
+                            menusForPrint
                         ),
                         memoLine: memoLine || null,
                         escapeHtml,
@@ -3107,6 +3061,14 @@ export default function PosTerminalPage() {
       currentStoreId,
       menus,
       lang,
+      resolveMenusForKitchenPrint,
+      kitchenSlipItemsForPrint,
+      kitchenItemsWithResolvedPromo,
+      getPrinterSettingsForStore,
+      enrichPromoItemsWithOptionName,
+      pricingAdjustments,
+      posReceiptLineOpts,
+      optionNameByCode,
     ]
   )
 
@@ -3815,12 +3777,6 @@ export default function PosTerminalPage() {
               optionCodes: Array.isArray((it as { optionCodes?: string[] }).optionCodes)
                 ? (it as { optionCodes?: string[] }).optionCodes
                 : undefined,
-            }) ||
-            inferDefaultSizeLabelForLine({
-              menuId: String((it as { menuId?: string }).menuId ?? ''),
-              id: String((it as { id?: string }).id ?? ''),
-              name: String((it as { name?: string }).name ?? ''),
-              note: String((it as { note?: string }).note ?? ''),
             }),
           ...(promoItems ? { promoItems } : {}),
         }
@@ -5414,7 +5370,8 @@ export default function PosTerminalPage() {
                     items: kitchenSlipItemsForPrint(
                       slip.items,
                       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                      ki
+                      ki,
+                      menusForPrint
                     ),
                     memoLine: memoLine || null,
                     escapeHtml,
@@ -6964,8 +6921,14 @@ export default function PosTerminalPage() {
   ] : []
   const effectiveDeliveryApps = deliveryApps.length > 0 ? deliveryApps : deliveryAppsFallback
   const cartOrderType = activeTab === 'delivery' ? 'delivery' : activeTab === 'takeout' ? 'takeout' : 'dine-in'
-  const formatTakeoutSlotLabel = (slot: string) =>
-    (t('posTakeoutSlotN') || '포장 {{n}}').replace('{{n}}', slot)
+  const formatTakeoutSlotLabel = (slot: string) => {
+    const rawTemplate = String(t('posTakeoutSlotN') ?? '').trim()
+    const template =
+      rawTemplate && rawTemplate !== 'posTakeoutSlotN' && !/^pos[A-Z]/.test(rawTemplate)
+        ? rawTemplate
+        : '포장 {{n}}'
+    return template.replace('{{n}}', slot)
+  }
   const baseTakeoutLabel = takeoutMode === 'member'
     ? (takeoutMemberName.trim() || (t('posTakeoutMemberName') || '회원 이름'))
     : formatTakeoutSlotLabel(takeoutSlot)
