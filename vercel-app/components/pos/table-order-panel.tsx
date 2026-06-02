@@ -82,6 +82,8 @@ export interface TableOrderPanelProps {
   onAfterFullOrderKitchenReprint?: (orderId: number, detail: PosKitchenReprintPayload) => void | Promise<void>
   /** 테이블 이동·합석 직후 — 터미널에서 갱신된 테이블 번호로 홀 주문서 재인쇄 */
   onAfterTableTransfer?: (keepOrderId: number) => void | Promise<void>
+  /** 합석 API 호출 직전 — Realtime 추가주문 인쇄와 중복 방지 */
+  onBeforeTableMerge?: (keepOrderId: number) => void
   onClose?: () => void
   t?: (key: string) => string
   /** 데모: 서빙 API 없이 부모 state만 갱신 */
@@ -103,6 +105,7 @@ export function TableOrderPanel({
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
   onAfterTableTransfer,
+  onBeforeTableMerge,
   onClose,
   t: tProp,
   isDemo,
@@ -547,6 +550,7 @@ export function TableOrderPanel({
         mergeDirection === 'into_selected' ? Number(peer.order.id) : Number(order.id)
       const absorbId =
         mergeDirection === 'into_selected' ? Number(order.id) : Number(peer.order.id)
+      onBeforeTableMerge?.(keepId)
       const res = await posDineInTableMerge({ keepOrderId: keepId, absorbOrderId: absorbId })
       if (!res.success) {
         await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))

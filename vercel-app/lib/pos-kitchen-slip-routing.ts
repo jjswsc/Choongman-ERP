@@ -304,13 +304,6 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
   for (const it of items) {
     const pi = it.promoItems
     if (Array.isArray(pi) && pi.length > 0) {
-      const parentMenuId = String(
-        (it as { menuId?: string; menuId1?: string; menu_id1?: string; menuId2?: string }).menuId ??
-          (it as { menuId1?: string }).menuId1 ??
-          (it as { menu_id1?: string }).menu_id1 ??
-          (it as { menuId2?: string }).menuId2 ??
-          ''
-      ).trim()
       const parentQty = resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown })
       const parentName = String(it.name ?? '').trim()
       let n = 0
@@ -340,8 +333,8 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
         out.push({
           ...it,
           id: `${String(it.id ?? 'promo')}-k${n}`,
-          // 세트가 특정 주방으로 설정된 경우 부모 메뉴 설정을 우선한다.
-          kitchenRouteMenuId: parentMenuId || mid,
+          // 세트 구성품은 각 메뉴 코드의 프린터 설정대로 분리 라우팅한다.
+          kitchenRouteMenuId: mid,
           name: `${displayName}${optionLabel}`,
           qty: q,
           kitchenPromoGroupId: String(it.id ?? '').trim() || undefined,

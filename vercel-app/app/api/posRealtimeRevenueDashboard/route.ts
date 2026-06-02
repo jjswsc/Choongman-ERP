@@ -16,6 +16,7 @@ import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-ord
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { resolvePosSalesStoresForAuth } from '@/lib/pos-sales-request-scope'
+import { isPosOrderStatsCancellation } from '@/lib/pos-order-merge'
 
 const FETCH_LIMIT = 1_000_000
 const COMPLETED_STATUSES = new Set(['completed', 'paid', 'ready'])
@@ -278,7 +279,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (CANCELLED_STATUSES.has(status)) {
+      if (CANCELLED_STATUSES.has(status) && isPosOrderStatsCancellation(row)) {
         acc.cancelCount += 1
         acc.cancelAmount += total
         const orderReason = parseOrderCancelReason(String(row.memo || ''))

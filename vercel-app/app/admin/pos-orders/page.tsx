@@ -83,6 +83,11 @@ import {
   displayPosCancelReasonKey,
   normalizePosCancelReasonKey,
 } from "@/lib/pos-cancel-reason-key"
+import {
+  isPosOrderMergedAbsorbRow,
+  isPosOrderStatsCancellation,
+  parsePosOrderMergedKeepRef,
+} from "@/lib/pos-order-merge"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import {
   POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
@@ -182,6 +187,7 @@ function lineCancelReasonKeys(o: PosOrder): string[] {
 }
 
 function orderCancelReasonKey(o: PosOrder): string | null {
+  if (isPosOrderMergedAbsorbRow(o)) return null
   if (o.status !== "cancelled" && o.status !== "refunded") return null
   return normalizePosCancelReasonKey(extractOrderCancelReasonFromMemo(String(o.memo || "")))
 }
@@ -1347,7 +1353,7 @@ export default function PosOrdersPage() {
     const pending = orders.filter((o) =>
       ['pending', 'cooking'].includes(o.status)
     )
-    const cancelled = orders.filter((o) => o.status === 'cancelled')
+    const cancelled = orders.filter((o) => isPosOrderStatsCancellation(o))
     return {
       completedCount: completed.length,
       completedTotal: completed.reduce((s, o) => s + (o.total ?? 0), 0),
@@ -1383,7 +1389,7 @@ export default function PosOrdersPage() {
   const cancelledOrderReasonSummary = React.useMemo(() => {
     const bucket = new Map<string, { count: number; amount: number }>()
     for (const o of filteredOrders) {
-      if (o.status !== "cancelled" && o.status !== "refunded") continue
+      if (!isPosOrderStatsCancellation(o)) continue
       const reason = normalizePosCancelReasonKey(extractOrderCancelReasonFromMemo(String(o.memo || "")))
       const prev = bucket.get(reason) || { count: 0, amount: 0 }
       prev.count += 1
@@ -1856,6 +1862,7 @@ export default function PosOrdersPage() {
                               "border-b cursor-pointer hover:bg-muted/20",
                               expandedId === o.id && "bg-muted/20",
                               o.status === "cancelled" &&
+                                !isPosOrderMergedAbsorbRow(o) &&
                                 "bg-rose-50/60 hover:bg-rose-50/80 dark:bg-rose-950/25 dark:hover:bg-rose-950/35"
                             )}
                             onClick={() =>
@@ -1896,6 +1903,28 @@ export default function PosOrdersPage() {
                               {o.total?.toLocaleString()} ฿
                             </td>
                             <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                              {isPosOrderMergedAbsorbRow(o) ? (
+                                <span
+                                  className={cn(
+                                    ADMIN_BADGE_BASE_CN,
+                                    ADMIN_BADGE_NEUTRAL_CN,
+                                    "inline-flex max-w-[110px] justify-center"
+                                  )}
+                                  title={(() => {
+                                    const ref = parsePosOrderMergedKeepRef(o.memo)
+                                    const target =
+                                      ref?.keepOrderNo ||
+                                      (ref?.keepOrderId ? `#${ref.keepOrderId}` : "")
+                                    if (!target) return t("posOrderStatusMergedAbsorb") || "합석 흡수"
+                                    return (
+                                      i18nTr(t, "posOrderMergedInto", { orderNo: target }) ||
+                                      `→ ${target}에 합침`
+                                    )
+                                  })()}
+                                >
+                                  {t("posOrderStatusMergedAbsorb") || "합석 흡수"}
+                                </span>
+                              ) : (
                               <Select
                                 value={o.status}
                                 onValueChange={(v) => handleStatusChange(o.id, v)}
@@ -1919,6 +1948,7 @@ export default function PosOrdersPage() {
                                   ))}
                                 </SelectContent>
                               </Select>
+                              )}
                             </td>
                             <td className="px-5 py-3 text-center text-muted-foreground">
                               {o.createdAt

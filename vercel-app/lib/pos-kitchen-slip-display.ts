@@ -530,7 +530,8 @@ export function buildKitchenHallStyleSlipLines(
       displayParentName,
       menuCodeByMenuId
     )
-    const promoComposeLines = fromOrder.length > 0 ? fromOrder : fromChildren
+    // 주방 슬립은 스테이션별 분할 결과를 우선 표시한다(세트 제목은 유지, 구성품은 각 주방에 해당분만).
+    const promoComposeLines = fromChildren.length > 0 ? fromChildren : fromOrder
     if (isLikelyCodeLikeMenuName(displayParentName)) {
       const derived = deriveParentNameFromPromoComposeLines(promoComposeLines)
       if (derived && !isLikelyCodeLikeMenuName(derived)) displayParentName = derived

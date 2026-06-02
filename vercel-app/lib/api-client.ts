@@ -10378,7 +10378,7 @@ export async function posDineInTableMove(params: { orderId: number; targetTableN
 
 /**
  * 홀 주문 합석: keep는 매장(dine_in)만. absorb는 매장 또는 포장(takeout) — 포장은 이 테이블 청구서로만 합침.
- * keep에 absorb 품목·인원 등을 합치고 absorb는 cancelled. 결제 반영된 주문은 합석 불가(API).
+ * keep에 absorb 품목·인원 등을 합치고 absorb는 cancelled + `[ORDER_MERGED …]` 메모. 결제 반영된 주문은 합석 불가(API).
  */
 export async function posDineInTableMerge(params: { keepOrderId: number; absorbOrderId: number }) {
   const res = await apiFetchWithOffline('/api/posDineInTableActions', {

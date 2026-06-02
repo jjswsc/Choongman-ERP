@@ -126,7 +126,7 @@ describe('buildKitchenSlipGroups printer overlay', () => {
     )
   })
 
-  it('routes promo components by parent menu printer when parent menuId exists', () => {
+  it('routes promo components by each child menu printer setting', () => {
     const items: KitchenSlipRoutingItem[] = [
       {
         id: 'promo-2',
@@ -145,7 +145,7 @@ describe('buildKitchenSlipGroups printer overlay', () => {
       }),
     })
     expect(slips).toHaveLength(1)
-    expect(slips[0]?.station).toBe(1)
+    expect(slips[0]?.station).toBe(2)
     expect(slips[0]?.items[0]?.name).toContain('Crispy Chicken')
   })
 

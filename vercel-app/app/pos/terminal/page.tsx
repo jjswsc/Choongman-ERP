@@ -1521,7 +1521,7 @@ export default function PosTerminalPage() {
       if (!rawItems.length) throw new Error('empty_order_items')
       const items = rawItems.map((it) => {
         const note = String(it.note ?? '').trim()
-        const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+        const menuId = String(it.menuId1 ?? it.menuId2 ?? it.menuId ?? '').trim()
         const pit = it as {
           optionCode?: string
           optionCode1?: string
@@ -1550,15 +1550,25 @@ export default function PosTerminalPage() {
         const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
         const grabLine =
           /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
+        const mergedNote = resolveGrabItemPrintNote({
+          note: note || null,
+          optionCode: optionCode || null,
+          optionCode1: optionCode || null,
+          optionCode2: null,
+          optionCodes: optionCodes.length > 0 ? optionCodes : undefined,
+        })
         return {
           id: String(it.id ?? ''),
           name: grabLine ? String(it.name ?? displayName) : displayName,
           price: Number(it.price ?? 0),
-          qty: Number(it.qty ?? 1),
+          qty: Number(it.qty ?? it.quantity ?? 1),
           ...(menuId ? { menuId } : {}),
           ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
           ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
-          ...(note ? { note } : {}),
+          ...(mergedNote ? { note: mergedNote } : {}),
+          ...(String(order.deliveryAppCode ?? '').trim()
+            ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
+            : {}),
           ...(promoId ? { promoId } : {}),
           ...(promoCode ? { promoCode } : {}),
           ...(Array.isArray(
@@ -2571,7 +2581,7 @@ export default function PosTerminalPage() {
       }
       const items = (order.items || []).map((it) => {
         const note = String(it.note ?? '').trim()
-        const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+        const menuId = String(it.menuId1 ?? it.menuId2 ?? it.menuId ?? '').trim()
         const pit = it as {
           optionCode?: string
           optionCode1?: string
@@ -2599,6 +2609,13 @@ export default function PosTerminalPage() {
         const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
         const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
         const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
+        const mergedNote = resolveGrabItemPrintNote({
+          note: note || null,
+          optionCode: optionCode || null,
+          optionCode1: optionCode || null,
+          optionCode2: null,
+          optionCodes: optionCodes.length > 0 ? optionCodes : undefined,
+        })
         return {
           id: String(it.id ?? ''),
           name: grabLine ? String(it.name ?? displayName) : displayName,
@@ -2607,7 +2624,10 @@ export default function PosTerminalPage() {
           ...(menuId ? { menuId } : {}),
           ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
           ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
-          ...(note ? { note } : {}),
+          ...(mergedNote ? { note: mergedNote } : {}),
+          ...(String(order.deliveryAppCode ?? '').trim()
+            ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
+            : {}),
           ...(promoId ? { promoId } : {}),
           ...(promoCode ? { promoCode } : {}),
           ...(Array.isArray(
@@ -2794,7 +2814,7 @@ export default function PosTerminalPage() {
             if (order?.items?.length) {
               const items = (order.items || []).map((it) => {
                 const note = String(it.note ?? '').trim()
-                const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+                const menuId = String(it.menuId1 ?? it.menuId2 ?? it.menuId ?? '').trim()
                 const pit = it as {
                   optionCode?: string
                   optionCode1?: string
@@ -2819,6 +2839,13 @@ export default function PosTerminalPage() {
                 const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
                 const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
                 const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
+                const mergedNote = resolveGrabItemPrintNote({
+                  note: note || null,
+                  optionCode: optionCode || null,
+                  optionCode1: optionCode || null,
+                  optionCode2: null,
+                  optionCodes: optionCodes.length > 0 ? optionCodes : undefined,
+                })
                 return {
                   id: String(it.id ?? ''),
                   name: grabLine ? String(it.name ?? displayName) : displayName,
@@ -2827,7 +2854,10 @@ export default function PosTerminalPage() {
                   ...(menuId ? { menuId } : {}),
                   ...(optionCode ? { optionCode, optionCode1: optionCode } : {}),
                   ...(optionCodes.length > 0 ? { optionCodes } : optionCode ? { optionCodes: [optionCode] } : {}),
-                  ...(note ? { note } : {}),
+                  ...(mergedNote ? { note: mergedNote } : {}),
+                  ...(String(order.deliveryAppCode ?? '').trim()
+                    ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
+                    : {}),
                   ...(promoId ? { promoId } : {}),
                   ...(promoCode ? { promoCode } : {}),
                   ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
@@ -4325,6 +4355,25 @@ export default function PosTerminalPage() {
   /** 테이블 이동·합석 직후: 갱신된 테이블 번호·품목으로 홀 주문서만 재인쇄 */
   async function runAfterTableTransferHallReprint(keepOrderId: number) {
     await runAfterPartialLineCancelPrints(keepOrderId, 'dine_in', undefined, { skipKitchen: true })
+    try {
+      const list = await getPosOrders({ orderId: keepOrderId, storeCode: currentStoreId, strictStore: true })
+      const po = list?.[0] as PosOrder | undefined
+      if (!po?.items?.length) return
+      const snapItems = (po.items || []).map((it) => ({
+        id: String(it.id ?? ''),
+        name: String(it.name ?? ''),
+        price: Number(it.price ?? 0),
+        qty: Math.max(1, Number(it.qty ?? 1) || 1),
+        ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+        ...(String(it.menuId1 ?? it.menuId2 ?? '').trim()
+          ? { menuId: String(it.menuId1 ?? it.menuId2 ?? '').trim() }
+          : {}),
+      }))
+      const newQtyById = buildDineInQtySnapshot(snapItems)
+      if (newQtyById.size > 0) dineInRemoteItemQtySnapshotRef.current.set(keepOrderId, newQtyById)
+    } catch (e) {
+      console.warn('runAfterTableTransferHallReprint snapshot refresh:', e)
+    }
   }
 
   useEffect(() => {
@@ -9708,6 +9757,16 @@ export default function PosTerminalPage() {
                   ? undefined
                   : async (keepOrderId) => {
                       await runAfterTableTransferHallReprint(keepOrderId)
+                    }
+              }
+              onBeforeTableMerge={
+                isPosDemo
+                  ? undefined
+                  : (keepOrderId) => {
+                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                        keepOrderId,
+                        Date.now() + 15_000
+                      )
                     }
               }
               onAddOrder={() => {

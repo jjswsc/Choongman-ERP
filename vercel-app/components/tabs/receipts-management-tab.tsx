@@ -52,6 +52,7 @@ import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
 import {
   ADMIN_BADGE_BASE_CN,
   ADMIN_BADGE_DANGER_CN,
+  ADMIN_BADGE_NEUTRAL_CN,
   ADMIN_BADGE_SUCCESS_CN,
   ADMIN_BADGE_WARNING_CN,
   ADMIN_BTN_XS_CN,
@@ -94,6 +95,11 @@ import {
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { printPosVoidReceiptForOrder } from '@/lib/print-pos-void-receipt'
 import { isPosReversalStatus } from '@/lib/pos-order-policy'
+import {
+  isPosOrderMergedAbsorbRow,
+  isPosOrderStatsCancellation,
+  parsePosOrderMergedKeepRef,
+} from '@/lib/pos-order-merge'
 import {
   buildKitchenPrintTrackingId,
   clearKitchenPrintFailure,
@@ -236,6 +242,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       cancelled: t('cancel') || '취소',
     }),
     [t]
+  )
+
+  const resolveOrderStatusLabel = React.useCallback(
+    (o: PosOrder) => {
+      if (isPosOrderMergedAbsorbRow(o)) {
+        return t('posOrderStatusMergedAbsorb') || '합석 흡수'
+      }
+      return statusLabels[o.status] ?? o.status
+    },
+    [statusLabels, t]
   )
 
   const todayStr = getPosBusinessDateStr()
@@ -631,7 +647,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     if (!isToday || orders.length === 0) return null
     const completed = orders.filter((o) => ['completed', 'paid', 'ready'].includes(o.status))
     const pending = orders.filter((o) => ['pending', 'cooking'].includes(o.status))
-    const cancelled = orders.filter((o) => o.status === 'cancelled')
+    const cancelled = orders.filter((o) => isPosOrderStatsCancellation(o))
     return {
       completedCount: completed.length,
       completedTotal: completed.reduce((s, o) => s + (o.total ?? 0), 0),
@@ -1644,6 +1660,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                           'border-b cursor-pointer hover:bg-muted/20 transition',
                           expandedId === o.id && 'bg-muted/20',
                           o.status === 'cancelled' &&
+                            !isPosOrderMergedAbsorbRow(o) &&
                             'bg-rose-50/60 hover:bg-rose-50/80 dark:bg-rose-950/25 dark:hover:bg-rose-950/35'
                         )}
                         onClick={() => setExpandedId((prev) => (prev === o.id ? null : o.id))}
@@ -1662,12 +1679,14 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                             className={cn(
                               ADMIN_BADGE_BASE_CN,
                               o.status === 'completed' && ADMIN_BADGE_SUCCESS_CN,
+                              isPosOrderMergedAbsorbRow(o) && ADMIN_BADGE_NEUTRAL_CN,
                               o.status === 'cancelled' &&
+                                !isPosOrderMergedAbsorbRow(o) &&
                                 `${ADMIN_BADGE_DANGER_CN} dark:bg-rose-950/50 dark:text-rose-200`,
                               o.status === 'pending' && ADMIN_BADGE_WARNING_CN
                             )}
                           >
-                            {statusLabels[o.status] ?? o.status}
+                            {resolveOrderStatusLabel(o)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
@@ -1709,6 +1728,21 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                         <tr className="border-b bg-muted/10">
                           <td colSpan={9} className="px-4 py-4">
                             <div className="space-y-2 text-xs">
+                              {isPosOrderMergedAbsorbRow(o) ? (
+                                <div className="mb-2 pb-2 border-b text-muted-foreground">
+                                  {(() => {
+                                    const ref = parsePosOrderMergedKeepRef(o.memo)
+                                    const target =
+                                      ref?.keepOrderNo ||
+                                      (ref?.keepOrderId ? `#${ref.keepOrderId}` : '')
+                                    if (!target) return t('posOrderStatusMergedAbsorb') || '합석 흡수'
+                                    return (
+                                      i18nTr(t, 'posOrderMergedInto', { orderNo: target }) ||
+                                      `→ ${target}에 합침`
+                                    )
+                                  })()}
+                                </div>
+                              ) : null}
                               {(o.tableName ||
                                 o.memo ||
                                 (o.discountAmt && o.discountAmt > 0) ||
@@ -1819,7 +1853,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                         </>
                                       )
                                     })()}
-                                    {isPosReversalStatus(String(o.status ?? '')) ? (
+                                    {isPosReversalStatus(String(o.status ?? '')) &&
+                                    !isPosOrderMergedAbsorbRow(o) ? (
                                       <Button
                                         size="sm"
                                         variant="outline"

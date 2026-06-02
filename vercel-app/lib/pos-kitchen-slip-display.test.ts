@@ -16,7 +16,7 @@ describe('pos-kitchen-slip-display', () => {
     })
   })
 
-  it('groups split promo children under set header with full promoItems from order', () => {
+  it('groups split promo children under set header and keeps station-specific children', () => {
     const orderItems: KitchenSlipRoutingItem[] = [
       {
         id: 'set-1',
@@ -33,19 +33,20 @@ describe('pos-kitchen-slip-display', () => {
         id: 'set-1-k1',
         name: '[Set 1] GOLDEN FRIED CHICKEN (S Boneless)',
         qty: 1,
+        kitchenRouteMenuId: 'chicken',
         kitchenPromoGroupId: 'set-1',
         kitchenPromoParentName: '[April] Set 1',
         kitchenPromoParentQty: 1,
       },
     ]
-    const lines = buildKitchenHallStyleSlipLines(slipItems, { orderItems })
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems,
+      menuNameByMenuId: { chicken: 'GOLDEN FRIED CHICKEN' },
+    })
     expect(lines).toHaveLength(1)
     expect(lines[0].name).toContain('Set 1')
     expect(lines[0].qty).toBe(1)
-    expect(lines[0].promoComposeLines).toEqual([
-      'Rice x1',
-      'GOLDEN FRIED CHICKEN (S Boneless) x1',
-    ])
+    expect(lines[0].promoComposeLines).toEqual(['GOLDEN FRIED CHICKEN (S Boneless) x1'])
   })
 
   it('resolves promo optionCode and hides raw code-only parent note', () => {

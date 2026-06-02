@@ -8,9 +8,11 @@ import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
+import { appendPosOrderMergedAbsorbStamp } from '@/lib/pos-order-merge'
 
 type PosOrderRow = {
   id?: number
+  order_no?: string
   store_code?: string
   order_type?: string
   table_name?: string
@@ -358,6 +360,10 @@ export async function POST(req: NextRequest) {
       )
       await supabaseUpdateByFilter('pos_orders', `id=eq.${absorbOrderId}`, {
         status: 'cancelled',
+        memo: appendPosOrderMergedAbsorbStamp(absorb.memo, {
+          keepOrderId,
+          keepOrderNo: String(keep.order_no ?? ''),
+        }),
       })
 
       return NextResponse.json({ success: true }, { headers })

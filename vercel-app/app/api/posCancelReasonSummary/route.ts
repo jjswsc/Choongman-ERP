@@ -8,6 +8,7 @@ import { applyPosSalesStoreSelectionFilterAsync } from '@/lib/pos-sales-fetch-ro
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { normalizePosCancelReasonKey } from '@/lib/pos-cancel-reason-key'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { isPosOrderStatsCancellation } from '@/lib/pos-order-merge'
 
 const FETCH_LIMIT = 1_000_000
 
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
         lineTotalCount += 1
         lineTotalAmount += amount
       }
-      if (row.status === 'cancelled' || row.status === 'refunded') {
+      if (isPosOrderStatsCancellation(row)) {
         const memoLines = String(row.memo || '').split(/\r?\n/)
         let reason = ''
         for (let i = memoLines.length - 1; i >= 0; i -= 1) {
