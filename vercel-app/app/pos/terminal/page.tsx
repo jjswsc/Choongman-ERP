@@ -1408,12 +1408,34 @@ export default function PosTerminalPage() {
           applyPosMenusList(refreshedList)
           const refreshedIds = new Set(refreshedList.map((m) => String(m.id ?? '').trim()).filter(Boolean))
           const stillMissing = [...requiredMenuIds].filter((id) => !refreshedIds.has(id))
-          if (stillMissing.length > 0) {
-            console.error('[POS_PRINT_MENU_MAPPING_MISSING]', {
-              storeCode: String(targetStoreCode || currentStoreId || '').trim(),
-              missingMenuIds: stillMissing.slice(0, 50),
-            })
+          if (stillMissing.length === 0) return refreshedList
+          // 세트 구성품 등 매장 판매목록엔 없지만 이름 표기가 필요한 메뉴: 전역(매장 스코프 없음) 카탈로그에서 이름만 보강
+          try {
+            const globalRefreshed = await getPosMenus({ fresh: true })
+            const globalList = Array.isArray(globalRefreshed) ? (globalRefreshed as PosMenu[]) : []
+            if (globalList.length > 0) {
+              const missingSet = new Set(stillMissing)
+              const supplement = globalList.filter((m) => missingSet.has(String(m.id ?? '').trim()))
+              if (supplement.length > 0) {
+                const mergedList = [...refreshedList, ...supplement]
+                const mergedIds = new Set(mergedList.map((m) => String(m.id ?? '').trim()).filter(Boolean))
+                const afterMerge = [...requiredMenuIds].filter((id) => !mergedIds.has(id))
+                if (afterMerge.length > 0) {
+                  console.error('[POS_PRINT_MENU_MAPPING_MISSING]', {
+                    storeCode: String(targetStoreCode || currentStoreId || '').trim(),
+                    missingMenuIds: afterMerge.slice(0, 50),
+                  })
+                }
+                return mergedList
+              }
+            }
+          } catch {
+            /* 전역 카탈로그 보강 실패 시 매장 스코프 목록으로 진행 */
           }
+          console.error('[POS_PRINT_MENU_MAPPING_MISSING]', {
+            storeCode: String(targetStoreCode || currentStoreId || '').trim(),
+            missingMenuIds: stillMissing.slice(0, 50),
+          })
           return refreshedList
         }
       } catch {
