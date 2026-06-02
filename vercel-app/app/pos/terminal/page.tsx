@@ -2555,12 +2555,12 @@ export default function PosTerminalPage() {
       const { kitchenCartLines, dedupeKey, orderNo, storeCode, tableName, memo, guestCount, logEvent } = params
       if (!kitchenCartLines.length) return
       const fallbackDedupeKey = buildDineInAddonKitchenFallbackDedupeKey(orderNo, kitchenCartLines)
-      const baseKitchenDedupeKey = (() => {
-        const m = /^order:(\d+):kitchen:add:/.exec(String(dedupeKey))
-        return m?.[1] ? `order:${m[1]}:kitchen` : ''
-      })()
+      // 추가주문 주방 dedupe는 "내용 기반 add 키"(+fallback)만 쓴다.
+      // 신규 주문 키(order:{id}:kitchen)를 섞으면, 신규 주문이 이미 그 키를 예약한 뒤
+      // 첫 추가주문부터 6시간 TTL에 걸려 주방 슬립이 영구 미출력된다.
+      // (같은 기기 중복은 self-suppress 윈도우 + 내용 기반 add 키가 막는다.)
       const dedupeKeys = Array.from(
-        new Set([dedupeKey, fallbackDedupeKey, baseKitchenDedupeKey].map((k) => String(k || '').trim()).filter(Boolean))
+        new Set([dedupeKey, fallbackDedupeKey].map((k) => String(k || '').trim()).filter(Boolean))
       )
       if (!reserveKitchenAutoPrintKey(dedupeKeys)) return
       logPosPrintDebug(logEvent, {
