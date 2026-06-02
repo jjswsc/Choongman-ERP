@@ -83,9 +83,14 @@ function formatPromoComposeLine(
   parentItemName?: string,
   menuCodeByMenuId?: Record<string, string>
 ): string[] {
+  const directMenuName = String((p as { menuName?: unknown }).menuName ?? '').trim()
+  const menuNameFromMenuId =
+    menuNameByMenuId && p.menuId ? String(menuNameByMenuId[p.menuId] ?? '').trim() : ''
+  const preferredDirectMenuName =
+    directMenuName && !isLikelyCodeLikeMenuName(directMenuName) ? directMenuName : ''
   const menuName =
-    String((p as { menuName?: unknown }).menuName ?? '').trim() ||
-    (menuNameByMenuId && p.menuId ? String(menuNameByMenuId[p.menuId] ?? '').trim() : '') ||
+    menuNameFromMenuId ||
+    preferredDirectMenuName ||
     (p.menuId ? `#${p.menuId}` : '')
   const rows =
     grabSplit && menuCodeByMenuId

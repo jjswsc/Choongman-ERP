@@ -1348,10 +1348,12 @@ export default function PosTerminalPage() {
       slipItems: KitchenSlipRoutingItem[],
       orderSource: KitchenSlipRoutingItem[],
       ki: { t: (key: string) => string },
-      menuCatalog?: PosMenu[]
+      menuCatalog?: PosMenu[],
+      optionNameByCodeForPrint?: Map<string, string>
     ) =>
       {
         const activeMenus = Array.isArray(menuCatalog) && menuCatalog.length > 0 ? menuCatalog : menus
+        const activeOptionMap = optionNameByCodeForPrint ?? optionNameByCode
         return mapKitchenSlipGroupItemsForPrint(slipItems, {
           orderItems: orderSource,
           menuNameByMenuId: Object.fromEntries(
@@ -1360,7 +1362,7 @@ export default function PosTerminalPage() {
           menuCodeByMenuId: Object.fromEntries(
             activeMenus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
           ),
-          optionNameByCode,
+          optionNameByCode: activeOptionMap,
           translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
           formatNote: formatLineNoteForPrint,
         })
@@ -1430,6 +1432,81 @@ export default function PosTerminalPage() {
       return catalog
     },
     [applyPosMenusList, currentStoreId, menus]
+  )
+  const resolveOptionNameByCodeForKitchenPrint = useCallback(
+    async (
+      rows: Array<Record<string, unknown>>,
+      menuCatalog: PosMenu[]
+    ): Promise<Map<string, string>> => {
+      const requiredOptionCodes = new Set<string>()
+      const addCode = (raw: unknown) => {
+        const code = String(raw ?? '').trim().toUpperCase()
+        if (code) requiredOptionCodes.add(code)
+      }
+      const addCodesFromNote = (rawNote: unknown) => {
+        const note = String(rawNote ?? '')
+        const matches = note.match(/optc:\s*([A-Za-z0-9,\-_]+)/gi) || []
+        for (const hit of matches) {
+          const payload = String(hit).replace(/^optc:\s*/i, '')
+          for (const part of payload.split(',')) addCode(part)
+        }
+      }
+      for (const row of rows) {
+        addCode((row as { optionCode?: unknown }).optionCode)
+        addCode((row as { optionCode1?: unknown }).optionCode1)
+        addCode((row as { optionCode2?: unknown }).optionCode2)
+        const optionCodes = (row as { optionCodes?: unknown[] }).optionCodes
+        if (Array.isArray(optionCodes)) optionCodes.forEach((c) => addCode(c))
+        addCodesFromNote((row as { note?: unknown }).note)
+        const promoItems = (row as { promoItems?: Array<{ optionCode?: unknown }> }).promoItems
+        if (Array.isArray(promoItems)) {
+          for (const p of promoItems) addCode((p as { optionCode?: unknown }).optionCode)
+        }
+      }
+      if (requiredOptionCodes.size === 0) return optionNameByCode
+
+      const hasCodeInCurrentMap = (codeUpper: string): boolean => {
+        if (optionNameByCode.has(codeUpper)) return true
+        for (const [k] of optionNameByCode.entries()) {
+          if (String(k ?? '').trim().toUpperCase() === codeUpper) return true
+        }
+        return false
+      }
+      const missingCodes = [...requiredOptionCodes].filter((code) => !hasCodeInCurrentMap(code))
+      if (missingCodes.length === 0) return optionNameByCode
+
+      try {
+        const [rowsDefault, rowsCodeMap] = await Promise.all([
+          getPosMenuOptions({ fresh: true }),
+          getPosMenuOptions({ fresh: true, forCodeMap: true }),
+        ])
+        setMenuOptions(Array.isArray(rowsDefault) ? rowsDefault : [])
+        setMenuOptionsForCodeMap(Array.isArray(rowsCodeMap) ? rowsCodeMap : [])
+        const rebuilt = buildOptionNameByCodeFromMenus(
+          menuCatalog,
+          Array.isArray(rowsCodeMap) && rowsCodeMap.length > 0 ? rowsCodeMap : Array.isArray(rowsDefault) ? rowsDefault : []
+        )
+        const stillMissing = [...requiredOptionCodes].filter((code) => {
+          if (rebuilt.has(code)) return false
+          for (const [k] of rebuilt.entries()) {
+            if (String(k ?? '').trim().toUpperCase() === code) return false
+          }
+          return true
+        })
+        if (stillMissing.length > 0) {
+          console.error('[POS_PRINT_OPTION_CODE_MAPPING_MISSING]', {
+            missingOptionCodes: stillMissing.slice(0, 80),
+          })
+        }
+        return rebuilt.size > 0 ? rebuilt : optionNameByCode
+      } catch {
+        console.error('[POS_PRINT_OPTION_CODE_MAPPING_REFRESH_FAILED]', {
+          missingOptionCodes: missingCodes.slice(0, 80),
+        })
+      }
+      return optionNameByCode
+    },
+    [optionNameByCode]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
@@ -1611,6 +1688,10 @@ export default function PosTerminalPage() {
       })
       const settings = await getPrinterSettingsForStore(effectiveStoreCode)
       const menusForPrint = await resolveMenusForKitchenPrint(items as Array<Record<string, unknown>>, effectiveStoreCode)
+      const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+        items as Array<Record<string, unknown>>,
+        menusForPrint
+      )
       const ki = kitchenSlipPrintI18n(settings, lang)
       const slips = buildKitchenSlipGroups(
         kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
@@ -1640,12 +1721,13 @@ export default function PosTerminalPage() {
             slip.items,
             kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
             ki,
-            menusForPrint
+            menusForPrint,
+            optionNameByCodeForPrint
           ),
           memoLine: memoLine || null,
           escapeHtml,
           design: slipDesign,
-          optionNameByCode,
+          optionNameByCode: optionNameByCodeForPrint,
           printColorAdjust: 'exact',
           ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
         })
@@ -2720,6 +2802,10 @@ export default function PosTerminalPage() {
               items as Array<Record<string, unknown>>,
               effectiveStoreCode
             )
+            const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+              items as Array<Record<string, unknown>>,
+              menusForPrint
+            )
             const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
@@ -2750,12 +2836,13 @@ export default function PosTerminalPage() {
                   slip.items,
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
                   ki,
-                  menusForPrint
+                  menusForPrint,
+                  optionNameByCodeForPrint
                 ),
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
-                optionNameByCode,
+                optionNameByCode: optionNameByCodeForPrint,
                 printColorAdjust: 'exact',
                 ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
               })
@@ -2993,6 +3080,10 @@ export default function PosTerminalPage() {
                       items as Array<Record<string, unknown>>,
                       effectiveStoreCode
                     )
+                    const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+                      items as Array<Record<string, unknown>>,
+                      menusForPrint
+                    )
                     const ki = kitchenSlipPrintI18n(settings, lang)
                     const slips = buildKitchenSlipGroups(
                       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
@@ -3022,13 +3113,14 @@ export default function PosTerminalPage() {
                         items: kitchenSlipItemsForPrint(
                           slip.items,
                           kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                            ki,
-                            menusForPrint
+                          ki,
+                          menusForPrint,
+                          optionNameByCodeForPrint
                         ),
                         memoLine: memoLine || null,
                         escapeHtml,
                         design: slipDesign,
-                        optionNameByCode,
+                        optionNameByCode: optionNameByCodeForPrint,
                         printColorAdjust: 'exact',
                         ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
                       })
@@ -5344,10 +5436,30 @@ export default function PosTerminalPage() {
               menuId1?: string
               menu_id1?: string
               menuId?: string
+              optionCode?: string
+              optionCode1?: string
+              optionCode2?: string
+              optionCodes?: string[]
               promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+              deliveryAppCode?: string
             }) => {
               const note = String(it.note ?? '').trim()
               const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+              const optionCodes = Array.isArray(it.optionCodes)
+                ? it.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
+                : []
+              const optionCode1 = String(
+                it.optionCode1 ?? it.optionCode2 ?? it.optionCode ?? optionCodes[0] ?? ''
+              ).trim()
+              const optionCode2 = String(it.optionCode2 ?? '').trim()
+              const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
+              const mergedNote = resolveGrabItemPrintNote({
+                note: note || null,
+                optionCode: optionCode1 || null,
+                optionCode1: optionCode1 || null,
+                optionCode2: optionCode2 || null,
+                optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
+              })
               const displayName = resolveOrderItemDisplayName({
                 id: String(it.id ?? ''),
                 name: String(it.name ?? ''),
@@ -5359,7 +5471,13 @@ export default function PosTerminalPage() {
                 price: Number(it.price ?? 0),
                 qty: Number(it.qty ?? it.quantity ?? 1),
                 ...(menuId ? { menuId } : {}),
-                ...(note ? { note } : {}),
+                ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
+                ...(optionCode2 ? { optionCode2 } : {}),
+                ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
+                ...(mergedNote ? { note: mergedNote } : {}),
+                ...(String(it.deliveryAppCode ?? '').trim()
+                  ? { deliveryAppCode: String(it.deliveryAppCode).trim().toLowerCase() }
+                  : {}),
                 ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
               }
             }
@@ -5406,6 +5524,10 @@ export default function PosTerminalPage() {
                   items as Array<Record<string, unknown>>,
                   effectiveStoreCode
                 )
+                const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+                  items as Array<Record<string, unknown>>,
+                  menusForPrint
+                )
                 const ki = kitchenSlipPrintI18n(settings, lang)
                 const slips = buildKitchenSlipGroups(
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
@@ -5436,12 +5558,13 @@ export default function PosTerminalPage() {
                       slip.items,
                       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
                       ki,
-                      menusForPrint
+                      menusForPrint,
+                      optionNameByCodeForPrint
                     ),
                     memoLine: memoLine || null,
                     escapeHtml,
                     design: slipDesign,
-                    optionNameByCode,
+                    optionNameByCode: optionNameByCodeForPrint,
                     printColorAdjust: 'exact',
                     ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
                   })
