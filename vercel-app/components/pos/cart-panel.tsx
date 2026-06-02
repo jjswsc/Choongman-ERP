@@ -525,6 +525,8 @@ interface CartPanelProps {
     pointUsed?: number
     /** 홀 주문 인원 (매출 분석용) */
     guestCount?: number
+    /** 테이블에 이미 열린 주문이 있으면 해당 주문 id */
+    existingOrderId?: number
   }) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onDeliveryOrderComplete?: (payload: {
@@ -4847,6 +4849,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   appliedCoupons: couponPayloadFields.appliedCoupons,
                   pointUsed: pointUsedNum || undefined,
                   guestCount,
+                  existingOrderId: normalizeExistingPosOrderId(selectedTable.order?.id) ?? undefined,
                 })
               }}
             >

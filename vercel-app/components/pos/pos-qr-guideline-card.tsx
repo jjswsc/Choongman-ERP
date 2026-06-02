@@ -6,24 +6,12 @@ import { cn } from '@/lib/utils'
 import { POS_QR_BRAND, type PosQrDisplayKind } from '@/lib/pos-qr-brand-paths'
 
 /**
- * BOT / KBank guideline card proportions (reference slip layout).
- * - Header band: full card width
- * - PromptPay mark: ~28% card width
- * - QR modules: ~82% card width
- * - Center logo: ~14% of QR module area
+ * BOT / KBank guideline card — one column width (QR module width).
+ * Header blue band, brand row, and QR share the same horizontal span.
  */
-const GUIDELINE_CARD_WIDTH_PX = 280
-const QR_WIDTH_RATIO = 0.82
-const PROMPTPAY_WIDTH_RATIO = 0.28
-const CARD_BRAND_ROW_WIDTH_RATIO = 0.72
-/** PromptPay screen header height (photo 2) — shared by both QR kinds. */
-const HEADER_BAND_HEIGHT_RATIO = 0.22
+const DEFAULT_QR_SIZE_PX = 230
+const HEADER_BAND_HEIGHT_RATIO = 0.24
 const CENTER_LOGO_RATIO = 0.14
-
-const QR_DISPLAY_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * QR_WIDTH_RATIO)
-const PROMPTPAY_WIDTH_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * PROMPTPAY_WIDTH_RATIO)
-const CARD_BRAND_ROW_WIDTH_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * CARD_BRAND_ROW_WIDTH_RATIO)
-const HEADER_BAND_HEIGHT_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * HEADER_BAND_HEIGHT_RATIO)
 
 /** Logo-01 crop: blue header band only (matches `thai-qr-payment` renderCard). */
 const THAI_QR_HEADER_CROP = {
@@ -35,6 +23,9 @@ const THAI_QR_HEADER_CROP = {
   height: 210,
 } as const
 
+const HEADER_CROP_BG_SIZE = `${(THAI_QR_HEADER_CROP.imageWidth / THAI_QR_HEADER_CROP.width) * 100}% ${(THAI_QR_HEADER_CROP.imageHeight / THAI_QR_HEADER_CROP.height) * 100}%`
+const HEADER_CROP_BG_POSITION = `${(THAI_QR_HEADER_CROP.x / (THAI_QR_HEADER_CROP.imageWidth - THAI_QR_HEADER_CROP.width)) * 100}% ${(THAI_QR_HEADER_CROP.y / (THAI_QR_HEADER_CROP.imageHeight - THAI_QR_HEADER_CROP.height)) * 100}%`
+
 type Props = {
   payload: string
   kind: PosQrDisplayKind
@@ -42,17 +33,11 @@ type Props = {
   qrClassName?: string
 }
 
-function ThaiQrHeaderBand({ className }: { className?: string }) {
-  const { imageWidth, imageHeight, x, y, width, height } = THAI_QR_HEADER_CROP
-  const bgWidthPct = (imageWidth / width) * 100
-  const bgHeightPct = (imageHeight / height) * 100
-  const posXPct = (x / (imageWidth - width)) * 100
-  const posYPct = (y / (imageHeight - height)) * 100
-
+function ThaiQrHeaderBand({ bandHeightPx }: { bandHeightPx: number }) {
   return (
     <div
-      className={cn('w-full overflow-hidden bg-[#00427A]', className)}
-      style={{ height: HEADER_BAND_HEIGHT_PX }}
+      className="w-full shrink-0 overflow-hidden bg-[#00427A]"
+      style={{ height: bandHeightPx }}
       role="img"
       aria-label="THAI QR PAYMENT"
     >
@@ -60,18 +45,34 @@ function ThaiQrHeaderBand({ className }: { className?: string }) {
         className="h-full w-full bg-no-repeat"
         style={{
           backgroundImage: `url(${POS_QR_BRAND.thaiQrHeader})`,
-          backgroundSize: `${bgWidthPct}% ${bgHeightPct}%`,
-          backgroundPosition: `${posXPct}% ${posYPct}%`,
+          backgroundSize: HEADER_CROP_BG_SIZE,
+          backgroundPosition: HEADER_CROP_BG_POSITION,
         }}
       />
     </div>
   )
 }
 
+function resolveQrBoxClass(qrClassName?: string): string {
+  if (qrClassName?.trim()) return qrClassName.trim()
+  return `h-[${DEFAULT_QR_SIZE_PX}px] w-[${DEFAULT_QR_SIZE_PX}px]`
+}
+
+function parseQrWidthPx(qrClassName?: string): number {
+  const raw = String(qrClassName || '')
+  const bracket = raw.match(/\bw-\[(\d+(?:\.\d+)?)px\]/i)
+  if (bracket) {
+    const n = Number(bracket[1])
+    if (Number.isFinite(n) && n > 0) return Math.round(n)
+  }
+  return DEFAULT_QR_SIZE_PX
+}
+
 export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Props) {
   const [qrUrl, setQrUrl] = React.useState('')
   const [failed, setFailed] = React.useState(false)
-  const centerLogoPx = Math.round(QR_DISPLAY_PX * CENTER_LOGO_RATIO)
+  const qrBoxClass = resolveQrBoxClass(qrClassName)
+  const qrWidthPx = parseQrWidthPx(qrClassName)
 
   React.useEffect(() => {
     const raw = String(payload || '').trim()
@@ -129,45 +130,44 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
     )
   }
 
+  const headerHeightPx = Math.max(48, Math.round(qrWidthPx * HEADER_BAND_HEIGHT_RATIO))
+  const centerLogoPx = Math.round(qrWidthPx * CENTER_LOGO_RATIO)
+
   return (
-    <div
-      className={cn('mx-auto overflow-hidden rounded-md border bg-white', className)}
-      style={{ width: GUIDELINE_CARD_WIDTH_PX, maxWidth: '100%' }}
-    >
-      <ThaiQrHeaderBand />
-      <div className="bg-white px-2 py-2">
-        {kind === 'CREDIT_CARD' ? (
-          <div
-            className="mx-auto flex items-center justify-center gap-1.5"
-            style={{ width: CARD_BRAND_ROW_WIDTH_PX }}
-          >
-            <img src={POS_QR_BRAND.visa} alt="Visa" className="h-5 max-h-6 flex-1 object-contain" />
-            <img src={POS_QR_BRAND.mastercard} alt="Mastercard" className="h-6 max-h-7 flex-1 object-contain" />
-            <img src={POS_QR_BRAND.unionpay} alt="UnionPay" className="h-5 max-h-6 flex-1 object-contain" />
+    <div className={cn('mx-auto overflow-hidden rounded-md border bg-white', className)}>
+      {/* QR 박스 너비 = 컬럼 너비 → 헤더 파란 띠도 동일 너비 */}
+      <div className="inline-flex w-fit max-w-full flex-col items-stretch">
+        <ThaiQrHeaderBand bandHeightPx={headerHeightPx} />
+        <div className="bg-white py-2">
+          {kind === 'CREDIT_CARD' ? (
+            <div className="mx-auto flex w-[88%] max-w-full items-center justify-center gap-1.5">
+              <img src={POS_QR_BRAND.visa} alt="Visa" className="h-5 max-h-6 flex-1 object-contain" />
+              <img src={POS_QR_BRAND.mastercard} alt="Mastercard" className="h-6 max-h-7 flex-1 object-contain" />
+              <img src={POS_QR_BRAND.unionpay} alt="UnionPay" className="h-5 max-h-6 flex-1 object-contain" />
+            </div>
+          ) : (
+            <img
+              src={POS_QR_BRAND.promptpay}
+              alt="PromptPay"
+              className="mx-auto block h-auto w-[72%] max-w-full object-contain"
+            />
+          )}
+        </div>
+        <div className="relative shrink-0 bg-white pb-3">
+          <div className={cn('relative', qrBoxClass)}>
+            <img
+              src={qrUrl}
+              alt={kind === 'CREDIT_CARD' ? 'Credit Card QR' : 'Thai QR Payment'}
+              className="h-full w-full object-contain"
+            />
+            <img
+              src={POS_QR_BRAND.thaiQrCenterLogo}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
+              style={{ width: centerLogoPx, height: centerLogoPx }}
+            />
           </div>
-        ) : (
-          <img
-            src={POS_QR_BRAND.promptpay}
-            alt="PromptPay"
-            className="mx-auto block h-auto object-contain"
-            style={{ width: PROMPTPAY_WIDTH_PX, maxWidth: '100%' }}
-          />
-        )}
-      </div>
-      <div className="flex items-center justify-center bg-white px-2 pb-3 pt-1">
-        <div className="relative inline-flex" style={{ width: QR_DISPLAY_PX, height: QR_DISPLAY_PX }}>
-          <img
-            src={qrUrl}
-            alt={kind === 'CREDIT_CARD' ? 'Credit Card QR' : 'Thai QR Payment'}
-            className={cn('h-full w-full object-contain', qrClassName)}
-          />
-          <img
-            src={POS_QR_BRAND.thaiQrCenterLogo}
-            alt=""
-            aria-hidden
-            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-contain"
-            style={{ width: centerLogoPx, height: centerLogoPx }}
-          />
         </div>
       </div>
     </div>
