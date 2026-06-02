@@ -1431,6 +1431,9 @@ export default function PosTerminalPage() {
     ) =>
       mapKitchenSlipGroupItemsForPrint(slipItems, {
         orderItems: orderSource,
+        menuNameByMenuId: Object.fromEntries(
+          menus.map((m) => [String(m.id), String(m.name ?? '').trim()]).filter(([id, name]) => id && name)
+        ),
         menuCodeByMenuId: Object.fromEntries(
           menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
         ),
@@ -1438,7 +1441,7 @@ export default function PosTerminalPage() {
         translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
         formatNote: formatLineNoteForPrint,
       }),
-    [formatLineNoteForPrint, optionNameByCode]
+    [formatLineNoteForPrint, menus, optionNameByCode]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList, currentStoreId || null)
   const drawerOpenWarnedRef = useRef(false)
