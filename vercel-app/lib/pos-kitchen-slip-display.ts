@@ -621,14 +621,21 @@ export function buildKitchenHallStyleSlipLines(
       ? fallbackNameFromNote
       : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
     const formattedNote = formatItemNoteForPrint(resolvedNote)
+    // optionCode가 없고 이름에만 옵션이 있는 메뉴(코드 미부여): 이름에 적힌 옵션 텍스트를
+    // 그대로 표기해 누락을 막는다. (이름에 이미 있는 값이라 추론이 아님)
+    const optionLineFallback =
+      !formattedNote && lineSplit.optionLine && !hasOptionCodeToken
+        ? String(lineSplit.optionLine).trim()
+        : ''
+    const effectiveNote = formattedNote || optionLineFallback
     const dedupedNote =
       fallbackNameFromNote &&
-      formattedNote &&
+      effectiveNote &&
       normalizePromoParentKey(
-        formattedNote.replace(/\s*x\s*[\d.]+\s*$/iu, '')
+        effectiveNote.replace(/\s*x\s*[\d.]+\s*$/iu, '')
       ) === normalizePromoParentKey(fallbackNameFromNote)
         ? undefined
-        : formattedNote
+        : effectiveNote
     out.push({
       name: resolvedMainName,
       qty: Math.max(1, Number(it.qty ?? 1) || 1),

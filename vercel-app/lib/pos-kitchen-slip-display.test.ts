@@ -235,6 +235,18 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('SNOW ONION')
   })
 
+  it('keeps name-parsed option when item has no optionCode (no inference, value already in name)', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      { id: 'cart-banban-1', name: 'Banban Chicken (CURRY SNOW ONION / CURRYCANE)', qty: 1 },
+      { id: 'cart-snow-1', name: 'SNOW ONION (M - Drumette)', qty: 1 },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, { grabInbound: false })
+    expect(lines[0].name).toBe('Banban Chicken')
+    expect(lines[0].note).toBe('CURRY SNOW ONION / CURRYCANE')
+    expect(lines[1].name).toBe('SNOW ONION')
+    expect(lines[1].note).toBe('M - Drumette')
+  })
+
   it('grab line resolves optionCode when note is empty', () => {
     const catalog = buildGrabPosCatalog(
       [],
