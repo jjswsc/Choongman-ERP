@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 const KEY_LOGIN_BG = 'member_portal_login_background_url'
 const KEY_APP_BG = 'member_portal_app_background_url'
@@ -14,7 +14,7 @@ function asHttpUrl(raw: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const filter = `or=(key.eq.${KEY_LOGIN_BG},key.eq.${KEY_APP_BG})`
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const body = (await req.json()) as { loginBackgroundUrl?: string; appBackgroundUrl?: string }

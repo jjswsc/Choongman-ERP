@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/verify-auth'
+import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 import { randomStorageObjectBasename } from '@/lib/storage-filename-safe'
 import {
   looksLikeSupabaseStorageMissingBucketError,
@@ -13,7 +13,7 @@ const MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const body = (await req.json()) as { fileName?: string; contentType?: string; fileSize?: number }

@@ -22,9 +22,16 @@ type MemberPortalLineListProps = {
   emptyMessage: string
   onToggleActive: (id: string) => void
   onEdit: (id: string) => void
+  canEdit?: boolean
 }
 
-export function MemberPortalLineList({ rows, emptyMessage, onToggleActive, onEdit }: MemberPortalLineListProps) {
+export function MemberPortalLineList({
+  rows,
+  emptyMessage,
+  onToggleActive,
+  onEdit,
+  canEdit = true,
+}: MemberPortalLineListProps) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/20 px-6 py-14 text-center text-sm text-muted-foreground">
@@ -61,8 +68,12 @@ export function MemberPortalLineList({ rows, emptyMessage, onToggleActive, onEdi
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
-                  onClick={() => onEdit(row.id)}
-                  className="truncate text-left text-sm font-semibold text-[#06c755] hover:underline"
+                  onClick={() => canEdit && onEdit(row.id)}
+                  disabled={!canEdit}
+                  className={cn(
+                    "truncate text-left text-sm font-semibold",
+                    canEdit ? "text-[#06c755] hover:underline" : "cursor-default text-foreground"
+                  )}
                 >
                   {row.title || "(제목 없음)"}
                 </button>
@@ -78,16 +89,18 @@ export function MemberPortalLineList({ rows, emptyMessage, onToggleActive, onEdi
                   ) : null}
                 </div>
               </div>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="shrink-0 md:hidden"
-                onClick={() => onEdit(row.id)}
-                aria-label="편집"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
+              {canEdit ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0 md:hidden"
+                  onClick={() => onEdit(row.id)}
+                  aria-label="편집"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              ) : null}
             </div>
 
             <p className="hidden text-xs text-muted-foreground md:block">{row.placement || "—"}</p>
@@ -95,35 +108,50 @@ export function MemberPortalLineList({ rows, emptyMessage, onToggleActive, onEdi
             <p className="hidden text-center text-xs text-muted-foreground md:block">{row.sortOrder ?? 0}</p>
 
             <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="hidden md:inline-flex"
-                onClick={() => onEdit(row.id)}
-              >
-                <Pencil className="mr-1 h-3.5 w-3.5" />
-                편집
-              </Button>
-              <button
-                type="button"
-                disabled={row.toggling}
-                onClick={() => onToggleActive(row.id)}
-                className={cn(
-                  "inline-flex min-w-[5.5rem] items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-                  row.isActive
-                    ? "border-[#06c755] bg-[#06c755]/10 text-[#06c755] hover:bg-[#06c755]/15"
-                    : "border-muted-foreground/30 bg-muted/40 text-muted-foreground hover:bg-muted"
-                )}
-              >
-                {row.toggling ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : row.isActive ? (
-                  "사용 중"
-                ) : (
-                  "중지"
-                )}
-              </button>
+              {canEdit ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="hidden md:inline-flex"
+                  onClick={() => onEdit(row.id)}
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  편집
+                </Button>
+              ) : null}
+              {canEdit ? (
+                <button
+                  type="button"
+                  disabled={row.toggling}
+                  onClick={() => onToggleActive(row.id)}
+                  className={cn(
+                    "inline-flex min-w-[5.5rem] items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                    row.isActive
+                      ? "border-[#06c755] bg-[#06c755]/10 text-[#06c755] hover:bg-[#06c755]/15"
+                      : "border-muted-foreground/30 bg-muted/40 text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {row.toggling ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : row.isActive ? (
+                    "사용 중"
+                  ) : (
+                    "중지"
+                  )}
+                </button>
+              ) : (
+                <span
+                  className={cn(
+                    "inline-flex min-w-[5.5rem] items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold",
+                    row.isActive
+                      ? "border-[#06c755]/30 bg-[#06c755]/5 text-[#06c755]"
+                      : "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+                  )}
+                >
+                  {row.isActive ? "사용 중" : "중지"}
+                </span>
+              )}
             </div>
           </li>
         ))}

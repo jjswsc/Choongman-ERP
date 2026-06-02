@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 const KEY_FACEBOOK = 'member_portal_contact_facebook_url'
 const KEY_INSTAGRAM = 'member_portal_contact_instagram_url'
@@ -14,7 +14,7 @@ function asHttpUrl(raw: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const filter = `or=(key.eq.${KEY_FACEBOOK},key.eq.${KEY_INSTAGRAM})`
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const body = (await req.json()) as { facebookUrl?: string; instagramUrl?: string }

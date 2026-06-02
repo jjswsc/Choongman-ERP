@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 const KEY_GRAB = 'member_portal_delivery_grab_url'
 const KEY_LINEMAN = 'member_portal_delivery_lineman_url'
@@ -15,7 +15,7 @@ function asHttpUrl(raw: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const filter = `or=(key.eq.${KEY_GRAB},key.eq.${KEY_LINEMAN},key.eq.${KEY_SHOPEE})`
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const body = (await req.json()) as { grabUrl?: string; linemanUrl?: string; shopeeUrl?: string }

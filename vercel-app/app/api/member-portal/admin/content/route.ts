@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { mapMemberPortalContentRow, type MemberPortalContentRow } from '@/lib/member-portal-content'
 import { supabaseSelect, supabaseUpsertMerge } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 function isMissingContentTableError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e || '')
@@ -19,7 +19,7 @@ function normalizeBangkokDateTimeInput(raw: unknown): string | null {
 }
 
 export async function GET(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const rows = (await supabaseSelect('member_portal_content', {
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const body = (await req.json()) as Record<string, unknown>

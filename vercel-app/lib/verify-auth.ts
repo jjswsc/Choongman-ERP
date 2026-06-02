@@ -4,7 +4,12 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, type JwtPayload } from './jwt-auth'
-import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from '@/lib/permissions'
+import {
+  canEditMemberPortalAdmin,
+  isAccountingRole,
+  isManagerOrFranchiseeRole,
+  isOfficeRole,
+} from '@/lib/permissions'
 
 /** API Route의 Request/NextRequest에서 Bearer JWT만 검증 (선택) */
 export async function tryVerifyBearerFromRequest(req: Request | NextRequest): Promise<JwtPayload | null> {
@@ -128,5 +133,31 @@ export async function requireAuth(
     }
   }
 
+  return { auth, errorResponse: null }
+}
+
+/** 회원앱 운영 API — 본사·회계·매장 관리자 편집 허용 */
+export async function requireMemberPortalAdminAuth(
+  req: NextRequest
+): Promise<
+  | { auth: JwtPayload; errorResponse: null }
+  | { auth: null; errorResponse: NextResponse }
+> {
+  const authResult = await requireAuth(req, 'any')
+  if (authResult.errorResponse) return authResult
+  const auth = authResult.auth!
+  if (!canEditMemberPortalAdmin(auth.role || '', auth.store)) {
+    return {
+      auth: null,
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          message: '회원앱 운영 편집 권한이 필요합니다.',
+          msg: '회원앱 운영 편집 권한이 필요합니다.',
+        },
+        { status: 403 }
+      ),
+    }
+  }
   return { auth, errorResponse: null }
 }

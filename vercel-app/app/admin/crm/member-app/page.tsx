@@ -5,69 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
+import type { MemberPortalContentAdminItem } from "@/lib/member-portal-content-admin"
+import { useAuth } from "@/lib/auth-context"
+import { canEditMemberPortalAdmin } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
-
-type ContentType = "popup" | "info" | "store_photo"
-
-type ContentItem = {
-  id: number
-  contentKey: string
-  contentType: ContentType
-  storeCode: string
-  title: string
-  body: string
-  imageUrl: string
-  targetTab: string
-  isActive: boolean
-  sortOrder: number
-  startsAt: string
-  endsAt: string
-  updatedAt: string
-  updatedBy: string
-}
-
-type FormState = {
-  contentKey: string
-  contentType: ContentType
-  storeCode: string
-  title: string
-  body: string
-  imageUrl: string
-  targetTab: string
-  isActive: boolean
-  sortOrder: number
-  startsAt: string
-  endsAt: string
-}
-
-function emptyForm(): FormState {
-  return {
-    contentKey: "",
-    contentType: "popup",
-    storeCode: "",
-    title: "",
-    body: "",
-    imageUrl: "",
-    targetTab: "",
-    isActive: true,
-    sortOrder: 0,
-    startsAt: "",
-    endsAt: "",
-  }
-}
-
-function toDatetimeLocal(iso: string): string {
-  const v = String(iso || "").trim()
-  if (!v) return ""
-  const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
-  if (!m) return ""
-  return `${m[1]}T${m[2]}`
-}
 
 type ImageRule = {
   label: string
@@ -148,9 +94,12 @@ function validateImageByRule(
 }
 
 export default function CrmMemberAppContentPage() {
-  const [activeTab, setActiveTab] = React.useState<"design" | "popup" | "info" | "stores" | "contact" | "delivery">("design")
-  const [items, setItems] = React.useState<ContentItem[]>([])
-  const [form, setForm] = React.useState<FormState>(emptyForm())
+  const { auth } = useAuth()
+  const canEdit = canEditMemberPortalAdmin(auth?.role || "", auth?.store)
+  const [activeTab, setActiveTab] = React.useState<
+    "design" | "popup" | "promo" | "info" | "stores" | "contact" | "delivery"
+  >("promo")
+  const [items, setItems] = React.useState<MemberPortalContentAdminItem[]>([])
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
   const [contactInstagramUrl, setContactInstagramUrl] = React.useState("")
   const [deliveryGrabUrl, setDeliveryGrabUrl] = React.useState("")
@@ -159,7 +108,6 @@ export default function CrmMemberAppContentPage() {
   const [loginBackgroundUrl, setLoginBackgroundUrl] = React.useState("")
   const [appBackgroundUrl, setAppBackgroundUrl] = React.useState("")
   const [loading, setLoading] = React.useState(false)
-  const [saving, setSaving] = React.useState(false)
   const [contactSaving, setContactSaving] = React.useState(false)
   const [deliverySaving, setDeliverySaving] = React.useState(false)
   const [designSaving, setDesignSaving] = React.useState(false)
@@ -176,7 +124,7 @@ export default function CrmMemberAppContentPage() {
         success: boolean
         needsSetup?: boolean
         message?: string
-        items?: ContentItem[]
+        items?: MemberPortalContentAdminItem[]
       }
       if (!res.ok || !data.success) {
         setItems([])
@@ -251,89 +199,6 @@ export default function CrmMemberAppContentPage() {
     loadDeliverySettings().catch(() => {})
     loadDesignSettings().catch(() => {})
   }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, refresh])
-
-  React.useEffect(() => {
-    if (activeTab === "popup" || activeTab === "info") {
-      setForm((prev) => ({ ...prev, contentType: activeTab }))
-    }
-  }, [activeTab])
-
-  const onSave = React.useCallback(async () => {
-    setSaving(true)
-    setError("")
-    setNotice("")
-    try {
-      const res = await apiFetch("/api/member-portal/admin/content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      })
-      const data = (await res.json()) as { success: boolean; message?: string }
-      if (!res.ok || !data.success) {
-        setError(data.message || "저장에 실패했습니다.")
-        return
-      }
-      setNotice("저장되었습니다.")
-      setForm(emptyForm())
-      await refresh()
-    } catch {
-      setError("저장 중 오류가 발생했습니다.")
-    } finally {
-      setSaving(false)
-    }
-  }, [form, refresh])
-
-  const onUploadImage = React.useCallback(async (file: File) => {
-    setUploading(true)
-    setError("")
-    try {
-      const size = await readImageSize(file)
-      const rule =
-        form.contentType === "popup"
-          ? IMAGE_RULES.popup
-          : form.contentType === "store_photo"
-            ? IMAGE_RULES.store_photo
-            : null
-      if (rule) {
-        const v = validateImageByRule(size.width, size.height, rule)
-        if (!v.ok) {
-          setError(v.message)
-          return
-        }
-      }
-
-      const presignRes = await apiFetch("/api/uploadMemberPortalContentImage/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type || "image/jpeg",
-          fileSize: file.size,
-        }),
-      })
-      const presign = (await presignRes.json()) as {
-        success: boolean
-        message?: string
-        signedUrl?: string
-        publicUrl?: string
-      }
-      if (!presignRes.ok || !presign.success || !presign.signedUrl || !presign.publicUrl) {
-        setError(presign.message || "이미지 업로드 준비에 실패했습니다.")
-        return
-      }
-      const putRes = await putFileToSupabaseSignedUploadUrl(presign.signedUrl, file, { timeoutMs: 180000 })
-      if (!putRes.ok) {
-        setError("이미지 업로드에 실패했습니다.")
-        return
-      }
-      setForm((prev) => ({ ...prev, imageUrl: presign.publicUrl || "" }))
-      setNotice("이미지가 업로드되었습니다.")
-    } catch {
-      setError("이미지 업로드 중 오류가 발생했습니다.")
-    } finally {
-      setUploading(false)
-    }
-  }, [form.contentType])
 
   const saveContactSettings = React.useCallback(async () => {
     setContactSaving(true)
@@ -460,13 +325,6 @@ export default function CrmMemberAppContentPage() {
     }
   }, [])
 
-  const filteredItems = React.useMemo(() => {
-    if (activeTab === "popup" || activeTab === "info") {
-      return items.filter((x) => x.contentType === activeTab)
-    }
-    return items
-  }, [activeTab, items])
-
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
@@ -475,7 +333,9 @@ export default function CrmMemberAppContentPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">회원앱 운영</h1>
-            <p className="text-sm text-muted-foreground">디자인, 팝업, 매장 정보, 문의 채널을 ERP에서 통합 관리합니다.</p>
+            <p className="text-sm text-muted-foreground">
+              LINE OA 관리자처럼 목록·썸네일·사용 중지로 팝업·프로모션·매장을 관리합니다.
+            </p>
           </div>
           <Button variant="outline" onClick={() => refresh()} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
@@ -486,15 +346,21 @@ export default function CrmMemberAppContentPage() {
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</div>
         )}
         {!!error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+        {!canEdit ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            이 화면은 조회만 가능합니다. 편집은 본사·회계·매장 관리자 계정으로 로그인해 주세요.
+          </div>
+        ) : null}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-6">
-            <TabsTrigger value="design">디자인</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
+            <TabsTrigger value="promo">월별 프로모션</TabsTrigger>
             <TabsTrigger value="popup">팝업</TabsTrigger>
-            <TabsTrigger value="info">정보 업데이트</TabsTrigger>
-            <TabsTrigger value="stores">매장 정보</TabsTrigger>
-            <TabsTrigger value="contact">문의 채널</TabsTrigger>
-            <TabsTrigger value="delivery">배달 앱</TabsTrigger>
+            <TabsTrigger value="info">정보·공지</TabsTrigger>
+            <TabsTrigger value="stores">매장</TabsTrigger>
+            <TabsTrigger value="design">디자인</TabsTrigger>
+            <TabsTrigger value="contact">문의</TabsTrigger>
+            <TabsTrigger value="delivery">배달</TabsTrigger>
           </TabsList>
 
           <TabsContent value="design" className="space-y-4">
@@ -506,6 +372,7 @@ export default function CrmMemberAppContentPage() {
                 <p className="text-sm text-muted-foreground">
                   로그인 화면 / 접속 후 메인 화면 배경을 업로드합니다. 권장 포맷: JPG/PNG, 1080x1920(px) 세로형.
                 </p>
+                <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2 rounded-lg border p-3">
                     <Label>로그인 배경 URL</Label>
@@ -547,13 +414,14 @@ export default function CrmMemberAppContentPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => saveDesignSettings()} disabled={designSaving || uploading}>
+                  <Button onClick={() => saveDesignSettings()} disabled={designSaving || uploading || !canEdit}>
                     {designSaving ? "저장 중..." : "디자인 저장"}
                   </Button>
                   <Button variant="outline" onClick={() => loadDesignSettings().catch(() => {})}>
                     다시 불러오기
                   </Button>
                 </div>
+                </fieldset>
               </CardContent>
             </Card>
           </TabsContent>
@@ -567,6 +435,7 @@ export default function CrmMemberAppContentPage() {
                 <p className="text-sm text-muted-foreground">
                   회원앱 로그인 화면의 Contact us에서 열리는 Facebook / Instagram 링크를 관리합니다.
                 </p>
+                <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label>Facebook URL</Label>
@@ -586,13 +455,14 @@ export default function CrmMemberAppContentPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => saveContactSettings()} disabled={contactSaving}>
+                  <Button onClick={() => saveContactSettings()} disabled={contactSaving || !canEdit}>
                     {contactSaving ? "저장 중..." : "문의 채널 저장"}
                   </Button>
                   <Button variant="outline" onClick={() => loadContactSettings().catch(() => {})}>
                     다시 불러오기
                   </Button>
                 </div>
+                </fieldset>
               </CardContent>
             </Card>
           </TabsContent>
@@ -606,6 +476,7 @@ export default function CrmMemberAppContentPage() {
                 <p className="text-sm text-muted-foreground">
                   회원앱 주문 탭에서 배달 선택 시 열리는 GrabFood / LINE MAN / ShopeeFood 링크입니다. 비워 두면 기본 URL을 사용합니다.
                 </p>
+                <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-3">
                   <div className="space-y-1.5">
                     <Label>GrabFood URL</Label>
@@ -633,45 +504,57 @@ export default function CrmMemberAppContentPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => saveDeliverySettings()} disabled={deliverySaving}>
+                  <Button onClick={() => saveDeliverySettings()} disabled={deliverySaving || !canEdit}>
                     {deliverySaving ? "저장 중..." : "배달 링크 저장"}
                   </Button>
                   <Button variant="outline" onClick={() => loadDeliverySettings().catch(() => {})}>
                     다시 불러오기
                   </Button>
                 </div>
+                </fieldset>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="promo" className="space-y-4">
+            <MemberPortalContentAdminPanel
+              variant="promo"
+              items={items}
+              loading={loading}
+              canEdit={canEdit}
+              onSaved={refresh}
+              onNotice={setNotice}
+              onError={setError}
+            />
           </TabsContent>
 
           <TabsContent value="popup" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>팝업 관리</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">권장 이미지 사이즈: 1080x1350(px), 모바일 카드형.</p>
-              </CardContent>
-            </Card>
+            <MemberPortalContentAdminPanel
+              variant="popup"
+              items={items}
+              loading={loading}
+              canEdit={canEdit}
+              onSaved={refresh}
+              onNotice={setNotice}
+              onError={setError}
+            />
           </TabsContent>
 
           <TabsContent value="info" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>정보 업데이트 관리</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  공지/이벤트/운영 안내 등 텍스트 중심 콘텐츠를 관리합니다. 홈 <strong>신메뉴·프로모션</strong> 타일은 노출 탭{" "}
-                  <code className="rounded bg-muted px-1">home_feature</code>, 홈 <strong>이달의 프로모션</strong> 가로 목록은{" "}
-                  <code className="rounded bg-muted px-1">home_promo</code> + 시작·종료일(방콕 기준 월) + 이미지를 등록하세요.
-                </p>
-              </CardContent>
-            </Card>
+            <MemberPortalContentAdminPanel
+              variant="info"
+              items={items}
+              loading={loading}
+              canEdit={canEdit}
+              onSaved={refresh}
+              onNotice={setNotice}
+              onError={setError}
+            />
           </TabsContent>
 
           <TabsContent value="stores" className="space-y-4">
             <MemberPortalStoresPanel
+              canEdit={canEdit}
               onNotice={(msg) => {
                 setNotice(msg)
                 setError("")
@@ -683,194 +566,6 @@ export default function CrmMemberAppContentPage() {
             />
           </TabsContent>
 
-          {(activeTab === "popup" || activeTab === "info") && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>콘텐츠 등록/수정</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="space-y-1.5">
-                      <Label>관리 탭</Label>
-                      <Input value={form.contentType} readOnly />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>매장 코드 (선택)</Label>
-                      <Input
-                        value={form.storeCode}
-                        onChange={(e) => setForm((p) => ({ ...p, storeCode: e.target.value }))}
-                        placeholder="예: CM01"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>노출 탭 (선택)</Label>
-                      <Input
-                        value={form.targetTab}
-                        onChange={(e) => setForm((p) => ({ ...p, targetTab: e.target.value }))}
-                        placeholder="예: home / home_feature / home_promo / location"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label>제목</Label>
-                      <Input
-                        value={form.title}
-                        onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                        placeholder="팝업 제목 또는 안내 제목"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>이미지 URL</Label>
-                      <Input
-                        value={form.imageUrl}
-                        onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
-                        placeholder="https://..."
-                      />
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) void onUploadImage(file)
-                          }}
-                        />
-                        {uploading ? <span className="text-xs text-muted-foreground">업로드 중...</span> : null}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>본문</Label>
-                    <Textarea
-                      value={form.body}
-                      onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
-                      rows={4}
-                      placeholder="회원앱에 보여줄 설명/안내 문구"
-                    />
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div className="space-y-1.5">
-                      <Label>시작일시(방콕)</Label>
-                      <Input
-                        type="datetime-local"
-                        value={form.startsAt}
-                        onChange={(e) => setForm((p) => ({ ...p, startsAt: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>종료일시(방콕)</Label>
-                      <Input
-                        type="datetime-local"
-                        value={form.endsAt}
-                        onChange={(e) => setForm((p) => ({ ...p, endsAt: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>정렬순서</Label>
-                      <Input
-                        type="number"
-                        value={form.sortOrder}
-                        onChange={(e) => setForm((p) => ({ ...p, sortOrder: Number(e.target.value || 0) }))}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>활성화</Label>
-                      <div className="flex h-10 items-center rounded-md border px-3">
-                        <input
-                          id="isActive"
-                          type="checkbox"
-                          checked={form.isActive}
-                          onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
-                        />
-                        <label htmlFor="isActive" className="ml-2 text-sm">
-                          노출
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button onClick={() => onSave()} disabled={saving}>
-                      {saving ? "저장 중..." : "저장"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setForm({ ...emptyForm(), contentType: activeTab as ContentType })}
-                    >
-                      새로 작성
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>등록된 콘텐츠</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {filteredItems.length === 0 ? (
-                    <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                      등록된 콘텐츠가 없습니다.
-                    </div>
-                  ) : (
-                    <div className="overflow-auto rounded border">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/40">
-                          <tr>
-                            <th className="p-2 text-left">유형</th>
-                            <th className="p-2 text-left">제목</th>
-                            <th className="p-2 text-left">매장</th>
-                            <th className="p-2 text-left">활성</th>
-                            <th className="p-2 text-left">정렬</th>
-                            <th className="p-2 text-left">수정</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredItems.map((it) => (
-                            <tr key={it.contentKey} className="border-t">
-                              <td className="p-2">{it.contentType}</td>
-                              <td className="p-2">{it.title || "-"}</td>
-                              <td className="p-2">{it.storeCode || "-"}</td>
-                              <td className="p-2">{it.isActive ? "Y" : "N"}</td>
-                              <td className="p-2">{it.sortOrder}</td>
-                              <td className="p-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    setForm({
-                                      contentKey: it.contentKey,
-                                      contentType: it.contentType,
-                                      storeCode: it.storeCode,
-                                      title: it.title,
-                                      body: it.body,
-                                      imageUrl: it.imageUrl,
-                                      targetTab: it.targetTab,
-                                      isActive: it.isActive,
-                                      sortOrder: it.sortOrder,
-                                      startsAt: toDatetimeLocal(it.startsAt),
-                                      endsAt: toDatetimeLocal(it.endsAt),
-                                    })
-                                  }
-                                >
-                                  불러오기
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          )}
         </Tabs>
       </div>
     </div>

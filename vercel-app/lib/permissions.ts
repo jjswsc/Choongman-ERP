@@ -371,6 +371,19 @@ export function canAccessPosCostAnalysis(role: string): boolean {
   return isOfficeRole(role)
 }
 
+/**
+ * 회원앱 운영(/admin/crm/member-app) 편집 — 본사·회계·매장 관리자.
+ * 본사 매장(Office/오피스 등) 소속이면 role 문자열과 무관하게 편집 허용.
+ */
+export function canEditMemberPortalAdmin(role: string, store?: string): boolean {
+  return (
+    isOfficeRole(role) ||
+    isAccountingRole(role) ||
+    isManagerOrFranchiseeRole(role) ||
+    isOfficeStore(String(store || ""))
+  )
+}
+
 /** POS 직원(주문만/결산만)이 해당 경로 접근 가능한지 */
 export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   const p = String(pathname || "").trim()

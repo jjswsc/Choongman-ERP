@@ -15,7 +15,7 @@ import {
   supabaseUpdateByFilter,
   supabaseUpsertMerge,
 } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 const LEGACY_SELECT =
   'store_code,display_name,aliases,sort_order,is_active,photo_url,map_query,address'
@@ -62,7 +62,7 @@ function toAdminDto(row: ErpStoreMasterRow): MemberPortalStoreDto | null {
 }
 
 export async function GET(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const rows = await fetchAllErpStoresForAdmin()
@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const body = (await req.json()) as Record<string, unknown>
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
     const storeCode = new URL(req.url).searchParams.get('storeCode')?.trim() || ''

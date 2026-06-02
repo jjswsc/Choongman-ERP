@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { MemberPortalLineList } from "@/components/admin/member-portal-line-list"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -64,17 +65,19 @@ async function readImageSize(file: File): Promise<{ width: number; height: numbe
 }
 
 type MemberPortalStoresPanelProps = {
+  canEdit?: boolean
   onNotice: (msg: string) => void
   onError: (msg: string) => void
 }
 
-export function MemberPortalStoresPanel({ onNotice, onError }: MemberPortalStoresPanelProps) {
+export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: MemberPortalStoresPanelProps) {
   const [stores, setStores] = React.useState<StoreRow[]>([])
   const [form, setForm] = React.useState<StoreForm>(emptyForm())
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [editMode, setEditMode] = React.useState(false)
+  const [togglingCode, setTogglingCode] = React.useState<string | null>(null)
 
   const refresh = React.useCallback(async () => {
     setLoading(true)
@@ -134,29 +137,6 @@ export function MemberPortalStoresPanel({ onNotice, onError }: MemberPortalStore
     }
   }, [form, onError, onNotice, refresh])
 
-  const onDeactivate = React.useCallback(
-    async (storeCode: string) => {
-      if (!window.confirm(`매장 "${storeCode}"을(를) 비활성화할까요? 회원앱 목록에서 숨겨집니다.`)) return
-      onError("")
-      try {
-        const res = await apiFetch(
-          `/api/member-portal/admin/stores?storeCode=${encodeURIComponent(storeCode)}`,
-          { method: "DELETE" }
-        )
-        const data = (await res.json()) as { success: boolean; message?: string }
-        if (!res.ok || !data.success) {
-          onError(data.message || "비활성화에 실패했습니다.")
-          return
-        }
-        onNotice("매장을 비활성화했습니다.")
-        await refresh()
-      } catch {
-        onError("비활성화 중 오류가 발생했습니다.")
-      }
-    },
-    [onError, onNotice, refresh]
-  )
-
   const onUploadPhoto = React.useCallback(
     async (file: File) => {
       setUploading(true)
@@ -204,29 +184,129 @@ export function MemberPortalStoresPanel({ onNotice, onError }: MemberPortalStore
     [onError, onNotice]
   )
 
-  const activeStores = stores.filter((s) => s.isActive)
-  const inactiveStores = stores.filter((s) => !s.isActive)
+  const persistStore = React.useCallback(async (payload: StoreForm & { storeCode: string }) => {
+    const res = await apiFetch("/api/member-portal/admin/stores", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storeCode: payload.storeCode,
+        displayName: payload.displayName,
+        address: payload.address,
+        mapQuery: payload.mapQuery,
+        photoUrl: payload.photoUrl,
+        sortOrder: payload.sortOrder,
+        isActive: payload.isActive,
+        aliases: payload.aliases,
+      }),
+    })
+    const data = (await res.json()) as { success: boolean; message?: string }
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "저장에 실패했습니다.")
+    }
+  }, [])
+
+  const onToggleStoreActive = React.useCallback(
+    async (storeCode: string) => {
+      const row = stores.find((s) => s.storeCode === storeCode)
+      if (!row) return
+      setTogglingCode(storeCode)
+      onError("")
+      try {
+        await persistStore({
+          storeCode: row.storeCode,
+          displayName: row.displayName,
+          address: row.address,
+          mapQuery: row.mapQuery,
+          photoUrl: row.photoUrl,
+          sortOrder: row.sortOrder,
+          isActive: !row.isActive,
+          aliases: "",
+        })
+        onNotice(row.isActive ? "매장 노출을 중지했습니다." : "매장을 사용 중으로 전환했습니다.")
+        await refresh()
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "상태 변경에 실패했습니다.")
+      } finally {
+        setTogglingCode(null)
+      }
+    },
+    [onError, onNotice, persistStore, refresh, stores]
+  )
+
+  const loadStoreToForm = React.useCallback((s: StoreRow) => {
+    setEditMode(true)
+    setForm({
+      storeCode: s.storeCode,
+      displayName: s.displayName,
+      address: s.address,
+      mapQuery: s.mapQuery,
+      photoUrl: s.photoUrl,
+      sortOrder: s.sortOrder,
+      isActive: s.isActive,
+      aliases: "",
+    })
+  }, [])
+
+  const sortedStores = React.useMemo(
+    () =>
+      [...stores].sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+        return a.displayName.localeCompare(b.displayName, "ko")
+      }),
+    [stores]
+  )
+
+  const storeListRows = sortedStores.map((s) => ({
+    id: s.storeCode,
+    imageUrl: s.photoUrl,
+    title: s.displayName,
+    subtitle: s.address || s.storeCode,
+    placement: "회원앱 · 매장 위치",
+    periodLabel: s.mapQuery ? `지도: ${s.mapQuery}` : undefined,
+    sortOrder: s.sortOrder,
+    isActive: s.isActive,
+    toggling: togglingCode === s.storeCode,
+  }))
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>매장 정보 관리</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            회원앱 <strong>매장</strong> 탭·픽업 주문 매장 선택에 노출되는 목록입니다. 매장 코드는 POS·직원
-            매장(<code className="rounded bg-muted px-1">store_code</code>)과 동일하게 맞추세요.
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">매장 목록</h2>
+          <p className="text-sm text-muted-foreground">
+            LINE OA 목록처럼 썸네일·사용 중지로 회원앱 매장 탭을 관리합니다. 사진·주소는 아래 폼에서 편집하세요.
           </p>
-          <p>권장 사진: 1200×800px, 3:2. 위치는 Google Maps 검색어 또는 주소를 입력합니다.</p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">불러오는 중...</div>
+      ) : (
+        <MemberPortalLineList
+          rows={storeListRows}
+          emptyMessage="등록된 매장이 없습니다. 아래 폼에서 추가하세요."
+          onToggleActive={onToggleStoreActive}
+          onEdit={(storeCode) => {
+            const s = stores.find((x) => x.storeCode === storeCode)
+            if (s) loadStoreToForm(s)
+          }}
+          canEdit={canEdit}
+        />
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>{editMode ? "매장 수정" : "매장 추가"}</CardTitle>
+          <CardTitle>{editMode ? "매장 편집" : "매장 추가"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              회원앱 <strong>매장</strong> 탭·픽업 주문 매장 선택에 노출되는 목록입니다. 매장 코드는 POS·직원
+              매장(<code className="rounded bg-muted px-1">store_code</code>)과 동일하게 맞추세요.
+            </p>
+            <p>권장 사진: 1200×800px, 3:2. 위치는 Google Maps 검색어 또는 주소를 입력합니다.</p>
+          </div>
+          <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label>매장 코드 *</Label>
@@ -329,83 +409,10 @@ export function MemberPortalStoresPanel({ onNotice, onError }: MemberPortalStore
               {loading ? "불러오는 중..." : "목록 새로고침"}
             </Button>
           </div>
+          </fieldset>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>등록된 매장 ({activeStores.length}개 노출)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {stores.length === 0 ? (
-            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-              등록된 매장이 없습니다. 위에서 추가하거나 Supabase erp_stores를 확인하세요.
-            </div>
-          ) : (
-            <div className="overflow-auto rounded border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="p-2 text-left">코드</th>
-                    <th className="p-2 text-left">매장명</th>
-                    <th className="p-2 text-left">주소</th>
-                    <th className="p-2 text-left">사진</th>
-                    <th className="p-2 text-left">활성</th>
-                    <th className="p-2 text-left">정렬</th>
-                    <th className="p-2 text-left">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...activeStores, ...inactiveStores].map((s) => (
-                    <tr key={s.storeCode} className={`border-t ${!s.isActive ? "opacity-50" : ""}`}>
-                      <td className="p-2 font-mono text-xs">{s.storeCode}</td>
-                      <td className="p-2">{s.displayName}</td>
-                      <td className="max-w-[12rem] truncate p-2 text-muted-foreground">{s.address || "-"}</td>
-                      <td className="p-2">
-                        {s.photoUrl ? (
-                          <img src={s.photoUrl} alt="" className="h-10 w-16 rounded object-cover" />
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="p-2">{s.isActive ? "Y" : "N"}</td>
-                      <td className="p-2">{s.sortOrder}</td>
-                      <td className="p-2">
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditMode(true)
-                              setForm({
-                                storeCode: s.storeCode,
-                                displayName: s.displayName,
-                                address: s.address,
-                                mapQuery: s.mapQuery,
-                                photoUrl: s.photoUrl,
-                                sortOrder: s.sortOrder,
-                                isActive: s.isActive,
-                                aliases: "",
-                              })
-                            }}
-                          >
-                            수정
-                          </Button>
-                          {s.isActive ? (
-                            <Button size="sm" variant="outline" onClick={() => void onDeactivate(s.storeCode)}>
-                              비활성
-                            </Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
