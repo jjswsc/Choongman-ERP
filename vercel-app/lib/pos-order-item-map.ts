@@ -119,9 +119,18 @@ function normPosOrderItemId(id: unknown): string {
 export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
   return items.map((i) => {
     const q = resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
-    const menuIdPrimary = String(i.menuId ?? '').trim()
-    const optionIdPrimary = String(i.optionId ?? '').trim()
-    const optionCodePrimary = String(i.optionCode ?? '').trim()
+    const menuIdPrimary = String(
+      (i as { menuId?: string; menuId1?: string }).menuId1 ?? i.menuId ?? ''
+    ).trim()
+    const optionIdPrimary = String(
+      (i as { optionId?: string; optionId1?: string }).optionId1 ?? i.optionId ?? ''
+    ).trim()
+    const optionCodePrimary = String(
+      (i as { optionCode?: string; optionCode1?: string }).optionCode1 ?? i.optionCode ?? ''
+    ).trim()
+    const menuId2 = String((i as { menuId2?: string }).menuId2 ?? '').trim()
+    const optionId2 = String((i as { optionId2?: string }).optionId2 ?? '').trim()
+    const optionCode2 = String((i as { optionCode2?: string }).optionCode2 ?? '').trim()
     const lineDiscountAmt = Math.max(
       0,
       Number((i as { lineDiscountAmt?: unknown }).lineDiscountAmt ?? 0) || 0
@@ -137,6 +146,9 @@ export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] 
       ...(menuIdPrimary ? { menuId1: menuIdPrimary } : {}),
       ...(optionIdPrimary ? { optionId1: optionIdPrimary } : {}),
       ...(optionCodePrimary ? { optionCode1: optionCodePrimary } : {}),
+      ...(menuId2 ? { menuId2 } : {}),
+      ...(optionId2 ? { optionId2 } : {}),
+      ...(optionCode2 ? { optionCode2 } : {}),
       ...(i.servedAt ? { servedAt: i.servedAt } : {}),
       ...(i.servedBy ? { servedBy: i.servedBy } : {}),
       ...(i.cancelledAt ? { cancelledAt: i.cancelledAt } : {}),

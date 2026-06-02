@@ -677,7 +677,18 @@ function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView>
  * 카트 줄 id가 과거에 중복이면 `find`로 잘못 붙을 수 있어, **동일 id가 터미널에 있으면 터미널 수량을 단일 소스로** 쓴다.
  */
 function reconcilePayloadItemsWithTerminalCart<
-  T extends { id?: unknown; quantity?: unknown; qty?: unknown; menuId?: unknown; optionId?: unknown; optionCode?: unknown },
+  T extends {
+    id?: unknown
+    quantity?: unknown
+    qty?: unknown
+    menuId?: unknown
+    menuId2?: unknown
+    optionId?: unknown
+    optionId2?: unknown
+    optionCode?: unknown
+    optionCode2?: unknown
+    optionCodes?: unknown
+  },
 >(payloadItems: T[] | undefined | null, terminalLines: OrderItem[]): T[] {
   return (payloadItems || []).map((it) => {
     const hit = (terminalLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
@@ -686,18 +697,42 @@ function reconcilePayloadItemsWithTerminalCart<
       const mid = String(
         (it as { menuId?: unknown }).menuId ?? hit.menuId ?? ''
       ).trim()
+      const mid2 = String(
+        (it as { menuId2?: unknown }).menuId2 ?? (hit as { menuId2?: unknown }).menuId2 ?? ''
+      ).trim()
       const oid = String(
         (it as { optionId?: unknown }).optionId ?? hit.optionId ?? ''
+      ).trim()
+      const oid2 = String(
+        (it as { optionId2?: unknown }).optionId2 ?? (hit as { optionId2?: unknown }).optionId2 ?? ''
       ).trim()
       const oc = String(
         (it as { optionCode?: unknown }).optionCode ?? hit.optionCode ?? ''
       ).trim()
+      const oc2 = String(
+        (it as { optionCode2?: unknown }).optionCode2 ?? (hit as { optionCode2?: unknown }).optionCode2 ?? ''
+      ).trim()
+      const optionCodes = [
+        ...new Set(
+          [
+            ...((Array.isArray((it as { optionCodes?: unknown }).optionCodes)
+              ? ((it as { optionCodes?: unknown[] }).optionCodes ?? [])
+              : []) as unknown[]).map((x) => String(x ?? '').trim()),
+            oc,
+            oc2,
+          ].filter(Boolean)
+        ),
+      ]
       return {
         ...it,
         quantity: q,
         ...(mid ? { menuId: mid } : {}),
+        ...(mid2 ? { menuId2: mid2 } : {}),
         ...(oid ? { optionId: oid } : {}),
+        ...(oid2 ? { optionId2: oid2 } : {}),
         ...(oc ? { optionCode: oc } : {}),
+        ...(oc2 ? { optionCode2: oc2 } : {}),
+        ...(optionCodes.length > 0 ? { optionCodes } : {}),
       }
     }
     const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
@@ -1348,6 +1383,13 @@ export default function PosTerminalPage() {
             ''
         ).trim()
         if (menuId) requiredMenuIds.add(menuId)
+        const promoItems = (row as { promoItems?: Array<{ menuId?: unknown }> }).promoItems
+        if (Array.isArray(promoItems)) {
+          for (const p of promoItems) {
+            const promoMid = String((p as { menuId?: unknown }).menuId ?? '').trim()
+            if (promoMid) requiredMenuIds.add(promoMid)
+          }
+        }
       }
       if (catalog.length > 0) {
         const catalogIds = new Set(catalog.map((m) => String(m.id ?? '').trim()).filter(Boolean))
@@ -1362,10 +1404,28 @@ export default function PosTerminalPage() {
         const refreshedList = Array.isArray(refreshed) ? (refreshed as PosMenu[]) : []
         if (refreshedList.length > 0) {
           applyPosMenusList(refreshedList)
+          const refreshedIds = new Set(refreshedList.map((m) => String(m.id ?? '').trim()).filter(Boolean))
+          const stillMissing = [...requiredMenuIds].filter((id) => !refreshedIds.has(id))
+          if (stillMissing.length > 0) {
+            console.error('[POS_PRINT_MENU_MAPPING_MISSING]', {
+              storeCode: String(targetStoreCode || currentStoreId || '').trim(),
+              missingMenuIds: stillMissing.slice(0, 50),
+            })
+          }
           return refreshedList
         }
       } catch {
         /* 메뉴 카탈로그 재조회 실패 시 현재 스냅샷으로 진행 */
+      }
+      if (catalog.length > 0) {
+        const catalogIds = new Set(catalog.map((m) => String(m.id ?? '').trim()).filter(Boolean))
+        const stillMissing = [...requiredMenuIds].filter((id) => !catalogIds.has(id))
+        if (stillMissing.length > 0) {
+          console.error('[POS_PRINT_MENU_MAPPING_MISSING]', {
+            storeCode: String(targetStoreCode || currentStoreId || '').trim(),
+            missingMenuIds: stillMissing.slice(0, 50),
+          })
+        }
       }
       return catalog
     },
