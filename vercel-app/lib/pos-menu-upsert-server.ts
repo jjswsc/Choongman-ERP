@@ -558,9 +558,15 @@ export async function upsertPosMenuFromBody(
         }
         const pid = prev.promo_id
         if (pid != null && Number(pid) > 0 && hasBanbanFlavorMenuIdsPayload) {
-          return {
-            success: false,
-            message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
+          // 클라이언트가 isBanban=false일 때도 banbanFlavorMenuIds: []를 보내는 경우가 있어
+          // payload 존재만으로 차단하면 설명·이미지 저장까지 막힌다.
+          const wantsBanbanChange =
+            body.isBanban === true || normalizedBanbanFlavorMenuIds.length > 0
+          if (wantsBanbanChange) {
+            return {
+              success: false,
+              message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
+            }
           }
         }
         if (pid != null && Number(pid) > 0) {

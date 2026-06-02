@@ -153,7 +153,6 @@ import {
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import {
-  normalizePosTableNameForMatch,
   translatePosMenuLineForReceipt,
   translateReceiptTableDisplayName,
   translateTakeoutOrderDisplayLabel,
@@ -985,6 +984,12 @@ export default function PosTerminalPage() {
   const [pendingDineInOrderId, setPendingDineInOrderId] = useState<number | null>(null)
   /** `pendingDineInOrderId`가 가리키는 주문의 테이블명 — 다른 테이블로 잘못 병합(updatePosOrder)되는 것을 막음 */
   const pendingDineInOrderTableRef = useRef<string>('')
+  /** 방금 저장한 dine-in 주문만 fallback add 대상으로 허용(오래된 pending id 오인 방지) */
+  const pendingDineInOrderSavedAtRef = useRef<{ orderId: number; atMs: number; tableKey: string }>({
+    orderId: 0,
+    atMs: 0,
+    tableKey: '',
+  })
   const [pendingPayRequest, setPendingPayRequest] = useState<PendingPayRequest>(null)
   const [pendingTakeoutOrderId, setPendingTakeoutOrderId] = useState<number | null>(null)
   const [pendingTakeoutPayRequest, setPendingTakeoutPayRequest] = useState<PendingPayRequest>(null)
@@ -5143,7 +5148,6 @@ export default function PosTerminalPage() {
             let staggerMs = 0
             for (const order of candidates) {
               const oid = Number(order.id)
-              const adj = pricingAdjustments
               setTimeout(() => {
                 void (async () => {
                   try {
@@ -7536,11 +7540,28 @@ export default function PosTerminalPage() {
                 pendingTableKey &&
                 pendingTableKey === payloadTableKey
               ) {
-                existingOrderId = pendingExistingOrderId
+                const recentPending = pendingDineInOrderSavedAtRef.current
+                const isRecentPendingMatch =
+                  recentPending.orderId === pendingExistingOrderId &&
+                  recentPending.tableKey === pendingTableKey &&
+                  Date.now() - recentPending.atMs <= 2 * 60 * 1000
+                if (isRecentPendingMatch) {
+                  existingOrderId = pendingExistingOrderId
+                } else {
+                  logPosPrintDebug('submit_skip_stale_pending_dine_in_fallback', {
+                    pendingExistingOrderId,
+                    payloadTableKey,
+                    pendingTableKey,
+                    recentPendingOrderId: recentPending.orderId,
+                    recentPendingTableKey: recentPending.tableKey,
+                    recentPendingAgeMs:
+                      recentPending.atMs > 0 ? Date.now() - recentPending.atMs : null,
+                  })
+                }
               }
               const isOpenForDineInAddStatus = (raw: unknown): boolean => {
                 const s = String(raw ?? '').trim().toLowerCase()
-                if (!s) return true
+                if (!s) return false
                 if (isPosOrderPaidLikeStatus(s)) return false
                 if (s === 'completed' || s === 'cancelled' || s === 'canceled' || s === 'refunded') return false
                 return true
@@ -7960,104 +7981,133 @@ export default function PosTerminalPage() {
                   const kitchenPrintKey =
                     savedOrderId != null ? `order:${savedOrderId}:kitchen` : `submit:${orderNoStr}:${payload.tableName || ''}:new`
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
-                  logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
-                    orderId: savedOrderId,
-                    orderNo: orderNoStr,
-                    kitchenPrintKey,
-                    kitchenLines: kitchenCartLines.length,
-                    isAddOrder,
-                  })
-                  const itemsForKitchen = kitchenCartLines.map((i) => {
-                    const line = i as {
-                      menuId?: string
-                      menuId1?: string
-                      menu_id1?: string
-                      menuId2?: string
-                      note?: string
-                      promoId?: string
-                      promoCode?: string
-                      promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-                    }
-                    const menuId = String(
-                      line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
-                    ).trim()
-                    const note = String(line.note ?? '').trim()
-                    const promoId = String(line.promoId ?? '').trim()
-                    const promoCode = String(line.promoCode ?? '').trim()
-                    return {
-                      id: i.id,
-                      name: i.name,
-                      price: i.price,
-                      qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
-                      ...(menuId ? { menuId } : {}),
-                      ...(note ? { note } : {}),
-                      ...(promoId ? { promoId } : {}),
-                      ...(promoCode ? { promoCode } : {}),
-                      ...(Array.isArray(line.promoItems)
-                        ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) }
-                        : {}),
-                    }
-                  })
-                  getPrinterSettingsForStore(currentStoreId)
-                    .then((settings) => {
-                      const ki = kitchenSlipPrintI18n(settings, lang)
-                      const slips = buildKitchenSlipGroups(
-                        kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
-                      )
-                      if (!slips.length) return
-                      const slipDesign = resolveKitchenSlipDesign(settings)
-                      const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
-                      const memoLine = kitchenMemo.trim()
-                        ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-                        : ''
-                      const cR = (tag: string) => '\u003c/' + tag + '>'
-                      const tablePartR = payload.tableName
-                        ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.tableName, ki.t)
-                        : ''
-                      const printOne = (idx: number) => {
-                        if (idx >= slips.length) return
-                        const slip = slips[idx]
-                        const html = buildKitchenSlipDocumentHtml({
-                          label: slip.label,
-                          orderNo: orderNoStr,
-                          storeCode: currentStoreId,
-                          orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
-                          tablePart: tablePartR,
-                          dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                          items: kitchenSlipItemsForPrint(
-                            slip.items,
-                            kitchenItemsWithResolvedPromo(
-                              itemsForKitchen as Record<string, unknown>[]
-                            ) as KitchenSlipRoutingItem[],
-                            ki
-                          ),
-                          memoLine: memoLine || null,
-                          escapeHtml,
-                          design: slipDesign,
-                          optionNameByCode,
-                          printColorAdjust: 'exact',
-                          ...posKitchenGuestSpread(payload.guestCount, ki.t('posOrderGuestCount')),
-                        })
-                        printPosHtmlDocument(html, {
-                          title: slip.label,
-                          printDelayMs: 0,
-                          focusIframeBeforePrint: false,
-                          printRole: 'kitchen',
-                          kitchenStation: slip.station,
-                          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
-                          onPrintUnavailable: () => {
-                            void appAlert(t('posPrintUnavailable'))
-                          },
-                          onAfterCleanup: () => {
-                            if (idx + 1 < slips.length)
-                              setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
-                          },
-                        })
-                      }
-                      setTimeout(() => printOne(0), 0)
+                  const runKitchenFromSnapshot = () => {
+                    logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
+                      orderId: savedOrderId,
+                      orderNo: orderNoStr,
+                      kitchenPrintKey,
+                      kitchenLines: kitchenCartLines.length,
+                      isAddOrder,
+                      source: 'snapshot',
                     })
-                    .catch((e) => console.error('Kitchen slip print:', e))
+                    const itemsForKitchen = kitchenCartLines.map((i) => {
+                      const line = i as {
+                        menuId?: string
+                        menuId1?: string
+                        menu_id1?: string
+                        menuId2?: string
+                        note?: string
+                        promoId?: string
+                        promoCode?: string
+                        promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+                      }
+                      const menuId = String(
+                        line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
+                      ).trim()
+                      const note = String(line.note ?? '').trim()
+                      const promoId = String(line.promoId ?? '').trim()
+                      const promoCode = String(line.promoCode ?? '').trim()
+                      return {
+                        id: i.id,
+                        name: i.name,
+                        price: i.price,
+                        qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
+                        ...(menuId ? { menuId } : {}),
+                        ...(note ? { note } : {}),
+                        ...(promoId ? { promoId } : {}),
+                        ...(promoCode ? { promoCode } : {}),
+                        ...(Array.isArray(line.promoItems)
+                          ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) }
+                          : {}),
+                      }
+                    })
+                    getPrinterSettingsForStore(currentStoreId)
+                      .then((settings) => {
+                        const ki = kitchenSlipPrintI18n(settings, lang)
+                        const slips = buildKitchenSlipGroups(
+                          kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
+                          buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+                        )
+                        if (!slips.length) return
+                        const slipDesign = resolveKitchenSlipDesign(settings)
+                        const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
+                        const memoLine = kitchenMemo.trim()
+                          ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                          : ''
+                        const tablePartR = payload.tableName
+                          ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.tableName, ki.t)
+                          : ''
+                        const printOne = (idx: number) => {
+                          if (idx >= slips.length) return
+                          const slip = slips[idx]
+                          const html = buildKitchenSlipDocumentHtml({
+                            label: slip.label,
+                            orderNo: orderNoStr,
+                            storeCode: currentStoreId,
+                            orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
+                            tablePart: tablePartR,
+                            dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
+                            items: kitchenSlipItemsForPrint(
+                              slip.items,
+                              kitchenItemsWithResolvedPromo(
+                                itemsForKitchen as Record<string, unknown>[]
+                              ) as KitchenSlipRoutingItem[],
+                              ki
+                            ),
+                            memoLine: memoLine || null,
+                            escapeHtml,
+                            design: slipDesign,
+                            optionNameByCode,
+                            printColorAdjust: 'exact',
+                            ...posKitchenGuestSpread(payload.guestCount, ki.t('posOrderGuestCount')),
+                          })
+                          printPosHtmlDocument(html, {
+                            title: slip.label,
+                            printDelayMs: 0,
+                            focusIframeBeforePrint: false,
+                            printRole: 'kitchen',
+                            kitchenStation: slip.station,
+                            escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                            onPrintUnavailable: () => {
+                              void appAlert(t('posPrintUnavailable'))
+                            },
+                            onAfterCleanup: () => {
+                              if (idx + 1 < slips.length)
+                                setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
+                            },
+                          })
+                        }
+                        setTimeout(() => printOne(0), 0)
+                      })
+                      .catch((e) => console.error('Kitchen slip print:', e))
+                  }
+                  if (savedOrderId != null && savedOrderId > 0) {
+                    void getPosOrders({
+                      orderId: savedOrderId,
+                      storeCode: currentStoreId,
+                      strictStore: true,
+                      limit: 1,
+                    })
+                      .then((rows) => rows?.[0])
+                      .then((latestOrder) => {
+                        if (!latestOrder?.items?.length) throw new Error('latest_order_not_ready')
+                        logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
+                          orderId: savedOrderId,
+                          orderNo: orderNoStr,
+                          kitchenPrintKey,
+                          kitchenLines: latestOrder.items.length,
+                          isAddOrder,
+                          source: 'canonical',
+                        })
+                        return printKitchenFromPosOrder(latestOrder)
+                      })
+                      .catch((e) => {
+                        console.warn('submit canonical kitchen fetch failed, fallback to snapshot:', e)
+                        runKitchenFromSnapshot()
+                      })
+                    return
+                  }
+                  runKitchenFromSnapshot()
                 }
                 const kitchenDelayAfterReceiptMs =
                   typeof window !== 'undefined' && window.cmPosShell
@@ -8123,6 +8173,15 @@ export default function PosTerminalPage() {
                 if (savedOrderId != null) {
                   setPendingDineInOrderId(savedOrderId)
                   pendingDineInOrderTableRef.current = String(payload.tableName ?? '').trim()
+                  pendingDineInOrderSavedAtRef.current = {
+                    orderId: Number(savedOrderId) || 0,
+                    atMs: Date.now(),
+                    tableKey:
+                      posDineInTableMatchKey(
+                        String(payload.tableName ?? '').trim(),
+                        getTableFloor(selectedTableId ?? servingTableId)
+                      ) || '',
+                  }
                 }
                 /** 추가 주문 직후 결제 카트가 DB보다 적어지는 것 방지 — 저장된 전체 줄로 터미널 카트 동기화 */
                 setTerminalCartLines(

@@ -1438,6 +1438,44 @@ export default function PosMenusPage() {
       )
       return
     }
+    /** 프로모션 연동 메뉴: 설명·이미지만 메뉴 화면에서 저장 (이름·가격 등은 프로모션 관리) */
+    if (editingMenuLinkedPromoId && editingId) {
+      const promoSavePayload: Parameters<typeof savePosMenu>[0] = {
+        id: editingId,
+        descriptionDefault: formData.descriptionDefault.trim(),
+        descriptionDelivery: formData.descriptionDelivery.trim() || null,
+        descriptionTable: formData.descriptionTable.trim() || null,
+      }
+      if (imageSave.includeImageUrl) {
+        promoSavePayload.imageUrl = imageSave.imageUrl
+      }
+      const promoRes = await savePosMenu(promoSavePayload)
+      if (!promoRes.success) {
+        await appAlert(translateApiMessage(promoRes.message, t) || t("msg_save_fail_detail"))
+        return
+      }
+      setMenus((prev) =>
+        prev.map((m) =>
+          m.id === editingId
+            ? {
+                ...m,
+                descriptionDefault: formData.descriptionDefault.trim(),
+                descriptionDelivery: formData.descriptionDelivery.trim() || null,
+                descriptionTable: formData.descriptionTable.trim() || null,
+                ...(imageSave.includeImageUrl ? { imageUrl: imageSave.imageUrl } : {}),
+              }
+            : m
+        )
+      )
+      if (imageSave.mismatchMessage) {
+        await appAlert(
+          `${t("posMenuSavedWithoutImageMismatch") || "메뉴 정보는 저장했습니다. 다만 사진 URL이 다른 메뉴용이라 사진은 그대로 두었습니다."}\n\n${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드해 주세요."}`
+        )
+      } else {
+        await appAlert(t("itemsAlertUpdated"))
+      }
+      return
+    }
     const savePayload: Parameters<typeof savePosMenu>[0] = {
       id: editingId || undefined,
       code,
