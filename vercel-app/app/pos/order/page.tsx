@@ -272,12 +272,21 @@ export default function PosOrderPage() {
   const businessOpenBlocked = !businessOpenGate.allowed
   const ensureBusinessOpenForOrder = React.useCallback(async (): Promise<boolean> => {
     if (businessOpenGate.allowed) return true
-    await appAlert(
-      t("posBusinessOpenRequiredBody") ||
-        "오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요."
-    )
+    const msg =
+      businessOpenGate.blockReason === 'new_business_day'
+        ? t('posBusinessOpenNewDayBody') ||
+          `아침에 등록한 시제는 이전 영업일${businessOpenGate.prevBusinessDateYmd ? `(${businessOpenGate.prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessOpenGate.businessDateYmd}) 시제를 다시 저장해 주세요.`
+        : t('posBusinessOpenRequiredBody') ||
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+    await appAlert(msg)
     return false
-  }, [businessOpenGate.allowed, t])
+  }, [
+    businessOpenGate.allowed,
+    businessOpenGate.blockReason,
+    businessOpenGate.prevBusinessDateYmd,
+    businessOpenGate.businessDateYmd,
+    t,
+  ])
   const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
     React.useCallback((list) => setMenus(list), []),
     storeCode || null
@@ -1560,13 +1569,55 @@ export default function PosOrderPage() {
     try {
       const settings = await getPrinterSettingsForStore(receiptData.storeCode)
       const ki = kitchenSlipPrintI18n(settings, lang)
-      const itemsForKitchen = preparePosOrderItemsForKitchenSlip(
+      // 세트/프로모 구성품 메뉴는 매장 판매목록(스코프)에 없을 수 있어 #ID 로 찍힌다.
+      // 구성품 menuId 를 모아, 매장 스코프 → 전역(스코프 없음) 카탈로그로 이름을 보강한다.
+      const preparedForIds = preparePosOrderItemsForKitchenSlip(
         receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
         { ...posReceiptLineOptsKitchen, menus }
+      )
+      const neededMenuIds = new Set<string>()
+      for (const it of preparedForIds as Array<Record<string, unknown>>) {
+        const mid = String(
+          (it as { menuId?: unknown; menuId1?: unknown; menuId2?: unknown }).menuId ??
+            (it as { menuId?: unknown; menuId1?: unknown; menuId2?: unknown }).menuId1 ??
+            (it as { menuId?: unknown; menuId1?: unknown; menuId2?: unknown }).menuId2 ??
+            ''
+        ).trim()
+        if (mid) neededMenuIds.add(mid)
+        const pis = (it as { promoItems?: Array<{ menuId?: unknown }> }).promoItems
+        if (Array.isArray(pis)) {
+          for (const p of pis) {
+            const pm = String((p as { menuId?: unknown }).menuId ?? '').trim()
+            if (pm) neededMenuIds.add(pm)
+          }
+        }
+      }
+      let menusForPrint: PosMenu[] = menus
+      const haveAll = [...neededMenuIds].every((id) => menus.some((m) => String(m.id ?? '').trim() === id))
+      if (!haveAll) {
+        try {
+          const storeScoped = await getPosMenus({ fresh: true, storeCode: receiptData.storeCode || undefined })
+          let merged = Array.isArray(storeScoped) && storeScoped.length > 0 ? (storeScoped as PosMenu[]) : menus
+          const missing = [...neededMenuIds].filter((id) => !merged.some((m) => String(m.id ?? '').trim() === id))
+          if (missing.length > 0) {
+            const globalMenus = await getPosMenus({ fresh: true })
+            const supplement = (Array.isArray(globalMenus) ? (globalMenus as PosMenu[]) : []).filter((m) =>
+              missing.includes(String(m.id ?? '').trim())
+            )
+            if (supplement.length > 0) merged = [...merged, ...supplement]
+          }
+          menusForPrint = merged
+        } catch {
+          /* 보강 실패 시 현재 menus 로 진행 */
+        }
+      }
+      const itemsForKitchen = preparePosOrderItemsForKitchenSlip(
+        receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        { ...posReceiptLineOptsKitchen, menus: menusForPrint }
       ) as unknown as typeof receiptData.items
       const slips = buildKitchenSlipGroups(
         itemsForKitchen,
-        { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: true }
+        { ...buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels), splitPromoKitchenLines: true }
       )
       if (slips.length === 0) {
         await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 출력할 품목이 없습니다.")
@@ -1779,6 +1830,8 @@ export default function PosOrderPage() {
           blocked={businessOpenBlocked}
           loading={businessOpenGate.loading}
           businessDateYmd={businessOpenGate.businessDateYmd}
+          blockReason={businessOpenGate.blockReason}
+          prevBusinessDateYmd={businessOpenGate.prevBusinessDateYmd}
           className="relative flex-1 min-h-0"
         >
           <div className="h-full flex-1 overflow-y-auto p-2 sm:p-3">
