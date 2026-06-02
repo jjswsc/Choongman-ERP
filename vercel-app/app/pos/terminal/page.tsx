@@ -1521,7 +1521,7 @@ export default function PosTerminalPage() {
       if (!rawItems.length) throw new Error('empty_order_items')
       const items = rawItems.map((it) => {
         const note = String(it.note ?? '').trim()
-        const menuId = String(it.menuId1 ?? it.menuId2 ?? it.menuId ?? '').trim()
+        const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
         const pit = it as {
           optionCode?: string
           optionCode1?: string
@@ -2581,7 +2581,7 @@ export default function PosTerminalPage() {
       }
       const items = (order.items || []).map((it) => {
         const note = String(it.note ?? '').trim()
-        const menuId = String(it.menuId1 ?? it.menuId2 ?? it.menuId ?? '').trim()
+        const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
         const pit = it as {
           optionCode?: string
           optionCode1?: string
@@ -2814,7 +2814,7 @@ export default function PosTerminalPage() {
             if (order?.items?.length) {
               const items = (order.items || []).map((it) => {
                 const note = String(it.note ?? '').trim()
-                const menuId = String(it.menuId1 ?? it.menuId2 ?? it.menuId ?? '').trim()
+                const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
                 const pit = it as {
                   optionCode?: string
                   optionCode1?: string
