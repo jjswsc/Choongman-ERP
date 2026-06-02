@@ -635,6 +635,68 @@ export default function PosOrderPage() {
     [promoCatalogById, menus, optionNameByCodeForKitchen, optionNameByIdForKitchen]
   )
 
+  // 매장(터미널)과 동일: 인쇄 직전 필요한 옵션코드를 모아, 현재 맵에 없으면
+  // getPosMenuOptions(forCodeMap 포함) 를 새로 받아 코드→이름 맵을 재구성한다.
+  // (단품 치킨 사이즈·반반 맛 옵션이 코드만 있고 이름이 없어 누락되던 문제 해결)
+  const resolveOptionNameByCodeForKitchenPrint = React.useCallback(
+    async (rows: Array<Record<string, unknown>>, menuCatalog: PosMenu[]): Promise<Map<string, string>> => {
+      const base = optionNameByCodeForKitchen
+      const requiredOptionCodes = new Set<string>()
+      const addCode = (raw: unknown) => {
+        const code = String(raw ?? "").trim().toUpperCase()
+        if (code) requiredOptionCodes.add(code)
+      }
+      const addCodesFromNote = (rawNote: unknown) => {
+        const note = String(rawNote ?? "")
+        const matches = note.match(/optc:\s*([A-Za-z0-9,\-_]+)/gi) || []
+        for (const hit of matches) {
+          const payload = String(hit).replace(/^optc:\s*/i, "")
+          for (const part of payload.split(",")) addCode(part)
+        }
+      }
+      for (const row of rows) {
+        addCode((row as { optionCode?: unknown }).optionCode)
+        addCode((row as { optionCode1?: unknown }).optionCode1)
+        addCode((row as { optionCode2?: unknown }).optionCode2)
+        const optionCodes = (row as { optionCodes?: unknown[] }).optionCodes
+        if (Array.isArray(optionCodes)) optionCodes.forEach((c) => addCode(c))
+        addCodesFromNote((row as { note?: unknown }).note)
+        const promoItems = (row as { promoItems?: Array<{ optionCode?: unknown }> }).promoItems
+        if (Array.isArray(promoItems)) {
+          for (const p of promoItems) addCode((p as { optionCode?: unknown }).optionCode)
+        }
+      }
+      if (requiredOptionCodes.size === 0) return base
+      const hasCode = (codeUpper: string): boolean => {
+        if (base.has(codeUpper)) return true
+        for (const [k] of base.entries()) {
+          if (String(k ?? "").trim().toUpperCase() === codeUpper) return true
+        }
+        return false
+      }
+      const missingCodes = [...requiredOptionCodes].filter((c) => !hasCode(c))
+      if (missingCodes.length === 0) return base
+      try {
+        const [rowsDefault, rowsCodeMap] = await Promise.all([
+          getPosMenuOptions({ fresh: true }),
+          getPosMenuOptions({ fresh: true, forCodeMap: true }),
+        ])
+        const rebuilt = buildOptionNameByCodeFromMenus(
+          menuCatalog,
+          Array.isArray(rowsCodeMap) && rowsCodeMap.length > 0
+            ? rowsCodeMap
+            : Array.isArray(rowsDefault)
+              ? rowsDefault
+              : []
+        )
+        return rebuilt.size > 0 ? rebuilt : base
+      } catch {
+        return base
+      }
+    },
+    [optionNameByCodeForKitchen]
+  )
+
   const todayStr = getBangkokDateStr()
 
   /** 반반 맛 선택 목록 (폴백: 같은 대분류 → c코드 대분류 → 음료/디저트 제외) */
@@ -1632,9 +1694,13 @@ export default function PosOrderPage() {
           /* 보강 실패 시 현재 menus 로 진행 */
         }
       }
+      const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+        receiptData.items as unknown as Array<Record<string, unknown>>,
+        menusForPrint
+      )
       const itemsForKitchen = preparePosOrderItemsForKitchenSlip(
         receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
-        { ...posReceiptLineOptsKitchen, menus: menusForPrint }
+        { ...posReceiptLineOptsKitchen, menus: menusForPrint, optionNameByCode: optionNameByCodeForPrint }
       ) as unknown as typeof receiptData.items
       const slips = buildKitchenSlipGroups(
         itemsForKitchen,
@@ -1677,7 +1743,7 @@ export default function PosOrderPage() {
           printTrackingId,
           items: mapKitchenSlipGroupItemsForPrint(slip.items, {
             orderItems: itemsForKitchen,
-            optionNameByCode: optionNameByCodeForKitchen,
+            optionNameByCode: optionNameByCodeForPrint,
             menuNameByMenuId: Object.fromEntries(
               menusForPrint
                 .map((m) => [String(m.id ?? ""), String(m.name ?? "").trim()])

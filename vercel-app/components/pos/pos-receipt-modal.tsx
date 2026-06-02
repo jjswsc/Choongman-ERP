@@ -2,7 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useRef, type RefObject } from 'react'
-import { getPosMenus, getPosPrinterSettings, type PosPrinterSettings } from '@/lib/api-client'
+import { getPosMenus, getPosMenuOptions, getPosPrinterSettings, type PosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -435,7 +435,26 @@ export function PosReceiptModal({
         tableName: receiptData.tableName,
         memo: receiptData.memo,
       })
-      const optionNameByCode = buildOptionNameByCodeFromMenus(menusForPrint, [])
+      // 매장(터미널)과 동일: 옵션 카탈로그(forCodeMap 포함)를 받아 코드→이름 맵을 구성.
+      // 빈 배열로만 만들면 단품 사이즈·반반 맛 옵션 코드가 풀리지 않는다.
+      let optionNameByCode = buildOptionNameByCodeFromMenus(menusForPrint, [])
+      try {
+        const [rowsDefault, rowsCodeMap] = await Promise.all([
+          getPosMenuOptions({ fresh: true }),
+          getPosMenuOptions({ fresh: true, forCodeMap: true }),
+        ])
+        const rebuilt = buildOptionNameByCodeFromMenus(
+          menusForPrint,
+          Array.isArray(rowsCodeMap) && rowsCodeMap.length > 0
+            ? rowsCodeMap
+            : Array.isArray(rowsDefault)
+              ? rowsDefault
+              : []
+        )
+        if (rebuilt.size > 0) optionNameByCode = rebuilt
+      } catch {
+        /* 옵션 보강 실패 시 메뉴 기반 맵으로 진행 */
+      }
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
