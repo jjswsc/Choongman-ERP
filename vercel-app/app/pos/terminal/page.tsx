@@ -5338,13 +5338,18 @@ export default function PosTerminalPage() {
             if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
             void (async () => {
               try {
+                const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
                 const settings = await getPrinterSettingsForStore(
-                  String(currentStoreId || order.storeCode || '').trim()
+                  effectiveStoreCode
+                )
+                const menusForPrint = await resolveMenusForKitchenPrint(
+                  items as Array<Record<string, unknown>>,
+                  effectiveStoreCode
                 )
                 const ki = kitchenSlipPrintI18n(settings, lang)
                 const slips = buildKitchenSlipGroups(
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                  buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+                  buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
                 )
                 if (!slips.length) return
                 const slipDesign = resolveKitchenSlipDesign(settings)
