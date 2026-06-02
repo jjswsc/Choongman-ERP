@@ -1572,7 +1572,7 @@ export default function PosTerminalPage() {
       const ki = kitchenSlipPrintI18n(settings, lang)
       const slips = buildKitchenSlipGroups(
         kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-        { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
       )
       if (!slips.length) throw new Error('no_slips_to_print')
       const slipDesign = resolveKitchenSlipDesign(settings)
@@ -2429,7 +2429,7 @@ export default function PosTerminalPage() {
           const ki = kitchenSlipPrintI18n(settings, lang)
           const slips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-            { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+            buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
@@ -2628,7 +2628,7 @@ export default function PosTerminalPage() {
             const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
             )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
@@ -2845,7 +2845,7 @@ export default function PosTerminalPage() {
                     const ki = kitchenSlipPrintI18n(settings, lang)
                     const slips = buildKitchenSlipGroups(
                       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                      { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+                      buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                     )
                     if (!slips.length) return
                     const slipDesign = resolveKitchenSlipDesign(settings)
@@ -4069,7 +4069,7 @@ export default function PosTerminalPage() {
           const ki = kitchenSlipPrintI18n(settings, lang)
           const slips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as typeof lines,
-            { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+            buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
@@ -4220,7 +4220,7 @@ export default function PosTerminalPage() {
       void getPrinterSettingsForStore(currentStoreId)
         .then((settings) => {
           const ki = kitchenSlipPrintI18n(settings, lang)
-          const groupOpts = { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+          const groupOpts = buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
           const removedLines = kitchenDetail?.removedKitchenLines ?? []
           const cancelledSlips = removedLines.length
             ? buildKitchenSlipGroups(
@@ -4424,7 +4424,7 @@ export default function PosTerminalPage() {
             const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
             )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
@@ -5231,7 +5231,7 @@ export default function PosTerminalPage() {
                 const ki = kitchenSlipPrintI18n(settings, lang)
                 const slips = buildKitchenSlipGroups(
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                  { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+                  buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                 )
                 if (!slips.length) return
                 const slipDesign = resolveKitchenSlipDesign(settings)
@@ -8128,7 +8128,7 @@ export default function PosTerminalPage() {
                         const ki = kitchenSlipPrintI18n(settings, lang)
                         const slips = buildKitchenSlipGroups(
                           kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                          { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+                          buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                         )
                         if (!slips.length) return
                         const slipDesign = resolveKitchenSlipDesign(settings)
@@ -8763,7 +8763,7 @@ export default function PosTerminalPage() {
                       const ki = kitchenSlipPrintI18n(settings, lang)
                       const slips = buildKitchenSlipGroups(
                         kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                        { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: false }
+                        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                       )
                       if (!slips.length) return
                       const slipDesign = resolveKitchenSlipDesign(settings)
