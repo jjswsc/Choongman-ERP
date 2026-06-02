@@ -628,7 +628,7 @@ type PendingPayRequest = {
 } | null
 
 type KbankOutcomeState = {
-  kind: 'success' | 'cancelled'
+  kind: 'success' | 'cancelled' | 'voided'
   amount: number
   refId: string
   paymentMethod?: string
@@ -5736,6 +5736,44 @@ export default function PosTerminalPage() {
     []
   )
 
+  const presentKbankPaymentApproved = useCallback(
+    (input: {
+      refId: string
+      amount?: number
+      approvalCode?: string
+      timeLabel?: string
+      dedupeKey?: string
+      paymentMethod?: string
+      cardBrands?: string[]
+    }) => {
+      const refId = String(input.refId || '').trim()
+      if (!refId) return
+      if (kbankCallbackNotifiedTxRef.current === refId) return
+      kbankCallbackNotifiedTxRef.current = refId
+      setKbankCallbackState('received')
+      setCustomerDisplayPaymentMessage('')
+      const brands = input.cardBrands ?? kbankOpsCardBrands
+      openKbankOutcomeModal(
+        {
+          kind: 'success',
+          amount:
+            input.amount != null && Number.isFinite(input.amount)
+              ? input.amount
+              : Math.max(0, Number(liveKbankQrAmount || 0)),
+          refId,
+          paymentMethod:
+            input.paymentMethod ||
+            (liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR'),
+          cardLabel: brands.length > 0 ? brands.join(' / ') : undefined,
+          approvalCode: input.approvalCode,
+          timeLabel: input.timeLabel || formatPosDateTimeMedium(new Date(), lang),
+        },
+        input.dedupeKey || `success:${refId}`
+      )
+    },
+    [kbankOpsCardBrands, liveKbankQrAmount, liveKbankQrType, openKbankOutcomeModal, lang]
+  )
+
   const runKbankQrPaymentIfNeeded = useCallback(
     async (
       payment: CartPanelPaymentPayload | null | undefined,
@@ -5941,23 +5979,14 @@ export default function PosTerminalPage() {
         if (st.success) {
           const s = String(st.status || '').trim().toLowerCase()
           if (s === 'approved') {
-            setKbankCallbackState('received')
-            setCustomerDisplayPaymentMessage('')
-            openKbankOutcomeModal(
-              {
-                kind: 'success',
-                amount: qrAmount,
-                refId: partnerTransactionId,
-                paymentMethod: requestedQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
-                cardLabel:
-                  requestedQrType === 'CREDIT_CARD' && generatedCardBrands.length > 0
-                    ? generatedCardBrands.join(' / ')
-                    : undefined,
-                approvalCode: stTxnNo || undefined,
-                timeLabel: formatPosDateTimeMedium(new Date(), lang),
-              },
-              `success:${partnerTransactionId}`
-            )
+            presentKbankPaymentApproved({
+              refId: partnerTransactionId,
+              amount: qrAmount,
+              approvalCode: stTxnNo || undefined,
+              paymentMethod: requestedQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+              cardBrands: generatedCardBrands,
+              dedupeKey: `success:${partnerTransactionId}`,
+            })
             return { ok: true as const, partnerTransactionId }
           }
           if (s === 'declined' || s === 'failed') {
@@ -6037,7 +6066,18 @@ export default function PosTerminalPage() {
       )
       return { ok: false as const, message: 'kbank_qr_pending' }
     },
-    [isPosDemo, isKbankPilotStore, currentStoreId, kbankOpsTerminalId, t, sleepMs, enforceKbankCooldown, openKbankOutcomeModal, lang]
+    [
+      isPosDemo,
+      isKbankPilotStore,
+      currentStoreId,
+      kbankOpsTerminalId,
+      t,
+      sleepMs,
+      enforceKbankCooldown,
+      openKbankOutcomeModal,
+      presentKbankPaymentApproved,
+      lang,
+    ]
   )
 
   const runKbankFollowupAction = useCallback(
@@ -6086,6 +6126,19 @@ export default function PosTerminalPage() {
               cardScheme: d.cardScheme,
             })
             if (brands.length > 0) setKbankOpsCardBrands(brands)
+            const s = String(out.status || '').trim().toLowerCase()
+            if (s === 'approved') {
+              presentKbankPaymentApproved({
+                refId: partnerTxnUid,
+                approvalCode: nextTxnNo || undefined,
+                cardBrands: brands,
+                dedupeKey: `inquiry:${partnerTxnUid}:${nextTxnNo}`,
+              })
+            }
+          } else {
+            await appAlert(
+              String(out.statusMessage || out.message || t('processFail') || 'Inquiry failed').trim()
+            )
           }
           setKbankOpsLastResult(`[INQUIRY] ${JSON.stringify(out)}`)
           return
@@ -6148,11 +6201,27 @@ export default function PosTerminalPage() {
             const d = (out.data || {}) as Record<string, unknown>
             const nextTxnNo = String(d.txnNo || txnNo || '').trim().slice(0, 20)
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
-          }
-          if (out.success) {
-            setLiveKbankQrPayload('')
-            setLiveKbankQrType('THAI_QR')
-            setKbankCallbackState('idle')
+            setKbankCallbackState('failed')
+            openKbankOutcomeModal(
+              {
+                kind: 'voided',
+                amount: Math.max(0, Number(liveKbankQrAmount || 0)),
+                refId: origPartnerTxnUid || partnerTxnUid,
+                paymentMethod: liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+                approvalCode: nextTxnNo || txnNo || undefined,
+                timeLabel: formatPosDateTimeMedium(new Date(), lang),
+              },
+              `void:${origPartnerTxnUid || partnerTxnUid}:${voidPartnerTxnUid}`
+            )
+          } else {
+            await appAlert(
+              String(
+                out.statusMessage ||
+                  out.message ||
+                  t('posKbankVoidFailedAlert') ||
+                  'Void payment failed. Check KBank response in the panel below.'
+              ).trim()
+            )
           }
           setKbankOpsLastResult(`[VOID] ${JSON.stringify(out)}`)
           return
@@ -6199,6 +6268,7 @@ export default function PosTerminalPage() {
       enforceKbankCooldown,
       liveKbankQrAmount,
       openKbankOutcomeModal,
+      presentKbankPaymentApproved,
       lang,
     ]
   )
@@ -6267,7 +6337,6 @@ export default function PosTerminalPage() {
         setKbankOpsTxnNo(txnNoFromText.slice(0, 20))
       }
       if (status === 'approved') {
-        setKbankCallbackState('received')
         setKbankOpsLastResult(
           `[CALLBACK] ${JSON.stringify({
             localTxId,
@@ -6278,27 +6347,15 @@ export default function PosTerminalPage() {
           })}`
         )
         const methodFromText = lowerText.includes('credit') || lowerText.includes('card')
-        openKbankOutcomeModal(
-          {
-            kind: 'success',
-            amount: Math.max(0, Number(hit.approvedAmount || hit.requestAmount || liveKbankQrAmount || 0)),
-            refId: localTxId,
-            paymentMethod:
-              methodFromText || liveKbankQrType === 'CREDIT_CARD'
-                ? 'Credit Card QR'
-                : 'PromptPay QR',
-            cardLabel: kbankOpsCardBrands.length > 0 ? kbankOpsCardBrands.join(' / ') : undefined,
-            approvalCode: String(hit.approvalCode || kbankOpsTxnNo || '').trim() || undefined,
-            timeLabel: formatPosDateTimeMedium(
-              hit.createdAt ? new Date(hit.createdAt) : new Date(),
-              lang
-            ),
-          },
-          `callback:${localTxId}:${hit.createdAt || ''}:${hit.responseCode || ''}`
-        )
-        if (kbankCallbackNotifiedTxRef.current !== localTxId) {
-          kbankCallbackNotifiedTxRef.current = localTxId
-        }
+        presentKbankPaymentApproved({
+          refId: localTxId,
+          amount: Math.max(0, Number(hit.approvedAmount || hit.requestAmount || liveKbankQrAmount || 0)),
+          paymentMethod:
+            methodFromText || liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+          approvalCode: String(hit.approvalCode || kbankOpsTxnNo || '').trim() || undefined,
+          timeLabel: formatPosDateTimeMedium(hit.createdAt ? new Date(hit.createdAt) : new Date(), lang),
+          dedupeKey: `callback:${localTxId}:${hit.createdAt || ''}:${hit.responseCode || ''}`,
+        })
         return
       }
       if (status === 'declined' || status === 'failed' || status === 'timeout' || status === 'error') {
@@ -6313,7 +6370,92 @@ export default function PosTerminalPage() {
       cancelled = true
       window.clearInterval(timerId)
     }
-  }, [isKbankPilotStore, currentStoreId, kbankOpsTxnUid, kbankOpsTxnNo, kbankCallbackState, liveKbankQrAmount, liveKbankQrType, kbankOpsCardBrands, openKbankOutcomeModal, lang])
+  }, [
+    isKbankPilotStore,
+    currentStoreId,
+    kbankOpsTxnUid,
+    kbankOpsTxnNo,
+    kbankCallbackState,
+    liveKbankQrAmount,
+    liveKbankQrType,
+    kbankOpsCardBrands,
+    presentKbankPaymentApproved,
+    lang,
+  ])
+
+  /** Callback 미수신 시 KBank Inquiry로 승인 상태 동기화 (은행 결제 완료·POS 대기 불일치 완화). */
+  useEffect(() => {
+    if (!isKbankPilotStore || !currentStoreId) return
+    const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+    const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 32)
+    if (!partnerTxnUid || kbankCallbackState !== 'waiting') return
+
+    let cancelled = false
+    const pollApprovedViaInquiry = async () => {
+      if (cancelled || kbankCallbackNotifiedTxRef.current === partnerTxnUid) return
+      if (Date.now() - kbankInquiryLastAtRef.current < 12000) return
+
+      kbankInquiryLastAtRef.current = Date.now()
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      const txnNo = String(kbankOpsTxnNo || '').trim()
+      try {
+        const st = await executeKbankCheckStatus({
+          storeCode: currentStoreId,
+          partnerTransactionId: partnerTxnUid,
+          originalTransactionId: origPartnerTxnUid || undefined,
+          terminalId: terminalId || undefined,
+          txnNo: txnNo || undefined,
+          payload: {
+            ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+            ...(terminalId ? { terminalId } : {}),
+            ...(txnNo ? { txnNo } : {}),
+          },
+        })
+        if (cancelled) return
+        if (!st.success) return
+        const s = String(st.status || '').trim().toLowerCase()
+        if (s !== 'approved') return
+        const stData = (st.data || {}) as Record<string, unknown>
+        const stTxnNo = String(stData.txnNo || txnNo || '').trim().slice(0, 20)
+        if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
+        const brands = resolveKbankCreditCardBrandLabels({
+          sof: stData.sof,
+          cardScheme: stData.cardScheme,
+        })
+        if (brands.length > 0) setKbankOpsCardBrands(brands)
+        presentKbankPaymentApproved({
+          refId: partnerTxnUid,
+          approvalCode: stTxnNo || undefined,
+          cardBrands: brands,
+          dedupeKey: `auto-inquiry:${partnerTxnUid}:${stTxnNo}`,
+        })
+      } catch {
+        /* noop */
+      }
+    }
+
+    const firstDelayMs = window.setTimeout(() => {
+      void pollApprovedViaInquiry()
+    }, 12000)
+    const intervalId = window.setInterval(() => {
+      void pollApprovedViaInquiry()
+    }, 20000)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(firstDelayMs)
+      window.clearInterval(intervalId)
+    }
+  }, [
+    isKbankPilotStore,
+    currentStoreId,
+    kbankOpsTxnUid,
+    kbankOpsOrigTxnUid,
+    kbankOpsTerminalId,
+    kbankOpsTxnNo,
+    kbankCallbackState,
+    presentKbankPaymentApproved,
+  ])
 
   const applyTaxInvoiceProfile = useCallback((profile: PosTaxInvoiceData) => {
     setTiCustomerType(profile.customerType === 'company' ? 'company' : 'person')
@@ -9718,15 +9860,17 @@ export default function PosTerminalPage() {
         open={kbankOutcomeState != null}
         onOpenChange={(open) => {
           if (!open) {
-            const wasCancelled = kbankOutcomeState?.kind === 'cancelled'
+            const terminalKind = kbankOutcomeState?.kind
+            const shouldClearQrPanel = terminalKind === 'cancelled' || terminalKind === 'voided'
             setKbankOutcomeState(null)
-            if (wasCancelled) {
+            if (shouldClearQrPanel) {
               setLiveKbankQrPayload('')
               setLiveKbankQrType('THAI_QR')
               setKbankOpsTxnUid('')
               setKbankOpsOrigTxnUid('')
               setKbankOpsTxnNo('')
               setCustomerDisplayPaymentMessage('')
+              setKbankCallbackState('idle')
               kbankManualCancelPendingRef.current = false
             }
           }

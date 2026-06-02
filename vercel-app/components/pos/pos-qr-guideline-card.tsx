@@ -7,7 +7,7 @@ import { POS_QR_BRAND, type PosQrDisplayKind } from '@/lib/pos-qr-brand-paths'
 
 /**
  * BOT / KBank guideline card proportions (reference slip layout).
- * - Header band: full card width, ~16% visual height
+ * - Header band: full card width
  * - PromptPay mark: ~28% card width
  * - QR modules: ~82% card width
  * - Center logo: ~14% of QR module area
@@ -16,13 +16,24 @@ const GUIDELINE_CARD_WIDTH_PX = 280
 const QR_WIDTH_RATIO = 0.82
 const PROMPTPAY_WIDTH_RATIO = 0.28
 const CARD_BRAND_ROW_WIDTH_RATIO = 0.72
+/** PromptPay screen header height (photo 2) — shared by both QR kinds. */
 const HEADER_BAND_HEIGHT_RATIO = 0.22
 const CENTER_LOGO_RATIO = 0.14
 
 const QR_DISPLAY_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * QR_WIDTH_RATIO)
 const PROMPTPAY_WIDTH_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * PROMPTPAY_WIDTH_RATIO)
 const CARD_BRAND_ROW_WIDTH_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * CARD_BRAND_ROW_WIDTH_RATIO)
-const HEADER_BAND_MAX_HEIGHT_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * HEADER_BAND_HEIGHT_RATIO)
+const HEADER_BAND_HEIGHT_PX = Math.round(GUIDELINE_CARD_WIDTH_PX * HEADER_BAND_HEIGHT_RATIO)
+
+/** Logo-01 crop: blue header band only (matches `thai-qr-payment` renderCard). */
+const THAI_QR_HEADER_CROP = {
+  imageWidth: 913,
+  imageHeight: 376,
+  x: 88,
+  y: 75,
+  width: 750,
+  height: 210,
+} as const
 
 type Props = {
   payload: string
@@ -32,19 +43,25 @@ type Props = {
 }
 
 function ThaiQrHeaderBand({ className }: { className?: string }) {
+  const { imageWidth, imageHeight, x, y, width, height } = THAI_QR_HEADER_CROP
+  const bgWidthPct = (imageWidth / width) * 100
+  const bgHeightPct = (imageHeight / height) * 100
+  const posXPct = (x / (imageWidth - width)) * 100
+  const posYPct = (y / (imageHeight - height)) * 100
+
   return (
     <div
-      className={cn('w-full bg-white px-2 pb-1 pt-2', className)}
+      className={cn('w-full overflow-hidden bg-[#00427A]', className)}
+      style={{ height: HEADER_BAND_HEIGHT_PX }}
       role="img"
       aria-label="THAI QR PAYMENT"
     >
-      <img
-        src={POS_QR_BRAND.thaiQrHeader}
-        alt="THAI QR PAYMENT"
-        className="mx-auto block h-auto w-full object-contain"
+      <div
+        className="h-full w-full bg-no-repeat"
         style={{
-          maxWidth: GUIDELINE_CARD_WIDTH_PX,
-          maxHeight: HEADER_BAND_MAX_HEIGHT_PX,
+          backgroundImage: `url(${POS_QR_BRAND.thaiQrHeader})`,
+          backgroundSize: `${bgWidthPct}% ${bgHeightPct}%`,
+          backgroundPosition: `${posXPct}% ${posYPct}%`,
         }}
       />
     </div>
@@ -115,7 +132,7 @@ export function PosQrGuidelineCard({ payload, kind, className, qrClassName }: Pr
   return (
     <div
       className={cn('mx-auto overflow-hidden rounded-md border bg-white', className)}
-      style={{ maxWidth: GUIDELINE_CARD_WIDTH_PX }}
+      style={{ width: GUIDELINE_CARD_WIDTH_PX, maxWidth: '100%' }}
     >
       <ThaiQrHeaderBand />
       <div className="bg-white px-2 py-2">

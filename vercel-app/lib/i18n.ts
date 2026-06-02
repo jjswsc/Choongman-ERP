@@ -6364,6 +6364,8 @@ export const i18n = {
     posKbankInquiry: '조회 (Inquiry)',
     posKbankCancel: '취소 (Cancel)',
     posKbankVoid: '무효 (Void)',
+    posKbankVoidFailedAlert:
+      'Void 결제에 실패했습니다. 아래 KBank 패널의 응답을 확인하거나 Inquiry 후 다시 시도해 주세요.',
     posKbankSettlement: '정산 (Settlement)',
     posStaffQrMonitor: '직원 모니터',
     posStoreRequired: '매장 정보가 필요합니다.',
@@ -15262,6 +15264,8 @@ orderItemQty: 'Qty',
     posKbankInquiry: 'Inquiry',
     posKbankCancel: 'Cancel',
     posKbankVoid: 'Void',
+    posKbankVoidFailedAlert:
+      'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankSettlement: 'Settlement',
     posStaffQrMonitor: 'Staff monitor',
     posStoreRequired: 'Store information is required.',

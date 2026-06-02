@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useEffect, useMemo, useState } from 'react'
 
-type KbankOutcomeKind = 'success' | 'cancelled'
+type KbankOutcomeKind = 'success' | 'cancelled' | 'voided'
 
 type Props = {
   open: boolean
@@ -41,15 +41,28 @@ export function PosKbankPaymentOutcomeDialog({
   onCreateNewQr,
 }: Props) {
   const isSuccess = kind === 'success'
+  const isVoided = kind === 'voided'
+  const isCancelled = kind === 'cancelled'
   const [detailMode, setDetailMode] = useState(false)
 
   useEffect(() => {
     if (open) setDetailMode(false)
   }, [open])
 
-  const statusLabel = useMemo(() => (isSuccess ? 'สำเร็จ' : 'ยกเลิกแล้ว'), [isSuccess])
+  const statusLabel = useMemo(() => {
+    if (isSuccess) return 'สำเร็จ'
+    if (isVoided) return 'Void สำเร็จ'
+    return 'ยกเลิกแล้ว'
+  }, [isSuccess, isVoided])
+
+  const headline = useMemo(() => {
+    if (isSuccess) return 'ชำระสำเร็จ'
+    if (isVoided) return 'Void สำเร็จ'
+    return 'ยกเลิกสำเร็จ'
+  }, [isSuccess, isVoided])
 
   const methodLabel = paymentMethod || (isSuccess ? 'ชำระด้วย QR' : '-')
+  const toneClass = isSuccess ? 'emerald' : isVoided ? 'violet' : 'amber'
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[380px] border-0 bg-transparent p-0 shadow-none">
@@ -58,28 +71,40 @@ export function PosKbankPaymentOutcomeDialog({
             <div
               className={cn(
                 'rounded-xl px-3 py-4',
-                isSuccess ? 'bg-[#eef9eb]' : 'bg-[#fcf6e8]'
+                isSuccess && 'bg-[#eef9eb]',
+                isVoided && 'bg-[#f3f0ff]',
+                isCancelled && 'bg-[#fcf6e8]'
               )}
             >
               <div className="flex items-center justify-center gap-2">
                 {isSuccess ? (
                   <Check className="h-5 w-5 text-[#1f6b2e]" aria-hidden />
                 ) : (
-                  <X className="h-5 w-5 text-[#7a5a17]" aria-hidden />
+                  <X
+                    className={cn(
+                      'h-5 w-5',
+                      isVoided ? 'text-[#5b3ea6]' : 'text-[#7a5a17]'
+                    )}
+                    aria-hidden
+                  />
                 )}
                 <span
                   className={cn(
                     'text-lg font-semibold',
-                    isSuccess ? 'text-[#1f6b2e]' : 'text-[#6d4f14]'
+                    isSuccess && 'text-[#1f6b2e]',
+                    isVoided && 'text-[#5b3ea6]',
+                    isCancelled && 'text-[#6d4f14]'
                   )}
                 >
-                  {isSuccess ? 'ชำระสำเร็จ' : 'ยกเลิกสำเร็จ'}
+                  {headline}
                 </span>
               </div>
               <p
                 className={cn(
                   'mt-1 text-center text-[44px] font-bold leading-none',
-                  isSuccess ? 'text-[#1f6b2e]' : 'text-[#6d4f14]'
+                  isSuccess && 'text-[#1f6b2e]',
+                  isVoided && 'text-[#5b3ea6]',
+                  isCancelled && 'text-[#6d4f14]'
                 )}
               >
                 {formatBaht(amount)}
@@ -168,7 +193,9 @@ export function PosKbankPaymentOutcomeDialog({
             <div
               className={cn(
                 'mx-auto flex h-14 w-14 items-center justify-center rounded-full',
-                isSuccess ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                toneClass === 'emerald' && 'bg-emerald-50 text-emerald-700',
+                toneClass === 'violet' && 'bg-violet-50 text-violet-700',
+                toneClass === 'amber' && 'bg-amber-50 text-amber-700'
               )}
             >
               {isSuccess ? <Check className="h-8 w-8" aria-hidden /> : <X className="h-8 w-8" aria-hidden />}
@@ -177,15 +204,19 @@ export function PosKbankPaymentOutcomeDialog({
             <p
               className={cn(
                 'mt-3 text-center text-2xl font-semibold tracking-tight',
-                isSuccess ? 'text-emerald-800' : 'text-amber-800'
+                toneClass === 'emerald' && 'text-emerald-800',
+                toneClass === 'violet' && 'text-violet-800',
+                toneClass === 'amber' && 'text-amber-800'
               )}
             >
-              {isSuccess ? 'ชำระสำเร็จ' : 'ยกเลิกสำเร็จ'}
+              {headline}
             </p>
             <p
               className={cn(
                 'mt-1 text-center text-4xl font-bold leading-none',
-                isSuccess ? 'text-emerald-700' : 'text-amber-700'
+                toneClass === 'emerald' && 'text-emerald-700',
+                toneClass === 'violet' && 'text-violet-700',
+                toneClass === 'amber' && 'text-amber-700'
               )}
             >
               {formatBaht(amount)}
