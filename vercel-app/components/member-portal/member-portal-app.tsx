@@ -6,7 +6,6 @@ import QRCode from "qrcode"
 import {
   ChevronRight,
   Copy,
-  ExternalLink,
   Gift,
   History,
   Home,
@@ -16,7 +15,6 @@ import {
   Share2,
   ShoppingCart,
   Sparkles,
-  Star,
   Ticket,
   UserRound,
 } from "lucide-react"
@@ -38,6 +36,7 @@ import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { pickHomeFeatureContent } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
+import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
 import { MemberPortalTierGuide, useMemberPortalTiers } from "@/components/member-portal/member-portal-tier-guide"
@@ -69,11 +68,7 @@ import {
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
 import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
-import {
-  memberPortalGoogleMapsUrl,
-  memberPortalStoreMatchesQuery,
-  type MemberPortalStoreDto,
-} from "@/lib/member-portal-stores"
+import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type MemberPortalStoreRow = MemberPortalStoreDto
 
@@ -1013,7 +1008,7 @@ export function MemberPortalApp() {
                 />
               </div>
             </GlassCard>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {filteredStores.length === 0 ? (
                 <GlassCard soft className="px-5 py-14 text-center">
                   <MapPin className="mx-auto mb-3 h-7 w-7 text-amber-300/80" />
@@ -1022,53 +1017,16 @@ export function MemberPortalApp() {
                   </p>
                 </GlassCard>
               ) : (
-                filteredStores.map((s) => {
-                  const photoUrl = s.photoUrl || storePhotoMap.get(s.storeCode) || ""
-                  return (
-                  <GlassCard key={s.storeCode} soft className="px-4 py-3.5">
-                    {photoUrl ? (
-                      <img
-                        src={photoUrl}
-                        alt={s.displayName}
-                        className="mb-3 h-28 w-full rounded-xl object-cover"
-                      />
-                    ) : null}
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{s.displayName}</p>
-                        {s.address ? (
-                          <p className="mt-0.5 text-xs text-white/55">{s.address}</p>
-                        ) : null}
-                        <p className="text-xs text-white/45">
-                          {t("locationCode")} · {s.storeCode}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          window.open(memberPortalGoogleMapsUrl(s), "_blank")
-                        }}
-                        className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        {t("locationOpenMap")}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleFavoriteStore(s.storeCode)}
-                      className={`mt-2 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs ${
-                        favoriteStoreCodes.includes(s.storeCode)
-                          ? "border-amber-300/40 bg-amber-300/15 text-amber-100"
-                          : "border-white/15 bg-white/5 text-white/80 hover:bg-white/10"
-                      }`}
-                    >
-                      <Star className={`h-3.5 w-3.5 ${favoriteStoreCodes.includes(s.storeCode) ? "fill-current" : ""}`} />
-                      {favoriteStoreCodes.includes(s.storeCode) ? t("locationFavorite") : t("locationFavoriteSet")}
-                    </button>
-                  </GlassCard>
-                  )
-                })
+                filteredStores.map((s) => (
+                  <MemberPortalStoreLocationCard
+                    key={s.storeCode}
+                    store={s}
+                    photoUrl={s.photoUrl || storePhotoMap.get(s.storeCode) || ""}
+                    isFavorite={favoriteStoreCodes.includes(s.storeCode)}
+                    onToggleFavorite={() => toggleFavoriteStore(s.storeCode)}
+                    t={t}
+                  />
+                ))
               )}
             </div>
           </div>

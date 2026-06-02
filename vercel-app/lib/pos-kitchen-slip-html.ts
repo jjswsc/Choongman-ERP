@@ -5,7 +5,6 @@
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { parseBanbanFlavorsFromName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
-import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 import { formatGrabOptionFragmentForPrint } from '@/lib/grab-pos-order-enrich'
 import {
   isLikelyPosMenuSkuCode,
@@ -22,6 +21,22 @@ const KITCHEN_SLIP_BODY_WIDTH_MM = 76
 const KITCHEN_SLIP_PADDING_MM = { t: 1, r: 14, b: 1, l: 2 } as const
 /** @page 높이: 짧으면 긴 주방전표가 2페이지로 잘림. 600mm까지 한 페이지로 묶음. */
 const POS_PAPER_HEIGHT_MM = 600
+
+/** 주방전: 열전사·Electron 무인쇄 시 Google Fonts CSS(woff base64)가 본문에 섞여 긴 난문 출력되는 경우 방지 */
+const KITCHEN_SLIP_PRINT_TEXT_MAX_LEN = 280
+
+export function sanitizeKitchenSlipTextForPrint(raw: string | null | undefined): string {
+  const s = String(raw ?? '').trim()
+  if (!s) return ''
+  if (s.length > KITCHEN_SLIP_PRINT_TEXT_MAX_LEN) {
+    return `${s.slice(0, KITCHEN_SLIP_PRINT_TEXT_MAX_LEN - 1)}…`
+  }
+  if ((s.startsWith('{') || s.startsWith('[')) && /"[^"]+"\s*:/.test(s)) return ''
+  if (/<\s*\/?\s*(html|head|style|script|link)\b/i.test(s)) return ''
+  const compact = s.replace(/\s+/g, '')
+  if (compact.length >= 96 && /^[A-Za-z0-9+/=_-]+$/.test(compact)) return ''
+  return s
+}
 
 export type KitchenSlipFontScale = 'sm' | 'md' | 'lg'
 
@@ -464,7 +479,9 @@ export function formatKitchenSlipItemRowHtml(
     (rowDisplay.optionLine
       ? parseKitchenSlipBanbanFromName(`${rowDisplay.mainName} (${rowDisplay.optionLine})`)
       : null)
-  let baseDisplayName = banban ? banban.baseName : rowDisplay.mainName || it.name
+  let baseDisplayName = sanitizeKitchenSlipTextForPrint(
+    banban ? banban.baseName : rowDisplay.mainName || it.name
+  )
   const optionLine = banban
     ? ''
     : localizeKitchenSlipLineNote(
@@ -475,7 +492,9 @@ export function formatKitchenSlipItemRowHtml(
       )
   const optionGroupPrint = opts?.optionGroupPrint ?? {}
   let optionLines = filterKitchenOptionTokenList(
-    splitPrintOptionTokens(optionLine).map((x) => localizeKitchenSlipLineNote(x)),
+    splitPrintOptionTokens(optionLine)
+      .map((x) => sanitizeKitchenSlipTextForPrint(localizeKitchenSlipLineNote(x)))
+      .filter(Boolean),
     optionGroupPrint
   )
   if (!banban && isLikelyPosMenuSkuCode(stripLeadingPrintCodeBrackets(baseDisplayName)) && note) {
@@ -517,6 +536,9 @@ export function formatKitchenSlipItemRowHtml(
   })()
   if (isDuplicatedMenuEchoNote) note = ''
   if (isDuplicatedMenuEchoNote) noteLines = []
+  noteLines = noteLines
+    .map((line) => sanitizeKitchenSlipTextForPrint(line))
+    .filter(Boolean)
   if (note && isLikelyPosMenuSkuCode(splitPosPrintItemLine(String(it.name ?? '')).mainName)) {
     const noteMain = resolveKitchenSlipRowMainDisplay({ name: '', note })
     if (noteMain.mainName && simplify(note).includes(simplify(noteMain.mainName))) note = ''
@@ -543,9 +565,9 @@ export function formatKitchenSlipItemRowHtml(
       : ''
   const banbanHtml = banban
     ? '<div class="k-line-note">- ' +
-      escapeHtml(banban.flavor1) +
+      escapeHtml(sanitizeKitchenSlipTextForPrint(banban.flavor1)) +
       '<br/>- ' +
-      escapeHtml(banban.flavor2) +
+      escapeHtml(sanitizeKitchenSlipTextForPrint(banban.flavor2)) +
       close('div')
     : ''
   const promoLines = (() => {
@@ -554,7 +576,10 @@ export function formatKitchenSlipItemRowHtml(
       .flatMap((line) => {
         const expanded = expandBanbanComposeLineForPrint(String(line))
         const candidates = expanded ?? [String(line)]
-        return candidates.flatMap((part) => filterKitchenPromoComposeLine(part, optionGroupPrint))
+        return candidates
+          .flatMap((part) => filterKitchenPromoComposeLine(part, optionGroupPrint))
+          .map((part) => sanitizeKitchenSlipTextForPrint(part))
+          .filter(Boolean)
       })
     const deduped: string[] = []
     const seen = new Set<string>()
@@ -622,7 +647,7 @@ export function buildKitchenSlipMemoBlockHtml(
   design: KitchenSlipDesignResolved
 ): string {
   if (!design.showOrderMemo) return ''
-  const trimmed = String(memoLine ?? '').trim()
+  const trimmed = sanitizeKitchenSlipTextForPrint(String(memoLine ?? '').trim())
   if (!trimmed) return ''
   const c = (tag: string) => '\u003c/' + tag + '>'
   return '<div class="k-memo">' + escapeHtml(trimmed) + c('div')
@@ -689,7 +714,6 @@ export function buildKitchenSlipHtml(params: {
       : ''
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
-    POS_PRINT_NOTO_SANS_THAI_FONT_LINKS +
     '<meta name="viewport" content="width=device-width,initial-scale=1"/>' +
     '<title>' +
     escapeHtml(label) +

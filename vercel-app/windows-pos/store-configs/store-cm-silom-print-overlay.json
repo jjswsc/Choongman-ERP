@@ -1,6 +1,6 @@
 {
   "_comment": "CM Silom(สาขาสีลม) — 연속 주방 인쇄 시 본문 깨짐 완화. 기존 runtime-config.json의 print.* 프린터 이름은 유지한 채 아래 키만 병합.",
-  "printHtmlSettleMs": 360,
-  "postHtmlPrintSpoolFlushMs": 600,
-  "printHtmlQueueGapMs": 120
+  "printHtmlSettleMs": 420,
+  "postHtmlPrintSpoolFlushMs": 750,
+  "printHtmlQueueGapMs": 140
 }

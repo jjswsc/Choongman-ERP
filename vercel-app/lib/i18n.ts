@@ -6379,6 +6379,8 @@ export const i18n = {
     posKbankVoidNeedsTxnNo: 'txnNo 없음 — Void 시 Inquiry를 먼저 실행합니다.',
     posKbankVoidInquiryFailed:
       'Inquiry로 txnNo를 가져오지 못했습니다. 아래 KBank 응답을 확인하세요.',
+    posKbankRateLimitAlert:
+      'KBank API 호출 한도 초과입니다. 약 {minutes}분 후 {label}을(를) 한 번만 눌러 주세요. (연속 클릭 금지)',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -15301,6 +15303,8 @@ orderItemQty: 'Qty',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
     posKbankVoidInquiryFailed:
       'Could not obtain txnNo from Inquiry. Check the KBank response below.',
+    posKbankRateLimitAlert:
+      'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -22699,6 +22703,10 @@ orderItemQty: 'จำนวน',
     posKbankInquiry: 'สอบถาม (Inquiry)',
     posKbankCancel: 'ยกเลิก (Cancel)',
     posKbankVoid: 'Void',
+    posKbankRateLimitAlert:
+      'KBank จำกัดจำนวนครั้ง — รอประมาณ {minutes} นาที แล้วกด {label} ครั้งเดียว (ห้ามกดซ้ำ)',
+    posKbankCallbackWaitingHint:
+      'หากลูกค้าชำระแล้ว กดสอบถาม (Inquiry) เพื่อยืนยัน — รอ Callback',
     posKbankSettlement: 'Settlement',
     posStaffQrMonitor: 'จอพนักงาน',
     posStoreRequired: 'ต้องมีข้อมูลร้าน',

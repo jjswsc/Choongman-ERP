@@ -186,7 +186,7 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('PEPSI MEGA 1')
   })
 
-  it('falls back to grab note label when long code has no menu code mapping', () => {
+  it('derives menu name from grab note when code mapping is missing', () => {
     const slipItems: KitchenSlipRoutingItem[] = [
       { id: 'grab:line-3', name: '260457-S01', qty: 1, note: 'PEPSI MEGA 1 x1' },
     ]

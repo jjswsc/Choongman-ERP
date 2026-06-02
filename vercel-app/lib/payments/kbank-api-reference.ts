@@ -161,6 +161,9 @@ export function formatKbankHttpErrorMessage(
   return String(fallback || '').trim() || `kbank_http_${httpStatus}`
 }
 
+/** After rate-limit response, pause client-side KBank follow-up calls (ms). */
+export const KBANK_RATE_LIMIT_BACKOFF_MS = 180_000
+
 /** KBank Open API rate-limit / quota exceeded (English message from bank). */
 export function isKbankRateLimitError(message: unknown): boolean {
   const key = String(message || '')

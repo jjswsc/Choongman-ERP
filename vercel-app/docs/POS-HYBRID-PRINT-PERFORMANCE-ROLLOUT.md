@@ -66,7 +66,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/merge-windows-pos-ru
 # 3) Choongman POS 재시작
 ```
 
-오버레이 값: `printHtmlSettleMs: 360`, `postHtmlPrintSpoolFlushMs: 600`, `printHtmlQueueGapMs: 120`.
+오버레이 값: `printHtmlSettleMs: 420`, `postHtmlPrintSpoolFlushMs: 750`, `printHtmlQueueGapMs: 140`.  
+주방 HTML은 Google Fonts 링크 없이 OS 폰트만 사용(woff base64가 본문에 섞여 긴 난문이 나오는 현상 방지).
 
 **Vercel**: `lib/pos-print-html.ts`, `app/pos/order/page.tsx` 배포(웹 POS·자동 주방 인쇄 큐).
 

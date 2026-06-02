@@ -206,6 +206,7 @@ import {
   extractKbankQrResponseMeta,
   isKbankCreditCardQrUnavailableError,
   isKbankRateLimitError,
+  KBANK_RATE_LIMIT_BACKOFF_MS,
   resolveKbankCreditCardBrandLabels,
   resolveKbankDisplayQrTypeDetails,
   type KbankDisplayQrTypeSource,
@@ -1078,6 +1079,8 @@ export default function PosTerminalPage() {
   const kbankGenerateLastAtRef = useRef(0)
   const kbankInquiryLastAtRef = useRef(0)
   const kbankFollowupLastAtRef = useRef(0)
+  const kbankApiPausedUntilRef = useRef(0)
+  const [kbankApiPausedUntilMs, setKbankApiPausedUntilMs] = useState(0)
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
@@ -5714,6 +5717,36 @@ export default function PosTerminalPage() {
   )
 
   const sleepMs = useCallback((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), [])
+
+  const noteKbankRateLimitResponse = useCallback((message: unknown): boolean => {
+    if (!isKbankRateLimitError(message)) return false
+    const until = Date.now() + KBANK_RATE_LIMIT_BACKOFF_MS
+    kbankApiPausedUntilRef.current = until
+    setKbankApiPausedUntilMs(until)
+    return true
+  }, [])
+
+  const isKbankApiPaused = useCallback(
+    () => Date.now() < kbankApiPausedUntilRef.current,
+    []
+  )
+
+  const alertIfKbankApiPaused = useCallback(
+    async (label: string): Promise<boolean> => {
+      if (!isKbankApiPaused()) return true
+      const waitSec = Math.max(1, Math.ceil((kbankApiPausedUntilRef.current - Date.now()) / 1000))
+      const waitMin = Math.max(1, Math.ceil(waitSec / 60))
+      await appAlert(
+        String(t('posKbankRateLimitAlert') || '')
+          .replace('{minutes}', String(waitMin))
+          .replace('{label}', label) ||
+          `KBank API rate limit exceeded. Wait about ${waitMin} minute(s), then try ${label} once (do not tap repeatedly).`
+      )
+      return false
+    },
+    [isKbankApiPaused, t]
+  )
+
   const enforceKbankCooldown = useCallback(
     async (
       bucket: 'generate' | 'inquiry' | 'followup',
@@ -5970,13 +6003,12 @@ export default function PosTerminalPage() {
         return { ok: true as const, partnerTransactionId, pending: true as const }
       }
 
-      // Rate-limit safe: wait before first inquiry; at most 2 checks (not 3 back-to-back).
-      await sleepMs(5000)
+      // Rate-limit safe: one optional inquiry after 10s (auto-poll handles later sync).
+      await sleepMs(10_000)
       if (kbankManualCancelPendingRef.current) {
         return { ok: false as const, message: 'kbank_qr_cancelled' }
       }
-      for (let i = 0; i < 2; i += 1) {
-        if (kbankManualCancelPendingRef.current) break
+      if (!isKbankApiPaused()) {
         kbankInquiryLastAtRef.current = Date.now()
         const st = await executeKbankCheckStatus({
           storeCode: currentStoreId,
@@ -5988,7 +6020,9 @@ export default function PosTerminalPage() {
         })
         const stData = (st.data || {}) as Record<string, unknown>
         const stTxnNo = String(stData.txnNo || '').trim().slice(0, 20)
-        if (st.success) {
+        if (!st.success && noteKbankRateLimitResponse(st.statusMessage || st.message)) {
+          /* stay pending; staff can Inquiry after backoff */
+        } else if (st.success) {
           const s = String(st.status || '').trim().toLowerCase()
           if (s === 'approved') {
             presentKbankPaymentApproved({
@@ -6037,12 +6071,13 @@ export default function PosTerminalPage() {
                 : t('posPaymentDeclined') || '결제가 거절되었습니다.'
             return finalizeKbankQrFailureWithManualOption(failureHint)
           }
-        }
-        if (!st.success && i === 1) {
+        } else if (!st.success) {
           const failureHint = String(
             st.statusMessage || st.message || t('processFail') || 'kbank_check_status_failed'
           ).trim()
-          return finalizeKbankQrFailureWithManualOption(failureHint)
+          if (!noteKbankRateLimitResponse(failureHint)) {
+            return finalizeKbankQrFailureWithManualOption(failureHint)
+          }
         }
         if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         const inquiryMeta = extractKbankQrResponseMeta(stData)
@@ -6058,10 +6093,6 @@ export default function PosTerminalPage() {
         }
         if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
         if (!refId) refId = String(st.refId || '').trim()
-        if (i < 1) {
-          await sleepMs(5000)
-          if (kbankManualCancelPendingRef.current) break
-        }
       }
 
       if (kbankManualCancelPendingRef.current) {
@@ -6088,6 +6119,8 @@ export default function PosTerminalPage() {
       enforceKbankCooldown,
       openKbankOutcomeModal,
       presentKbankPaymentApproved,
+      isKbankApiPaused,
+      noteKbankRateLimitResponse,
       lang,
     ]
   )
@@ -6106,11 +6139,12 @@ export default function PosTerminalPage() {
       const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
       const terminalId = String(kbankOpsTerminalId || '').trim()
       const txnNo = String(kbankOpsTxnNo || '').trim()
+      if (!(await alertIfKbankApiPaused(action))) return
       if (action === 'inquiry') {
-        const canInquiry = await enforceKbankCooldown('inquiry', 5000, 'Inquiry')
+        const canInquiry = await enforceKbankCooldown('inquiry', 30_000, 'Inquiry')
         if (!canInquiry) return
       } else {
-        const canFollowup = await enforceKbankCooldown('followup', 3000, action)
+        const canFollowup = await enforceKbankCooldown('followup', 5000, action)
         if (!canFollowup) return
       }
       setKbankOpsBusy(true)
@@ -6148,8 +6182,14 @@ export default function PosTerminalPage() {
               })
             }
           } else {
+            const errMsg = String(out.statusMessage || out.message || t('processFail') || 'Inquiry failed').trim()
+            const rateLimited = noteKbankRateLimitResponse(errMsg)
             await appAlert(
-              String(out.statusMessage || out.message || t('processFail') || 'Inquiry failed').trim()
+              rateLimited
+                ? String(t('posKbankRateLimitAlert') || errMsg)
+                    .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                    .replace('{label}', 'Inquiry') || errMsg
+                : errMsg
             )
           }
           setKbankOpsLastResult(`[INQUIRY] ${JSON.stringify(out)}`)
@@ -6206,13 +6246,19 @@ export default function PosTerminalPage() {
               if (voidTxnNo) setKbankOpsTxnNo(voidTxnNo)
             }
             if (!voidTxnNo) {
+              const inqErr = String(
+                inq.statusMessage ||
+                  inq.message ||
+                  t('posKbankVoidInquiryFailed') ||
+                  'Could not obtain txnNo from Inquiry. Check KBank response below.'
+              ).trim()
+              const rateLimited = noteKbankRateLimitResponse(inqErr)
               await appAlert(
-                String(
-                  inq.statusMessage ||
-                    inq.message ||
-                    t('posKbankVoidInquiryFailed') ||
-                    'Could not obtain txnNo from Inquiry. Check KBank response below.'
-                ).trim()
+                rateLimited
+                  ? String(t('posKbankRateLimitAlert') || inqErr)
+                      .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                      .replace('{label}', 'Inquiry') || inqErr
+                  : inqErr
               )
               setKbankOpsLastResult(`[VOID-INQUIRY] ${JSON.stringify(inq)}`)
               return
@@ -6250,13 +6296,19 @@ export default function PosTerminalPage() {
               `void:${origPartnerTxnUid || partnerTxnUid}:${voidPartnerTxnUid}`
             )
           } else {
+            const voidErr = String(
+              out.statusMessage ||
+                out.message ||
+                t('posKbankVoidFailedAlert') ||
+                'Void payment failed. Check KBank response in the panel below.'
+            ).trim()
+            const rateLimited = noteKbankRateLimitResponse(voidErr)
             await appAlert(
-              String(
-                out.statusMessage ||
-                  out.message ||
-                  t('posKbankVoidFailedAlert') ||
-                  'Void payment failed. Check KBank response in the panel below.'
-              ).trim()
+              rateLimited
+                ? String(t('posKbankRateLimitAlert') || voidErr)
+                    .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                    .replace('{label}', 'Void') || voidErr
+                : voidErr
             )
           }
           setKbankOpsLastResult(`[VOID] ${JSON.stringify(out)}`)
@@ -6305,6 +6357,8 @@ export default function PosTerminalPage() {
       liveKbankQrAmount,
       openKbankOutcomeModal,
       presentKbankPaymentApproved,
+      alertIfKbankApiPaused,
+      noteKbankRateLimitResponse,
       lang,
     ]
   )
@@ -6429,7 +6483,8 @@ export default function PosTerminalPage() {
     let cancelled = false
     const pollApprovedViaInquiry = async () => {
       if (cancelled || kbankCallbackNotifiedTxRef.current === partnerTxnUid) return
-      if (Date.now() - kbankInquiryLastAtRef.current < 12000) return
+      if (isKbankApiPaused()) return
+      if (Date.now() - kbankInquiryLastAtRef.current < 60_000) return
 
       kbankInquiryLastAtRef.current = Date.now()
       const terminalId = String(kbankOpsTerminalId || '').trim()
@@ -6448,7 +6503,10 @@ export default function PosTerminalPage() {
           },
         })
         if (cancelled) return
-        if (!st.success) return
+        if (!st.success) {
+          noteKbankRateLimitResponse(st.statusMessage || st.message)
+          return
+        }
         const s = String(st.status || '').trim().toLowerCase()
         if (s !== 'approved') return
         const stData = (st.data || {}) as Record<string, unknown>
@@ -6472,10 +6530,10 @@ export default function PosTerminalPage() {
 
     const firstDelayMs = window.setTimeout(() => {
       void pollApprovedViaInquiry()
-    }, 12000)
+    }, 60_000)
     const intervalId = window.setInterval(() => {
       void pollApprovedViaInquiry()
-    }, 20000)
+    }, 120_000)
 
     return () => {
       cancelled = true
@@ -6491,6 +6549,8 @@ export default function PosTerminalPage() {
     kbankOpsTxnNo,
     kbankCallbackState,
     presentKbankPaymentApproved,
+    isKbankApiPaused,
+    noteKbankRateLimitResponse,
   ])
 
   const applyTaxInvoiceProfile = useCallback((profile: PosTaxInvoiceData) => {
@@ -10063,6 +10123,14 @@ export default function PosTerminalPage() {
                 <p className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-100">
                   {t('posKbankCallbackWaitingHint') ||
                     'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.'}
+                </p>
+              ) : null}
+              {kbankApiPausedUntilMs > Date.now() ? (
+                <p className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[11px] font-medium text-rose-900 dark:text-rose-100">
+                  {String(t('posKbankRateLimitAlert') || '')
+                    .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                    .replace('{label}', 'Inquiry') ||
+                    'KBank API rate limit — wait a few minutes, then tap Inquiry once.'}
                 </p>
               ) : null}
               <div className="mt-2 grid grid-cols-2 gap-2">

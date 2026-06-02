@@ -36,6 +36,11 @@ export type PosOrderReceiptLineOptions = {
   optionNameByCode?: Map<string, string>
   /** 프로모 구성 optionId → 표시명 */
   optionNameById?: Map<string, string>
+  /**
+   * true면 promoItems 보강 시 추론 경로(이름/토큰/메뉴 연결 역추적)를 쓰지 않고
+   * 주문에 명시된 코드/ID(promoId, promoCode, promo-카트ID)만 허용한다.
+   */
+  strictPromoCodeOnly?: boolean
 }
 
 type ReceiptPromoLine = {
@@ -419,7 +424,8 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
 function resolvePromoItemsForReceiptLine(
   row: Record<string, unknown>,
   catalog: Map<string, PosPromoWithItems> | undefined,
-  menus: PosMenu[] | undefined
+  menus: PosMenu[] | undefined,
+  opts?: PosOrderReceiptLineOptions
 ): ReceiptPromoLine[] | null {
   const direct = pickPromoItemsFromOrderLine(row)
   if (direct && direct.length > 0) return normalizeReceiptPromoLines(direct)
@@ -430,6 +436,14 @@ function resolvePromoItemsForReceiptLine(
     return promoLinesFromCatalog(pid, catalog)
   }
 
+  const strict = opts?.strictPromoCodeOnly === true
+  if (strict) {
+    return (
+      tryPid(pickPromoIdFromOrderLine(row)) ??
+      tryPid(pickPromoIdFromCartLineId(String(row.id ?? ''), catalog)) ??
+      tryPid(pickPromoIdFromPromoCode(row, catalog))
+    )
+  }
   return (
     tryPid(pickPromoIdFromOrderLine(row)) ??
     tryPid(pickPromoIdFromCartLineId(String(row.id ?? ''), catalog)) ??
@@ -464,7 +478,7 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
       const enriched = applyPromoEnrich(normalizeReceiptPromoLines(direct))
       return enriched ? ({ ...it, promoItems: enriched } as T) : (it as T)
     }
-    const promo = resolvePromoItemsForReceiptLine(it, catalog, menus)
+    const promo = resolvePromoItemsForReceiptLine(it, catalog, menus, opts)
     if (!promo || promo.length === 0) return it
     const enriched = applyPromoEnrich(promo)
     return enriched ? ({ ...it, promoItems: enriched } as T) : (it as T)
@@ -506,7 +520,7 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
     .filter((it) => !String((it as { cancelledAt?: string | null }).cancelledAt || '').trim())
     .map((it) => {
     const row = it as unknown as Record<string, unknown>
-    const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
+    const promo = resolvePromoItemsForReceiptLine(row, catalog, menus, opts)
     const rowDelivery = String(row.deliveryAppCode ?? row.delivery_app_code ?? '').trim()
     const menuId = String(
       row.menuId1 ?? row.menuId ?? row.menu_id ?? (it as { menuId?: unknown }).menuId ?? ''

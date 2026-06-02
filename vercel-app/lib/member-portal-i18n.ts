@@ -110,6 +110,7 @@ export type MemberPortalKey =
   | 'locationSearchPh'
   | 'locationNoResult'
   | 'locationOpenMap'
+  | 'locationOpenGoogleMaps'
   | 'locationCode'
   | 'locationFavorite'
   | 'locationFavoriteSet'
@@ -523,6 +524,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Open in map',
     th: 'เปิดแผนที่',
     ko: '지도에서 보기',
+  },
+  locationOpenGoogleMaps: {
+    en: 'Open in Google Maps',
+    th: 'เปิดใน Google Maps',
+    ko: 'Google Maps에서 열기',
   },
   locationCode: {
     en: 'Store code',

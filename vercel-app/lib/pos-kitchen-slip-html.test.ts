@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { formatKitchenSlipItemRowHtml, localizeKitchenSlipLineNote } from './pos-kitchen-slip-html'
+import {
+  formatKitchenSlipItemRowHtml,
+  localizeKitchenSlipLineNote,
+  sanitizeKitchenSlipTextForPrint,
+} from './pos-kitchen-slip-html'
 
 describe('pos-kitchen-slip-html', () => {
   describe('localizeKitchenSlipLineNote', () => {
@@ -252,6 +256,16 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('Banban Chicken')
       expect(html).toContain('- SNOW ONION')
       expect(html).toContain('- SWEET YANGNYEOM')
+    })
+
+    it('sanitizeKitchenSlipTextForPrint는 JSON·base64 덩어리를 제거한다', () => {
+      expect(sanitizeKitchenSlipTextForPrint('{"modifiers":[{"id":"x"}]}')).toBe('')
+      expect(
+        sanitizeKitchenSlipTextForPrint(
+          'YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVm'
+        )
+      ).toBe('')
+      expect(sanitizeKitchenSlipTextForPrint('PEPSI MEGA 1')).toBe('PEPSI MEGA 1')
     })
 
     it('Size 라벨 행은 note 선두 메뉴명으로 복구하고 잘못된 Size 본문 노출을 막는다', () => {

@@ -1213,10 +1213,10 @@ async function waitForHiddenWindowSettle(printWindow, baseSettleMs) {
   try {
     await Promise.race([
       printWindow.webContents.executeJavaScript(
-        "new Promise((resolve)=>{const done=()=>{try{requestAnimationFrame(()=>requestAnimationFrame(resolve));}catch(_e){resolve();}};if(document.fonts&&document.fonts.ready){document.fonts.ready.then(done).catch(done);}else{done();}})",
+        "new Promise((resolve)=>{const finish=()=>{const deadline=Date.now()+4500;let last=-1,stable=0;const tick=()=>{if(Date.now()>deadline)return resolve();const n=document.body&&document.body.innerText?document.body.innerText.length:0;if(n>0&&n===last)stable++;else{stable=0;last=n;}if(stable>=3)return resolve();requestAnimationFrame(tick);};if(document.readyState==='complete')tick();else window.addEventListener('load',tick,{once:true});};const done=()=>{try{requestAnimationFrame(()=>requestAnimationFrame(finish));}catch(_e){finish();}};if(document.fonts&&document.fonts.ready){document.fonts.ready.then(done).catch(done);}else{done();}})",
         true
       ),
-      delayMs(Math.max(400, Math.min(totalSettleMs + 200, 1500))),
+      delayMs(Math.max(600, Math.min(totalSettleMs + 400, 2500))),
     ]);
   } catch {
     /* ignore */
