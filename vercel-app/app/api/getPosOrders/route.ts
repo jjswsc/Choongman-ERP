@@ -141,6 +141,79 @@ function inferOrderTypeForResponse(row: {
   return 'dine_in' as const
 }
 
+/**
+ * 세트/프로모 구성품 promoItems 에 서버 pos_menus 조인으로 menuName·menuCode 를 채운다.
+ * 클라이언트 메뉴/프로모 캐시가 낡아도 주방 슬립이 #ID(번호) 대신 이름을 찍도록 보장.
+ * (자동인쇄·재인쇄 등 서버 주문 데이터를 쓰는 모든 경로에 공통 적용)
+ */
+function attachPromoMenuNames(
+  items: unknown[],
+  menuById: Map<string, { name: string; code: string }>
+): unknown[] {
+  if (menuById.size === 0 || !Array.isArray(items)) return items
+  return items.map((it) => {
+    const pis = (it as { promoItems?: unknown }).promoItems
+    if (!Array.isArray(pis) || pis.length === 0) return it
+    let changed = false
+    const enriched = pis.map((p) => {
+      const mid = String((p as { menuId?: unknown }).menuId ?? '').trim()
+      if (!mid) return p
+      const found = menuById.get(mid)
+      if (!found) return p
+      const cur = p as { menuName?: unknown; menuCode?: unknown }
+      const hasName = String(cur.menuName ?? '').trim().length > 0
+      const hasCode = String(cur.menuCode ?? '').trim().length > 0
+      if (hasName && hasCode) return p
+      changed = true
+      return {
+        ...(p as object),
+        ...(hasName || !found.name ? {} : { menuName: found.name }),
+        ...(hasCode || !found.code ? {} : { menuCode: found.code }),
+      }
+    })
+    return changed ? { ...(it as object), promoItems: enriched } : it
+  })
+}
+
+/** 응답 rows 의 promoItems 가 참조하는 구성품 menuId → {name,code} 맵 (없으면 빈 맵) */
+async function loadPromoComponentMenuMap(
+  rows: Array<{ items_json?: string }> | null
+): Promise<Map<string, { name: string; code: string }>> {
+  const promoMenuIds = new Set<string>()
+  for (const r of rows || []) {
+    try {
+      const arr = JSON.parse(String(r.items_json || '[]'))
+      if (!Array.isArray(arr)) continue
+      for (const it of arr) {
+        const pis = (it as { promoItems?: Array<{ menuId?: unknown }> }).promoItems
+        if (!Array.isArray(pis)) continue
+        for (const p of pis) {
+          const mid = String((p as { menuId?: unknown }).menuId ?? '').trim()
+          if (mid) promoMenuIds.add(mid)
+        }
+      }
+    } catch {
+      /* items_json 파싱 실패 무시 */
+    }
+  }
+  const map = new Map<string, { name: string; code: string }>()
+  if (promoMenuIds.size === 0) return map
+  try {
+    const menuRows = (await supabaseSelect('pos_menus', {
+      limit: 10000,
+      select: 'id,code,name',
+    })) as { id?: number | string; code?: string; name?: string }[]
+    for (const m of menuRows || []) {
+      const id = String(m.id ?? '').trim()
+      if (!id || !promoMenuIds.has(id)) continue
+      map.set(id, { name: String(m.name ?? '').trim(), code: String(m.code ?? '').trim() })
+    }
+  } catch {
+    /* pos_menus 조회 실패 시 보강 생략 (기존 동작 유지) */
+  }
+  return map
+}
+
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -445,6 +518,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const promoComponentMenuMap = await loadPromoComponentMenuMap(
+      rows as Array<{ items_json?: string }> | null
+    )
+
     const list = (rows || [])
       .filter((r) => {
         if (startDate && endDate) return true
@@ -522,7 +599,7 @@ export async function GET(request: NextRequest) {
           items: (() => {
             try {
               const arr = JSON.parse(r.items_json || '[]')
-              return Array.isArray(arr) ? arr : []
+              return Array.isArray(arr) ? attachPromoMenuNames(arr, promoComponentMenuMap) : []
             } catch {
               return []
             }
