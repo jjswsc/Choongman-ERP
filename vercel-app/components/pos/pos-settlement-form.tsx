@@ -948,6 +948,7 @@ ${amt(t('posSystemVat') || 'VAT (7%)', formatBahtNum(systemVat))}
 <div class="receipt-divider"></div>
 ${amt(t('posSystemTotal') || '시스템 매출', formatBahtNum(systemTotal), ' receipt-total')}
 <div class="receipt-divider"></div>
+${amt(t('posCash') || '현금', formatBahtNum(cashAmtNum))}
 ${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum))}
 ${amt(t('posCard') || '카드', formatBahtNum(cardNum))}
 ${amt(t('posPaymentQrCode') || 'QR 코드', formatBahtNum(qrNum))}
