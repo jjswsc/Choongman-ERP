@@ -40,6 +40,7 @@ import { pickHomeFeatureContent } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
+import { MemberPortalTierGuide, useMemberPortalTiers } from "@/components/member-portal/member-portal-tier-guide"
 import {
   GlassCard,
   MemberPortalAmbienceBackground,
@@ -133,6 +134,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 export function MemberPortalApp() {
   const brand = useAppBrandConfig()
   const { lang, t } = useMemberPortalLang()
+  const { tiers: portalTiers } = useMemberPortalTiers()
   const dateLocale = memberPortalDateLocale(lang)
   const [member, setMember] = React.useState<MemberSummary | null>(null)
   const [dashboard, setDashboard] = React.useState<PortalDashboard | null>(null)
@@ -714,6 +716,12 @@ export function MemberPortalApp() {
             ) : null}
           </div>
 
+          {portalTiers.length > 0 ? (
+            <div className="mt-8">
+              <MemberPortalTierGuide tiers={portalTiers} />
+            </div>
+          ) : null}
+
           <div className="mt-auto pt-10 text-center">
             <button
               type="button"
@@ -892,6 +900,8 @@ export function MemberPortalApp() {
               accentClass={tier.accent}
             />
 
+            <MemberPortalTierGuide tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
+
             <div className="grid grid-cols-2 gap-3">
               <PremiumStatTile
                 icon={Sparkles}
@@ -1062,6 +1072,7 @@ export function MemberPortalApp() {
         {tab === "privilege" && (
           <div className="space-y-3">
             <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
+            <MemberPortalTierGuide tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
             <div className="grid grid-cols-3 gap-2">
               <GlassCard soft className="px-3 py-3 text-center">
                 <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("statCoupons")}</p>

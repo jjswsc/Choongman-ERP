@@ -357,6 +357,11 @@ function extractKbankGenerateResponseInfo(raw: unknown): {
   }
 }
 
+/** Inquiry/Void/Cancel — origPartnerTxnUid must match our Generate partnerTxnUid (not bank echo). */
+function kbankOrigPartnerTxnUidForFollowup(partnerTxnUid: string): string {
+  return String(partnerTxnUid || '').trim().slice(0, 32)
+}
+
 function buildKbankGenerateAuditPaste(input: {
   partnerTxnUid: string
   amount: number
@@ -3170,6 +3175,14 @@ export default function PosTerminalPage() {
     }
   }, [isKbankPilotStore, kbankTerminalIdStorageKey, kbankOpsTerminalId])
 
+  useEffect(() => {
+    const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+    if (!partnerTxnUid) return
+    if (String(kbankOpsOrigTxnUid || '').trim() !== partnerTxnUid) {
+      setKbankOpsOrigTxnUid(partnerTxnUid)
+    }
+  }, [kbankOpsTxnUid, kbankOpsOrigTxnUid])
+
   const demoKbankQrPayload = useMemo(() => {
     if (!isPosDemo || !tourPaymentModalOpen) return ''
     const amount = Math.max(0, Number(tourPaymentQrAmount || 0))
@@ -5857,14 +5870,9 @@ export default function PosTerminalPage() {
 
       const data = (generate.data || {}) as Record<string, unknown>
       const generatedInfo = extractKbankGenerateResponseInfo(data)
-      const resolvedOrigTxnUid = String(
-        generatedInfo.originalTxnId || partnerTransactionId
-      )
-        .trim()
-        .slice(0, 32)
       const resolvedTxnNo = String(generatedInfo.txnNo || '').trim().slice(0, 20)
       setKbankOpsTxnUid(partnerTransactionId)
-      setKbankOpsOrigTxnUid(resolvedOrigTxnUid)
+      setKbankOpsOrigTxnUid(partnerTransactionId)
       if (resolvedTxnNo) setKbankOpsTxnNo(resolvedTxnNo)
       setKbankCallbackState('waiting')
       const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
@@ -5971,8 +5979,9 @@ export default function PosTerminalPage() {
           storeCode: currentStoreId,
           orderId: context?.orderId,
           partnerTransactionId,
-          originalTransactionId: originalTransactionId || undefined,
+          originalTransactionId: partnerTransactionId,
           refId: refId || undefined,
+          payload: { origPartnerTxnUid: partnerTransactionId },
         })
         const stData = (st.data || {}) as Record<string, unknown>
         const stTxnNo = String(stData.txnNo || '').trim().slice(0, 20)
@@ -6091,7 +6100,7 @@ export default function PosTerminalPage() {
         await appAlert(t('posKbankGenerateFirstAlert') || 'Please run QR Generate first.')
         return
       }
-      const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 32)
+      const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
       const terminalId = String(kbankOpsTerminalId || '').trim()
       const txnNo = String(kbankOpsTxnNo || '').trim()
       if (action === 'inquiry') {
@@ -6175,12 +6184,36 @@ export default function PosTerminalPage() {
           return
         }
         if (action === 'void') {
-          if (!txnNo) {
-            await appAlert(
-              t('posKbankTxnNoRequiredAlert') ||
-                'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.'
-            )
-            return
+          let voidTxnNo = txnNo
+          if (!voidTxnNo) {
+            kbankInquiryLastAtRef.current = Date.now()
+            const inq = await executeKbankCheckStatus({
+              storeCode: currentStoreId,
+              partnerTransactionId: partnerTxnUid,
+              originalTransactionId: origPartnerTxnUid,
+              terminalId: terminalId || undefined,
+              payload: {
+                origPartnerTxnUid,
+                ...(terminalId ? { terminalId } : {}),
+              },
+            })
+            if (inq.success) {
+              const inqData = (inq.data || {}) as Record<string, unknown>
+              voidTxnNo = String(inqData.txnNo || '').trim().slice(0, 20)
+              if (voidTxnNo) setKbankOpsTxnNo(voidTxnNo)
+            }
+            if (!voidTxnNo) {
+              await appAlert(
+                String(
+                  inq.statusMessage ||
+                    inq.message ||
+                    t('posKbankVoidInquiryFailed') ||
+                    'Could not obtain txnNo from Inquiry. Check KBank response below.'
+                ).trim()
+              )
+              setKbankOpsLastResult(`[VOID-INQUIRY] ${JSON.stringify(inq)}`)
+              return
+            }
           }
           const voidPartnerTxnUid = `VOD${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
           const out = await executeKbankVoidPayment({
@@ -6189,17 +6222,17 @@ export default function PosTerminalPage() {
             originalTransactionId: origPartnerTxnUid,
             partnerTxnUid: voidPartnerTxnUid,
             terminalId: terminalId || undefined,
-            txnNo: txnNo || undefined,
+            txnNo: voidTxnNo || undefined,
             payload: {
               partnerTxnUid: voidPartnerTxnUid,
               origPartnerTxnUid,
               ...(terminalId ? { terminalId } : {}),
-              ...(txnNo ? { txnNo } : {}),
+              ...(voidTxnNo ? { txnNo: voidTxnNo } : {}),
             },
           })
           if (out.success) {
             const d = (out.data || {}) as Record<string, unknown>
-            const nextTxnNo = String(d.txnNo || txnNo || '').trim().slice(0, 20)
+            const nextTxnNo = String(d.txnNo || voidTxnNo || '').trim().slice(0, 20)
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
@@ -6208,7 +6241,7 @@ export default function PosTerminalPage() {
                 amount: Math.max(0, Number(liveKbankQrAmount || 0)),
                 refId: origPartnerTxnUid || partnerTxnUid,
                 paymentMethod: liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
-                approvalCode: nextTxnNo || txnNo || undefined,
+                approvalCode: nextTxnNo || voidTxnNo || undefined,
                 timeLabel: formatPosDateTimeMedium(new Date(), lang),
               },
               `void:${origPartnerTxnUid || partnerTxnUid}:${voidPartnerTxnUid}`
@@ -6387,7 +6420,7 @@ export default function PosTerminalPage() {
   useEffect(() => {
     if (!isKbankPilotStore || !currentStoreId) return
     const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
-    const origPartnerTxnUid = String(kbankOpsOrigTxnUid || partnerTxnUid).trim().slice(0, 32)
+    const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
     if (!partnerTxnUid || kbankCallbackState !== 'waiting') return
 
     let cancelled = false
@@ -10014,13 +10047,19 @@ export default function PosTerminalPage() {
                         : 'idle'
                 }`}
               </p>
+              {kbankCallbackState === 'waiting' && kbankOpsTxnUid ? (
+                <p className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-100">
+                  {t('posKbankCallbackWaitingHint') ||
+                    'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.'}
+                </p>
+              ) : null}
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[11px]">{t('posKbankOrigTxnUidLabel') || 'origPartnerTxnUid'}</Label>
                   <Input
-                    className="h-8 text-xs"
-                    value={kbankOpsOrigTxnUid}
-                    onChange={(e) => setKbankOpsOrigTxnUid(e.target.value)}
+                    className="h-8 bg-muted/50 text-xs"
+                    readOnly
+                    value={kbankOpsTxnUid || kbankOpsOrigTxnUid}
                     placeholder={t('posKbankOrigTxnUidHint') || 'QR 요청 TxnUid'}
                   />
                 </div>
@@ -10080,6 +10119,12 @@ export default function PosTerminalPage() {
                   variant="outline"
                   className="h-8 text-xs"
                   disabled={kbankOpsBusy}
+                  title={
+                    !String(kbankOpsTxnNo || '').trim()
+                      ? t('posKbankVoidNeedsTxnNo') ||
+                        'Void runs Inquiry first when txnNo is empty.'
+                      : undefined
+                  }
                   onClick={() => void runKbankFollowupAction('void')}
                 >
                   {t('posKbankVoid') || 'Void'}

@@ -141,10 +141,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // localTxId lookup: order may be unlinked (order_id null) — do not drop row on empty store_code.
     const filteredByStore =
-      effectiveStoreCode && effectiveStoreCode !== 'All'
-        ? mapped.filter((x) => storeCodesLooselyEqual(effectiveStoreCode, String(x.storeCode || '')))
-        : mapped
+      localTxId || !effectiveStoreCode || effectiveStoreCode === 'All'
+        ? mapped
+        : mapped.filter((x) => storeCodesLooselyEqual(effectiveStoreCode, String(x.storeCode || '')))
 
     return NextResponse.json(filteredByStore, { headers })
   } catch (e) {

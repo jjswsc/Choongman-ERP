@@ -92,7 +92,12 @@ type MemberTierRow = {
   code?: string
   name?: string
   min_amount?: number
+  min_points?: number
   point_rate?: number
+  sort_order?: number
+  benefits_ko?: string | null
+  benefits_en?: string | null
+  benefits_th?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -762,7 +767,14 @@ export async function unlinkLineIdentity(params: { memberId: number; lineUserId?
 }
 
 async function getActiveTiers(): Promise<MemberTierRow[]> {
-  return (await supabaseSelect('member_tiers', { order: 'min_amount.asc', limit: 1000 })) as MemberTierRow[]
+  const rows = (await supabaseSelect('member_tiers', { order: 'sort_order.asc,min_points.asc', limit: 1000 })) as MemberTierRow[]
+  return [...rows].sort((a, b) => {
+    const orderDiff = Number(a.sort_order || 0) - Number(b.sort_order || 0)
+    if (orderDiff !== 0) return orderDiff
+    const pointsDiff = Number(a.min_points || 0) - Number(b.min_points || 0)
+    if (pointsDiff !== 0) return pointsDiff
+    return Number(a.min_amount || 0) - Number(b.min_amount || 0)
+  })
 }
 
 function pickTierByAmount(tiers: MemberTierRow[], amount: number): string {
@@ -848,7 +860,12 @@ export async function saveMemberTier(params: {
   code: string
   name: string
   minAmount: number
+  minPoints?: number
   pointRate: number
+  sortOrder?: number
+  benefitsKo?: string
+  benefitsEn?: string
+  benefitsTh?: string
 }) {
   const code = toText(params.code).toUpperCase()
   if (!code) throw new Error('등급 코드가 필요합니다.')
@@ -859,7 +876,12 @@ export async function saveMemberTier(params: {
         code,
         name: toText(params.name) || code,
         min_amount: Math.max(0, Number(params.minAmount || 0)),
+        min_points: Math.max(0, Math.trunc(Number(params.minPoints || 0))),
         point_rate: Math.max(0, Number(params.pointRate || 0)),
+        sort_order: Math.max(0, Math.trunc(Number(params.sortOrder || 0))),
+        benefits_ko: toText(params.benefitsKo) || null,
+        benefits_en: toText(params.benefitsEn) || null,
+        benefits_th: toText(params.benefitsTh) || null,
         updated_at: getBangkokDateTimeString(),
       },
     ],

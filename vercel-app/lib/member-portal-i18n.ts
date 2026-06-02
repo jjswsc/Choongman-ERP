@@ -27,6 +27,10 @@ export type MemberPortalKey =
   | 'tierNext'
   | 'tierMax'
   | 'tierProgress'
+  | 'tierGuideTitle'
+  | 'tierGuideDesc'
+  | 'tierCurrentBadge'
+  | 'tierEarnRate'
   | 'statLifetime'
   | 'homeFeatureLabel'
   | 'homeFeatureEmpty'
@@ -320,6 +324,18 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'อีก {amount} ถึง {tier}',
     ko: '{tier}까지 {amount} 남음',
   },
+  tierGuideTitle: {
+    en: 'Membership levels',
+    th: 'ระดับสมาชิก',
+    ko: '회원 등급',
+  },
+  tierGuideDesc: {
+    en: 'Levels are based on accumulated points and spend. Benefits may change by store policy.',
+    th: 'ระดับสมาชิกอ้างอิงจากแต้มสะสมและยอดใช้จ่าย สิทธิประโยชน์อาจเปลี่ยนแปลงตามนโยบายร้าน',
+    ko: '누적 포인트·이용 금액 기준으로 등급이 정해집니다. 혜택은 매장 정책에 따라 변경될 수 있습니다.',
+  },
+  tierCurrentBadge: { en: 'Current', th: 'ระดับปัจจุบัน', ko: '현재 등급' },
+  tierEarnRate: { en: 'Point earn rate', th: 'อัตราแต้มสะสม', ko: '포인트 적립율' },
   statLifetime: { en: 'Lifetime spend', th: 'ยอดใช้จ่ายสะสม', ko: '누적 이용 금액' },
   homeFeatureLabel: { en: 'New & promo', th: 'เมนูใหม่·โปร', ko: '신메뉴·프로모션' },
   homeFeatureEmpty: { en: 'Coming soon', th: 'เร็วๆ นี้', ko: '곧 공개' },
@@ -554,9 +570,9 @@ const MS: Record<MemberPortalKey, Dict> = {
   },
   privilegeTitle: { en: 'My privilege', th: 'สิทธิพิเศษของฉัน', ko: '내 혜택' },
   privilegeDesc: {
-    en: 'Coupons, points, and visit history in one place.',
-    th: 'รวมคูปอง แต้ม และประวัติการใช้บริการไว้ในหน้าเดียว',
-    ko: '쿠폰, 포인트, 이용 내역을 한 화면에서 확인하세요.',
+    en: 'Membership levels, coupons, points, and visit history in one place.',
+    th: 'ระดับสมาชิก คูปอง แต้ม และประวัติการใช้บริการในหน้าเดียว',
+    ko: '등급·혜택, 쿠폰, 포인트, 이용 내역을 한 화면에서 확인하세요.',
   },
   couponsTitle: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
   couponsSub: {

@@ -11,7 +11,12 @@ create table if not exists public.member_tiers (
   code text not null unique,
   name text not null,
   min_amount numeric(14,2) not null default 0,
+  min_points integer not null default 0,
   point_rate numeric(8,4) not null default 0.0100,
+  sort_order integer not null default 0,
+  benefits_ko text,
+  benefits_en text,
+  benefits_th text,
   created_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok'),
   updated_at timestamp without time zone not null default (now() at time zone 'Asia/Bangkok')
 );
@@ -64,15 +69,17 @@ alter table public.pos_orders
 
 create index if not exists idx_pos_orders_member_id on public.pos_orders(member_id);
 
-insert into public.member_tiers (code, name, min_amount, point_rate)
+insert into public.member_tiers (code, name, min_amount, min_points, point_rate, sort_order, benefits_ko, benefits_en, benefits_th)
 values
-  ('BRONZE', 'Bronze', 0, 0.0100),
-  ('SILVER', 'Silver', 10000, 0.0125),
-  ('GOLD', 'Gold', 30000, 0.0150),
-  ('VIP', 'VIP', 70000, 0.0200)
+  ('BRONZE', 'Bronze', 0, 0, 0.0100, 1, '기본 회원 등급입니다.', 'Basic membership level.', 'สมาชิกระดับพื้นฐาน'),
+  ('SILVER', 'Silver', 3000, 120, 0.0125, 2, null, null, null),
+  ('GOLD', 'Gold', 6000, 240, 0.0150, 3, null, null, null),
+  ('DIAMOND', 'Diamond', 10000, 400, 0.0200, 4, null, null, null)
 on conflict (code) do update
 set
   name = excluded.name,
   min_amount = excluded.min_amount,
+  min_points = excluded.min_points,
   point_rate = excluded.point_rate,
+  sort_order = excluded.sort_order,
   updated_at = (now() at time zone 'Asia/Bangkok');

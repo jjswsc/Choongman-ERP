@@ -5,20 +5,44 @@ import { appAlert } from "@/lib/app-message"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { getMemberTiers, recalculateMemberTier, saveMemberTier } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-type TierRow = { code: string; name: string; min_amount: number; point_rate: number }
+type TierRow = {
+  code: string
+  name: string
+  min_amount: number
+  min_points: number
+  point_rate: number
+  sort_order: number
+  benefits_ko?: string | null
+  benefits_en?: string | null
+  benefits_th?: string | null
+}
+
+function emptyForm(): Omit<TierRow, "code"> & { code: string } {
+  return {
+    code: "BRONZE",
+    name: "Bronze",
+    min_amount: 0,
+    min_points: 0,
+    point_rate: 0.01,
+    sort_order: 1,
+    benefits_ko: "",
+    benefits_en: "",
+    benefits_th: "",
+  }
+}
 
 export function MemberPointsPolicyTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const [rows, setRows] = React.useState<TierRow[]>([])
-  const [code, setCode] = React.useState("BRONZE")
-  const [name, setName] = React.useState("Bronze")
-  const [minAmount, setMinAmount] = React.useState("0")
-  const [pointRate, setPointRate] = React.useState("0.01")
+  const [form, setForm] = React.useState(emptyForm())
+  const [saving, setSaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const tiers = await getMemberTiers()
@@ -29,40 +53,117 @@ export function MemberPointsPolicyTab() {
     load().catch(() => {})
   }, [load])
 
+  const applyRow = React.useCallback((r: TierRow) => {
+    setForm({
+      code: r.code,
+      name: r.name,
+      min_amount: Number(r.min_amount || 0),
+      min_points: Number(r.min_points || 0),
+      point_rate: Number(r.point_rate || 0),
+      sort_order: Number(r.sort_order || 0),
+      benefits_ko: String(r.benefits_ko || ""),
+      benefits_en: String(r.benefits_en || ""),
+      benefits_th: String(r.benefits_th || ""),
+    })
+  }, [])
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{t("memberPointsEarnHint")}</p>
+      <p className="text-sm text-muted-foreground">{t("memberTierLineHint")}</p>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("memberTierRuleTitle")}</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <Input placeholder="CODE" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
-          <Input placeholder={t("name")} value={name} onChange={(e) => setName(e.target.value)} />
-          <Input
-            placeholder={t("memberTierMinAmount")}
-            value={minAmount}
-            onChange={(e) => setMinAmount(e.target.value)}
-          />
-          <Input
-            placeholder={t("memberTierPointRatePh")}
-            value={pointRate}
-            onChange={(e) => setPointRate(e.target.value)}
-          />
-          <Button
-            onClick={async () => {
-              const res = await saveMemberTier({
-                code: code.trim(),
-                name: name.trim(),
-                minAmount: Number(minAmount || 0),
-                pointRate: Number(pointRate || 0),
-              })
-              if (!res.success) await appAlert(res.message || t("msg_save_fail"))
-              await load()
-            }}
-          >
-            {t("commonSave")}
-          </Button>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            <Input
+              placeholder="CODE"
+              value={form.code}
+              onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+            />
+            <Input
+              placeholder={t("name")}
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+            <Input
+              placeholder={t("memberTierMinPoints")}
+              value={String(form.min_points)}
+              onChange={(e) => setForm((prev) => ({ ...prev, min_points: Number(e.target.value || 0) }))}
+            />
+            <Input
+              placeholder={t("memberTierMinAmount")}
+              value={String(form.min_amount)}
+              onChange={(e) => setForm((prev) => ({ ...prev, min_amount: Number(e.target.value || 0) }))}
+            />
+            <Input
+              placeholder={t("memberTierPointRatePh")}
+              value={String(form.point_rate)}
+              onChange={(e) => setForm((prev) => ({ ...prev, point_rate: Number(e.target.value || 0) }))}
+            />
+            <Input
+              placeholder={t("memberTierSortOrder")}
+              value={String(form.sort_order)}
+              onChange={(e) => setForm((prev) => ({ ...prev, sort_order: Number(e.target.value || 0) }))}
+            />
+            <Button
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true)
+                try {
+                  const res = await saveMemberTier({
+                    code: form.code.trim(),
+                    name: form.name.trim(),
+                    minAmount: Number(form.min_amount || 0),
+                    minPoints: Number(form.min_points || 0),
+                    pointRate: Number(form.point_rate || 0),
+                    sortOrder: Number(form.sort_order || 0),
+                    benefitsKo: String(form.benefits_ko || ""),
+                    benefitsEn: String(form.benefits_en || ""),
+                    benefitsTh: String(form.benefits_th || ""),
+                  })
+                  if (!res.success) await appAlert(res.message || t("msg_save_fail"))
+                  await load()
+                } finally {
+                  setSaving(false)
+                }
+              }}
+            >
+              {saving ? t("loading") : t("commonSave")}
+            </Button>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="space-y-1">
+              <Label className="text-xs">{t("memberTierBenefitsKo")}</Label>
+              <Textarea
+                rows={5}
+                value={String(form.benefits_ko || "")}
+                onChange={(e) => setForm((prev) => ({ ...prev, benefits_ko: e.target.value }))}
+                placeholder={t("memberTierBenefitsPh")}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("memberTierBenefitsEn")}</Label>
+              <Textarea
+                rows={5}
+                value={String(form.benefits_en || "")}
+                onChange={(e) => setForm((prev) => ({ ...prev, benefits_en: e.target.value }))}
+                placeholder={t("memberTierBenefitsPh")}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("memberTierBenefitsTh")}</Label>
+              <Textarea
+                rows={5}
+                value={String(form.benefits_th || "")}
+                onChange={(e) => setForm((prev) => ({ ...prev, benefits_th: e.target.value }))}
+                placeholder={t("memberTierBenefitsPh")}
+              />
+            </div>
+          </div>
         </CardContent>
         <CardContent className="border-t pt-4">
           <p className="text-xs text-muted-foreground">{t("memberPointsPolicyExample")}</p>
@@ -98,8 +199,10 @@ export function MemberPointsPolicyTab() {
                 <tr>
                   <th className="p-2 text-left">{t("code")}</th>
                   <th className="p-2 text-left">{t("name")}</th>
+                  <th className="p-2 text-left">{t("memberTierMinPoints")}</th>
                   <th className="p-2 text-left">{t("memberTierMinAmount")}</th>
                   <th className="p-2 text-left">{t("memberTierPointRate")}</th>
+                  <th className="p-2 text-left">{t("memberTierBenefitsShort")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -107,17 +210,16 @@ export function MemberPointsPolicyTab() {
                   <tr
                     key={r.code}
                     className="cursor-pointer border-t hover:bg-muted/20"
-                    onClick={() => {
-                      setCode(r.code)
-                      setName(r.name)
-                      setMinAmount(String(r.min_amount))
-                      setPointRate(String(r.point_rate))
-                    }}
+                    onClick={() => applyRow(r)}
                   >
                     <td className="p-2">{r.code}</td>
                     <td className="p-2">{r.name}</td>
+                    <td className="p-2">{Number(r.min_points || 0).toLocaleString()}</td>
                     <td className="p-2">{Number(r.min_amount || 0).toLocaleString()}</td>
                     <td className="p-2">{Number(r.point_rate || 0)}</td>
+                    <td className="max-w-[240px] truncate p-2 text-muted-foreground">
+                      {String(r.benefits_th || r.benefits_ko || r.benefits_en || "—")}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -11396,10 +11396,32 @@ export async function adjustMemberPoints(params: { memberId: number; points: num
 
 export async function getMemberTiers() {
   const res = await apiFetchWithOffline('/api/member-tiers')
-  return res.json() as Promise<Array<{ code: string; name: string; min_amount: number; point_rate: number }>>
+  return res.json() as Promise<
+    Array<{
+      code: string
+      name: string
+      min_amount: number
+      min_points: number
+      point_rate: number
+      sort_order: number
+      benefits_ko?: string | null
+      benefits_en?: string | null
+      benefits_th?: string | null
+    }>
+  >
 }
 
-export async function saveMemberTier(params: { code: string; name: string; minAmount: number; pointRate: number }) {
+export async function saveMemberTier(params: {
+  code: string
+  name: string
+  minAmount: number
+  minPoints?: number
+  pointRate: number
+  sortOrder?: number
+  benefitsKo?: string
+  benefitsEn?: string
+  benefitsTh?: string
+}) {
   const res = await apiFetchWithOffline('/api/member-tiers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

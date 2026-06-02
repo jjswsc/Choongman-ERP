@@ -6,6 +6,7 @@ import {
   listMemberPoints,
   listMemberTiers,
 } from '@/lib/members-server'
+import { normalizeMemberTierCode } from '@/lib/member-tier-public'
 
 function toText(v: unknown): string {
   return String(v || '').trim()
@@ -51,11 +52,17 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
   const availableCoupons = coupons.filter((c) => toText(c.status) === 'issued').length
   const pointsEarnedTotal = points.filter((p) => Number(p.points) > 0).reduce((s, p) => s + Number(p.points), 0)
 
-  const sortedTiers = [...tiers].sort((a, b) => Number(a.min_amount || 0) - Number(b.min_amount || 0))
-  const currentTierCode = toText(member.tierCode) || 'BRONZE'
+  const sortedTiers = [...tiers].sort((a, b) => {
+    const orderDiff = Number(a.sort_order || 0) - Number(b.sort_order || 0)
+    if (orderDiff !== 0) return orderDiff
+    const pointsDiff = Number(a.min_points || 0) - Number(b.min_points || 0)
+    if (pointsDiff !== 0) return pointsDiff
+    return Number(a.min_amount || 0) - Number(b.min_amount || 0)
+  })
+  const currentTierCode = normalizeMemberTierCode(toText(member.tierCode) || 'BRONZE')
   const currentIdx = Math.max(
     0,
-    sortedTiers.findIndex((t) => toText(t.code).toUpperCase() === currentTierCode.toUpperCase())
+    sortedTiers.findIndex((t) => normalizeMemberTierCode(toText(t.code)) === currentTierCode)
   )
   const currentTier = sortedTiers[currentIdx] || sortedTiers[0]
   const nextTier = sortedTiers[currentIdx + 1] || null

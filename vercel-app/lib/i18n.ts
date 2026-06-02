@@ -6115,9 +6115,18 @@ export const i18n = {
     reason: '사유',
     memberCountUnit: '명',
     memberTierRuleTitle: '등급 규칙 관리',
+    memberTierLineHint:
+      'LINE OA 기준: Bronze 0P / Silver 120P·3,000฿ / Gold 240P·6,000฿ / Diamond 400P·10,000฿. 혜택 문구는 회원앱에 표시됩니다.',
+    memberTierMinPoints: '최소 포인트(등급)',
     memberTierMinAmount: '최소 누적금액',
     memberTierPointRate: '적립율',
     memberTierPointRatePh: '적립율(0.01=1%)',
+    memberTierSortOrder: '표시 순서',
+    memberTierBenefitsKo: '혜택 (한국어)',
+    memberTierBenefitsEn: '혜택 (English)',
+    memberTierBenefitsTh: '혜택 (ไทย)',
+    memberTierBenefitsPh: '줄바꿈으로 여러 혜택 입력',
+    memberTierBenefitsShort: '혜택',
     memberTierRecalculateTitle: '등급 재계산',
     memberTierRecalculateAll: '전체 회원 등급 재계산',
     memberTierRecalculateFail: '재계산 실패',
@@ -6356,7 +6365,12 @@ export const i18n = {
     posKbankSettlementThaiQrOnlyAlert:
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
-      'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.',
+      'Void에는 txnNo가 필요합니다. 결제 후 Inquiry를 실행하거나 콜백 txnNo를 입력하세요.',
+    posKbankCallbackWaitingHint:
+      '고객 결제가 끝났다면 「조회(Inquiry)」로 승인을 확인하세요. Callback 대기 중입니다.',
+    posKbankVoidNeedsTxnNo: 'txnNo 없음 — Void 시 Inquiry를 먼저 실행합니다.',
+    posKbankVoidInquiryFailed:
+      'Inquiry로 txnNo를 가져오지 못했습니다. 아래 KBank 응답을 확인하세요.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -7575,7 +7589,7 @@ export const i18n = {
     helpSum_admin_members_points:
       '회원 포인트 잔액·원장 조회, 수기 조정, POS 매출 연동 적립 규칙(등급별 적립율)을 관리하는 화면입니다.',
     helpHow_admin_members_points:
-      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 등급별 적립율·누적금액 기준을 설정합니다. POS 결제 완료 시 매출×적립율로 자동 적립됩니다.\n③ 등급 재계산으로 누적 매출 기준 등급을 일괄 반영합니다.',
+      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 등급별 최소 포인트·누적금액·적립율·혜택 문구(한/영/태)를 설정합니다. POS 결제 완료 시 매출×적립율로 자동 적립됩니다.\n③ 등급 재계산으로 누적 매출 기준 등급을 일괄 반영합니다.',
     helpSum_admin_members_coupons:
       '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다.',
     helpHow_admin_members_coupons:
@@ -15020,9 +15034,18 @@ orderItemQty: 'Qty',
     reason: 'Reason',
     memberCountUnit: '',
     memberTierRuleTitle: 'Tier Rule Management',
+    memberTierLineHint:
+      'LINE OA baseline: Bronze 0P / Silver 120P·3,000 THB / Gold 240P·6,000 THB / Diamond 400P·10,000 THB. Benefit text appears in the member app.',
+    memberTierMinPoints: 'Min points (tier)',
     memberTierMinAmount: 'Minimum cumulative amount',
     memberTierPointRate: 'Point rate',
     memberTierPointRatePh: 'Point rate (0.01=1%)',
+    memberTierSortOrder: 'Display order',
+    memberTierBenefitsKo: 'Benefits (Korean)',
+    memberTierBenefitsEn: 'Benefits (English)',
+    memberTierBenefitsTh: 'Benefits (Thai)',
+    memberTierBenefitsPh: 'Enter multiple benefits with line breaks',
+    memberTierBenefitsShort: 'Benefits',
     memberTierRecalculateTitle: 'Recalculate tiers',
     memberTierRecalculateAll: 'Recalculate all member tiers',
     memberTierRecalculateFail: 'Recalculation failed',
@@ -15257,6 +15280,11 @@ orderItemQty: 'Qty',
       'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.',
     posKbankTxnNoRequiredAlert:
       'txnNo is required for Void Payment. Run Inquiry after payment or enter txnNo from the payment callback.',
+    posKbankCallbackWaitingHint:
+      'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
+    posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
+    posKbankVoidInquiryFailed:
+      'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -16478,7 +16506,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members_points:
       'View member point balances and ledger, manual adjustments, and POS sales-based earn rules (tier rates).',
     helpHow_admin_members_points:
-      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: set tier earn rates and cumulative amount thresholds. POS auto-earns on completed payment (sales × rate).\n③ Run tier recalculation to apply cumulative sales thresholds.',
+      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: set tier min points, cumulative amount, earn rate, and benefit copy (KO/EN/TH). POS auto-earns on completed payment (sales × rate).\n③ Run tier recalculation to apply cumulative sales thresholds.',
     helpSum_admin_members_coupons:
       'Issue member coupons and review master and redemption history.',
     helpHow_admin_members_coupons:

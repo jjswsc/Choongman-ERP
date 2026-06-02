@@ -24,13 +24,23 @@ export async function POST(req: NextRequest) {
       code?: string
       name?: string
       minAmount?: number
+      minPoints?: number
       pointRate?: number
+      sortOrder?: number
+      benefitsKo?: string
+      benefitsEn?: string
+      benefitsTh?: string
     }
     await saveMemberTier({
       code: String(body.code || '').trim(),
       name: String(body.name || '').trim(),
       minAmount: Number(body.minAmount || 0),
+      minPoints: Number(body.minPoints || 0),
       pointRate: Number(body.pointRate || 0),
+      sortOrder: Number(body.sortOrder || 0),
+      benefitsKo: String(body.benefitsKo || ''),
+      benefitsEn: String(body.benefitsEn || ''),
+      benefitsTh: String(body.benefitsTh || ''),
     })
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
