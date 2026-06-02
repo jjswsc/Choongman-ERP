@@ -7538,6 +7538,40 @@ export default function PosTerminalPage() {
               ) {
                 existingOrderId = pendingExistingOrderId
               }
+              const isOpenForDineInAddStatus = (raw: unknown): boolean => {
+                const s = String(raw ?? '').trim().toLowerCase()
+                if (!s) return true
+                if (isPosOrderPaidLikeStatus(s)) return false
+                if (s === 'completed' || s === 'cancelled' || s === 'canceled' || s === 'refunded') return false
+                return true
+              }
+              const isEligibleExistingDineInOrder = (
+                row: { id?: unknown; tableName?: unknown; orderType?: unknown; status?: unknown; items?: unknown[] } | null | undefined
+              ): boolean => {
+                const oid = Number(row?.id ?? 0)
+                if (!(Number.isFinite(oid) && oid > 0)) return false
+                const rt = String(row?.orderType ?? 'dine_in').trim().toLowerCase()
+                if (rt && rt !== 'dine_in') return false
+                const rowItems = Array.isArray(row?.items) ? row.items : []
+                if (rowItems.length === 0) return false
+                if (!isOpenForDineInAddStatus(row?.status)) return false
+                if (!payloadTableKey) return true
+                const rowTableKey = posDineInTableMatchKey(
+                  String(row?.tableName ?? ''),
+                  getTableFloor(selectedTableId ?? servingTableId)
+                )
+                return Boolean(rowTableKey && rowTableKey === payloadTableKey)
+              }
+              if (!isEligibleExistingDineInOrder(existingOrder as unknown as {
+                id?: unknown
+                tableName?: unknown
+                orderType?: unknown
+                status?: unknown
+                items?: unknown[]
+              })) {
+                existingOrder = null
+                existingOrderId = 0
+              }
               if ((existingOrder == null || Number(existingOrder.id ?? 0) !== existingOrderId) && Number.isFinite(existingOrderId) && existingOrderId > 0) {
                 try {
                   const rows = await getPosOrders({
@@ -7572,11 +7606,27 @@ export default function PosTerminalPage() {
                       type: 'dine-in',
                       items: mappedItems,
                       total: Number(hit.total ?? 0) || 0,
-                      status: 'pending',
+                      status: (() => {
+                        const s = String(hit.status ?? '').trim().toLowerCase()
+                        if (s === 'pending' || s === 'preparing' || s === 'ready' || s === 'paid' || s === 'completed' || s === 'cancelled') {
+                          return s
+                        }
+                        return 'pending'
+                      })(),
                       createdAt: new Date(hit.createdAt || Date.now()),
                       tableName: String(hit.tableName ?? payload.tableName ?? ''),
                       orderNo: String(hit.orderNo ?? '').trim() || undefined,
                       guestCount: Math.max(0, Math.trunc(Number(hit.guestCount ?? 0) || 0)),
+                    }
+                    if (!isEligibleExistingDineInOrder({
+                      id: hit.id,
+                      tableName: hit.tableName,
+                      orderType: hit.orderType,
+                      status: hit.status,
+                      items: hit.items as unknown[],
+                    })) {
+                      existingOrder = null
+                      existingOrderId = 0
                     }
                   }
                 } catch (e) {
