@@ -9971,7 +9971,7 @@ export default function PosTerminalPage() {
       />
       {String(effectiveStaffKbankQrPayload || '').trim() ? (
         <div
-          className="pointer-events-auto fixed right-4 top-20 z-[70] w-[360px] rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
+          className="pointer-events-auto fixed right-4 top-20 z-[70] flex max-h-[calc(100dvh-5.5rem)] w-[360px] flex-col overflow-y-auto overscroll-y-contain rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
           data-tour={isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined}
         >
           <div className="flex items-start justify-between gap-3">
@@ -10024,12 +10024,13 @@ export default function PosTerminalPage() {
               </Button>
             </div>
           ) : null}
-          <div className="mt-3 rounded-md border bg-white p-2">
-            <div className="overflow-hidden rounded-md border bg-white">
+          <div className="mt-3 shrink-0 rounded-md border bg-white p-2">
+            <div className="flex justify-center overflow-hidden rounded-md border bg-white">
               {String(effectiveStaffKbankQrPayload || '').trim().startsWith('000201') ? (
                 <PosQrGuidelineCard
                   payload={String(effectiveStaffKbankQrPayload || '').trim()}
                   kind={effectiveCustomerDisplayQrType}
+                  className="border-0"
                 />
               ) : (
                 <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
