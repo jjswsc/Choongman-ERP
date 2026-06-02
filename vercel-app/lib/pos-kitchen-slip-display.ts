@@ -150,14 +150,67 @@ function promoComposeFromSplitChildren(
 ): string[] {
   const lines: string[] = []
   for (const ch of children) {
+    const routeMid = String((ch as { kitchenRouteMenuId?: string }).kitchenRouteMenuId ?? '').trim()
     const parsed = parseKitchenSplitPromoLineName(String(ch.name ?? ''))
-    if (!parsed) continue
+    const lineQty = Math.max(0.0001, Number(ch.qty ?? 1) || 1)
+    const parentQty = Math.max(
+      1,
+      Number(
+        (ch as { kitchenPromoParentQty?: number }).kitchenPromoParentQty ??
+          resolveCartLineQuantityForSave(ch as { qty?: unknown; quantity?: unknown })
+      ) || 1
+    )
+    const componentQty = Math.max(1, Math.round(lineQty / parentQty) || 1)
+    if (!parsed) {
+      if (!routeMid) continue
+      const menuName = String(menuNameByMenuId?.[routeMid] ?? '').trim() || `#${routeMid}`
+      let resolvedOptName = ''
+      if (grabSplit) {
+        const chips = collectGrabPrintOptionLines({ note: ch.note, optionNameByCode })
+        if (chips.length) resolvedOptName = chips.join(', ')
+      } else {
+        const fromNote = formatGrabOrderLineNoteForPrint(String(ch.note ?? ''), optionNameByCode)
+        if (fromNote && !fromNote.split(',').every((x) => isLikelyPosOptionCode(x.trim()))) {
+          resolvedOptName = fromNote
+        }
+      }
+      if (grabSplit && menuCodeByMenuId) {
+        const optcMatch = /optc:([^\s,]+)/i.exec(String(ch.note ?? ''))
+        const enriched = enrichGrabPromoItemsForPrint(
+          [
+            {
+              menuId: routeMid,
+              optionId: (ch as { optionId?: string | null }).optionId ?? null,
+              optionCode: optcMatch?.[1] ?? null,
+              optionName: resolvedOptName || null,
+              menuName,
+              quantity: componentQty,
+            },
+          ],
+          { optionNameByCode, menuCodeByMenuId }
+        )
+        const en = String(enriched[0]?.optionName ?? '').trim()
+        if (en) resolvedOptName = en
+      }
+      lines.push(
+        ...formatGrabPromoComposeLinesForPrint(
+          {
+            menuName,
+            optionName: resolvedOptName,
+            quantity: componentQty,
+            parentItemName,
+          },
+          Boolean(grabSplit)
+        )
+      )
+      continue
+    }
     const childLabel = parsed.childLabel
     const optMatch = /^(.+?)\s+\(([^)]+)\)\s*$/u.exec(childLabel)
-    const routeMid = String((ch as { kitchenRouteMenuId?: string }).kitchenRouteMenuId ?? '').trim()
     const menuNameFromId =
       routeMid && menuNameByMenuId ? String(menuNameByMenuId[routeMid] ?? '').trim() : ''
-    const menuName = menuNameFromId || (optMatch ? optMatch[1].trim() : childLabel)
+    const menuName = menuNameFromId || (routeMid ? `#${routeMid}` : '')
+    if (!menuName) continue
     let optName = optMatch ? formatGrabOptionFragmentForPrint(optMatch[2].trim(), optionNameByCode) : ''
     if (!optName) {
       if (grabSplit) {
@@ -170,15 +223,6 @@ function promoComposeFromSplitChildren(
         }
       }
     }
-    const parentQty = Math.max(
-      1,
-      Number(
-        (ch as { kitchenPromoParentQty?: number }).kitchenPromoParentQty ??
-          resolveCartLineQuantityForSave(ch as { qty?: unknown; quantity?: unknown })
-      ) || 1
-    )
-    const lineQty = Math.max(0.0001, Number(ch.qty ?? 1) || 1)
-    const componentQty = Math.max(1, Math.round(lineQty / parentQty) || 1)
     let resolvedOptName = optName
     if (grabSplit && menuCodeByMenuId && routeMid) {
       const optcMatch = /optc:([^\s,]+)/i.exec(String(ch.note ?? ''))

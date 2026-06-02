@@ -303,13 +303,6 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
   for (const it of items) {
     const pi = it.promoItems
     if (Array.isArray(pi) && pi.length > 0) {
-      const parentMenuId = String(
-        (it as { menuId?: string; menuId1?: string; menu_id1?: string; menuId2?: string }).menuId ??
-          (it as { menuId1?: string }).menuId1 ??
-          (it as { menu_id1?: string }).menu_id1 ??
-          (it as { menuId2?: string }).menuId2 ??
-          ''
-      ).trim()
       const parentQty = resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown })
       const parentName = String(it.name ?? '').trim()
       let n = 0
@@ -339,12 +332,8 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
         out.push({
           ...it,
           id: `${String(it.id ?? 'promo')}-k${n}`,
-          /**
-           * 세트(프로모) 구성품은 상세를 보이되 라우팅은 세트(부모) 기준을 우선한다.
-           * - 부모 menuId가 있으면 부모 기준 라우트 적용
-           * - 부모 menuId가 없으면 기존처럼 구성품 menuId로 라우트
-           */
-          kitchenRouteMenuId: parentMenuId || mid,
+          // 추론 라우팅 금지: 프로모션 구성품은 구성 데이터의 menuId 기준으로만 라우팅한다.
+          kitchenRouteMenuId: mid,
           name: `${displayName}${optionLabel}`,
           qty: q,
           kitchenPromoGroupId: String(it.id ?? '').trim() || undefined,
