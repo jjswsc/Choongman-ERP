@@ -4111,7 +4111,7 @@ export default function PosTerminalPage() {
               design: slipDesign,
               optionNameByCode,
               printColorAdjust: 'exact',
-              prependItemsHtml: idx === 0 ? fullHead : '',
+              prependItemsHtml: fullHead,
             })
             printPosHtmlDocument(html, {
               title: slip.label,
@@ -4256,6 +4256,9 @@ export default function PosTerminalPage() {
           const printOne = (idx: number) => {
             if (idx >= slips.length) return
             const slip = slips[idx]
+            const slipHasCancelledLines = slip.items.some((it) =>
+              Boolean((it as { kitchenLineCancelled?: boolean }).kitchenLineCancelled)
+            )
             const html = buildKitchenSlipDocumentHtml({
               label: slip.label,
               orderNo: orderNoStr,
@@ -4275,7 +4278,7 @@ export default function PosTerminalPage() {
               design: slipDesign,
               optionNameByCode,
               printColorAdjust: 'exact',
-              prependItemsHtml: idx === 0 ? partialHead : '',
+              prependItemsHtml: slipHasCancelledLines ? partialHead : '',
               ...posKitchenGuestSpread(po.guestCount, ki.t('posOrderGuestCount')),
             })
             printPosHtmlDocument(html, {
