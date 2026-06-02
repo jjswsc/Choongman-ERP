@@ -2584,11 +2584,19 @@ export default function PosTerminalPage() {
       })
       const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
       void getPrinterSettingsForStore(printSettingsStoreCode)
-        .then((settings) => {
+        .then(async (settings) => {
           const ki = kitchenSlipPrintI18n(settings, lang)
+          const menusForPrint = await resolveMenusForKitchenPrint(
+            itemsForKitchen as Array<Record<string, unknown>>,
+            printSettingsStoreCode
+          )
+          const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+            itemsForKitchen as Array<Record<string, unknown>>,
+            menusForPrint
+          )
           const slips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-            buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+            buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
@@ -2619,12 +2627,14 @@ export default function PosTerminalPage() {
                 kitchenItemsWithResolvedPromo(
                   itemsForKitchen as Record<string, unknown>[]
                 ) as KitchenSlipRoutingItem[],
-                ki
+                ki,
+                menusForPrint,
+                optionNameByCodeForPrint
               ),
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
-              optionNameByCode,
+              optionNameByCode: optionNameByCodeForPrint,
               printColorAdjust: 'exact',
               prependItemsHtml: idx === 0 ? addonKitchenHead : '',
               ...posKitchenGuestSpread(guestCount, ki.t('posOrderGuestCount')),
@@ -2656,7 +2666,8 @@ export default function PosTerminalPage() {
       getPrinterSettingsForStore,
       currentStoreId,
       kitchenItemsWithResolvedPromo,
-      menus,
+      resolveMenusForKitchenPrint,
+      resolveOptionNameByCodeForKitchenPrint,
       lang,
       kitchenSlipItemsForPrint,
       optionNameByCode,
@@ -4344,11 +4355,19 @@ export default function PosTerminalPage() {
     const runKitchenFullCancel = () => {
       if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
       void getPrinterSettingsForStore(currentStoreId)
-        .then((settings) => {
+        .then(async (settings) => {
           const ki = kitchenSlipPrintI18n(settings, lang)
+          const menusForPrint = await resolveMenusForKitchenPrint(
+            lines as Array<Record<string, unknown>>,
+            currentStoreId
+          )
+          const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+            lines as Array<Record<string, unknown>>,
+            menusForPrint
+          )
           const slips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as typeof lines,
-            buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+            buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
@@ -4383,12 +4402,14 @@ export default function PosTerminalPage() {
               items: kitchenSlipItemsForPrint(
                 slip.items,
                 kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                ki
+                ki,
+                menusForPrint,
+                optionNameByCodeForPrint
               ).map((row) => ({ ...row, cancelled: true })),
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
-              optionNameByCode,
+              optionNameByCode: optionNameByCodeForPrint,
               printColorAdjust: 'exact',
               prependItemsHtml: fullHead,
             })
@@ -4497,9 +4518,18 @@ export default function PosTerminalPage() {
         }
       })
       void getPrinterSettingsForStore(currentStoreId)
-        .then((settings) => {
+        .then(async (settings) => {
           const ki = kitchenSlipPrintI18n(settings, lang)
-          const groupOpts = buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+          const removedLinesForMenus = kitchenDetail?.removedKitchenLines ?? []
+          const menusForPrint = await resolveMenusForKitchenPrint(
+            [...itemsForKitchen, ...removedLinesForMenus] as Array<Record<string, unknown>>,
+            currentStoreId
+          )
+          const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+            [...itemsForKitchen, ...removedLinesForMenus] as Array<Record<string, unknown>>,
+            menusForPrint
+          )
+          const groupOpts = buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
           const removedLines = kitchenDetail?.removedKitchenLines ?? []
           const cancelledSlips = removedLines.length
             ? buildKitchenSlipGroups(
@@ -4550,12 +4580,14 @@ export default function PosTerminalPage() {
                 kitchenItemsWithResolvedPromo(
                   itemsForKitchen as Record<string, unknown>[]
                 ) as KitchenSlipRoutingItem[],
-                ki
+                ki,
+                menusForPrint,
+                optionNameByCodeForPrint
               ),
               memoLine: memoLine || null,
               escapeHtml,
               design: slipDesign,
-              optionNameByCode,
+              optionNameByCode: optionNameByCodeForPrint,
               printColorAdjust: 'exact',
               prependItemsHtml: slipHasCancelledLines ? partialHead : '',
               ...posKitchenGuestSpread(po.guestCount, ki.t('posOrderGuestCount')),
@@ -4718,11 +4750,19 @@ export default function PosTerminalPage() {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
         const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
         getPrinterSettingsForStore(printSettingsStoreCode)
-          .then((settings) => {
+          .then(async (settings) => {
             const ki = kitchenSlipPrintI18n(settings, lang)
+            const menusForPrint = await resolveMenusForKitchenPrint(
+              items as Array<Record<string, unknown>>,
+              printSettingsStoreCode
+            )
+            const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+              items as Array<Record<string, unknown>>,
+              menusForPrint
+            )
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+              buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
             )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
@@ -4746,12 +4786,14 @@ export default function PosTerminalPage() {
                 items: kitchenSlipItemsForPrint(
                   slip.items,
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                  ki
+                  ki,
+                  menusForPrint,
+                  optionNameByCodeForPrint
                 ),
                 memoLine: memoLine || null,
                 escapeHtml,
                 design: slipDesign,
-                optionNameByCode,
+                optionNameByCode: optionNameByCodeForPrint,
                 printColorAdjust: 'exact',
                 ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
               })
@@ -8522,11 +8564,19 @@ export default function PosTerminalPage() {
                       }
                     })
                     getPrinterSettingsForStore(currentStoreId)
-                      .then((settings) => {
+                      .then(async (settings) => {
                         const ki = kitchenSlipPrintI18n(settings, lang)
+                        const menusForPrint = await resolveMenusForKitchenPrint(
+                          itemsForKitchen as Array<Record<string, unknown>>,
+                          currentStoreId
+                        )
+                        const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+                          itemsForKitchen as Array<Record<string, unknown>>,
+                          menusForPrint
+                        )
                         const slips = buildKitchenSlipGroups(
                           kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                          buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+                          buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
                         )
                         if (!slips.length) return
                         const slipDesign = resolveKitchenSlipDesign(settings)
@@ -8552,12 +8602,14 @@ export default function PosTerminalPage() {
                               kitchenItemsWithResolvedPromo(
                                 itemsForKitchen as Record<string, unknown>[]
                               ) as KitchenSlipRoutingItem[],
-                              ki
+                              ki,
+                              menusForPrint,
+                              optionNameByCodeForPrint
                             ),
                             memoLine: memoLine || null,
                             escapeHtml,
                             design: slipDesign,
-                            optionNameByCode,
+                            optionNameByCode: optionNameByCodeForPrint,
                             printColorAdjust: 'exact',
                             ...posKitchenGuestSpread(payload.guestCount, ki.t('posOrderGuestCount')),
                           })
@@ -9157,11 +9209,19 @@ export default function PosTerminalPage() {
                     }
                   })
                   getPrinterSettingsForStore(currentStoreId)
-                    .then((settings) => {
+                    .then(async (settings) => {
                       const ki = kitchenSlipPrintI18n(settings, lang)
+                      const menusForPrint = await resolveMenusForKitchenPrint(
+                        itemsForKitchen as Array<Record<string, unknown>>,
+                        currentStoreId
+                      )
+                      const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+                        itemsForKitchen as Array<Record<string, unknown>>,
+                        menusForPrint
+                      )
                       const slips = buildKitchenSlipGroups(
                         kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+                        buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
                       )
                       if (!slips.length) return
                       const slipDesign = resolveKitchenSlipDesign(settings)
@@ -9190,12 +9250,14 @@ export default function PosTerminalPage() {
                             kitchenItemsWithResolvedPromo(
                               itemsForKitchen as Record<string, unknown>[]
                             ) as KitchenSlipRoutingItem[],
-                            ki
+                            ki,
+                            menusForPrint,
+                            optionNameByCodeForPrint
                           ),
                           memoLine: memoLine || null,
                           escapeHtml,
                           design: slipDesign,
-                          optionNameByCode,
+                          optionNameByCode: optionNameByCodeForPrint,
                           printColorAdjust: 'exact',
                         })
                         printPosHtmlDocument(html, {
