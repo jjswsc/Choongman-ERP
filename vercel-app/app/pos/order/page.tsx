@@ -91,6 +91,7 @@ import {
   preparePosOrderItemsForKitchenSlip,
 } from "@/lib/pos-kitchen-slip-routing"
 import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
+import { buildOptionNameByCodeFromMenus } from "@/lib/grab-pos-order-enrich"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
@@ -609,9 +610,29 @@ export default function PosOrderPage() {
     return m
   }, [promos])
 
+  // 주방 슬립 옵션(치킨 사이즈·반반 맛 등) 코드/ID → 이름 — 매장(터미널) 인쇄와 동일하게 구성
+  const optionNameByCodeForKitchen = React.useMemo(
+    () => buildOptionNameByCodeFromMenus(menus, allOptions),
+    [menus, allOptions]
+  )
+  const optionNameByIdForKitchen = React.useMemo(() => {
+    const m = new Map<string, string>()
+    for (const o of allOptions) {
+      const id = String(o.id ?? "").trim()
+      const name = String(o.name ?? "").trim()
+      if (id && name) m.set(id, name)
+    }
+    return m
+  }, [allOptions])
+
   const posReceiptLineOptsKitchen: PosOrderReceiptLineOptions = React.useMemo(
-    () => ({ promoCatalogById, menus }),
-    [promoCatalogById, menus]
+    () => ({
+      promoCatalogById,
+      menus,
+      optionNameByCode: optionNameByCodeForKitchen,
+      optionNameById: optionNameByIdForKitchen,
+    }),
+    [promoCatalogById, menus, optionNameByCodeForKitchen, optionNameByIdForKitchen]
   )
 
   const todayStr = getBangkokDateStr()
@@ -1656,6 +1677,17 @@ export default function PosOrderPage() {
           printTrackingId,
           items: mapKitchenSlipGroupItemsForPrint(slip.items, {
             orderItems: itemsForKitchen,
+            optionNameByCode: optionNameByCodeForKitchen,
+            menuNameByMenuId: Object.fromEntries(
+              menusForPrint
+                .map((m) => [String(m.id ?? ""), String(m.name ?? "").trim()])
+                .filter(([id, name]) => id && name)
+            ),
+            menuCodeByMenuId: Object.fromEntries(
+              menusForPrint
+                .map((m) => [String(m.id ?? ""), String(m.code ?? "").trim()])
+                .filter(([id, code]) => id && code)
+            ),
             translateName: (name) => translatePosMenuLineForReceipt(name, ki.t),
           }),
           memoLine: memoLine || null,
