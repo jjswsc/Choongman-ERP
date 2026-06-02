@@ -75,6 +75,25 @@ function resolvePromoOptionLabel(
   return ''
 }
 
+function resolveMenuNameByIdOrCode(
+  rawMenuRef: string,
+  menuNameByMenuId?: Record<string, string>,
+  menuCodeByMenuId?: Record<string, string>
+): string {
+  const ref = String(rawMenuRef ?? '').trim()
+  if (!ref) return ''
+  const fromId = String(menuNameByMenuId?.[ref] ?? '').trim()
+  if (fromId) return fromId
+  const normalizedRef = ref.replace(/^#\s*/, '').trim().toUpperCase()
+  if (!normalizedRef || !menuCodeByMenuId) return ''
+  for (const [mid, code] of Object.entries(menuCodeByMenuId)) {
+    if (String(code ?? '').trim().toUpperCase() !== normalizedRef) continue
+    const name = String(menuNameByMenuId?.[mid] ?? '').trim()
+    if (name) return name
+  }
+  return ''
+}
+
 function formatPromoComposeLine(
   p: PromoSnapshot,
   menuNameByMenuId?: Record<string, string>,
@@ -84,12 +103,15 @@ function formatPromoComposeLine(
   menuCodeByMenuId?: Record<string, string>
 ): string[] {
   const directMenuName = String((p as { menuName?: unknown }).menuName ?? '').trim()
-  const menuNameFromMenuId =
-    menuNameByMenuId && p.menuId ? String(menuNameByMenuId[p.menuId] ?? '').trim() : ''
+  const menuNameFromMenuIdOrCode = resolveMenuNameByIdOrCode(
+    String(p.menuId ?? ''),
+    menuNameByMenuId,
+    menuCodeByMenuId
+  )
   const preferredDirectMenuName =
     directMenuName && !isLikelyCodeLikeMenuName(directMenuName) ? directMenuName : ''
   const menuName =
-    menuNameFromMenuId ||
+    menuNameFromMenuIdOrCode ||
     preferredDirectMenuName ||
     (p.menuId ? `#${p.menuId}` : '')
   const rows =
@@ -168,7 +190,8 @@ function promoComposeFromSplitChildren(
     const componentQty = Math.max(1, Math.round(lineQty / parentQty) || 1)
     if (!parsed) {
       if (!routeMid) continue
-      const menuName = String(menuNameByMenuId?.[routeMid] ?? '').trim() || `#${routeMid}`
+      const menuName =
+        resolveMenuNameByIdOrCode(routeMid, menuNameByMenuId, menuCodeByMenuId) || `#${routeMid}`
       let resolvedOptName = ''
       if (grabSplit) {
         const chips = collectGrabPrintOptionLines({ note: ch.note, optionNameByCode })
@@ -212,9 +235,9 @@ function promoComposeFromSplitChildren(
     }
     const childLabel = parsed.childLabel
     const optMatch = /^(.+?)\s+\(([^)]+)\)\s*$/u.exec(childLabel)
-    const menuNameFromId =
-      routeMid && menuNameByMenuId ? String(menuNameByMenuId[routeMid] ?? '').trim() : ''
-    const menuName = menuNameFromId || (routeMid ? `#${routeMid}` : '')
+    const menuName =
+      resolveMenuNameByIdOrCode(routeMid, menuNameByMenuId, menuCodeByMenuId) ||
+      (routeMid ? `#${routeMid}` : '')
     if (!menuName) continue
     let optName = optMatch ? formatGrabOptionFragmentForPrint(optMatch[2].trim(), optionNameByCode) : ''
     if (!optName) {

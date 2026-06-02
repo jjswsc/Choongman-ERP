@@ -30,7 +30,7 @@ function readFirstFinite(...values: unknown[]): number {
 
 /** POS `pos_menu_options.option_code` 형태 (예: C020-1, C009-5) */
 export function isLikelyPosOptionCode(raw: string): boolean {
-  return /^[A-Za-z][A-Za-z0-9]*-\d+(?:-[A-Za-z0-9]+)*$/i.test(String(raw || '').trim())
+  return /^[A-Za-z0-9][A-Za-z0-9]*-\d+(?:-[A-Za-z0-9]+)*$/i.test(String(raw || '').trim())
 }
 
 export function isMachineLikeGrabToken(raw: string): boolean {
@@ -707,7 +707,7 @@ export function formatGrabOrderLineNoteForPrint(
   const raw = String(rawNote ?? '').trim()
   if (!raw) return ''
   const map = toOptionNameByCodeMap(optionNameByCode)
-  const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(raw)
+  const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z0-9][A-Za-z0-9]*-\d+/.test(raw)
   const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(raw) || hasGrabOptionToken
   if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
   const grabMeta = resolveGrabDeliveryLineNote(raw, map)
@@ -726,7 +726,7 @@ export function formatGrabOptionFragmentForPrint(
   const text = String(raw ?? '').trim()
   if (!text) return ''
   const map = toOptionNameByCodeMap(optionNameByCode)
-  if (!/[A-Za-z][A-Za-z0-9]*-\d+/.test(text) && !/(?:^|\s)(mods?:|optc:)/i.test(text)) {
+  if (!/[A-Za-z0-9][A-Za-z0-9]*-\d+/.test(text) && !/(?:^|\s)(mods?:|optc:)/i.test(text)) {
     return text
   }
   return formatGrabOrderLineNoteForPrint(text, map) || text
@@ -835,11 +835,16 @@ export function resolveGrabDeliveryLineNote(
     const raw = String(token || '').trim()
     if (!raw) return
     if (/^\d+$/.test(raw)) return
-    if (isLikelyPosOptionCode(raw)) {
-      const codeKey = raw.toUpperCase()
-      for (const label of resolveOptionCodesToLabels([raw], optionNameByCode)) {
-        if (label && label.toUpperCase() !== codeKey) pushHumanOption(label)
+    const codeKey = raw.toUpperCase()
+    let mappedAny = false
+    for (const label of resolveOptionCodesToLabels([raw], optionNameByCode)) {
+      if (label && label.toUpperCase() !== codeKey) {
+        pushHumanOption(label)
+        mappedAny = true
       }
+    }
+    if (isLikelyPosOptionCode(raw)) {
+      if (mappedAny) return
       return
     }
     pushHumanOption(raw)
