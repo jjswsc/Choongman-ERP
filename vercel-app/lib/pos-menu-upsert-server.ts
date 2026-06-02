@@ -20,6 +20,10 @@ import {
   normalizeBbqChickenOptionSelectionGroups,
   validateBbqOptionSelectionGroups,
 } from '@/lib/pos-bbq-option-guard'
+import {
+  normalizePromotionCategoryMain,
+  normalizePromotionSubcategory,
+} from '@/lib/pos-promo-constants'
 
 export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
@@ -64,6 +68,11 @@ export type PosMenuUpsertApiBody = {
    * 이 플래그가 켜진 요청은 다른 필드 비교/검증 단계를 건너뛴다.
    */
   imageOnly?: boolean
+  /**
+   * true 이면 설명(description_*) 컬럼만 갱신한다. 프로모션 연동 메뉴의
+   * Grab/LineMan 설명 등은 메뉴 화면 설명 탭에서 저장할 수 있어야 한다.
+   */
+  descriptionOnly?: boolean
 }
 
 type ExistingMenuRow = {
@@ -268,14 +277,16 @@ export async function upsertPosMenuFromBody(
     }
   }
 
-  // imageOnly 요청은 image 컬럼만 갱신하므로 code/name 입력을 강제하지 않는다.
+  // imageOnly / descriptionOnly 요청은 일부 컬럼만 갱신하므로 code/name 입력을 강제하지 않는다.
   const isImageOnlyEdit = body.imageOnly === true && !!editingId
-  if (!isImageOnlyEdit && !isEdit && (!code || !name)) {
+  const isDescriptionOnlyEdit = body.descriptionOnly === true && !!editingId
+  const isPartialMenuEdit = isImageOnlyEdit || isDescriptionOnlyEdit
+  if (!isPartialMenuEdit && !isEdit && (!code || !name)) {
     return { success: false, message: '코드와 메뉴명이 필요합니다.' }
   }
   // 메뉴 코드는 생성 후 식별자처럼 사용된다.
   // 수정 요청(id 포함)에서 code 변경을 허용하면 동일 코드/다른 id 불일치가 재발하므로 서버에서 차단한다.
-  if (isEdit && !isImageOnlyEdit && 'code' in body) {
+  if (isEdit && !isPartialMenuEdit && 'code' in body) {
     const row = (await supabaseSelectFilter(
       'pos_menus',
       `id=eq.${encodeURIComponent(String(editingId || ''))}`,
@@ -556,6 +567,61 @@ export async function upsertPosMenuFromBody(
             },
           }
         }
+        if (body.descriptionOnly === true) {
+          const descRow: Record<string, unknown> = {}
+          const changedFields: string[] = []
+          if ('descriptionDefault' in body) {
+            const next = String(body.descriptionDefault ?? '').trim()
+            descRow.description_default = next
+            if (next !== String(prev.description_default ?? '').trim()) {
+              changedFields.push('description_default')
+            }
+          }
+          if ('descriptionDelivery' in body) {
+            const v = body.descriptionDelivery
+            const next = v == null ? null : String(v).trim()
+            descRow.description_delivery = next
+            const prevVal =
+              prev.description_delivery == null ? null : String(prev.description_delivery).trim()
+            if (next !== prevVal) changedFields.push('description_delivery')
+          }
+          if ('descriptionTable' in body) {
+            const v = body.descriptionTable
+            const next = v == null ? null : String(v).trim()
+            descRow.description_table = next
+            const prevVal =
+              prev.description_table == null ? null : String(prev.description_table).trim()
+            if (next !== prevVal) changedFields.push('description_table')
+          }
+          const imageCol = resolveMenuImageColumnForUpsert(body, { isEdit: true })
+          if (imageCol.includeInRow) {
+            const nextImage = imageCol.image
+            descRow.image = nextImage
+            const prevImage = String(prev.image ?? '').trim()
+            if (nextImage !== prevImage) changedFields.push('image')
+          }
+          if (Object.keys(descRow).length === 0) {
+            return {
+              success: true,
+              message: '수정되었습니다.',
+              syncHint: {
+                imageChanged: false,
+                changedFields: [],
+                partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+              },
+            }
+          }
+          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, descRow)
+          return {
+            success: true,
+            message: '수정되었습니다.',
+            syncHint: {
+              imageChanged: changedFields.includes('image'),
+              changedFields,
+              partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+            },
+          }
+        }
         const pid = prev.promo_id
         if (pid != null && Number(pid) > 0 && hasBanbanFlavorMenuIdsPayload) {
           // 클라이언트가 isBanban=false일 때도 banbanFlavorMenuIds: []를 보내는 경우가 있어
@@ -640,14 +706,18 @@ export async function upsertPosMenuFromBody(
             )
           }
           const normStr = (v: unknown) => asString(v)
+          const normCategoryMain = (v: unknown) =>
+            asString(normalizePromotionCategoryMain(asString(v)))
+          const normCategory = (v: unknown) =>
+            asString(normalizePromotionSubcategory(asString(v)))
           const normNum = (v: unknown) => String(asNumberOrNull(v))
           const normBool = (v: unknown) => String(asBool(v))
           const normStrArr = (v: unknown) => JSON.stringify(asStringArray(v))
           /** 프로모션 연동 메뉴: 설명·이미지는 메뉴 화면에서, 나머지는 프로모션 관리에서 */
           const promoManagedFieldsUnchanged =
             fieldUnchanged('name', normStr) &&
-            fieldUnchanged('category_main', normStr) &&
-            fieldUnchanged('category', normStr) &&
+            fieldUnchanged('category_main', normCategoryMain) &&
+            fieldUnchanged('category', normCategory) &&
             fieldUnchanged('price', normNum) &&
             fieldUnchanged('price_delivery', normNum) &&
             fieldUnchanged('vat_included', normBool) &&
@@ -838,7 +908,7 @@ export async function upsertPosMenuFromBody(
         /* items에 해당 code 없으면 무시 */
       }
     }
-    if (result.success && hasStoreCodesPayload && !isImageOnlyEdit) {
+    if (result.success && hasStoreCodesPayload && !isPartialMenuEdit) {
       const savedMenuId = String(result.newId || editingId || '').trim()
       if (!savedMenuId) {
         return {
@@ -867,7 +937,7 @@ export async function upsertPosMenuFromBody(
         }
       }
     }
-    if (result.success && hasBanbanFlavorMenuIdsPayload && canSyncBanbanFlavorLinks && !isImageOnlyEdit) {
+    if (result.success && hasBanbanFlavorMenuIdsPayload && canSyncBanbanFlavorLinks && !isPartialMenuEdit) {
       const savedMenuId = String(result.newId || editingId || '').trim()
       if (!savedMenuId) {
         return {

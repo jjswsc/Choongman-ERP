@@ -7442,6 +7442,8 @@ export async function savePosMenu(
      * 서버는 다른 필드 비교를 건너뛴다.
      */
     imageOnly?: boolean
+    /** true 이면 설명(description_*)만 갱신한다(프로모 연동 세트의 Grab 설명 등). */
+    descriptionOnly?: boolean
   },
   opts?: { requireOnline?: boolean }
 ) {

@@ -1360,10 +1360,12 @@ export default function PosMenusPage() {
     }
   }, [editingId, loadPackagingChecklistRows, packagingChecklistRows, t])
 
-  const editingMenuLinkedPromoId = React.useMemo(() => {
-    if (!editingId) return null
-    const pid = menus.find((x) => x.id === editingId)?.promoId?.trim()
-    return pid || null
+  const isPromoLinkedMenuEdit = React.useMemo(() => {
+    if (!editingId) return false
+    const menu = menus.find((x) => x.id === editingId)
+    if (!menu) return false
+    if (menu.promoId?.trim()) return true
+    return normalizePromotionCategoryMain(menu.categoryMain ?? "") === PROMOTION_MAIN_CATEGORY
   }, [editingId, menus])
 
   const editingMenuForFormOptions = React.useMemo(
@@ -1421,27 +1423,15 @@ export default function PosMenusPage() {
           return persistedScope.length > 0 ? persistedScope : selectedStoreCodes
         })()
       : []
-    if (shouldPersistStoreScope && scopeForSave.length === 0) {
-      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
-      return
-    }
-    if (shouldPersistStoreScope && !storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
-      setSelectedStoreCodes(scopeForSave)
-    }
-    const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
-      isEdit: !!editingId,
-      existingImageUrl: editingMenu?.imageUrl,
-    })
-    if (!editingId && imageSave.mismatchMessage) {
-      await appAlert(
-        `${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드한 뒤 저장해 주세요."}`
-      )
-      return
-    }
     /** 프로모션 연동 메뉴: 설명·이미지만 메뉴 화면에서 저장 (이름·가격 등은 프로모션 관리) */
-    if (editingMenuLinkedPromoId && editingId) {
+    if (isPromoLinkedMenuEdit && editingId) {
+      const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
+        isEdit: true,
+        existingImageUrl: editingMenu?.imageUrl,
+      })
       const promoSavePayload: Parameters<typeof savePosMenu>[0] = {
         id: editingId,
+        descriptionOnly: true,
         descriptionDefault: formData.descriptionDefault.trim(),
         descriptionDelivery: formData.descriptionDelivery.trim() || null,
         descriptionTable: formData.descriptionTable.trim() || null,
@@ -1474,6 +1464,23 @@ export default function PosMenusPage() {
       } else {
         await appAlert(t("itemsAlertUpdated"))
       }
+      return
+    }
+    if (shouldPersistStoreScope && scopeForSave.length === 0) {
+      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
+      return
+    }
+    if (shouldPersistStoreScope && !storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {
+      setSelectedStoreCodes(scopeForSave)
+    }
+    const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
+      isEdit: !!editingId,
+      existingImageUrl: editingMenu?.imageUrl,
+    })
+    if (!editingId && imageSave.mismatchMessage) {
+      await appAlert(
+        `${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드한 뒤 저장해 주세요."}`
+      )
       return
     }
     const savePayload: Parameters<typeof savePosMenu>[0] = {
@@ -4239,7 +4246,7 @@ export default function PosMenusPage() {
               </Button>
             </div>
             <div className="flex flex-col gap-4 p-6">
-              {editingMenuLinkedPromoId && (
+              {isPromoLinkedMenuEdit && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   {t("posMenuPromoLinkedBanner") ||
                     "프로모션 연동 메뉴입니다. 이름·가격·분류·활성은 마케팅 > 프로모션 관리에서 수정하고, 설명은 이 화면 설명 탭에서 수정할 수 있습니다."}
@@ -4278,7 +4285,7 @@ export default function PosMenusPage() {
                         className="mt-1 h-10"
                         value={formData.name}
                         onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                        disabled={!!editingMenuLinkedPromoId}
+                        disabled={isPromoLinkedMenuEdit}
                       />
                     </div>
                     <div>
@@ -4291,7 +4298,7 @@ export default function PosMenusPage() {
                             value={formData.categoryMain}
                             onChange={(e) => setFormData((p) => ({ ...p, categoryMain: e.target.value }))}
                             onFocus={() => setCategoryMainOpen(true)}
-                            disabled={!!editingMenuLinkedPromoId}
+                            disabled={isPromoLinkedMenuEdit}
                           />
                           <DropdownMenuTrigger asChild>
                             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
@@ -4336,7 +4343,7 @@ export default function PosMenusPage() {
                             value={formData.category}
                             onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
                             onFocus={() => setCategoryOpen(true)}
-                            disabled={!!editingMenuLinkedPromoId}
+                            disabled={isPromoLinkedMenuEdit}
                           />
                           <DropdownMenuTrigger asChild>
                             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
@@ -4375,11 +4382,11 @@ export default function PosMenusPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
-                        <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
+                        <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} disabled={isPromoLinkedMenuEdit} />
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                        <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
+                        <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={isPromoLinkedMenuEdit} />
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -4388,7 +4395,7 @@ export default function PosMenusPage() {
                           type="checkbox"
                           checked={formData.sellHall}
                           onChange={(e) => setFormData((p) => ({ ...p, sellHall: e.target.checked }))}
-                          disabled={!!editingMenuLinkedPromoId}
+                          disabled={isPromoLinkedMenuEdit}
                         />
                         {t("posOptionSellHall") || "홀"}
                       </label>
@@ -4397,7 +4404,7 @@ export default function PosMenusPage() {
                           type="checkbox"
                           checked={formData.sellDelivery}
                           onChange={(e) => setFormData((p) => ({ ...p, sellDelivery: e.target.checked }))}
-                          disabled={!!editingMenuLinkedPromoId}
+                          disabled={isPromoLinkedMenuEdit}
                         />
                         {t("posOptionSellDelivery") || "배달"}
                       </label>
@@ -4406,22 +4413,22 @@ export default function PosMenusPage() {
                           type="checkbox"
                           checked={formData.sellPackaging}
                           onChange={(e) => setFormData((p) => ({ ...p, sellPackaging: e.target.checked }))}
-                          disabled={!!editingMenuLinkedPromoId}
+                          disabled={isPromoLinkedMenuEdit}
                         />
                         {t("posOptionSellPackaging") || "포장"}
                       </label>
                     </div>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
+                        <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
                         {t("posMenuVatIncluded")}
                       </label>
                       <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
+                        <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
                         {t("posMenuActive")}
                       </label>
                       <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S Boneless) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
-                        <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
+                        <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
                         {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
                       </label>
                     </div>
@@ -4449,7 +4456,7 @@ export default function PosMenusPage() {
                             variant="outline"
                             size="sm"
                             className="h-8 text-xs"
-                            disabled={!!editingMenuLinkedPromoId}
+                            disabled={isPromoLinkedMenuEdit}
                             onClick={async () => {
                               const nextIds = banbanFlavorAutoMenus
                                 .map((menu) => String(menu.id || "").trim())
@@ -4468,7 +4475,7 @@ export default function PosMenusPage() {
                             variant="ghost"
                             size="sm"
                             className="h-8 text-xs"
-                            disabled={!!editingMenuLinkedPromoId || formData.banbanFlavorMenuIds.length === 0}
+                            disabled={isPromoLinkedMenuEdit || formData.banbanFlavorMenuIds.length === 0}
                             onClick={() => setFormData((p) => ({ ...p, banbanFlavorMenuIds: [] }))}
                           >
                             {t("posMenuBanbanFlavorClearAll") || "전체 해제"}
@@ -4485,7 +4492,7 @@ export default function PosMenusPage() {
                                   <Checkbox
                                     id={`banban-flavor-${id}`}
                                     checked={checked}
-                                    disabled={!!editingMenuLinkedPromoId}
+                                    disabled={isPromoLinkedMenuEdit}
                                     onCheckedChange={(nextChecked) => {
                                       setFormData((prev) => ({
                                         ...prev,

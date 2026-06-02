@@ -51,8 +51,6 @@ import {
   executeLinkposDisplayQr,
   executeLinkposPayment,
   grabCancelOrderByStoreApi,
-  claimKitchenPrintJob,
-  markKitchenPrintJob,
   upsertPosTaxInvoiceRecipient,
   updatePosOrder,
   updatePosOrderStatus,
@@ -972,15 +970,6 @@ export default function PosTerminalPage() {
     const nextTab = orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'tables'
     setActiveTab((prev) => (prev === nextTab ? prev : nextTab))
   }, [orderType])
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const raw = String(window.localStorage.getItem('cm_pos_kitchen_queue_consumer_v1') ?? '').trim()
-      setKitchenPrintQueueConsumerEnabled(raw === '1' || raw.toLowerCase() === 'true')
-    } catch {
-      setKitchenPrintQueueConsumerEnabled(false)
-    }
-  }, [])
   const [pendingDineInOrderId, setPendingDineInOrderId] = useState<number | null>(null)
   /** `pendingDineInOrderId`가 가리키는 주문의 테이블명 — 다른 테이블로 잘못 병합(updatePosOrder)되는 것을 막음 */
   const pendingDineInOrderTableRef = useRef<string>('')
@@ -1012,7 +1001,6 @@ export default function PosTerminalPage() {
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = useState(false)
-  const [kitchenPrintQueueConsumerEnabled, setKitchenPrintQueueConsumerEnabled] = useState(false)
   const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = useState(false)
   const [receiptBizName, setReceiptBizName] = useState('')
   const [receiptBizTaxId, setReceiptBizTaxId] = useState('')
@@ -2230,7 +2218,6 @@ export default function PosTerminalPage() {
   const grabCancelWatchSeededRef = useRef(false)
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
-  const kitchenPrintQueueConsumerRunningRef = useRef(false)
   /**
    * 메인 포스: dine_in 품목 수량 스냅샷(다른 단말 UPDATE 시 id 추가 + 수량 증가를 모두 감지)
    * - key: orderId
@@ -2255,6 +2242,7 @@ export default function PosTerminalPage() {
           (Array.isArray(rawKeyOrKeys) ? rawKeyOrKeys : [rawKeyOrKeys])
             .map((k) => String(k || '').trim())
             .filter(Boolean)
+            .map((k) => `k2:${k}`)
         )
       )
       if (!keys.length) return true
@@ -2270,87 +2258,6 @@ export default function PosTerminalPage() {
     },
     [currentStoreId]
   )
-
-  useEffect(() => {
-    if (!isMainPosDevice) return
-    if (!kitchenPrintQueueConsumerEnabled) return
-    if (!autoPrintKitchenSlipOnOrder) return
-    const storeCode = String(currentStoreId || '').trim()
-    if (!storeCode) return
-    let stopped = false
-    const tick = async () => {
-      if (stopped) return
-      if (kitchenPrintQueueConsumerRunningRef.current) return
-      kitchenPrintQueueConsumerRunningRef.current = true
-      try {
-        const claim = await claimKitchenPrintJob({
-          storeCode,
-          workerId: `main-pos:${storeCode}`,
-        })
-        const job = claim?.success ? claim.job : null
-        if (!job?.id || !job.order_id) return
-        const queueDedupeKeys = [`order:${Number(job.order_id)}:kitchen`, `order:${Number(job.order_id)}:kitchen:queue`]
-        if (!reserveKitchenAutoPrintKey(queueDedupeKeys)) {
-          await markKitchenPrintJob({ jobId: Number(job.id), status: 'printed' })
-          return
-        }
-        const payload = job.payload_json && typeof job.payload_json === 'object' ? job.payload_json : null
-        const kitchenLinesFromJob = Array.isArray((payload as { kitchenLines?: unknown } | null)?.kitchenLines)
-          ? ((payload as { kitchenLines: Array<Record<string, unknown>> }).kitchenLines)
-          : null
-        const rows = await getPosOrders({
-          orderId: Number(job.order_id),
-          storeCode,
-          strictStore: true,
-          limit: 1,
-        })
-        const order = rows?.[0]
-        if (!order?.items?.length) {
-          await markKitchenPrintJob({
-            jobId: Number(job.id),
-            status: 'failed',
-            reason: 'order_not_found_or_empty',
-          })
-          return
-        }
-        try {
-          await printKitchenFromPosOrder(
-            order,
-            kitchenLinesFromJob && kitchenLinesFromJob.length > 0
-              ? { kitchenLines: kitchenLinesFromJob }
-              : undefined
-          )
-          await markKitchenPrintJob({ jobId: Number(job.id), status: 'printed' })
-        } catch (e) {
-          await markKitchenPrintJob({
-            jobId: Number(job.id),
-            status: 'failed',
-            reason: String(e || 'print_failed'),
-          })
-        }
-      } catch (e) {
-        console.error('kitchen print queue consumer:', e)
-      } finally {
-        kitchenPrintQueueConsumerRunningRef.current = false
-      }
-    }
-    void tick()
-    const timer = window.setInterval(() => {
-      void tick()
-    }, 2200)
-    return () => {
-      stopped = true
-      window.clearInterval(timer)
-    }
-  }, [
-    autoPrintKitchenSlipOnOrder,
-    currentStoreId,
-    getPosOrders,
-    isMainPosDevice,
-    kitchenPrintQueueConsumerEnabled,
-    printKitchenFromPosOrder,
-    reserveKitchenAutoPrintKey,
-  ])
 
   /**
    * 신규 주문 알림음 (브라우저 autoplay 정책에 따라 무음 처리될 수 있음)
