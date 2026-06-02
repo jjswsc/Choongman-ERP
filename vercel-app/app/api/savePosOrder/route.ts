@@ -31,6 +31,7 @@ import {
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
+import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
@@ -305,10 +306,18 @@ export async function POST(req: NextRequest) {
     })
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
+    const paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
+      paymentDeliveryApp,
+      paymentCash,
+      paymentCard,
+      paymentQr,
+      paymentOther,
+      total,
+    })
     const adj = pricingAdjustments as { cardRate?: number } | undefined
     const cardRateSnapshot = Math.max(0, Number(adj?.cardRate ?? 0) || 0)
 
-    const paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
     const closeStatusRaw = String(body.closeStatus ?? body.close_status ?? '').trim().toLowerCase()
     const closeStatus =
       closeStatusRaw === 'paid' || closeStatusRaw === 'completed' ? closeStatusRaw : null
@@ -395,7 +404,7 @@ export async function POST(req: NextRequest) {
         : paymentOtherBreakdownDb
           ? { payment_other_breakdown: paymentOtherBreakdownDb }
           : {}),
-      payment_delivery_app: paymentDeliveryApp,
+      payment_delivery_app: paymentDeliveryAppFinal,
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
@@ -590,7 +599,7 @@ export async function POST(req: NextRequest) {
           payment_card: paymentCard,
           payment_qr: paymentQr,
           payment_other: paymentOther,
-          payment_delivery_app: paymentDeliveryApp,
+          payment_delivery_app: paymentDeliveryAppFinal,
         },
         reason: 'new_order_created',
       })

@@ -1,8 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canonicalPosMenuUpstreamUrl,
   normalizePosMenuImageUrl,
+  toHybridProxiedMenuImageHref,
   toPosMenuDisplayImageHref,
 } from '@/lib/pos-menu-image-url'
+
+describe('canonicalPosMenuUpstreamUrl', () => {
+  it('forces https and lowercases supabase host', () => {
+    const out = canonicalPosMenuUpstreamUrl(
+      'http://ABC.supabase.co/storage/v1/object/public/menu/a.png'
+    )
+    expect(out).toMatch(/^https:\/\/abc\.supabase\.co\//)
+  })
+})
+
+describe('toHybridProxiedMenuImageHref', () => {
+  it('uses canonical upstream in query', () => {
+    const href = toHybridProxiedMenuImageHref(
+      'http://x.supabase.co/storage/v1/object/public/b/p.jpg'
+    )
+    expect(href).toContain('u=https%3A%2F%2Fx.supabase.co%2F')
+    expect(href).not.toContain('http%3A')
+  })
+})
 
 describe('toPosMenuDisplayImageHref', () => {
   const origin = 'https://erp.example.com'

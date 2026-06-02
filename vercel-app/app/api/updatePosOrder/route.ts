@@ -28,6 +28,7 @@ import {
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
+import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -249,6 +250,14 @@ export async function POST(req: NextRequest) {
     })
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
+    const paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
+      paymentDeliveryApp,
+      paymentCash,
+      paymentCard,
+      paymentQr,
+      paymentOther,
+      total,
+    })
 
     const paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
       paymentOther,
@@ -263,7 +272,7 @@ export async function POST(req: NextRequest) {
       paymentOther: Number(current?.payment_other ?? 0),
       paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
     })
-    const nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
     const paidAtStamp = resolvePosOrderPaidAtStampIso({
       existingPaidAt: String(current?.paid_at ?? '').trim() || null,
       total,
@@ -291,7 +300,7 @@ export async function POST(req: NextRequest) {
         : paymentOtherBreakdownDb
           ? { payment_other_breakdown: paymentOtherBreakdownDb }
           : { payment_other_breakdown: null }),
-      payment_delivery_app: paymentDeliveryApp,
+      payment_delivery_app: paymentDeliveryAppFinal,
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
@@ -388,7 +397,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
     const paymentComplete = total > 0 && paymentSum >= total - 0.02
     let pointEarned = pointEarnedReq
     const previousEarned = Number(current?.point_earned || 0)
@@ -455,7 +464,7 @@ export async function POST(req: NextRequest) {
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
-      payment_delivery_app: paymentDeliveryApp,
+      payment_delivery_app: paymentDeliveryAppFinal,
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,

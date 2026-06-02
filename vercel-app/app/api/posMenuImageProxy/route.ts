@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { canonicalPosMenuUpstreamUrl } from '@/lib/pos-menu-image-url'
 import { supabaseFetch } from '@/lib/supabase-server'
 
-const BROWSER_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=600'
+/** 브라우저·POS 단말 — CDN HIT 후에도 주기적 재검증은 SWR로 완화 */
+const BROWSER_CACHE_CONTROL = 'public, max-age=86400, stale-while-revalidate=604800'
 const CDN_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=604800'
 
 function isAllowedUpstream(parsed: URL): boolean {
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
   }
   let parsed: URL
   try {
-    parsed = new URL(raw)
+    parsed = new URL(canonicalPosMenuUpstreamUrl(raw))
   } catch {
     return new NextResponse(null, { status: 400 })
   }

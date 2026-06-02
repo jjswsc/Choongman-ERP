@@ -89,8 +89,19 @@ export function shouldProxyPosMenuImageForHybrid(absoluteUrl: string): boolean {
   }
 }
 
+/** 프록시·CDN 캐시 키 통일 — http→https, 호스트 소문자 (동일 이미지 이중 캐시 방지) */
+export function canonicalPosMenuUpstreamUrl(raw: string): string {
+  const parsed = new URL(String(raw ?? '').trim())
+  const h = parsed.hostname.toLowerCase()
+  if (h.endsWith('.supabase.co') || h === 'supabase.co') {
+    parsed.protocol = 'https:'
+    if (parsed.hostname !== h) parsed.hostname = h
+  }
+  return parsed.href
+}
+
 export function toHybridProxiedMenuImageHref(absoluteUrl: string): string {
-  return `/api/posMenuImageProxy?u=${encodeURIComponent(absoluteUrl)}`
+  return `/api/posMenuImageProxy?u=${encodeURIComponent(canonicalPosMenuUpstreamUrl(absoluteUrl))}`
 }
 
 function toGeneralImageProxyHref(absoluteUrl: string): string {

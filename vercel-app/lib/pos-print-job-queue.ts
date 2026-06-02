@@ -82,6 +82,18 @@ export async function claimQueuedKitchenPrintJob(params: {
       claimed_at: new Date().toISOString(),
       attempt_count: 1,
     })
+    const verify = (await supabaseSelectFilter(
+      'pos_print_jobs',
+      `id=eq.${Number(picked.id)}`,
+      {
+        limit: 1,
+        select: 'id,status,claimed_by',
+      }
+    )) as { id?: number; status?: string; claimed_by?: string | null }[] | null
+    const claimed = verify?.[0]
+    if (!claimed?.id) return null
+    if (String(claimed.status ?? '').trim() !== 'claimed') return null
+    if (String(claimed.claimed_by ?? '').trim() !== workerId) return null
     return {
       id: Number(picked.id),
       order_id: Number(picked.order_id || 0),

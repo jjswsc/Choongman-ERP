@@ -13,6 +13,7 @@ import {
   loadPosPaymentMethodCatalog,
   resolvePosPaymentKeysForStore,
 } from '@/lib/pos-payment-settings-resolve'
+import { resolvePosDeliveryAppSettlementGross } from '@/lib/pos-delivery-app-settlement-amount'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -182,11 +183,13 @@ export async function GET(request: NextRequest) {
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
       select:
-        'subtotal,vat,total,status,order_type,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+        'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
     })) as {
       subtotal?: number
       vat?: number
       total?: number
+      discount_amt?: number
+      coupon_discount_amt?: number
       status?: string
       order_type?: string
       payment_cash?: number
@@ -234,7 +237,7 @@ export async function GET(request: NextRequest) {
       systemVat += Number(o.vat ?? 0) || 0
       systemCashFromOrders += Number(o.payment_cash) || 0
       cardReportedTotal += Number(o.payment_card) || 0
-      const deliveryAmt = Number(o.payment_delivery_app) || 0
+      const deliveryAmt = resolvePosDeliveryAppSettlementGross(o)
       if (deliveryAmt > 0) {
         const channel = String(o.delivery_payment_channel || '').trim().toLowerCase()
         const orderType = String(o.order_type || '').trim().toLowerCase()

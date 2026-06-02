@@ -3845,7 +3845,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   /** 배달 기존 주문 「ชำระที่ร้าน」: 플랫폼 정산 전제 — 결제 수단 없이 할인만 조정 후 완료 */
-  const completeDeliveryPayInStoreFromModal = () => {
+  const completeDeliveryPayInStoreFromModal = async () => {
     const existingId = normalizeExistingPosOrderId(checkoutExistingPosOrderIdRef.current)
     if (!onDeliveryOrderComplete || existingId == null) return
     if (total <= 0) return
@@ -3858,7 +3858,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }),
       paymentDeliveryApp: total,
     })
-    onDeliveryOrderComplete(
+    const ok =
+      (await onDeliveryOrderComplete(
       {
         items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
         orderLabel: (paymentTableNameOverride ?? '').trim() || '',
@@ -3881,7 +3882,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         pointUsed: pointUsedNum || undefined,
       },
       existingId
-    )
+    )) !== false
+    if (!ok) return
     onPaymentComplete?.()
     handleClearCart()
     setShowPaymentModal(false)
@@ -5011,7 +5013,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 type="button"
                 className="h-12 w-full rounded-xl font-semibold sm:min-w-[8rem]"
                 disabled={total <= 0}
-                onClick={completeDeliveryPayInStoreFromModal}
+                onClick={() => void completeDeliveryPayInStoreFromModal()}
               >
                 {t('posDeliveryPaymentComplete') || t('posConfirm') || '확인'}
               </Button>

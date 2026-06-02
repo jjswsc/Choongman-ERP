@@ -232,6 +232,9 @@ export async function persistShopeeFoodOrderToPos(params: {
     adjustments: {},
   })
   const orderTotal = totalMajor > 0.005 ? totalMajor : pricing.finalTotal
+  const isCashOnDelivery = paymentMethod === 'CASH_ON_DELIVERY'
+  const paymentCash = isCashOnDelivery ? orderTotal : 0
+  const paymentDeliveryApp = isCashOnDelivery ? 0 : orderTotal
 
   const orderNo = await allocateNextPosOrderNo(storeCode)
   const remark = String(order.remark ?? '').trim()
@@ -259,10 +262,11 @@ export async function persistShopeeFoodOrderToPos(params: {
     vat: pricing.vatFeeAmt,
     total: orderTotal,
     status: 'pending',
-    payment_cash: paymentMethod === 'CASH_ON_DELIVERY' ? orderTotal : 0,
+    payment_cash: paymentCash,
     payment_card: 0,
     payment_qr: 0,
-    payment_other: paymentMethod === 'ONLINE_PAYMENT' ? orderTotal : 0,
+    payment_other: 0,
+    payment_delivery_app: paymentDeliveryApp,
     member_id: null,
     member_no: null,
     coupon_code: null,

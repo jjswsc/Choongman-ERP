@@ -2469,7 +2469,13 @@ export default function PosTerminalPage() {
       const { kitchenCartLines, dedupeKey, orderNo, storeCode, tableName, memo, guestCount, logEvent } = params
       if (!kitchenCartLines.length) return
       const fallbackDedupeKey = buildDineInAddonKitchenFallbackDedupeKey(orderNo, kitchenCartLines)
-      const dedupeKeys = fallbackDedupeKey ? [dedupeKey, fallbackDedupeKey] : [dedupeKey]
+      const baseKitchenDedupeKey = (() => {
+        const m = /^order:(\d+):kitchen:add:/.exec(String(dedupeKey))
+        return m?.[1] ? `order:${m[1]}:kitchen` : ''
+      })()
+      const dedupeKeys = Array.from(
+        new Set([dedupeKey, fallbackDedupeKey, baseKitchenDedupeKey].map((k) => String(k || '').trim()).filter(Boolean))
+      )
       if (!reserveKitchenAutoPrintKey(dedupeKeys)) return
       logPosPrintDebug(logEvent, {
         orderNo,
@@ -4908,7 +4914,6 @@ export default function PosTerminalPage() {
       const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId)
       if (suppressUntil != null) {
         if (Date.now() < suppressUntil) {
-          mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
           const parsedSelf = parseRealtimePosOrderRowItemsJson(row)
           if (parsedSelf.ok && parsedSelf.items.length > 0) {
             const sid = buildDineInQtySnapshot(parsedSelf.items)
@@ -5467,6 +5472,15 @@ export default function PosTerminalPage() {
                 const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
                 const newQtyById = buildDineInQtySnapshot(items)
                 if (newQtyById.size === 0) continue
+                const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(oid)
+                if (suppressUntil != null) {
+                  if (Date.now() < suppressUntil) {
+                    dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                    logPosPrintDebug('poll_meta_skip_self_dine_in_suppress', { orderId: oid })
+                    continue
+                  }
+                  mainPosSelfDineInUpdateSuppressUntilRef.current.delete(oid)
+                }
                 if (!prevQtyById) {
                   dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                   continue

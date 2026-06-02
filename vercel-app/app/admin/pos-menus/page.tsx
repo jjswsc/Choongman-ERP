@@ -819,6 +819,8 @@ export default function PosMenusPage() {
     }
   }, [newOptionChannelScope, newOptionModifier, newOptionModifierDelivery])
   const [deliveryOpsSearch, setDeliveryOpsSearch] = React.useState("")
+  const [deliveryOpsBulkSellStart, setDeliveryOpsBulkSellStart] = React.useState("")
+  const [deliveryOpsBulkSellEnd, setDeliveryOpsBulkSellEnd] = React.useState("")
   const [deliveryOpsAppPolicy, setDeliveryOpsAppPolicy] = React.useState<PosDeliveryAppPolicy>({
     storeCode: "",
     appCode: "grab",
@@ -3733,6 +3735,53 @@ export default function PosMenusPage() {
     })
   }, [deliveryOpsStoreCode, deliveryOpsAppCode])
 
+  const handleApplyBulkSellTimes = React.useCallback(async () => {
+    const start = String(deliveryOpsBulkSellStart ?? "").trim() || null
+    const end = String(deliveryOpsBulkSellEnd ?? "").trim() || null
+    if ((start && !end) || (!start && end)) {
+      await appAlert(
+        t("posDeliveryOpsBulkSellBothRequired") || "판매 시작·종료 시간을 모두 입력하거나, 둘 다 비워 두세요(종일 판매)."
+      )
+      return
+    }
+    const q = deliveryOpsSearch.trim()
+    const targets = q ? deliveryOpsVisibleMenus : menus
+    if (!targets.length) {
+      await appAlert(t("posDeliveryOpsBulkSellNoMenus") || "적용할 메뉴가 없습니다.")
+      return
+    }
+    if (q) {
+      const ok = await appConfirm(
+        (t("posDeliveryOpsBulkSellFilteredConfirm") || "검색 결과 {{n}}개 메뉴에만 판매 시간을 적용할까요?").replace(
+          "{{n}}",
+          String(targets.length)
+        )
+      )
+      if (!ok) return
+    }
+    for (const m of targets) {
+      upsertDeliveryMenuPolicy(String(m.id), { sellStartTime: start, sellEndTime: end })
+    }
+    const msg = start && end
+      ? (t("posDeliveryOpsBulkSellApplied") || "{{n}}개 메뉴에 {{start}}~{{end}} 적용했습니다. 저장 후 Grab에 반영됩니다.")
+          .replace("{{n}}", String(targets.length))
+          .replace("{{start}}", start)
+          .replace("{{end}}", end)
+      : (t("posDeliveryOpsBulkSellCleared") || "{{n}}개 메뉴 판매 시간을 비웠습니다(종일 판매). 저장 후 Grab에 반영됩니다.").replace(
+          "{{n}}",
+          String(targets.length)
+        )
+    await appAlert(msg)
+  }, [
+    deliveryOpsBulkSellStart,
+    deliveryOpsBulkSellEnd,
+    deliveryOpsSearch,
+    deliveryOpsVisibleMenus,
+    menus,
+    upsertDeliveryMenuPolicy,
+    t,
+  ])
+
   const handleUploadDeliveryMenuImage = React.useCallback(
     async (menu: PosMenu, file: File) => {
       const menuId = String(menu.id)
@@ -6610,6 +6659,42 @@ export default function PosMenusPage() {
                     onChange={(e) => setDeliveryOpsSearch(e.target.value)}
                     placeholder={t("itemsSearchPh") || "검색"}
                   />
+                </div>
+                <div className="rounded-md border bg-muted/30 p-2.5 space-y-2">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <span className="text-xs font-semibold shrink-0">
+                      {t("posDeliveryOpsBulkSellTimes") || "판매 시간 일괄"}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[11px] text-muted-foreground">
+                        {t("posDeliveryOpsSellStart") || "판매 시작"}
+                      </label>
+                      <Input
+                        type="time"
+                        className="h-8 w-32 text-xs"
+                        value={deliveryOpsBulkSellStart}
+                        onChange={(e) => setDeliveryOpsBulkSellStart(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[11px] text-muted-foreground">
+                        {t("posDeliveryOpsSellEnd") || "판매 종료"}
+                      </label>
+                      <Input
+                        type="time"
+                        className="h-8 w-32 text-xs"
+                        value={deliveryOpsBulkSellEnd}
+                        onChange={(e) => setDeliveryOpsBulkSellEnd(e.target.value)}
+                      />
+                    </div>
+                    <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => void handleApplyBulkSellTimes()}>
+                      {t("posDeliveryOpsBulkSellApply") || "전체 메뉴에 적용"}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {t("posDeliveryOpsBulkSellHint") ||
+                      "하루 판매 가능 시간(HH:mm)입니다. 공란이면 Grab에 종일 판매(OpenAllDay)로 전송됩니다. 저장 시 Grab 메뉴(serviceHours)에 반영됩니다. 프로모 기간·컷프라이스(취소선)는 POS 프로모·Grab 캠페인과 별도입니다."}
+                  </p>
                 </div>
                 <div className="max-h-[420px] overflow-auto border rounded">
                   <table className="w-full text-xs">

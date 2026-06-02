@@ -1,5 +1,6 @@
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import type { PosChannelGrossRow, PosChannelSettlementChannel } from '@/lib/pos-channel-settlement'
+import { resolvePosDeliveryAppSettlementGross } from '@/lib/pos-delivery-app-settlement-amount'
 
 const COMPLETED = new Set(['paid', 'preparing', 'cooking', 'ready', 'completed'])
 const POS_CHANNEL_SETTLEMENT_SCAN_MAX_ROWS = 1_000_000
@@ -21,7 +22,14 @@ function aggregateGrossFallback(
   rows: {
     payment_card?: number
     payment_delivery_app?: number
+    payment_cash?: number
+    payment_other?: number
     delivery_app_code?: string | null
+    order_type?: string | null
+    total?: number
+    subtotal?: number
+    discount_amt?: number
+    coupon_discount_amt?: number
     card_fee_amt?: number
   }[],
   channel: PosChannelSettlementChannel
@@ -30,7 +38,7 @@ function aggregateGrossFallback(
   let cardFeeTotal = 0
   for (const r of rows) {
     const card = Math.max(0, Number(r.payment_card) || 0)
-    const del = Math.max(0, Number(r.payment_delivery_app) || 0)
+    const delGross = resolvePosDeliveryAppSettlementGross(r)
     const code = String(r.delivery_app_code ?? '')
       .trim()
       .toLowerCase()
@@ -38,13 +46,13 @@ function aggregateGrossFallback(
       gross += card
       cardFeeTotal += Math.max(0, Number(r.card_fee_amt) || 0)
     } else if (channel === 'delivery_all') {
-      gross += del
-    } else if (channel === 'grab' && del > 0 && isGrabCode(code)) {
-      gross += del
-    } else if (channel === 'lineman' && del > 0 && isLinemanCode(code)) {
-      gross += del
-    } else if (channel === 'shopee' && del > 0 && isShopeeCode(code)) {
-      gross += del
+      gross += delGross
+    } else if (channel === 'grab' && delGross > 0 && isGrabCode(code)) {
+      gross += delGross
+    } else if (channel === 'lineman' && delGross > 0 && isLinemanCode(code)) {
+      gross += delGross
+    } else if (channel === 'shopee' && delGross > 0 && isShopeeCode(code)) {
+      gross += delGross
     }
   }
   return {
@@ -87,14 +95,22 @@ export async function fetchPosChannelSettlementGross(params: {
   const end = `${settleDate}T23:59:59+07:00`
   const filter = `store_code=eq.${encodeURIComponent(storeCode)}&created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(end)}`
   const orders = (await supabaseSelectFilterAllPages('pos_orders', filter, {
-    select: 'payment_card,payment_delivery_app,delivery_app_code,card_fee_amt,status',
+    select:
+      'payment_card,payment_delivery_app,payment_cash,payment_other,delivery_app_code,order_type,total,subtotal,discount_amt,coupon_discount_amt,card_fee_amt,status',
     pageSize: 8000,
     maxRows: POS_CHANNEL_SETTLEMENT_SCAN_MAX_ROWS,
     order: 'id.asc',
   })) as {
     payment_card?: number
     payment_delivery_app?: number
+    payment_cash?: number
+    payment_other?: number
     delivery_app_code?: string | null
+    order_type?: string | null
+    total?: number
+    subtotal?: number
+    discount_amt?: number
+    coupon_discount_amt?: number
     card_fee_amt?: number
     status?: string
   }[] | null
