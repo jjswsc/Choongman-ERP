@@ -1376,7 +1376,18 @@ export default function PosTerminalPage() {
     ): Promise<PosMenu[]> => {
       const catalog = Array.isArray(menus) ? menus : []
       const requiredMenuIds = new Set<string>()
-      for (const row of rows) {
+      // 표시 단계와 동일하게 프로모 구성품을 먼저 복원해야 세트 구성품 menuId(예: 26/32)가
+      // 원본 라인 스냅샷에 없어도 수집된다. (카탈로그 promoId 복원분 포함)
+      let collectRows: Array<Record<string, unknown>> = rows
+      try {
+        const resolved = kitchenItemsWithResolvedPromo(rows as Record<string, unknown>[])
+        if (Array.isArray(resolved) && resolved.length > 0) {
+          collectRows = resolved as Array<Record<string, unknown>>
+        }
+      } catch {
+        /* 프로모 복원 실패 시 원본 rows 기준으로 수집 */
+      }
+      for (const row of collectRows) {
         const menuId = String(
           (row as { menuId?: unknown; menuId1?: unknown; menu_id1?: unknown; menuId2?: unknown }).menuId1 ??
             (row as { menuId?: unknown; menuId1?: unknown; menu_id1?: unknown; menuId2?: unknown }).menuId ??
@@ -1453,7 +1464,7 @@ export default function PosTerminalPage() {
       }
       return catalog
     },
-    [applyPosMenusList, currentStoreId, menus]
+    [applyPosMenusList, currentStoreId, kitchenItemsWithResolvedPromo, menus]
   )
   const resolveOptionNameByCodeForKitchenPrint = useCallback(
     async (
