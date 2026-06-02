@@ -8277,6 +8277,14 @@ export default function PosTerminalPage() {
                 if (savedOrderId != null && savedOrderId > 0) {
                   const qtySnap = buildDineInQtySnapshot(receiptPrintItems)
                   if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(savedOrderId, qtySnap)
+                  /**
+                   * 신규 저장 직후 서버 후처리 UPDATE(메모/할인/스냅샷 정규화)가 들어오면
+                   * Realtime add 감지에서 `isAddon`으로 오인되어 `1x > ...` 추가영수증이 한 장 더 찍힐 수 있다.
+                   * 신규 주문은 짧은 창에서 add 감지를 건너뛰고 스냅샷만 갱신한다.
+                   */
+                  if (!isAddOrder && isMainPosDevice) {
+                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(savedOrderId, Date.now() + 15_000)
+                  }
                 }
                 if (savedOrderId != null) {
                   setPendingDineInOrderId(savedOrderId)

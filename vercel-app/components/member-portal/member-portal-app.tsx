@@ -889,10 +889,15 @@ export function MemberPortalApp() {
               title={t("tierNext")}
               subtitle={
                 activeDashboard.tierProgress.nextTierName
-                  ? t("tierProgress", {
-                      amount: formatBaht(activeDashboard.tierProgress.amountToNext),
-                      tier: activeDashboard.tierProgress.nextTierName,
-                    })
+                  ? activeDashboard.tierProgress.upgradeBasis === "points"
+                    ? t("tierProgressPoints", {
+                        amount: formatPoints(activeDashboard.tierProgress.amountToNext),
+                        tier: activeDashboard.tierProgress.nextTierName,
+                      })
+                    : t("tierProgress", {
+                        amount: formatBaht(activeDashboard.tierProgress.amountToNext),
+                        tier: activeDashboard.tierProgress.nextTierName,
+                      })
                   : t("tierMax")
               }
               progressPercent={activeDashboard.tierProgress.progressPercent}

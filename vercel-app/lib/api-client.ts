@@ -11396,19 +11396,48 @@ export async function adjustMemberPoints(params: { memberId: number; points: num
 
 export async function getMemberTiers() {
   const res = await apiFetchWithOffline('/api/member-tiers')
-  return res.json() as Promise<
-    Array<{
-      code: string
-      name: string
-      min_amount: number
-      min_points: number
-      point_rate: number
-      sort_order: number
-      benefits_ko?: string | null
-      benefits_en?: string | null
-      benefits_th?: string | null
-    }>
-  >
+  const data = (await res.json()) as
+    | Array<{
+        code: string
+        name: string
+        min_amount: number
+        min_points: number
+        point_rate: number
+        sort_order: number
+        benefits_ko?: string | null
+        benefits_en?: string | null
+        benefits_th?: string | null
+      }>
+    | {
+        tiers?: Array<{
+          code: string
+          name: string
+          min_amount: number
+          min_points: number
+          point_rate: number
+          sort_order: number
+          benefits_ko?: string | null
+          benefits_en?: string | null
+          benefits_th?: string | null
+        }>
+        upgradeBasis?: 'amount' | 'points'
+      }
+  if (Array.isArray(data)) return data
+  return data.tiers || []
+}
+
+export async function getMemberTierPolicy() {
+  const res = await apiFetchWithOffline('/api/member-tiers/policy')
+  return res.json() as Promise<{ success: boolean; upgradeBasis?: 'amount' | 'points'; message?: string }>
+}
+
+export async function saveMemberTierPolicy(params: { upgradeBasis: 'amount' | 'points' }) {
+  const res = await apiFetchWithOffline('/api/member-tiers/policy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; upgradeBasis?: 'amount' | 'points'; message?: string }>
 }
 
 export async function saveMemberTier(params: {

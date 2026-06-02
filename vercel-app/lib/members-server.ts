@@ -11,6 +11,11 @@ import {
   supabaseUpsert,
 } from '@/lib/supabase-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import {
+  loadMemberTierUpgradeBasis,
+  pickTierByQualification,
+  type MemberTierUpgradeBasis,
+} from '@/lib/member-tier-policy'
 
 export type MemberSummary = {
   id: number
@@ -70,6 +75,8 @@ type MemberRow = {
   status?: string | null
   tier_code?: string | null
   point_balance?: number | null
+  tier_points?: number | null
+  line_tier_points?: number | null
   lifetime_amount?: number | null
   created_at?: string | null
   updated_at?: string | null
@@ -777,25 +784,49 @@ async function getActiveTiers(): Promise<MemberTierRow[]> {
   })
 }
 
-function pickTierByAmount(tiers: MemberTierRow[], amount: number): string {
-  let next = 'BRONZE'
-  for (const tier of tiers) {
-    if (amount >= Number(tier.min_amount || 0)) next = toText(tier.code) || next
-  }
-  return next
+export function resolveMemberTierQualificationValue(
+  member: Pick<MemberRow, 'lifetime_amount' | 'tier_points' | 'line_tier_points'>,
+  basis: MemberTierUpgradeBasis
+): number {
+  if (basis === 'amount') return Math.max(0, Number(member.lifetime_amount || 0))
+  return Math.max(
+    0,
+    Math.trunc(Number(member.tier_points || 0)),
+    Math.trunc(Number(member.line_tier_points || 0))
+  )
 }
 
-export async function recalculateMemberTier(memberId: number): Promise<{ tierCode: string; lifetimeAmount: number }> {
+export async function getMemberTierQualificationPoints(memberId: number): Promise<number> {
+  const id = Number(memberId || 0)
+  if (!id) return 0
+  const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, {
+    limit: 1,
+    select: 'tier_points,line_tier_points',
+  })) as Pick<MemberRow, 'tier_points' | 'line_tier_points'>[]
+  const member = rows?.[0]
+  if (!member) return 0
+  return resolveMemberTierQualificationValue(member, 'points')
+}
+
+export async function recalculateMemberTier(memberId: number): Promise<{
+  tierCode: string
+  lifetimeAmount: number
+  qualificationPoints: number
+  upgradeBasis: MemberTierUpgradeBasis
+}> {
   const id = Number(memberId || 0)
   if (!id) throw new Error('유효한 회원 ID가 필요합니다.')
   const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, { limit: 1 })) as MemberRow[]
   const member = rows?.[0]
   if (!member) throw new Error('회원을 찾을 수 없습니다.')
 
+  const upgradeBasis = await loadMemberTierUpgradeBasis()
   const lifetimeAmount = Number(member.lifetime_amount || 0)
+  const qualificationPoints = resolveMemberTierQualificationValue(member, 'points')
+  const qualificationValue = resolveMemberTierQualificationValue(member, upgradeBasis)
   const prevTier = toText(member.tier_code) || 'BRONZE'
   const tiers = await getActiveTiers()
-  const nextTier = pickTierByAmount(tiers, lifetimeAmount)
+  const nextTier = pickTierByQualification(tiers, qualificationValue, upgradeBasis)
   if (nextTier !== prevTier) {
     await supabaseUpdateByFilter('members', `id=eq.${id}`, {
       tier_code: nextTier,
@@ -809,7 +840,7 @@ export async function recalculateMemberTier(memberId: number): Promise<{ tierCod
       changed_at: getBangkokDateTimeString(),
     })
   }
-  return { tierCode: nextTier, lifetimeAmount }
+  return { tierCode: nextTier, lifetimeAmount, qualificationPoints, upgradeBasis }
 }
 
 export async function recalculateAllMemberTiers(): Promise<number> {
@@ -933,7 +964,9 @@ export async function adjustMemberPoints(params: {
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
     point_balance: nextBalance,
     updated_at: getBangkokDateTimeString(),
+    ...(points > 0 ? { tier_points: Math.max(0, Math.trunc(Number(member.tier_points || 0))) + points } : {}),
   })
+  await recalculateMemberTier(memberId)
 }
 
 export async function applyLoyaltyOnOrder(params: {
@@ -1019,6 +1052,10 @@ export async function applyLoyaltyOnOrder(params: {
     }
   }
 
+  const nextTierPoints =
+    Math.max(0, Math.trunc(Number(member.tier_points || 0)), Math.trunc(Number(member.line_tier_points || 0))) +
+    (appliedEarn > 0 ? appliedEarn : 0)
+
   if (!shouldInsertUse && !shouldInsertEarn) {
     return { pointEarned: 0, tierCode: currentTierCode }
   }
@@ -1026,6 +1063,7 @@ export async function applyLoyaltyOnOrder(params: {
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
     point_balance: nextBalance,
     lifetime_amount: nextLifetime,
+    tier_points: nextTierPoints,
     last_visited_at: getBangkokDateTimeString(),
     updated_at: getBangkokDateTimeString(),
   })

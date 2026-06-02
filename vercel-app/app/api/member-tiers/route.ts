@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { loadMemberTierUpgradeBasis } from '@/lib/member-tier-policy'
 import { listMemberTiers, saveMemberTier } from '@/lib/members-server'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -7,11 +8,11 @@ export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, 'manager')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
-    const rows = await listMemberTiers()
-    return NextResponse.json(rows, { headers })
+    const [rows, upgradeBasis] = await Promise.all([listMemberTiers(), loadMemberTierUpgradeBasis()])
+    return NextResponse.json({ tiers: rows, upgradeBasis }, { headers })
   } catch (e) {
     console.error('GET /api/member-tiers:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json({ tiers: [], upgradeBasis: 'points' }, { headers })
   }
 }
 

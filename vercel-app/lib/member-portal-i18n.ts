@@ -27,6 +27,7 @@ export type MemberPortalKey =
   | 'tierNext'
   | 'tierMax'
   | 'tierProgress'
+  | 'tierProgressPoints'
   | 'tierGuideTitle'
   | 'tierGuideDesc'
   | 'tierCurrentBadge'
@@ -324,15 +325,20 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'อีก {amount} ถึง {tier}',
     ko: '{tier}까지 {amount} 남음',
   },
+  tierProgressPoints: {
+    en: '{amount} more to {tier}',
+    th: 'อีก {amount} ถึง {tier}',
+    ko: '{tier}까지 {amount} 남음',
+  },
   tierGuideTitle: {
     en: 'Membership levels',
     th: 'ระดับสมาชิก',
     ko: '회원 등급',
   },
   tierGuideDesc: {
-    en: 'Levels are based on accumulated points and spend. Benefits may change by store policy.',
-    th: 'ระดับสมาชิกอ้างอิงจากแต้มสะสมและยอดใช้จ่าย สิทธิประโยชน์อาจเปลี่ยนแปลงตามนโยบายร้าน',
-    ko: '누적 포인트·이용 금액 기준으로 등급이 정해집니다. 혜택은 매장 정책에 따라 변경될 수 있습니다.',
+    en: 'Levels follow store policy (points or spend). Benefits may change anytime.',
+    th: 'ระดับสมาชิกตามนโยบายร้าน (แต้มหรือยอดใช้จ่าย) สิทธิประโยชน์อาจเปลี่ยนแปลงได้',
+    ko: '매장 정책(포인트 또는 누적금액)에 따라 등급이 정해집니다. 혜택은 수시로 변경될 수 있습니다.',
   },
   tierCurrentBadge: { en: 'Current', th: 'ระดับปัจจุบัน', ko: '현재 등급' },
   tierEarnRate: { en: 'Point earn rate', th: 'อัตราแต้มสะสม', ko: '포인트 적립율' },

@@ -59,6 +59,8 @@ export type PortalDashboard = {
     progressPercent: number
     amountToNext: number
     pointRate: number
+    upgradeBasis?: 'amount' | 'points'
+    qualificationValue?: number
   }
 }
 

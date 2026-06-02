@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { getMemberTiers, recalculateMemberTier, saveMemberTier } from "@/lib/api-client"
+import { getMemberTierPolicy, getMemberTiers, recalculateMemberTier, saveMemberTier, saveMemberTierPolicy } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -43,10 +43,15 @@ export function MemberPointsPolicyTab() {
   const [rows, setRows] = React.useState<TierRow[]>([])
   const [form, setForm] = React.useState(emptyForm())
   const [saving, setSaving] = React.useState(false)
+  const [upgradeBasis, setUpgradeBasis] = React.useState<"amount" | "points">("points")
+  const [policySaving, setPolicySaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
-    const tiers = await getMemberTiers()
+    const [tiers, policy] = await Promise.all([getMemberTiers(), getMemberTierPolicy()])
     setRows(tiers as TierRow[])
+    if (policy.upgradeBasis === "amount" || policy.upgradeBasis === "points") {
+      setUpgradeBasis(policy.upgradeBasis)
+    }
   }, [])
 
   React.useEffect(() => {
@@ -71,6 +76,53 @@ export function MemberPointsPolicyTab() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{t("memberPointsEarnHint")}</p>
       <p className="text-sm text-muted-foreground">{t("memberTierLineHint")}</p>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("memberTierUpgradeBasisTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t("memberTierUpgradeBasisDesc")}</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {(["points", "amount"] as const).map((value) => {
+              const active = upgradeBasis === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setUpgradeBasis(value)}
+                  className={`rounded-lg border px-4 py-3 text-left text-sm transition ${
+                    active ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"
+                  }`}
+                >
+                  <p className="font-medium">
+                    {value === "points" ? t("memberTierUpgradeBasisPoints") : t("memberTierUpgradeBasisAmount")}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {value === "points" ? t("memberTierUpgradeBasisPointsHint") : t("memberTierUpgradeBasisAmountHint")}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+          <Button
+            variant="outline"
+            disabled={policySaving}
+            onClick={async () => {
+              setPolicySaving(true)
+              try {
+                const res = await saveMemberTierPolicy({ upgradeBasis })
+                if (!res.success) await appAlert(res.message || t("msg_save_fail"))
+                else await appAlert(t("memberTierUpgradeBasisSaved"))
+              } finally {
+                setPolicySaving(false)
+              }
+            }}
+          >
+            {policySaving ? t("loading") : t("memberTierUpgradeBasisSave")}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

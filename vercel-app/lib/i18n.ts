@@ -6117,6 +6117,14 @@ export const i18n = {
     memberTierRuleTitle: '등급 규칙 관리',
     memberTierLineHint:
       'LINE OA 기준: Bronze 0P / Silver 120P·3,000฿ / Gold 240P·6,000฿ / Diamond 400P·10,000฿. 혜택 문구는 회원앱에 표시됩니다.',
+    memberTierUpgradeBasisTitle: '등급 승급 기준',
+    memberTierUpgradeBasisDesc: '회원 등급을 올릴 때 비교하는 값을 선택합니다. 변경 후 「등급 재계산」을 실행하세요.',
+    memberTierUpgradeBasisPoints: '누적 포인트 (min_points)',
+    memberTierUpgradeBasisPointsHint: 'LINE OA 방식. 적립 포인트 합계(tier_points) 기준 — 사용해도 등급은 유지됩니다.',
+    memberTierUpgradeBasisAmount: '누적 이용금액 (min_amount)',
+    memberTierUpgradeBasisAmountHint: 'POS 결제 누적 매출(lifetime_amount) 기준.',
+    memberTierUpgradeBasisSave: '승급 기준 저장',
+    memberTierUpgradeBasisSaved: '승급 기준이 저장되었습니다.',
     memberTierMinPoints: '최소 포인트(등급)',
     memberTierMinAmount: '최소 누적금액',
     memberTierPointRate: '적립율',
@@ -7589,7 +7597,7 @@ export const i18n = {
     helpSum_admin_members_points:
       '회원 포인트 잔액·원장 조회, 수기 조정, POS 매출 연동 적립 규칙(등급별 적립율)을 관리하는 화면입니다.',
     helpHow_admin_members_points:
-      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 등급별 최소 포인트·누적금액·적립율·혜택 문구(한/영/태)를 설정합니다. POS 결제 완료 시 매출×적립율로 자동 적립됩니다.\n③ 등급 재계산으로 누적 매출 기준 등급을 일괄 반영합니다.',
+      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 승급 기준(누적 포인트/누적금액)을 선택하고, 등급별 min_points·min_amount·적립율·혜택 문구를 설정합니다.\n③ 등급 재계산으로 선택한 기준에 맞게 등급을 일괄 반영합니다.',
     helpSum_admin_members_coupons:
       '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다.',
     helpHow_admin_members_coupons:
@@ -15036,6 +15044,14 @@ orderItemQty: 'Qty',
     memberTierRuleTitle: 'Tier Rule Management',
     memberTierLineHint:
       'LINE OA baseline: Bronze 0P / Silver 120P·3,000 THB / Gold 240P·6,000 THB / Diamond 400P·10,000 THB. Benefit text appears in the member app.',
+    memberTierUpgradeBasisTitle: 'Tier upgrade criterion',
+    memberTierUpgradeBasisDesc: 'Choose what value is compared for tier upgrades. Run tier recalculation after changing.',
+    memberTierUpgradeBasisPoints: 'Lifetime points (min_points)',
+    memberTierUpgradeBasisPointsHint: 'LINE OA style. Uses earned points total (tier_points) — spending points does not downgrade tier.',
+    memberTierUpgradeBasisAmount: 'Lifetime spend (min_amount)',
+    memberTierUpgradeBasisAmountHint: 'Uses POS cumulative sales (lifetime_amount).',
+    memberTierUpgradeBasisSave: 'Save upgrade criterion',
+    memberTierUpgradeBasisSaved: 'Upgrade criterion saved.',
     memberTierMinPoints: 'Min points (tier)',
     memberTierMinAmount: 'Minimum cumulative amount',
     memberTierPointRate: 'Point rate',
@@ -16506,7 +16522,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members_points:
       'View member point balances and ledger, manual adjustments, and POS sales-based earn rules (tier rates).',
     helpHow_admin_members_points:
-      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: set tier min points, cumulative amount, earn rate, and benefit copy (KO/EN/TH). POS auto-earns on completed payment (sales × rate).\n③ Run tier recalculation to apply cumulative sales thresholds.',
+      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: choose upgrade criterion (points vs spend), then set min_points, min_amount, earn rate, and benefit copy.\n③ Run tier recalculation to apply the selected criterion to all members.',
     helpSum_admin_members_coupons:
       'Issue member coupons and review master and redemption history.',
     helpHow_admin_members_coupons:

@@ -1,12 +1,16 @@
 import {
   ensureMemberReferralCode,
   getMemberSummaryById,
+  getMemberTierQualificationPoints,
   getMemberVisits,
   listMemberCouponIssues,
   listMemberPoints,
   listMemberTiers,
+  resolveMemberTierQualificationValue,
 } from '@/lib/members-server'
+import { computeTierProgress, loadMemberTierUpgradeBasis } from '@/lib/member-tier-policy'
 import { normalizeMemberTierCode } from '@/lib/member-tier-public'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 function toText(v: unknown): string {
   return String(v || '').trim()
@@ -21,6 +25,7 @@ export type MemberPortalDashboard = {
     avgTicket: number
     availableCoupons: number
     pointsEarnedTotal: number
+    tierQualificationPoints: number
   }
   tierProgress: {
     currentTierCode: string
@@ -30,6 +35,8 @@ export type MemberPortalDashboard = {
     progressPercent: number
     amountToNext: number
     pointRate: number
+    upgradeBasis: 'amount' | 'points'
+    qualificationValue: number
   }
 }
 
@@ -38,11 +45,16 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
   if (!member) throw new Error('회원을 찾을 수 없습니다.')
 
   const referralCode = await ensureMemberReferralCode(memberId)
-  const [visits, coupons, points, tiers] = await Promise.all([
+  const [visits, coupons, points, tiers, upgradeBasis, memberRow] = await Promise.all([
     getMemberVisits({ memberId, limit: 200 }),
     listMemberCouponIssues({ memberId, limit: 100 }),
     listMemberPoints({ memberId, limit: 200 }),
     listMemberTiers(),
+    loadMemberTierUpgradeBasis(),
+    supabaseSelectFilter('members', `id=eq.${memberId}`, {
+      limit: 1,
+      select: 'lifetime_amount,tier_points,line_tier_points',
+    }) as Promise<Array<{ lifetime_amount?: number; tier_points?: number; line_tier_points?: number }>>,
   ])
 
   const visitCount = visits.length
@@ -51,6 +63,16 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
   const avgTicket = visitCount > 0 ? Math.round(visitTotal / visitCount) : 0
   const availableCoupons = coupons.filter((c) => toText(c.status) === 'issued').length
   const pointsEarnedTotal = points.filter((p) => Number(p.points) > 0).reduce((s, p) => s + Number(p.points), 0)
+  const tierQualificationPoints = await getMemberTierQualificationPoints(memberId)
+  const qualificationRow = memberRow?.[0] || {}
+  const qualificationValue = resolveMemberTierQualificationValue(
+    {
+      lifetime_amount: Math.max(Number(qualificationRow.lifetime_amount || 0), lifetimeAmount),
+      tier_points: qualificationRow.tier_points,
+      line_tier_points: qualificationRow.line_tier_points,
+    },
+    upgradeBasis
+  )
 
   const sortedTiers = [...tiers].sort((a, b) => {
     const orderDiff = Number(a.sort_order || 0) - Number(b.sort_order || 0)
@@ -65,14 +87,12 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
     sortedTiers.findIndex((t) => normalizeMemberTierCode(toText(t.code)) === currentTierCode)
   )
   const currentTier = sortedTiers[currentIdx] || sortedTiers[0]
-  const nextTier = sortedTiers[currentIdx + 1] || null
-  const currentMin = Number(currentTier?.min_amount || 0)
-  const nextMin = nextTier ? Number(nextTier.min_amount || 0) : currentMin
-  const span = Math.max(1, nextMin - currentMin)
-  const progressPercent = nextTier
-    ? Math.min(100, Math.max(0, ((lifetimeAmount - currentMin) / span) * 100))
-    : 100
-  const amountToNext = nextTier ? Math.max(0, nextMin - lifetimeAmount) : 0
+  const progress = computeTierProgress({
+    tiers: sortedTiers,
+    currentTierCode,
+    qualificationValue,
+    basis: upgradeBasis,
+  })
 
   return {
     member: { ...member, referralCode, lifetimeAmount },
@@ -83,15 +103,18 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
       avgTicket,
       availableCoupons,
       pointsEarnedTotal,
+      tierQualificationPoints,
     },
     tierProgress: {
       currentTierCode: toText(currentTier?.code) || currentTierCode,
       currentTierName: toText(currentTier?.name) || currentTierCode,
-      nextTierCode: nextTier ? toText(nextTier.code) : null,
-      nextTierName: nextTier ? toText(nextTier.name) : null,
-      progressPercent: Math.round(progressPercent),
-      amountToNext: Math.round(amountToNext),
+      nextTierCode: progress.nextTierCode,
+      nextTierName: progress.nextTierName,
+      progressPercent: progress.progressPercent,
+      amountToNext: progress.toNext,
       pointRate: Number(currentTier?.point_rate || 0.01),
+      upgradeBasis,
+      qualificationValue,
     },
   }
 }

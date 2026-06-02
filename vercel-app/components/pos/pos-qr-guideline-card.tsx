@@ -13,19 +13,6 @@ const DEFAULT_QR_SIZE_PX = 230
 const HEADER_BAND_HEIGHT_RATIO = 0.24
 const CENTER_LOGO_RATIO = 0.14
 
-/** Logo-01 crop: blue header band only (matches `thai-qr-payment` renderCard). */
-const THAI_QR_HEADER_CROP = {
-  imageWidth: 913,
-  imageHeight: 376,
-  x: 88,
-  y: 75,
-  width: 750,
-  height: 210,
-} as const
-
-const HEADER_CROP_BG_SIZE = `${(THAI_QR_HEADER_CROP.imageWidth / THAI_QR_HEADER_CROP.width) * 100}% ${(THAI_QR_HEADER_CROP.imageHeight / THAI_QR_HEADER_CROP.height) * 100}%`
-const HEADER_CROP_BG_POSITION = `${(THAI_QR_HEADER_CROP.x / (THAI_QR_HEADER_CROP.imageWidth - THAI_QR_HEADER_CROP.width)) * 100}% ${(THAI_QR_HEADER_CROP.y / (THAI_QR_HEADER_CROP.imageHeight - THAI_QR_HEADER_CROP.height)) * 100}%`
-
 type Props = {
   payload: string
   kind: PosQrDisplayKind
@@ -36,18 +23,18 @@ type Props = {
 function ThaiQrHeaderBand({ bandHeightPx }: { bandHeightPx: number }) {
   return (
     <div
-      className="w-full shrink-0 overflow-hidden bg-[#00427A]"
+      className="flex w-full shrink-0 items-center justify-center overflow-hidden bg-[#00427A]"
       style={{ height: bandHeightPx }}
       role="img"
       aria-label="THAI QR PAYMENT"
     >
-      <div
-        className="h-full w-full bg-no-repeat"
-        style={{
-          backgroundImage: `url(${POS_QR_BRAND.thaiQrHeader})`,
-          backgroundSize: HEADER_CROP_BG_SIZE,
-          backgroundPosition: HEADER_CROP_BG_POSITION,
-        }}
+      {/* Full-width blue only; logo/text keep aspect ratio (no horizontal stretch). */}
+      <img
+        src={POS_QR_BRAND.thaiQrHeader}
+        alt=""
+        aria-hidden
+        className="h-full w-auto max-w-full object-contain object-center"
+        draggable={false}
       />
     </div>
   )
