@@ -395,13 +395,12 @@ export function buildKitchenHallStyleSlipLines(
     return String(codeToMenuName.get(upper) ?? plain).trim() || plain
   }
   const menuCodeByMenuId = opts?.menuCodeByMenuId
-  const formatItemNoteForPrint = (note: string, optionFragment?: string): string | undefined => {
+  const formatItemNoteForPrint = (note: string): string | undefined => {
     const raw = String(note ?? '').trim()
-    if (!raw && !optionFragment) return undefined
+    if (!raw) return undefined
     if (grabInbound) {
       const lines = collectGrabPrintOptionLines({
         note: raw,
-        optionFragment,
         optionNameByCode,
       })
       return lines.length > 0 ? lines.join('\n') : undefined
@@ -551,9 +550,7 @@ export function buildKitchenHallStyleSlipLines(
 
   for (const it of regular) {
     const pi = it.promoItems
-    const resolvedNote = grabInbound
-      ? resolveGrabItemPrintNote(it as Parameters<typeof resolveGrabItemPrintNote>[0])
-      : String(it.note ?? '').trim()
+    const resolvedNote = resolveGrabItemPrintNote(it as Parameters<typeof resolveGrabItemPrintNote>[0])
     if (Array.isArray(pi) && pi.length > 0) {
       const headerName = stripLeadingPrintCodeBrackets(String(it.name ?? ''))
       const promoComposeLines = promoComposeFromOrderParent(
@@ -576,6 +573,18 @@ export function buildKitchenHallStyleSlipLines(
       continue
     }
     const lineSplit = splitPosPrintItemLine(String(it.name ?? ''))
+    const hasOptionCodeToken = /(^|[\s,])optc:/i.test(String(resolvedNote ?? ''))
+    if (lineSplit.optionLine && !hasOptionCodeToken) {
+      console.error('[POS_PRINT_OPTION_CODE_MISSING]', {
+        orderItemId: String(it.id ?? ''),
+        menuId:
+          String((it as { menuId?: string; menuId1?: string; menuId2?: string }).menuId1 ?? '').trim() ||
+          String((it as { menuId?: string; menuId1?: string; menuId2?: string }).menuId ?? '').trim() ||
+          String((it as { menuId?: string; menuId1?: string; menuId2?: string }).menuId2 ?? '').trim(),
+        itemName: String(it.name ?? ''),
+        parsedOptionLabel: lineSplit.optionLine,
+      })
+    }
     const fallbackNameFromNote =
       grabInbound && isLikelyCodeLikeMenuName(lineSplit.mainName || String(it.name ?? ''))
         ? deriveGrabMenuNameFromCodeLikeNote(String(it.note ?? ''))
@@ -583,7 +592,7 @@ export function buildKitchenHallStyleSlipLines(
     const resolvedMainName = fallbackNameFromNote
       ? fallbackNameFromNote
       : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
-    const formattedNote = formatItemNoteForPrint(resolvedNote, lineSplit.optionLine)
+    const formattedNote = formatItemNoteForPrint(resolvedNote)
     const dedupedNote =
       fallbackNameFromNote &&
       formattedNote &&
