@@ -718,7 +718,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ? `<div class="simple-tax-subtitle">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>`
             : ''
         }
-        <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
+        <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: <span class="receipt-order-no-print">${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</span></div>
         <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
         ${
           posOrderNoDigits
@@ -785,6 +785,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-k { width: 72%; }
         .simple-v { width: 28%; text-align: right; white-space: nowrap; }
         .simple-total { font-size: 12px; font-weight: 800; margin-top: 4px; color: #000; }
+        .receipt-order-no-print { color: #000 !important; font-weight: 800 !important; font-size: 22px !important; line-height: 1.2 !important; }
         ${voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''}
       `,
     })
@@ -1047,7 +1048,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           background: #fff;
           letter-spacing: .02em;
         }
-        .receipt-order-no-print { color: #000 !important; font-weight: 800 !important; }
+        .receipt-order-no-print { color: #000 !important; font-weight: 800 !important; font-size: 22px !important; line-height: 1.2 !important; }
         .receipt-payment { color: #000; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .receipt-payment .receipt-line-note {
           font-size: 10px;
