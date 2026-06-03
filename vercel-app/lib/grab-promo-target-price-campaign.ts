@@ -15,6 +15,15 @@ import type { PromoOptionLike } from '@/lib/promo-economics'
 import { supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 const CAMPAIGN_NAME_PREFIX = 'CM-POS-PROMO-'
+// #region agent experiment (advancedPricing native strikethrough test)
+/**
+ * 실험: 이 grabItemId들은 percentage 캠페인 대신 advancedPricing(채널 할인가)만으로
+ * Grab 손님 앱 정가 취소선이 뜨는지 검증한다. 해당 항목은 캠페인을 생성하지 않고(기존 캠페인 삭제),
+ * 메뉴 push/빌드 시 advancedPricing=할인가, price=정가로 내보낸다.
+ * 검증 후 제거 예정.
+ */
+export const AP_STRIKETHROUGH_EXPERIMENT_ITEM_IDS = new Set<string>(['item-342-260416-s04'])
+// #endregion
 /** Grab 샘플 수준 quotas (999999 등은 INVALID_QUOTAS → 5xx로 보고되는 사례 있음) */
 const GRAB_CAMPAIGN_QUOTAS = { totalCount: 9999, totalCountPerUser: 99 } as const
 /** Grab Create Campaign: 최소 지속 2시간 */
@@ -559,7 +568,13 @@ async function pushGrabMenuRecordForCutTarget(
    * 캠페인이 단독으로 취소선을 만들게 한다. (fixPrice 전략일 때만 advancedPricing으로 배달가를 직접 할인가로 내린다.)
    */
   const usePercentageCampaign = resolveGrabPromoCampaignDiscountType() === 'percentage'
-  const advancedPriceMinor = usePercentageCampaign ? regularMinor : saleMinor
+  let advancedPriceMinor = usePercentageCampaign ? regularMinor : saleMinor
+  // #region agent experiment: AP test items push channel price = sale (no campaign → native strikethrough)
+  if (AP_STRIKETHROUGH_EXPERIMENT_ITEM_IDS.has(target.grabItemId)) {
+    advancedPriceMinor = saleMinor
+    fetch('http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8cf53c'},body:JSON.stringify({sessionId:'8cf53c',hypothesisId:'AP',location:'grab-promo-target-price-campaign.ts:pushGrabMenuRecordForCutTarget',message:'AP experiment push',data:{grabItemId:target.grabItemId,regularMinor,saleMinor,advancedPriceMinor},timestamp:Date.now()})}).catch(()=>{})
+  }
+  // #endregion
   await grabUpdateMenuRecord({
     merchantID,
     field: 'ITEM',
@@ -971,6 +986,12 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
 
   for (const target of targets) {
     const campaignName = buildGrabPromoCampaignName(target.promoId)
+    // #region agent experiment: skip campaign for AP test items so stale-delete loop removes existing campaign
+    if (AP_STRIKETHROUGH_EXPERIMENT_ITEM_IDS.has(target.grabItemId)) {
+      fetch('http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8cf53c'},body:JSON.stringify({sessionId:'8cf53c',hypothesisId:'AP',location:'grab-promo-target-price-campaign.ts:syncLoop',message:'AP experiment skip campaign',data:{grabItemId:target.grabItemId,campaignName},timestamp:Date.now()})}).catch(()=>{})
+      continue
+    }
+    // #endregion
     keepNames.add(campaignName)
     const buildBody = (opts?: { leadMinutes?: number; discountType?: GrabPromoCampaignDiscountType }) =>
       buildGrabTargetPriceCampaignBody({
