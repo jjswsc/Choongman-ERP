@@ -2,7 +2,6 @@ import type { PosMenu } from '@/lib/api-client'
 import { buildGrabDeliveryAdvancedPricing } from '@/lib/grab-menu-advanced-pricing'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
-  AP_STRIKETHROUGH_EXPERIMENT_ITEM_IDS,
   loadGrabPromoCutPriceByPromoId,
   resolveGrabPromoCampaignDiscountType,
 } from '@/lib/grab-promo-target-price-campaign'
@@ -1048,12 +1047,9 @@ export async function buildGrabMenuFromPos(params: {
        * 따라서 percentage 전략에서는 advancedPricing을 생략하고 캠페인이 단독으로 할인을 만든다.
        * (fixPrice 전략일 때만 advancedPricing으로 배달 할인가를 직접 내린다.)
        */
-      // #region agent experiment: AP test items keep advancedPricing(=sale) even under percentage (no campaign)
-      const isApExperimentItem = AP_STRIKETHROUGH_EXPERIMENT_ITEM_IDS.has(itemId)
-      // #endregion
       const includeAdvancedPricing =
         promoCut?.showCutPrice &&
-        (isApExperimentItem || resolveGrabPromoCampaignDiscountType() !== 'percentage') &&
+        resolveGrabPromoCampaignDiscountType() !== 'percentage' &&
         (isGrabAdvancedPricingFallbackEnabled() || !isGrabAdvancedPricingExplicitlyDisabled())
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
