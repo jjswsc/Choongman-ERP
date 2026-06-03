@@ -175,10 +175,13 @@ export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
  * percentage를 다시 시도하려면 env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage`.
  */
 export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
-  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'fixPrice')
+  // 기본 percentage: 이 모드에선 메뉴 빌더가 프로모 item에 advancedPricing을 보내지 않는다.
+  // fixPrice(=advancedPricing 동봉)로 두면 일부 매장에서 메뉴 전체 검증이 거부되어
+  // 세트 카테고리가 통째로 사라지는 사례가 있었다(2026-06 충만). 할인 표시는 percentage 캠페인이 담당.
+  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
     .trim()
     .toLowerCase()
-  return raw === 'percentage' ? 'percentage' : 'fixPrice'
+  return raw === 'fixprice' ? 'fixPrice' : 'percentage'
 }
 
 /** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
