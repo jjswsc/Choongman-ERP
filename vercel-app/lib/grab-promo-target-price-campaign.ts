@@ -168,12 +168,17 @@ type IndexedGrabCampaign = {
 
 export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
 
-/** 손님 앱 취소선: 기본 percentage(정가+할인율). fixPrice는 할인가만 보일 수 있음 → env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=fixPrice` 로 되돌림 */
+/**
+ * 기본 fixPrice(할인가 직접 지정 + advancedPricing=할인가). percentage 방식은
+ * 손님 앱 정가 취소선이 Grab 프로덕션에서 표시되지 않고(기능 미통합) 재pull 후 캠페인이
+ * 리스트 가격에 재적용되지 않아 정가가 노출되는 불안정성이 확인되어 fixPrice로 되돌림.
+ * percentage를 다시 시도하려면 env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage`.
+ */
 export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
-  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
+  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'fixPrice')
     .trim()
     .toLowerCase()
-  return raw === 'fixprice' ? 'fixPrice' : 'percentage'
+  return raw === 'percentage' ? 'percentage' : 'fixPrice'
 }
 
 /** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
