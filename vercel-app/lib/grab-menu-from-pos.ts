@@ -352,6 +352,13 @@ function shouldForceSingleSelectGroup(groupName: string, rows: OptionRow[]): boo
   return hasCutChoices
 }
 
+/**
+ * Grab serviceHours.openPeriodType 허용값. 이 셋 외 값(예: 과거 'SpecificTimes')을 보내면
+ * Grab menu-sync가 7개 요일 전부 검증 실패시켜 메뉴 전체가 게시 거부된다(카테고리 통째 실종).
+ * @see https://github.com/grab/grabfood-api-sdk-go/blob/main/model_service_hour.go
+ */
+export const GRAB_VALID_OPEN_PERIOD_TYPES = ['OpenPeriod', 'OpenAllDay', 'CloseAllDay'] as const
+
 function mergeTimeRanges(ranges: TimeRange[]): TimeRange[] {
   if (ranges.length <= 1) return ranges
   const sorted = [...ranges].sort((a, b) => a.start.localeCompare(b.start))
@@ -371,7 +378,7 @@ function mergeTimeRanges(ranges: TimeRange[]): TimeRange[] {
   return out
 }
 
-function serviceHoursFromRanges(ranges: TimeRange[]) {
+export function serviceHoursFromRanges(ranges: TimeRange[]) {
   if (!ranges.length) {
     const openAllDay = {
       openPeriodType: 'OpenAllDay' as const,

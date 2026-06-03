@@ -1,0 +1,49 @@
+---
+description: Grab 메뉴가 손님 앱에 안 나오거나 카테고리가 통째로 사라질 때 진단 순서 (충만 ERP)
+globs:
+  - vercel-app/lib/grab-menu-from-pos.ts
+  - vercel-app/lib/grab-promo-target-price-campaign.ts
+  - vercel-app/app/api/grab/**
+  - vercel-app/app/api/webhooks/grab/**
+alwaysApply: false
+---
+
+# Grab 메뉴 동기화 디버깅 — "메뉴/카테고리가 안 나온다"
+
+Grab 손님 앱에서 **특정 카테고리(예: Set)나 메뉴가 통째로 안 보일 때**, 가격·설명·advancedPricing부터 의심하지 말고 **아래 순서**로 본다. 추측 기반 반복 배포는 비용·시간 낭비다.
+
+## 0) 가장 먼저 — Grab의 menu-sync 결과(FAILED 사유)를 본다  ★최우선★
+
+손님 앱이 보여주는 건 **"Grab이 마지막으로 검증·게시에 성공한 메뉴"** 다. 우리가 `updateMenuNotification`을 보내도 Grab의 **재pull→검증(validate)→게시**가 `FAILED`면 옛 메뉴가 그대로 남아, 새 메뉴/카테고리가 안 나온다.
+
+- 진단 API: **`GET /api/grab/debugMenuSyncState?limit=15`** — `pos_grab_webhook_events`의 `menu_sync_state` 웹훅(QUEUEING→PROCESSING→SUCCESS/FAILED)을 그대로 보여준다.
+- 해당 매장 `merchantID`(예: `GFSBPOS-811-087`)의 최신 상태가 **FAILED면 payload.errors 배열에 정확한 사유**가 들어 있다. 이게 단일 진실 소스다.
+- `notifiedMerchantIDs`/`{success:true}`는 **알림 접수**만 의미하지 게시 성공이 아니다. 절대 혼동 금지.
+
+## 1) 알려진 함정 — `serviceHours.openPeriodType`
+
+- Grab 허용값은 **`OpenPeriod` / `OpenAllDay` / `CloseAllDay`** 뿐. (`vercel-app/lib/grab-menu-from-pos.ts`의 `GRAB_VALID_OPEN_PERIOD_TYPES`)
+- 과거 시간제한 판매시간대를 **`'SpecificTimes'`** 라는 무효값으로 보내, **7개 요일 전부 검증 실패 → 메뉴 전체 게시 거부 → 카테고리 통째 실종**된 사례가 있었다(2026-06, 충만/True 지점). 이 버그는 **반복적으로 잘못 진단**되어 왔다(설명 길이·advancedPricing 등으로 오인). FAILED errors에 `serviceHours-<day>-openPeriodType ... invalid` 가 보이면 이 케이스다.
+- 회귀 방지 테스트: `vercel-app/lib/grab-menu-service-hours.test.ts`.
+
+## 2) 그 다음 의심 순서 (FAILED errors가 가리키는 대로)
+
+- **설명 길이/문자**: 비-VN 지역 기본 상한 **200자**. `sanitizeGrabMenuDescription`(`grab-menu-limits.ts`)가 서버에서 절단·HTML 제거. 입력란(`pos-menus`)도 200자 maxLength.
+- **advancedPricing**: 이 매장은 Grab에서 Service-based pricing 기능이 **미통합**일 수 있다. fixPrice 캠페인(=프로모 item에 advancedPricing 동봉)이 검증을 깨 카테고리를 떨굴 수 있어, 기본 캠페인 타입은 **percentage**로 둔다(`resolveGrabPromoCampaignDiscountType`). percentage 모드에선 빌더가 프로모 item에 advancedPricing을 보내지 않는다.
+- **sellingTime 중복**: `serviceHours` 서명 기준 dedup 로직(`buildSellingTimesAndRootCategories`)이 이미 있다.
+
+## 3) 우리 출력이 정상인지 확인
+
+- `GET /api/grab/debugMenuPromoPricing?merchantID=GFSBPOS-811-087&partnerMerchantID=1040&raw=Set` — 특정 카테고리의 **원본 JSON 전체**(설명·photos·modifierGroups 포함)를 덤프해 검증 위험 필드를 직접 본다.
+- `&q=set` 등으로 아이템 가격/advancedPricing/promoCut 요약도 본다.
+
+## 4) 취소선(원가→할인가)·할인 표시
+
+- 취소선·캠페인 할인은 Grab **프로덕션 캠페인/메뉴 기능 활성화**에 달려 있고, 대시보드에서 "Not integrated"면 우리 코드(percentage/fixPrice 무엇이든)로 못 켠다. 이건 Grab 측 활성화 대기 사안이다.
+- 캠페인은 **ongoing**이어야 취소선이 보인다(upcoming은 할인가만).
+
+## 5) 운영 메모
+
+- PowerShell: curl `-d`에 작은따옴표 JSON이 깨진다 → JSON을 파일로 써서 `--data "@file"`로 보낸다.
+- 배포 후 Grab 재pull: `POST /api/grab/updateMenuNotification` body `{"merchantID":"1040"}` (파트너 숫자ID도 `resolveGrabMenuNotificationMerchantIDs`로 `GFSBPOS-…`로 해석됨).
+- 관련 수정은 한 묶음으로(Vercel 비용 규칙). 배포 전 `npx tsc --noEmit` 통과시키기.
