@@ -33,6 +33,9 @@ import {
 } from '@/lib/vat-ledger-invoice-evidence'
 
 export const dynamic = 'force-dynamic'
+// 최초 동기화(빈 기간·매입 없음)나 forceSync 시 다건 upsert에 시간이 걸릴 수 있어,
+// 무거운 회계 리포트 라우트(getBalanceSheet 등)와 동일하게 여유를 둔다.
+export const maxDuration = 120
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -47,19 +50,6 @@ function normalizeLedgerFilingStatus(v: unknown): 'draft' | 'submitted' {
 function matchesFilingStatus(v: unknown, filter: '' | 'draft' | 'submitted'): boolean {
   if (!filter) return true
   return normalizeLedgerFilingStatus(v) === filter
-}
-
-function isMissingSubmissionColumnError(e: unknown): boolean {
-  const msg = String(e || '').toLowerCase()
-  return (
-    msg.includes('filing_status') ||
-    msg.includes('submitted_at') ||
-    msg.includes('submitted_by') ||
-    msg.includes('created_by_employee_id') ||
-    msg.includes('created_by_employee_code') ||
-    msg.includes('submitted_by_employee_id') ||
-    msg.includes('submitted_by_employee_code')
-  )
 }
 
 function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
@@ -216,6 +206,9 @@ export async function GET(request: NextRequest) {
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
+  const forceSync = ['1', 'true', 'yes'].includes(
+    String(searchParams.get('forceSync') || '').trim().toLowerCase()
+  )
   const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
   const userStore = String(authResult.auth.store || '').trim()
   const isOfficeLevel =
@@ -264,35 +257,36 @@ export async function GET(request: NextRequest) {
       await backfillVatLedgerStoreNames(period.months)
     }
 
-    if (scopedStoreFilter) {
+    // POS 매출은 주문 저장·상태변경(savePosOrder/updatePosOrderStatus) 시 이미 VAT 원장에 반영되고,
+    // 입고·지출 매입도 각 발생 시점에 동기화된다. 따라서 조회 때마다 전체 재동기화는 불필요하고,
+    // 매장 거래량(주문 수)에 비례해 수천 건을 순차 upsert 하느라 함수 타임아웃을 유발한다
+    // (거래량 적은 본사는 통과, 거래량 많은 매장은 빈 결과로 보였던 원인).
+    // → 전 매장(All)과 동일하게, 해당 기간·매장에 행이 없거나 매입 행이 없을 때만 동기화한다.
+    const probeRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+      select: 'direction,store_name',
+      order: 'id.asc',
+      pageSize: 4000,
+      maxRows: 100000,
+    })) as { direction?: string | null; store_name?: string | null }[] | null
+    const scopedProbeRows = (probeRows || []).filter(
+      (row) => !scopedStoreFilter || storeScope.matches(String(row.store_name || ''))
+    )
+    const hasAnyRows = scopedProbeRows.length > 0
+    const hasInputEntries = scopedProbeRows.some(
+      (row) => String(row.direction || '').trim().toLowerCase() === 'input'
+    )
+    const hasBlankStoreRows = (probeRows || []).some((row) => !String(row.store_name || '').trim())
+    const didSync = forceSync || !hasAnyRows || !hasInputEntries
+    if (didSync) {
       try {
         await runVatAutoSync()
       } catch (e) {
-        console.warn('vatLedger GET scoped auto-sync failed:', e)
+        console.warn('vatLedger GET auto-sync skipped:', e)
       }
-      try {
-        await runBackfill()
-      } catch (e) {
-        console.warn('vatLedger GET scoped store_name backfill failed:', e)
-      }
-    } else {
-      const probeRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
-        select: 'direction',
-        order: 'id.asc',
-        pageSize: 4000,
-        maxRows: 100000,
-      })) as { direction?: string | null }[] | null
-      const hasAnyRows = (probeRows || []).length > 0
-      const hasInputEntries = (probeRows || []).some(
-        (row) => String(row.direction || '').trim().toLowerCase() === 'input'
-      )
-      if (!hasAnyRows || !hasInputEntries) {
-        try {
-          await runVatAutoSync()
-        } catch (e) {
-          console.warn('vatLedger GET auto-sync skipped:', e)
-        }
-      }
+    }
+    // 백필은 store_name 공란 행을 표준화하기 위한 것. 동기화했거나 공란 행이 있을 때만 실행
+    // (이미 표준화된 데이터에서 매 조회마다 전월 행을 다시 읽고 도는 비용 제거).
+    if (didSync || hasBlankStoreRows) {
       try {
         await runBackfill()
       } catch (e) {

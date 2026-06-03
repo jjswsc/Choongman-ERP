@@ -300,10 +300,17 @@ export async function registerMemberByPhoneBirthDate(params: {
   phone: string
   birthDate: string
   gender?: string
+  consentMarketing?: boolean
   userAgent?: string
   deviceLabel?: string
   ip?: string
-}): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string; created: boolean }> {
+}): Promise<{
+  member: MemberSummary
+  sessionToken: string
+  expiresAt: string
+  created: boolean
+  welcomeCouponIssued: boolean
+}> {
   const name = toText(params.name)
   const phone = normalizeMemberPhone(params.phone)
   const birthDate = normalizeBirthDateInput(params.birthDate)
@@ -333,7 +340,13 @@ export async function registerMemberByPhoneBirthDate(params: {
       userAgent: params.userAgent,
       ip: params.ip,
     })
-    return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, created: false }
+    return {
+      member,
+      sessionToken: session.sessionToken,
+      expiresAt: session.expiresAt,
+      created: false,
+      welcomeCouponIssued: false,
+    }
   }
 
   if (rows.length > 0) {
@@ -344,6 +357,7 @@ export async function registerMemberByPhoneBirthDate(params: {
     )
   }
 
+  const consentMarketing = Boolean(params.consentMarketing)
   const member = await createMember({
     name,
     phone,
@@ -351,6 +365,7 @@ export async function registerMemberByPhoneBirthDate(params: {
     gender,
     source: 'app',
     joinChannel: 'homepage',
+    consentMarketing,
   })
   const session = await createMemberPortalSession({
     memberId: member.id,
@@ -358,7 +373,19 @@ export async function registerMemberByPhoneBirthDate(params: {
     userAgent: params.userAgent,
     ip: params.ip,
   })
-  return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, created: true }
+  const { issueSignupWelcomeCouponIfEligible } = await import('@/lib/member-portal-signup-welcome-coupon')
+  const welcomeCouponIssued = await issueSignupWelcomeCouponIfEligible({
+    memberId: member.id,
+    created: true,
+    consentMarketing,
+  })
+  return {
+    member,
+    sessionToken: session.sessionToken,
+    expiresAt: session.expiresAt,
+    created: true,
+    welcomeCouponIssued,
+  }
 }
 
 export async function createMemberPortalSessionForMember(params: {

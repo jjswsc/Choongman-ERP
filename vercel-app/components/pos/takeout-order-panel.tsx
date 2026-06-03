@@ -25,6 +25,10 @@ import {
   translatePosMenuLineForReceipt,
   translateTakeoutOrderDisplayLabel,
 } from '@/lib/pos-print-translate'
+import {
+  buildMemberPortalTakeoutBarSubLabel,
+  resolveMemberPortalTakeoutMeta,
+} from '@/lib/pos-member-portal-takeout-label'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import { canStartPosLinePartialCancel } from '@/lib/pos-order-line-update'
@@ -68,6 +72,26 @@ export function TakeoutOrderPanel({
 }: TakeoutOrderPanelProps) {
   const { lang } = useLang()
   const ti = useT(lang)
+  const memberTakeoutMeta = useMemo(
+    () =>
+      resolveMemberPortalTakeoutMeta({
+        memo: order?.memo,
+        memberId: order?.memberId,
+        memberNo: order?.memberNo,
+        tableName: order?.tableName,
+      }),
+    [order?.memo, order?.memberId, order?.memberNo, order?.tableName]
+  )
+  const memberPickupTimeLabel = useMemo(() => {
+    if (!memberTakeoutMeta.isMemberPortal || !memberTakeoutMeta.pickupAtRaw) return ''
+    return buildMemberPortalTakeoutBarSubLabel({
+      createdAt: order?.createdAt,
+      pickupAtRaw: memberTakeoutMeta.pickupAtRaw,
+      lang,
+      orderTimeLabel: ti('posOrderTimeShort') || '주문',
+      pickupTimeLabel: ti('posPickupAtShort') || '픽업',
+    })
+  }, [memberTakeoutMeta, order?.createdAt, lang, ti])
   const normalizedStatus = String(order?.status ?? '').trim().toLowerCase()
   const isCompleted = normalizedStatus === 'completed'
   const isPaid = normalizedStatus === 'paid' || normalizedStatus === 'completed'
@@ -339,6 +363,19 @@ export function TakeoutOrderPanel({
             <Clock className="w-4 h-4 shrink-0" />
             <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
           </div>
+          {memberTakeoutMeta.isMemberPortal ? (
+            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
+              <p className="font-semibold">{t('posMemberPortalOrder') || '회원주문'}</p>
+              {(memberTakeoutMeta.memberName || memberTakeoutMeta.memberNo) ? (
+                <p className="mt-0.5 text-xs opacity-90">
+                  {[memberTakeoutMeta.memberName, memberTakeoutMeta.memberNo].filter(Boolean).join(' · ')}
+                </p>
+              ) : null}
+              {memberPickupTimeLabel ? (
+                <p className="mt-1 text-xs tabular-nums opacity-90">{memberPickupTimeLabel}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {isCompleted ? (
             <>

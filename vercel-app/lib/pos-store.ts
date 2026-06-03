@@ -27,6 +27,7 @@ import {
   type PosTableFloor,
 } from '@/lib/pos-table-floor-match'
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
+import { resolveMemberPortalTakeoutTableDisplay } from '@/lib/pos-member-portal-takeout-label'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
@@ -181,6 +182,15 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
 
 function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
   const inferredType = inferOrderType(po)
+  const tableDisplay =
+    inferredType === 'takeout'
+      ? resolveMemberPortalTakeoutTableDisplay({
+          tableName: po.tableName,
+          memo: po.memo,
+          memberId: po.memberId,
+          memberNo: po.memberNo,
+        })
+      : String(po.tableName || '').trim()
   return {
     id: String(po.id),
     tableId: undefined,
@@ -189,8 +199,8 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     total: Number(po.total ?? 0) || 0,
     status: mapOrderStatus(po.status),
     createdAt: new Date(po.createdAt || Date.now()),
-    tableName: String(po.tableName || '').trim() || undefined,
-    customerName: String(po.tableName || '').trim() || undefined,
+    tableName: tableDisplay || undefined,
+    customerName: tableDisplay || undefined,
     memo: String(po.memo || '').trim() || undefined,
     orderNo: String(po.orderNo ?? '').trim() || undefined,
     deliveryAppCode: (() => {

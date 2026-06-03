@@ -11488,20 +11488,39 @@ export async function getMemberVisits(params?: { memberId?: number; limit?: numb
   }>>
 }
 
-export async function getMemberCoupons(params?: { memberId?: number; limit?: number }) {
+export async function getMemberCoupons(params?: {
+  memberId?: number
+  limit?: number
+  status?: string
+  couponCode?: string
+  q?: string
+}) {
   const q = new URLSearchParams()
   if (params?.memberId) q.set('memberId', String(params.memberId))
   if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.status) q.set('status', params.status)
+  if (params?.couponCode) q.set('couponCode', params.couponCode)
+  if (params?.q) q.set('q', params.q)
   const suffix = q.toString()
   const res = await apiFetchWithOffline('/api/member-coupons' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<Array<{
     id: number
     memberId: number
+    memberNo?: string
+    memberName?: string
     couponCode: string
+    couponName?: string
+    discountType?: string
+    discountValue?: number
+    minOrderAmt?: number
+    validTo?: string
     issuedAt: string
+    expiresAt?: string
     usedAt: string
     orderId: number | null
     status: string
+    campaignId?: number | null
+    campaignName?: string
   }>>
 }
 

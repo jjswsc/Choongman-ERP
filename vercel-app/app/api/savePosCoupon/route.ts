@@ -66,12 +66,6 @@ export async function POST(req: NextRequest) {
     if (!code) {
       return NextResponse.json({ success: false, message: '쿠폰 코드를 입력하세요.' }, { headers })
     }
-    if (!id && !marketingCampaignId) {
-      return NextResponse.json(
-        { success: false, message: '캠페인 선택은 필수입니다. 캠페인 허브에서 연동 후 저장해 주세요.' },
-        { headers }
-      )
-    }
     if (discountType === 'percent' && (discountValue < 1 || discountValue > 100)) {
       return NextResponse.json({ success: false, message: '할인율은 1~100입니다.' }, { headers })
     }

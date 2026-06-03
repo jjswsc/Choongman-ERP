@@ -141,6 +141,7 @@ export type CreateMemberInput = {
   lineUserId?: string
   lineDisplayName?: string
   linePictureUrl?: string
+  consentMarketing?: boolean
 }
 
 export type UpdateMemberInput = {
@@ -426,6 +427,8 @@ async function insertMemberBase(input: CreateMemberInput): Promise<MemberRow> {
       referred_by_member_id: referredByMemberId,
       source: toText(input.source) || 'manual',
       status: 'active',
+      consent_marketing: input.consentMarketing != null ? Boolean(input.consentMarketing) : null,
+      consent_at: input.consentMarketing ? now : null,
       created_at: now,
       updated_at: now,
     })) as MemberRow[]
@@ -1071,10 +1074,29 @@ export async function applyLoyaltyOnOrder(params: {
   return { pointEarned: appliedEarn, tierCode: recalc.tierCode }
 }
 
-export async function listMemberCouponIssues(params?: { memberId?: number; limit?: number }) {
+export async function listMemberCouponIssues(params?: {
+  memberId?: number
+  limit?: number
+  status?: string
+  couponCode?: string
+  q?: string
+}) {
   const memberId = Number(params?.memberId || 0)
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
-  const filter = memberId ? `member_id=eq.${memberId}` : ''
+  const statusFilter = String(params?.status || '').trim().toLowerCase()
+  const couponCodeFilter = String(params?.couponCode || '').trim().toUpperCase()
+  const q = String(params?.q || '').trim().toLowerCase()
+
+  let filter = memberId ? `member_id=eq.${memberId}` : ''
+  if (statusFilter && statusFilter !== 'all') {
+    filter = filter ? `${filter}&status=eq.${encodeURIComponent(statusFilter)}` : `status=eq.${encodeURIComponent(statusFilter)}`
+  }
+  if (couponCodeFilter) {
+    filter = filter
+      ? `${filter}&coupon_code=eq.${encodeURIComponent(couponCodeFilter)}`
+      : `coupon_code=eq.${encodeURIComponent(couponCodeFilter)}`
+  }
+
   const rows = (filter
     ? await supabaseSelectFilter('member_coupon_issues', filter, { order: 'id.desc', limit })
     : await supabaseSelect('member_coupon_issues', { order: 'id.desc', limit })) as {
@@ -1162,7 +1184,33 @@ export async function listMemberCouponIssues(params?: { memberId?: number; limit
     }
   }
 
-  return (rows || []).map((row) => {
+  const memberIds = Array.from(new Set((rows || []).map((row) => Number(row.member_id || 0)).filter((x) => x > 0)))
+  const memberMap = new Map<number, { memberNo: string; name: string }>()
+  if (memberIds.length > 0) {
+    try {
+      const chunkSize = 80
+      for (let i = 0; i < memberIds.length; i += chunkSize) {
+        const chunk = memberIds.slice(i, i + chunkSize)
+        const memberRows = (await supabaseSelectFilter(
+          'members',
+          `id=in.(${chunk.join(',')})`,
+          { limit: chunk.length, select: 'id,member_no,full_name,name' }
+        )) as Array<{ id?: number; member_no?: string; full_name?: string; name?: string }>
+        for (const member of memberRows || []) {
+          const id = Number(member.id || 0)
+          if (!id) continue
+          memberMap.set(id, {
+            memberNo: toText(member.member_no),
+            name: toText(member.full_name) || toText(member.name),
+          })
+        }
+      }
+    } catch {
+      // members 테이블 조회 실패 시 memberId만 표시
+    }
+  }
+
+  const mapped = (rows || []).map((row) => {
     const couponCode = toText(row.coupon_code).toUpperCase()
     const coupon = couponMap.get(couponCode)
     const campaignId = Number(row.campaign_id || 0) || null
@@ -1170,9 +1218,13 @@ export async function listMemberCouponIssues(params?: { memberId?: number; limit
     const issuedStoreScope = Array.isArray(issuedScopeRaw)
       ? issuedScopeRaw.map((x) => toText(x)).filter(Boolean)
       : []
+    const mid = Number(row.member_id || 0)
+    const member = memberMap.get(mid)
     return {
       id: Number(row.id || 0),
-      memberId: Number(row.member_id || 0),
+      memberId: mid,
+      memberNo: member?.memberNo || '',
+      memberName: member?.name || '',
       couponCode,
       couponName: coupon?.name || couponCode,
       discountType: coupon?.discountType || 'fixed',
@@ -1193,6 +1245,22 @@ export async function listMemberCouponIssues(params?: { memberId?: number; limit
       restoreReason: toText(row.restore_reason),
       restoredFromOrderId: Number(row.restored_from_order_id || 0) || null,
     }
+  })
+
+  if (!q) return mapped
+  return mapped.filter((row) => {
+    const hay = [
+      row.memberNo,
+      row.memberName,
+      row.couponCode,
+      row.couponName,
+      row.campaignName,
+      String(row.memberId || ''),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return hay.includes(q)
   })
 }
 

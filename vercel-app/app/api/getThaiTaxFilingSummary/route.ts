@@ -16,6 +16,8 @@ import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export const dynamic = 'force-dynamic'
+// 무거운 회계 리포트 라우트와 동일하게 최초 동기화 여유를 둔다.
+export const maxDuration = 120
 
 type VatRow = {
   direction?: string
@@ -111,25 +113,53 @@ export async function GET(request: NextRequest) {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
-    try {
-      await syncTaxVatLedgersFromStockAndExpenses({
-        months: period.months,
-        storeFilter: syncStoreFilter,
-      })
-      await syncTaxWithholdingLedgersFromExpenses({
-        months: period.months,
-        storeFilter: syncStoreFilter,
-      })
-      await syncTaxWithholdingLedgersFromPayroll({
-        months: period.months,
-        storeFilter: syncStoreFilter,
-      })
-      await syncTaxWithholdingLedgersFromPurchaseOrders({
-        months: period.months,
-        storeFilter: syncStoreFilter,
-      })
-    } catch (e) {
-      console.warn('getThaiTaxFilingSummary auto-sync skipped:', e)
+    const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
+    // vatLedger 조회와 동일: 원천 데이터는 발생 시점에 동기화되므로, 매장 거래량에 비례한
+    // 조회 시 전체 재동기화(수천 건 순차 upsert)는 타임아웃을 유발한다. 해당 기간·매장에
+    // 행이 없거나 매입이 없을 때만 동기화한다(거래량 많은 매장 빈 요약 방지).
+    let needSync = true
+    if (scopedStoreFilter) {
+      try {
+        const monthFilter = buildTaxMonthPostgrestFilter(period.months)
+        const probeRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+          select: 'direction,store_name',
+          order: 'id.asc',
+          pageSize: 4000,
+          maxRows: 100000,
+        })) as { direction?: string | null; store_name?: string | null }[] | null
+        const scopedProbeRows = (probeRows || []).filter((row) =>
+          storeScope.matches(String(row.store_name || ''))
+        )
+        const hasAnyRows = scopedProbeRows.length > 0
+        const hasInputEntries = scopedProbeRows.some(
+          (row) => String(row.direction || '').trim().toLowerCase() === 'input'
+        )
+        needSync = !hasAnyRows || !hasInputEntries
+      } catch {
+        needSync = true
+      }
+    }
+    if (needSync) {
+      try {
+        await syncTaxVatLedgersFromStockAndExpenses({
+          months: period.months,
+          storeFilter: syncStoreFilter,
+        })
+        await syncTaxWithholdingLedgersFromExpenses({
+          months: period.months,
+          storeFilter: syncStoreFilter,
+        })
+        await syncTaxWithholdingLedgersFromPayroll({
+          months: period.months,
+          storeFilter: syncStoreFilter,
+        })
+        await syncTaxWithholdingLedgersFromPurchaseOrders({
+          months: period.months,
+          storeFilter: syncStoreFilter,
+        })
+      } catch (e) {
+        console.warn('getThaiTaxFilingSummary auto-sync skipped:', e)
+      }
     }
     const useRpcSummary = !storeFilter || storeFilter === 'All' || storeFilter === '*'
     if (useRpcSummary) {

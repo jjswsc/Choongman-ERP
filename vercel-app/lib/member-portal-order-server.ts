@@ -1,6 +1,7 @@
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertMemberPickupTimeAllowed as assertPickupTime } from '@/lib/member-portal-pickup-time'
+import { buildMemberPortalTakeoutTableNameForStorage } from '@/lib/pos-member-portal-takeout-label'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
@@ -131,7 +132,7 @@ export async function createMemberPickupOrder(params: {
     order_no: orderNo,
     store_code: storeCode,
     order_type: orderType,
-    table_name: '',
+    table_name: buildMemberPortalTakeoutTableNameForStorage(memberName, memberNo),
     memo,
     discount_amt: 0,
     delivery_fee: 0,

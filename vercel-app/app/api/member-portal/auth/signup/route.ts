@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       phone?: string
       birthDate?: string
       gender?: string
+      consentMarketing?: boolean
       deviceLabel?: string
     }
     const registered = await registerMemberByPhoneBirthDate({
@@ -27,6 +28,7 @@ export async function POST(req: NextRequest) {
       phone: String(body.phone || '').trim(),
       birthDate: String(body.birthDate || '').trim(),
       gender: String(body.gender || '').trim(),
+      consentMarketing: Boolean(body.consentMarketing),
       deviceLabel: String(body.deviceLabel || '').trim() || 'member-web',
       userAgent: req.headers.get('user-agent') || '',
       ip: clientIp(req),
@@ -34,6 +36,7 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({
       success: true,
       created: registered.created,
+      welcomeCouponIssued: registered.welcomeCouponIssued,
       member: registered.member,
       sessionExpiresAt: registered.expiresAt,
     })

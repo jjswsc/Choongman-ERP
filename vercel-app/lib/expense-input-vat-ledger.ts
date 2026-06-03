@@ -21,11 +21,6 @@ function shouldSkipExpenseVatAutoSync(withdrawalCategory: string): boolean {
   return cat === 'purchase_payment' || cat === 'purchase_advance'
 }
 
-function isMissingSubmissionColumnError(e: unknown): boolean {
-  const msg = String(e || '').toLowerCase()
-  return msg.includes('filing_status') || msg.includes('submitted_at') || msg.includes('submitted_by')
-}
-
 function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
   const next = { ...row }
   delete next.filing_status

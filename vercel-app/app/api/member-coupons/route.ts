@@ -10,7 +10,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const memberId = Number(searchParams.get('memberId') || 0)
     const limit = Number(searchParams.get('limit') || 200)
-    const rows = await listMemberCouponIssues({ memberId, limit })
+    const status = String(searchParams.get('status') || '').trim()
+    const couponCode = String(searchParams.get('couponCode') || '').trim()
+    const q = String(searchParams.get('q') || '').trim()
+    const rows = await listMemberCouponIssues({
+      memberId,
+      limit,
+      status: status || undefined,
+      couponCode: couponCode || undefined,
+      q: q || undefined,
+    })
     return NextResponse.json(rows, { headers })
   } catch (e) {
     console.error('GET /api/member-coupons:', e)

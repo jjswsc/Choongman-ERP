@@ -144,6 +144,10 @@ function collectVatLedgerAutoMemoIds(rows: { store_name?: string | null; memo?: 
   const stockLogIds: number[] = []
   const expenseIds: number[] = []
   for (const row of rows || []) {
+    // memo 기반 소스 매핑은 store_name 공란 행에만 필요하다. 이미 store_name 이 있는 행은
+    // resolveStoreDisplayNameForVatLedger(store_name) 으로 표준화되므로 매핑 조회가 불필요.
+    // (조회 때마다 수천 건 POS/입고/지출 id 를 청크 조회하던 비용 제거)
+    if (String(row.store_name || '').trim()) continue
     const memo = String(row.memo || '')
     const posM = memo.match(/\[AUTO:POS_ORDER:(\d+)\]/i)
     if (posM) {

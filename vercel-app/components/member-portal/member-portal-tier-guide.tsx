@@ -13,52 +13,69 @@ type Props = {
   currentTierCode?: string
 }
 
-function TierGuideList({ tiers, currentTierCode }: Props) {
+const TierGuideCard = React.memo(function TierGuideCard({
+  tier,
+  isCurrent,
+  earnRateLabel,
+}: {
+  tier: MemberTierPublic
+  isCurrent: boolean
+  earnRateLabel: string
+}) {
+  const { t } = useMemberPortalLang()
+  const visual = tierVisual(tier.code)
+  return (
+    <GlassCard
+      soft
+      className={`px-4 py-3 ${isCurrent ? `ring-1 ring-amber-300/40 ${visual.glow}` : ""}`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-black/25 ${visual.chip}`}
+        >
+          <Star className={`h-4 w-4 ${visual.accent}`} fill="currentColor" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold text-white">{tier.name}</p>
+            {isCurrent ? (
+              <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+                {t("tierCurrentBadge")}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs text-white/70">{tier.pointRangeLabel}</p>
+          <p className="mt-0.5 text-xs text-white/45">{tier.spendLabel}</p>
+          {tier.benefits ? (
+            <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-white/65">{tier.benefits}</p>
+          ) : null}
+          <p className="mt-2 text-[11px] text-white/40">
+            {earnRateLabel}: {(tier.pointRate * 100).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+    </GlassCard>
+  )
+})
+
+const TierGuideList = React.memo(function TierGuideList({ tiers, currentTierCode }: Props) {
   const { t } = useMemberPortalLang()
   const activeCode = normalizeMemberTierCode(currentTierCode || "BRONZE")
+  const earnRateLabel = t("tierEarnRate")
 
   return (
     <div className="space-y-2">
-      {tiers.map((tier) => {
-        const isCurrent = normalizeMemberTierCode(tier.code) === activeCode
-        const visual = tierVisual(tier.code)
-        return (
-          <GlassCard
-            key={tier.code}
-            soft
-            className={`px-4 py-3 ${isCurrent ? `ring-1 ring-amber-300/40 ${visual.glow}` : ""}`}
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-black/25 ${visual.chip}`}
-              >
-                <Star className={`h-4 w-4 ${visual.accent}`} fill="currentColor" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-white">{tier.name}</p>
-                  {isCurrent ? (
-                    <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-100">
-                      {t("tierCurrentBadge")}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-1 text-xs text-white/70">{tier.pointRangeLabel}</p>
-                <p className="mt-0.5 text-xs text-white/45">{tier.spendLabel}</p>
-                {tier.benefits ? (
-                  <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-white/65">{tier.benefits}</p>
-                ) : null}
-                <p className="mt-2 text-[11px] text-white/40">
-                  {t("tierEarnRate")}: {(tier.pointRate * 100).toFixed(1)}%
-                </p>
-              </div>
-            </div>
-          </GlassCard>
-        )
-      })}
+      {tiers.map((tier) => (
+        <TierGuideCard
+          key={tier.code}
+          tier={tier}
+          isCurrent={normalizeMemberTierCode(tier.code) === activeCode}
+          earnRateLabel={earnRateLabel}
+        />
+      ))}
     </div>
   )
-}
+})
 
 export function MemberPortalTierGuide({ tiers, currentTierCode }: Props) {
   const { t } = useMemberPortalLang()
@@ -76,52 +93,73 @@ export function MemberPortalTierGuide({ tiers, currentTierCode }: Props) {
   )
 }
 
-function TierBenefitsList({ tiers, currentTierCode }: Props) {
+const TierBenefitCard = React.memo(function TierBenefitCard({
+  tier,
+  isCurrent,
+  earnRateLabel,
+  benefitsEmptyLabel,
+}: {
+  tier: MemberTierPublic
+  isCurrent: boolean
+  earnRateLabel: string
+  benefitsEmptyLabel: string
+}) {
+  const { t } = useMemberPortalLang()
+  const visual = tierVisual(tier.code)
+  return (
+    <GlassCard
+      soft
+      className={`px-4 py-3 ${isCurrent ? `ring-1 ring-amber-300/40 ${visual.glow}` : ""}`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-black/25 ${visual.chip}`}
+        >
+          <Star className={`h-4 w-4 ${visual.accent}`} fill="currentColor" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold text-white">{tier.name}</p>
+            {isCurrent ? (
+              <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+                {t("tierCurrentBadge")}
+              </span>
+            ) : null}
+          </div>
+          {tier.benefits ? (
+            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/80">{tier.benefits}</p>
+          ) : (
+            <p className="mt-2 text-xs text-white/40">{benefitsEmptyLabel}</p>
+          )}
+          <p className="mt-2 text-[11px] text-white/40">
+            {earnRateLabel}: {(tier.pointRate * 100).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+    </GlassCard>
+  )
+})
+
+const TierBenefitsList = React.memo(function TierBenefitsList({ tiers, currentTierCode }: Props) {
   const { t } = useMemberPortalLang()
   const activeCode = normalizeMemberTierCode(currentTierCode || "BRONZE")
+  const earnRateLabel = t("tierEarnRate")
+  const benefitsEmptyLabel = t("tierBenefitsEmpty")
 
   return (
     <div className="space-y-2">
-      {tiers.map((tier) => {
-        const isCurrent = normalizeMemberTierCode(tier.code) === activeCode
-        const visual = tierVisual(tier.code)
-        return (
-          <GlassCard
-            key={tier.code}
-            soft
-            className={`px-4 py-3 ${isCurrent ? `ring-1 ring-amber-300/40 ${visual.glow}` : ""}`}
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-black/25 ${visual.chip}`}
-              >
-                <Star className={`h-4 w-4 ${visual.accent}`} fill="currentColor" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-white">{tier.name}</p>
-                  {isCurrent ? (
-                    <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-100">
-                      {t("tierCurrentBadge")}
-                    </span>
-                  ) : null}
-                </div>
-                {tier.benefits ? (
-                  <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/80">{tier.benefits}</p>
-                ) : (
-                  <p className="mt-2 text-xs text-white/40">{t("tierBenefitsEmpty")}</p>
-                )}
-                <p className="mt-2 text-[11px] text-white/40">
-                  {t("tierEarnRate")}: {(tier.pointRate * 100).toFixed(1)}%
-                </p>
-              </div>
-            </div>
-          </GlassCard>
-        )
-      })}
+      {tiers.map((tier) => (
+        <TierBenefitCard
+          key={tier.code}
+          tier={tier}
+          isCurrent={normalizeMemberTierCode(tier.code) === activeCode}
+          earnRateLabel={earnRateLabel}
+          benefitsEmptyLabel={benefitsEmptyLabel}
+        />
+      ))}
     </div>
   )
-}
+})
 
 export function MemberPortalTierBenefits({ tiers, currentTierCode }: Props) {
   const { t } = useMemberPortalLang()
@@ -192,6 +230,7 @@ export function useMemberPortalTiers() {
   const { lang } = useMemberPortalLang()
   const [tiers, setTiers] = React.useState<MemberTierPublic[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [, startTransition] = React.useTransition()
 
   React.useEffect(() => {
     let cancelled = false
@@ -203,9 +242,17 @@ export function useMemberPortalTiers() {
           credentials: "same-origin",
         })
         const data = (await res.json()) as { success?: boolean; tiers?: MemberTierPublic[] }
-        if (!cancelled) setTiers(data.success ? data.tiers || [] : [])
+        if (!cancelled) {
+          startTransition(() => {
+            setTiers(data.success ? data.tiers || [] : [])
+          })
+        }
       } catch {
-        if (!cancelled) setTiers([])
+        if (!cancelled) {
+          startTransition(() => {
+            setTiers([])
+          })
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }

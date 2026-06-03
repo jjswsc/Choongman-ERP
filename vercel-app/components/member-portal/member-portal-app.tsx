@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { BirthDateFields } from "@/components/member-portal/birth-date-fields"
+import { MemberPortalNationalitySelect } from "@/components/member-portal/member-portal-nationality-select"
 import { MemberPortalLangSelect } from "@/components/member-portal/member-portal-lang-select"
 import type { MemberSummary } from "@/lib/members-server"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
@@ -46,6 +47,7 @@ import {
   MemberPortalTierGuideSheet,
   useMemberPortalTiers,
 } from "@/components/member-portal/member-portal-tier-guide"
+import { MemberPortalProfileContactLinks, MemberPortalContactChannelButtons } from "@/components/member-portal/member-portal-contact-links"
 import {
   GlassCard,
   MemberPortalAmbienceBackground,
@@ -142,8 +144,19 @@ export function MemberPortalApp() {
   const [phone, setPhone] = React.useState("")
   const [birthDate, setBirthDate] = React.useState("")
   const [tab, setTab] = React.useState<PortalTab>("home")
+  const [, startTabTransition] = React.useTransition()
+  const changeTab = React.useCallback(
+    (next: PortalTab) => {
+      if (next === tab) return
+      requestAnimationFrame(() => {
+        startTabTransition(() => setTab(next))
+      })
+    },
+    [tab]
+  )
   const [signupName, setSignupName] = React.useState("")
   const [signupGender, setSignupGender] = React.useState<"" | "M" | "F">("")
+  const [signupConsentMarketing, setSignupConsentMarketing] = React.useState(true)
   const [loading, setLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState(false)
   const [authPanel, setAuthPanel] = React.useState<"signup" | "login" | null>(null)
@@ -154,9 +167,11 @@ export function MemberPortalApp() {
   const [contactUrls, setContactUrls] = React.useState<{
     facebookUrl: string
     instagramUrl: string
+    lineOfficialUrl: string
   }>({
     facebookUrl: brand.memberContactFacebookUrl,
     instagramUrl: brand.memberContactInstagramUrl,
+    lineOfficialUrl: "",
   })
   const [designBackgrounds, setDesignBackgrounds] = React.useState<{
     loginBackgroundUrl: string
@@ -165,6 +180,7 @@ export function MemberPortalApp() {
     loginBackgroundUrl: "",
     appBackgroundUrl: "",
   })
+  const [signupWelcomeCouponEnabled, setSignupWelcomeCouponEnabled] = React.useState(false)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
   const [visits, setVisits] = React.useState<PortalVisitRow[]>([])
@@ -289,25 +305,30 @@ export function MemberPortalApp() {
       success: boolean
       facebookUrl?: string
       instagramUrl?: string
+      lineOfficialUrl?: string
       loginBackgroundUrl?: string
       appBackgroundUrl?: string
+      signupWelcomeCouponEnabled?: boolean
     }>("/api/member-portal/public-config")
       .then((r) =>
         {
           setContactUrls({
             facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
             instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
+            lineOfficialUrl: String(r.lineOfficialUrl || "").trim(),
           })
           setDesignBackgrounds({
             loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
             appBackgroundUrl: String(r.appBackgroundUrl || "").trim(),
           })
+          setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
         }
       )
       .catch(() => {
         setContactUrls({
           facebookUrl: brand.memberContactFacebookUrl,
           instagramUrl: brand.memberContactInstagramUrl,
+          lineOfficialUrl: "",
         })
         setDesignBackgrounds({
           loginBackgroundUrl: "",
@@ -377,6 +398,7 @@ export function MemberPortalApp() {
       const res = await postJson<{
         success: boolean
         created?: boolean
+        welcomeCouponIssued?: boolean
         message?: string
         code?: string
         member?: MemberSummary
@@ -385,13 +407,18 @@ export function MemberPortalApp() {
         phone: normalizeMemberPhone(phone),
         birthDate,
         gender: signupGender,
+        consentMarketing: signupConsentMarketing,
         deviceLabel: "member-web",
       })
       if (!res.success) {
         setError(res.code ? memberPortalLoginError(lang, res.code) : res.message || t("loginFailed"))
         return
       }
-      setNotice(t(res.created ? "signup_success_created" : "signup_success_existing"))
+      if (res.created && res.welcomeCouponIssued) {
+        setNotice(t("signup_success_created_with_coupon"))
+      } else {
+        setNotice(t(res.created ? "signup_success_created" : "signup_success_existing"))
+      }
       if (res.member) applyLoggedInMember(res.member)
       const ok = await loadSession()
       if (!ok) setError(t("loginFailed"))
@@ -672,6 +699,31 @@ export function MemberPortalApp() {
                       })}
                     </div>
                   </div>
+                  <label
+                    className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 text-sm transition ${
+                      signupConsentMarketing
+                        ? "border-amber-400/35 bg-amber-400/[0.08]"
+                        : "border-white/10 bg-black/25"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={signupConsentMarketing}
+                      onChange={(e) => setSignupConsentMarketing(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-amber-400"
+                    />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2 font-medium text-white/90">
+                        <Gift className="h-4 w-4 shrink-0 text-amber-300" aria-hidden />
+                        {t("consentMarketing")}
+                      </span>
+                      {signupWelcomeCouponEnabled ? (
+                        <span className="mt-1 block text-xs leading-relaxed text-amber-100/75">
+                          {signupConsentMarketing ? t("consentMarketingSignupHint") : t("consentMarketingCouponHint")}
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
                   <Button
                     onClick={signupWithPhoneBirth}
                     disabled={
@@ -771,35 +823,17 @@ export function MemberPortalApp() {
               <div className="relative w-full rounded-t-[28px] border border-white/10 bg-[#121214] px-5 pb-8 pt-5 shadow-2xl">
                 <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" />
                 <p className="mb-4 text-center text-sm font-medium text-white/80">{t("contactMenuTitle")}</p>
-                <div className="space-y-2.5">
-                  <button
-                    type="button"
-                    className="h-12 w-full rounded-2xl bg-[#1877F2] text-sm font-semibold text-white shadow-lg"
-                    onClick={() => {
-                      window.open(contactUrls.facebookUrl, "_blank")
-                      setContactMenuOpen(false)
-                    }}
-                  >
-                    {t("contactViaFacebook")}
-                  </button>
-                  <button
-                    type="button"
-                    className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#833AB4] via-[#E1306C] to-[#F77737] text-sm font-semibold text-white shadow-lg"
-                    onClick={() => {
-                      window.open(contactUrls.instagramUrl, "_blank")
-                      setContactMenuOpen(false)
-                    }}
-                  >
-                    {t("contactViaInstagram")}
-                  </button>
-                  <button
-                    type="button"
-                    className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-medium text-white/80"
-                    onClick={() => setContactMenuOpen(false)}
-                  >
-                    {t("contactMenuClose")}
-                  </button>
-                </div>
+                <MemberPortalContactChannelButtons
+                  urls={contactUrls}
+                  onChannelClick={() => setContactMenuOpen(false)}
+                />
+                <button
+                  type="button"
+                  className="mt-2.5 h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-medium text-white/80"
+                  onClick={() => setContactMenuOpen(false)}
+                >
+                  {t("contactMenuClose")}
+                </button>
               </div>
             </div>
           ) : null}
@@ -974,7 +1008,7 @@ export function MemberPortalApp() {
 
             <button
               type="button"
-              onClick={() => setTab("privilege")}
+              onClick={() => changeTab("privilege")}
               className={`${mpGlassCardSoft} flex w-full items-center justify-between px-5 py-4 text-left transition hover:border-white/15`}
             >
               <div>
@@ -1236,11 +1270,9 @@ export function MemberPortalApp() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-white/70">{t("nationalityLabel")}</Label>
-                    <Input
+                    <MemberPortalNationalitySelect
                       value={profile.nationality}
-                      onChange={(e) => setProfile((p) => ({ ...p, nationality: e.target.value }))}
-                      placeholder="TH"
-                      className={mpInputClass}
+                      onChange={(nationality) => setProfile((p) => ({ ...p, nationality }))}
                     />
                   </div>
                 </div>
@@ -1283,6 +1315,8 @@ export function MemberPortalApp() {
               </Button>
             </GlassCard>
 
+            <MemberPortalProfileContactLinks urls={contactUrls} />
+
             <GlassCard soft className="text-sm text-white/50">
               <p>{t("memberNo")} {member.memberNo}</p>
               {activeDashboard.referralCode ? (
@@ -1297,7 +1331,7 @@ export function MemberPortalApp() {
         )}
       </MemberPortalShell>
 
-      <PremiumBottomNav tab={tab} onChange={setTab} items={navItems} />
+      <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
 
       <MemberPortalContentSheet
         open={homeFeatureOpen}

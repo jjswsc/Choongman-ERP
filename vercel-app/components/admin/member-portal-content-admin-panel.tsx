@@ -16,6 +16,12 @@ import {
   type MemberPortalContentAdminTab,
 } from "@/lib/member-portal-content-admin"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
+import {
+  formatMemberPortalContentImageHint,
+  readMemberPortalImageSize,
+  resolveMemberPortalContentImageRule,
+  validateMemberPortalImageByRule,
+} from "@/lib/member-portal-content-image-rules"
 
 type ContentType = "popup" | "info" | "store_photo"
 
@@ -160,6 +166,8 @@ export function MemberPortalContentAdminPanel({
   const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
 
   const formMeta = VARIANT_META[formVariant]
+  const imageRule = React.useMemo(() => resolveMemberPortalContentImageRule(formVariant), [formVariant])
+  const imageHint = formatMemberPortalContentImageHint(imageRule)
 
   const openNew = React.useCallback(
     (targetVariant?: Exclude<MemberPortalContentAdminTab, "all">) => {
@@ -278,6 +286,14 @@ export function MemberPortalContentAdminPanel({
       setUploading(true)
       onError("")
       try {
+        const rule = resolveMemberPortalContentImageRule(formVariant)
+        const size = await readMemberPortalImageSize(file)
+        const validation = validateMemberPortalImageByRule(size.width, size.height, rule)
+        if (!validation.ok) {
+          onError(validation.message)
+          return
+        }
+
         const presignRes = await apiFetch("/api/uploadMemberPortalContentImage/presign", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -310,7 +326,7 @@ export function MemberPortalContentAdminPanel({
         setUploading(false)
       }
     },
-    [onError, onNotice]
+    [formVariant, onError, onNotice]
   )
 
   const headerTitle =
@@ -376,52 +392,63 @@ export function MemberPortalContentAdminPanel({
       )}
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
+          <SheetHeader className="shrink-0 border-b px-6 py-5 pr-14">
             <SheetTitle>{form.contentKey ? `${formMeta.title} 편집` : formMeta.newLabel}</SheetTitle>
           </SheetHeader>
 
-          <div className="mt-6 space-y-4 pb-8">
+          <div className="flex-1 space-y-6 px-6 py-6 pb-10">
             {form.contentKey ? (
-              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-md border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
                 콘텐츠 키: <span className="font-mono text-foreground">{form.contentKey}</span>
               </div>
             ) : null}
 
-            <div className="space-y-1.5">
-              <Label>제목</Label>
+            <div className="space-y-2">
+              <Label htmlFor="mp-content-title">제목</Label>
               <Input
+                id="mp-content-title"
                 value={form.title}
                 onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
                 placeholder="회원에게 보이는 제목"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label>이미지</Label>
+            <div className="space-y-2">
+              <Label htmlFor="mp-content-image-url">이미지</Label>
+              <p className="text-xs leading-relaxed text-muted-foreground">{imageHint}</p>
               <Input
+                id="mp-content-image-url"
                 value={form.imageUrl}
                 onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
                 placeholder="https://..."
               />
-              <input
-                type="file"
-                accept="image/*"
-                className="text-sm"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void onUploadImage(file)
-                }}
-              />
-              {uploading ? <p className="text-xs text-muted-foreground">업로드 중...</p> : null}
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-center transition hover:bg-muted/35">
+                <span className="text-sm font-medium text-foreground">
+                  {uploading ? "업로드 중..." : "이미지 파일 선택"}
+                </span>
+                <span className="text-xs text-muted-foreground">{imageHint}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) void onUploadImage(file)
+                    e.target.value = ""
+                  }}
+                />
+              </label>
               {form.imageUrl ? (
-                <img src={form.imageUrl} alt="" className="mt-2 max-h-40 w-full rounded-lg object-cover" />
+                <img src={form.imageUrl} alt="" className="max-h-44 w-full rounded-lg border object-cover" />
               ) : null}
             </div>
 
-            <div className="space-y-1.5">
-              <Label>본문</Label>
+            <div className="space-y-2">
+              <Label htmlFor="mp-content-body">본문</Label>
               <Textarea
+                id="mp-content-body"
                 value={form.body}
                 onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
                 rows={5}
@@ -430,16 +457,19 @@ export function MemberPortalContentAdminPanel({
             </div>
 
             {formVariant !== "popup" ? (
-              <div className="space-y-1.5">
-                <Label>노출 탭</Label>
+              <div className="space-y-2">
+                <Label htmlFor="mp-content-target-tab">노출 탭</Label>
                 {formVariant === "promo" ? (
                   <>
-                    <Input value={form.targetTab} readOnly />
-                    <p className="text-xs text-muted-foreground">월별 프로모션은 home_promo로 고정됩니다.</p>
+                    <Input id="mp-content-target-tab" value={form.targetTab} readOnly />
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      월별 프로모션은 home_promo로 고정됩니다.
+                    </p>
                   </>
                 ) : (
                   <>
                     <select
+                      id="mp-content-target-tab"
                       value={form.targetTab || "home"}
                       onChange={(e) => setForm((p) => ({ ...p, targetTab: e.target.value }))}
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -450,7 +480,7 @@ export function MemberPortalContentAdminPanel({
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       home_feature = 홈 신메뉴·프로모션 타일 / home = 홈 하단 공지
                     </p>
                   </>
@@ -458,18 +488,20 @@ export function MemberPortalContentAdminPanel({
               </div>
             ) : null}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>시작 (방콕)</Label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="mp-content-starts">시작 (방콕)</Label>
                 <Input
+                  id="mp-content-starts"
                   type="datetime-local"
                   value={form.startsAt}
                   onChange={(e) => setForm((p) => ({ ...p, startsAt: e.target.value }))}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>종료 (방콕)</Label>
+              <div className="space-y-2">
+                <Label htmlFor="mp-content-ends">종료 (방콕)</Label>
                 <Input
+                  id="mp-content-ends"
                   type="datetime-local"
                   value={form.endsAt}
                   onChange={(e) => setForm((p) => ({ ...p, endsAt: e.target.value }))}
@@ -477,18 +509,20 @@ export function MemberPortalContentAdminPanel({
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>정렬순서</Label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="mp-content-sort">정렬순서</Label>
                 <Input
+                  id="mp-content-sort"
                   type="number"
                   value={form.sortOrder}
                   onChange={(e) => setForm((p) => ({ ...p, sortOrder: Number(e.target.value || 0) }))}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>매장 코드 (선택)</Label>
+              <div className="space-y-2">
+                <Label htmlFor="mp-content-store">매장 코드 (선택)</Label>
                 <Input
+                  id="mp-content-store"
                   value={form.storeCode}
                   onChange={(e) => setForm((p) => ({ ...p, storeCode: e.target.value }))}
                   placeholder="CM01"
@@ -496,7 +530,7 @@ export function MemberPortalContentAdminPanel({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+            <div className="flex items-center gap-3 rounded-md border px-4 py-3">
               <input
                 id={`active-${variant}-${formVariant}`}
                 type="checkbox"
@@ -508,7 +542,7 @@ export function MemberPortalContentAdminPanel({
               </label>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-3 border-t pt-6">
               <Button type="button" onClick={() => void onSave()} disabled={saving || uploading} className="flex-1">
                 {saving ? "저장 중..." : "저장"}
               </Button>

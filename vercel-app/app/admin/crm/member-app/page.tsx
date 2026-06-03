@@ -15,84 +15,11 @@ import { useAuth } from "@/lib/auth-context"
 import { canEditMemberPortalAdmin } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
-
-type ImageRule = {
-  label: string
-  minWidth: number
-  minHeight: number
-  aspectW: number
-  aspectH: number
-}
-
-const IMAGE_RULES = {
-  login: {
-    label: "로그인 배경",
-    minWidth: 1080,
-    minHeight: 1920,
-    aspectW: 9,
-    aspectH: 16,
-  } satisfies ImageRule,
-  app: {
-    label: "접속 후 배경",
-    minWidth: 1080,
-    minHeight: 1920,
-    aspectW: 9,
-    aspectH: 16,
-  } satisfies ImageRule,
-  popup: {
-    label: "팝업",
-    minWidth: 1080,
-    minHeight: 1350,
-    aspectW: 4,
-    aspectH: 5,
-  } satisfies ImageRule,
-  store_photo: {
-    label: "매장 사진",
-    minWidth: 1200,
-    minHeight: 800,
-    aspectW: 3,
-    aspectH: 2,
-  } satisfies ImageRule,
-} as const
-
-async function readImageSize(file: File): Promise<{ width: number; height: number }> {
-  const url = URL.createObjectURL(file)
-  try {
-    const size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
-      const img = new window.Image()
-      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      img.onerror = () => reject(new Error("이미지 크기를 읽을 수 없습니다."))
-      img.src = url
-    })
-    return size
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
-
-function validateImageByRule(
-  width: number,
-  height: number,
-  rule: ImageRule
-): { ok: true } | { ok: false; message: string } {
-  if (width < rule.minWidth || height < rule.minHeight) {
-    return {
-      ok: false,
-      message: `${rule.label} 이미지는 최소 ${rule.minWidth}x${rule.minHeight}px 이상이어야 합니다. (현재 ${width}x${height}px)`,
-    }
-  }
-  const actual = width / height
-  const expected = rule.aspectW / rule.aspectH
-  const ratioDiff = Math.abs(actual - expected)
-  // 2% 오차 허용(리사이즈 과정에서 미세 오차 대응)
-  if (ratioDiff > expected * 0.02) {
-    return {
-      ok: false,
-      message: `${rule.label} 비율은 ${rule.aspectW}:${rule.aspectH} 이어야 합니다. (현재 ${width}x${height}px)`,
-    }
-  }
-  return { ok: true }
-}
+import {
+  MEMBER_PORTAL_CONTENT_IMAGE_RULES,
+  readMemberPortalImageSize,
+  validateMemberPortalImageByRule,
+} from "@/lib/member-portal-content-image-rules"
 
 export default function CrmMemberAppContentPage() {
   const { auth } = useAuth()
@@ -103,6 +30,8 @@ export default function CrmMemberAppContentPage() {
   const [items, setItems] = React.useState<MemberPortalContentAdminItem[]>([])
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
   const [contactInstagramUrl, setContactInstagramUrl] = React.useState("")
+  const [contactLineOfficialUrl, setContactLineOfficialUrl] = React.useState("")
+  const [signupWelcomeCouponCode, setSignupWelcomeCouponCode] = React.useState("")
   const [deliveryGrabUrl, setDeliveryGrabUrl] = React.useState("")
   const [deliveryLinemanUrl, setDeliveryLinemanUrl] = React.useState("")
   const [deliveryShopeeUrl, setDeliveryShopeeUrl] = React.useState("")
@@ -110,6 +39,7 @@ export default function CrmMemberAppContentPage() {
   const [appBackgroundUrl, setAppBackgroundUrl] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [contactSaving, setContactSaving] = React.useState(false)
+  const [signupBenefitsSaving, setSignupBenefitsSaving] = React.useState(false)
   const [deliverySaving, setDeliverySaving] = React.useState(false)
   const [designSaving, setDesignSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
@@ -151,10 +81,12 @@ export default function CrmMemberAppContentPage() {
         success: boolean
         facebookUrl?: string
         instagramUrl?: string
+        lineOfficialUrl?: string
       }
       if (!res.ok || !data.success) return
       setContactFacebookUrl(String(data.facebookUrl || ""))
       setContactInstagramUrl(String(data.instagramUrl || ""))
+      setContactLineOfficialUrl(String(data.lineOfficialUrl || ""))
     } catch {
       /* ignore */
     }
@@ -194,12 +126,24 @@ export default function CrmMemberAppContentPage() {
     }
   }, [])
 
+  const loadSignupBenefitsSettings = React.useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/member-portal/admin/settings/signup-benefits", { cache: "no-store" })
+      const data = (await res.json()) as { success: boolean; welcomeCouponCode?: string }
+      if (!res.ok || !data.success) return
+      setSignupWelcomeCouponCode(String(data.welcomeCouponCode || ""))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   React.useEffect(() => {
     refresh().catch(() => {})
     loadContactSettings().catch(() => {})
     loadDeliverySettings().catch(() => {})
     loadDesignSettings().catch(() => {})
-  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, refresh])
+    loadSignupBenefitsSettings().catch(() => {})
+  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, loadSignupBenefitsSettings, refresh])
 
   const saveContactSettings = React.useCallback(async () => {
     setContactSaving(true)
@@ -212,6 +156,7 @@ export default function CrmMemberAppContentPage() {
         body: JSON.stringify({
           facebookUrl: contactFacebookUrl,
           instagramUrl: contactInstagramUrl,
+          lineOfficialUrl: contactLineOfficialUrl,
         }),
       })
       const data = (await res.json()) as { success: boolean; message?: string }
@@ -226,7 +171,31 @@ export default function CrmMemberAppContentPage() {
     } finally {
       setContactSaving(false)
     }
-  }, [contactFacebookUrl, contactInstagramUrl, loadContactSettings])
+  }, [contactFacebookUrl, contactInstagramUrl, contactLineOfficialUrl, loadContactSettings])
+
+  const saveSignupBenefitsSettings = React.useCallback(async () => {
+    setSignupBenefitsSaving(true)
+    setError("")
+    setNotice("")
+    try {
+      const res = await apiFetch("/api/member-portal/admin/settings/signup-benefits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ welcomeCouponCode: signupWelcomeCouponCode }),
+      })
+      const data = (await res.json()) as { success: boolean; message?: string }
+      if (!res.ok || !data.success) {
+        setError(data.message || "가입 혜택 설정 저장에 실패했습니다.")
+        return
+      }
+      setNotice("가입 혜택 설정을 저장했습니다.")
+      await loadSignupBenefitsSettings()
+    } catch {
+      setError("가입 혜택 설정 저장 중 오류가 발생했습니다.")
+    } finally {
+      setSignupBenefitsSaving(false)
+    }
+  }, [loadSignupBenefitsSettings, signupWelcomeCouponCode])
 
   const saveDeliverySettings = React.useCallback(async () => {
     setDeliverySaving(true)
@@ -284,9 +253,9 @@ export default function CrmMemberAppContentPage() {
     setUploading(true)
     setError("")
     try {
-      const size = await readImageSize(file)
-      const rule = target === "login" ? IMAGE_RULES.login : IMAGE_RULES.app
-      const v = validateImageByRule(size.width, size.height, rule)
+      const size = await readMemberPortalImageSize(file)
+      const rule = target === "login" ? MEMBER_PORTAL_CONTENT_IMAGE_RULES.login : MEMBER_PORTAL_CONTENT_IMAGE_RULES.app
+      const v = validateMemberPortalImageByRule(size.width, size.height, rule)
       if (!v.ok) {
         setError(v.message)
         return
@@ -463,7 +432,7 @@ export default function CrmMemberAppContentPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  회원앱 로그인 화면의 Contact us에서 열리는 Facebook / Instagram 링크를 관리합니다.
+                  회원앱 로그인 「문의하기」와 「내 정보」 탭에 표시되는 Facebook · Instagram · LINE 공식 링크를 관리합니다.
                 </p>
                 <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-3 md:grid-cols-2">
@@ -483,6 +452,14 @@ export default function CrmMemberAppContentPage() {
                       placeholder="https://www.instagram.com/..."
                     />
                   </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label>LINE 공식 URL</Label>
+                    <Input
+                      value={contactLineOfficialUrl}
+                      onChange={(e) => setContactLineOfficialUrl(e.target.value)}
+                      placeholder="https://line.me/R/ti/p/@..."
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => saveContactSettings()} disabled={contactSaving || !canEdit}>
@@ -492,6 +469,34 @@ export default function CrmMemberAppContentPage() {
                     다시 불러오기
                   </Button>
                 </div>
+                </fieldset>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>회원가입 웰컴 쿠폰</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  회원앱 가입 화면에서 마케팅 수신 동의(기본 체크) 시 자동 지급할 POS 쿠폰 코드입니다. CRM 쿠폰 정의에 있는 코드를 입력하세요. 비워 두면 쿠폰 안내 문구가 숨겨집니다.
+                </p>
+                <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
+                  <div className="space-y-1.5">
+                    <Label>웰컴 쿠폰 코드</Label>
+                    <Input
+                      value={signupWelcomeCouponCode}
+                      onChange={(e) => setSignupWelcomeCouponCode(e.target.value.toUpperCase())}
+                      placeholder="WELCOME100"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => saveSignupBenefitsSettings()} disabled={signupBenefitsSaving || !canEdit}>
+                      {signupBenefitsSaving ? "저장 중..." : "가입 혜택 저장"}
+                    </Button>
+                    <Button variant="outline" onClick={() => loadSignupBenefitsSettings().catch(() => {})}>
+                      다시 불러오기
+                    </Button>
+                  </div>
                 </fieldset>
               </CardContent>
             </Card>

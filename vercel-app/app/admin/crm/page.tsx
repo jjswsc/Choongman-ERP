@@ -80,10 +80,9 @@ export default function CrmDashboardPage() {
           <CardContent className="flex flex-wrap gap-2">
             <Button asChild variant="outline"><Link href="/admin/crm/segments">세그먼트 추출</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/members/visits?tab=rfm">RFM 점수</Link></Button>
+            <Button asChild variant="outline"><Link href="/admin/crm/coupons">쿠폰 관리</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/crm/campaigns">쿠폰 캠페인</Link></Button>
-            <Button asChild variant="outline"><Link href="/admin/crm/coupons">쿠폰 수동발급</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/crm/member-app">회원앱 운영</Link></Button>
-            <Button asChild variant="outline"><Link href="/admin/members/coupons">쿠폰 발행</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/marketing/integrations">LINE 연동</Link></Button>
           </CardContent>
         </Card>

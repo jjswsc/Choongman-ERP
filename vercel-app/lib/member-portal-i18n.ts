@@ -21,7 +21,10 @@ export type MemberPortalKey =
   | 'contactMenuTitle'
   | 'contactViaFacebook'
   | 'contactViaInstagram'
+  | 'contactViaLineOfficial'
   | 'contactMenuClose'
+  | 'profileContactTitle'
+  | 'profileContactSub'
   | 'memberLounge'
   | 'logout'
   | 'tierNext'
@@ -151,8 +154,12 @@ export type MemberPortalKey =
   | 'genderMale'
   | 'genderFemale'
   | 'nationalityLabel'
+  | 'nationalityPlaceholder'
   | 'referralInputLabel'
   | 'consentMarketing'
+  | 'consentMarketingSignupHint'
+  | 'consentMarketingCouponHint'
+  | 'signup_success_created_with_coupon'
   | 'saveProfile'
   | 'saveProfileChanges'
   | 'profileReferralLocked'
@@ -320,6 +327,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Contact via Instagram',
     th: 'ติดต่อผ่าน Instagram',
     ko: 'Instagram으로 문의',
+  },
+  contactViaLineOfficial: {
+    en: 'LINE Official',
+    th: 'LINE Official',
+    ko: 'LINE 공식',
   },
   contactMenuClose: {
     en: 'Close',
@@ -656,6 +668,16 @@ const MS: Record<MemberPortalKey, Dict> = {
   pointsHistory: { en: 'Points history', th: 'ประวัติแต้ม', ko: '포인트 내역' },
   noPoints: { en: 'No points history', th: 'ยังไม่มีประวัติแต้ม', ko: '포인트 내역 없음' },
   profileTitle: { en: 'Member profile', th: 'โปรไฟล์สมาชิก', ko: '회원 프로필' },
+  profileContactTitle: {
+    en: 'Contact & social',
+    th: 'ติดต่อ & โซเชียล',
+    ko: '문의 · SNS',
+  },
+  profileContactSub: {
+    en: 'Reach us on official channels',
+    th: 'ติดต่อเราผ่านช่องทางทางการ',
+    ko: '공식 채널로 문의하세요',
+  },
   profileSub: {
     en: 'Your saved details appear below. Update and save changes.',
     th: 'ข้อมูลที่บันทึกไว้จะแสดงด้านล่าง แก้ไขแล้วกดบันทึก',
@@ -667,11 +689,26 @@ const MS: Record<MemberPortalKey, Dict> = {
   genderMale: { en: 'Male', th: 'ชาย', ko: '남성' },
   genderFemale: { en: 'Female', th: 'หญิง', ko: '여성' },
   nationalityLabel: { en: 'Nationality', th: 'สัญชาติ', ko: '국적' },
+  nationalityPlaceholder: {
+    en: 'Select nationality',
+    th: 'เลือกสัญชาติ',
+    ko: '국적 선택',
+  },
   referralInputLabel: { en: 'Referral code (optional)', th: 'รหัสผู้แนะนำ (ถ้ามี)', ko: '추천 코드 (선택)' },
   consentMarketing: {
     en: 'I agree to receive news and promotions',
     th: 'ยินยอมรับข่าวสารและโปรโมชัน',
     ko: '마케팅 수신에 동의합니다',
+  },
+  consentMarketingSignupHint: {
+    en: 'Keep this checked and sign up to receive your welcome coupon.',
+    th: 'คงติ๊กไว้แล้วสมัครสมาชิกเพื่อรับคูปองต้อนรับ',
+    ko: '체크를 유지한 채 가입하시면 웰컴 쿠폰을 드립니다.',
+  },
+  consentMarketingCouponHint: {
+    en: 'Unchecking means you will not receive the welcome coupon.',
+    th: 'ถ้ายกเลิกติ๊กจะไม่ได้รับคูปองต้อนรับ',
+    ko: '체크를 해제하면 웰컴 쿠폰을 받을 수 없습니다.',
   },
   saveProfile: { en: 'Save profile', th: 'บันทึกข้อมูล', ko: '저장' },
   saveProfileChanges: { en: 'Save changes', th: 'บันทึกการเปลี่ยนแปลง', ko: '변경사항 저장' },
@@ -868,6 +905,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Welcome! Your membership is ready.',
     th: 'ยินดีต้อนรับ! สมัครสมาชิกเรียบร้อยแล้ว',
     ko: '환영합니다! 회원가입이 완료되었습니다.',
+  },
+  signup_success_created_with_coupon: {
+    en: 'Welcome! Your membership is ready — check My Benefits for your welcome coupon.',
+    th: 'ยินดีต้อนรับ! สมัครสำเร็จแล้ว — ดูคูปองต้อนรับได้ที่สิทธิประโยชน์ของฉัน',
+    ko: '환영합니다! 가입이 완료되었고 웰컴 쿠폰이 지급되었습니다. 「내 혜택」에서 확인하세요.',
   },
   signup_success_existing: {
     en: 'Existing account found. Signed you in.',

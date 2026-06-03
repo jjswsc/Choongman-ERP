@@ -1,5 +1,6 @@
 'use client'
 
+import { startTransition } from 'react'
 import { Languages } from 'lucide-react'
 import {
   MEMBER_PORTAL_LANG_OPTIONS,
@@ -16,7 +17,12 @@ export function MemberPortalLangSelect({ className }: { className?: string }) {
       <span className="sr-only">{t('langLabel')}</span>
       <select
         value={lang}
-        onChange={(e) => setLang(e.target.value as LangCode)}
+        onChange={(e) => {
+          const next = e.target.value as LangCode
+          requestAnimationFrame(() => {
+            startTransition(() => setLang(next))
+          })
+        }}
         className="h-9 max-w-[9.5rem] truncate rounded-xl border border-white/10 bg-black/30 px-2 text-xs text-white/85 outline-none focus:border-amber-400/40"
         aria-label={t('langLabel')}
       >

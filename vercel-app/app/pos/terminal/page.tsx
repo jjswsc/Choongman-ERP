@@ -156,6 +156,12 @@ import {
   translateTakeoutOrderDisplayLabel,
 } from '@/lib/pos-print-translate'
 import {
+  buildMemberPortalTakeoutBarSubLabel,
+  buildMemberPortalTakeoutDisplayLabel,
+  resolveMemberPortalTakeoutMeta,
+  resolveMemberPortalTakeoutTableDisplay,
+} from '@/lib/pos-member-portal-takeout-label'
+import {
   layoutHasMultipleFloors,
   parsePosTableFloorFromLabel,
   posDineInTableMatchKey,
@@ -7210,10 +7216,47 @@ export default function PosTerminalPage() {
     t
   )
   const resolveTakeoutOrderBarLabel = (order: Order) => {
+    const memberTable = resolveMemberPortalTakeoutTableDisplay({
+      tableName: order.tableName,
+      memo: order.memo,
+      memberId: order.memberId,
+      memberNo: order.memberNo,
+      labelText: { memberPortalOrder: t('posMemberPortalOrder') || '회원주문' },
+    })
     const raw =
+      memberTable ||
       String(order.customerName ?? '').trim() ||
       String(order.tableName ?? '').trim()
     return translateTakeoutOrderDisplayLabel(raw, t, { fallbackOrderId: order.id })
+  }
+
+  const buildTakeoutBarItemFields = (order: Order) => {
+    const label = resolveTakeoutOrderBarLabel(order)
+    const meta = resolveMemberPortalTakeoutMeta({
+      memo: order.memo,
+      memberId: order.memberId,
+      memberNo: order.memberNo,
+      tableName: order.tableName,
+    })
+    if (!meta.isMemberPortal) {
+      return { label, subLabel: undefined as string | undefined, rightLabel: label }
+    }
+    const memberLabel =
+      buildMemberPortalTakeoutDisplayLabel(meta, {
+        memberPortalOrder: t('posMemberPortalOrder') || '회원주문',
+      }) || label
+    const timeSubLabel = buildMemberPortalTakeoutBarSubLabel({
+      createdAt: order.createdAt,
+      pickupAtRaw: meta.pickupAtRaw,
+      lang,
+      orderTimeLabel: t('posOrderTimeShort') || '주문',
+      pickupTimeLabel: t('posPickupAtShort') || '픽업',
+    })
+    return {
+      label: memberLabel,
+      subLabel: timeSubLabel || undefined,
+      rightLabel: `#${order.id}`,
+    }
   }
 
   const takeoutMergePeerTables = useMemo((): Table[] => {
@@ -7547,56 +7590,57 @@ export default function PosTerminalPage() {
     const orders = [...takeoutOrders]
     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return orders.map((order) => {
-      const label = resolveTakeoutOrderBarLabel(order)
+      const barFields = buildTakeoutBarItemFields(order)
       const visual = getOrderVisual(order)
       return {
         id: `takeout-order-${order.id}`,
-        label,
+        label: barFields.label,
         status: visual.status,
         createdAt: visual.createdAt,
         targetMin: visual.targetMin,
         subLabel:
-          visual.status === 'pending'
+          barFields.subLabel ||
+          (visual.status === 'pending'
             ? t('posOrderBarPendingAccept') || '수락 대기'
-            : t('posOrderStatusPreparing') || '진행 중',
-        rightLabel: label,
+            : t('posOrderStatusPreparing') || '진행 중'),
+        rightLabel: barFields.rightLabel,
       } satisfies OrderBarItem
     })
-  }, [takeoutOrders, menuTargets, t])
+  }, [takeoutOrders, menuTargets, t, lang])
 
   const packagedTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
     const filtered = [...packagedTakeoutOrders]
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
-      const label = resolveTakeoutOrderBarLabel(order)
+      const barFields = buildTakeoutBarItemFields(order)
       return {
         id: `takeout-order-${order.id}`,
-        label,
+        label: barFields.label,
         status: 'packaged' as const,
         createdAt: order.createdAt ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt)) : undefined,
         targetMin: 0,
-        subLabel: t('posDeliveryPackagingComplete') || '포장 완료',
-        rightLabel: label,
+        subLabel: barFields.subLabel || t('posDeliveryPackagingComplete') || '포장 완료',
+        rightLabel: barFields.rightLabel,
       } satisfies OrderBarItem
     })
-  }, [packagedTakeoutOrders, t])
+  }, [packagedTakeoutOrders, t, lang])
 
   const completedTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
     const filtered = [...completedTakeoutOrders]
     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return filtered.map((order) => {
-      const label = resolveTakeoutOrderBarLabel(order)
+      const barFields = buildTakeoutBarItemFields(order)
       return {
         id: `takeout-order-${order.id}`,
-        label,
+        label: barFields.label,
         status: 'completed' as const,
         createdAt: order.createdAt ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt)) : undefined,
         targetMin: 0,
-        subLabel: formatPosOrderNoForPrint(order.orderNo || ''),
-        rightLabel: label,
+        subLabel: barFields.subLabel || formatPosOrderNoForPrint(order.orderNo || ''),
+        rightLabel: barFields.rightLabel,
       } satisfies OrderBarItem
     })
-  }, [completedTakeoutOrders, t])
+  }, [completedTakeoutOrders, t, lang])
 
   const allTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
     type Tagged = Order & { _listType?: 'in_progress' | 'packaged' | 'completed' }
@@ -7631,28 +7675,29 @@ export default function PosTerminalPage() {
     const filtered = Array.from(byId.values())
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
-      const label = resolveTakeoutOrderBarLabel(order)
+      const barFields = buildTakeoutBarItemFields(order)
       const listType = (order as Tagged)._listType
       const visual = getOrderVisual(order)
       const barStatus = listType === 'completed' ? 'completed' as const : listType === 'packaged' ? 'packaged' as const : visual.status
       return {
         id: `takeout-order-${order.id}`,
-        label,
+        label: barFields.label,
         status: barStatus,
         createdAt: order.createdAt ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt)) : undefined,
         targetMin: listType === 'in_progress' ? visual.targetMin : 0,
         subLabel:
-          listType === 'completed'
+          barFields.subLabel ||
+          (listType === 'completed'
             ? formatPosOrderNoForPrint(order.orderNo || '')
             : listType === 'packaged'
               ? t('posDeliveryPackagingComplete') || '포장 완료'
               : visual.status === 'pending'
                 ? t('posOrderBarPendingAccept') || '수락 대기'
-                : t('posOrderStatusPreparing') || '진행 중',
-        rightLabel: label,
+                : t('posOrderStatusPreparing') || '진행 중'),
+        rightLabel: barFields.rightLabel,
       } satisfies OrderBarItem
     })
-  }, [takeoutOrders, packagedTakeoutOrders, completedTakeoutOrders, menuTargets, t])
+  }, [takeoutOrders, packagedTakeoutOrders, completedTakeoutOrders, menuTargets, t, lang])
 
   const inProgressOrPackagedTakeoutBarItems = useMemo(() => {
     const merged = [...takeoutBarItems, ...packagedTakeoutBarItems]
