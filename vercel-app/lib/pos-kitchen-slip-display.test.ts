@@ -49,6 +49,24 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].promoComposeLines).toEqual(['GOLDEN FRIED CHICKEN (S Boneless) x1'])
   })
 
+  it('keeps same-menu different-size singles as separate kitchen lines (not merged by code prefix)', () => {
+    // 라우팅 후(withKitchenCodeName) 단품에도 `[SC001]` 코드 접두가 붙는다.
+    // 같은 메뉴(코드 동일) 다른 사이즈 두 단품이 promo 부모(SC001)로 오인되어 합쳐지면 안 된다.
+    const slipItems: KitchenSlipRoutingItem[] = [
+      { id: 'soy-s', name: '[SC001] SOY SAUCE CHICKEN (S Boneless)', qty: 1, note: 'S Boneless' },
+      { id: 'soy-m', name: '[SC001] SOY SAUCE CHICKEN (M Boneless)', qty: 1, note: 'M Boneless' },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      menuNameByMenuId: { soy: 'SOY SAUCE CHICKEN' },
+      menuCodeByMenuId: { soy: 'SC001' },
+    })
+    expect(lines).toHaveLength(2)
+    expect(lines.every((l) => l.qty === 1)).toBe(true)
+    const noteText = lines.map((l) => `${l.name} ${l.note ?? ''} ${(l.promoComposeLines ?? []).join(' ')}`).join('\n')
+    expect(noteText).toContain('S Boneless')
+    expect(noteText).toContain('M Boneless')
+  })
+
   it('resolves promo optionCode and hides raw code-only parent note', () => {
     const catalog = buildGrabPosCatalog(
       [],

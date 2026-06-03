@@ -10,7 +10,11 @@ import {
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
-import { splitPosPrintItemLine, stripLeadingPrintCodeBrackets } from '@/lib/pos-print-item-line'
+import {
+  isLikelyPosMenuSkuCode,
+  splitPosPrintItemLine,
+  stripLeadingPrintCodeBrackets,
+} from '@/lib/pos-print-item-line'
 import type { KitchenSlipRoutingItem } from '@/lib/pos-kitchen-slip-routing'
 
 export type KitchenSlipPrintLine = {
@@ -471,7 +475,17 @@ export function buildKitchenHallStyleSlipLines(
   for (const it of slipItems) {
     const groupId = String((it as { kitchenPromoGroupId?: string }).kitchenPromoGroupId ?? '').trim()
     const metaParent = String((it as { kitchenPromoParentName?: string }).kitchenPromoParentName ?? '').trim()
-    const parsed = parseKitchenSplitPromoLineName(String(it.name ?? ''))
+    let parsed = parseKitchenSplitPromoLineName(String(it.name ?? ''))
+    // `withKitchenCodeName`이 단품에도 `[메뉴코드]` 접두를 붙이므로
+    // `[SC001] SOY SAUCE CHICKEN (S Boneless)` 같은 단품이 promo 부모(SC001)로 오인되어
+    // 같은 코드의 다른 사이즈끼리 한 줄로 합쳐지는 문제를 막는다.
+    // 실제 세트 구성품은 kitchenPromoGroupId/ParentName 메타 또는 `[코드][세트명]` 이중 괄호를 가진다.
+    if (parsed && !groupId && !metaParent && !parsed.codePrefix) {
+      const parentUpper = parsed.parentLabel.trim().toUpperCase()
+      if (codeToMenuName.has(parentUpper) || isLikelyPosMenuSkuCode(parsed.parentLabel)) {
+        parsed = null
+      }
+    }
     if (groupId || metaParent || parsed) {
       const parentLabel = metaParent || parsed?.parentLabel || ''
       const key = groupId || normalizePromoParentKey(parentLabel)
