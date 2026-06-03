@@ -551,6 +551,15 @@ async function pushGrabMenuRecordForCutTarget(
   const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
   const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
   if (regularMinor <= saleMinor) return false
+  /**
+   * percentage 캠페인이 정가(item.price)→할인가 취소선을 만드는 전략에서는
+   * advancedPricing(배달 채널가)을 할인가로 내리면 채널가=할인가가 되어
+   * 캠페인 할인 결과와 같아져 상쇄된다 → 취소선·정상가가 사라지고 할인가만 노출.
+   * 따라서 채널가를 정가로 맞춰(이전에 박힌 할인가 advancedPricing도 정가로 덮어써 제거)
+   * 캠페인이 단독으로 취소선을 만들게 한다. (fixPrice 전략일 때만 advancedPricing으로 배달가를 직접 할인가로 내린다.)
+   */
+  const usePercentageCampaign = resolveGrabPromoCampaignDiscountType() === 'percentage'
+  const advancedPriceMinor = usePercentageCampaign ? regularMinor : saleMinor
   await grabUpdateMenuRecord({
     merchantID,
     field: 'ITEM',
@@ -558,7 +567,7 @@ async function pushGrabMenuRecordForCutTarget(
     price: regularMinor,
     advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
       key,
-      price: saleMinor,
+      price: advancedPriceMinor,
     })),
   })
   return true
