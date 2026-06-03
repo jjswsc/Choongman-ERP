@@ -2,19 +2,18 @@
 
 import * as React from "react"
 import { Plus } from "lucide-react"
-import { MemberPortalLineList } from "@/components/admin/member-portal-line-list"
+import { MemberPortalContentAdminList } from "@/components/admin/member-portal-content-admin-list"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
+import { appConfirm } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
 import {
   filterContentForAdminTab,
-  formatMemberPortalAdminPeriod,
-  memberPortalContentPlacementLabel,
-  toDatetimeLocalValue,
   type MemberPortalContentAdminItem,
+  type MemberPortalContentAdminTab,
 } from "@/lib/member-portal-content-admin"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 
@@ -34,14 +33,24 @@ type FormState = {
   endsAt: string
 }
 
-const VARIANT_META = {
+const VARIANT_META: Record<
+  Exclude<MemberPortalContentAdminTab, "all">,
+  {
+    title: string
+    description: string
+    empty: string
+    newLabel: string
+    defaultTargetTab: string
+    contentType: ContentType
+  }
+> = {
   popup: {
     title: "팝업",
-    description: "로그인 후 홈에 뜨는 팝업 배너입니다. LINE OA 쿠폰 목록처럼 등록·사용 중지를 바로 전환할 수 있습니다.",
+    description: "로그인 후 홈에 뜨는 팝업 배너입니다. 목록에서 노출 상태·기간·미리보기를 확인하고 바로 편집할 수 있습니다.",
     empty: "등록된 팝업이 없습니다. 「새 팝업」으로 추가하세요.",
     newLabel: "새 팝업",
     defaultTargetTab: "home",
-    contentType: "popup" as const,
+    contentType: "popup",
   },
   promo: {
     title: "월별 프로모션",
@@ -50,7 +59,7 @@ const VARIANT_META = {
     empty: "등록된 월별 프로모션이 없습니다.",
     newLabel: "새 프로모션",
     defaultTargetTab: "home_promo",
-    contentType: "info" as const,
+    contentType: "info",
   },
   info: {
     title: "정보·공지",
@@ -58,11 +67,17 @@ const VARIANT_META = {
     empty: "등록된 정보 콘텐츠가 없습니다.",
     newLabel: "새 공지",
     defaultTargetTab: "home",
-    contentType: "info" as const,
+    contentType: "info",
   },
 }
 
-function emptyForm(variant: keyof typeof VARIANT_META): FormState {
+const INFO_TARGET_OPTIONS = [
+  { value: "home", label: "홈 · 공지" },
+  { value: "home_feature", label: "홈 · 추천 타일" },
+  { value: "location", label: "매장 탭" },
+] as const
+
+function emptyForm(variant: Exclude<MemberPortalContentAdminTab, "all">): FormState {
   const meta = VARIANT_META[variant]
   return {
     contentKey: "",
@@ -82,7 +97,7 @@ function emptyForm(variant: keyof typeof VARIANT_META): FormState {
 function itemToForm(item: MemberPortalContentAdminItem): FormState {
   return {
     contentKey: item.contentKey,
-    contentType: item.contentType,
+    contentType: item.contentType === "store_photo" ? "info" : item.contentType,
     storeCode: item.storeCode,
     title: item.title,
     body: item.body,
@@ -95,8 +110,26 @@ function itemToForm(item: MemberPortalContentAdminItem): FormState {
   }
 }
 
+function toDatetimeLocalValue(iso: string): string {
+  const v = String(iso || "").trim()
+  if (!v) return ""
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  if (!m) return ""
+  return `${m[1]}T${m[2]}`
+}
+
+function resolveEditVariant(
+  variant: MemberPortalContentAdminTab,
+  item: MemberPortalContentAdminItem
+): Exclude<MemberPortalContentAdminTab, "all"> {
+  if (variant !== "all") return variant
+  if (item.contentType === "popup") return "popup"
+  if (item.contentType === "info" && item.targetTab === "home_promo") return "promo"
+  return "info"
+}
+
 type MemberPortalContentAdminPanelProps = {
-  variant: keyof typeof VARIANT_META
+  variant: MemberPortalContentAdminTab
   items: MemberPortalContentAdminItem[]
   loading?: boolean
   canEdit?: boolean
@@ -114,44 +147,65 @@ export function MemberPortalContentAdminPanel({
   onNotice,
   onError,
 }: MemberPortalContentAdminPanelProps) {
-  const meta = VARIANT_META[variant]
+  const panelVariant = variant === "all" ? "promo" : variant
+  const meta = VARIANT_META[panelVariant]
   const filtered = React.useMemo(() => filterContentForAdminTab(items, variant), [items, variant])
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
-  const [form, setForm] = React.useState<FormState>(() => emptyForm(variant))
+  const [formVariant, setFormVariant] = React.useState<Exclude<MemberPortalContentAdminTab, "all">>(panelVariant)
+  const [form, setForm] = React.useState<FormState>(() => emptyForm(panelVariant))
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [togglingKey, setTogglingKey] = React.useState<string | null>(null)
+  const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
 
-  const openNew = React.useCallback(() => {
-    setForm(emptyForm(variant))
-    setSheetOpen(true)
-  }, [variant])
+  const formMeta = VARIANT_META[formVariant]
+
+  const openNew = React.useCallback(
+    (targetVariant?: Exclude<MemberPortalContentAdminTab, "all">) => {
+      const nextVariant = targetVariant || panelVariant
+      setFormVariant(nextVariant)
+      setForm(emptyForm(nextVariant))
+      setSheetOpen(true)
+    },
+    [panelVariant]
+  )
 
   const openEdit = React.useCallback(
     (contentKey: string) => {
       const item = filtered.find((x) => x.contentKey === contentKey)
       if (!item) return
+      const editVariant = resolveEditVariant(variant, item)
+      setFormVariant(editVariant)
       setForm(itemToForm(item))
       setSheetOpen(true)
     },
-    [filtered]
+    [filtered, variant]
   )
 
-  const persist = React.useCallback(
-    async (payload: FormState) => {
-      const res = await apiFetch("/api/member-portal/admin/content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = (await res.json()) as { success: boolean; message?: string }
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "저장에 실패했습니다.")
-      }
+  const openDuplicate = React.useCallback(
+    (contentKey: string) => {
+      const item = filtered.find((x) => x.contentKey === contentKey)
+      if (!item) return
+      const editVariant = resolveEditVariant(variant, item)
+      setFormVariant(editVariant)
+      setForm({ ...itemToForm(item), contentKey: "" })
+      setSheetOpen(true)
     },
-    []
+    [filtered, variant]
   )
+
+  const persist = React.useCallback(async (payload: FormState) => {
+    const res = await apiFetch("/api/member-portal/admin/content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const data = (await res.json()) as { success: boolean; message?: string }
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "저장에 실패했습니다.")
+    }
+  }, [])
 
   const onSave = React.useCallback(async () => {
     setSaving(true)
@@ -185,6 +239,38 @@ export function MemberPortalContentAdminPanel({
       }
     },
     [filtered, onError, onNotice, onSaved, persist]
+  )
+
+  const onDelete = React.useCallback(
+    async (contentKey: string) => {
+      const item = filtered.find((x) => x.contentKey === contentKey)
+      if (!item) return
+      const ok = await appConfirm(`「${item.title || contentKey}」 항목을 삭제할까요?`, {
+        title: "콘텐츠 삭제",
+        confirmLabel: "삭제",
+        cancelLabel: "취소",
+      })
+      if (!ok) return
+      setDeletingKey(contentKey)
+      onError("")
+      try {
+        const res = await apiFetch(
+          `/api/member-portal/admin/content?contentKey=${encodeURIComponent(contentKey)}`,
+          { method: "DELETE" }
+        )
+        const data = (await res.json()) as { success: boolean; message?: string }
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || "삭제에 실패했습니다.")
+        }
+        onNotice("삭제되었습니다.")
+        await onSaved()
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "삭제 중 오류가 발생했습니다.")
+      } finally {
+        setDeletingKey(null)
+      }
+    },
+    [filtered, onError, onNotice, onSaved]
   )
 
   const onUploadImage = React.useCallback(
@@ -227,54 +313,81 @@ export function MemberPortalContentAdminPanel({
     [onError, onNotice]
   )
 
-  const listRows = filtered.map((it) => ({
-    id: it.contentKey,
-    imageUrl: it.imageUrl,
-    title: it.title,
-    subtitle: it.body ? it.body.slice(0, 80) : undefined,
-    placement: memberPortalContentPlacementLabel(it.targetTab, it.contentType),
-    periodLabel: formatMemberPortalAdminPeriod(it.startsAt, it.endsAt),
-    sortOrder: it.sortOrder,
-    isActive: it.isActive,
-    toggling: togglingKey === it.contentKey,
-  }))
+  const headerTitle =
+    variant === "all" ? "전체 콘텐츠 목록" : meta.title
+  const headerDescription =
+    variant === "all"
+      ? "월별 프로모션·팝업·정보·공지를 한 화면에서 검색·필터·미리보기할 수 있습니다."
+      : meta.description
+  const emptyMessage =
+    variant === "all"
+      ? "등록된 콘텐츠가 없습니다. 아래 탭에서 새 항목을 추가하세요."
+      : meta.empty
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">{meta.title}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{meta.description}</p>
+          <h2 className="text-lg font-semibold">{headerTitle}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{headerDescription}</p>
         </div>
         {canEdit ? (
-          <Button type="button" onClick={openNew} className="shrink-0 bg-[#06c755] hover:bg-[#05b34c]">
-            <Plus className="mr-1.5 h-4 w-4" />
-            {meta.newLabel}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {variant === "all" ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => openNew("promo")}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  프로모션
+                </Button>
+                <Button type="button" variant="outline" onClick={() => openNew("popup")}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  팝업
+                </Button>
+                <Button type="button" onClick={() => openNew("info")} className="bg-[#06c755] hover:bg-[#05b34c]">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  공지
+                </Button>
+              </>
+            ) : (
+              <Button type="button" onClick={() => openNew()} className="shrink-0 bg-[#06c755] hover:bg-[#05b34c]">
+                <Plus className="mr-1.5 h-4 w-4" />
+                {meta.newLabel}
+              </Button>
+            )}
+          </div>
         ) : null}
       </div>
 
       {loading ? (
         <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">불러오는 중...</div>
       ) : (
-        <MemberPortalLineList
-          rows={listRows}
-          emptyMessage={meta.empty}
+        <MemberPortalContentAdminList
+          variant={variant}
+          items={filtered}
+          emptyMessage={emptyMessage}
+          canEdit={canEdit}
+          togglingKey={togglingKey}
+          deletingKey={deletingKey}
           onToggleActive={onToggleActive}
           onEdit={openEdit}
-          canEdit={canEdit}
+          onDuplicate={canEdit ? openDuplicate : undefined}
+          onDelete={canEdit ? onDelete : undefined}
         />
       )}
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader>
-            <SheetTitle>
-              {form.contentKey ? `${meta.title} 편집` : meta.newLabel}
-            </SheetTitle>
+            <SheetTitle>{form.contentKey ? `${formMeta.title} 편집` : formMeta.newLabel}</SheetTitle>
           </SheetHeader>
 
           <div className="mt-6 space-y-4 pb-8">
+            {form.contentKey ? (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                콘텐츠 키: <span className="font-mono text-foreground">{form.contentKey}</span>
+              </div>
+            ) : null}
+
             <div className="space-y-1.5">
               <Label>제목</Label>
               <Input
@@ -311,26 +424,36 @@ export function MemberPortalContentAdminPanel({
               <Textarea
                 value={form.body}
                 onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
-                rows={4}
+                rows={5}
                 placeholder="상세 설명 (탭 시 시트에 표시)"
               />
             </div>
 
-            {variant !== "popup" ? (
+            {formVariant !== "popup" ? (
               <div className="space-y-1.5">
                 <Label>노출 탭</Label>
-                <Input
-                  value={form.targetTab}
-                  onChange={(e) => setForm((p) => ({ ...p, targetTab: e.target.value }))}
-                  placeholder={meta.defaultTargetTab}
-                  readOnly={variant === "promo"}
-                />
-                {variant === "promo" ? (
-                  <p className="text-xs text-muted-foreground">월별 프로모션은 home_promo로 고정됩니다.</p>
+                {formVariant === "promo" ? (
+                  <>
+                    <Input value={form.targetTab} readOnly />
+                    <p className="text-xs text-muted-foreground">월별 프로모션은 home_promo로 고정됩니다.</p>
+                  </>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    예: home, home_feature, home_promo, location
-                  </p>
+                  <>
+                    <select
+                      value={form.targetTab || "home"}
+                      onChange={(e) => setForm((p) => ({ ...p, targetTab: e.target.value }))}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    >
+                      {INFO_TARGET_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      home_feature = 홈 신메뉴·프로모션 타일 / home = 홈 하단 공지
+                    </p>
+                  </>
                 )}
               </div>
             ) : null}
@@ -375,12 +498,12 @@ export function MemberPortalContentAdminPanel({
 
             <div className="flex items-center gap-2 rounded-md border px-3 py-2">
               <input
-                id={`active-${variant}`}
+                id={`active-${variant}-${formVariant}`}
                 type="checkbox"
                 checked={form.isActive}
                 onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
               />
-              <label htmlFor={`active-${variant}`} className="text-sm">
+              <label htmlFor={`active-${variant}-${formVariant}`} className="text-sm">
                 사용 중 (회원앱 노출)
               </label>
             </div>

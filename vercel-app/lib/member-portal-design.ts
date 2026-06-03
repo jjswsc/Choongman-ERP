@@ -1,6 +1,13 @@
-/** 회원 라운지 기본 배경 — CMS 미설정 시 사용 (모바일 세로 9:16) */
+/** 회원 라운지 기본 배경 — CMS 미설정 시 사용 (모바일 세로 9:16, 상단=히어로 음식) */
 export const DEFAULT_MEMBER_APP_BG = '/member-portal/app-bg-premium.jpg'
 export const DEFAULT_MEMBER_LOGIN_BG = '/member-portal/app-bg-premium.jpg'
+
+/** 모바일 세로 배경 — cover + 상단 정렬 (치킨 히어로 노출) */
+export const MEMBER_PORTAL_BG_STYLE = {
+  backgroundSize: 'cover' as const,
+  backgroundPosition: 'center top' as const,
+  backgroundRepeat: 'no-repeat' as const,
+}
 
 export const MP_MAX_WIDTH = 'max-w-[430px]'
 

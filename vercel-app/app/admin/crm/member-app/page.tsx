@@ -10,6 +10,7 @@ import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
 import type { MemberPortalContentAdminItem } from "@/lib/member-portal-content-admin"
+import { countContentForAdminTab } from "@/lib/member-portal-content-admin"
 import { useAuth } from "@/lib/auth-context"
 import { canEditMemberPortalAdmin } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
@@ -97,8 +98,8 @@ export default function CrmMemberAppContentPage() {
   const { auth } = useAuth()
   const canEdit = canEditMemberPortalAdmin(auth?.role || "", auth?.store)
   const [activeTab, setActiveTab] = React.useState<
-    "design" | "popup" | "promo" | "info" | "stores" | "contact" | "delivery"
-  >("promo")
+    "all" | "design" | "popup" | "promo" | "info" | "stores" | "contact" | "delivery"
+  >("all")
   const [items, setItems] = React.useState<MemberPortalContentAdminItem[]>([])
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
   const [contactInstagramUrl, setContactInstagramUrl] = React.useState("")
@@ -334,7 +335,7 @@ export default function CrmMemberAppContentPage() {
           <div>
             <h1 className="text-xl font-bold">회원앱 운영</h1>
             <p className="text-sm text-muted-foreground">
-              LINE OA 관리자처럼 목록·썸네일·사용 중지로 팝업·프로모션·매장을 관리합니다.
+              월별 프로모션·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널을 함께 관리합니다.
             </p>
           </div>
           <Button variant="outline" onClick={() => refresh()} disabled={loading}>
@@ -353,10 +354,39 @@ export default function CrmMemberAppContentPage() {
         ) : null}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
-            <TabsTrigger value="promo">월별 프로모션</TabsTrigger>
-            <TabsTrigger value="popup">팝업</TabsTrigger>
-            <TabsTrigger value="info">정보·공지</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-8">
+            <TabsTrigger value="all">
+              전체 목록
+              {items.length > 0 ? (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  {countContentForAdminTab(items, "all")}
+                </span>
+              ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="promo">
+              월별 프로모션
+              {items.length > 0 ? (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  {countContentForAdminTab(items, "promo")}
+                </span>
+              ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="popup">
+              팝업
+              {items.length > 0 ? (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  {countContentForAdminTab(items, "popup")}
+                </span>
+              ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="info">
+              정보·공지
+              {items.length > 0 ? (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  {countContentForAdminTab(items, "info")}
+                </span>
+              ) : null}
+            </TabsTrigger>
             <TabsTrigger value="stores">매장</TabsTrigger>
             <TabsTrigger value="design">디자인</TabsTrigger>
             <TabsTrigger value="contact">문의</TabsTrigger>
@@ -514,6 +544,18 @@ export default function CrmMemberAppContentPage() {
                 </fieldset>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="all" className="space-y-4">
+            <MemberPortalContentAdminPanel
+              variant="all"
+              items={items}
+              loading={loading}
+              canEdit={canEdit}
+              onSaved={refresh}
+              onNotice={setNotice}
+              onError={setError}
+            />
           </TabsContent>
 
           <TabsContent value="promo" className="space-y-4">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { mapMemberPortalContentRow, type MemberPortalContentRow } from '@/lib/member-portal-content'
-import { supabaseSelect, supabaseUpsertMerge } from '@/lib/supabase-server'
+import { supabaseDeleteByFilter, supabaseSelect, supabaseUpsertMerge } from '@/lib/supabase-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 function isMissingContentTableError(e: unknown): boolean {
@@ -80,6 +80,33 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '저장에 실패했습니다.' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const authResult = await requireMemberPortalAdminAuth(req)
+  if (authResult.errorResponse) return authResult.errorResponse
+  try {
+    const contentKey = String(new URL(req.url).searchParams.get('contentKey') || '').trim()
+    if (!contentKey) {
+      return NextResponse.json({ success: false, message: 'contentKey is required' }, { status: 400 })
+    }
+    await supabaseDeleteByFilter(
+      'member_portal_content',
+      `content_key=eq.${encodeURIComponent(contentKey)}`
+    )
+    return NextResponse.json({ success: true })
+  } catch (e) {
+    if (isMissingContentTableError(e)) {
+      return NextResponse.json(
+        { success: false, message: 'member_portal_content 테이블이 없어 삭제할 수 없습니다.' },
+        { status: 400 }
+      )
+    }
+    return NextResponse.json(
+      { success: false, message: e instanceof Error ? e.message : '삭제에 실패했습니다.' },
       { status: 500 }
     )
   }

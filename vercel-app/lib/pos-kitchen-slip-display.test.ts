@@ -67,6 +67,26 @@ describe('pos-kitchen-slip-display', () => {
     expect(noteText).toContain('M Boneless')
   })
 
+  it('falls back to name-embedded size when optc code lookup fails (no intermittent size drop)', () => {
+    // optc:CODE 가 옵션맵에 없을 때(일시적 fetch 실패/콜드 캐시) 사이즈가 사라지면 안 된다.
+    // 이름에 (S Boneless) 가 있으므로 그대로 폴백해야 한다(홀과 동일 값).
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'soy-s',
+        name: 'SOY SAUCE CHICKEN (S Boneless)',
+        qty: 1,
+        note: 'optc:C999-1',
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      menuNameByMenuId: { soy: 'SOY SAUCE CHICKEN' },
+      // optionNameByCode 비움 → C999-1 해석 실패 상황 재현
+      optionNameByCode: new Map<string, string>(),
+    })
+    expect(lines).toHaveLength(1)
+    expect(`${lines[0].name} ${lines[0].note ?? ''}`).toContain('S Boneless')
+  })
+
   it('resolves promo optionCode and hides raw code-only parent note', () => {
     const catalog = buildGrabPosCatalog(
       [],

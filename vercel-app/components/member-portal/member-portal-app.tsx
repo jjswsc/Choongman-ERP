@@ -40,7 +40,12 @@ import { MemberPortalHomeMonthlyPromos } from "@/components/member-portal/member
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
-import { MemberPortalTierGuide, useMemberPortalTiers } from "@/components/member-portal/member-portal-tier-guide"
+import {
+  MemberPortalTierBenefits,
+  MemberPortalTierGuide,
+  MemberPortalTierGuideSheet,
+  useMemberPortalTiers,
+} from "@/components/member-portal/member-portal-tier-guide"
 import {
   GlassCard,
   MemberPortalAmbienceBackground,
@@ -68,7 +73,7 @@ import {
 } from "@/components/member-portal/portal-ui"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
-import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
+import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, MEMBER_PORTAL_BG_STYLE, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
 import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type MemberPortalStoreRow = MemberPortalStoreDto
@@ -170,6 +175,7 @@ export function MemberPortalApp() {
   const [showQr, setShowQr] = React.useState(false)
   const [homeFeatureOpen, setHomeFeatureOpen] = React.useState(false)
   const [homePromoOpen, setHomePromoOpen] = React.useState(false)
+  const [tierGuideOpen, setTierGuideOpen] = React.useState(false)
   const [selectedHomePromo, setSelectedHomePromo] = React.useState<MemberPortalContentItem | null>(null)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const [profile, setProfile] = React.useState<PortalProfileForm>({
@@ -520,9 +526,8 @@ export function MemberPortalApp() {
       <div
         className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white"
         style={{
-          backgroundImage: `linear-gradient(rgba(8,8,10,0.84), rgba(8,8,10,0.92)), url(${resolveMemberLoginBackgroundUrl(designBackgrounds.loginBackgroundUrl)})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
+          backgroundImage: `linear-gradient(rgba(8,8,10,0.62), rgba(8,8,10,0.82)), url(${resolveMemberLoginBackgroundUrl(designBackgrounds.loginBackgroundUrl)})`,
+          ...MEMBER_PORTAL_BG_STYLE,
         }}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.14),transparent_42%)]" />
@@ -911,9 +916,9 @@ export function MemberPortalApp() {
               progressPercent={activeDashboard.tierProgress.progressPercent}
               pointRateLabel={`${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · ${activeDashboard.tierProgress.progressPercent}%`}
               accentClass={tier.accent}
+              actionLabel={portalTiers.length > 0 ? t("tierGuideViewBtn") : undefined}
+              onAction={portalTiers.length > 0 ? () => setTierGuideOpen(true) : undefined}
             />
-
-            <MemberPortalTierGuide tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
 
             <div className="grid grid-cols-2 gap-3">
               <PremiumStatTile
@@ -1048,7 +1053,7 @@ export function MemberPortalApp() {
         {tab === "privilege" && (
           <div className="space-y-3">
             <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
-            <MemberPortalTierGuide tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
+            <MemberPortalTierBenefits tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
             <div className="grid grid-cols-3 gap-2">
               <GlassCard soft className="px-3 py-3 text-center">
                 <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("statCoupons")}</p>
@@ -1308,6 +1313,13 @@ export function MemberPortalApp() {
           setHomePromoOpen(false)
           setSelectedHomePromo(null)
         }}
+      />
+      <MemberPortalTierGuideSheet
+        open={tierGuideOpen}
+        tiers={portalTiers}
+        currentTierCode={activeDashboard.tierProgress.currentTierCode}
+        closeLabel={t("contactMenuClose")}
+        onClose={() => setTierGuideOpen(false)}
       />
     </MemberPortalAmbienceBackground>
   )

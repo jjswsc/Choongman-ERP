@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { MemberTierBenefitsPreview } from "@/components/admin/member-tier-benefits-preview"
 import { getMemberTierPolicy, getMemberTiers, recalculateMemberTier, saveMemberTier, saveMemberTierPolicy } from "@/lib/api-client"
+import type { MemberPortalLang } from "@/lib/member-tier-public"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr } from "@/lib/i18n"
 
 type TierRow = {
   code: string
@@ -71,6 +73,29 @@ export function MemberPointsPolicyTab() {
       benefits_th: String(r.benefits_th || ""),
     })
   }, [])
+
+  const saveTier = React.useCallback(async () => {
+    setSaving(true)
+    try {
+      const res = await saveMemberTier({
+        code: form.code.trim(),
+        name: form.name.trim(),
+        minAmount: Number(form.min_amount || 0),
+        minPoints: Number(form.min_points || 0),
+        pointRate: Number(form.point_rate || 0),
+        sortOrder: Number(form.sort_order || 0),
+        benefitsKo: String(form.benefits_ko || ""),
+        benefitsEn: String(form.benefits_en || ""),
+        benefitsTh: String(form.benefits_th || ""),
+      })
+      if (!res.success) await appAlert(res.message || t("msg_save_fail"))
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }, [form, load, t])
+
+  const previewLangDefault: MemberPortalLang = lang === "ko" ? "ko" : lang === "th" ? "th" : "en"
 
   return (
     <div className="space-y-4">
@@ -160,83 +185,13 @@ export function MemberPointsPolicyTab() {
               value={String(form.sort_order)}
               onChange={(e) => setForm((prev) => ({ ...prev, sort_order: Number(e.target.value || 0) }))}
             />
-            <Button
-              disabled={saving}
-              onClick={async () => {
-                setSaving(true)
-                try {
-                  const res = await saveMemberTier({
-                    code: form.code.trim(),
-                    name: form.name.trim(),
-                    minAmount: Number(form.min_amount || 0),
-                    minPoints: Number(form.min_points || 0),
-                    pointRate: Number(form.point_rate || 0),
-                    sortOrder: Number(form.sort_order || 0),
-                    benefitsKo: String(form.benefits_ko || ""),
-                    benefitsEn: String(form.benefits_en || ""),
-                    benefitsTh: String(form.benefits_th || ""),
-                  })
-                  if (!res.success) await appAlert(res.message || t("msg_save_fail"))
-                  await load()
-                } finally {
-                  setSaving(false)
-                }
-              }}
-            >
+            <Button disabled={saving} onClick={() => void saveTier()}>
               {saving ? t("loading") : t("commonSave")}
             </Button>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-3">
-            <div className="space-y-1">
-              <Label className="text-xs">{t("memberTierBenefitsKo")}</Label>
-              <Textarea
-                rows={5}
-                value={String(form.benefits_ko || "")}
-                onChange={(e) => setForm((prev) => ({ ...prev, benefits_ko: e.target.value }))}
-                placeholder={t("memberTierBenefitsPh")}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">{t("memberTierBenefitsEn")}</Label>
-              <Textarea
-                rows={5}
-                value={String(form.benefits_en || "")}
-                onChange={(e) => setForm((prev) => ({ ...prev, benefits_en: e.target.value }))}
-                placeholder={t("memberTierBenefitsPh")}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">{t("memberTierBenefitsTh")}</Label>
-              <Textarea
-                rows={5}
-                value={String(form.benefits_th || "")}
-                onChange={(e) => setForm((prev) => ({ ...prev, benefits_th: e.target.value }))}
-                placeholder={t("memberTierBenefitsPh")}
-              />
-            </div>
           </div>
         </CardContent>
         <CardContent className="border-t pt-4">
           <p className="text-xs text-muted-foreground">{t("memberPointsPolicyExample")}</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("memberTierRecalculateTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              const res = await recalculateMemberTier()
-              if (!res.success) await appAlert(res.message || t("memberTierRecalculateFail"))
-              else await appAlert(`${t("memberTierRecalculateDone")}: ${res.updated ?? 0}${t("memberCountUnit")}`)
-            }}
-          >
-            {t("memberTierRecalculateAll")}
-          </Button>
         </CardContent>
       </Card>
 
@@ -261,7 +216,9 @@ export function MemberPointsPolicyTab() {
                 {rows.map((r) => (
                   <tr
                     key={r.code}
-                    className="cursor-pointer border-t hover:bg-muted/20"
+                    className={`cursor-pointer border-t hover:bg-muted/20 ${
+                      r.code === form.code ? "bg-primary/5" : ""
+                    }`}
                     onClick={() => applyRow(r)}
                   >
                     <td className="p-2">{r.code}</td>
@@ -277,6 +234,85 @@ export function MemberPointsPolicyTab() {
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("memberTierBenefitsPortalTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t("memberTierBenefitsPortalDesc")}</p>
+          <p className="text-sm font-medium">
+            {tr(t, "memberTierBenefitsEditingTier", { name: form.name || form.code, code: form.code })}
+          </p>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="space-y-1">
+              <Label className="text-xs">{t("memberTierBenefitsKo")}</Label>
+              <Textarea
+                rows={6}
+                value={String(form.benefits_ko || "")}
+                onChange={(e) => setForm((prev) => ({ ...prev, benefits_ko: e.target.value }))}
+                placeholder={t("memberTierBenefitsPh")}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("memberTierBenefitsEn")}</Label>
+              <Textarea
+                rows={6}
+                value={String(form.benefits_en || "")}
+                onChange={(e) => setForm((prev) => ({ ...prev, benefits_en: e.target.value }))}
+                placeholder={t("memberTierBenefitsPh")}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("memberTierBenefitsTh")}</Label>
+              <Textarea
+                rows={6}
+                value={String(form.benefits_th || "")}
+                onChange={(e) => setForm((prev) => ({ ...prev, benefits_th: e.target.value }))}
+                placeholder={t("memberTierBenefitsPh")}
+              />
+            </div>
+          </div>
+          <MemberTierBenefitsPreview
+            key={form.code}
+            tierCode={form.code}
+            tierName={form.name || form.code}
+            pointRate={Number(form.point_rate || 0)}
+            benefitsKo={String(form.benefits_ko || "")}
+            benefitsEn={String(form.benefits_en || "")}
+            benefitsTh={String(form.benefits_th || "")}
+            defaultLang={previewLangDefault}
+            previewTitle={t("memberTierBenefitsPreviewTitle")}
+            previewHint={t("memberTierBenefitsPreviewHint")}
+            earnRateLabel={t("memberTierPointRate")}
+            emptyLabel={t("memberTierBenefitsPreviewEmpty")}
+            langKoLabel="KO"
+            langEnLabel="EN"
+            langThLabel="TH"
+          />
+          <Button disabled={saving} onClick={() => void saveTier()}>
+            {saving ? t("loading") : t("memberTierBenefitsSave")}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("memberTierRecalculateTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const res = await recalculateMemberTier()
+              if (!res.success) await appAlert(res.message || t("memberTierRecalculateFail"))
+              else await appAlert(`${t("memberTierRecalculateDone")}: ${res.updated ?? 0}${t("memberCountUnit")}`)
+            }}
+          >
+            {t("memberTierRecalculateAll")}
+          </Button>
         </CardContent>
       </Card>
     </div>

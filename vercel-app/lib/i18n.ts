@@ -6135,6 +6135,14 @@ export const i18n = {
     memberTierBenefitsTh: '혜택 (ไทย)',
     memberTierBenefitsPh: '줄바꿈으로 여러 혜택 입력',
     memberTierBenefitsShort: '혜택',
+    memberTierBenefitsPortalTitle: '회원 앱 · 등급별 혜택',
+    memberTierBenefitsPortalDesc:
+      '회원 앱 「내 혜택」탭에 등급별로 표시됩니다. 등급 목록에서 행을 클릭해 선택한 뒤, 언어별 혜택 문구를 입력·저장하세요.',
+    memberTierBenefitsEditingTier: '편집 중: {name} ({code})',
+    memberTierBenefitsSave: '등급별 혜택 저장',
+    memberTierBenefitsPreviewTitle: '회원 앱 미리보기',
+    memberTierBenefitsPreviewHint: '저장 전 입력 중인 내용이 「내 혜택」탭에 이렇게 표시됩니다.',
+    memberTierBenefitsPreviewEmpty: '등록된 혜택이 없습니다.',
     memberTierRecalculateTitle: '등급 재계산',
     memberTierRecalculateAll: '전체 회원 등급 재계산',
     memberTierRecalculateFail: '재계산 실패',
@@ -7603,7 +7611,7 @@ export const i18n = {
     helpSum_admin_members_points:
       '회원 포인트 잔액·원장 조회, 수기 조정, POS 매출 연동 적립 규칙(등급별 적립율)을 관리하는 화면입니다.',
     helpHow_admin_members_points:
-      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 승급 기준(누적 포인트/누적금액)을 선택하고, 등급별 min_points·min_amount·적립율·혜택 문구를 설정합니다.\n③ 등급 재계산으로 선택한 기준에 맞게 등급을 일괄 반영합니다.',
+      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 승급 기준(누적 포인트/누적금액)을 선택하고, 등급별 min_points·min_amount·적립율을 설정합니다.\n③ 「회원 앱 · 등급별 혜택」: 등급 목록에서 행을 선택한 뒤 언어별 혜택 문구를 입력·저장하면 회원 앱 「내 혜택」에 표시됩니다.\n④ 등급 재계산으로 선택한 기준에 맞게 등급을 일괄 반영합니다.',
     helpSum_admin_members_coupons:
       '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다.',
     helpHow_admin_members_coupons:
@@ -7629,9 +7637,9 @@ export const i18n = {
     helpHow_admin_crm_rfm:
       '① R/F/M 개별 점수와 RFM 3자리 코드를 확인합니다.\n② 555/554 같은 상위군은 VIP 혜택, 1xx 군은 재활성화 캠페인을 우선 적용합니다.\n③ 점수는 주기적으로 다시 계산해 고객 이동을 추적합니다.',
     helpSum_admin_crm_member_app:
-      '회원앱의 로그인 배경, 접속 후 배경, 팝업/정보, 매장 정보(목록·위치·사진), 문의 채널(Facebook/Instagram)을 통합 관리하는 화면입니다.',
+      '회원앱의 로그인·접속 후 배경, 월별 프로모션·팝업·정보·공지(목록·검색·미리보기), 매장 정보, 문의 채널(Facebook/Instagram)을 통합 관리하는 화면입니다.',
     helpHow_admin_crm_member_app:
-      '① 디자인 탭: 로그인 배경/접속 후 배경 이미지를 권장 해상도(1080x1920)로 업로드하고 저장합니다.\n② 매장 정보 탭: 회원앱·픽업 주문에 노출할 매장을 추가·수정·비활성화하고 주소·지도 검색어·사진을 관리합니다.\n③ 팝업·정보 탭: 유형별 콘텐츠를 등록하고 노출 기간·정렬·활성 상태를 관리합니다. 홈 신메뉴 타일은 정보 유형 + 노출 탭 home_feature(또는 home_promo) + 이미지·본문으로 설정합니다.\n④ 문의 채널 탭: Contact us에 노출될 Facebook/Instagram 링크를 저장합니다.\n⑤ 저장 후 회원앱(/m)에서 실제 반영 여부를 확인합니다.',
+      '① 전체 목록 탭: 프로모션·팝업·공지를 한 번에 검색·필터(노출 중/예정/종료/중지)하고 미리보기·편집합니다.\n② 월별 프로모션·팝업·정보·공지 탭: 유형별로 등록·복제·삭제하고 노출 기간(방콕)·정렬·활성 상태를 관리합니다.\n③ 디자인 탭: 로그인/접속 후 배경(1080x1920 세로)을 업로드합니다.\n④ 매장 정보 탭: 회원앱·픽업 주문 매장 목록·주소·사진을 관리합니다.\n⑤ 문의 채널 탭: Contact us Facebook/Instagram 링크를 저장합니다.\n⑥ 저장 후 회원앱(/m)에서 실제 반영 여부를 확인합니다.',
     workLogLoginRequired: '로그인이 필요합니다.',
     workLogDate: '날짜',
     workLogEmployee: '직원',
@@ -15068,6 +15076,14 @@ orderItemQty: 'Qty',
     memberTierBenefitsTh: 'Benefits (Thai)',
     memberTierBenefitsPh: 'Enter multiple benefits with line breaks',
     memberTierBenefitsShort: 'Benefits',
+    memberTierBenefitsPortalTitle: 'Member app · benefits by tier',
+    memberTierBenefitsPortalDesc:
+      'Shown on the member app “My privilege” tab per tier. Click a row in the tier list below, then enter and save benefit text for each language.',
+    memberTierBenefitsEditingTier: 'Editing: {name} ({code})',
+    memberTierBenefitsSave: 'Save tier benefits',
+    memberTierBenefitsPreviewTitle: 'Member app preview',
+    memberTierBenefitsPreviewHint: 'Shows how the current draft will appear on My privilege before you save.',
+    memberTierBenefitsPreviewEmpty: 'No benefits listed for this tier yet.',
     memberTierRecalculateTitle: 'Recalculate tiers',
     memberTierRecalculateAll: 'Recalculate all member tiers',
     memberTierRecalculateFail: 'Recalculation failed',
@@ -16534,7 +16550,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members_points:
       'View member point balances and ledger, manual adjustments, and POS sales-based earn rules (tier rates).',
     helpHow_admin_members_points:
-      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: choose upgrade criterion (points vs spend), then set min_points, min_amount, earn rate, and benefit copy.\n③ Run tier recalculation to apply the selected criterion to all members.',
+      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: choose upgrade criterion (points vs spend), then set min_points, min_amount, and earn rate.\n③ Member app · benefits by tier: select a tier row, enter benefit copy per language, and save — shown on the member app My privilege tab.\n④ Run tier recalculation to apply the selected criterion to all members.',
     helpSum_admin_members_coupons:
       'Issue member coupons and review master and redemption history.',
     helpHow_admin_members_coupons:
@@ -16560,9 +16576,9 @@ orderItemQty: 'Qty',
     helpHow_admin_crm_rfm:
       '① Review each R/F/M score and the combined 3-digit RFM code.\n② Use top codes (e.g. 555) for VIP retention and low recency groups for reactivation.\n③ Recalculate regularly and track migration between segments.',
     helpSum_admin_crm_member_app:
-      'Manage member-app design and content: login/app backgrounds, popup/info, store list (location & photos), and contact channels (Facebook/Instagram).',
+      'Manage member-app design and content: backgrounds, monthly promos, popups, info/announcements (list, search, preview), store list, and contact channels.',
     helpHow_admin_crm_member_app:
-      '① Design tab: upload login and post-login backgrounds (recommended 1080x1920) and save.\n② Store info tab: add, edit, or deactivate stores shown in the member app and pickup flow; set address, map query, and photo.\n③ Popup/Info tabs: manage content with schedule, sort, and active status.\n④ Contact tab: set Facebook/Instagram links shown in Contact us.\n⑤ After saving, verify changes in the member portal (/m).',
+      '① All content tab: search and filter promos, popups, and notices together; preview and edit.\n② Promo / Popup / Info tabs: create, duplicate, delete; set Bangkok schedule, sort order, and active state.\n③ Design tab: upload login/app backgrounds (1080x1920 portrait).\n④ Stores tab: manage location list, address, and photos.\n⑤ Contact tab: save Facebook/Instagram links.\n⑥ Verify on the member app (/m) after saving.',
     workLogLoginRequired: 'Login required.',
     workLogDate: 'Date',
     workLogEmployee: 'Employee',

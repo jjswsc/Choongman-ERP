@@ -30,6 +30,10 @@ export type MemberPortalKey =
   | 'tierProgressPoints'
   | 'tierGuideTitle'
   | 'tierGuideDesc'
+  | 'tierGuideViewBtn'
+  | 'tierBenefitsTitle'
+  | 'tierBenefitsDesc'
+  | 'tierBenefitsEmpty'
   | 'tierCurrentBadge'
   | 'tierEarnRate'
   | 'statLifetime'
@@ -345,6 +349,26 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Levels follow store policy (points or spend). Benefits may change anytime.',
     th: 'ระดับสมาชิกตามนโยบายร้าน (แต้มหรือยอดใช้จ่าย) สิทธิประโยชน์อาจเปลี่ยนแปลงได้',
     ko: '매장 정책(포인트 또는 누적금액)에 따라 등급이 정해집니다. 혜택은 수시로 변경될 수 있습니다.',
+  },
+  tierGuideViewBtn: {
+    en: 'View membership levels',
+    th: 'ดูระดับสมาชิก',
+    ko: '회원 등급 안내',
+  },
+  tierBenefitsTitle: {
+    en: 'Benefits by tier',
+    th: 'สิทธิประโยชน์ตามระดับ',
+    ko: '등급별 혜택',
+  },
+  tierBenefitsDesc: {
+    en: 'Benefits provided at each membership level. Content may change without notice.',
+    th: 'สิทธิประโยชน์ตามระดับสมาชิก เนื้อหาอาจเปลี่ยนแปลงได้',
+    ko: '회원 등급별로 제공되는 혜택입니다. 내용은 변경될 수 있습니다.',
+  },
+  tierBenefitsEmpty: {
+    en: 'No benefits listed for this tier yet.',
+    th: 'ยังไม่มีสิทธิประโยชน์สำหรับระดับนี้',
+    ko: '등록된 혜택이 없습니다.',
   },
   tierCurrentBadge: { en: 'Current', th: 'ระดับปัจจุบัน', ko: '현재 등급' },
   tierEarnRate: { en: 'Point earn rate', th: 'อัตราแต้มสะสม', ko: '포인트 적립율' },

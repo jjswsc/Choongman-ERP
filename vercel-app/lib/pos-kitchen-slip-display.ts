@@ -635,10 +635,12 @@ export function buildKitchenHallStyleSlipLines(
       ? fallbackNameFromNote
       : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
     const formattedNote = formatItemNoteForPrint(resolvedNote)
-    // optionCode가 없고 이름에만 옵션이 있는 메뉴(코드 미부여): 이름에 적힌 옵션 텍스트를
-    // 그대로 표기해 누락을 막는다. (이름에 이미 있는 값이라 추론이 아님)
+    // 옵션 표기 누락 방지: 코드(optc:) 조회 결과가 비면(=일시적 네트워크 실패·콜드 캐시·
+    // 카탈로그 미수록 등으로 사이즈가 간헐적으로 사라지는 경우 포함) 이름에 이미 적힌
+    // 옵션 텍스트로 폴백한다. 코드가 정상 해석되면 formattedNote를 그대로 쓰므로 중복 없음.
+    // (이름에 있는 값을 쓰는 것이라 추론이 아니며 홀 영수증과 동일 값)
     const optionLineFallback =
-      !formattedNote && lineSplit.optionLine && !hasOptionCodeToken
+      !formattedNote && lineSplit.optionLine
         ? String(lineSplit.optionLine).trim()
         : ''
     const effectiveNote = formattedNote || optionLineFallback

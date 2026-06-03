@@ -5,10 +5,11 @@ import Image from "next/image"
 import type { LucideIcon } from "lucide-react"
 import {
   DEFAULT_MEMBER_APP_BG,
+  MP_MAX_WIDTH,
+  MEMBER_PORTAL_BG_STYLE,
   mpGlassCard,
   mpGlassCardSoft,
   mpGlassInset,
-  MP_MAX_WIDTH,
   resolveMemberAppBackgroundUrl,
 } from "@/lib/member-portal-design"
 import type { PortalTab } from "@/components/member-portal/portal-ui"
@@ -27,11 +28,14 @@ export function MemberPortalAmbienceBackground({
     <div className={`relative min-h-[100dvh] overflow-x-hidden bg-[#050506] pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-white ${className}`}>
       <div className="pointer-events-none fixed inset-0 z-0">
         <div
-          className="absolute inset-0 scale-105 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${bg})` }}
+          className="absolute inset-0 scale-105"
+          style={{
+            backgroundImage: `url(${bg})`,
+            ...MEMBER_PORTAL_BG_STYLE,
+          }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/55 via-[#08080a]/72 to-[#050506]/94" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.14),transparent_55%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/42 via-[#08080a]/60 to-[#050506]/88" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.16),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.06),transparent_50%)]" />
       </div>
       <div className="relative z-10">{children}</div>
@@ -301,12 +305,16 @@ export function TierProgressCard({
   progressPercent,
   pointRateLabel,
   accentClass,
+  actionLabel,
+  onAction,
 }: {
   title: string
   subtitle: string
   progressPercent: number
   pointRateLabel: string
   accentClass: string
+  actionLabel?: string
+  onAction?: () => void
 }) {
   return (
     <GlassCard>
@@ -327,7 +335,18 @@ export function TierProgressCard({
           style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
         />
       </div>
-      <p className="mt-2.5 text-[11px] font-medium tracking-wide text-white/45">{pointRateLabel}</p>
+      <div className="mt-2.5 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-medium tracking-wide text-white/45">{pointRateLabel}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-400/15"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
     </GlassCard>
   )
 }
