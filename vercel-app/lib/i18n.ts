@@ -8081,6 +8081,11 @@ export const i18n = {
     posOptionRuleRequireForOrder: '손님: 옵션 필수 선택',
     posOptionRuleRequireForOrderHint:
       '켜두면 POS에서 이 단계를 고르기 전에는 담을 수 없습니다. 끄면「건너뛰기」로 주문할 수 있습니다.',
+    posOptionGroupDisplayName: '그룹 표시명(배달)',
+    posOptionGroupDisplayNameHint:
+      'Grab 배달 화면의 옵션 그룹 제목으로 표시됩니다. 비우면 단계 키가 사용됩니다.',
+    posOptionDescriptionDeliveryGrabHint:
+      'Grab 배달에서는 옵션 이름 뒤에 괄호로 표시됩니다. 예: S 사이즈 (뼈 없는 5조각 / 175G.)',
     posOptionSizeAbbrevPlaceholder: 'S / M / L',
     posOptionBulkAddTitle: '선택 그룹에 값 일괄 추가',
     posOptionBulkAddPlaceholder: '예: 치킨무, 김치, 단무지',
@@ -17060,6 +17065,11 @@ orderItemQty: 'Qty',
     posOptionRuleRequireForOrder: 'Require option before adding to cart',
     posOptionRuleRequireForOrderHint:
       'When on, POS blocks add-to-cart until this step is chosen. When off, guests can tap Skip for this step.',
+    posOptionGroupDisplayName: 'Group display name (delivery)',
+    posOptionGroupDisplayNameHint:
+      'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
+    posOptionDescriptionDeliveryGrabHint:
+      'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
     posOptionSizeAbbrevPlaceholder: 'S / M / L',
     posOptionBulkAddTitle: 'Bulk add values to selected group',
     posOptionBulkAddPlaceholder: 'e.g. pickled radish, kimchi, danmuji',
@@ -25077,6 +25087,11 @@ orderItemQty: 'จำนวน',
     posOptionRuleRequireForOrder: 'บังคับเลือกตัวเลือกก่อนใส่ตะกร้า',
     posOptionRuleRequireForOrderHint:
       'เปิด: POS จะบล็อกใส่ตะกร้าจนกว่าจะเลือกขั้นนี้ ปิด: ลูกค้ากดข้ามขั้นนี้ได้',
+    posOptionGroupDisplayName: 'ชื่อกลุ่มที่แสดง (เดลิเวอรี)',
+    posOptionGroupDisplayNameHint:
+      'ใช้เป็นหัวข้อกลุ่มตัวเลือกบนหน้าจอ Grab เดลิเวอรี หากเว้นว่างจะใช้คีย์ของขั้นแทน',
+    posOptionDescriptionDeliveryGrabHint:
+      'บน Grab เดลิเวอรีจะแสดงในวงเล็บต่อท้ายชื่อตัวเลือก เช่น S ไซซ์ (ไม่มีกระดูก 5 ชิ้น / 175 ก.)',
     posOptionRuleRequiredStep: 'ขั้นที่บังคับ',
     posOptionStepDisplayNameLabel: 'ชื่อแสดงของขั้น',
     posOptionStepListDefaultHint: 'ยังไม่มีขั้นเลือก',

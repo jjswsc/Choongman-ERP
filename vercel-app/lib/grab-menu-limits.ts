@@ -24,3 +24,31 @@ export function sanitizeGrabMenuDescription(raw: string | null | undefined): str
   if (text.length <= GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH) return text
   return text.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH).trim()
 }
+
+/**
+ * Grab 옵션(modifier) 이름 최대 길이.
+ * Grab MenuModifier 에는 description 필드가 없어, 옵션 옆 설명을 이름 텍스트에 합쳐 보낸다.
+ * 이름이 길면 메뉴 검증에 영향을 줄 수 있어 보수적으로 200자로 절단한다.
+ */
+export const GRAB_MENU_MODIFIER_NAME_MAX_LENGTH = 200
+
+/**
+ * Grab 옵션 이름 + 배달 설명을 한 줄로 합친다(예: "S 사이즈 (뼈 없는 5조각 / 175G.)").
+ * Grab 옵션엔 description 필드가 없으므로 이름에 괄호로 덧붙인다.
+ * - 제어문자 제거·공백 정리 후 합치고, 최종 길이를 절단한다.
+ * - 설명이 비어 있으면 이름만 반환한다.
+ */
+export function composeGrabModifierName(
+  rawName: string | null | undefined,
+  rawDescription: string | null | undefined
+): string {
+  const name = String(rawName ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const desc = sanitizeGrabMenuDescription(rawDescription)
+  const combined = desc ? `${name} (${desc})`.trim() : name
+  if (combined.length <= GRAB_MENU_MODIFIER_NAME_MAX_LENGTH) return combined
+  return combined.slice(0, GRAB_MENU_MODIFIER_NAME_MAX_LENGTH).trim()
+}

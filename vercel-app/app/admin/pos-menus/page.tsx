@@ -171,7 +171,22 @@ function formatChickenOptionStepDisplayLabel(stepKey: "size" | "part", t: (key: 
   return `${CHICKEN_OPTION_GROUP_TITLE} · ${suffix}`
 }
 
-/** 치킨(c)·size+part 단계일 때 option_selection_config.label 을 통일 형식으로 덮어씀 */
+/** 사용자가 그룹 표시명을 직접 넣었는지(기본값/빈 값/step키와 동일이면 미설정으로 본다) */
+function hasCustomGroupLabel(row: PosOptionSelectionGroupConfig, t: (key: string) => string): boolean {
+  const label = String(row?.label ?? "").trim()
+  if (!label) return false
+  const key = String(row?.key ?? "").trim()
+  if (label.toLowerCase() === key.toLowerCase()) return false
+  if (key === "size" && label === formatChickenOptionStepDisplayLabel("size", t)) return false
+  if (key === "part" && label === formatChickenOptionStepDisplayLabel("part", t)) return false
+  if (key === "part" && label === (t("posOptionGroupPart") || "부위")) return false
+  return true
+}
+
+/**
+ * 치킨(c)·size+part 단계일 때 option_selection_config.label 을 통일 형식으로 덮어씀.
+ * 단, 사용자가 그룹 표시명을 직접 입력한 행은 그 값을 유지한다(Grab 배달 그룹명 커스텀 허용).
+ */
 function applyChickenOptionGroupLabelsToConfig(
   groups: string[],
   normalizedConfig: PosOptionSelectionGroupConfig[],
@@ -180,6 +195,7 @@ function applyChickenOptionGroupLabelsToConfig(
 ): PosOptionSelectionGroupConfig[] {
   if (!isChickenMenu(menuCode) || !isSizePartGroups(groups)) return normalizedConfig
   return normalizedConfig.map((row) => {
+    if (hasCustomGroupLabel(row, t)) return row
     if (row.key === "size") return { ...row, label: formatChickenOptionStepDisplayLabel("size", t) }
     if (row.key === "part") return { ...row, label: formatChickenOptionStepDisplayLabel("part", t) }
     return row
@@ -2274,7 +2290,11 @@ export default function PosMenusPage() {
         .replace("{min}", String(minSel))
         .replace("{max}", String(maxSel))
       let displayLabel = String(row.label ?? groupKey).trim()
-      if (isChickenMenu(optionsConfigSelectedMenu?.code) && isSizePartGroups(optionsConfigPanelStepGroups)) {
+      if (
+        isChickenMenu(optionsConfigSelectedMenu?.code) &&
+        isSizePartGroups(optionsConfigPanelStepGroups) &&
+        !hasCustomGroupLabel(row as PosOptionSelectionGroupConfig, t)
+      ) {
         if (groupKey === "size") displayLabel = formatChickenOptionStepDisplayLabel("size", t)
         else if (groupKey === "part") displayLabel = formatChickenOptionStepDisplayLabel("part", t)
       }
@@ -4897,8 +4917,14 @@ export default function PosMenusPage() {
                                     setOptionDescDeliveryDraft(e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH))
                                   }
                                 />
-                                <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
-                                  {optionDescDeliveryDraft.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                <div className="mt-0.5 flex items-start justify-between gap-2 text-[10px] text-muted-foreground">
+                                  <span className="leading-snug">
+                                    {t("posOptionDescriptionDeliveryGrabHint") ||
+                                      "Grab 배달에서는 옵션 이름 뒤에 괄호로 표시됩니다. 예: S 사이즈 (뼈 없는 5조각 / 175G.)"}
+                                  </span>
+                                  <span className="shrink-0">
+                                    {optionDescDeliveryDraft.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                  </span>
                                 </div>
                               </div>
                               <Textarea
@@ -6051,6 +6077,31 @@ export default function PosMenusPage() {
                                           {t("posOptionRuleRequireForOrderHint")}
                                         </span>
                                       </label>
+                                    </div>
+                                    <div className="flex max-w-md flex-col gap-0.5">
+                                      <label
+                                        htmlFor={`opt-grp-label-${groupKey}`}
+                                        className="text-[11px] font-medium text-muted-foreground"
+                                      >
+                                        {t("posOptionGroupDisplayName") || "그룹 표시명(배달)"}
+                                      </label>
+                                      <Input
+                                        id={`opt-grp-label-${groupKey}`}
+                                        type="text"
+                                        className="h-7 text-xs"
+                                        disabled={promoLocked}
+                                        placeholder={groupKey}
+                                        value={hasCustomGroupLabel(row as PosOptionSelectionGroupConfig, t) ? String(row.label ?? "") : ""}
+                                        onChange={(e) => {
+                                          handleOptionGroupRuleFieldChange(groupKey, {
+                                            label: e.target.value,
+                                          })
+                                        }}
+                                      />
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {t("posOptionGroupDisplayNameHint") ||
+                                          "Grab 배달 화면의 옵션 그룹 제목으로 표시됩니다. 비우면 단계 키가 사용됩니다."}
+                                      </span>
                                     </div>
                                     <div className="flex flex-wrap items-end gap-2">
                                       <div>
