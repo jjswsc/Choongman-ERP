@@ -47,6 +47,18 @@ function summarizeMenuCategories(menu: unknown): Array<{
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/** 루트 categories에서 이름 매칭되는 첫 카테고리의 원본 JSON 전체를 반환 (검증 깨짐 진단용) */
+function pickRawCategory(menu: unknown, nameMatch: string): unknown {
+  const root = menu as Record<string, unknown>
+  const cats = Array.isArray(root.categories) ? root.categories : []
+  const want = nameMatch.trim().toLowerCase()
+  for (const raw of cats) {
+    const cat = raw as { name?: string }
+    if (String(cat.name ?? '').toLowerCase() === want) return raw
+  }
+  return null
+}
+
 function walkMenuItems(menu: unknown): MenuItemRow[] {
   const out: MenuItemRow[] = []
   const root = menu as Record<string, unknown>
@@ -79,6 +91,7 @@ export async function GET(req: NextRequest) {
     const merchantID = String(url.searchParams.get('merchantID') || 'GFSBPOS-811-087').trim()
     const partnerMerchantID = String(url.searchParams.get('partnerMerchantID') || '1040').trim()
     const nameFilter = String(url.searchParams.get('q') || 'april').trim().toLowerCase()
+    const rawCategoryName = String(url.searchParams.get('raw') || '').trim()
 
     const resolvedMerchantIDs = resolveGrabMenuNotificationMerchantIDs(partnerMerchantID)
     const grabMerchantID = resolvedMerchantIDs[0] || merchantID
@@ -105,6 +118,19 @@ export async function GET(req: NextRequest) {
 
     const categories = summarizeMenuCategories(menu)
     const setCategory = categories.filter((c) => /set/i.test(c.name))
+
+    if (rawCategoryName) {
+      return NextResponse.json(
+        {
+          success: true,
+          merchantID,
+          partnerMerchantID,
+          rawCategoryName,
+          rawCategory: pickRawCategory(menu, rawCategoryName),
+        },
+        { headers }
+      )
+    }
 
     const items = walkMenuItems(menu)
       .filter((item) => String(item.name || '').toLowerCase().includes(nameFilter))
