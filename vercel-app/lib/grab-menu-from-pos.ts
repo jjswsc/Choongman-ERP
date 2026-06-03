@@ -1,7 +1,10 @@
 import type { PosMenu } from '@/lib/api-client'
 import { buildGrabDeliveryAdvancedPricing } from '@/lib/grab-menu-advanced-pricing'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
-import { loadGrabPromoCutPriceByPromoId } from '@/lib/grab-promo-target-price-campaign'
+import {
+  loadGrabPromoCutPriceByPromoId,
+  resolveGrabPromoCampaignDiscountType,
+} from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
@@ -1037,8 +1040,16 @@ export async function buildGrabMenuFromPos(params: {
       const grabListPriceMinor = Math.max(1, toMinorUnit(grabListPriceMajor))
       const grabSalePriceMinor =
         promoCut?.showCutPrice ? Math.max(1, toMinorUnit(promoCut.salePrice)) : grabListPriceMinor
+      /**
+       * percentage 캠페인은 정가(item.price) 기준 % 할인으로 취소선(정가→할인가)을 만든다.
+       * 이때 advancedPricing(배달가 덮어쓰기=할인가)을 함께 보내면 배달가가 할인가로 고정되어
+       * 캠페인 할인 결과와 같아져 상쇄된다 → 취소선·정상가 사라지고 할인가만 노출.
+       * 따라서 percentage 전략에서는 advancedPricing을 생략하고 캠페인이 단독으로 할인을 만든다.
+       * (fixPrice 전략일 때만 advancedPricing으로 배달 할인가를 직접 내린다.)
+       */
       const includeAdvancedPricing =
         promoCut?.showCutPrice &&
+        resolveGrabPromoCampaignDiscountType() !== 'percentage' &&
         (isGrabAdvancedPricingFallbackEnabled() || !isGrabAdvancedPricingExplicitlyDisabled())
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
