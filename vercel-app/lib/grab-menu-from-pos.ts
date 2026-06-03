@@ -407,8 +407,10 @@ function serviceHoursFromRanges(ranges: TimeRange[]) {
       sun: openAllDay,
     }
   }
+  // Grab serviceHours: openPeriodType은 OpenPeriod/OpenAllDay/CloseAllDay만 허용.
+  // 과거 'SpecificTimes'는 무효값이라 7개 요일 전부 검증 실패 → 메뉴 전체 게시 거부됐다(2026-06).
   const specific = {
-    openPeriodType: 'SpecificTimes' as const,
+    openPeriodType: 'OpenPeriod' as const,
     periods: normalized,
   }
   return {
