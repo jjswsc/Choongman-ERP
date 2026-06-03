@@ -11,7 +11,7 @@ type WebhookEventRow = {
   merchant_id?: string | null
   partner_merchant_id?: string | null
   payload_json?: unknown
-  created_at?: string | null
+  received_at?: string | null
 }
 
 /**
@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
         'event_kind=eq.menu_sync_state',
         {
           limit,
-          order: 'created_at.desc',
-          select: 'id,event_kind,request_id,job_id,merchant_id,partner_merchant_id,payload_json,created_at',
+          order: 'received_at.desc',
+          select: 'id,event_kind,request_id,job_id,merchant_id,partner_merchant_id,payload_json,received_at',
         }
       )) as WebhookEventRow[] | null
     } catch (e) {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       const payload = (r.payload_json || {}) as Record<string, unknown>
       return {
         id: r.id,
-        createdAt: r.created_at,
+        receivedAt: r.received_at,
         merchantID: r.merchant_id,
         partnerMerchantID: r.partner_merchant_id,
         status: payload.status ?? null,
