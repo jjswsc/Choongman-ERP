@@ -378,11 +378,31 @@ function mergeTimeRanges(ranges: TimeRange[]): TimeRange[] {
   return out
 }
 
+/** "HH:mm"(또는 "HH:mm:ss") → 분. 파싱 실패 시 NaN */
+function hhmmToMinutes(value: string): number {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim())
+  if (!m) return NaN
+  return Number(m[1]) * 60 + Number(m[2])
+}
+
+/**
+ * 병합된 범위가 사실상 종일(시작<=00:00, 끝>=23:59)인지. 종일이면 Grab은 OpenPeriod 대신
+ * OpenAllDay로 보내야 한다. 23:59 같은 값을 OpenPeriod로 보내면 일부 환경에서 경계 해석으로
+ * 카테고리가 "영업시간 외"로 숨겨질 수 있다(2026-06 Set 카테고리 실종 2차 원인).
+ */
+function rangesCoverFullDay(ranges: TimeRange[]): boolean {
+  for (const r of ranges) {
+    const start = hhmmToMinutes(r.start)
+    const end = hhmmToMinutes(r.end)
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue
+    if (start <= 0 && end >= 23 * 60 + 59) return true
+  }
+  return false
+}
+
 export function serviceHoursFromRanges(ranges: TimeRange[]) {
-  if (!ranges.length) {
-    const openAllDay = {
-      openPeriodType: 'OpenAllDay' as const,
-    }
+  const openAllDayMap = () => {
+    const openAllDay = { openPeriodType: 'OpenAllDay' as const }
     return {
       mon: openAllDay,
       tue: openAllDay,
@@ -393,27 +413,17 @@ export function serviceHoursFromRanges(ranges: TimeRange[]) {
       sun: openAllDay,
     }
   }
-  const normalized = mergeTimeRanges(ranges)
-    .filter((r) => r.start < r.end)
+  if (!ranges.length) return openAllDayMap()
+  const merged = mergeTimeRanges(ranges).filter((r) => r.start < r.end)
+  // 종일 범위(예: 00:00~23:59)는 OpenAllDay로 — OpenPeriod 경계 해석으로 카테고리가 숨겨지는 것 방지
+  if (rangesCoverFullDay(merged)) return openAllDayMap()
+  const normalized = merged
     .slice(0, 4)
     .map((r) => ({
       startTime: `${r.start}:00`,
       endTime: `${r.end}:00`,
     }))
-  if (!normalized.length) {
-    const openAllDay = {
-      openPeriodType: 'OpenAllDay' as const,
-    }
-    return {
-      mon: openAllDay,
-      tue: openAllDay,
-      wed: openAllDay,
-      thu: openAllDay,
-      fri: openAllDay,
-      sat: openAllDay,
-      sun: openAllDay,
-    }
-  }
+  if (!normalized.length) return openAllDayMap()
   // Grab serviceHours: openPeriodType은 OpenPeriod/OpenAllDay/CloseAllDay만 허용.
   // 과거 'SpecificTimes'는 무효값이라 7개 요일 전부 검증 실패 → 메뉴 전체 게시 거부됐다(2026-06).
   const specific = {

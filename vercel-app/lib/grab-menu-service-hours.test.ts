@@ -30,6 +30,16 @@ describe('serviceHoursFromRanges — openPeriodType validity', () => {
     }
   })
 
+  it('full-day range (00:00-23:59) -> OpenAllDay, not a hidden OpenPeriod', () => {
+    const sh = serviceHoursFromRanges([{ start: '00:00', end: '23:59' }]) as Record<
+      string,
+      { openPeriodType: string }
+    >
+    for (const day of DAYS) {
+      expect(sh[day].openPeriodType).toBe('OpenAllDay')
+    }
+  })
+
   it('always emits a Grab-allowed openPeriodType', () => {
     for (const ranges of [[], [{ start: '09:00', end: '17:00' }]]) {
       const sh = serviceHoursFromRanges(ranges) as Record<string, { openPeriodType: string }>
