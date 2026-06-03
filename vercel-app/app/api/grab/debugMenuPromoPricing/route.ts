@@ -120,6 +120,7 @@ export async function GET(req: NextRequest) {
     const setCategory = categories.filter((c) => /set/i.test(c.name))
 
     if (rawCategoryName) {
+      const root = menu as Record<string, unknown>
       return NextResponse.json(
         {
           success: true,
@@ -127,6 +128,7 @@ export async function GET(req: NextRequest) {
           partnerMerchantID,
           rawCategoryName,
           rawCategory: pickRawCategory(menu, rawCategoryName),
+          sellingTimes: Array.isArray(root.sellingTimes) ? root.sellingTimes : [],
         },
         { headers }
       )
