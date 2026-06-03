@@ -1,5 +1,6 @@
 import type { PosMenu } from '@/lib/api-client'
 import { buildGrabDeliveryAdvancedPricing } from '@/lib/grab-menu-advanced-pricing'
+import { sanitizeGrabMenuDescription } from '@/lib/grab-menu-limits'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
   loadGrabPromoCutPriceByPromoId,
@@ -974,10 +975,11 @@ export async function buildGrabMenuFromPos(params: {
                 opt.price_modifier_delivery != null ? opt.price_modifier_delivery : opt.price_modifier
               const modDescDelivery = String(opt.description_delivery ?? '').trim()
               const modDescDefault = String(opt.description_default ?? '').trim()
+              const modDesc = sanitizeGrabMenuDescription(modDescDelivery || modDescDefault)
               return {
                 id: modId,
                 name: String(opt.name ?? `Option ${idx + 1}`),
-                description: modDescDelivery || modDescDefault || undefined,
+                description: modDesc || undefined,
                 sequence: idx + 1,
                 availableStatus: 'AVAILABLE' as const,
                 price: toMinorUnit(modPrice ?? 0),
@@ -1059,7 +1061,7 @@ export async function buildGrabMenuFromPos(params: {
           : ''
       const menuDescDelivery = String(menu.description_delivery ?? '').trim()
       const menuDescDefault = String(menu.description_default ?? '').trim()
-      const menuDesc = menuDescDelivery || menuDescDefault
+      const menuDesc = sanitizeGrabMenuDescription(menuDescDelivery || menuDescDefault)
       return {
         id: itemId,
         name: String(menu.name ?? menu.code ?? 'Menu'),

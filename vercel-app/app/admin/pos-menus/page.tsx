@@ -105,6 +105,7 @@ import { OptionItemRowCard } from "@/components/erp/option-item-row-card"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+import { GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH } from "@/lib/grab-menu-limits"
 import { resolvePosOptionGroupCode } from "@/lib/pos-option-group-code"
 import {
   PROMOTION_MAIN_CATEGORY,
@@ -4797,10 +4798,17 @@ export default function PosMenusPage() {
                           className="mt-1 min-h-[72px] text-xs"
                           placeholder={t("posMenuDescriptionDefaultPh") || "메뉴 기본 설명을 입력하세요."}
                           value={formData.descriptionDefault}
+                          maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
                           onChange={(e) =>
-                            setFormData((p) => ({ ...p, descriptionDefault: e.target.value }))
+                            setFormData((p) => ({
+                              ...p,
+                              descriptionDefault: e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH),
+                            }))
                           }
                         />
+                        <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                          {formData.descriptionDefault.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                        </div>
                       </div>
                       <div>
                         <label className="text-xs font-semibold">
@@ -4810,10 +4818,17 @@ export default function PosMenusPage() {
                           className="mt-1 min-h-[60px] text-xs"
                           placeholder={t("posMenuDescriptionDeliveryPh") || "Grab/LineMan 등에 노출할 설명"}
                           value={formData.descriptionDelivery}
+                          maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
                           onChange={(e) =>
-                            setFormData((p) => ({ ...p, descriptionDelivery: e.target.value }))
+                            setFormData((p) => ({
+                              ...p,
+                              descriptionDelivery: e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH),
+                            }))
                           }
                         />
+                        <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                          {formData.descriptionDelivery.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                        </div>
                       </div>
                       <div>
                         <label className="text-xs font-semibold">
@@ -4858,18 +4873,34 @@ export default function PosMenusPage() {
                           </Select>
                           {selectedOptionDescId && (
                             <div className="grid gap-2">
-                              <Textarea
-                                className="min-h-[56px] text-xs"
-                                placeholder={t("posOptionDescriptionDefaultPh") || "옵션 기본 설명"}
-                                value={optionDescDefaultDraft}
-                                onChange={(e) => setOptionDescDefaultDraft(e.target.value)}
-                              />
-                              <Textarea
-                                className="min-h-[48px] text-xs"
-                                placeholder={t("posOptionDescriptionDeliveryPh") || "배달앱 옵션 설명 (비우면 기본 설명)"}
-                                value={optionDescDeliveryDraft}
-                                onChange={(e) => setOptionDescDeliveryDraft(e.target.value)}
-                              />
+                              <div>
+                                <Textarea
+                                  className="min-h-[56px] text-xs"
+                                  placeholder={t("posOptionDescriptionDefaultPh") || "옵션 기본 설명"}
+                                  value={optionDescDefaultDraft}
+                                  maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                  onChange={(e) =>
+                                    setOptionDescDefaultDraft(e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH))
+                                  }
+                                />
+                                <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                                  {optionDescDefaultDraft.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                </div>
+                              </div>
+                              <div>
+                                <Textarea
+                                  className="min-h-[48px] text-xs"
+                                  placeholder={t("posOptionDescriptionDeliveryPh") || "배달앱 옵션 설명 (비우면 기본 설명)"}
+                                  value={optionDescDeliveryDraft}
+                                  maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                  onChange={(e) =>
+                                    setOptionDescDeliveryDraft(e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH))
+                                  }
+                                />
+                                <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                                  {optionDescDeliveryDraft.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                </div>
+                              </div>
                               <Textarea
                                 className="min-h-[48px] text-xs"
                                 placeholder={t("posOptionDescriptionTablePh") || "테이블오더 옵션 설명 (비우면 기본 설명)"}
