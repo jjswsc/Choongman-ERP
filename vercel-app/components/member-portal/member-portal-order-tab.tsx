@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { startTransition } from "react"
 import {
   ArrowLeft,
   Check,
@@ -95,6 +96,211 @@ function MemberMenuThumb({ src, alt }: { src: string; alt: string }) {
 }
 
 type MenuListSection = { key: string; title: string; items: PosMenu[] }
+
+function scheduleAfterPaint(task: () => void) {
+  requestAnimationFrame(() => {
+    task()
+  })
+}
+
+type PickupMenuCatalogProps = {
+  menusLoading: boolean
+  packagingMenus: PosMenu[]
+  showCategoryNav: boolean
+  mainCategoryTabs: string[]
+  activeMainCategory: string
+  activeSubCategory: string
+  subCategoriesForMain: string[]
+  menuListSections: MenuListSection[]
+  onSelectMainCategory: (main: string) => void
+  onSelectAllCategories: () => void
+  onSelectSubCategory: (sub: string) => void
+  onAddMenu: (menu: PosMenu) => void
+  t: (key: MemberPortalKey, params?: Record<string, string>) => string
+}
+
+const PickupMenuCatalog = React.memo(function PickupMenuCatalog({
+  menusLoading,
+  packagingMenus,
+  showCategoryNav,
+  mainCategoryTabs,
+  activeMainCategory,
+  activeSubCategory,
+  subCategoriesForMain,
+  menuListSections,
+  onSelectMainCategory,
+  onSelectAllCategories,
+  onSelectSubCategory,
+  onAddMenu,
+  t,
+}: PickupMenuCatalogProps) {
+  return (
+    <div className="pb-6">
+      {menusLoading ? (
+        <p className="px-4 py-10 text-center text-sm text-neutral-500">{t("loginChecking")}</p>
+      ) : packagingMenus.length === 0 ? (
+        <p className="px-4 py-10 text-center text-sm text-neutral-500">{t("orderMenuEmpty")}</p>
+      ) : (
+        <>
+          {showCategoryNav ? (
+            <div className="sticky top-0 z-10 space-y-0 border-b border-neutral-100 bg-white/95 backdrop-blur-sm">
+              <div className="flex items-center gap-2 px-3 py-2">
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                  {t("orderMainCategory")}
+                </span>
+                <div className="flex flex-1 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    onClick={onSelectAllCategories}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                      !activeMainCategory ? "bg-amber-400 text-black" : "bg-neutral-100 text-neutral-600"
+                    }`}
+                  >
+                    {t("orderCategoryAll")}
+                  </button>
+                  {mainCategoryTabs.map((main) => (
+                    <button
+                      key={main}
+                      type="button"
+                      onClick={() => onSelectMainCategory(main)}
+                      className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                        activeMainCategory === main ? "bg-amber-400 text-black" : "bg-neutral-100 text-neutral-600"
+                      }`}
+                    >
+                      {main}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {activeMainCategory && subCategoriesForMain.length > 0 ? (
+                <div className="flex items-center gap-2 border-t border-neutral-50 bg-neutral-50/90 px-3 py-2">
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                    {t("orderSubCategory")}
+                  </span>
+                  <div className="flex flex-1 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {subCategoriesForMain.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => onSelectSubCategory(sub)}
+                        className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                          activeSubCategory === sub ||
+                          (activeMainCategory === PROMOTION_MAIN_CATEGORY &&
+                            promotionSubcategoriesEqual(activeSubCategory, sub))
+                            ? "border-amber-400 bg-amber-400 text-black"
+                            : "border-neutral-200 bg-white text-neutral-600"
+                        }`}
+                      >
+                        {normalizePromotionSubcategory(sub)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="px-4 pt-2">
+            {activeMainCategory && !activeSubCategory ? (
+              <p className="py-10 text-center text-sm text-neutral-500">{t("orderSelectSubCategory")}</p>
+            ) : menuListSections.length === 0 ? (
+              <p className="py-10 text-center text-sm text-neutral-500">{t("orderMenuEmpty")}</p>
+            ) : (
+              menuListSections.map((section) => (
+                <section key={section.key} className="mb-4">
+                  {!activeMainCategory || menuListSections.length > 1 ? (
+                    <h3 className="mb-2 text-sm font-bold text-neutral-800">{section.title}</h3>
+                  ) : null}
+                  <ul className="divide-y divide-neutral-100">
+                    {section.items.map((menu) => (
+                      <li key={menu.id}>
+                        <div className="flex gap-3 py-3">
+                          <MemberMenuThumb src={String(menu.imageUrl || "")} alt={String(menu.name || "menu")} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-medium leading-snug text-neutral-900">{menu.name}</p>
+                            <p className="mt-1 text-sm font-semibold text-neutral-800">
+                              {formatBaht(Number(menu.price || 0))}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label={t("orderAdd")}
+                            onClick={() => onAddMenu(menu)}
+                            className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-400 text-lg font-semibold leading-none text-black shadow-sm transition hover:bg-amber-300 active:scale-95"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))
+            )}
+            <p className="border-t border-neutral-100 py-3 text-[11px] text-neutral-400">{t("orderMenuOptionsNote")}</p>
+          </div>
+        </>
+      )}
+    </div>
+  )
+})
+
+type CartConfirmDialogProps = {
+  open: boolean
+  submitting: boolean
+  storeName: string
+  pickupAt: string
+  cartTotal: number
+  onCancel: () => void
+  onConfirm: () => void
+  t: (key: MemberPortalKey, params?: Record<string, string>) => string
+}
+
+const CartConfirmDialog = React.memo(function CartConfirmDialog({
+  open,
+  submitting,
+  storeName,
+  pickupAt,
+  cartTotal,
+  onCancel,
+  onConfirm,
+  t,
+}: CartConfirmDialogProps) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-[28px] bg-white p-6 text-neutral-900 shadow-2xl">
+        <p className="text-lg font-bold">{t("orderCartConfirmTitle")}</p>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-600">{t("orderCartConfirmBody")}</p>
+        <div className="mt-4 rounded-xl bg-neutral-50 px-3 py-2.5 text-sm">
+          <p className="font-medium">{storeName}</p>
+          <p className="text-neutral-500">{pickupAt.replace("T", " ")}</p>
+          <p className="mt-1 font-bold tabular-nums">{formatBaht(cartTotal)}</p>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 flex-1 rounded-2xl"
+            disabled={submitting}
+            onClick={onCancel}
+          >
+            {t("orderBack")}
+          </Button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={onConfirm}
+            className="inline-flex h-11 flex-1 items-center justify-center rounded-2xl bg-amber-400 text-sm font-semibold text-black transition hover:bg-amber-300 disabled:pointer-events-none disabled:opacity-50"
+          >
+            {submitting ? t("saving") : t("orderCartConfirmBtn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
 
 function orderStoreMatchesQuery(store: StoreRow, query: string): boolean {
   return memberPortalStoreMatchesQuery(
@@ -381,7 +587,7 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
     setOptionPickerSelections({})
   }
 
-  const addToCart = (menu: PosMenu, opt: PosMenuOption | null) => {
+  const addToCart = React.useCallback((menu: PosMenu, opt: PosMenuOption | null) => {
     const price = packagingMenuPrice(menu) + (opt ? packagingOptionModifier(opt) : 0)
     const rawOptId = opt ? String(opt.id || "").trim() : ""
     const optionId = rawOptId && /^\d+$/.test(rawOptId) ? rawOptId : undefined
@@ -410,19 +616,38 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
         },
       ]
     })
-    closeOptionPicker()
-  }
+    setOptionPickerMenu(null)
+    setOptionPickerStep(0)
+    setOptionPickerSelections({})
+  }, [])
 
-  const handleMenuAdd = (menu: PosMenu) => {
-    const groups = menu.optionSelectionGroups
-    if (Array.isArray(groups) && groups.length > 0) {
-      setOptionPickerMenu(menu)
-      setOptionPickerStep(0)
-      setOptionPickerSelections({})
-      return
-    }
-    addToCart(menu, null)
-  }
+  const handleMenuAdd = React.useCallback(
+    (menu: PosMenu) => {
+      const groups = menu.optionSelectionGroups
+      if (Array.isArray(groups) && groups.length > 0) {
+        setOptionPickerMenu(menu)
+        setOptionPickerStep(0)
+        setOptionPickerSelections({})
+        return
+      }
+      addToCart(menu, null)
+    },
+    [addToCart]
+  )
+
+  const selectAllCategories = React.useCallback(() => {
+    setActiveMainCategory("")
+    setActiveSubCategory("")
+  }, [])
+
+  const selectMainCategory = React.useCallback((main: string) => {
+    setActiveMainCategory(main)
+    setActiveSubCategory("")
+  }, [])
+
+  const selectSubCategory = React.useCallback((sub: string) => {
+    setActiveSubCategory(sub)
+  }, [])
 
   const goHub = () => {
     setView("hub")
@@ -442,13 +667,17 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
     setMemberNoticeOpen(true)
   }
 
-  const confirmMemberNotice = () => {
+  const confirmMemberNotice = React.useCallback(() => {
     setMemberNoticeOpen(false)
-    setPickupReady(true)
-    setActiveMainCategory("")
-    setActiveSubCategory("")
-    void loadMenus(pickupStore)
-  }
+    scheduleAfterPaint(() => {
+      startTransition(() => {
+        setPickupReady(true)
+        setActiveMainCategory("")
+        setActiveSubCategory("")
+      })
+      void loadMenus(pickupStore)
+    })
+  }, [loadMenus, pickupStore])
 
   const changeQty = (cartKey: string, delta: number) => {
     setCart((prev) =>
@@ -464,14 +693,13 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
     setCartConfirmOpen(false)
   }
 
-  const openCartConfirm = () => {
+  const openCartConfirm = React.useCallback(() => {
     if (cart.length === 0) return
-    setCartConfirmOpen(true)
-  }
+    scheduleAfterPaint(() => setCartConfirmOpen(true))
+  }, [cart.length])
 
-  const submitPickupOrder = async () => {
+  const submitPickupOrder = React.useCallback(async () => {
     if (!pickupStore || cart.length === 0) return
-    setSubmitting(true)
     setOrderError("")
     setOrderMessage("")
     try {
@@ -503,21 +731,33 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
         )
         return
       }
-      setOrderMessage(t("orderSubmitSuccess", { orderNo: res.orderNo || "" }))
-      setCart([])
-      setCartSheetOpen(false)
-      setCartConfirmOpen(false)
-      setOrderError("")
-      setPickupReady(false)
-      setView("hub")
+      startTransition(() => {
+        setOrderMessage(t("orderSubmitSuccess", { orderNo: res.orderNo || "" }))
+        setCart([])
+        setCartSheetOpen(false)
+        setCartConfirmOpen(false)
+        setOrderError("")
+        setPickupReady(false)
+        setView("hub")
+      })
     } catch {
       setOrderError(t("orderSubmitFail"))
     } finally {
       setSubmitting(false)
     }
-  }
+  }, [cart, lang, pickupAt, pickupStore, t])
+
+  const handleConfirmSubmit = React.useCallback(() => {
+    if (!pickupStore || cart.length === 0 || submitting) return
+    setSubmitting(true)
+    scheduleAfterPaint(() => {
+      void submitPickupOrder()
+    })
+  }, [cart.length, pickupStore, submitPickupOrder, submitting])
 
   const resolvedDeliveryLinks = deliveryLinks ?? DEFAULT_DELIVERY_LINKS
+  const pickupStoreName =
+    stores.find((s) => s.storeCode === pickupStore)?.displayName || pickupStore
 
   const deliveryApps = [
     { code: "grab", label: "GrabFood", color: "from-[#00B14F] to-[#008f41]", url: resolvedDeliveryLinks.grab },
@@ -725,131 +965,24 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
 
           <div
             className={`-mx-4 overflow-hidden rounded-t-[1.75rem] bg-white text-neutral-900 shadow-[0_-10px_40px_rgba(0,0,0,0.35)] ${
-              cart.length > 0 ? "pb-28" : "pb-6"
+              cart.length > 0 ? "pb-28" : ""
             }`}
           >
-            {menusLoading ? (
-              <p className="px-4 py-10 text-center text-sm text-neutral-500">{t("loginChecking")}</p>
-            ) : packagingMenus.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm text-neutral-500">{t("orderMenuEmpty")}</p>
-            ) : (
-              <>
-                {showCategoryNav ? (
-                  <div className="sticky top-0 z-10 space-y-0 border-b border-neutral-100 bg-white/95 backdrop-blur-sm">
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
-                        {t("orderMainCategory")}
-                      </span>
-                      <div className="flex flex-1 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveMainCategory("")
-                            setActiveSubCategory("")
-                          }}
-                          className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-                            !activeMainCategory
-                              ? "bg-amber-400 text-black"
-                              : "bg-neutral-100 text-neutral-600"
-                          }`}
-                        >
-                          {t("orderCategoryAll")}
-                        </button>
-                        {mainCategoryTabs.map((main) => (
-                          <button
-                            key={main}
-                            type="button"
-                            onClick={() => {
-                              setActiveMainCategory(main)
-                              setActiveSubCategory("")
-                            }}
-                            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-                              activeMainCategory === main
-                                ? "bg-amber-400 text-black"
-                                : "bg-neutral-100 text-neutral-600"
-                            }`}
-                          >
-                            {main}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {activeMainCategory && subCategoriesForMain.length > 0 ? (
-                      <div className="flex items-center gap-2 border-t border-neutral-50 bg-neutral-50/90 px-3 py-2">
-                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
-                          {t("orderSubCategory")}
-                        </span>
-                        <div className="flex flex-1 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                          {subCategoriesForMain.map((sub) => (
-                            <button
-                              key={sub}
-                              type="button"
-                              onClick={() => setActiveSubCategory(sub)}
-                              className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
-                                activeSubCategory === sub ||
-                                (activeMainCategory === PROMOTION_MAIN_CATEGORY &&
-                                  promotionSubcategoriesEqual(activeSubCategory, sub))
-                                  ? "border-amber-400 bg-amber-400 text-black"
-                                  : "border-neutral-200 bg-white text-neutral-600"
-                              }`}
-                            >
-                              {normalizePromotionSubcategory(sub)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <div className="px-4 pt-2">
-                  {activeMainCategory && !activeSubCategory ? (
-                    <p className="py-10 text-center text-sm text-neutral-500">{t("orderSelectSubCategory")}</p>
-                  ) : menuListSections.length === 0 ? (
-                    <p className="py-10 text-center text-sm text-neutral-500">{t("orderMenuEmpty")}</p>
-                  ) : (
-                    menuListSections.map((section) => (
-                      <section key={section.key} className="mb-4">
-                        {!activeMainCategory || menuListSections.length > 1 ? (
-                          <h3 className="mb-2 text-sm font-bold text-neutral-800">{section.title}</h3>
-                        ) : null}
-                        <ul className="divide-y divide-neutral-100">
-                          {section.items.map((menu) => (
-                            <li key={menu.id}>
-                              <div className="flex gap-3 py-3">
-                                <MemberMenuThumb
-                                  src={String(menu.imageUrl || "")}
-                                  alt={String(menu.name || "menu")}
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[15px] font-medium leading-snug text-neutral-900">
-                                    {menu.name}
-                                  </p>
-                                  <p className="mt-1 text-sm font-semibold text-neutral-800">
-                                    {formatBaht(Number(menu.price || 0))}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  aria-label={t("orderAdd")}
-                                  onClick={() => handleMenuAdd(menu)}
-                                  className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-400 text-lg font-semibold leading-none text-black shadow-sm transition hover:bg-amber-300 active:scale-95"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    ))
-                  )}
-                  <p className="border-t border-neutral-100 py-3 text-[11px] text-neutral-400">
-                    {t("orderMenuOptionsNote")}
-                  </p>
-                </div>
-              </>
-            )}
+            <PickupMenuCatalog
+              menusLoading={menusLoading}
+              packagingMenus={packagingMenus}
+              showCategoryNav={showCategoryNav}
+              mainCategoryTabs={mainCategoryTabs}
+              activeMainCategory={activeMainCategory}
+              activeSubCategory={activeSubCategory}
+              subCategoriesForMain={subCategoriesForMain}
+              menuListSections={menuListSections}
+              onSelectAllCategories={selectAllCategories}
+              onSelectMainCategory={selectMainCategory}
+              onSelectSubCategory={selectSubCategory}
+              onAddMenu={handleMenuAdd}
+              t={t}
+            />
           </div>
 
           {cart.length > 0 ? (
@@ -989,38 +1122,16 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                 </div>
               ) : null}
 
-              {cartConfirmOpen ? (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
-                  <div className="w-full max-w-sm rounded-[28px] bg-white p-6 text-neutral-900 shadow-2xl">
-                    <p className="text-lg font-bold">{t("orderCartConfirmTitle")}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-neutral-600">{t("orderCartConfirmBody")}</p>
-                    <div className="mt-4 rounded-xl bg-neutral-50 px-3 py-2.5 text-sm">
-                      <p className="font-medium">{stores.find((s) => s.storeCode === pickupStore)?.displayName}</p>
-                      <p className="text-neutral-500">{pickupAt.replace("T", " ")}</p>
-                      <p className="mt-1 font-bold tabular-nums">{formatBaht(cartTotal)}</p>
-                    </div>
-                    <div className="mt-5 flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 flex-1 rounded-2xl"
-                        disabled={submitting}
-                        onClick={() => setCartConfirmOpen(false)}
-                      >
-                        {t("orderBack")}
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={submitting}
-                        className="h-11 flex-1 rounded-2xl bg-amber-400 font-semibold text-black hover:bg-amber-300"
-                        onClick={() => void submitPickupOrder()}
-                      >
-                        {submitting ? t("saving") : t("orderCartConfirmBtn")}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+              <CartConfirmDialog
+                open={cartConfirmOpen}
+                submitting={submitting}
+                storeName={pickupStoreName}
+                pickupAt={pickupAt}
+                cartTotal={cartTotal}
+                onCancel={() => setCartConfirmOpen(false)}
+                onConfirm={handleConfirmSubmit}
+                t={t}
+              />
             </>
           ) : null}
         </>
