@@ -15,6 +15,38 @@ type MenuItemRow = {
   promo_id?: number | null
 }
 
+function summarizeMenuCategories(menu: unknown): Array<{
+  id: string
+  name: string
+  itemCount: number
+  sampleItemNames: string[]
+}> {
+  const out: Array<{ id: string; name: string; itemCount: number; sampleItemNames: string[] }> = []
+  const root = menu as Record<string, unknown>
+  const pools: unknown[] = []
+  if (Array.isArray(root.categories)) pools.push(...root.categories)
+  if (Array.isArray(root.sections)) {
+    for (const sec of root.sections) {
+      const cats = (sec as { categories?: unknown[] }).categories
+      if (Array.isArray(cats)) pools.push(...cats)
+    }
+  }
+  for (const raw of pools) {
+    const cat = raw as { id?: string; name?: string; items?: unknown[] }
+    const items = Array.isArray(cat.items) ? cat.items : []
+    out.push({
+      id: String(cat.id ?? ''),
+      name: String(cat.name ?? ''),
+      itemCount: items.length,
+      sampleItemNames: items
+        .slice(0, 5)
+        .map((it) => String((it as { name?: string }).name ?? ''))
+        .filter(Boolean),
+    })
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
 function walkMenuItems(menu: unknown): MenuItemRow[] {
   const out: MenuItemRow[] = []
   const root = menu as Record<string, unknown>
@@ -70,6 +102,9 @@ export async function GET(req: NextRequest) {
       if (!pid) continue
       promoIdByGrabItemId.set(buildGrabMenuItemId(mirror), pid)
     }
+
+    const categories = summarizeMenuCategories(menu)
+    const setCategory = categories.filter((c) => /set/i.test(c.name))
 
     const items = walkMenuItems(menu)
       .filter((item) => String(item.name || '').toLowerCase().includes(nameFilter))
@@ -137,6 +172,9 @@ export async function GET(req: NextRequest) {
         grabCampaignEarliestStartBkk: earliestStartBkk ?? null,
         grabCampaigns: grabCampaigns.slice(0, 20),
         filter: nameFilter,
+        categoryCount: categories.length,
+        categories,
+        setCategories: setCategory,
         itemCount: items.length,
         items,
         hint,

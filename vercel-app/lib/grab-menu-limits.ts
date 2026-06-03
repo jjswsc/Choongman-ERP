@@ -17,7 +17,9 @@ export const GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH = 200
  */
 export function sanitizeGrabMenuDescription(raw: string | null | undefined): string {
   const text = String(raw ?? '')
+    .replace(/<[^>]*>/g, ' ')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
   if (text.length <= GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH) return text
   return text.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH).trim()
