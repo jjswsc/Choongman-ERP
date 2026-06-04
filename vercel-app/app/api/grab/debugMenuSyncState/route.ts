@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') || '15')))
+    const merchantFilter = String(url.searchParams.get('merchantID') || '').trim().toLowerCase()
 
     let rows: WebhookEventRow[] | null = null
     try {
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const events = (rows || []).map((r) => {
+    let events = (rows || []).map((r) => {
       const payload = (r.payload_json || {}) as Record<string, unknown>
       return {
         id: r.id,
@@ -55,11 +56,17 @@ export async function GET(req: NextRequest) {
         payload,
       }
     })
+    if (merchantFilter) {
+      events = events.filter(
+        (e) => String(e.merchantID ?? '').trim().toLowerCase() === merchantFilter
+      )
+    }
 
     return NextResponse.json(
       {
         success: true,
         count: events.length,
+        merchantFilter: merchantFilter || null,
         latestStatus: events[0]?.status ?? null,
         events,
       },

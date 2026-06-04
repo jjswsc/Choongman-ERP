@@ -1178,13 +1178,18 @@ export async function buildGrabMenuFromPos(params: {
 
   const { sellingTimes, categories } = buildSellingTimesAndRootCategories(sections)
 
-  /** `sections`는 시뮬레이터·구버전 호환, 루트 `sellingTimes`·`categories`는 Grab 검증(GetMenuNew) 필수 */
+  /**
+   * Grab GetMenuNewResponse 필수: 루트 `sellingTimes` + `categories` (sellingTimeID 포함).
+   * `sections` 중첩 카테고리는 sellingTimeID가 없어, 손님 앱이 sections만 쓰면 Set 등이 빠질 수 있음.
+   * 시뮬레이터·구버전만 `GRAB_MENU_INCLUDE_SECTIONS=1` 로 sections 포함.
+   */
+  const includeLegacySections = process.env.GRAB_MENU_INCLUDE_SECTIONS === '1'
   return {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
     sellingTimes,
     categories,
-    sections,
+    ...(includeLegacySections ? { sections } : {}),
   }
 }

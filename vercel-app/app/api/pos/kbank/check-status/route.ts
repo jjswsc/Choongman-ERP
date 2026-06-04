@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
+    const qrType = String(body.qrType || rawPayload?.qrType || '').trim()
     const payloadOrigPartnerTxnUid = String(rawPayload?.origPartnerTxnUid || '').trim()
 
     if (!partnerTransactionId && !originalTransactionId && !refId && !payloadOrigPartnerTxnUid) {
@@ -120,7 +121,10 @@ export async function POST(req: NextRequest) {
       refId: refId || undefined,
       terminalId: terminalId || undefined,
       txnNo: txnNo || undefined,
-      payload: rawPayload,
+      payload: {
+        ...(rawPayload || {}),
+        ...(qrType ? { qrType } : {}),
+      },
     }
 
     const requestedAt = new Date().toISOString()

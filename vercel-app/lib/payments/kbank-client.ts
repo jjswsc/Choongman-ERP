@@ -20,7 +20,9 @@ import {
   isKbankBusinessSuccess,
   maskKbankMessageForLog,
   readKbankResponseStatusCode,
+  resolveKbankInquiryTxnNoForRequest,
   resolveKbankQrTypeCode,
+  resolveKbankVoidTxnNoForRequest,
 } from '@/lib/payments/kbank-api-reference'
 
 const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
@@ -413,7 +415,10 @@ function buildCheckStatusPayload(
   if (!resolvedOrigPartnerTxnUid) {
     throw new Error('origPartnerTxnUid is required for Inquire Payment (v5).')
   }
-  const resolvedTxnNo = String(payload.txnNo || req.txnNo || '').trim()
+  const rawTxnNo = String(payload.txnNo || req.txnNo || '').trim()
+  const qrType = String(payload.qrType || '').trim()
+  const resolvedTxnNo =
+    resolveKbankInquiryTxnNoForRequest(rawTxnNo, { qrType: qrType || undefined }) || ''
   return {
     ...payload,
     partnerTxnUid: requestTxnUid,
@@ -550,8 +555,11 @@ function buildTxnPayload(
         String(payload.qrType || reqQrType || process.env.KBANK_QR_TYPE_THAI || '3').trim() || undefined
       )
     : ''
-  const resolvedTxnNo = options?.includeTxnNo
+  const rawTxnNo = options?.includeTxnNo
     ? String(payload.txnNo || reqTxnNo || '').trim()
+    : ''
+  const resolvedTxnNo = options?.includeTxnNo
+    ? resolveKbankVoidTxnNoForRequest(rawTxnNo) || ''
     : ''
   return {
     ...payload,

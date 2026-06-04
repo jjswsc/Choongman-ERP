@@ -210,9 +210,14 @@ import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import {
   extractKbankQrResponseMeta,
+  extractKbankPaymentTxnNo,
   isKbankCreditCardQrUnavailableError,
+  isKbankPaymentTxnNo,
+  isKbankQrSessionTxnNo,
   isKbankRateLimitError,
   KBANK_RATE_LIMIT_BACKOFF_MS,
+  resolveKbankInquiryTxnNoForRequest,
+  resolveKbankVoidTxnNoForRequest,
   resolveKbankCreditCardBrandLabels,
   resolveKbankDisplayQrTypeDetails,
   type KbankDisplayQrTypeSource,
@@ -1117,6 +1122,7 @@ export default function PosTerminalPage() {
   const [kbankGenerateAuditText, setKbankGenerateAuditText] = useState('')
   const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
   const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
+  const kbankOpsTxnUidRef = useRef('')
   const [kbankOpsOrigTxnUid, setKbankOpsOrigTxnUid] = useState('')
   const [kbankOpsTxnNo, setKbankOpsTxnNo] = useState('')
   const [kbankOpsTerminalId, setKbankOpsTerminalId] = useState('')
@@ -1132,6 +1138,17 @@ export default function PosTerminalPage() {
   const kbankFollowupLastAtRef = useRef(0)
   const kbankApiPausedUntilRef = useRef(0)
   const [kbankApiPausedUntilMs, setKbankApiPausedUntilMs] = useState(0)
+  /** QR 대기 결제: 승인되면 주문을 paid로 마감·영수증 출력하는 후처리(파트너TxnUid별). */
+  const pendingKbankFinalizeRef = useRef<
+    Record<string, (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>>
+  >({})
+  /** 콜백이 결제 후처리 등록보다 빠를 때 승인 정보 보관 (partnerTxnUid별). */
+  const deferredKbankApprovalRef = useRef<
+    Record<string, { txnNo?: string; cardBrands?: string[] }>
+  >({})
+  useEffect(() => {
+    kbankOpsTxnUidRef.current = String(kbankOpsTxnUid || '').trim()
+  }, [kbankOpsTxnUid])
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
@@ -3459,6 +3476,8 @@ export default function PosTerminalPage() {
     setKbankOpsLastResult('')
     setKbankCallbackState('idle')
     kbankCallbackNotifiedTxRef.current = ''
+    pendingKbankFinalizeRef.current = {}
+    deferredKbankApprovalRef.current = {}
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId])
 
@@ -3508,6 +3527,15 @@ export default function PosTerminalPage() {
     if (live) return live
     return String(demoKbankQrPayload || '').trim()
   }, [liveKbankQrPayload, demoKbankQrPayload])
+  /** QR 이미지 없이 txnUid만 남은 경우(취소 후 Inquiry 등)에도 직원 모니터 표시 */
+  const showKbankStaffMonitor = useMemo(
+    () =>
+      Boolean(
+        String(effectiveStaffKbankQrPayload || '').trim() ||
+          (!isPosDemo && isKbankPilotStore && String(kbankOpsTxnUid || '').trim())
+      ),
+    [effectiveStaffKbankQrPayload, isPosDemo, isKbankPilotStore, kbankOpsTxnUid]
+  )
   const effectiveStaffKbankQrAmount = useMemo(() => {
     const live = String(liveKbankQrPayload || '').trim()
     if (live && liveKbankQrAmount > 0) return liveKbankQrAmount
@@ -6175,6 +6203,45 @@ export default function PosTerminalPage() {
     []
   )
 
+  const tryRunKbankPendingFinalize = useCallback(
+    (refId: string, approval: { txnNo?: string; cardBrands?: string[] }) => {
+      const key = String(refId || '').trim()
+      if (!key) return false
+      const finalize = pendingKbankFinalizeRef.current[key]
+      if (!finalize) return false
+      delete pendingKbankFinalizeRef.current[key]
+      delete deferredKbankApprovalRef.current[key]
+      void Promise.resolve(finalize(approval)).catch((e) =>
+        console.error('kbank pending finalize:', e)
+      )
+      return true
+    },
+    []
+  )
+
+  const registerPendingKbankFinalize = useCallback(
+    (
+      partnerTxnId: string,
+      fn: (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>
+    ) => {
+      const key = String(partnerTxnId || '').trim()
+      if (!key) return
+      pendingKbankFinalizeRef.current[key] = fn
+      const deferred = deferredKbankApprovalRef.current[key]
+      if (deferred) {
+        tryRunKbankPendingFinalize(key, deferred)
+      }
+    },
+    [tryRunKbankPendingFinalize]
+  )
+
+  const purgeKbankPendingFinalize = useCallback((partnerTxnId: string) => {
+    const key = String(partnerTxnId || '').trim()
+    if (!key) return
+    delete pendingKbankFinalizeRef.current[key]
+    delete deferredKbankApprovalRef.current[key]
+  }, [])
+
   const presentKbankPaymentApproved = useCallback(
     (input: {
       refId: string
@@ -6187,11 +6254,19 @@ export default function PosTerminalPage() {
     }) => {
       const refId = String(input.refId || '').trim()
       if (!refId) return
-      if (kbankCallbackNotifiedTxRef.current === refId) return
+      const brands = input.cardBrands ?? kbankOpsCardBrands
+      const approval = { txnNo: input.approvalCode, cardBrands: brands }
+      const alreadyNotified = kbankCallbackNotifiedTxRef.current === refId
+      // QR 대기 결제: 승인되면 등록된 후처리(주문 paid 마감·영수증). 콜백이 먼저 오면 deferred 후 등록 시 실행.
+      if (!alreadyNotified) {
+        if (!tryRunKbankPendingFinalize(refId, approval)) {
+          deferredKbankApprovalRef.current[refId] = approval
+        }
+      }
       kbankCallbackNotifiedTxRef.current = refId
       setKbankCallbackState('received')
       setCustomerDisplayPaymentMessage('')
-      const brands = input.cardBrands ?? kbankOpsCardBrands
+      if (alreadyNotified) return
       openKbankOutcomeModal(
         {
           kind: 'success',
@@ -6210,8 +6285,28 @@ export default function PosTerminalPage() {
         input.dedupeKey || `success:${refId}`
       )
     },
-    [kbankOpsCardBrands, liveKbankQrAmount, liveKbankQrType, openKbankOutcomeModal, lang]
+    [
+      kbankOpsCardBrands,
+      liveKbankQrAmount,
+      liveKbankQrType,
+      openKbankOutcomeModal,
+      lang,
+      tryRunKbankPendingFinalize,
+    ]
   )
+
+  /** KBank QR 직원 모니터 세션 정리 (QR 이미지·후속 처리 ID·상태 초기화) */
+  const clearKbankQrSession = useCallback(() => {
+    purgeKbankPendingFinalize(kbankOpsTxnUidRef.current)
+    setLiveKbankQrPayload('')
+    setLiveKbankQrType('THAI_QR')
+    setKbankOpsTxnUid('')
+    setKbankOpsOrigTxnUid('')
+    setKbankOpsTxnNo('')
+    setCustomerDisplayPaymentMessage('')
+    setKbankCallbackState('idle')
+    kbankManualCancelPendingRef.current = false
+  }, [purgeKbankPendingFinalize])
 
   const runKbankQrPaymentIfNeeded = useCallback(
     async (
@@ -6296,10 +6391,19 @@ export default function PosTerminalPage() {
 
       const data = (generate.data || {}) as Record<string, unknown>
       const generatedInfo = extractKbankGenerateResponseInfo(data)
-      const resolvedTxnNo = String(generatedInfo.txnNo || '').trim().slice(0, 20)
+      const generateTxnNoRaw = String(generatedInfo.txnNo || '').trim().slice(0, 20)
       setKbankOpsTxnUid(partnerTransactionId)
       setKbankOpsOrigTxnUid(partnerTransactionId)
-      if (resolvedTxnNo) setKbankOpsTxnNo(resolvedTxnNo)
+      // Generate APIC* is QR session id — not for CC Inquiry; payment txnNo comes from callback/inquiry (e.g. 26440008).
+      if (generateTxnNoRaw && isKbankPaymentTxnNo(generateTxnNoRaw)) {
+        setKbankOpsTxnNo(generateTxnNoRaw)
+      } else if (generateTxnNoRaw && isKbankQrSessionTxnNo(generateTxnNoRaw)) {
+        setKbankOpsTxnNo('')
+      } else if (generateTxnNoRaw) {
+        setKbankOpsTxnNo(generateTxnNoRaw)
+      } else {
+        setKbankOpsTxnNo('')
+      }
       setKbankCallbackState('waiting')
       const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
       const generatedCardBrands = resolveKbankCreditCardBrandLabels({
@@ -6406,10 +6510,14 @@ export default function PosTerminalPage() {
           partnerTransactionId,
           originalTransactionId: partnerTransactionId,
           refId: refId || undefined,
-          payload: { origPartnerTxnUid: partnerTransactionId },
+          payload: {
+            origPartnerTxnUid: partnerTransactionId,
+            qrType: requestedQrType,
+          },
         })
         const stData = (st.data || {}) as Record<string, unknown>
-        const stTxnNo = String(stData.txnNo || '').trim().slice(0, 20)
+        const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
+        if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         if (!st.success && noteKbankRateLimitResponse(st.statusMessage || st.message)) {
           /* stay pending; staff can Inquiry after backoff */
         } else if (st.success) {
@@ -6469,7 +6577,6 @@ export default function PosTerminalPage() {
             return finalizeKbankQrFailureWithManualOption(failureHint)
           }
         }
-        if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         const inquiryMeta = extractKbankQrResponseMeta(stData)
         if (inquiryMeta.qrTypeCode || inquiryMeta.sof) {
           const inquiryDetails = resolveKbankDisplayQrTypeDetails({
@@ -6497,7 +6604,14 @@ export default function PosTerminalPage() {
           ' — ' +
           (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )
-      return { ok: false as const, message: 'kbank_qr_pending' }
+      return {
+        ok: false as const,
+        qrPending: true as const,
+        message: 'kbank_qr_pending',
+        partnerTransactionId,
+        qrAmount,
+        qrType: requestedQrType,
+      }
     },
     [
       isPosDemo,
@@ -6528,7 +6642,10 @@ export default function PosTerminalPage() {
       }
       const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
       const terminalId = String(kbankOpsTerminalId || '').trim()
-      const txnNo = String(kbankOpsTxnNo || '').trim()
+      const txnNoRaw = String(kbankOpsTxnNo || '').trim()
+      const inquiryTxnNo = resolveKbankInquiryTxnNoForRequest(txnNoRaw, {
+        qrType: liveKbankQrType,
+      })
       if (!(await alertIfKbankApiPaused(action))) return
       if (action === 'inquiry') {
         const canInquiry = await enforceKbankCooldown('inquiry', 30_000, 'Inquiry')
@@ -6546,16 +6663,17 @@ export default function PosTerminalPage() {
             partnerTransactionId: partnerTxnUid,
             originalTransactionId: origPartnerTxnUid || undefined,
             terminalId: terminalId || undefined,
-            txnNo: txnNo || undefined,
+            txnNo: inquiryTxnNo,
             payload: {
               ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
               ...(terminalId ? { terminalId } : {}),
-              ...(txnNo ? { txnNo } : {}),
+              qrType: liveKbankQrType,
+              ...(inquiryTxnNo ? { txnNo: inquiryTxnNo } : {}),
             },
           })
           if (out.success) {
             const d = (out.data || {}) as Record<string, unknown>
-            const nextTxnNo = String(d.txnNo || txnNo || '').trim().slice(0, 20)
+            const nextTxnNo = extractKbankPaymentTxnNo(d).slice(0, 20)
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
             const brands = resolveKbankCreditCardBrandLabels({
               sof: d.sof,
@@ -6601,6 +6719,7 @@ export default function PosTerminalPage() {
           })
           if (out.success) {
             kbankManualCancelPendingRef.current = true
+            purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
               {
@@ -6617,7 +6736,7 @@ export default function PosTerminalPage() {
           return
         }
         if (action === 'void') {
-          let voidTxnNo = txnNo
+          let voidTxnNo = resolveKbankVoidTxnNoForRequest(txnNoRaw) || ''
           if (!voidTxnNo) {
             kbankInquiryLastAtRef.current = Date.now()
             const inq = await executeKbankCheckStatus({
@@ -6627,12 +6746,13 @@ export default function PosTerminalPage() {
               terminalId: terminalId || undefined,
               payload: {
                 origPartnerTxnUid,
+                qrType: liveKbankQrType,
                 ...(terminalId ? { terminalId } : {}),
               },
             })
             if (inq.success) {
               const inqData = (inq.data || {}) as Record<string, unknown>
-              voidTxnNo = String(inqData.txnNo || '').trim().slice(0, 20)
+              voidTxnNo = extractKbankPaymentTxnNo(inqData).slice(0, 20)
               if (voidTxnNo) setKbankOpsTxnNo(voidTxnNo)
             }
             if (!voidTxnNo) {
@@ -6671,8 +6791,9 @@ export default function PosTerminalPage() {
           })
           if (out.success) {
             const d = (out.data || {}) as Record<string, unknown>
-            const nextTxnNo = String(d.txnNo || voidTxnNo || '').trim().slice(0, 20)
+            const nextTxnNo = extractKbankPaymentTxnNo(d).slice(0, 20) || voidTxnNo
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
+            purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
               {
@@ -6747,6 +6868,7 @@ export default function PosTerminalPage() {
       liveKbankQrAmount,
       openKbankOutcomeModal,
       presentKbankPaymentApproved,
+      purgeKbankPendingFinalize,
       alertIfKbankApiPaused,
       noteKbankRateLimitResponse,
       lang,
@@ -6810,11 +6932,18 @@ export default function PosTerminalPage() {
       const status = String(hit.status || '').trim().toLowerCase()
       const lowerText = String(hit.responseText || '').trim().toLowerCase()
       const txnNoFromTextMatch =
-        lowerText.match(/(?:txnno|transactionno)\s*[:=]\s*([a-z0-9-]{4,30})/i) ||
-        lowerText.match(/\btxnno\b.*?\b([a-z0-9-]{4,30})\b/i)
+        lowerText.match(/(?:txnno|transactionno)\s*[:=]\s*(\d{6,16})/i) ||
+        lowerText.match(/\btxnno\b.*?(\d{6,16})\b/i)
       const txnNoFromText = String(txnNoFromTextMatch?.[1] || '').trim()
-      if (txnNoFromText && !String(kbankOpsTxnNo || '').trim()) {
-        setKbankOpsTxnNo(txnNoFromText.slice(0, 20))
+      const tracePaymentTxnNo = String(hit.traceNo || '').trim()
+      let paymentTxnNo = ''
+      if (isKbankPaymentTxnNo(tracePaymentTxnNo)) {
+        paymentTxnNo = tracePaymentTxnNo
+      } else if (isKbankPaymentTxnNo(txnNoFromText)) {
+        paymentTxnNo = txnNoFromText
+      }
+      if (paymentTxnNo && !resolveKbankInquiryTxnNoForRequest(kbankOpsTxnNo, { qrType: liveKbankQrType })) {
+        setKbankOpsTxnNo(paymentTxnNo.slice(0, 20))
       }
       if (status === 'approved') {
         setKbankOpsLastResult(
@@ -6878,18 +7007,21 @@ export default function PosTerminalPage() {
 
       kbankInquiryLastAtRef.current = Date.now()
       const terminalId = String(kbankOpsTerminalId || '').trim()
-      const txnNo = String(kbankOpsTxnNo || '').trim()
+      const pollInquiryTxnNo = resolveKbankInquiryTxnNoForRequest(String(kbankOpsTxnNo || '').trim(), {
+        qrType: liveKbankQrType,
+      })
       try {
         const st = await executeKbankCheckStatus({
           storeCode: currentStoreId,
           partnerTransactionId: partnerTxnUid,
           originalTransactionId: origPartnerTxnUid || undefined,
           terminalId: terminalId || undefined,
-          txnNo: txnNo || undefined,
+          txnNo: pollInquiryTxnNo,
           payload: {
             ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
             ...(terminalId ? { terminalId } : {}),
-            ...(txnNo ? { txnNo } : {}),
+            qrType: liveKbankQrType,
+            ...(pollInquiryTxnNo ? { txnNo: pollInquiryTxnNo } : {}),
           },
         })
         if (cancelled) return
@@ -6900,7 +7032,7 @@ export default function PosTerminalPage() {
         const s = String(st.status || '').trim().toLowerCase()
         if (s !== 'approved') return
         const stData = (st.data || {}) as Record<string, unknown>
-        const stTxnNo = String(stData.txnNo || txnNo || '').trim().slice(0, 20)
+        const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
         if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
         const brands = resolveKbankCreditCardBrandLabels({
           sof: stData.sof,
@@ -7842,6 +7974,8 @@ export default function PosTerminalPage() {
                   String(payload.memo ?? ''),
                   normalizePosSplitReceiptSnapshots(payload.splitReceipts)
                 )
+                let kbankQrPending = false
+                let kbankPartnerTxnId = ''
                 if (existingOrderId != null && payload.payment != null) {
                   try {
                     const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
@@ -7858,7 +7992,11 @@ export default function PosTerminalPage() {
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
                   })
-                  if (!kbankQr.ok) return false
+                  kbankQrPending = !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
+                  if (!kbankQr.ok && !kbankQrPending) return false
+                  kbankPartnerTxnId = String(
+                    (kbankQr as { partnerTransactionId?: string }).partnerTransactionId || ''
+                  ).trim()
                   memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
@@ -7882,73 +8020,92 @@ export default function PosTerminalPage() {
                     await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
                     return false
                   }
-                  const completedOk = await applyOrderStatusWithRetry({
-                    id: existingOrderId,
-                    status: 'paid',
+                  if (!kbankQrPending) {
+                    const completedOk = await applyOrderStatusWithRetry({
+                      id: existingOrderId,
+                      status: 'paid',
+                    })
+                    if (!completedOk) return false
+                  }
+                }
+                const finalizeDeliveryPaid = async (): Promise<boolean> => {
+                  if (kbankQrPending && existingOrderId != null) {
+                    const completedOk = await applyOrderStatusWithRetry({
+                      id: existingOrderId,
+                      status: 'paid',
+                    })
+                    if (!completedOk) return false
+                  }
+                  const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                  const discountAmt = payload.discountAmt ?? 0
+                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
+                  await tryOpenDrawerOnOrderComplete(payload.payment, {
+                    skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
-                  if (!completedOk) return false
+                  const receiptPayload: ReceiptModalData = {
+                    orderNo: pendingReceiptOrderNo ?? '',
+                    items: itemsForPaymentSave,
+                    subtotal,
+                    discountAmt,
+                    total: pricing.finalTotal,
+                    storeCode: currentStoreId,
+                    orderType: 'delivery',
+                    tableName: payload.orderLabel,
+                    memo: memoWithKbank,
+                    discountReason: payload.discountReason,
+                    vatFeeAmt: pricing.vatFeeAmt,
+                    vatFeeMode: pricing.vatFeeMode,
+                    ...receiptTaxDisplayFieldsFromPricing(pricing),
+                    serviceFeeAmt: pricing.serviceFeeAmt,
+                    serviceFeeMode: pricing.serviceFeeMode,
+                    cardFeeAmt: pricing.cardFeeAmt,
+                    cardFeeMode: pricing.cardFeeMode,
+                    otherFeeAmt: pricing.otherFeeAmt,
+                    otherFeeMode: pricing.otherFeeMode,
+                    ...(String(deliveryApp ?? '').trim()
+                      ? { deliveryAppCode: String(deliveryApp).trim().toLowerCase() }
+                      : {}),
+                    ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
+                    receiptAutoPrintContext: 'payment',
+                    suppressReceiptModalAutoPrint: !isMainPosDevice,
+                  }
+                  const splitBatch = makeSplitPaymentReceiptBatch(
+                    {
+                      orderNo: receiptPayload.orderNo,
+                      storeCode: receiptPayload.storeCode,
+                      orderType: receiptPayload.orderType,
+                      tableName: receiptPayload.tableName,
+                      memo: receiptPayload.memo,
+                      discountReason: receiptPayload.discountReason,
+                      vatFeeMode: receiptPayload.vatFeeMode,
+                    },
+                    payload.splitReceipts,
+                    !isMainPosDevice,
+                    existingOrderId
+                  )
+                  dispatchCheckoutPaymentReceipt({
+                    receiptPayload,
+                    splitBatch,
+                    orderId: existingOrderId,
+                  })
+                  setPendingReceiptOrderNo(null)
+                  setPendingDeliveryOrderId(null)
+                  setSelectedDeliveryTargetId(null)
+                  setSelectedDeliveryTargetLabel('')
+                  setDeliveryApp(null)
+                  setDeliveryOrderNo('')
+                  await refetchCurrentStore()
+                  if (payload.payment != null) schedulePostPaymentCustomerQr()
+                  return true
                 }
-                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
-                await tryOpenDrawerOnOrderComplete(payload.payment, {
-                  skipAutoOpen: Boolean(payload.splitReceipts?.length),
-                })
-                const receiptPayload: ReceiptModalData = {
-                  orderNo: pendingReceiptOrderNo ?? '',
-                  items: itemsForPaymentSave,
-                  subtotal,
-                  discountAmt,
-                  total: pricing.finalTotal,
-                  storeCode: currentStoreId,
-                  orderType: 'delivery',
-                  tableName: payload.orderLabel,
-                  memo: memoWithKbank,
-                  discountReason: payload.discountReason,
-                  vatFeeAmt: pricing.vatFeeAmt,
-                  vatFeeMode: pricing.vatFeeMode,
-                  ...receiptTaxDisplayFieldsFromPricing(pricing),
-                  serviceFeeAmt: pricing.serviceFeeAmt,
-                  serviceFeeMode: pricing.serviceFeeMode,
-                  cardFeeAmt: pricing.cardFeeAmt,
-                  cardFeeMode: pricing.cardFeeMode,
-                  otherFeeAmt: pricing.otherFeeAmt,
-                  otherFeeMode: pricing.otherFeeMode,
-                  ...(String(deliveryApp ?? '').trim()
-                    ? { deliveryAppCode: String(deliveryApp).trim().toLowerCase() }
-                    : {}),
-                  ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
-                  receiptAutoPrintContext: 'payment',
-                  suppressReceiptModalAutoPrint: !isMainPosDevice,
+                if (kbankQrPending && kbankPartnerTxnId) {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                    void finalizeDeliveryPaid()
+                  })
+                  await refetchCurrentStore()
+                  return true
                 }
-                const splitBatch = makeSplitPaymentReceiptBatch(
-                  {
-                    orderNo: receiptPayload.orderNo,
-                    storeCode: receiptPayload.storeCode,
-                    orderType: receiptPayload.orderType,
-                    tableName: receiptPayload.tableName,
-                    memo: receiptPayload.memo,
-                    discountReason: receiptPayload.discountReason,
-                    vatFeeMode: receiptPayload.vatFeeMode,
-                  },
-                  payload.splitReceipts,
-                  !isMainPosDevice,
-                  existingOrderId
-                )
-                dispatchCheckoutPaymentReceipt({
-                  receiptPayload,
-                  splitBatch,
-                  orderId: existingOrderId,
-                })
-                setPendingReceiptOrderNo(null)
-                setPendingDeliveryOrderId(null)
-                setSelectedDeliveryTargetId(null)
-                setSelectedDeliveryTargetLabel('')
-                setDeliveryApp(null)
-                setDeliveryOrderNo('')
-                await refetchCurrentStore()
-                if (payload.payment != null) schedulePostPaymentCustomerQr()
-                return true
+                return await finalizeDeliveryPaid()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
                 await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
@@ -7983,6 +8140,8 @@ export default function PosTerminalPage() {
                   String(payload.memo ?? ''),
                   normalizePosSplitReceiptSnapshots(payload.splitReceipts)
                 )
+                let kbankQrPending = false
+                let kbankPartnerTxnId = ''
                 if (existingOrderId != null && payload.payment != null) {
                   try {
                     const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
@@ -7999,7 +8158,11 @@ export default function PosTerminalPage() {
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
                   })
-                  if (!kbankQr.ok) return false
+                  kbankQrPending = !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
+                  if (!kbankQr.ok && !kbankQrPending) return false
+                  kbankPartnerTxnId = String(
+                    (kbankQr as { partnerTransactionId?: string }).partnerTransactionId || ''
+                  ).trim()
                   memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
@@ -8023,68 +8186,87 @@ export default function PosTerminalPage() {
                     await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
                     return false
                   }
-                  const completedOk = await applyOrderStatusWithRetry({
-                    id: existingOrderId,
-                    status: 'paid',
+                  if (!kbankQrPending) {
+                    const completedOk = await applyOrderStatusWithRetry({
+                      id: existingOrderId,
+                      status: 'paid',
+                    })
+                    if (!completedOk) return false
+                  }
+                }
+                const finalizeTakeoutPaid = async (): Promise<boolean> => {
+                  if (kbankQrPending && existingOrderId != null) {
+                    const completedOk = await applyOrderStatusWithRetry({
+                      id: existingOrderId,
+                      status: 'paid',
+                    })
+                    if (!completedOk) return false
+                  }
+                  const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                  const discountAmt = payload.discountAmt ?? 0
+                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
+                  await tryOpenDrawerOnOrderComplete(payload.payment, {
+                    skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
-                  if (!completedOk) return false
+                  const receiptPayload: ReceiptModalData = {
+                    orderNo: pendingReceiptOrderNo ?? '',
+                    items: itemsForPaymentSave,
+                    subtotal,
+                    discountAmt,
+                    total: pricing.finalTotal,
+                    storeCode: currentStoreId,
+                    orderType: 'takeout',
+                    tableName: payload.orderLabel,
+                    memo: memoWithKbank,
+                    discountReason: payload.discountReason,
+                    vatFeeAmt: pricing.vatFeeAmt,
+                    vatFeeMode: pricing.vatFeeMode,
+                    ...receiptTaxDisplayFieldsFromPricing(pricing),
+                    serviceFeeAmt: pricing.serviceFeeAmt,
+                    serviceFeeMode: pricing.serviceFeeMode,
+                    cardFeeAmt: pricing.cardFeeAmt,
+                    cardFeeMode: pricing.cardFeeMode,
+                    otherFeeAmt: pricing.otherFeeAmt,
+                    otherFeeMode: pricing.otherFeeMode,
+                    ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
+                    receiptAutoPrintContext: 'payment',
+                    suppressReceiptModalAutoPrint: !isMainPosDevice,
+                  }
+                  const splitBatch = makeSplitPaymentReceiptBatch(
+                    {
+                      orderNo: receiptPayload.orderNo,
+                      storeCode: receiptPayload.storeCode,
+                      orderType: receiptPayload.orderType,
+                      tableName: receiptPayload.tableName,
+                      memo: receiptPayload.memo,
+                      discountReason: receiptPayload.discountReason,
+                      vatFeeMode: receiptPayload.vatFeeMode,
+                    },
+                    payload.splitReceipts,
+                    !isMainPosDevice,
+                    existingOrderId
+                  )
+                  dispatchCheckoutPaymentReceipt({
+                    receiptPayload,
+                    splitBatch,
+                    orderId: existingOrderId,
+                  })
+                  setPendingReceiptOrderNo(null)
+                  setPendingTakeoutOrderId(null)
+                  setSelectedTakeoutTargetId(null)
+                  setSelectedTakeoutTargetLabel('')
+                  await refetchCurrentStore()
+                  if (payload.payment != null) schedulePostPaymentCustomerQr()
+                  return true
                 }
-                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
-                await tryOpenDrawerOnOrderComplete(payload.payment, {
-                  skipAutoOpen: Boolean(payload.splitReceipts?.length),
-                })
-                const receiptPayload: ReceiptModalData = {
-                  orderNo: pendingReceiptOrderNo ?? '',
-                  items: itemsForPaymentSave,
-                  subtotal,
-                  discountAmt,
-                  total: pricing.finalTotal,
-                  storeCode: currentStoreId,
-                  orderType: 'takeout',
-                  tableName: payload.orderLabel,
-                  memo: memoWithKbank,
-                  discountReason: payload.discountReason,
-                  vatFeeAmt: pricing.vatFeeAmt,
-                  vatFeeMode: pricing.vatFeeMode,
-                  ...receiptTaxDisplayFieldsFromPricing(pricing),
-                  serviceFeeAmt: pricing.serviceFeeAmt,
-                  serviceFeeMode: pricing.serviceFeeMode,
-                  cardFeeAmt: pricing.cardFeeAmt,
-                  cardFeeMode: pricing.cardFeeMode,
-                  otherFeeAmt: pricing.otherFeeAmt,
-                  otherFeeMode: pricing.otherFeeMode,
-                  ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
-                  receiptAutoPrintContext: 'payment',
-                  suppressReceiptModalAutoPrint: !isMainPosDevice,
+                if (kbankQrPending && kbankPartnerTxnId) {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                    void finalizeTakeoutPaid()
+                  })
+                  await refetchCurrentStore()
+                  return true
                 }
-                const splitBatch = makeSplitPaymentReceiptBatch(
-                  {
-                    orderNo: receiptPayload.orderNo,
-                    storeCode: receiptPayload.storeCode,
-                    orderType: receiptPayload.orderType,
-                    tableName: receiptPayload.tableName,
-                    memo: receiptPayload.memo,
-                    discountReason: receiptPayload.discountReason,
-                    vatFeeMode: receiptPayload.vatFeeMode,
-                  },
-                  payload.splitReceipts,
-                  !isMainPosDevice,
-                  existingOrderId
-                )
-                dispatchCheckoutPaymentReceipt({
-                  receiptPayload,
-                  splitBatch,
-                  orderId: existingOrderId,
-                })
-                setPendingReceiptOrderNo(null)
-                setPendingTakeoutOrderId(null)
-                setSelectedTakeoutTargetId(null)
-                setSelectedTakeoutTargetLabel('')
-                await refetchCurrentStore()
-                if (payload.payment != null) schedulePostPaymentCustomerQr()
-                return true
+                return await finalizeTakeoutPaid()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
                 await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
@@ -8879,7 +9061,12 @@ export default function PosTerminalPage() {
                       orderId: existingOrderId ?? undefined,
                     })
                   : { ok: true as const }
-                if (!kbankQr.ok) return false
+                const kbankQrPending =
+                  !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
+                if (!kbankQr.ok && !kbankQrPending) return false
+                const kbankPartnerTxnId = String(
+                  (kbankQr as { partnerTransactionId?: string }).partnerTransactionId || ''
+                ).trim()
                 const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const cartItemsForSave = cartLinesToPosOrderItems(payloadItemsNormalized)
@@ -8950,7 +9137,7 @@ export default function PosTerminalPage() {
                       linkposPayment: linkpos.linkposPayment,
                       kbankPartnerTransactionId: String((kbankQr as { partnerTransactionId?: string }).partnerTransactionId || '') || null,
                       pricingAdjustments,
-                      closeStatus: targetClose,
+                      ...(kbankQrPending ? {} : { closeStatus: targetClose }),
                     }))
                   }
                   if (mergedLocal) {
@@ -8980,7 +9167,7 @@ export default function PosTerminalPage() {
                       linkposPayment: linkpos.linkposPayment,
                       kbankPartnerTransactionId: String((kbankQr as { partnerTransactionId?: string }).partnerTransactionId || '') || null,
                       pricingAdjustments,
-                      closeStatus: targetClose,
+                      ...(kbankQrPending ? {} : { closeStatus: targetClose }),
                     })
                     if (!res.success) {
                       const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
@@ -8992,81 +9179,92 @@ export default function PosTerminalPage() {
                     await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
                   }
                 }
-                if (orderIdToComplete != null) {
-                  const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
-                  const statusOk = await applyOrderStatusWithRetry({
-                    id: orderIdToComplete,
-                    status: targetStatus,
-                  })
-                  if (!statusOk) return false
-                  /** 후불(완료)만 즉시 테이블 비움. 선불(paid)은 테이블·내역 유지 */
-                  if (!payload.isPrepaid && payload.tableName) {
+                const finalizeDineInPaid = async (): Promise<boolean> => {
+                  if (orderIdToComplete != null) {
+                    const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
+                    const statusOk = await applyOrderStatusWithRetry({
+                      id: orderIdToComplete,
+                      status: targetStatus,
+                    })
+                    if (!statusOk) return false
+                    /** 후불(완료)만 즉시 테이블 비움. 선불(paid)은 테이블·내역 유지 */
+                    if (!payload.isPrepaid && payload.tableName) {
+                      clearTableOrder(currentStoreId, payload.tableName)
+                    }
+                  } else if (pay != null && payload.tableName && !payload.isPrepaid) {
+                    /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                     clearTableOrder(currentStoreId, payload.tableName)
                   }
-                } else if (pay != null && payload.tableName && !payload.isPrepaid) {
-                  /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
-                  clearTableOrder(currentStoreId, payload.tableName)
+                  const subtotal = itemsForPaymentSave.reduce(
+                    (s, it) => s + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
+                    0
+                  )
+                  const discountAmt = payload.discountAmt ?? 0
+                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
+                  await tryOpenDrawerOnOrderComplete(payload.payment, {
+                    skipAutoOpen: Boolean(payload.splitReceipts?.length),
+                  })
+                  const receiptPayload: ReceiptModalData = {
+                    orderNo,
+                    items: itemsForPaymentSave,
+                    subtotal,
+                    discountAmt,
+                    total: pricing.finalTotal,
+                    storeCode: currentStoreId,
+                    orderType: 'dine_in',
+                    tableName: payload.tableName,
+                    memo: memoWithKbank,
+                    discountReason: payload.discountReason,
+                    vatFeeAmt: pricing.vatFeeAmt,
+                    vatFeeMode: pricing.vatFeeMode,
+                    ...receiptTaxDisplayFieldsFromPricing(pricing),
+                    serviceFeeAmt: pricing.serviceFeeAmt,
+                    serviceFeeMode: pricing.serviceFeeMode,
+                    cardFeeAmt: pricing.cardFeeAmt,
+                    cardFeeMode: pricing.cardFeeMode,
+                    otherFeeAmt: pricing.otherFeeAmt,
+                    otherFeeMode: pricing.otherFeeMode,
+                    ...(pay ? receiptPaymentFieldsFromSnapshot(pay) : {}),
+                    receiptAutoPrintContext: 'payment',
+                    suppressReceiptModalAutoPrint: !isMainPosDevice,
+                  }
+                  const splitBatch = makeSplitPaymentReceiptBatch(
+                    {
+                      orderNo: receiptPayload.orderNo,
+                      storeCode: receiptPayload.storeCode,
+                      orderType: receiptPayload.orderType,
+                      tableName: receiptPayload.tableName,
+                      memo: receiptPayload.memo,
+                      discountReason: receiptPayload.discountReason,
+                      vatFeeMode: receiptPayload.vatFeeMode,
+                    },
+                    payload.splitReceipts,
+                    !isMainPosDevice,
+                    orderIdToComplete
+                  )
+                  dispatchCheckoutPaymentReceipt({
+                    receiptPayload,
+                    splitBatch,
+                    orderId: orderIdToComplete,
+                  })
+                  setPendingReceiptOrderNo(null)
+                  setPendingDineInOrderId(null)
+                  pendingDineInOrderTableRef.current = ''
+                  setServingTableId(null)
+                  setSelectedTableId(null)
+                  await refetchCurrentStore()
+                  if (pay) schedulePostPaymentCustomerQr()
+                  return true
                 }
-                const subtotal = itemsForPaymentSave.reduce(
-                  (s, it) => s + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
-                  0
-                )
-                const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
-                await tryOpenDrawerOnOrderComplete(payload.payment, {
-                  skipAutoOpen: Boolean(payload.splitReceipts?.length),
-                })
-                const receiptPayload: ReceiptModalData = {
-                  orderNo,
-                  items: itemsForPaymentSave,
-                  subtotal,
-                  discountAmt,
-                  total: pricing.finalTotal,
-                  storeCode: currentStoreId,
-                  orderType: 'dine_in',
-                  tableName: payload.tableName,
-                  memo: memoWithKbank,
-                  discountReason: payload.discountReason,
-                  vatFeeAmt: pricing.vatFeeAmt,
-                  vatFeeMode: pricing.vatFeeMode,
-                  ...receiptTaxDisplayFieldsFromPricing(pricing),
-                  serviceFeeAmt: pricing.serviceFeeAmt,
-                  serviceFeeMode: pricing.serviceFeeMode,
-                  cardFeeAmt: pricing.cardFeeAmt,
-                  cardFeeMode: pricing.cardFeeMode,
-                  otherFeeAmt: pricing.otherFeeAmt,
-                  otherFeeMode: pricing.otherFeeMode,
-                  ...(pay ? receiptPaymentFieldsFromSnapshot(pay) : {}),
-                  receiptAutoPrintContext: 'payment',
-                  suppressReceiptModalAutoPrint: !isMainPosDevice,
+                /** QR 대기 결제: 모달을 닫고 주문은 open 유지, 승인되면 후처리 실행 */
+                if (kbankQrPending && kbankPartnerTxnId) {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                    void finalizeDineInPaid()
+                  })
+                  await refetchCurrentStore()
+                  return true
                 }
-                const splitBatch = makeSplitPaymentReceiptBatch(
-                  {
-                    orderNo: receiptPayload.orderNo,
-                    storeCode: receiptPayload.storeCode,
-                    orderType: receiptPayload.orderType,
-                    tableName: receiptPayload.tableName,
-                    memo: receiptPayload.memo,
-                    discountReason: receiptPayload.discountReason,
-                    vatFeeMode: receiptPayload.vatFeeMode,
-                  },
-                  payload.splitReceipts,
-                  !isMainPosDevice,
-                  orderIdToComplete
-                )
-                dispatchCheckoutPaymentReceipt({
-                  receiptPayload,
-                  splitBatch,
-                  orderId: orderIdToComplete,
-                })
-                setPendingReceiptOrderNo(null)
-                setPendingDineInOrderId(null)
-                pendingDineInOrderTableRef.current = ''
-                setServingTableId(null)
-                setSelectedTableId(null)
-                await refetchCurrentStore()
-                if (pay) schedulePostPaymentCustomerQr()
-                return true
+                return await finalizeDineInPaid()
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
                 await appAlert(tr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
@@ -9108,7 +9306,11 @@ export default function PosTerminalPage() {
                   orderType: payload.orderType,
                   orderLabel: payload.orderLabel,
                 })
-                if (!kbankQr.ok) return false
+                const kbankQrPending = !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
+                if (!kbankQr.ok && !kbankQrPending) return false
+                const kbankPartnerTxnId = String(
+                  (kbankQr as { partnerTransactionId?: string }).partnerTransactionId || ''
+                ).trim()
                 const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const paymentSumBeforeSave =
                   Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
@@ -9116,7 +9318,8 @@ export default function PosTerminalPage() {
                   Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
-                const hasPayment = paymentSumBeforeSave > 0.0001
+                /** QR 대기 중에는 아직 미결제 → '주문 접수(미결제)'로 저장하고 승인 시 마감 */
+                const hasPayment = paymentSumBeforeSave > 0.0001 && !kbankQrPending
                 const res = await savePosOrderWithOffline({
                   storeCode: currentStoreId,
                   createdBy: auth?.user ?? '',
@@ -9454,6 +9657,44 @@ export default function PosTerminalPage() {
                   }
                 }
                 if (hasPayment) schedulePostPaymentCustomerQr()
+                /** QR 대기 결제: 승인되면 주문을 paid로 마감하고 결제 영수증 발행 */
+                if (kbankQrPending && kbankPartnerTxnId) {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                    void (async () => {
+                      if (newOrderId != null && newOrderId > 0) {
+                        await applyOrderStatusWithRetry({ id: newOrderId, status: 'paid' })
+                      }
+                      const splitBatch = makeSplitPaymentReceiptBatch(
+                        {
+                          orderNo: receiptPayloadSubmit.orderNo,
+                          storeCode: receiptPayloadSubmit.storeCode,
+                          orderType: receiptPayloadSubmit.orderType,
+                          tableName: receiptPayloadSubmit.tableName,
+                          memo: receiptPayloadSubmit.memo,
+                          discountReason: payload.discountReason,
+                          vatFeeMode: receiptPayloadSubmit.vatFeeMode,
+                        },
+                        payload.splitReceipts,
+                        suppressReceiptModalAutoPrint,
+                        newOrderId
+                      )
+                      dispatchCheckoutPaymentReceipt({
+                        receiptPayload: {
+                          ...receiptPayloadSubmit,
+                          ...(payload.payment
+                            ? receiptPaymentFieldsFromSnapshot(payload.payment)
+                            : {}),
+                          receiptAutoPrintContext: 'payment',
+                          suppressReceiptModalAutoPrint,
+                        },
+                        splitBatch,
+                        orderId: newOrderId,
+                      })
+                      schedulePostPaymentCustomerQr()
+                      await refetchCurrentStore()
+                    })()
+                  })
+                }
                 return true
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)
@@ -10463,19 +10704,9 @@ export default function PosTerminalPage() {
         open={kbankOutcomeState != null}
         onOpenChange={(open) => {
           if (!open) {
-            const terminalKind = kbankOutcomeState?.kind
-            const shouldClearQrPanel = terminalKind === 'cancelled' || terminalKind === 'voided'
+            /** 취소/Void 후에도 패널·ID를 남겨 둬 Inquiry로 취소 상태를 조회할 수 있게 한다.
+             *  (정리는 직원 모니터의 "닫기" 버튼 또는 새 QR 생성 시) */
             setKbankOutcomeState(null)
-            if (shouldClearQrPanel) {
-              setLiveKbankQrPayload('')
-              setLiveKbankQrType('THAI_QR')
-              setKbankOpsTxnUid('')
-              setKbankOpsOrigTxnUid('')
-              setKbankOpsTxnNo('')
-              setCustomerDisplayPaymentMessage('')
-              setKbankCallbackState('idle')
-              kbankManualCancelPendingRef.current = false
-            }
           }
         }}
         kind={kbankOutcomeState?.kind || 'success'}
@@ -10493,16 +10724,10 @@ export default function PosTerminalPage() {
           setSelectedTakeoutTargetLabel('')
         }}
         onCreateNewQr={() => {
-          setLiveKbankQrPayload('')
-          setLiveKbankQrType('THAI_QR')
-          setKbankCallbackState('idle')
-          setKbankOpsTxnUid('')
-          setKbankOpsOrigTxnUid('')
-          setKbankOpsTxnNo('')
-          setCustomerDisplayPaymentMessage('')
+          clearKbankQrSession()
         }}
       />
-      {String(effectiveStaffKbankQrPayload || '').trim() ? (
+      {showKbankStaffMonitor ? (
         <div
           className="pointer-events-auto fixed right-4 top-20 z-[70] flex max-h-[calc(100dvh-5.5rem)] w-[360px] flex-col overflow-y-auto overscroll-y-contain rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
           data-tour={isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined}
@@ -10518,9 +10743,34 @@ export default function PosTerminalPage() {
                   : t('posDemoBanner') || '데모 — 실제 주문·결제는 실데이터에 반영되지 않습니다.'}
               </p>
             </div>
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
-              {isPosDemo && !String(liveKbankQrPayload || '').trim() ? 'DEMO' : 'LIVE'}
-            </div>
+            {(() => {
+              if (isPosDemo && !String(liveKbankQrPayload || '').trim()) {
+                return (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+                    DEMO
+                  </div>
+                )
+              }
+              if (kbankCallbackState === 'received') {
+                return (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+                    {t('posKbankStatusPaid') || 'PAID'}
+                  </div>
+                )
+              }
+              if (kbankCallbackState === 'failed') {
+                return (
+                  <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700">
+                    {t('posKbankStatusCancelled') || 'CANCELLED'}
+                  </div>
+                )
+              }
+              return (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+                  LIVE
+                </div>
+              )
+            })()}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {`QR ${(t('amount') || '금액')}: ${effectiveStaffKbankQrAmount.toFixed(2)} ฿`}
@@ -10565,6 +10815,16 @@ export default function PosTerminalPage() {
                   kind={effectiveCustomerDisplayQrType}
                   className="border-0"
                 />
+              ) : String(kbankOpsTxnUid || '').trim() ? (
+                <div className="flex min-h-[120px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
+                  <span>
+                    {kbankCallbackState === 'failed'
+                      ? t('posKbankStatusCancelled') || 'CANCELLED'
+                      : t('posPending') || 'Pending'}
+                    {' · '}
+                    {t('posKbankInquiry') || 'Inquiry'}
+                  </span>
+                </div>
               ) : (
                 <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
                   <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
@@ -10690,6 +10950,16 @@ export default function PosTerminalPage() {
                   className="mt-2 h-20 resize-none text-[10px]"
                 />
               ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="mt-2 h-8 w-full text-xs text-muted-foreground"
+                disabled={kbankOpsBusy}
+                onClick={() => clearKbankQrSession()}
+              >
+                {t('posKbankCloseSession') || 'Close'}
+              </Button>
             </div>
           ) : null}
         </div>

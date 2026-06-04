@@ -94,6 +94,19 @@ export function OfflineBanner({
     [t, pendingLabel, retriableCount]
   )
 
+  const removeDeadLetterLabel = t('offlineBannerRemoveDeadLetter')
+
+  const deadLetterLineText = React.useMemo(
+    () =>
+      t('offlineBannerDeadLetterLine')
+        .replace('{count}', String(deadLetterCount))
+        .replace('{button}', removeDeadLetterLabel),
+    [deadLetterCount, removeDeadLetterLabel, t]
+  )
+
+  /** 실패 항목만 남은 경우: 직원용 짧은 안내만 (동기화 메타·대기 목록 링크 숨김) */
+  const deadLetterOnly = deadLetterCount > 0 && retriableCount === 0
+
   const refreshPending = React.useCallback(() => {
     getOfflineQueueCounts({ scope: queueScope })
       .then(async ({ retriable, dead }) => {
@@ -280,7 +293,7 @@ export function OfflineBanner({
               {retriableCount > 0 ? (
                 pendingLineText
               ) : deadLetterCount > 0 ? (
-                t('offlineBannerDeadLetterLine').replace('{count}', String(deadLetterCount))
+                deadLetterLineText
               ) : null}
             </span>
           </>
@@ -297,26 +310,26 @@ export function OfflineBanner({
         )}
         </div>
         {deadLetterCount > 0 && retriableCount > 0 && online && !syncing && (
-          <div className="text-xs text-amber-800/95">
-            {t('offlineBannerDeadLetterLine').replace('{count}', String(deadLetterCount))}
-          </div>
+          <div className="text-xs text-amber-800/95">{deadLetterLineText}</div>
         )}
-        <button
-          type="button"
-          disabled={syncing}
-          title={t('offlineBannerViewQueueDetails')}
-          onClick={() => {
-            if (!syncing) void openQueueDetail()
-          }}
-          className={cn(
-            'w-full min-w-0 truncate text-left text-xs text-amber-700/90',
-            !syncing && 'cursor-pointer rounded-sm hover:underline hover:decoration-amber-700/80',
-            syncing && 'cursor-default opacity-70',
-          )}
-        >
-          {syncMetaText}
-        </button>
-        {totalQueued > 0 && !syncing && (
+        {!deadLetterOnly && (
+          <button
+            type="button"
+            disabled={syncing}
+            title={t('offlineBannerViewQueueDetails')}
+            onClick={() => {
+              if (!syncing) void openQueueDetail()
+            }}
+            className={cn(
+              'w-full min-w-0 truncate text-left text-xs text-amber-700/90',
+              !syncing && 'cursor-pointer rounded-sm hover:underline hover:decoration-amber-700/80',
+              syncing && 'cursor-default opacity-70',
+            )}
+          >
+            {syncMetaText}
+          </button>
+        )}
+        {totalQueued > 0 && !syncing && !deadLetterOnly && (
           <button
             type="button"
             onClick={() => void openQueueDetail()}

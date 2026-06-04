@@ -418,7 +418,8 @@ export function AdminPayrollCalc() {
     setEditHolidayPay(String(r.holidayPay ?? 0))
     setEditSplBonus(String(r.splBonus || 0))
     setEditOtAmt(String(r.otAmt || 0))
-    setEditLateDed(String(r.lateDed || 0))
+    // 표 "지각" 열은 lateDed+earlyDed 합계 — 모달도 동일 금액으로 열어야 수동 수정이 반영됨
+    setEditLateDed(String((r.lateDed || 0) + (r.earlyDed ?? 0)))
     setEditSso(String(r.sso || 0))
     setEditTax(String(r.tax || 0))
     setEditOtherDed(String(r.otherDed || 0))
@@ -436,6 +437,7 @@ export function AdminPayrollCalc() {
     const splBonus = Number(editSplBonus) || 0
     const otAmt = Number(editOtAmt) || 0
     const lateDed = Number(editLateDed) || 0
+    const earlyDed = 0
     const sso = Math.max(0, Math.floor(Number(editSso) || 0))
     const tax = Math.max(0, Math.floor(Number(editTax) || 0))
     const otherDed = Number(editOtherDed) || 0
@@ -449,6 +451,7 @@ export function AdminPayrollCalc() {
       splBonus,
       otAmt,
       lateDed,
+      earlyDed,
       sso,
       tax,
       otherDed,
@@ -462,6 +465,7 @@ export function AdminPayrollCalc() {
         splBonus,
         otAmt,
         lateDed,
+        earlyDed,
         sso,
         tax,
         otherDed,

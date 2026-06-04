@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { voidKbankPayment } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankVoidPaymentRequest } from '@/lib/payments/kbank-types'
+import { resolveKbankVoidTxnNoForRequest } from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +50,8 @@ export async function POST(req: NextRequest) {
     const voidPartnerTxnUid = buildVoidPartnerTxnUid(
       String(body.partnerTxnUid || rawPayload?.partnerTxnUid || '').trim()
     )
-    const resolvedTxnNo = String(txnNo || rawPayload?.txnNo || '').trim()
+    const resolvedTxnNo =
+      resolveKbankVoidTxnNoForRequest(String(txnNo || rawPayload?.txnNo || '').trim()) || ''
 
     if (!origPartnerTxnUid) {
       return withCorsHeaders(
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
             success: false,
             statusCode: 'KBANK_TXN_NO_REQUIRED',
             message:
-              'txnNo is required for Void Payment. Run Inquiry after payment or use the value from the payment callback.',
+              'txnNo is required for Void Payment (numeric payment txnNo from callback/inquiry, not APIC* from Generate QR).',
           },
           { status: 400 }
         )

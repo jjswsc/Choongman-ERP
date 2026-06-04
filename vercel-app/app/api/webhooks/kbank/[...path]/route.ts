@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
+import {
+  extractKbankPaymentTxnNo,
+  normalizeKbankTxnStatusToPos,
+} from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,6 +188,15 @@ export async function POST(
     'data.amount',
     'data.transactionAmount',
   ])
+  const txnNoPaths = parsePathListFromEnv('KBANK_WEBHOOK_TXN_NO_PATHS', [
+    'txnNo',
+    'transactionNo',
+    'bankTxnNo',
+    'data.txnNo',
+    'data.transactionNo',
+    'payment.txnNo',
+    'paymentInfo.txnNo',
+  ])
 
   const partnerTransactionId = pickFirst(body, partnerTransactionIdPaths)
   const originalTransactionId = pickFirst(body, originalTransactionIdPaths)
@@ -200,6 +212,7 @@ export async function POST(
   const normalized = normalizeStatus(transactionStatusRaw, statusCode)
   const amountRawPath = amountPaths.find((p) => String(getPathValue(body, p) ?? '').trim() !== '')
   const amount = parseAmount(amountRawPath ? getPathValue(body, amountRawPath) : undefined)
+  const paymentTxnNo = extractKbankPaymentTxnNo(body) || extractKbankPaymentTxnNo({ txnNo: pickFirst(body, txnNoPaths) })
 
   const safeBodyForLog = rawBody.length > 50000 ? `${rawBody.slice(0, 50000)}...` : rawBody
 
@@ -214,6 +227,7 @@ export async function POST(
             response_code: statusCode || null,
             response_text: statusMessage || transactionStatusRaw || null,
             approved_amount: normalized === 'approved' ? amount : 0,
+            ...(paymentTxnNo ? { trace_no: paymentTxnNo.slice(0, 40) } : {}),
             response_raw: safeBodyForLog || null,
             error_reason:
               normalized === 'declined' || normalized === 'failed'

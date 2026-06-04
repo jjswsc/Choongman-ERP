@@ -15,6 +15,11 @@ import {
   resolveKbankQrTypeCode,
   maskKbankMessageForLog,
   inferKbankQrTypeFromEmvPayload,
+  isKbankQrSessionTxnNo,
+  isKbankPaymentTxnNo,
+  extractKbankPaymentTxnNo,
+  resolveKbankInquiryTxnNoForRequest,
+  resolveKbankVoidTxnNoForRequest,
 } from './kbank-api-reference'
 
 describe('kbank-api-reference', () => {
@@ -69,6 +74,19 @@ describe('kbank-api-reference', () => {
     expect(
       formatKbankApiErrorMessage('', 'This merchant has not registered for QR credit card. (EMQRNCC)')
     ).toContain('not registered')
+  })
+
+  it('distinguishes Generate session txnNo from payment txnNo', () => {
+    expect(isKbankQrSessionTxnNo('APIC1780542865020JY5')).toBe(true)
+    expect(isKbankPaymentTxnNo('26440008')).toBe(true)
+    expect(resolveKbankInquiryTxnNoForRequest('APIC1780542865020JY5', { qrType: 'CREDIT_CARD' })).toBe(
+      undefined
+    )
+    expect(resolveKbankInquiryTxnNoForRequest('26440008', { qrType: 'CREDIT_CARD' })).toBe('26440008')
+    expect(resolveKbankVoidTxnNoForRequest('APIC1780542865020JY5')).toBeUndefined()
+    expect(extractKbankPaymentTxnNo({ txnNo: 'APIC1780542865020JY5', data: { txnNo: '26440008' } })).toBe(
+      '26440008'
+    )
   })
 
   it('detects rate limit quota messages', () => {

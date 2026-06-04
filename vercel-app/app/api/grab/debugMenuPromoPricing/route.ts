@@ -116,6 +116,15 @@ export async function GET(req: NextRequest) {
       promoIdByGrabItemId.set(buildGrabMenuItemId(mirror), pid)
     }
 
+    const root = menu as Record<string, unknown>
+    const sellingTimesSummary = (Array.isArray(root.sellingTimes) ? root.sellingTimes : []).map(
+      (st) => {
+        const row = st as { id?: string; name?: string }
+        return { id: String(row.id ?? ''), name: String(row.name ?? '') }
+      }
+    )
+    const includesLegacySections = Array.isArray(root.sections) && root.sections.length > 0
+
     const categories = summarizeMenuCategories(menu)
     const setCategory = categories.filter((c) => /set/i.test(c.name))
     const setCategoryItems = setCategory.flatMap((cat) => {
@@ -126,8 +135,7 @@ export async function GET(req: NextRequest) {
     const setAvailableCount = setCategoryItems.filter(
       (it) => String(it.availableStatus ?? '') === 'AVAILABLE'
     ).length
-    const rootMenu = menu as Record<string, unknown>
-    const promotionSellingTime = (Array.isArray(rootMenu.sellingTimes) ? rootMenu.sellingTimes : []).find(
+    const promotionSellingTime = (Array.isArray(root.sellingTimes) ? root.sellingTimes : []).find(
       (st) => String((st as { name?: string }).name ?? '').toLowerCase() === 'promotion'
     )
 
@@ -213,6 +221,9 @@ export async function GET(req: NextRequest) {
         grabCampaigns: grabCampaigns.slice(0, 20),
         filter: nameFilter,
         categoryCount: categories.length,
+        sellingTimesCount: sellingTimesSummary.length,
+        sellingTimesSummary,
+        includesLegacySections,
         categories,
         setCategories: setCategory,
         setCategoryDiagnostics: {

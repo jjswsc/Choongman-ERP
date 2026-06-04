@@ -251,6 +251,84 @@ export function readKbankResponseStatusCode(
   return String(httpStatus)
 }
 
+/** Generate QR session id (e.g. APIC…) — not valid for Credit Card Inquiry/Void after PAID. */
+export function isKbankQrSessionTxnNo(txnNo: unknown): boolean {
+  const s = String(txnNo || '').trim().toUpperCase()
+  return /^APIC/i.test(s)
+}
+
+/** Bank payment txnNo for Inquiry/Void (e.g. 26440008). */
+export function isKbankPaymentTxnNo(txnNo: unknown): boolean {
+  const s = String(txnNo || '').trim()
+  return /^\d{6,16}$/.test(s)
+}
+
+function asKbankPlainObject(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  return raw as Record<string, unknown>
+}
+
+function pickKbankTxnNoFromObject(obj: Record<string, unknown> | null): string[] {
+  if (!obj) return []
+  const keys = [
+    'txnNo',
+    'transactionNo',
+    'bankTxnNo',
+    'paymentTxnNo',
+    'kbankTxnNo',
+    'approvalTxnNo',
+  ]
+  const out: string[] = []
+  for (const key of keys) {
+    const v = String(obj[key] ?? '').trim()
+    if (v) out.push(v)
+  }
+  const data = asKbankPlainObject(obj.data)
+  const payment = asKbankPlainObject(obj.payment)
+  const paymentInfo = asKbankPlainObject(obj.paymentInfo)
+  for (const nested of [data, payment, paymentInfo]) {
+    out.push(...pickKbankTxnNoFromObject(nested))
+  }
+  return out
+}
+
+/** Collect txnNo candidates from API/callback JSON; prefer numeric payment txnNo. */
+export function extractKbankPaymentTxnNo(raw: unknown): string {
+  const root = asKbankPlainObject(raw)
+  if (!root) return ''
+  const candidates = pickKbankTxnNoFromObject(root)
+  const payment = candidates.filter((c) => isKbankPaymentTxnNo(c))
+  if (payment.length > 0) return payment[0]
+  const nonSession = candidates.filter((c) => !isKbankQrSessionTxnNo(c))
+  return nonSession[0] || ''
+}
+
+/**
+ * txnNo to send on Inquiry — omit Generate session ids (APIC*).
+ * Credit Card: only numeric payment txnNo (from callback or successful inquiry).
+ */
+export function resolveKbankInquiryTxnNoForRequest(
+  txnNo: unknown,
+  options?: { qrType?: string }
+): string | undefined {
+  const t = String(txnNo || '').trim()
+  if (!t) return undefined
+  if (isKbankQrSessionTxnNo(t)) return undefined
+  const qr = String(options?.qrType || '')
+    .trim()
+    .toUpperCase()
+  if (qr === 'CREDIT_CARD' && !isKbankPaymentTxnNo(t)) return undefined
+  return t
+}
+
+/** txnNo for Void — same rules as inquiry (payment txnNo only). */
+export function resolveKbankVoidTxnNoForRequest(txnNo: unknown): string | undefined {
+  const t = String(txnNo || '').trim()
+  if (!t || isKbankQrSessionTxnNo(t)) return undefined
+  if (!isKbankPaymentTxnNo(t)) return undefined
+  return t
+}
+
 export function normalizeKbankTxnStatusToPos(
   txnStatus: unknown,
   statusCode?: unknown
@@ -312,11 +390,6 @@ export function parseKbankAllowVoid(value: unknown): boolean | null {
 }
 
 export type KbankDisplayQrType = 'THAI_QR' | 'CREDIT_CARD'
-
-function asKbankPlainObject(v: unknown): Record<string, unknown> | null {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
-  return v as Record<string, unknown>
-}
 
 function collectKbankNestedSources(raw: unknown): Record<string, unknown>[] {
   const root = asKbankPlainObject(raw)
