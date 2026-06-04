@@ -13,6 +13,7 @@ import { normStoreKey } from '@/lib/store-list-keys'
  * `GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040`
  * (쉼표로 여러 매장: `포털ID=1040,다른포털=1048`)
  * True Digital: Prod=`3-C6DWPB4VCKK1GT`, test sandbox=`GFSBPOS-811-087` — 1040에 test GFSBPOS 묶지 말 것.
+ * GRAB_* env만 바꿀 때: Vercel Deployments에서 Redeploy 필요(빈 커밋은 ignored-build-step으로 스킵됨).
  */
 export function parseGrabPortalMerchantMap(raw?: string): Record<string, string> {
   const s = String(raw ?? process.env.GRAB_PORTAL_MERCHANT_MAP ?? '').trim()
