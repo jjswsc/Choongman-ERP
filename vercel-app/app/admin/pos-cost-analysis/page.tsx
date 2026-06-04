@@ -519,14 +519,11 @@ export default function PosCostAnalysisPage() {
             <h1 className="text-xl font-bold tracking-tight text-foreground">
               {t("posCostAnalysis") || "원가 분석"}
             </h1>
-            <p className="text-xs text-muted-foreground">
-              {t("posCostAnalysisSub") || "메뉴별 원가·마진·재료 내역. 품목 코드=본사, 없음=매장 구매. 음식/포장재 구분."}
-              {!canEdit && (
-                <span className="block mt-0.5">
-                  {t("posCostEditOfficeOnly") || "원가 데이터 수정은 오피스 직원만 가능합니다."}
-                </span>
-              )}
-            </p>
+            {!canEdit && (
+              <p className="text-xs text-muted-foreground">
+                {t("posCostEditOfficeOnly") || "원가 데이터 수정은 오피스 직원만 가능합니다."}
+              </p>
+            )}
           </div>
         </div>
 
