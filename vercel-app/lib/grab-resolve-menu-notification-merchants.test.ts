@@ -46,6 +46,14 @@ describe('resolveGrabMenuNotificationMerchantIDs', () => {
     expect(resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')).toEqual(['3-C6DWPB4VCKK1GT'])
   })
 
+  it('uses GRAB_PARTNER_API_MENU_MERCHANT_MAP override for partner 1040', () => {
+    const prevApi = process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP
+    process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP = '1040=GFSBPOS-PROD-999'
+    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual(['GFSBPOS-PROD-999'])
+    if (prevApi === undefined) delete process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP
+    else process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP = prevApi
+  })
+
   it('uses GFSBPOS when portal map is absent (sandbox-only)', () => {
     const prevPortal = process.env.GRAB_PORTAL_MERCHANT_MAP
     const prevMap = process.env.GRAB_STORE_MAP_JSON

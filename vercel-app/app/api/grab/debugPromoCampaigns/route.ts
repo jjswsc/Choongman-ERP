@@ -7,7 +7,10 @@ import {
   listGrabPromoCutPriceTargets,
   shouldSuppressGrabPromoCampaignsForConsumerSale,
 } from '@/lib/grab-promo-target-price-campaign'
-import { resolveGrabMenuNotificationMerchantIDs } from '@/lib/grab-resolve-menu-notification-merchants'
+import {
+  resolveGrabMenuNotificationMerchantIDs,
+  resolveGrabMenuNotificationMerchantIDsForStore,
+} from '@/lib/grab-resolve-menu-notification-merchants'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,11 +62,14 @@ export async function GET(req: NextRequest) {
     let merchantIDs: string[] = []
     let resolvedFrom: 'storeCode' | 'merchantID' | 'default' = 'default'
     if (storeCode) {
-      merchantIDs = resolveGrabMenuNotificationMerchantIDs(storeCode)
+      merchantIDs = await resolveGrabMenuNotificationMerchantIDsForStore(storeCode)
       resolvedFrom = 'storeCode'
     } else if (merchantIDParam) {
-      merchantIDs = resolveGrabMenuNotificationMerchantIDs(merchantIDParam)
-      if (merchantIDs.length === 0) merchantIDs = [merchantIDParam]
+      merchantIDs = await resolveGrabMenuNotificationMerchantIDsForStore(merchantIDParam)
+      if (merchantIDs.length === 0) {
+        const direct = resolveGrabMenuNotificationMerchantIDs(merchantIDParam)
+        merchantIDs = direct.length ? direct : [merchantIDParam]
+      }
       resolvedFrom = 'merchantID'
     } else {
       merchantIDs = ['3-C6DWPB4VCKK1GT']
@@ -95,7 +101,9 @@ export async function GET(req: NextRequest) {
           grabCampaigns: [],
           erpGrabPromos,
           hint:
-            'Grab merchantID(GFSBPOS-…)를 해석하지 못했습니다. GRAB_STORE_MAP_JSON·GRAB_PORTAL_MERCHANT_MAP 환경변수에 이 매장이 연결돼 있는지 확인하세요.',
+            'Grab merchantID를 해석하지 못했습니다. Vercel: GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040, GRAB_STORE_MAP_JSON에 1040·ERP매장명 연결. True Digital: Prod 3-C6DWPB4VCKK1GT / partner 1040. (ERP 프로모 목록은 아래 참고)',
+          hintTh:
+            'ไม่พบ Grab merchantID สำหรับร้านที่เลือก — ตรวจ Vercel env (3-C6DWPB4VCKK1GT=1040) หรือแจ้งทีม Korea ตั้งค่า map ร้าน True Digital Park',
         },
         { headers }
       )

@@ -63,6 +63,40 @@ function parseGrabStoreMapJsonObject(raw?: string): Record<string, string> {
   }
 }
 
+/**
+ * Partner menu/campaign API용 merchantID — Grab 대시보드 `3-C…`와 다를 수 있음.
+ * 예: `GRAB_PARTNER_API_MENU_MERCHANT_MAP=1040=GFSBPOS-xxx,3-C6DWPB4VCKK1GT=GFSBPOS-xxx`
+ */
+export function parseGrabPartnerApiMenuMerchantMap(raw?: string): Record<string, string> {
+  const s = String(raw ?? process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP ?? '').trim()
+  if (!s) return {}
+  if (s.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(s) as Record<string, unknown>
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(parsed)) {
+        const key = String(k || '').trim()
+        const val = String(v || '').trim()
+        if (key && val) out[key] = val
+      }
+      return out
+    } catch {
+      return {}
+    }
+  }
+  const out: Record<string, string> = {}
+  for (const part of s.split(/[,;\n]+/)) {
+    const piece = part.trim()
+    if (!piece) continue
+    const eq = piece.indexOf('=')
+    if (eq <= 0) continue
+    const key = piece.slice(0, eq).trim()
+    const val = piece.slice(eq + 1).trim()
+    if (key && val) out[key] = val
+  }
+  return out
+}
+
 /** GRAB_STORE_MAP_JSON + GRAB_PORTAL_MERCHANT_MAP 병합 */
 export function parseGrabStoreMap(): Record<string, string> {
   const out = parseGrabStoreMapJsonObject()

@@ -4117,8 +4117,9 @@ export default function PosMenusPage() {
         consumerListPriceMode: res.consumerListPriceMode,
         erpGrabPromos: res.erpGrabPromos ?? [],
       })
-      if (merchantIDs.length === 0 && res.hint) {
-        await appAlert(res.hint)
+      if (merchantIDs.length === 0 && (res.hint || (res as { hintTh?: string }).hintTh)) {
+        const hintTh = String((res as { hintTh?: string }).hintTh ?? "")
+        await appAlert(hintTh || res.hint || "")
       }
     } catch (e) {
       await appAlert(translateApiMessage(String(e ?? "load_failed"), t))
