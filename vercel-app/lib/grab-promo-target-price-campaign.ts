@@ -169,31 +169,60 @@ type IndexedGrabCampaign = {
 export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
 
 /**
- * 기본 percentage(캠페인 % 할인·취소선). fixPrice 캠페인은 env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=fixPrice`.
- * 손님 앱 할인가 노출은 `shouldSendGrabPromoSaleAdvancedPricing` + `GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED`(기본 on).
+ * 손님 앱 목록가: 기본 `GRAB_PROMO_CONSUMER_LIST_PRICE=sale` → item.price=할인가(111).
+ * Grab이 advancedPricing·percentage 캠페인을 목록에 안 붙이는 매장 대응(2026-06 True Digital).
+ * 정가+취소선만 쓰려면 `regular` + `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage`.
  */
-export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
-  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
+export function isGrabPromoConsumerListPriceAsSaleEnabled(): boolean {
+  const raw = String(process.env.GRAB_PROMO_CONSUMER_LIST_PRICE ?? 'sale')
     .trim()
     .toLowerCase()
-  return raw === 'fixprice' ? 'fixPrice' : 'percentage'
+  return raw === 'sale' || raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }
 
 /**
- * percentage 캠페인만으로 손님 앱에 할인가가 안 보이는 매장(기능 미통합) 대비:
- * item.price=정가 + advancedPricing=할인가로 배달 채널가를 직접 내린다. 기본 on.
- * 끄려면 `GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED=0`.
+ * 캠페인 타입. env 미지정 시 listPrice=sale 이면 fixPrice(이중 % 할인 방지).
+ * 명시: `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage|fixPrice`.
+ */
+export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
+  const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? '')
+    .trim()
+    .toLowerCase()
+  if (raw === 'fixprice') return 'fixPrice'
+  if (raw === 'percentage') return 'percentage'
+  if (isGrabPromoConsumerListPriceAsSaleEnabled()) return 'fixPrice'
+  return 'percentage'
+}
+
+/**
+ * advancedPricing 시도(일부 매장만 손님 앱 반영). listPrice=sale 이면 생략.
+ * `GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED=0` 으로 끔.
  */
 export function isGrabPromoConsumerSaleViaAdvancedEnabled(): boolean {
+  if (isGrabPromoConsumerListPriceAsSaleEnabled()) return false
   const raw = String(process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED ?? '1')
     .trim()
     .toLowerCase()
   return !(raw === '0' || raw === 'false' || raw === 'no' || raw === 'off')
 }
 
+/** GetMenu·updateMenuRecord에 프로모 item.price(minor) — 손님 앱에 보이는 숫자 */
+export function resolveGrabPromoMenuItemPriceMinor(params: {
+  showCutPrice: boolean
+  regularMinor: number
+  saleMinor: number
+}): number {
+  if (!params.showCutPrice) return params.regularMinor
+  if (isGrabPromoConsumerListPriceAsSaleEnabled()) {
+    return Math.max(1, Math.round(params.saleMinor))
+  }
+  return Math.max(1, Math.round(params.regularMinor))
+}
+
 /** GetMenu·updateMenuRecord에 프로모 할인가 advancedPricing을 실을지 */
 export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): boolean {
   if (!showCutPrice) return false
+  if (isGrabPromoConsumerListPriceAsSaleEnabled()) return false
   if (resolveGrabPromoCampaignDiscountType() === 'fixPrice') return true
   return isGrabPromoConsumerSaleViaAdvancedEnabled()
 }
@@ -573,18 +602,26 @@ async function pushGrabMenuRecordForCutTarget(
   const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
   const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
   if (regularMinor <= saleMinor) return false
-  const advancedPriceMinor = shouldSendGrabPromoSaleAdvancedPricing(true)
-    ? saleMinor
-    : regularMinor
+  const listMinor = resolveGrabPromoMenuItemPriceMinor({
+    showCutPrice: true,
+    regularMinor,
+    saleMinor,
+  })
+  const pushAdvanced = shouldSendGrabPromoSaleAdvancedPricing(true)
+  const advancedPriceMinor = pushAdvanced ? saleMinor : listMinor
   await grabUpdateMenuRecord({
     merchantID,
     field: 'ITEM',
     id: target.grabItemId,
-    price: regularMinor,
-    advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
-      key,
-      price: advancedPriceMinor,
-    })),
+    price: listMinor,
+    ...(pushAdvanced
+      ? {
+          advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+            key,
+            price: advancedPriceMinor,
+          })),
+        }
+      : {}),
   })
   return true
 }

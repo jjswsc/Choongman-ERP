@@ -4,6 +4,7 @@ import { sanitizeGrabMenuDescription, composeGrabModifierName } from '@/lib/grab
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
   loadGrabPromoCutPriceByPromoId,
+  resolveGrabPromoMenuItemPriceMinor,
   shouldSendGrabPromoSaleAdvancedPricing,
 } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
@@ -1064,11 +1065,17 @@ export async function buildGrabMenuFromPos(params: {
        * Grab Cut Price: item.price=정가(minor), advancedPricing=Grab 앱 배달 할인가.
        * 손님 앱 취소선은 percentage 캠페인 + 정가 item.price 조합. fixPrice만 있으면 111만 보일 수 있음.
        */
-      const grabListPriceMajor =
+      const grabRegularPriceMajor =
         promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)
-      const grabListPriceMinor = Math.max(1, toMinorUnit(grabListPriceMajor))
-      const grabSalePriceMinor =
-        promoCut?.showCutPrice ? Math.max(1, toMinorUnit(promoCut.salePrice)) : grabListPriceMinor
+      const grabRegularPriceMinor = Math.max(1, toMinorUnit(grabRegularPriceMajor))
+      const grabSalePriceMinor = promoCut?.showCutPrice
+        ? Math.max(1, toMinorUnit(promoCut.salePrice))
+        : grabRegularPriceMinor
+      const grabListPriceMinor = resolveGrabPromoMenuItemPriceMinor({
+        showCutPrice: !!promoCut?.showCutPrice,
+        regularMinor: grabRegularPriceMinor,
+        saleMinor: grabSalePriceMinor,
+      })
       /**
        * percentage 캠페인은 정가(item.price) 기준 % 할인으로 취소선(정가→할인가)을 만든다.
        * 이때 advancedPricing(배달가 덮어쓰기=할인가)을 함께 보내면 배달가가 할인가로 고정되어

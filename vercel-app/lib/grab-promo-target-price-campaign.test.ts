@@ -8,8 +8,10 @@ import {
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
+  isGrabPromoConsumerListPriceAsSaleEnabled,
   isGrabPromoConsumerSaleViaAdvancedEnabled,
   resolveGrabCampaignScheduleMs,
+  resolveGrabPromoMenuItemPriceMinor,
   shouldSendGrabPromoSaleAdvancedPricing,
 } from '@/lib/grab-promo-target-price-campaign'
 
@@ -19,31 +21,78 @@ describe('calcGrabPercentageOffMajor', () => {
   })
 })
 
-describe('shouldSendGrabPromoSaleAdvancedPricing', () => {
-  it('includes sale advanced for percentage mode by default', () => {
-    const prev = process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED
-    const prevType = process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
-    delete process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED
-    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'percentage'
-    expect(isGrabPromoConsumerSaleViaAdvancedEnabled()).toBe(true)
-    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
-    process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED = '0'
+describe('consumer list price mode', () => {
+  const envKeys = [
+    'GRAB_PROMO_CONSUMER_LIST_PRICE',
+    'GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED',
+    'GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE',
+  ] as const
+
+  function saveEnv(): Record<string, string | undefined> {
+    const snap: Record<string, string | undefined> = {}
+    for (const k of envKeys) snap[k] = process.env[k]
+    return snap
+  }
+
+  function restoreEnv(snap: Record<string, string | undefined>) {
+    for (const k of envKeys) {
+      if (snap[k] === undefined) delete process.env[k]
+      else process.env[k] = snap[k]
+    }
+  }
+
+  it('defaults to item.price=sale and fixPrice campaigns', () => {
+    const snap = saveEnv()
+    for (const k of envKeys) delete process.env[k]
+    expect(isGrabPromoConsumerListPriceAsSaleEnabled()).toBe(true)
+    expect(
+      resolveGrabPromoMenuItemPriceMinor({
+        showCutPrice: true,
+        regularMinor: 17900,
+        saleMinor: 11100,
+      })
+    ).toBe(11100)
     expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
-    if (prev === undefined) delete process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED
-    else process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED = prev
-    if (prevType === undefined) delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
-    else process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = prevType
+    expect(buildGrabCampaignDiscountForTarget({
+      grabItemId: 'item-1',
+      salePriceMajor: 111,
+      regularPriceMajor: 179,
+    }).type).toBe('fixPrice')
+    restoreEnv(snap)
+  })
+
+  it('regular list + advanced when GRAB_PROMO_CONSUMER_LIST_PRICE=regular', () => {
+    const snap = saveEnv()
+    process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+    expect(
+      resolveGrabPromoMenuItemPriceMinor({
+        showCutPrice: true,
+        regularMinor: 17900,
+        saleMinor: 11100,
+      })
+    ).toBe(17900)
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
+    restoreEnv(snap)
   })
 })
 
 describe('buildGrabCampaignDiscountForTarget', () => {
-  it('uses percentage by default for live app strikethrough', () => {
+  it('uses percentage when list price is regular (explicit campaign type)', () => {
+    const snap = process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+    const snapList = process.env.GRAB_PROMO_CONSUMER_LIST_PRICE
+    process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'percentage'
     const d = buildGrabCampaignDiscountForTarget({
       grabItemId: 'item-1',
       salePriceMajor: 111,
       regularPriceMajor: 179,
     })
     expect(d.type).toBe('percentage')
+    if (snap === undefined) delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+    else process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = snap
+    if (snapList === undefined) delete process.env.GRAB_PROMO_CONSUMER_LIST_PRICE
+    else process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = snapList
     expect(d.value).toBe(38)
     expect((d as { cap?: number }).cap).toBe(0)
   })
@@ -108,7 +157,12 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         {
           discount: { type: 'percentage', value: 38, scope: { objectIDs: ['item-99'] } },
         },
-        { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
+        {
+          grabItemId: 'item-99',
+          salePriceMajor: 111,
+          regularPriceMajor: 179,
+          discountType: 'percentage',
+        }
       )
     ).toBe(true)
   })
@@ -119,7 +173,12 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         {
           discount: { type: 'fixPrice', value: 111, scope: { objectIDs: ['item-99'] } },
         },
-        { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
+        {
+          grabItemId: 'item-99',
+          salePriceMajor: 111,
+          regularPriceMajor: 179,
+          discountType: 'percentage',
+        }
       )
     ).toBe(false)
   })
@@ -130,7 +189,12 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         {
           discount: { type: 'percentage', value: 30, scope: { objectIDs: ['item-99'] } },
         },
-        { grabItemId: 'item-99', salePriceMajor: 111, regularPriceMajor: 179 }
+        {
+          grabItemId: 'item-99',
+          salePriceMajor: 111,
+          regularPriceMajor: 179,
+          discountType: 'percentage',
+        }
       )
     ).toBe(false)
   })

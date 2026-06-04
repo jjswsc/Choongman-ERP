@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { buildGrabMenuFromPos } from '@/lib/grab-menu-from-pos'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
+  isGrabPromoConsumerListPriceAsSaleEnabled,
   isGrabPromoConsumerSaleViaAdvancedEnabled,
   loadGrabPromoCutPriceByPromoId,
   listGrabManagedPromoCampaigns,
@@ -194,8 +195,12 @@ export async function GET(req: NextRequest) {
                 showCutPrice: cut.showCutPrice,
               }
             : null,
-          /** Grab 컷프라이스 UI: price=정가(minor), advancedPricing=할인가(minor) */
-          cutPriceReady: Boolean(cut?.showCutPrice && advVals.length > 0 && priceMinor > saleMinor),
+          /** 손님 앱: listPrice=sale 이면 price=할인가, regular 모드면 price=정가+advanced=할인가 */
+          cutPriceReady: Boolean(
+            cut?.showCutPrice &&
+              (priceMinor <= Math.round((cut.salePrice ?? 0) * 100) ||
+                (advVals.length > 0 && priceMinor > saleMinor))
+          ),
         }
       })
 
@@ -229,6 +234,7 @@ export async function GET(req: NextRequest) {
         resolvedMerchantIDs,
         grabMerchantID,
         promoCampaignDiscountType: resolveGrabPromoCampaignDiscountType(),
+        consumerListPriceMode: isGrabPromoConsumerListPriceAsSaleEnabled() ? 'sale' : 'regular',
         consumerSaleViaAdvanced: isGrabPromoConsumerSaleViaAdvancedEnabled(),
         grabCampaignCount: campaignCount,
         grabCampaignOngoingCount: ongoingCount,
