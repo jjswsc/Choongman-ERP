@@ -11,10 +11,23 @@ import {
   isGrabPromoConsumerListPriceAsSaleEnabled,
   isGrabPromoConsumerSaleViaAdvancedEnabled,
   resolveGrabCampaignScheduleMs,
+  resolveGrabMenuSalePriceMajor,
   resolveGrabPromoMenuItemPriceMinor,
   shouldSendGrabPromoSaleAdvancedPricing,
   shouldSuppressGrabPromoCampaignsForConsumerSale,
 } from '@/lib/grab-promo-target-price-campaign'
+
+describe('resolveGrabMenuSalePriceMajor', () => {
+  it('prefers menu price_delivery (ERP 배달앱 칸) over promo master', () => {
+    expect(
+      resolveGrabMenuSalePriceMajor({
+        menuPriceDelivery: 111,
+        menuPrice: 0,
+        promoCut: { salePrice: 179, showCutPrice: true },
+      })
+    ).toBe(111)
+  })
+})
 
 describe('calcGrabPercentageOffMajor', () => {
   it('computes percent off for 179 -> 111', () => {

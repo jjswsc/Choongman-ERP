@@ -139,6 +139,8 @@ export async function POST(req: NextRequest) {
         void triggerGrabMenuNotification({
           reason,
           partnerMerchantID: result.syncHint?.partnerMerchantID ?? null,
+          syncPromoTargetPriceCampaigns:
+            changed.includes('price_delivery') || changed.includes('price'),
         })
       }
       try {

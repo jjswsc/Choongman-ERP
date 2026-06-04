@@ -5,6 +5,7 @@ import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
   loadGrabPromoCutPriceByPromoId,
   resolveGrabPromoMenuItemPriceMinor,
+  resolveGrabMenuSalePriceMajor,
   shouldSendGrabPromoSaleAdvancedPricing,
 } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
@@ -1068,9 +1069,12 @@ export async function buildGrabMenuFromPos(params: {
       const grabRegularPriceMajor =
         promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)
       const grabRegularPriceMinor = Math.max(1, toMinorUnit(grabRegularPriceMajor))
-      const grabSalePriceMinor = promoCut?.showCutPrice
-        ? Math.max(1, toMinorUnit(promoCut.salePrice))
-        : grabRegularPriceMinor
+      const grabSalePriceMajor = resolveGrabMenuSalePriceMajor({
+        menuPriceDelivery: menu.price_delivery,
+        menuPrice: menu.price,
+        promoCut,
+      })
+      const grabSalePriceMinor = Math.max(1, toMinorUnit(grabSalePriceMajor))
       const grabListPriceMinor = resolveGrabPromoMenuItemPriceMinor({
         showCutPrice: !!promoCut?.showCutPrice,
         regularMinor: grabRegularPriceMinor,

@@ -208,6 +208,22 @@ export function isGrabPromoConsumerSaleViaAdvancedEnabled(): boolean {
   return !(raw === '0' || raw === 'false' || raw === 'no' || raw === 'off')
 }
 
+/**
+ * ERP 메뉴 관리 → 배달앱 칸(`pos_menus.price_delivery`)을 Grab 손님가로 쓴다.
+ * 프로모 마스터 할인가보다 우선(화면에 보이는 111이 Grab에 가야 함).
+ */
+export function resolveGrabMenuSalePriceMajor(params: {
+  menuPriceDelivery?: number | null
+  menuPrice?: number | null
+  promoCut?: { salePrice: number; showCutPrice: boolean } | null
+}): number {
+  if (params.menuPriceDelivery != null && Number.isFinite(Number(params.menuPriceDelivery))) {
+    return Math.max(0, Number(params.menuPriceDelivery))
+  }
+  if (params.promoCut?.showCutPrice) return params.promoCut.salePrice
+  return Math.max(0, Number(params.menuPrice ?? 0))
+}
+
 /** GetMenu·updateMenuRecord에 프로모 item.price(minor) — 손님 앱에 보이는 숫자 */
 export function resolveGrabPromoMenuItemPriceMinor(params: {
   showCutPrice: boolean
@@ -667,10 +683,17 @@ export function collectGrabPromoCutPriceTargets(
     const pricingItems = promoItemsToPricingLines(itemRows)
     if (!pricingItems.length) continue
 
-    const salePrice =
+    const mirrorMenuId = String(mirror.id ?? '').trim()
+    const mirrorMenuRow = menuRows.find((m) => String(m.id ?? '').trim() === mirrorMenuId)
+    const saleFromPromoMaster =
       promo.price_delivery != null && Number.isFinite(Number(promo.price_delivery))
         ? Number(promo.price_delivery)
         : Number(promo.price ?? 0)
+    const salePrice = resolveGrabMenuSalePriceMajor({
+      menuPriceDelivery: mirrorMenuRow?.priceDelivery,
+      menuPrice: mirrorMenuRow?.price,
+      promoCut: { salePrice: saleFromPromoMaster, showCutPrice: true },
+    })
     const regularPrice = calcPromoRegularPriceForGrabCut({
       items: pricingItems,
       menus: menuRows,
