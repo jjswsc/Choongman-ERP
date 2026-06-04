@@ -16,7 +16,7 @@ import {
   resolveGrabPrintNoteRequest,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
-import { normalizePosLineNote } from '@/lib/pos-line-note'
+import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import {
@@ -711,9 +711,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         lineOptionTokens.length > 0
           ? '<div class="receipt-line-note">' + lineOptionTokens.map((opt) => '- ' + esc(opt)).join('<br/>') + c('div')
           : ''
-      const noteHtml = lineNote
-        ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
-        : ''
+      const noteHtml =
+        lineNote && !lineNoteDuplicatesOptions(lineNote, lineOptionTokens)
+          ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
+          : ''
       const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
       const lineDiscountHtml =
         lineDiscount > 0.0001

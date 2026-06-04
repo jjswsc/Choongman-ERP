@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   GRAB_VALID_OPEN_PERIOD_TYPES,
+  grabSectionServiceHours,
   serviceHoursFromRanges,
 } from '@/lib/grab-menu-from-pos'
 
@@ -38,6 +39,32 @@ describe('serviceHoursFromRanges — openPeriodType validity', () => {
     for (const day of DAYS) {
       expect(sh[day].openPeriodType).toBe('OpenAllDay')
     }
+  })
+
+  it('Promotion section always OpenAllDay even with limited sell ranges', () => {
+    const sh = grabSectionServiceHours('Promotion', [{ start: '11:00', end: '22:00' }]) as Record<
+      string,
+      { openPeriodType: string }
+    >
+    for (const day of DAYS) {
+      expect(sh[day].openPeriodType).toBe('OpenAllDay')
+    }
+  })
+
+  it('legacy Korean promotion main category maps to OpenAllDay', () => {
+    const sh = grabSectionServiceHours('프로모션', [{ start: '08:00', end: '21:00' }]) as Record<
+      string,
+      { openPeriodType: string }
+    >
+    expect(sh.mon.openPeriodType).toBe('OpenAllDay')
+  })
+
+  it('non-promotion section keeps OpenPeriod for limited ranges', () => {
+    const sh = grabSectionServiceHours('Regular', [{ start: '11:00', end: '22:00' }]) as Record<
+      string,
+      { openPeriodType: string }
+    >
+    expect(sh.mon.openPeriodType).toBe('OpenPeriod')
   })
 
   it('always emits a Grab-allowed openPeriodType', () => {

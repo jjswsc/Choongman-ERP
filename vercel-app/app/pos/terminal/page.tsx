@@ -8504,7 +8504,9 @@ export default function PosTerminalPage() {
                   isAddOrder && existingOrder ? orderUiItemsToPosOrderItems(existingOrder.items) : []
                 const kitchenCartLines = (() => {
                   if (!(isAddOrder && existingOrder)) return payloadItemsNormalized
-                  const delta = filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd)
+                  const delta = filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd, {
+                    formatNote: formatLineNoteForPrint,
+                  })
                   /**
                    * 테이블/리패치 레이스에서 기존 스냅샷이 이미 병합 상태로 보이면 delta가 0줄이 될 수 있다.
                    * 추가주문에서 입력분이 있는데 주방 미출력을 막기 위해 1회 fallback.

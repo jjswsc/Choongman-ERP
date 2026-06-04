@@ -19,19 +19,33 @@ type KitchenComparableLine = {
   optionCode1?: string
 }
 
-function lineSignature(line: KitchenComparableLine): string {
+/**
+ * note 표현이 카트(`optc:` 토큰/빈 값)와 DB(해석된 "M - Boneless")에서 어긋나면
+ * 기존 줄이 "신규"로 오인되어 주방에 중복 출력된다. 스냅샷 키와 동일한 normalizer를
+ * 받아 양쪽 note를 같은 형태로 맞춰 비교한다(미전달 시 단순 trim).
+ */
+type DineInNoteNormalizer = (note: string) => string
+const defaultDineInNoteNormalize: DineInNoteNormalizer = (note) => note.trim()
+
+function lineSignature(
+  line: KitchenComparableLine,
+  formatNote: DineInNoteNormalizer = defaultDineInNoteNormalize
+): string {
   const name = String(line.name ?? '').trim()
   const price = Number(line.price ?? 0) || 0
   const qty = lineQty(line)
-  const note = String(line.note ?? '').trim()
+  const note = formatNote(String(line.note ?? '').trim())
   return [name, price, qty, note].join('\u001f')
 }
 
-function lineContentSignature(line: KitchenComparableLine): string {
+function lineContentSignature(
+  line: KitchenComparableLine,
+  formatNote: DineInNoteNormalizer = defaultDineInNoteNormalize
+): string {
   const menuId = String(line.menuId ?? line.menuId1 ?? '').trim()
   const name = String(line.name ?? '').trim()
   const price = Number(line.price ?? 0) || 0
-  const note = String(line.note ?? '').trim()
+  const note = formatNote(String(line.note ?? '').trim())
   return [menuId, name, price, note].join('\u001f')
 }
 
@@ -169,9 +183,12 @@ function existingHasQtyInfo(items: Array<{ quantity?: number; qty?: number }>): 
 
 export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLine>(
   cartLines: T[],
-  existingOrderItems: Array<{ id?: string; quantity?: number; qty?: number }> | null | undefined
+  existingOrderItems: Array<{ id?: string; quantity?: number; qty?: number }> | null | undefined,
+  opts?: { formatNote?: DineInNoteNormalizer }
 ): T[] {
   if (!existingOrderItems?.length) return cartLines
+
+  const formatNote = opts?.formatNote ?? defaultDineInNoteNormalize
 
   const existingQtyById = new Map<string, number>()
   for (const it of existingOrderItems) {
@@ -192,10 +209,10 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
         }
         continue
       }
-      const contentSig = lineContentSignature(line)
+      const contentSig = lineContentSignature(line, formatNote)
       let matchedExistingQty = 0
       for (const ex of existingOrderItems) {
-        if (lineContentSignature(ex) === contentSig) {
+        if (lineContentSignature(ex, formatNote) === contentSig) {
           matchedExistingQty += lineQty(ex)
         }
       }
@@ -223,12 +240,12 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
   // id 충돌/재생성 케이스 보정: 서명(name/price/qty/note) 다중집합으로 "추가분"만 계산.
   const existingCounts = new Map<string, number>()
   for (const line of existingOrderItems) {
-    const key = lineSignature(line)
+    const key = lineSignature(line, formatNote)
     existingCounts.set(key, (existingCounts.get(key) || 0) + 1)
   }
   const filteredBySignature: T[] = []
   for (const line of cartLines) {
-    const key = lineSignature(line)
+    const key = lineSignature(line, formatNote)
     const remain = existingCounts.get(key) || 0
     if (remain > 0) {
       existingCounts.set(key, remain - 1)

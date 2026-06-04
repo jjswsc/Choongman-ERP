@@ -58,6 +58,37 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
       ])
     ).toEqual([{ id: 'cart-menu2-newuuid', name: 'Banban Chicken', price: 199, quantity: 1 }])
   })
+
+  it('does not re-emit existing lines when note representation drifts (optc vs resolved)', () => {
+    // 카트는 `optc:` 토큰, 기존(DB)은 해석된 "M - Boneless" — id도 cart-* 로 재생성됨.
+    // formatNote 로 양쪽을 같은 형태로 맞추면 기존 치킨은 신규로 오인되지 않는다(추가분만 출력).
+    const formatNote = (note: string) => (note === 'optc:SIZE_M' ? 'M - Boneless' : note.trim())
+    const cart = [
+      { id: 'cart-c1-new', name: 'Golden Fried Chicken', price: 219, quantity: 1, note: 'optc:SIZE_M', menuId: '26' },
+      { id: 'cart-c2-new', name: 'Snow Onion', price: 249, quantity: 1, note: 'optc:SIZE_M', menuId: '27' },
+      { id: 'cart-soup-new', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
+    ]
+    const existing = [
+      { id: 'db-c1', name: 'Golden Fried Chicken', price: 219, quantity: 1, qty: 1, note: 'M - Boneless', menuId: '26' },
+      { id: 'db-c2', name: 'Snow Onion', price: 249, quantity: 1, qty: 1, note: 'M - Boneless', menuId: '27' },
+    ]
+    const delta = filterKitchenCartLinesForDineInAdd(cart, existing, { formatNote })
+    expect(delta).toEqual([
+      { id: 'cart-soup-new', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
+    ])
+  })
+
+  it('without a note normalizer the drift would re-emit existing chicken (documents root cause)', () => {
+    const cart = [
+      { id: 'cart-c1-new', name: 'Golden Fried Chicken', price: 219, quantity: 1, note: 'optc:SIZE_M', menuId: '26' },
+      { id: 'cart-soup-new', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
+    ]
+    const existing = [
+      { id: 'db-c1', name: 'Golden Fried Chicken', price: 219, quantity: 1, qty: 1, note: 'M - Boneless', menuId: '26' },
+    ]
+    const delta = filterKitchenCartLinesForDineInAdd(cart, existing)
+    expect(delta.some((l) => l.name === 'Golden Fried Chicken')).toBe(true)
+  })
 })
 
 describe('resolveDineInKitchenSnapshotItemKey', () => {

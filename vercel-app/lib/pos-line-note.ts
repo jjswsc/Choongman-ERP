@@ -41,3 +41,29 @@ export function normalizePosLineNote(
   }
   return out.join(' · ')
 }
+
+/**
+ * 홀/결제 영수증 중복 방지:
+ * 옵션이 이름·note 양쪽에 들어 있으면(예: 이름의 "(M - Boneless)" → 옵션 줄,
+ * note 의 "M - Boneless" → 비고 줄) 같은 값이 두 번 찍힌다.
+ * note 전체가 이미 출력된 옵션 토큰과 동일하면 비고 줄을 숨기기 위한 판정.
+ * (note 에 옵션 외 실제 고객 메모가 섞여 있으면 일치하지 않으므로 비고를 유지한다.)
+ */
+export function lineNoteDuplicatesOptions(
+  note: string | null | undefined,
+  optionTokens: ReadonlyArray<string | null | undefined>
+): boolean {
+  const norm = (s: string | null | undefined) =>
+    String(s ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+  const n = norm(note)
+  if (!n) return false
+  const opts = optionTokens.map(norm).filter(Boolean)
+  if (!opts.length) return false
+  if (opts.includes(n)) return true
+  if (norm(opts.join(', ')) === n) return true
+  if (norm(opts.join(' ')) === n) return true
+  return false
+}

@@ -32,6 +32,10 @@ import {
   type PosDeliveryMenuPolicy,
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
+import {
+  normalizePromotionCategoryMain,
+  PROMOTION_MAIN_CATEGORY,
+} from '@/lib/pos-promo-constants'
 
 function isGrabAdvancedPricingFallbackEnabled(): boolean {
   const raw = String(process.env.GRAB_MENU_ADVANCED_PRICING_FALLBACK || '')
@@ -308,8 +312,23 @@ function isValidPhotoUrl(value: unknown): value is string {
 }
 
 function normalizeSectionName(raw: unknown): string {
-  const s = String(raw ?? '').trim()
+  const s = normalizePromotionCategoryMain(String(raw ?? '').trim())
   return s || 'Regular'
+}
+
+/**
+ * Grab sellingTimes.serviceHours — 프로모션(Set) 대분류는 항상 OpenAllDay.
+ * 세트 메뉴에 걸린 배달 판매시간(예: 11:00~22:00)이 섹션 전체에 OpenPeriod로 묶이면
+ * 그 시간 밖에 Set 카테고리가 통째로 안 보이는 사례가 반복됨(2026-06).
+ */
+export function grabSectionServiceHours(
+  sectionName: string,
+  ranges: TimeRange[]
+): ReturnType<typeof serviceHoursFromRanges> {
+  if (normalizePromotionCategoryMain(sectionName) === PROMOTION_MAIN_CATEGORY) {
+    return serviceHoursFromRanges([])
+  }
+  return serviceHoursFromRanges(ranges)
 }
 
 function parseHHmm(raw: unknown): string | null {
@@ -1125,7 +1144,7 @@ export async function buildGrabMenuFromPos(params: {
       categories: (categories || []).filter(
         (cat) => Array.isArray((cat as { items?: unknown[] }).items) && (cat as { items?: unknown[] }).items!.length > 0
       ),
-      serviceHours: serviceHoursFromRanges(sectionRanges.get(sectionName) || []),
+      serviceHours: grabSectionServiceHours(sectionName, sectionRanges.get(sectionName) || []),
     }))
     .filter((s) => s.categories.length > 0)
     .sort((a, b) => {

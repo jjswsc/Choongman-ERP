@@ -17,7 +17,7 @@ import {
   resolveReceiptDeliveryPaymentChannelCode,
 } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
-import { normalizePosLineNote } from '@/lib/pos-line-note'
+import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import {
   buildReceiptVoidBannerHtml,
@@ -952,9 +952,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                       ),
                     ]
                   : []
-            const noteHtml = lineNote
-              ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
-              : ''
+            const noteHtml =
+              lineNote &&
+              !lineNoteDuplicatesOptions(lineNote, [...baseOptionLine, ...banbanFlavorLines])
+                ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
+                : ''
             const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
             const lineDiscountHtml =
               lineDiscount > 0.0001

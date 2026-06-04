@@ -299,6 +299,52 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).not.toContain('1x &gt; Banban Chicken')
   })
 
+  it('does not print the option twice when it is in both the name and the note', () => {
+    // 사진 케이스: 이름의 "(M - Boneless)" → 옵션 줄, note 의 "M - Boneless" → 비고 줄.
+    // 같은 값이 두 번 찍히지 않고 옵션 줄만 한 번 나와야 한다.
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '060',
+        storeCode: 'CM Ekkamai',
+        orderType: 'dine-in',
+        tableName: '7',
+        items: [
+          { id: '1', name: 'GOLDEN FRIED CHICKEN (M - Boneless)', price: 219, qty: 1, note: 'M - Boneless' },
+        ],
+        subtotal: 219,
+        discountAmt: 0,
+        total: 219,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).toContain('- M - Boneless')
+    expect(html).not.toContain('posLineNote')
+    // "M - Boneless" 문자열은 옵션 줄에서 딱 한 번만 등장
+    expect(html.split('M - Boneless').length - 1).toBe(1)
+  })
+
+  it('keeps a genuine customer note that differs from the option', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '061',
+        storeCode: 'CM Ekkamai',
+        orderType: 'dine-in',
+        tableName: '7',
+        items: [
+          { id: '1', name: 'GOLDEN FRIED CHICKEN (M - Boneless)', price: 219, qty: 1, note: 'no spicy' },
+        ],
+        subtotal: 219,
+        discountAmt: 0,
+        total: 219,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).toContain('- M - Boneless')
+    expect(html).toContain('no spicy')
+  })
+
   it('prints banban flavors on separate lines', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {

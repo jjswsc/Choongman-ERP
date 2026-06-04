@@ -6,38 +6,32 @@ import type { LucideIcon } from "lucide-react"
 import {
   DEFAULT_MEMBER_APP_BG,
   MP_MAX_WIDTH,
-  MEMBER_PORTAL_BG_STYLE,
   mpGlassCard,
   mpGlassCardSoft,
   mpGlassInset,
-  resolveMemberAppBackgroundUrl,
 } from "@/lib/member-portal-design"
+import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import type { PortalTab } from "@/components/member-portal/portal-ui"
 
 export function MemberPortalAmbienceBackground({
   imageUrl,
+  heroFoodImageUrl,
   children,
   className = "",
 }: {
   imageUrl?: string
+  heroFoodImageUrl?: string
   children: React.ReactNode
   className?: string
 }) {
-  const bg = resolveMemberAppBackgroundUrl(imageUrl || "")
   return (
     <div className={`relative min-h-[100dvh] overflow-x-hidden bg-[#050506] pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-white ${className}`}>
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div
-          className="absolute inset-0 scale-105"
-          style={{
-            backgroundImage: `url(${bg})`,
-            ...MEMBER_PORTAL_BG_STYLE,
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/42 via-[#08080a]/60 to-[#050506]/88" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.16),transparent_55%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.06),transparent_50%)]" />
-      </div>
+      <MemberPortalLoungeBackdrop
+        className="fixed"
+        customFullBackgroundUrl={imageUrl}
+        heroFoodImageUrl={heroFoodImageUrl}
+        variant="app"
+      />
       <div className="relative z-10">{children}</div>
     </div>
   )

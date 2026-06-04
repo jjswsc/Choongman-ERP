@@ -118,6 +118,18 @@ export async function GET(req: NextRequest) {
 
     const categories = summarizeMenuCategories(menu)
     const setCategory = categories.filter((c) => /set/i.test(c.name))
+    const setCategoryItems = setCategory.flatMap((cat) => {
+      const raw = pickRawCategory(menu, cat.name) as { items?: Array<Record<string, unknown>> } | null
+      const items = raw?.items
+      return Array.isArray(items) ? items : []
+    })
+    const setAvailableCount = setCategoryItems.filter(
+      (it) => String(it.availableStatus ?? '') === 'AVAILABLE'
+    ).length
+    const rootMenu = menu as Record<string, unknown>
+    const promotionSellingTime = (Array.isArray(rootMenu.sellingTimes) ? rootMenu.sellingTimes : []).find(
+      (st) => String((st as { name?: string }).name ?? '').toLowerCase() === 'promotion'
+    )
 
     if (rawCategoryName) {
       const root = menu as Record<string, unknown>
@@ -203,6 +215,20 @@ export async function GET(req: NextRequest) {
         categoryCount: categories.length,
         categories,
         setCategories: setCategory,
+        setCategoryDiagnostics: {
+          itemCount: setCategoryItems.length,
+          availableCount: setAvailableCount,
+          unavailableCount: setCategoryItems.length - setAvailableCount,
+          promotionSellingTimeOpenPeriodType: (
+            promotionSellingTime as { serviceHours?: { mon?: { openPeriodType?: string } } } | undefined
+          )?.serviceHours?.mon?.openPeriodType ?? null,
+          hint:
+            setCategoryItems.length === 0
+              ? 'Set 카테고리에 항목 0 — 메뉴 사용/배달 체크·배달앱 운영(Grab ON) 확인'
+              : setAvailableCount === 0
+                ? 'Set 항목은 있으나 전부 UNAVAILABLE — 배달앱 운영에서 Grab ON·품절·판매시간 확인'
+                : null,
+        },
         itemCount: items.length,
         items,
         hint,

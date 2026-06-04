@@ -48,6 +48,7 @@ import {
   useMemberPortalTiers,
 } from "@/components/member-portal/member-portal-tier-guide"
 import { MemberPortalProfileContactLinks, MemberPortalContactChannelButtons } from "@/components/member-portal/member-portal-contact-links"
+import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import {
   GlassCard,
   MemberPortalAmbienceBackground,
@@ -75,7 +76,7 @@ import {
 } from "@/components/member-portal/portal-ui"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
-import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn, MEMBER_PORTAL_BG_STYLE, resolveMemberLoginBackgroundUrl } from "@/lib/member-portal-design"
+import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
 import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type MemberPortalStoreRow = MemberPortalStoreDto
@@ -176,9 +177,11 @@ export function MemberPortalApp() {
   const [designBackgrounds, setDesignBackgrounds] = React.useState<{
     loginBackgroundUrl: string
     appBackgroundUrl: string
+    heroFoodImageUrl: string
   }>({
     loginBackgroundUrl: "",
     appBackgroundUrl: "",
+    heroFoodImageUrl: "",
   })
   const [signupWelcomeCouponEnabled, setSignupWelcomeCouponEnabled] = React.useState(false)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
@@ -308,6 +311,7 @@ export function MemberPortalApp() {
       lineOfficialUrl?: string
       loginBackgroundUrl?: string
       appBackgroundUrl?: string
+      heroFoodImageUrl?: string
       signupWelcomeCouponEnabled?: boolean
     }>("/api/member-portal/public-config")
       .then((r) =>
@@ -320,6 +324,7 @@ export function MemberPortalApp() {
           setDesignBackgrounds({
             loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
             appBackgroundUrl: String(r.appBackgroundUrl || "").trim(),
+            heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
           })
           setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
         }
@@ -333,6 +338,7 @@ export function MemberPortalApp() {
         setDesignBackgrounds({
           loginBackgroundUrl: "",
           appBackgroundUrl: "",
+          heroFoodImageUrl: "",
         })
       })
   }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, loadSession])
@@ -550,14 +556,12 @@ export function MemberPortalApp() {
     const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-white/45"
 
     return (
-      <div
-        className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white"
-        style={{
-          backgroundImage: `linear-gradient(rgba(8,8,10,0.62), rgba(8,8,10,0.82)), url(${resolveMemberLoginBackgroundUrl(designBackgrounds.loginBackgroundUrl)})`,
-          ...MEMBER_PORTAL_BG_STYLE,
-        }}
-      >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.14),transparent_42%)]" />
+      <div className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white">
+        <MemberPortalLoungeBackdrop
+          customFullBackgroundUrl={designBackgrounds.loginBackgroundUrl}
+          heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
+          variant="login"
+        />
         <div className="pointer-events-none absolute -left-24 top-32 h-56 w-56 rounded-full bg-[#ef233c]/10 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-40 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
 
@@ -875,7 +879,10 @@ export function MemberPortalApp() {
   }
 
   return (
-    <MemberPortalAmbienceBackground imageUrl={designBackgrounds.appBackgroundUrl}>
+    <MemberPortalAmbienceBackground
+      imageUrl={designBackgrounds.appBackgroundUrl}
+      heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
+    >
       <MemberPortalShell>
         <PremiumAppHeader
           wordmark={t("memberLounge")}

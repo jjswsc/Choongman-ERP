@@ -1,8 +1,14 @@
-/** 회원 라운지 기본 배경 — CMS 미설정 시 사용 (모바일 세로 9:16, 상단=히어로 음식) */
-export const DEFAULT_MEMBER_APP_BG = '/member-portal/app-bg-premium.jpg'
-export const DEFAULT_MEMBER_LOGIN_BG = '/member-portal/app-bg-premium.jpg'
+/** 회원 라운지 식당 배경 — CMS 미설정 시 합성 이미지의 하단(인테리어) 사용 */
+export const DEFAULT_MEMBER_LOUNGE_BG = '/member-portal/app-bg-premium.jpg'
 
-/** 모바일 세로 배경 — cover + 상단 정렬 (치킨 히어로 노출) */
+/** 상단 히어로 음식(접시 크롭) — CMS·POS URL 없을 때 폴백 */
+export const DEFAULT_MEMBER_HERO_FOOD = '/member-portal/snow-onion-hero.png'
+
+/** @deprecated 단일 배경 URL — 레거시 호환. 신규는 라운지+히어로 2레이어 */
+export const DEFAULT_MEMBER_APP_BG = DEFAULT_MEMBER_LOUNGE_BG
+export const DEFAULT_MEMBER_LOGIN_BG = DEFAULT_MEMBER_LOUNGE_BG
+
+/** 모바일 세로 배경 — cover + 상단 정렬 (단일 이미지 CMS 오버라이드용) */
 export const MEMBER_PORTAL_BG_STYLE = {
   backgroundSize: 'cover' as const,
   backgroundPosition: 'center top' as const,
@@ -31,14 +37,23 @@ export const mpPrimaryBtn =
 
 export const mpGoldText = 'bg-gradient-to-br from-[#fff7e6] via-amber-100 to-amber-300 bg-clip-text text-transparent'
 
-export function resolveMemberAppBackgroundUrl(customUrl: string): string {
+export function resolveMemberPortalLoungeBackgroundUrl(customUrl: string): string {
   const url = String(customUrl || '').trim()
-  return url || DEFAULT_MEMBER_APP_BG
+  return url || DEFAULT_MEMBER_LOUNGE_BG
+}
+
+export function resolveMemberPortalHeroFoodUrl(customUrl: string): string {
+  const url = String(customUrl || '').trim()
+  return url || DEFAULT_MEMBER_HERO_FOOD
+}
+
+/** CRM 전체 배경 오버라이드 (있을 때만) */
+export function resolveMemberAppBackgroundUrl(customUrl: string): string {
+  return String(customUrl || '').trim()
 }
 
 export function resolveMemberLoginBackgroundUrl(customUrl: string): string {
-  const url = String(customUrl || '').trim()
-  return url || DEFAULT_MEMBER_LOGIN_BG
+  return String(customUrl || '').trim()
 }
 
 /** 방콕 시간 기준 인사 */
