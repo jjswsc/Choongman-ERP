@@ -9,7 +9,6 @@ import {
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
   isGrabPromoConsumerListPriceAsSaleEnabled,
-  isGrabPromoConsumerSaleViaAdvancedEnabled,
   resolveGrabCampaignScheduleMs,
   resolveGrabMenuSalePriceMajor,
   resolveGrabPromoMenuItemPriceMinor,

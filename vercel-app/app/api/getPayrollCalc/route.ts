@@ -33,6 +33,7 @@ import {
   bangkokDateRangeToUtc,
   toDateStrBangkok,
   getBangkokHour,
+  getDayOfWeekBangkok,
   addDayBangkok,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
@@ -77,9 +78,8 @@ function countCalendarExpectedWorkDays(
 ): number {
   let n = 0
   for (let d = 1; d <= daysInMonth; d++) {
-    const date = new Date(year, targetMonthJs, d)
-    const dayOfWeek = date.getDay()
-    const dateStr = date.toISOString().slice(0, 10)
+    const dateStr = `${year}-${String(targetMonthJs + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const dayOfWeek = getDayOfWeekBangkok(dateStr)
     if (joinDateStr && dateStr < joinDateStr) continue
     if (resignCapInclusive && dateStr > resignCapInclusive) continue
     if (holidaySet.has(dateStr)) continue
@@ -1251,9 +1251,8 @@ export async function GET(request: NextRequest) {
         expectedWorkDaysForEmp = scheduleExpectedDates.size
       } else {
         for (let d = 1; d <= lastDay.getDate(); d++) {
-          const date = new Date(year, targetMonth, d)
-          const dayOfWeek = date.getDay()
-          const dateStr = date.toISOString().slice(0, 10)
+          const dateStr = `${year}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          const dayOfWeek = getDayOfWeekBangkok(dateStr)
           if (joinDateStr && dateStr < joinDateStr) continue
           if (resignDateStr && dateStr > resignDateStr) continue
           if (holidaySet.has(dateStr)) continue
@@ -1433,9 +1432,8 @@ export async function GET(request: NextRequest) {
         const rawAbsenceDays = Math.max(0, expectedWorkDays - workDays - paidLeaveDaysFromEvents)
         if (rawAbsenceDays > 0) {
           for (let d = 1; d <= lastDay.getDate(); d++) {
-            const dateObj = new Date(year, targetMonth, d)
-            const dow = dateObj.getDay()
-            const ds = dateObj.toISOString().slice(0, 10)
+            const ds = `${year}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            const dow = getDayOfWeekBangkok(ds)
             if (joinDateStr && ds < joinDateStr) continue
             if (resignDateStr && ds > resignDateStr) continue
             if (holidaySet.has(ds)) continue
