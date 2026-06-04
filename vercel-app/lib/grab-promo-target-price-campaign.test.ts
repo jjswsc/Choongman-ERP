@@ -8,12 +8,31 @@ import {
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
+  isGrabPromoConsumerSaleViaAdvancedEnabled,
   resolveGrabCampaignScheduleMs,
+  shouldSendGrabPromoSaleAdvancedPricing,
 } from '@/lib/grab-promo-target-price-campaign'
 
 describe('calcGrabPercentageOffMajor', () => {
   it('computes percent off for 179 -> 111', () => {
     expect(calcGrabPercentageOffMajor(179, 111)).toBe(38)
+  })
+})
+
+describe('shouldSendGrabPromoSaleAdvancedPricing', () => {
+  it('includes sale advanced for percentage mode by default', () => {
+    const prev = process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED
+    const prevType = process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+    delete process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED
+    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'percentage'
+    expect(isGrabPromoConsumerSaleViaAdvancedEnabled()).toBe(true)
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
+    process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED = '0'
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
+    if (prev === undefined) delete process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED
+    else process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED = prev
+    if (prevType === undefined) delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+    else process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = prevType
   })
 })
 

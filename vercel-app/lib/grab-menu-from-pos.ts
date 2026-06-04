@@ -4,7 +4,7 @@ import { sanitizeGrabMenuDescription, composeGrabModifierName } from '@/lib/grab
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
   loadGrabPromoCutPriceByPromoId,
-  resolveGrabPromoCampaignDiscountType,
+  shouldSendGrabPromoSaleAdvancedPricing,
 } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
@@ -40,14 +40,7 @@ import {
 
 export { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 
-function isGrabAdvancedPricingFallbackEnabled(): boolean {
-  const raw = String(process.env.GRAB_MENU_ADVANCED_PRICING_FALLBACK || '')
-    .trim()
-    .toLowerCase()
-  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
-}
-
-/** `GRAB_MENU_ADVANCED_PRICING_FALLBACK=0|false` 일 때만 컷프라이스 advancedPricing 생략 */
+/** `GRAB_MENU_ADVANCED_PRICING_FALLBACK=0|false` 일 때 프로모 advancedPricing 전부 생략 */
 function isGrabAdvancedPricingExplicitlyDisabled(): boolean {
   const raw = String(process.env.GRAB_MENU_ADVANCED_PRICING_FALLBACK || '')
     .trim()
@@ -1084,9 +1077,8 @@ export async function buildGrabMenuFromPos(params: {
        * (fixPrice 전략일 때만 advancedPricing으로 배달 할인가를 직접 내린다.)
        */
       const includeAdvancedPricing =
-        promoCut?.showCutPrice &&
-        resolveGrabPromoCampaignDiscountType() !== 'percentage' &&
-        (isGrabAdvancedPricingFallbackEnabled() || !isGrabAdvancedPricingExplicitlyDisabled())
+        shouldSendGrabPromoSaleAdvancedPricing(!!promoCut?.showCutPrice) &&
+        !isGrabAdvancedPricingExplicitlyDisabled()
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
       const photoUrl = isValidPhotoUrl(policyImageUrl)
         ? policyImageUrl

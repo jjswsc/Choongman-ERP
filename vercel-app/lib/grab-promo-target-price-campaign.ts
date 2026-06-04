@@ -169,19 +169,33 @@ type IndexedGrabCampaign = {
 export type GrabPromoCampaignDiscountType = 'percentage' | 'fixPrice'
 
 /**
- * 기본 fixPrice(할인가 직접 지정 + advancedPricing=할인가). percentage 방식은
- * 손님 앱 정가 취소선이 Grab 프로덕션에서 표시되지 않고(기능 미통합) 재pull 후 캠페인이
- * 리스트 가격에 재적용되지 않아 정가가 노출되는 불안정성이 확인되어 fixPrice로 되돌림.
- * percentage를 다시 시도하려면 env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=percentage`.
+ * 기본 percentage(캠페인 % 할인·취소선). fixPrice 캠페인은 env `GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE=fixPrice`.
+ * 손님 앱 할인가 노출은 `shouldSendGrabPromoSaleAdvancedPricing` + `GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED`(기본 on).
  */
 export function resolveGrabPromoCampaignDiscountType(): GrabPromoCampaignDiscountType {
-  // 기본 percentage: 이 모드에선 메뉴 빌더가 프로모 item에 advancedPricing을 보내지 않는다.
-  // fixPrice(=advancedPricing 동봉)로 두면 일부 매장에서 메뉴 전체 검증이 거부되어
-  // 세트 카테고리가 통째로 사라지는 사례가 있었다(2026-06 충만). 할인 표시는 percentage 캠페인이 담당.
   const raw = String(process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE ?? 'percentage')
     .trim()
     .toLowerCase()
   return raw === 'fixprice' ? 'fixPrice' : 'percentage'
+}
+
+/**
+ * percentage 캠페인만으로 손님 앱에 할인가가 안 보이는 매장(기능 미통합) 대비:
+ * item.price=정가 + advancedPricing=할인가로 배달 채널가를 직접 내린다. 기본 on.
+ * 끄려면 `GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED=0`.
+ */
+export function isGrabPromoConsumerSaleViaAdvancedEnabled(): boolean {
+  const raw = String(process.env.GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED ?? '1')
+    .trim()
+    .toLowerCase()
+  return !(raw === '0' || raw === 'false' || raw === 'no' || raw === 'off')
+}
+
+/** GetMenu·updateMenuRecord에 프로모 할인가 advancedPricing을 실을지 */
+export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): boolean {
+  if (!showCutPrice) return false
+  if (resolveGrabPromoCampaignDiscountType() === 'fixPrice') return true
+  return isGrabPromoConsumerSaleViaAdvancedEnabled()
 }
 
 /** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
@@ -559,15 +573,9 @@ async function pushGrabMenuRecordForCutTarget(
   const regularMinor = Math.max(1, Math.round(cut.regularPrice * 100))
   const saleMinor = Math.max(1, Math.round(cut.salePrice * 100))
   if (regularMinor <= saleMinor) return false
-  /**
-   * percentage 캠페인이 정가(item.price)→할인가 취소선을 만드는 전략에서는
-   * advancedPricing(배달 채널가)을 할인가로 내리면 채널가=할인가가 되어
-   * 캠페인 할인 결과와 같아져 상쇄된다 → 취소선·정상가가 사라지고 할인가만 노출.
-   * 따라서 채널가를 정가로 맞춰(이전에 박힌 할인가 advancedPricing도 정가로 덮어써 제거)
-   * 캠페인이 단독으로 취소선을 만들게 한다. (fixPrice 전략일 때만 advancedPricing으로 배달가를 직접 할인가로 내린다.)
-   */
-  const usePercentageCampaign = resolveGrabPromoCampaignDiscountType() === 'percentage'
-  const advancedPriceMinor = usePercentageCampaign ? regularMinor : saleMinor
+  const advancedPriceMinor = shouldSendGrabPromoSaleAdvancedPricing(true)
+    ? saleMinor
+    : regularMinor
   await grabUpdateMenuRecord({
     merchantID,
     field: 'ITEM',
