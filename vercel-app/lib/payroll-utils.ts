@@ -135,3 +135,49 @@ export function calcSSO(contributionBase: number, year: number): number {
   const raw = contributable * 0.05
   return Math.min(roundSsoContributionBaht(raw), maxDed)
 }
+
+/**
+ * 입사·퇴사일과 급여 귀속 기간 [periodStart, periodEnd]가 하루라도 겹치면 true.
+ * 입사일 없음 → 과거부터 재직. 퇴사일 없음 → 재직 중.
+ */
+export function isEmployeeActiveInPayrollPeriod(
+  joinYmd: string,
+  resignYmd: string,
+  periodStart: string,
+  periodEnd: string
+): boolean {
+  const j = joinYmd || '1900-01-01'
+  const r = resignYmd || '9999-12-31'
+  if (j > periodEnd) return false
+  if (r < periodStart) return false
+  return true
+}
+
+/**
+ * 급여 계산 명단 포함 여부.
+ * 퇴사일이 귀속월 이전이어도 해당 월 근태·스케줄 실적이 있으면 포함(익월 정산·퇴사일 보정).
+ */
+export function isEmployeePayrollEligibleForMonth(params: {
+  joinYmd: string
+  resignYmd: string
+  periodStart: string
+  periodEnd: string
+  hasAttendanceInMonth: boolean
+  hasScheduleInMonth: boolean
+}): boolean {
+  const { joinYmd, resignYmd, periodStart, periodEnd, hasAttendanceInMonth, hasScheduleInMonth } =
+    params
+  if (joinYmd && joinYmd > periodEnd) return false
+  if (isEmployeeActiveInPayrollPeriod(joinYmd, resignYmd, periodStart, periodEnd)) return true
+  return hasAttendanceInMonth || hasScheduleInMonth
+}
+
+/** 방콕 기준 YYYY-MM — 매월 5일 지급·전월 1일~말일 산정 시 기본 귀속월(전월) */
+export function defaultPayrollAttributionMonthBangkok(now = new Date()): string {
+  const cur = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 7)
+  const [y, m] = cur.split('-').map(Number)
+  const total = y * 12 + (m - 1) - 1
+  const ny = Math.floor(total / 12)
+  const nm = (total % 12) + 1
+  return `${ny}-${String(nm).padStart(2, '0')}`
+}

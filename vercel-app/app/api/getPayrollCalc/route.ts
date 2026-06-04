@@ -14,6 +14,7 @@ import {
   clockOutCountsForPayroll,
   calcSSO,
   grossWageBeforeSSO,
+  isEmployeePayrollEligibleForMonth,
   isEmployeeSsoExemptFlag,
   ssoContributableWageBaht,
   ssoContributionBaseWage,
@@ -1203,21 +1204,46 @@ export async function GET(request: NextRequest) {
       const birthBonus = birth && birth.getMonth() === targetMonth && workYears >= 1 ? 500 : 0
       const joinDateStr = toDateStr(e.join_date)
       const resignDateStr = toDateStr((e as { resign_date?: unknown }).resign_date)
-      if (resignDateStr && resignDateStr < startStr) continue
 
       const empId = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
       const attKey = payrollEmployeeKey(store, name, empId)
       const scheduleExpectedDates = new Set<string>()
       const scheduleLookupKeys = new Set<string>([attKey, `${store}_${normalizeNameForSchedule(name)}`])
       if (empId > 0) scheduleLookupKeys.add(`${store}_#${empId}`)
+      let hasScheduleInPayrollMonth = false
       for (const lk of scheduleLookupKeys) {
         const raw = scheduleWorkDatesByKey[lk]
         if (!raw || raw.size === 0) continue
         for (const ds of raw) {
+          if (ds >= startStr && ds <= endStr) {
+            if (!joinDateStr || ds >= joinDateStr) {
+              if (!resignDateStr || ds <= resignDateStr) hasScheduleInPayrollMonth = true
+            }
+          }
           if (joinDateStr && ds < joinDateStr) continue
           if (resignDateStr && ds > resignDateStr) continue
           scheduleExpectedDates.add(ds)
         }
+      }
+      const attForEligibility = attSummary[attKey]
+      const hasAttendanceInPayrollMonth = Boolean(
+        attForEligibility &&
+          ((attForEligibility.workDays ?? 0) > 0 ||
+            (attForEligibility.workDates?.size ?? 0) > 0 ||
+            (attForEligibility.checkInDates?.size ?? 0) > 0 ||
+            (attForEligibility.clockInDates?.size ?? 0) > 0)
+      )
+      if (
+        !isEmployeePayrollEligibleForMonth({
+          joinYmd: joinDateStr,
+          resignYmd: resignDateStr,
+          periodStart: startStr,
+          periodEnd: endStr,
+          hasAttendanceInMonth: hasAttendanceInPayrollMonth,
+          hasScheduleInMonth: hasScheduleInPayrollMonth,
+        })
+      ) {
+        continue
       }
       const hasScheduleBasis = scheduleExpectedDates.size > 0
       let expectedWorkDaysForEmp = 0

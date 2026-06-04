@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
   const headers = new Headers(JSON_UTF8_HEADERS)
   try {
     const url = new URL(req.url)
-    const merchantID = String(url.searchParams.get('merchantID') || 'GFSBPOS-811-087').trim()
+    const merchantID = String(url.searchParams.get('merchantID') || '3-C6DWPB4VCKK1GT').trim()
     const partnerMerchantID = String(url.searchParams.get('partnerMerchantID') || '1040').trim()
     const nameFilter = String(url.searchParams.get('q') || 'april').trim().toLowerCase()
     const rawCategoryName = String(url.searchParams.get('raw') || '').trim()

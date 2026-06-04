@@ -32,6 +32,7 @@ import {
   translatePayrollExplainDetail,
   translatePayrollExplainReason,
 } from "@/lib/payroll-explain-i18n"
+import { defaultPayrollAttributionMonthBangkok } from "@/lib/payroll-utils"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 /** 급여 API·인증 오류: `msg` 또는 `message` 중 하나만 오는 경우 대비 */
@@ -44,9 +45,9 @@ function pickApiMsg(data: { msg?: unknown; message?: unknown }): string {
 /** 급여 산출 상세에서 날짜 클릭 시 휴가 관리로 보낼 사유(API reason 원문) */
 const PAYROLL_EXPLAIN_DATE_TO_LEAVE_REASONS = new Set(["결석 공제", "무급휴가"])
 
+/** 급여 귀속월 기본값: 방콕 전월(매월 5일 지급·전월 1~말일 산정) */
 function toMonthStr(d?: Date): string {
-  const x = d || new Date()
-  return x.toISOString().slice(0, 7)
+  return defaultPayrollAttributionMonthBangkok(d || new Date())
 }
 
 type PayrollRow = {

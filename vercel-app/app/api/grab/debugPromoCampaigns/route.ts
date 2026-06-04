@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       if (merchantIDs.length === 0) merchantIDs = [merchantIDParam]
       resolvedFrom = 'merchantID'
     } else {
-      merchantIDs = ['GFSBPOS-811-087']
+      merchantIDs = ['3-C6DWPB4VCKK1GT']
       resolvedFrom = 'default'
     }
 

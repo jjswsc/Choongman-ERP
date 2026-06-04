@@ -9,9 +9,10 @@ import { normStoreKey } from '@/lib/store-list-keys'
  * 2) Partner Store ID → ERP `store_code`(드롭다운 value와 동일)
  *    예: `"1048":"CM Asoke"`
  *
- * 손님 앱·주문용 Grab 포털 ID(`3-C6DWPB4VCKK1GT` 등)는 **별도 한 줄** env:
+ * Prod Grab Store ID(`3-C6DWPB4VCKK1GT` 등) — menu/campaign sync·주문 공통. **별도 env 권장:**
  * `GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040`
  * (쉼표로 여러 매장: `포털ID=1040,다른포털=1048`)
+ * True Digital: Prod=`3-C6DWPB4VCKK1GT`, test sandbox=`GFSBPOS-811-087` — 1040에 test GFSBPOS 묶지 말 것.
  */
 export function parseGrabPortalMerchantMap(raw?: string): Record<string, string> {
   const s = String(raw ?? process.env.GRAB_PORTAL_MERCHANT_MAP ?? '').trim()

@@ -4,6 +4,8 @@ import {
   getSSOLimitsByYear,
   calcSSO,
   grossWageBeforeSSO,
+  isEmployeeActiveInPayrollPeriod,
+  isEmployeePayrollEligibleForMonth,
   otMinutesForPayroll,
   roundSsoContributionBaht,
   ssoContributableWageBaht,
@@ -12,6 +14,81 @@ import {
 } from './payroll-utils'
 
 describe('payroll-utils', () => {
+  describe('isEmployeePayrollEligibleForMonth', () => {
+    const period = { periodStart: '2026-01-01', periodEnd: '2026-01-31' }
+
+    it('퇴사일이 귀속월 내이면 포함', () => {
+      expect(
+        isEmployeePayrollEligibleForMonth({
+          joinYmd: '2025-06-01',
+          resignYmd: '2026-01-15',
+          ...period,
+          hasAttendanceInMonth: false,
+          hasScheduleInMonth: false,
+        })
+      ).toBe(true)
+    })
+
+    it('퇴사일이 귀속월 이후(익월 퇴사)면 해당 월 포함', () => {
+      expect(
+        isEmployeePayrollEligibleForMonth({
+          joinYmd: '2025-06-01',
+          resignYmd: '2026-02-01',
+          ...period,
+          hasAttendanceInMonth: false,
+          hasScheduleInMonth: false,
+        })
+      ).toBe(true)
+    })
+
+    it('퇴사일이 귀속월 이전이고 근무 실적 없으면 제외', () => {
+      expect(
+        isEmployeePayrollEligibleForMonth({
+          joinYmd: '2025-06-01',
+          resignYmd: '2025-12-31',
+          ...period,
+          hasAttendanceInMonth: false,
+          hasScheduleInMonth: false,
+        })
+      ).toBe(false)
+    })
+
+    it('퇴사일이 귀속월 이전이어도 해당 월 근태가 있으면 포함', () => {
+      expect(
+        isEmployeePayrollEligibleForMonth({
+          joinYmd: '2025-06-01',
+          resignYmd: '2025-12-31',
+          ...period,
+          hasAttendanceInMonth: true,
+          hasScheduleInMonth: false,
+        })
+      ).toBe(true)
+    })
+
+    it('입사일이 귀속월 이후면 제외', () => {
+      expect(
+        isEmployeePayrollEligibleForMonth({
+          joinYmd: '2026-02-01',
+          resignYmd: '',
+          ...period,
+          hasAttendanceInMonth: true,
+          hasScheduleInMonth: true,
+        })
+      ).toBe(false)
+    })
+  })
+
+  describe('isEmployeeActiveInPayrollPeriod', () => {
+    it('기간과 하루라도 겹치면 true', () => {
+      expect(
+        isEmployeeActiveInPayrollPeriod('2025-01-01', '2026-01-31', '2026-01-01', '2026-01-31')
+      ).toBe(true)
+      expect(
+        isEmployeeActiveInPayrollPeriod('2025-01-01', '2025-12-31', '2026-01-01', '2026-01-31')
+      ).toBe(false)
+    })
+  })
+
   describe('getSSOLimitsByYear', () => {
     it('2025 이하: ceiling 15000, maxDed 750', () => {
       expect(getSSOLimitsByYear(2024)).toEqual({ ceiling: 15000, maxDed: 750 })

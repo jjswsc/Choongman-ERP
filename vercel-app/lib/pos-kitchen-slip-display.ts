@@ -194,8 +194,14 @@ function promoComposeFromSplitChildren(
     const componentQty = Math.max(1, Math.round(lineQty / parentQty) || 1)
     if (!parsed) {
       if (!routeMid) continue
+      const childMainName = String(
+        splitPosPrintItemLine(String(ch.name ?? '')).mainName || ch.name || ''
+      ).trim()
+      const usableChildName = isUsableKitchenChildName(childMainName) ? childMainName : ''
       const menuName =
-        resolveMenuNameByIdOrCode(routeMid, menuNameByMenuId, menuCodeByMenuId) || `#${routeMid}`
+        resolveMenuNameByIdOrCode(routeMid, menuNameByMenuId, menuCodeByMenuId) ||
+        usableChildName ||
+        `#${routeMid}`
       let resolvedOptName = ''
       if (grabSplit) {
         const chips = collectGrabPrintOptionLines({ note: ch.note, optionNameByCode })
@@ -239,8 +245,15 @@ function promoComposeFromSplitChildren(
     }
     const childLabel = parsed.childLabel
     const optMatch = /^(.+?)\s+\(([^)]+)\)\s*$/u.exec(childLabel)
+    // 라우팅 단계가 줄에 이미 새겨 둔 사람이 읽는 구성품 이름.
+    // 매장 스코프 menuNameByMenuId 에 세트 전용 구성품(예: 26/29)이 없어 id 조회가 비더라도
+    // `#26` 으로 떨어지지 않도록, 이름 자리에 들어 있는 텍스트를 id 조회 실패 시 폴백으로 쓴다.
+    // (고객 영수증과 동일 값이며, `#26`·순수 숫자 같은 자리표시자는 폴백에서 제외)
+    const childNameText = String((optMatch ? optMatch[1] : childLabel) ?? '').trim()
+    const usableChildName = isUsableKitchenChildName(childNameText) ? childNameText : ''
     const menuName =
       resolveMenuNameByIdOrCode(routeMid, menuNameByMenuId, menuCodeByMenuId) ||
+      usableChildName ||
       (routeMid ? `#${routeMid}` : '')
     if (!menuName) continue
     let optName = optMatch ? formatGrabOptionFragmentForPrint(optMatch[2].trim(), optionNameByCode) : ''
@@ -357,6 +370,17 @@ function isLikelyCodeLikeMenuName(raw: string): boolean {
     /^[A-Z]{1,3}\d{2,4}$/i.test(name) ||
     /^\d{5,}-S\d+$/i.test(name)
   )
+}
+
+/**
+ * 주방 슬립 세트 구성품 이름 폴백 사용 가능 여부.
+ * 코드형(`SC001`)·옵션코드·`#26`/`26` 같은 menuId 자리표시자는 제외해, 진짜 메뉴명일 때만 폴백한다.
+ */
+function isUsableKitchenChildName(raw: string): boolean {
+  const name = String(raw ?? '').trim()
+  if (!name) return false
+  if (/^#?\d+$/.test(name)) return false
+  return !isLikelyCodeLikeMenuName(name)
 }
 
 /** Grab 코드형 줄(예: 260457-S01)에서 note(`PEPSI MEGA 1 x1`)로 메뉴명을 보정 */

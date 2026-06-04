@@ -49,6 +49,41 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].promoComposeLines).toEqual(['GOLDEN FRIED CHICKEN (S Boneless) x1'])
   })
 
+  it('recovers split set-child name from slip label when menuId is missing in store-scoped map (no #26)', () => {
+    // 회귀: 매장 판매목록(store-scoped)에 세트 전용 구성품(26/29)이 없어 menuNameByMenuId 조회가 비면
+    // 주방 슬립이 `#26`/`#29` 로 찍히던 문제. 줄 이름에 이미 들어 있는 사람이 읽는 이름으로 폴백해야 한다.
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'set-2-k1',
+        name: '[Choongman Festival Set 2] GOLDEN FRIED CHICKEN (S Boneless)',
+        qty: 1,
+        kitchenRouteMenuId: '26',
+        kitchenPromoGroupId: 'set-2',
+        kitchenPromoParentName: 'Choongman Festival Set 2',
+        kitchenPromoParentQty: 1,
+      },
+      {
+        id: 'set-2-k2',
+        name: '[Choongman Festival Set 2] KIMCHI SOUP With Rice',
+        qty: 1,
+        kitchenRouteMenuId: '29',
+        kitchenPromoGroupId: 'set-2',
+        kitchenPromoParentName: 'Choongman Festival Set 2',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      // 26/29 가 없는 매장 스코프 맵
+      menuNameByMenuId: {},
+    })
+    const compose = lines.flatMap((l) => l.promoComposeLines ?? [])
+    const composeText = compose.join('\n')
+    expect(composeText).toContain('GOLDEN FRIED CHICKEN')
+    expect(composeText).toContain('KIMCHI SOUP')
+    expect(composeText).not.toContain('#26')
+    expect(composeText).not.toContain('#29')
+  })
+
   it('keeps same-menu different-size singles as separate kitchen lines (not merged by code prefix)', () => {
     // 라우팅 후(withKitchenCodeName) 단품에도 `[SC001]` 코드 접두가 붙는다.
     // 같은 메뉴(코드 동일) 다른 사이즈 두 단품이 promo 부모(SC001)로 오인되어 합쳐지면 안 된다.

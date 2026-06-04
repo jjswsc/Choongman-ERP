@@ -34,15 +34,30 @@ describe('resolveGrabMenuNotificationMerchantIDs', () => {
     else process.env.GRAB_STORE_MAP_JSON = prev
   })
 
-  it('returns both merchant ids for partner store 1040', () => {
-    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual(['GFSBPOS-811-087'])
+  it('prefers prod portal merchant for partner store 1040 when portal is in map', () => {
+    expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual(['3-C6DWPB4VCKK1GT'])
   })
 
-  it('expands GFSBPOS from linked portal id in map', () => {
-    expect(resolveGrabMenuNotificationMerchantIDs('3-C6DWPB4VCKK1GT')).toEqual(['GFSBPOS-811-087'])
+  it('returns portal id when input is portal merchant', () => {
+    expect(resolveGrabMenuNotificationMerchantIDs('3-C6DWPB4VCKK1GT')).toEqual(['3-C6DWPB4VCKK1GT'])
   })
 
-  it('accepts GFSBPOS directly', () => {
+  it('linked portal wins over GFSBPOS when both map to same partner store', () => {
+    expect(resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')).toEqual(['3-C6DWPB4VCKK1GT'])
+  })
+
+  it('uses GFSBPOS when portal map is absent (sandbox-only)', () => {
+    const prevPortal = process.env.GRAB_PORTAL_MERCHANT_MAP
+    const prevMap = process.env.GRAB_STORE_MAP_JSON
+    delete process.env.GRAB_PORTAL_MERCHANT_MAP
+    process.env.GRAB_STORE_MAP_JSON = JSON.stringify({
+      'GFSBPOS-811-087': '1040',
+      '1040': 'CM True Digital',
+    })
     expect(resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')).toEqual(['GFSBPOS-811-087'])
+    if (prevPortal === undefined) delete process.env.GRAB_PORTAL_MERCHANT_MAP
+    else process.env.GRAB_PORTAL_MERCHANT_MAP = prevPortal
+    if (prevMap === undefined) delete process.env.GRAB_STORE_MAP_JSON
+    else process.env.GRAB_STORE_MAP_JSON = prevMap
   })
 })
