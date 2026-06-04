@@ -3,7 +3,9 @@ import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
 import { GRAB_DELIVERY_ON_APP_PRICING_KEYS } from '@/lib/grab-menu-advanced-pricing'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import { grabJsonRequest } from '@/lib/grab-openapi'
+import { buildGrabMenuFromPos, listGrabMenuItemPrices } from '@/lib/grab-menu-from-pos'
 import { grabUpdateMenuRecord } from '@/lib/grab-partner-api'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
   calcPromoRegularPriceForGrabCut,
   isPromoEligibleForGrabDeliveryApp,
@@ -222,7 +224,8 @@ export function resolveGrabPromoMenuItemPriceMinor(params: {
 /** GetMenu·updateMenuRecord에 프로모 할인가 advancedPricing을 실을지 */
 export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): boolean {
   if (!showCutPrice) return false
-  if (isGrabPromoConsumerListPriceAsSaleEnabled()) return false
+  /** 손님 앱이 배달 채널 advanced만 쓰는 매장: list=sale 이면 advanced도 할인가로 동일하게 */
+  if (isGrabPromoConsumerListPriceAsSaleEnabled()) return true
   if (resolveGrabPromoCampaignDiscountType() === 'fixPrice') return true
   return isGrabPromoConsumerSaleViaAdvancedEnabled()
 }
@@ -238,6 +241,69 @@ export function shouldSuppressGrabPromoCampaignsForConsumerSale(): boolean {
     .trim()
     .toLowerCase()
   return !(raw === '0' || raw === 'false' || raw === 'no' || raw === 'off')
+}
+
+async function resolvePartnerMerchantIdForGrab(merchantID: string): Promise<string> {
+  const id = String(merchantID || '').trim()
+  if (!id) return ''
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_grab_store_integrations',
+      `grab_merchant_id=eq.${encodeURIComponent(id)}`,
+      { limit: 1, order: 'updated_at.desc', select: 'partner_merchant_id' }
+    )) as { partner_merchant_id?: string | null }[] | null
+    return String(rows?.[0]?.partner_merchant_id ?? '').trim()
+  } catch {
+    return ''
+  }
+}
+
+/** GetMenu와 동일한 item.price·배달 advanced를 Grab에 PUT (Set 등 카테고리 단위) */
+export async function pushGrabBuiltMenuItemPrices(params: {
+  merchantID: string
+  partnerMerchantID?: string
+  /** 예: `set` — 미지정이면 전체 카테고리 */
+  categoryNameIncludes?: string
+}): Promise<{ pushed: number; failed: number; itemCount: number }> {
+  const merchantID = String(params.merchantID || '').trim()
+  if (!merchantID) return { pushed: 0, failed: 0, itemCount: 0 }
+  const partnerMerchantID =
+    String(params.partnerMerchantID || '').trim() || (await resolvePartnerMerchantIdForGrab(merchantID))
+  if (!partnerMerchantID) return { pushed: 0, failed: 0, itemCount: 0 }
+
+  const menu = await buildGrabMenuFromPos({ merchantID, partnerMerchantID })
+  const needle = String(params.categoryNameIncludes ?? '').trim().toLowerCase()
+  let rows = listGrabMenuItemPrices(menu)
+  if (needle) {
+    rows = rows.filter((r) => r.categoryName.toLowerCase().includes(needle))
+  }
+
+  let pushed = 0
+  let failed = 0
+  for (const row of rows) {
+    try {
+      await grabUpdateMenuRecord({
+        merchantID,
+        field: 'ITEM',
+        id: row.id,
+        price: row.priceMinor,
+        advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+          key,
+          price: row.priceMinor,
+        })),
+      })
+      pushed += 1
+    } catch (e) {
+      failed += 1
+      console.warn('[grab-promo-campaign] push_built_menu_item_failed', {
+        merchantID,
+        itemId: row.id,
+        priceMinor: row.priceMinor,
+        error: String(e),
+      })
+    }
+  }
+  return { pushed, failed, itemCount: rows.length }
 }
 
 async function deleteGrabManagedPromoCampaigns(
@@ -645,7 +711,6 @@ async function pushGrabMenuRecordForCutTarget(
     saleMinor,
   })
   const pushAdvanced = shouldSendGrabPromoSaleAdvancedPricing(true)
-  const advancedPriceMinor = pushAdvanced ? saleMinor : listMinor
   await grabUpdateMenuRecord({
     merchantID,
     field: 'ITEM',
@@ -655,7 +720,7 @@ async function pushGrabMenuRecordForCutTarget(
       ? {
           advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
             key,
-            price: advancedPriceMinor,
+            price: saleMinor,
           })),
         }
       : {}),
@@ -976,6 +1041,8 @@ function listCampaignRows(payload: unknown): GrabCampaignListRow[] {
 
 export async function syncGrabPromoTargetPriceCampaigns(params: {
   merchantID: string
+  /** Grab menu notification·GetMenu과 동일한 파트너 스토어 ID(예: 1040) */
+  partnerMerchantID?: string
   /** true면 Grab에 동일 캠페인이 있어도 삭제 후 재생성(메뉴 item id 변경·표시 불일치 우회) */
   force?: boolean
   /** fixPrice→percentage 등 할인 타입 불일치 시 skip 하지 않고 PUT 마이그레이션 */
@@ -999,8 +1066,12 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   campaignDiscountMigrated: number
   /** listPrice=sale 모드에서 CM-POS-PROMO 캠페인 전부 삭제 후 메뉴가만 반영 */
   campaignsSuppressed?: boolean
+  builtMenuItemsPushed?: number
+  builtMenuItemsFailed?: number
 }> {
   const merchantID = String(params.merchantID || '').trim()
+  const partnerMerchantID =
+    String(params.partnerMerchantID || '').trim() || (await resolvePartnerMerchantIdForGrab(merchantID))
   const force = params.force === true
   const migrateDiscountType = params.migrateDiscountType === true
   const campaignDiscountType = params.campaignDiscountType
@@ -1053,11 +1124,18 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
 
   if (suppressCampaigns) {
     const menuPush = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+    const builtPush = await pushGrabBuiltMenuItemPrices({
+      merchantID,
+      partnerMerchantID,
+      categoryNameIncludes: 'set',
+    })
     const deleted = await deleteGrabManagedPromoCampaigns(merchantID, existing)
     console.info('[grab-promo-campaign] consumer_sale_suppressed_campaigns', {
       merchantID,
+      partnerMerchantID,
       deleted,
       menuRecordsPushed: menuPush.pushed,
+      builtMenuItemsPushed: builtPush.pushed,
       targets: targets.length,
     })
     return {
@@ -1066,12 +1144,14 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       skipped: 0,
       deleted,
       targets: targets.length,
-      menuRecordsPushed: menuPush.pushed,
-      menuRecordsFailed: menuPush.failed,
+      menuRecordsPushed: menuPush.pushed + builtPush.pushed,
+      menuRecordsFailed: menuPush.failed + builtPush.failed,
       campaignErrors: [],
       campaignFallbackUsed: 0,
       campaignDiscountMigrated: 0,
       campaignsSuppressed: true,
+      builtMenuItemsPushed: builtPush.pushed,
+      builtMenuItemsFailed: builtPush.failed,
     }
   }
 

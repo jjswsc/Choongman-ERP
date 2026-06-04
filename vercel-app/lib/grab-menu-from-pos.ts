@@ -1189,3 +1189,29 @@ export async function buildGrabMenuFromPos(params: {
     ...(includeLegacySections ? { sections } : {}),
   }
 }
+
+export type GrabMenuItemPriceRow = {
+  id: string
+  priceMinor: number
+  categoryName: string
+}
+
+/** buildGrabMenuFromPos 결과에서 카테고리별 item id·price(minor) 목록 */
+export function listGrabMenuItemPrices(menu: unknown): GrabMenuItemPriceRow[] {
+  const out: GrabMenuItemPriceRow[] = []
+  const root = menu as Record<string, unknown>
+  const cats = Array.isArray(root.categories) ? root.categories : []
+  for (const raw of cats) {
+    const cat = raw as { name?: string; items?: unknown[] }
+    const categoryName = String(cat.name ?? '').trim()
+    const items = Array.isArray(cat.items) ? cat.items : []
+    for (const item of items) {
+      const row = item as { id?: string; price?: number }
+      const id = String(row.id ?? '').trim()
+      const priceMinor = Math.round(Number(row.price ?? 0))
+      if (!id || priceMinor <= 0) continue
+      out.push({ id, priceMinor, categoryName })
+    }
+  }
+  return out
+}

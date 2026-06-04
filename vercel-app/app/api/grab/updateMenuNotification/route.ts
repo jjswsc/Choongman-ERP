@@ -59,11 +59,18 @@ export async function POST(req: NextRequest) {
     }
 
     const toNotify = new Set<string>()
+    const partnerMerchantIdByGrabId = new Map<string, string>()
     const unresolvedInputs: string[] = []
     for (const raw of rawInputs) {
-      const resolved = resolveGrabMenuNotificationMerchantIDs(raw)
-      if (!resolved.length) unresolvedInputs.push(raw)
-      else resolved.forEach((id) => toNotify.add(id))
+      const trimmed = String(raw || '').trim()
+      const resolved = resolveGrabMenuNotificationMerchantIDs(trimmed)
+      if (!resolved.length) unresolvedInputs.push(trimmed)
+      else {
+        resolved.forEach((id) => toNotify.add(id))
+        if (/^\d{1,6}$/.test(trimmed)) {
+          for (const grabId of resolved) partnerMerchantIdByGrabId.set(grabId, trimmed)
+        }
+      }
     }
 
     if (toNotify.size === 0) {
@@ -133,6 +140,7 @@ export async function POST(req: NextRequest) {
         try {
           promoCampaignSyncResults[merchantID] = await syncGrabPromoTargetPriceCampaigns({
             merchantID,
+            partnerMerchantID: partnerMerchantIdByGrabId.get(merchantID),
             force: forcePromoCampaignResync,
             immediatePromoDisplay,
             ...(migratePromoCampaignToPercentage

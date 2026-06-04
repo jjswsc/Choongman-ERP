@@ -53,7 +53,7 @@ describe('consumer list price mode', () => {
         saleMinor: 11100,
       })
     ).toBe(11100)
-    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
     expect(shouldSuppressGrabPromoCampaignsForConsumerSale()).toBe(true)
     expect(buildGrabCampaignDiscountForTarget({
       grabItemId: 'item-1',
