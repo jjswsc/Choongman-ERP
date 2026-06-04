@@ -4101,11 +4101,15 @@ export default function PosMenusPage() {
         await appAlert(translateApiMessage(String(res.message ?? "load_failed"), t))
         return
       }
+      const merchantIDs = res.resolvedMerchantIDs ?? []
       setGrabCampaignsRows(res.grabCampaigns ?? [])
       setGrabCampaignsMeta({
-        merchantIDs: res.resolvedMerchantIDs ?? [],
+        merchantIDs,
         hint: String(res.hint ?? ""),
       })
+      if (merchantIDs.length === 0 && res.hint) {
+        await appAlert(res.hint)
+      }
     } catch (e) {
       await appAlert(translateApiMessage(String(e ?? "load_failed"), t))
     } finally {

@@ -55,10 +55,17 @@ export function getGrabCampaignStartLeadMs(
 
 /** 캠페인 conditions.startTime / endTime (방콕 valid_from·valid_to 반영) */
 /** Grab 즉시 표시: ERP 시작일이 내일이어도 캠페인·미리보기는 오늘부터 */
-export function clampPromoValidFromYmdToToday(ymd: string | null | undefined): string {
-  const today = bangkokDateStrISO()
+export function clampPromoValidFromYmdToToday(
+  ymd: string | null | undefined,
+  todayYmd?: string
+): string {
+  const today = String(todayYmd ?? '').trim() || bangkokDateStrISO()
   const from = String(ymd ?? '').trim() || today
   return from > today ? today : from
+}
+
+function bangkokYmdFromMs(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 }
 
 export function resolveGrabCampaignScheduleMs(params: {
@@ -70,12 +77,15 @@ export function resolveGrabCampaignScheduleMs(params: {
   /** true면 valid_from을 오늘(방콕) 이후로 당김 */
   clampValidFromToToday?: boolean
 }): { startMs: number; endMs: number; fromYmd: string; toYmd: string } {
-  const today = bangkokDateStrISO()
+  const nowMs = params.nowMs ?? Date.now()
+  const today =
+    params.nowMs != null ? bangkokYmdFromMs(nowMs) : bangkokDateStrISO()
   const rawFrom = String(params.validFrom ?? '').trim() || today
-  const fromYmd = params.clampValidFromToToday ? clampPromoValidFromYmdToToday(rawFrom) : rawFrom
+  const fromYmd = params.clampValidFromToToday
+    ? clampPromoValidFromYmdToToday(rawFrom, today)
+    : rawFrom
   const toYmd = String(params.validTo ?? '').trim() || '2099-12-31'
   const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(fromYmd, toYmd)
-  const nowMs = params.nowMs ?? Date.now()
   const minStartMs = nowMs + getGrabCampaignStartLeadMs(params.startLeadMinutes, {
     immediatePromoDisplay: params.clampValidFromToToday,
   })
