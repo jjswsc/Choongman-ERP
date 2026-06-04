@@ -227,6 +227,43 @@ export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): b
   return isGrabPromoConsumerSaleViaAdvancedEnabled()
 }
 
+/**
+ * 손님 앱에 item.price=할인가만 쓸 때 CM-POS-PROMO 캠페인을 끈다.
+ * percentage 캠페인이 남아 있으면 Grab이 목록에 정가(179)만 보여주는 사례가 있다(2026-06 True Digital).
+ * 취소선·Grab 프로모션 ID 연동 후 `GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE=0`.
+ */
+export function shouldSuppressGrabPromoCampaignsForConsumerSale(): boolean {
+  if (!isGrabPromoConsumerListPriceAsSaleEnabled()) return false
+  const raw = String(process.env.GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE ?? '1')
+    .trim()
+    .toLowerCase()
+  return !(raw === '0' || raw === 'false' || raw === 'no' || raw === 'off')
+}
+
+async function deleteGrabManagedPromoCampaigns(
+  merchantID: string,
+  rows: GrabCampaignListRow[]
+): Promise<number> {
+  let deleted = 0
+  for (const row of rows) {
+    const name = String(row.name ?? '').trim()
+    if (!name.startsWith(CAMPAIGN_NAME_PREFIX)) continue
+    const id = String(row.id ?? '').trim()
+    if (!id) continue
+    try {
+      await grabJsonRequest({
+        path: `/partner/v1/campaigns/${encodeURIComponent(id)}`,
+        method: 'DELETE',
+        expectNoContentOk: true,
+      })
+      deleted += 1
+    } catch (e) {
+      console.warn('[grab-promo-campaign] delete_managed_failed', { merchantID, id, name, error: String(e) })
+    }
+  }
+  return deleted
+}
+
 /** 정가→할인가 할인율(1~99). Grab `discount.type=percentage` 용 */
 export function calcGrabPercentageOffMajor(regularMajor: number, saleMajor: number): number {
   if (!Number.isFinite(regularMajor) || !Number.isFinite(saleMajor)) return 0
@@ -960,12 +997,15 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   campaignErrors: Array<{ promoId: number; grabItemId: string; error: string; errorCode?: string }>
   campaignFallbackUsed: number
   campaignDiscountMigrated: number
+  /** listPrice=sale 모드에서 CM-POS-PROMO 캠페인 전부 삭제 후 메뉴가만 반영 */
+  campaignsSuppressed?: boolean
 }> {
   const merchantID = String(params.merchantID || '').trim()
   const force = params.force === true
   const migrateDiscountType = params.migrateDiscountType === true
   const campaignDiscountType = params.campaignDiscountType
   const immediatePromoDisplay = params.immediatePromoDisplay !== false
+  const suppressCampaigns = shouldSuppressGrabPromoCampaignsForConsumerSale()
   const empty = {
     created: 0,
     updated: 0,
@@ -1009,6 +1049,30 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   for (const row of existing) {
     const name = String(row.name ?? '').trim()
     if (name.startsWith(CAMPAIGN_NAME_PREFIX)) existingByName.set(name, row)
+  }
+
+  if (suppressCampaigns) {
+    const menuPush = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+    const deleted = await deleteGrabManagedPromoCampaigns(merchantID, existing)
+    console.info('[grab-promo-campaign] consumer_sale_suppressed_campaigns', {
+      merchantID,
+      deleted,
+      menuRecordsPushed: menuPush.pushed,
+      targets: targets.length,
+    })
+    return {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      deleted,
+      targets: targets.length,
+      menuRecordsPushed: menuPush.pushed,
+      menuRecordsFailed: menuPush.failed,
+      campaignErrors: [],
+      campaignFallbackUsed: 0,
+      campaignDiscountMigrated: 0,
+      campaignsSuppressed: true,
+    }
   }
 
   let created = 0

@@ -4,6 +4,7 @@ import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
 import {
   isGrabPromoConsumerListPriceAsSaleEnabled,
   isGrabPromoConsumerSaleViaAdvancedEnabled,
+  shouldSuppressGrabPromoCampaignsForConsumerSale,
   loadGrabPromoCutPriceByPromoId,
   listGrabManagedPromoCampaigns,
   resolveGrabPromoCampaignDiscountType,
@@ -235,6 +236,7 @@ export async function GET(req: NextRequest) {
         grabMerchantID,
         promoCampaignDiscountType: resolveGrabPromoCampaignDiscountType(),
         consumerListPriceMode: isGrabPromoConsumerListPriceAsSaleEnabled() ? 'sale' : 'regular',
+        suppressPromoCampaignsForConsumerSale: shouldSuppressGrabPromoCampaignsForConsumerSale(),
         consumerSaleViaAdvanced: isGrabPromoConsumerSaleViaAdvancedEnabled(),
         grabCampaignCount: campaignCount,
         grabCampaignOngoingCount: ongoingCount,

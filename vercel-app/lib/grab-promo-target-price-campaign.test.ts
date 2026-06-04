@@ -13,6 +13,7 @@ import {
   resolveGrabCampaignScheduleMs,
   resolveGrabPromoMenuItemPriceMinor,
   shouldSendGrabPromoSaleAdvancedPricing,
+  shouldSuppressGrabPromoCampaignsForConsumerSale,
 } from '@/lib/grab-promo-target-price-campaign'
 
 describe('calcGrabPercentageOffMajor', () => {
@@ -53,6 +54,7 @@ describe('consumer list price mode', () => {
       })
     ).toBe(11100)
     expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
+    expect(shouldSuppressGrabPromoCampaignsForConsumerSale()).toBe(true)
     expect(buildGrabCampaignDiscountForTarget({
       grabItemId: 'item-1',
       salePriceMajor: 111,
