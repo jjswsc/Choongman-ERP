@@ -409,14 +409,19 @@ function buildCheckStatusPayload(
   const partnerId = mustEnv('KBANK_PARTNER_ID')
   const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
   const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const payload = { ...(req.payload || {}) } as Record<string, unknown>
+  // qrType은 클라이언트에서 txnNo 판정용으로만 쓰고, KBank Inquiry v5 본문에는 보내지 않는다.
+  // (라벨 'CREDIT_CARD'를 그대로 보내면 "Invalid Request Format(openapi_error)"가 난다.)
+  const { qrType: rawQrType, ...payloadRest } = {
+    ...(req.payload || {}),
+  } as Record<string, unknown>
+  const payload = payloadRest
   const terminalId = String(payload.terminalId || req.terminalId || process.env.KBANK_TERMINAL_ID || '').trim()
   const resolvedOrigPartnerTxnUid = String(origPartnerTxnUid || '').trim().slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
   if (!resolvedOrigPartnerTxnUid) {
     throw new Error('origPartnerTxnUid is required for Inquire Payment (v5).')
   }
   const rawTxnNo = String(payload.txnNo || req.txnNo || '').trim()
-  const qrType = String(payload.qrType || '').trim()
+  const qrType = String(rawQrType || '').trim()
   const resolvedTxnNo =
     resolveKbankInquiryTxnNoForRequest(rawTxnNo, { qrType: qrType || undefined }) || ''
   return {
