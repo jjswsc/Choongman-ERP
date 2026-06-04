@@ -47,6 +47,7 @@ import {
 import type { PosPaymentOtherBreakdown } from "@/lib/pos-payment-other-breakdown"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { Handshake, Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
+import { PosCollabQuantityControl } from "@/components/pos/pos-collab-quantity-control"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -2254,24 +2255,12 @@ export default function PosOrderPage() {
             {appliedCollab && collabSupportsQuantityEntry(appliedCollab.collabDetail) ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-[11px] text-slate-500">{t("posCollabQuantity")}</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10)}
-                  step={1}
+                <PosCollabQuantityControl
                   value={collabQuantity}
-                  onChange={(e) =>
-                    setCollabQuantity(
-                      Math.max(
-                        1,
-                        Math.min(
-                          Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10),
-                          Math.trunc(Number(e.target.value || 1))
-                        )
-                      )
-                    )
-                  }
-                  className="h-8 w-20 border-slate-200 bg-white text-sm text-slate-800"
+                  max={Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10)}
+                  onChange={setCollabQuantity}
+                  className="border-slate-200 bg-white"
+                  inputClassName="text-slate-800"
                 />
                 <span className="text-[11px] text-slate-500">
                   {t("posCollabMaxPerOrder")} {appliedCollab.collabDetail.posMaxPerOrder ?? 10}

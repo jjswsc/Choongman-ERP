@@ -602,6 +602,29 @@ export type PosKitchenReprintPayload = {
 export type KitchenSlipItemWithCancelFlag<T extends KitchenSlipRoutingItem> = T & { kitchenLineCancelled?: boolean }
 
 /**
+ * 부분 취소 주방 재인쇄: 취소가 발생한 station 에만 남은(active) 줄을 붙인다.
+ * (음료만 취소했을 때 음식 주방 1·2에 전체 주문이 다시 나가는 것을 막는다.)
+ */
+export function filterActiveKitchenSlipsForPartialCancel<T extends KitchenSlipRoutingItem>(
+  activeSlips: KitchenSlipGroupRow<T>[],
+  cancelledSlips: KitchenSlipGroupRow<T>[]
+): KitchenSlipGroupRow<T>[] {
+  if (!cancelledSlips.length) return []
+  const stations = new Set(cancelledSlips.map((s) => s.station))
+  return activeSlips.filter((s) => stations.has(s.station))
+}
+
+/** 부분 취소용 — 취소 station 에만 취소 줄 + 해당 station 의 남은 줄 */
+export function buildPartialCancelKitchenSlips<T extends KitchenSlipRoutingItem>(
+  cancelledSlips: KitchenSlipGroupRow<T>[],
+  activeSlips: KitchenSlipGroupRow<T>[]
+): KitchenSlipGroupRow<KitchenSlipItemWithCancelFlag<T>>[] {
+  if (!cancelledSlips.length) return []
+  const activeForPartial = filterActiveKitchenSlipsForPartialCancel(activeSlips, cancelledSlips)
+  return mergeKitchenSlipGroupsCancelledFirst(cancelledSlips, activeForPartial)
+}
+
+/**
  * 같은 `station` 기준으로 취소된 줄을 위에 두고, 그 아래 현재 주문 줄을 붙인다.
  * `cancelledSlips`가 비면 `activeSlips`만 반환한다.
  */

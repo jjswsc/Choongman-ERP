@@ -118,6 +118,7 @@ import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computeMenuSplitDueByPerson } from '@/lib/pos-menu-split-due'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { PosCollabQuantityControl } from '@/components/pos/pos-collab-quantity-control'
 import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
 import { usePosTour } from '@/lib/pos-tour'
 import {
@@ -5076,24 +5077,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 {appliedCollab && collabSupportsQuantityEntry(appliedCollab.collabDetail) ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground">{tr('posCollabQuantity', '적용 장수')}</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10)}
-                      step={1}
+                    <PosCollabQuantityControl
                       value={collabQuantity}
-                      onChange={(e) =>
-                        setCollabQuantity(
-                          Math.max(
-                            1,
-                            Math.min(
-                              Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10),
-                              Math.trunc(Number(e.target.value || 1))
-                            )
-                          )
-                        )
-                      }
-                      className="h-9 w-20 rounded-xl text-sm"
+                      max={Math.max(1, appliedCollab.collabDetail.posMaxPerOrder ?? 10)}
+                      onChange={setCollabQuantity}
+                      size="md"
                     />
                     <span className="text-xs text-muted-foreground">
                       {tr('posCollabMaxPerOrder', '최대')} {appliedCollab.collabDetail.posMaxPerOrder ?? 10}

@@ -137,7 +137,7 @@ import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
   preparePosOrderItemsForKitchenSlip,
-  mergeKitchenSlipGroupsCancelledFirst,
+  buildPartialCancelKitchenSlips,
   type KitchenSlipRoutingItem,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
@@ -4575,17 +4575,16 @@ export default function PosTerminalPage() {
           )
           const groupOpts = buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
           const removedLines = kitchenDetail?.removedKitchenLines ?? []
-          const cancelledSlips = removedLines.length
-            ? buildKitchenSlipGroups(
-                kitchenItemsWithResolvedPromo(removedLines as Record<string, unknown>[]) as typeof removedLines,
-                groupOpts
-              )
-            : []
+          if (!removedLines.length) return
+          const cancelledSlips = buildKitchenSlipGroups(
+            kitchenItemsWithResolvedPromo(removedLines as Record<string, unknown>[]) as typeof removedLines,
+            groupOpts
+          )
           const activeSlips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
             groupOpts
           )
-          const slips = mergeKitchenSlipGroupsCancelledFirst(cancelledSlips, activeSlips)
+          const slips = buildPartialCancelKitchenSlips(cancelledSlips, activeSlips)
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
           const kitchenMemo = parsePosOrderMemo(memo).plainMemo

@@ -5,7 +5,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search, Copy, Megaphone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -41,6 +41,8 @@ import {
   getPosDeliveryAppPolicies,
   getNextPosMenuCode,
   savePosDeliveryAppPolicies,
+  getGrabPromoCampaigns,
+  type GrabPromoCampaign,
   type PosMenuCategoriesConfig,
   type DeliveryAppCode,
   type PosDeliveryAppPolicy,
@@ -802,6 +804,10 @@ export default function PosMenusPage() {
   const [deliveryOpsCopySourceStore, setDeliveryOpsCopySourceStore] = React.useState("")
   const [deliveryOpsCopying, setDeliveryOpsCopying] = React.useState(false)
   const [deliveryOpsApplyingAll, setDeliveryOpsApplyingAll] = React.useState(false)
+  const [grabCampaignsLoading, setGrabCampaignsLoading] = React.useState(false)
+  const [grabCampaignsRows, setGrabCampaignsRows] = React.useState<GrabPromoCampaign[] | null>(null)
+  const [grabCampaignsMeta, setGrabCampaignsMeta] = React.useState<{ merchantIDs: string[]; hint: string } | null>(null)
+  const [grabCampaignCopiedId, setGrabCampaignCopiedId] = React.useState<string | null>(null)
 
   const resolveNewOptionChannelPayload = React.useCallback(() => {
     const hall = Number(newOptionModifier) || 0
@@ -4082,6 +4088,48 @@ export default function PosMenusPage() {
     }
   }, [canSearchAllStores, deliveryOpsStoreCode, stores, t, buildDeliveryOpsSavePayload, deliveryOpsAppCode, deliveryOpsAppPolicy])
 
+  const handleLoadGrabCampaigns = React.useCallback(async () => {
+    const storeCode = String(deliveryOpsStoreCode || "").trim()
+    if (!storeCode) {
+      await appAlert(t("posDeliveryOpsStoreRequired") || "매장을 먼저 선택해 주세요.")
+      return
+    }
+    setGrabCampaignsLoading(true)
+    try {
+      const res = await getGrabPromoCampaigns({ storeCode })
+      if (res?.success === false) {
+        await appAlert(translateApiMessage(String(res.message ?? "load_failed"), t))
+        return
+      }
+      setGrabCampaignsRows(res.grabCampaigns ?? [])
+      setGrabCampaignsMeta({
+        merchantIDs: res.resolvedMerchantIDs ?? [],
+        hint: String(res.hint ?? ""),
+      })
+    } catch (e) {
+      await appAlert(translateApiMessage(String(e ?? "load_failed"), t))
+    } finally {
+      setGrabCampaignsLoading(false)
+    }
+  }, [deliveryOpsStoreCode, t])
+
+  const handleCopyGrabCampaignId = React.useCallback(async (id: string) => {
+    const value = String(id || "").trim()
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setGrabCampaignCopiedId(value)
+      window.setTimeout(() => setGrabCampaignCopiedId((prev) => (prev === value ? null : prev)), 1500)
+    } catch {
+      // clipboard 권한이 없으면 무시 — 사용자가 직접 선택·복사
+    }
+  }, [])
+
+  React.useEffect(() => {
+    setGrabCampaignsRows(null)
+    setGrabCampaignsMeta(null)
+  }, [deliveryOpsStoreCode, deliveryOpsAppCode])
+
 
   return (
     <div className="flex-1 overflow-auto">
@@ -6962,6 +7010,102 @@ export default function PosMenusPage() {
                   </table>
                 </div>
               </div>
+
+              {deliveryOpsAppCode === "grab" && (
+                <div className="rounded-lg border p-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Megaphone className="h-4 w-4 text-primary" />
+                      <h4 className="text-xs font-semibold">{t("posGrabCampaignsTitle") || "Grab 캠페인 현황"}</h4>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => void handleLoadGrabCampaigns()}
+                      disabled={grabCampaignsLoading || !deliveryOpsStoreCode}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${grabCampaignsLoading ? "animate-spin" : ""}`} />
+                      {grabCampaignsLoading ? (t("loading") || "조회 중...") : (t("posGrabCampaignsLoad") || "조회")}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {t("posGrabCampaignsHint") ||
+                      "Grab에 전송된 프로모션 캠페인 목록입니다. Grab이 'Campaign ID'를 요청하면 아래 ID(복사 버튼)를 전달하세요. 0건이면 현재 이 매장에 살아있는 캠페인이 없습니다."}
+                  </p>
+                  {grabCampaignsMeta && (
+                    <p className="text-[11px] text-muted-foreground">
+                      merchantID: <span className="font-mono">{grabCampaignsMeta.merchantIDs.join(", ") || "-"}</span>
+                    </p>
+                  )}
+                  {grabCampaignsRows != null && (
+                    grabCampaignsRows.length === 0 ? (
+                      <p className="text-xs text-muted-foreground rounded border bg-muted/30 px-3 py-2">
+                        {grabCampaignsMeta?.hint || (t("posGrabCampaignsEmpty") || "조회된 Grab 캠페인이 없습니다.")}
+                      </p>
+                    ) : (
+                      <div className="max-h-[360px] overflow-auto border rounded">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-muted/80">
+                            <tr className="border-b">
+                              <th className="p-2 text-left">{t("posGrabCampaignName") || "캠페인"}</th>
+                              <th className="p-2 text-left w-64">Campaign ID</th>
+                              <th className="p-2 text-center w-20">{t("posGrabCampaignState") || "상태"}</th>
+                              <th className="p-2 text-center w-24">{t("posGrabCampaignDiscount") || "할인"}</th>
+                              <th className="p-2 text-left w-44">{t("posGrabCampaignPeriod") || "기간(BKK)"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {grabCampaignsRows.map((c) => (
+                              <tr key={`${c.merchantID}-${c.id}`} className="border-b last:border-b-0 align-top">
+                                <td className="p-2">
+                                  <div className="font-medium break-all">{c.name}</div>
+                                  <div className="text-muted-foreground break-all">{c.itemIds.join(", ") || "-"}</div>
+                                </td>
+                                <td className="p-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono break-all">{c.id}</span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-1.5 shrink-0"
+                                      onClick={() => void handleCopyGrabCampaignId(c.id)}
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                      <span className="ml-1 text-[10px]">
+                                        {grabCampaignCopiedId === c.id ? (t("copied") || "복사됨") : (t("copy") || "복사")}
+                                      </span>
+                                    </Button>
+                                  </div>
+                                </td>
+                                <td className="p-2 text-center">
+                                  <span className={c.section === "ongoing" ? "text-emerald-600 font-medium" : "text-amber-600"}>
+                                    {c.section === "ongoing"
+                                      ? (t("posGrabCampaignOngoing") || "진행중")
+                                      : (t("posGrabCampaignUpcoming") || "예정")}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-center tabular-nums">
+                                  {c.discountType === "percentage"
+                                    ? `${c.discountValue}%`
+                                    : c.discountType === "fixPrice"
+                                      ? `฿${c.discountValue}`
+                                      : `${c.discountType || "-"} ${c.discountValue || ""}`}
+                                </td>
+                                <td className="p-2 text-[11px] leading-snug">
+                                  <div>{c.startTimeBkk || c.startTimeUtc || "-"}</div>
+                                  <div className="text-muted-foreground">~ {c.endTimeBkk || c.endTimeUtc || "-"}</div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
 
               {deliveryOpsLoading && (
                 <p className="text-xs text-muted-foreground">{t("loading") || "불러오는 중..."}</p>

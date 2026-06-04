@@ -6766,6 +6766,38 @@ export async function savePosDeliveryAppPolicies(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export type GrabPromoCampaign = {
+  merchantID: string
+  id: string
+  name: string
+  section: 'ongoing' | 'upcoming'
+  discountType: string
+  discountValue: number
+  itemIds: string[]
+  startTimeUtc: string
+  endTimeUtc: string
+  startTimeBkk: string
+  endTimeBkk: string
+}
+
+export async function getGrabPromoCampaigns(params: { storeCode?: string; merchantID?: string }) {
+  const q = new URLSearchParams()
+  if (params.storeCode) q.set('storeCode', params.storeCode)
+  if (params.merchantID) q.set('merchantID', params.merchantID)
+  const res = await apiFetchWithOffline(`/api/grab/debugPromoCampaigns?${q.toString()}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    storeCode?: string
+    resolvedFrom?: 'storeCode' | 'merchantID' | 'default'
+    resolvedMerchantIDs?: string[]
+    todayBkk?: string
+    grabCampaignCount?: number
+    grabCampaigns?: GrabPromoCampaign[]
+    hint?: string
+  }>
+}
+
 export async function getPosMenuOptions(params?: {
   menuId?: string
   fresh?: boolean

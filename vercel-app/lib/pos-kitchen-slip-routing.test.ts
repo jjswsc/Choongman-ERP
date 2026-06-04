@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildKitchenSlipGroups,
+  buildPartialCancelKitchenSlips,
   kitchenRoutingItemFromOrderItem,
   resolveEffectiveKitchenRouteForMenu,
   type KitchenSlipRoutingItem,
@@ -161,5 +162,31 @@ describe('buildKitchenSlipGroups printer overlay', () => {
       'Banban Chicken'
     )
     expect(String(row.note ?? '')).toContain('optc:C011-1')
+  })
+})
+
+describe('buildPartialCancelKitchenSlips', () => {
+  it('only reprints active items on stations that had a cancellation', () => {
+    const cancelledSlips = [
+      { label: 'K1', station: 1 as const, items: [{ id: 'pepsi', name: 'Pepsi', qty: 1 }] },
+    ]
+    const activeSlips = [
+      { label: 'K1', station: 1 as const, items: [{ id: 'chicken', name: 'Banban Chicken', qty: 1 }] },
+      { label: 'K2', station: 2 as const, items: [{ id: 'tteok', name: 'Tteokbokki', qty: 1 }] },
+    ]
+    const slips = buildPartialCancelKitchenSlips(cancelledSlips, activeSlips)
+    expect(slips).toHaveLength(1)
+    expect(slips[0]?.station).toBe(1)
+    expect(slips[0]?.items.map((it) => it.name)).toEqual(['Pepsi', 'Banban Chicken'])
+    expect(slips[0]?.items[0]?.kitchenLineCancelled).toBe(true)
+    expect(slips[0]?.items[1]?.kitchenLineCancelled).toBeUndefined()
+  })
+
+  it('returns empty when there are no cancelled slips', () => {
+    const slips = buildPartialCancelKitchenSlips(
+      [],
+      [{ label: 'K2', station: 2 as const, items: [{ id: 'tteok', name: 'Tteokbokki', qty: 1 }] }]
+    )
+    expect(slips).toEqual([])
   })
 })

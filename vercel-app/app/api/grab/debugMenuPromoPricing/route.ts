@@ -180,11 +180,14 @@ export async function GET(req: NextRequest) {
         const adv = item.advancedPricing || {}
         const advVals = Object.values(adv).map((v) => Number(v)).filter(Number.isFinite)
         const saleMinor = advVals.length ? advVals[0] : priceMinor
+        const saleMajor = cut?.salePrice ?? Math.round(priceMinor / 100)
+        const bundleRegularMajor = cut?.regularPrice ?? null
+        const grabConsumerMajor = Math.round(priceMinor / 100)
         return {
           id: item.id,
           name: item.name,
           priceMinor,
-          priceMajor: Math.round(priceMinor / 100),
+          priceMajor: grabConsumerMajor,
           advancedPricing: adv,
           saleMajorFromAdvanced: advVals.length ? Math.round(saleMinor / 100) : null,
           hasAdvancedPricing: advVals.length > 0,
@@ -196,12 +199,27 @@ export async function GET(req: NextRequest) {
                 showCutPrice: cut.showCutPrice,
               }
             : null,
+          /** 번들 UI "배달 정가 합계"(구성품 합) vs Step3 배달 판매가 vs Grab GetMenu item.price */
+          priceSources: {
+            bundleComposeRegularMajor: bundleRegularMajor,
+            erpSetSaleDeliveryMajor: saleMajor,
+            grabGetMenuConsumerPriceMajor: grabConsumerMajor,
+            consumerListPriceMode: isGrabPromoConsumerListPriceAsSaleEnabled() ? 'sale' : 'regular',
+          },
           /** 손님 앱: listPrice=sale 이면 price=할인가, regular 모드면 price=정가+advanced=할인가 */
           cutPriceReady: Boolean(
             cut?.showCutPrice &&
               (priceMinor <= Math.round((cut.salePrice ?? 0) * 100) ||
                 (advVals.length > 0 && priceMinor > saleMinor))
           ),
+          priceMismatchNote:
+            bundleRegularMajor != null &&
+            grabConsumerMajor === saleMajor &&
+            bundleRegularMajor > saleMajor
+              ? '179=번들 구성 정가 합(ERP 분석·취소선용). Grab API는 111 전송. 손님 앱이 179면 Merchant 수동가·캐시 의심.'
+              : bundleRegularMajor != null && grabConsumerMajor === bundleRegularMajor
+                ? 'Grab GetMenu item.price가 번들 정가 합과 같음 — price_delivery 미반영 또는 list=regular 모드.'
+                : null,
         }
       })
 
@@ -267,6 +285,8 @@ export async function GET(req: NextRequest) {
         },
         itemCount: items.length,
         items,
+        bundleVsGrabNote:
+          '번들·마케팅 화면의 "배달 정가 합계"(구성품 Rice+치킨 등)는 promoCut.regularPrice(예:179)로만 쓰이고, consumerListPriceMode=sale 이면 Grab item.price는 Step3 배달 판매가(예:111)입니다.',
         hint,
       },
       { headers }
