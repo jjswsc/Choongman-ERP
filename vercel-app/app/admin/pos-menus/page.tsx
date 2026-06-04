@@ -42,6 +42,7 @@ import {
   getNextPosMenuCode,
   savePosDeliveryAppPolicies,
   getGrabPromoCampaigns,
+  type GrabErpPromoForCampaignLookup,
   type GrabPromoCampaign,
   type PosMenuCategoriesConfig,
   type DeliveryAppCode,
@@ -806,7 +807,13 @@ export default function PosMenusPage() {
   const [deliveryOpsApplyingAll, setDeliveryOpsApplyingAll] = React.useState(false)
   const [grabCampaignsLoading, setGrabCampaignsLoading] = React.useState(false)
   const [grabCampaignsRows, setGrabCampaignsRows] = React.useState<GrabPromoCampaign[] | null>(null)
-  const [grabCampaignsMeta, setGrabCampaignsMeta] = React.useState<{ merchantIDs: string[]; hint: string } | null>(null)
+  const [grabCampaignsMeta, setGrabCampaignsMeta] = React.useState<{
+    merchantIDs: string[]
+    hint: string
+    campaignsSuppressed?: boolean
+    consumerListPriceMode?: string
+    erpGrabPromos: GrabErpPromoForCampaignLookup[]
+  } | null>(null)
   const [grabCampaignCopiedId, setGrabCampaignCopiedId] = React.useState<string | null>(null)
 
   const resolveNewOptionChannelPayload = React.useCallback(() => {
@@ -4106,6 +4113,9 @@ export default function PosMenusPage() {
       setGrabCampaignsMeta({
         merchantIDs,
         hint: String(res.hint ?? ""),
+        campaignsSuppressed: res.campaignsSuppressed,
+        consumerListPriceMode: res.consumerListPriceMode,
+        erpGrabPromos: res.erpGrabPromos ?? [],
       })
       if (merchantIDs.length === 0 && res.hint) {
         await appAlert(res.hint)
@@ -4128,6 +4138,34 @@ export default function PosMenusPage() {
       // clipboard 권한이 없으면 무시 — 사용자가 직접 선택·복사
     }
   }, [])
+
+  const buildGrabSupportReplyText = React.useCallback(() => {
+    const mid = grabCampaignsMeta?.merchantIDs?.join(", ") || ""
+    const promos = grabCampaignsMeta?.erpGrabPromos ?? []
+    const promoLines = promos
+      .slice(0, 12)
+      .map(
+        (p) =>
+          `- ${p.campaignNameRef} | Grab menu item: ${p.grabMenuItemId} | ${p.name} | sale ฿${p.salePrice}${p.regularPrice > p.salePrice ? ` (was ฿${p.regularPrice})` : ""}`
+      )
+      .join("\n")
+    if (grabCampaignsMeta?.campaignsSuppressed) {
+      return (
+        `สวัสดีครับ/ค่ะ\n\n` +
+        `ร้าน merchantID: ${mid}\n` +
+        `ขณะนี้เราส่งราคาโปรโมชันผ่าน Grab Menu API (ราคาเมนู item.price) ไม่ได้ใช้ Grab Partner Campaign API จึงไม่มี Campaign ID ในระบบ Grab ครับ/ค่ะ\n\n` +
+        `โปรโมชันอ้างอิง (ERP):\n${promoLines || "(ไม่มีโปรโมชัน Grab ใน ERP)"}\n\n` +
+        `หากทาง Grab ต้องการ Campaign ID จาก Partner Campaign โปรดแจ้งกลับ — เราจะเปิดโหมด Campaign sync ใหม่ครับ/ค่ะ`
+      )
+    }
+    return (
+      `สวัสดีครับ/ค่ะ\n\n` +
+      `ร้าน merchantID: ${mid}\n` +
+      `ขณะนี้ไม่มี Campaign ที่ active ใน Grab (CM-POS-PROMO 0 รายการ)\n\n` +
+      `โปรโมชันใน ERP:\n${promoLines || "(ไม่มี)"}\n\n` +
+      `กำลัง sync Campaign ใหม่ — ได้ Campaign ID แล้วจะส่งให้อีกครั้งครับ/ค่ะ`
+    )
+  }, [grabCampaignsMeta])
 
   React.useEffect(() => {
     setGrabCampaignsRows(null)
@@ -7042,12 +7080,83 @@ export default function PosMenusPage() {
                       merchantID: <span className="font-mono">{grabCampaignsMeta.merchantIDs.join(", ") || "-"}</span>
                     </p>
                   )}
-                  {grabCampaignsRows != null && (
-                    grabCampaignsRows.length === 0 ? (
-                      <p className="text-xs text-muted-foreground rounded border bg-muted/30 px-3 py-2">
-                        {grabCampaignsMeta?.hint || (t("posGrabCampaignsEmpty") || "조회된 Grab 캠페인이 없습니다.")}
-                      </p>
-                    ) : (
+                  {grabCampaignsMeta?.campaignsSuppressed && (
+                    <p className="text-xs rounded border border-amber-200 bg-amber-50 text-amber-950 px-3 py-2 leading-snug">
+                      {t("posGrabCampaignsSuppressedBanner") ||
+                        "운영 모드: Grab Campaign API 미사용 — 할인은 메뉴 가격(Menu sync)만 반영. Campaign ID 없음이 정상입니다."}
+                      {grabCampaignsMeta.consumerListPriceMode
+                        ? ` (listPrice=${grabCampaignsMeta.consumerListPriceMode})`
+                        : ""}
+                    </p>
+                  )}
+                  {grabCampaignsRows != null && grabCampaignsRows.length === 0 && (
+                    <p className="text-xs text-muted-foreground rounded border bg-muted/30 px-3 py-2 leading-snug">
+                      {grabCampaignsMeta?.hint || (t("posGrabCampaignsEmpty") || "조회된 Grab 캠페인이 없습니다.")}
+                    </p>
+                  )}
+                  {grabCampaignsMeta && (grabCampaignsMeta.erpGrabPromos?.length ?? 0) > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h5 className="text-xs font-semibold">
+                          {t("posGrabCampaignsErpPromosTitle") || "ERP Grab 프로모 (메뉴 가격 동기화)"}
+                        </h5>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-7 text-[11px] gap-1"
+                          onClick={async () => {
+                            const text = buildGrabSupportReplyText()
+                            try {
+                              await navigator.clipboard.writeText(text)
+                              setGrabCampaignCopiedId("__grab_reply__")
+                              window.setTimeout(
+                                () => setGrabCampaignCopiedId((prev) => (prev === "__grab_reply__" ? null : prev)),
+                                2000
+                              )
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                          {grabCampaignCopiedId === "__grab_reply__"
+                            ? (t("copied") || "복사됨")
+                            : (t("posGrabCampaignsCopyGrabReply") || "Grab 답변(태국어) 복사")}
+                        </Button>
+                      </div>
+                      <div className="max-h-[280px] overflow-auto border rounded">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-muted/80">
+                            <tr className="border-b">
+                              <th className="p-2 text-left">{t("posGrabCampaignName") || "캠페인"}</th>
+                              <th className="p-2 text-left">{t("posGrabCampaignErpRef") || "참조명"}</th>
+                              <th className="p-2 text-left">Grab item ID</th>
+                              <th className="p-2 text-right w-24">{t("posGrabCampaignDiscount") || "할인"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {grabCampaignsMeta.erpGrabPromos.map((p) => (
+                              <tr key={p.promoId} className="border-b last:border-b-0">
+                                <td className="p-2">
+                                  <div className="font-medium">{p.name}</div>
+                                  <div className="text-muted-foreground">#{p.promoId}</div>
+                                </td>
+                                <td className="p-2 font-mono text-[11px]">{p.campaignNameRef}</td>
+                                <td className="p-2 font-mono text-[11px] break-all">{p.grabMenuItemId}</td>
+                                <td className="p-2 text-right tabular-nums">
+                                  ฿{p.salePrice}
+                                  {p.regularPrice > p.salePrice ? (
+                                    <div className="text-muted-foreground line-through text-[10px]">฿{p.regularPrice}</div>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {grabCampaignsRows != null && grabCampaignsRows.length > 0 && (
                       <div className="max-h-[360px] overflow-auto border rounded">
                         <table className="w-full text-xs">
                           <thead className="sticky top-0 bg-muted/80">
@@ -7106,7 +7215,6 @@ export default function PosMenusPage() {
                           </tbody>
                         </table>
                       </div>
-                    )
                   )}
                 </div>
               )}

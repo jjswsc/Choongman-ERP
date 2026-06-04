@@ -6780,6 +6780,17 @@ export type GrabPromoCampaign = {
   endTimeBkk: string
 }
 
+export type GrabErpPromoForCampaignLookup = {
+  promoId: number
+  name: string
+  campaignNameRef: string
+  grabMenuItemId: string
+  salePrice: number
+  regularPrice: number
+  validFrom: string | null
+  validTo: string | null
+}
+
 export async function getGrabPromoCampaigns(params: { storeCode?: string; merchantID?: string }) {
   const q = new URLSearchParams()
   if (params.storeCode) q.set('storeCode', params.storeCode)
@@ -6792,8 +6803,11 @@ export async function getGrabPromoCampaigns(params: { storeCode?: string; mercha
     resolvedFrom?: 'storeCode' | 'merchantID' | 'default'
     resolvedMerchantIDs?: string[]
     todayBkk?: string
+    campaignsSuppressed?: boolean
+    consumerListPriceMode?: 'sale' | 'regular'
     grabCampaignCount?: number
     grabCampaigns?: GrabPromoCampaign[]
+    erpGrabPromos?: GrabErpPromoForCampaignLookup[]
     hint?: string
   }>
 }

@@ -14,6 +14,27 @@ import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
+const JSON_UTF8_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Content-Type': 'application/json; charset=utf-8',
+}
+
+function buildPriceMismatchNoteEn(params: {
+  bundleRegularMajor: number | null
+  grabConsumerMajor: number
+  saleMajor: number
+}): string | null {
+  const { bundleRegularMajor, grabConsumerMajor, saleMajor } = params
+  if (bundleRegularMajor == null) return null
+  if (grabConsumerMajor === saleMajor && bundleRegularMajor > saleMajor) {
+    return `bundleRegular=${bundleRegularMajor} (compose sum, analytics only). grabGetMenuPrice=${grabConsumerMajor}. If consumer app shows ${bundleRegularMajor}, check Grab Merchant manual price or app cache.`
+  }
+  if (grabConsumerMajor === bundleRegularMajor) {
+    return `grabGetMenuPrice equals bundle regular ${bundleRegularMajor} — price_delivery missing or consumerListPriceMode=regular.`
+  }
+  return null
+}
+
 type MenuItemRow = {
   id?: string
   name?: string
@@ -91,8 +112,7 @@ function walkMenuItems(menu: unknown): MenuItemRow[] {
 
 /** Grab 컷프라이스 진단 — ERP가 보내는 item.price / advancedPricing 확인용 */
 export async function GET(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = new Headers(JSON_UTF8_HEADERS)
   try {
     const url = new URL(req.url)
     const merchantID = String(url.searchParams.get('merchantID') || 'GFSBPOS-811-087').trim()
@@ -220,6 +240,11 @@ export async function GET(req: NextRequest) {
               : bundleRegularMajor != null && grabConsumerMajor === bundleRegularMajor
                 ? 'Grab GetMenu item.price가 번들 정가 합과 같음 — price_delivery 미반영 또는 list=regular 모드.'
                 : null,
+          priceMismatchNoteEn: buildPriceMismatchNoteEn({
+            bundleRegularMajor,
+            grabConsumerMajor,
+            saleMajor,
+          }),
         }
       })
 
@@ -232,17 +257,32 @@ export async function GET(req: NextRequest) {
       .filter(Boolean)
       .sort()[0]
     let hint: string
+    let hintEn: string
     if (!cutReady) {
       hint =
         'cutPriceReady=false → GetMenu에 advancedPricing(할인가) 없음. GRAB_MENU_ADVANCED_PRICING_FALLBACK=0 이거나 프로모 컷프라이스 미설정. 배포 후 updateMenuNotification + syncCampaigns.'
+      hintEn =
+        'cutPriceReady=false: no sale advancedPricing on GetMenu. Redeploy, then updateMenuNotification + syncCampaigns.'
     } else if (ongoingCount === 0 && upcomingCount > 0) {
       hint = `Grab App Simulator "Now"는 캠페인 ongoing 전엔 취소선 없음(할인가만). upcoming ${upcomingCount}개 — earliest startTimeBkk=${earliestStartBkk ?? '?'}. force sync 반복 시 시작 시각이 계속 밀림.`
+      hintEn = `No strikethrough in Simulator until campaign ongoing. upcoming=${upcomingCount}, earliestStartBkk=${earliestStartBkk ?? '?'}.`
     } else if (campaignCount === 0) {
       hint =
         '메뉴 가격(정가+할인가)은 정상이나 Grab CM-POS-PROMO 캠페인 0개 — 취소선 없음. fixPrice 캠페인 재생성 필요.'
+      hintEn =
+        'Menu prices OK on GetMenu (sale price sent). grabCampaignCount=0 (suppressed). No strikethrough on Grab until campaigns re-enabled.'
     } else {
       hint = `ongoing ${ongoingCount}개 — App Simulator "Now"에서 취소선+할인가 확인 가능.`
+      hintEn = `ongoing campaigns=${ongoingCount} — check strikethrough in App Simulator Now.`
     }
+
+    const aprilOk =
+      items.length > 0 &&
+      items.every(
+        (i) =>
+          i.priceMajor === (i.promoCut?.salePrice ?? i.priceMajor) &&
+          (i.promoCut?.regularPrice ?? 0) > (i.promoCut?.salePrice ?? 0)
+      )
 
     return NextResponse.json(
       {
@@ -287,7 +327,13 @@ export async function GET(req: NextRequest) {
         items,
         bundleVsGrabNote:
           '번들·마케팅 화면의 "배달 정가 합계"(구성품 Rice+치킨 등)는 promoCut.regularPrice(예:179)로만 쓰이고, consumerListPriceMode=sale 이면 Grab item.price는 Step3 배달 판매가(예:111)입니다.',
+        bundleVsGrabNoteEn:
+          'Bundle UI "delivery regular sum" maps to promoCut.regularPrice only. With consumerListPriceMode=sale, Grab item.price is Step3 delivery sale (e.g. 111), not the compose sum (e.g. 179).',
+        diagnosisSummaryEn: aprilOk
+          ? 'OK: Grab GetMenu sends consumer list price = sale (111). Bundle regular (179) is not sent as item.price. If consumer app still shows 179, fix Grab Merchant manual menu price or clear app cache.'
+          : 'Check items[].priceMajor vs promoCut.salePrice and price_delivery in ERP.',
         hint,
+        hintEn,
       },
       { headers }
     )

@@ -640,6 +640,15 @@ export type GrabPromoCutPriceTarget = {
   validTo: string | null
 }
 
+/** ERP 관리 화면·진단 API — Grab 컷프라이스 대상 프로모 목록 */
+export async function listGrabPromoCutPriceTargets(options?: {
+  immediateDisplay?: boolean
+  businessDateYmd?: string
+}): Promise<GrabPromoCutPriceTarget[]> {
+  const bundle = await loadPromoBundle()
+  return collectGrabPromoCutPriceTargets(bundle, options)
+}
+
 function isPromoExpiredForGrab(validTo: string | null | undefined, businessDateYmd: string): boolean {
   const to = String(validTo ?? '').trim()
   if (!to) return false
