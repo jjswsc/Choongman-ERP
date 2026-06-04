@@ -1,0 +1,6 @@
+{
+  "timestamp": "2026-06-04T04:48:53.016043103Z",
+  "request": null,
+  "response": null,
+  "message": "{\"sellingTimes\":[{\"id\":\"SECTION-01\",\"serviceHours\":null,\"errors\":[\"update Selling Time failed: ServerError: target=, reason=invalid_argument, msg=the time of sellingtime is duplicate\"]}]}"
+}

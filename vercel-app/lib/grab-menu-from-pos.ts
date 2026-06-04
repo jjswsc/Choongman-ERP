@@ -32,10 +32,13 @@ import {
   type PosDeliveryMenuPolicy,
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
+import { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 import {
   normalizePromotionCategoryMain,
   PROMOTION_MAIN_CATEGORY,
 } from '@/lib/pos-promo-constants'
+
+export { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 
 function isGrabAdvancedPricingFallbackEnabled(): boolean {
   const raw = String(process.env.GRAB_MENU_ADVANCED_PRICING_FALLBACK || '')
@@ -468,15 +471,8 @@ type GrabMenuSectionOut = {
   categories: unknown[]
 }
 
-/**
- * Grab GetMenu 문서: sellingTimes[].startTime / endTime 은 UTC이며
- * `"2023-01-09 00:00:00"` 형식(공백 구분, T/Z 없음). ISO8601 문자열은 무효 처리될 수 있음.
- */
-const GRAB_SELLING_TIME_WINDOW_START = '2020-01-01 00:00:00'
-const GRAB_SELLING_TIME_WINDOW_END = '2039-12-31 23:59:59'
-
 /** Grab Menu Validation / GetMenuNewResponse: 루트 `sellingTimes` + `categories` 필수 */
-function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
+export function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
   sellingTimes: Array<{
     id: string
     name: string
@@ -503,11 +499,12 @@ function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
       sellingTimeIdBySectionId.set(sec.id, existing)
       continue
     }
+    const window = grabSellingTimeWindowForSlot(sellingTimes.length)
     sellingTimes.push({
       id: sec.id,
       name: sec.name,
-      startTime: GRAB_SELLING_TIME_WINDOW_START,
-      endTime: GRAB_SELLING_TIME_WINDOW_END,
+      startTime: window.startTime,
+      endTime: window.endTime,
       serviceHours: sec.serviceHours,
     })
     sellingTimeIdByHoursSignature.set(signature, sec.id)

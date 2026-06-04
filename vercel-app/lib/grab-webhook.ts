@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { SignJWT, jwtVerify } from 'jose'
+import { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 
 function isGrabProductionDeployment(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
@@ -211,8 +212,8 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
     sun: openAllDay,
   }
   const stubCategoryId = 'SECTION-01__grab-stub-category'
-  const sellingWindowStart = '2020-01-01 00:00:00'
-  const sellingWindowEnd = '2039-12-31 23:59:59'
+  const { startTime: sellingWindowStart, endTime: sellingWindowEnd } =
+    grabSellingTimeWindowForSlot(0)
   return {
     merchantID,
     partnerMerchantID,

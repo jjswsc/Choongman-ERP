@@ -30,7 +30,7 @@ Grab 손님 앱에서 **특정 카테고리(예: Set)나 메뉴가 통째로 안
 
 - **설명 길이/문자**: 비-VN 지역 기본 상한 **200자**. `sanitizeGrabMenuDescription`(`grab-menu-limits.ts`)가 서버에서 절단·HTML 제거. 입력란(`pos-menus`)도 200자 maxLength.
 - **advancedPricing**: 이 매장은 Grab에서 Service-based pricing 기능이 **미통합**일 수 있다. fixPrice 캠페인(=프로모 item에 advancedPricing 동봉)이 검증을 깨 카테고리를 떨굴 수 있어, 기본 캠페인 타입은 **percentage**로 둔다(`resolveGrabPromoCampaignDiscountType`). percentage 모드에선 빌더가 프로모 item에 advancedPricing을 보내지 않는다.
-- **sellingTime 중복**: `serviceHours` 서명 기준 dedup 로직(`buildSellingTimesAndRootCategories`)이 이미 있다.
+- **sellingTime 중복**: Grab 에러 `the time of sellingtime is duplicate` — **서로 다른 sellingTime에 동일 startTime+endTime** 이 있거나, 매장에 남은 온보딩 판매시간(`2020-01-01`)과 충돌. `grabSellingTimeWindowForSlot`(슬롯별 고유 윈도우, 슬롯 0=`2020-01-09`) + `serviceHours` 서명 dedup(`buildSellingTimesAndRootCategories`). Developer gzip `message`의 `sellingTimes[].errors` 확인.
 - **Set(프로모션) 카테고리만 안 보임**: `Promotion`/`프로모션` 대분류는 `grabSectionServiceHours`로 **항상 OpenAllDay**. 세트 메뉴에 걸린 배달 판매시간이 섹션에 `OpenPeriod`로 묶이면 시간 밖에 카테고리 통째 실종. `debugMenuPromoPricing`의 `setCategoryDiagnostics`로 항목 수·AVAILABLE 수·Promotion sellingTime 확인.
 - **sync SUCCESS인데 앱에 Set 없음**: GetMenu 응답의 `sections`(sellingTimeID 없음)와 루트 `categories`가 같이 가면 Grab이 sections만 쓸 때 Set이 빠질 수 있음 → 프로덕션은 기본 **`sections` 미포함**(`GRAB_MENU_INCLUDE_SECTIONS=1`일 때만 포함). 배포 후 `updateMenuNotification` 재실행 필수.
 - **debugMenuSyncState**: `?merchantID=GFSBPOS-811-087` 로 해당 매장만 필터.

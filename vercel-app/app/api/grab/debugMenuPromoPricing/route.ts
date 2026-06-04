@@ -119,10 +119,19 @@ export async function GET(req: NextRequest) {
     const root = menu as Record<string, unknown>
     const sellingTimesSummary = (Array.isArray(root.sellingTimes) ? root.sellingTimes : []).map(
       (st) => {
-        const row = st as { id?: string; name?: string }
-        return { id: String(row.id ?? ''), name: String(row.name ?? '') }
+        const row = st as { id?: string; name?: string; startTime?: string; endTime?: string }
+        return {
+          id: String(row.id ?? ''),
+          name: String(row.name ?? ''),
+          startTime: String(row.startTime ?? ''),
+          endTime: String(row.endTime ?? ''),
+        }
       }
     )
+    const sellingTimeWindowKeys = sellingTimesSummary.map((s) => `${s.startTime}|${s.endTime}`)
+    const duplicateSellingTimeWindows =
+      sellingTimeWindowKeys.length > 1 &&
+      new Set(sellingTimeWindowKeys).size < sellingTimeWindowKeys.length
     const includesLegacySections = Array.isArray(root.sections) && root.sections.length > 0
 
     const categories = summarizeMenuCategories(menu)
@@ -223,6 +232,7 @@ export async function GET(req: NextRequest) {
         categoryCount: categories.length,
         sellingTimesCount: sellingTimesSummary.length,
         sellingTimesSummary,
+        duplicateSellingTimeWindows,
         includesLegacySections,
         categories,
         setCategories: setCategory,
