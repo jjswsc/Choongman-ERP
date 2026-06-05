@@ -2,6 +2,7 @@ import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
 import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
   isGrabMenuSyncMerchantId,
+  listAllGrabPortalMerchantIdsFromEnv,
   resolveGrabMenuNotificationMerchantIDs,
 } from '@/lib/grab-resolve-menu-notification-merchants'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
@@ -47,17 +48,21 @@ async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promi
     if (!merchantID) continue
     for (const id of resolveGrabMenuNotificationMerchantIDs(merchantID)) out.add(id)
   }
-  if (out.size > 0) return Array.from(out).sort()
 
-  const map = parseGrabStoreMap()
   const partnerRaw = String(partnerMerchantID ?? '').trim()
-
   if (partnerRaw) {
-    return resolveGrabMenuNotificationMerchantIDs(partnerRaw)
+    for (const id of resolveGrabMenuNotificationMerchantIDs(partnerRaw)) out.add(id)
+    return Array.from(out).sort()
   }
 
-  for (const grabMerchantID of Object.keys(map)) {
-    if (isGrabMenuSyncMerchantId(grabMerchantID)) out.add(grabMerchantID)
+  /** ERP 프로모·컷프라이스는 매장 공통 — 포털 맵(1040/1042/1043) 전부 포함 */
+  for (const id of listAllGrabPortalMerchantIdsFromEnv()) out.add(id)
+
+  if (out.size === 0) {
+    const map = parseGrabStoreMap()
+    for (const grabMerchantID of Object.keys(map)) {
+      if (isGrabMenuSyncMerchantId(grabMerchantID)) out.add(grabMerchantID)
+    }
   }
   return Array.from(out).sort()
 }

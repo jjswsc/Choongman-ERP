@@ -1,6 +1,7 @@
 import {
   expandGrabStoreMapLinkedCodes,
   parseGrabPartnerApiMenuMerchantMap,
+  parseGrabPortalMerchantMap,
   parseGrabStoreMap,
 } from '@/lib/grab-store-map-env'
 import { normStoreKey } from '@/lib/store-list-keys'
@@ -213,4 +214,17 @@ export function listAllGrabFoodMerchantIdsFromStoreMap(): string[] {
     .map((k) => String(k || '').trim())
     .filter(Boolean)
     .sort()
+}
+
+/** `GRAB_PORTAL_MERCHANT_MAP`의 Prod 포털 merchantID — ERP 프로모는 매장 공통이므로 전부 동기화 대상 */
+export function listAllGrabPortalMerchantIdsFromEnv(): string[] {
+  const portal = parseGrabPortalMerchantMap()
+  const out = new Set<string>()
+  for (const merchantId of Object.keys(portal)) {
+    if (!isGrabPortalMerchantMapKey(merchantId)) continue
+    for (const id of resolveGrabMenuNotificationMerchantIDs(merchantId)) {
+      if (id) out.add(id)
+    }
+  }
+  return Array.from(out).sort()
 }

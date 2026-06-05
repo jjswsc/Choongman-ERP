@@ -5,6 +5,8 @@ import {
   buildGrabTargetPriceCampaignBody,
   buildPutBodyForExistingGrabCampaign,
   calcGrabPercentageOffMajor,
+  grabConsumerPriceFromPercentageMajor,
+  grabPercentageDiscountMatchesSale,
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
@@ -31,6 +33,13 @@ describe('resolveGrabMenuSalePriceMajor', () => {
 describe('calcGrabPercentageOffMajor', () => {
   it('computes percent off for 179 -> 111', () => {
     expect(calcGrabPercentageOffMajor(179, 111)).toBe(38)
+  })
+
+  it('189 -> 111 percentage rounds to 112 on Grab (1 baht off)', () => {
+    const pct = calcGrabPercentageOffMajor(189, 111)
+    expect(pct).toBe(41)
+    expect(grabConsumerPriceFromPercentageMajor(189, pct)).toBe(112)
+    expect(grabPercentageDiscountMatchesSale(189, 111, pct)).toBe(false)
   })
 })
 
@@ -141,6 +150,17 @@ describe('buildGrabCampaignDiscountForTarget', () => {
     })
     expect(d.type).toBe('percentage')
     expect(d.value).toBe(38)
+  })
+
+  it('falls back to fixPrice when percentage would be 1 baht off (189 -> 111)', () => {
+    const d = buildGrabCampaignDiscountForTarget({
+      grabItemId: 'item-2',
+      salePriceMajor: 111,
+      regularPriceMajor: 189,
+      discountType: 'percentage',
+    })
+    expect(d.type).toBe('fixPrice')
+    expect(d.value).toBe(111)
   })
 })
 

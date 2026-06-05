@@ -387,6 +387,21 @@ export function calcGrabPercentageOffMajor(regularMajor: number, saleMajor: numb
   return Math.min(99, Math.max(1, Math.round((1 - saleMajor / regularMajor) * 100)))
 }
 
+/** Grab 손님 앱이 percentage 할인을 반올림해 적용한 결과(바트) */
+export function grabConsumerPriceFromPercentageMajor(regularMajor: number, pct: number): number {
+  if (!Number.isFinite(regularMajor) || !Number.isFinite(pct)) return 0
+  return Math.round(regularMajor * (1 - pct / 100))
+}
+
+/** percentage 할인이 ERP 할인가와 정확히 일치하는지 (189→111이 112로 나오는 1바트 오차 방지) */
+export function grabPercentageDiscountMatchesSale(
+  regularMajor: number,
+  saleMajor: number,
+  pct: number
+): boolean {
+  return grabConsumerPriceFromPercentageMajor(regularMajor, pct) === Math.round(saleMajor)
+}
+
 export function buildGrabCampaignDiscountForTarget(params: {
   grabItemId: string
   salePriceMajor: number
@@ -395,7 +410,11 @@ export function buildGrabCampaignDiscountForTarget(params: {
 }): { type: string; value: number; cap?: number; scope: { type: 'items'; objectIDs: string[] } } {
   const discountType = params.discountType ?? resolveGrabPromoCampaignDiscountType()
   const pct = calcGrabPercentageOffMajor(params.regularPriceMajor, params.salePriceMajor)
-  if (discountType === 'percentage' && pct > 0) {
+  if (
+    discountType === 'percentage' &&
+    pct > 0 &&
+    grabPercentageDiscountMatchesSale(params.regularPriceMajor, params.salePriceMajor, pct)
+  ) {
     return {
       type: 'percentage',
       value: pct,
@@ -1194,12 +1213,13 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
   }
 
   if (suppressCampaigns) {
-    const menuPush = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
+    /** Set 전체 빌드 push 후 프로모 컷프라이스를 다시 push — 미러 price_delivery가 프로모 할인가를 덮어쓰지 않게 */
     const builtPush = await pushGrabBuiltMenuItemPrices({
       merchantID,
       partnerMerchantID,
       categoryNameIncludes: 'set',
     })
+    const menuPush = await pushGrabPromoCutPriceMenuRecords({ merchantID, targets })
     const deleted = await deleteGrabManagedPromoCampaigns(merchantID, existing)
     console.info('[grab-promo-campaign] consumer_sale_suppressed_campaigns', {
       merchantID,

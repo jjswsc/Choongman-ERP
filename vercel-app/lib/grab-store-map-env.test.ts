@@ -1,6 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { parseGrabPortalMerchantMap, parseGrabStoreMap } from '@/lib/grab-store-map-env'
-import { resolveGrabMenuNotificationMerchantIDs } from '@/lib/grab-resolve-menu-notification-merchants'
+import {
+  listAllGrabPortalMerchantIdsFromEnv,
+  resolveGrabMenuNotificationMerchantIDs,
+} from '@/lib/grab-resolve-menu-notification-merchants'
 
 describe('parseGrabPortalMerchantMap', () => {
   it('parses one-line portal=partner format', () => {
@@ -68,5 +71,15 @@ describe('parseGrabStoreMap merge', () => {
     expect(resolveGrabMenuNotificationMerchantIDs('1043')).toEqual(['3-C7JGN2B2DFJ1AE'])
     expect(resolveGrabMenuNotificationMerchantIDs('CM Silom')).toEqual(['3-C4NKAA4FCNCUGA'])
     expect(resolveGrabMenuNotificationMerchantIDs('CM Ekkamai')).toEqual(['3-C7JGN2B2DFJ1AE'])
+  })
+
+  it('lists all portal merchant IDs for multi-store promo sync', () => {
+    process.env.GRAB_PORTAL_MERCHANT_MAP =
+      '3-C6DWPB4VCKK1GT=1040,3-C4NKAA4FCNCUGA=1042,3-C7JGN2B2DFJ1AE=1043'
+    expect(listAllGrabPortalMerchantIdsFromEnv()).toEqual([
+      '3-C4NKAA4FCNCUGA',
+      '3-C6DWPB4VCKK1GT',
+      '3-C7JGN2B2DFJ1AE',
+    ])
   })
 })
