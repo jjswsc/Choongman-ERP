@@ -95,6 +95,8 @@ import {
   collabSupportsQuantityEntry,
 } from '@/lib/pos-collab-discount'
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
+import { isMemberCouponQrPayload, parseMemberCouponQrPayload } from '@/lib/member-coupon-qr'
+import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
 import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
   computePosPricing,
@@ -998,6 +1000,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [couponCode, setCouponCode] = useState('')
   const [couponQuantity, setCouponQuantity] = useState(1)
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
+  const [couponQrScannerOpen, setCouponQrScannerOpen] = useState(false)
   const [pointUsed, setPointUsed] = useState('0')
   const [couponMessage, setCouponMessage] = useState('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
@@ -3640,38 +3643,147 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setCartItems((prev) => mergeCartPanelAddItem(prev, item))
   }
 
+  const buildCouponCartLines = useCallback(
+    () =>
+      cartItems.map((item) => ({
+        menuId: String((item as { menuId?: string }).menuId ?? '').trim() || undefined,
+        categoryCode: String((item as { categoryCode?: string }).categoryCode ?? '').trim() || undefined,
+        quantity: Math.max(1, Number(item.quantity || 1)),
+        lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
+      })),
+    [cartItems]
+  )
+
+  const linkMemberForCouponQr = useCallback(async (memberNo: string): Promise<{ id: number; name: string } | null> => {
+    const keyword = String(memberNo || '').trim()
+    if (!keyword) return null
+    const rows = await getMembers({ q: keyword, limit: 20 })
+    const match = (rows || []).find(
+      (row) => String(row.memberNo || '').trim().toUpperCase() === keyword.toUpperCase()
+    )
+    if (!match?.id) return null
+    const value = String(match.id)
+    const name = match.name || match.memberNo || keyword
+    setSelectedMemberId(value)
+    setMemberOptions((prev) => {
+      const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+      if (prev.some((row) => row.value === value)) return prev
+      return [{ value, label }, ...prev]
+    })
+    setMemberMap((prev) => ({
+      ...prev,
+      [value]: {
+        id: match.id,
+        memberNo: match.memberNo || '',
+        name: match.name || '',
+        phone: match.phone || '',
+        email: match.email || '',
+      },
+    }))
+    return { id: match.id, name }
+  }, [])
+
+  const applyCouponWithParams = useCallback(
+    async (params: {
+      code: string
+      memberId?: number
+      memberIssueId?: number
+      quantity?: number
+      successNote?: string
+    }) => {
+      const code = String(params.code || '').trim()
+      if (!code) {
+        setCouponMessage(t('posCouponPleaseEnterCode'))
+        return false
+      }
+      try {
+        const res = await validatePosCoupons({
+          subtotal,
+          manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
+          collabDiscountAmt,
+          cartLines: buildCouponCartLines(),
+          applied: appliedCoupons,
+          candidate: {
+            code,
+            quantity: params.quantity ?? couponQuantity,
+            ...(params.memberIssueId ? { memberIssueId: params.memberIssueId } : {}),
+          },
+          memberId: params.memberId,
+        })
+        if (!res.valid || !res.appliedCoupons?.length) {
+          setCouponMessage(res.message || t('posCouponInvalid'))
+          return false
+        }
+        setAppliedCoupons(res.appliedCoupons)
+        setCouponCode('')
+        setCouponQuantity(1)
+        setCouponMessage(
+          params.successNote || i18nTr(t, 'posCouponAppliedSuccess', { code: code.toUpperCase() })
+        )
+        return true
+      } catch (e) {
+        console.error('validatePosCoupons:', e)
+        setCouponMessage(t('posCouponValidateError'))
+        return false
+      }
+    },
+    [
+      appliedCoupons,
+      buildCouponCartLines,
+      cancelledLineAmt,
+      collabDiscountAmt,
+      couponQuantity,
+      manualDiscountAmt,
+      serviceDiscountAmt,
+      subtotal,
+      t,
+    ]
+  )
+
+  const applyCouponFromQrPayload = useCallback(
+    async (raw: string) => {
+      const parsed = parseMemberCouponQrPayload(raw)
+      if (!parsed) {
+        setCouponMessage(t('posCouponInvalid'))
+        return
+      }
+
+      const linkedMember = await linkMemberForCouponQr(parsed.memberNo)
+      if (!linkedMember) {
+        setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
+        return
+      }
+
+      await applyCouponWithParams({
+        code: parsed.couponCode,
+        memberId: linkedMember.id,
+        memberIssueId: parsed.issueId,
+        successNote: i18nTr(t, 'posCouponQrMemberLinked', { name: linkedMember.name }),
+      })
+    },
+    [applyCouponWithParams, linkMemberForCouponQr, t]
+  )
+
   const applyCouponCode = async () => {
-    const code = couponCode.trim()
-    if (!code) {
+    const raw = couponCode.trim()
+    if (!raw) {
       setCouponMessage(t('posCouponPleaseEnterCode'))
       return
     }
-    try {
-      const res = await validatePosCoupons({
-        subtotal,
-        manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
-        collabDiscountAmt,
-        cartLines: cartItems.map((item) => ({
-          menuId: String((item as { menuId?: string }).menuId ?? '').trim() || undefined,
-          categoryCode: String((item as { categoryCode?: string }).categoryCode ?? '').trim() || undefined,
-          quantity: Math.max(1, Number(item.quantity || 1)),
-          lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
-        })),
-        applied: appliedCoupons,
-        candidate: { code, quantity: couponQuantity },
-        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-      })
-      if (!res.valid || !res.appliedCoupons?.length) {
-        setCouponMessage(res.message || t('posCouponInvalid'))
-        return
-      }
-      setAppliedCoupons(res.appliedCoupons)
-      setCouponCode('')
-      setCouponQuantity(1)
-      setCouponMessage(i18nTr(t, 'posCouponAppliedSuccess', { code: code.toUpperCase() }))
-    } catch (e) {
-      console.error('validatePosCoupons:', e)
-      setCouponMessage(t('posCouponValidateError'))
+    if (isMemberCouponQrPayload(raw)) {
+      await applyCouponFromQrPayload(raw)
+      return
+    }
+    await applyCouponWithParams({
+      code: raw,
+      memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+    })
+  }
+
+  const handleCouponCodeInput = (next: string) => {
+    setCouponCode(next)
+    if (parseMemberCouponQrPayload(next)) {
+      void applyCouponFromQrPayload(next)
     }
   }
 
@@ -5118,7 +5230,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     <Input
                       placeholder={t('posCouponCodePh')}
                       value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value)}
+                      onChange={(e) => handleCouponCodeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void applyCouponCode()
+                        }
+                      }}
                       className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs"
                     />
                     <Input
@@ -5135,15 +5253,32 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     />
                     <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-10 shrink-0 rounded-xl px-3"
+                      onClick={() => setCouponQrScannerOpen(true)}
+                      title={t('posCouponScanQr') || 'QR 스캔'}
+                    >
+                      <QrCode className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
                       variant="secondary"
                       size="sm"
                       className="h-10 shrink-0 rounded-xl px-4"
-                      onClick={applyCouponCode}
+                      onClick={() => void applyCouponCode()}
                     >
                       {tr('posCouponAdd', '추가')}
                     </Button>
                   </div>
                 </div>
+                <PosCouponQrScannerDialog
+                  open={couponQrScannerOpen}
+                  onOpenChange={setCouponQrScannerOpen}
+                  onScan={(raw) => {
+                    void applyCouponFromQrPayload(raw)
+                  }}
+                />
                 {appliedCoupons.length > 0 && (
                   <div className="mt-3 space-y-2">
                     {appliedCoupons.map((row, idx) => (

@@ -100,6 +100,17 @@ export function parseGrabPartnerApiMenuMerchantMap(raw?: string): Record<string,
   return out
 }
 
+/** `GRAB_PORTAL_MERCHANT_MAP` 값(파트너 스토어 ID) 목록 — 예: 1040, 1042, 1043 */
+export function listGrabPartnerStoreCodesFromPortalMap(): string[] {
+  const map = parseGrabPortalMerchantMap()
+  const out = new Set<string>()
+  for (const code of Object.values(map)) {
+    const trimmed = String(code ?? '').trim()
+    if (trimmed) out.add(trimmed)
+  }
+  return Array.from(out).sort((a, b) => a.localeCompare(b))
+}
+
 /** Prod Grab merchantID → 파트너 스토어 ID(예: `3-C4NKAA4FCNCUGA` → `1042`) */
 export function resolveGrabPartnerMerchantIdFromPortalMap(grabMerchantID: string): string {
   const id = String(grabMerchantID || '').trim()

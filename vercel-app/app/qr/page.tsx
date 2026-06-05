@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import QRCode from "qrcode"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import {
   Select,
   SelectContent,
@@ -25,12 +26,13 @@ const QR_LANG_LABELS: Record<LangCode, string> = {
   ms: "🇲🇾 Bahasa Melayu",
 }
 
-type QrTarget = "mobile" | "admin" | "pos"
+type QrTarget = "mobile" | "admin" | "pos" | "member"
 
 const PATHS: Record<QrTarget, string> = {
   mobile: "/login",
   admin: "/admin/login",
   pos: "/pos/login",
+  member: "/m",
 }
 
 function targetToFilename(target: QrTarget): string {
@@ -39,16 +41,32 @@ function targetToFilename(target: QrTarget): string {
       return "cm-erp-qr-admin.png"
     case "pos":
       return "cm-erp-qr-pos.png"
+    case "member":
+      return "cm-erp-qr-member.png"
     default:
       return "cm-erp-qr-mobile.png"
   }
 }
 
-/** ERP 접속용 QR — 모바일 / 관리자 / POS 로그인 URL 각각 생성 */
+const SEGMENT_HINT_KEYS: Record<QrTarget, string> = {
+  mobile: "qrSegmentHint",
+  admin: "qrSegmentHint",
+  pos: "qrSegmentHint",
+  member: "qrSegmentHintMember",
+}
+
+function parseQrTarget(raw: string | null | undefined): QrTarget {
+  const s = String(raw || "").trim().toLowerCase()
+  if (s === "admin" || s === "pos" || s === "member" || s === "mobile") return s
+  return "mobile"
+}
+
+/** ERP·회원앱 접속용 QR — 모바일 / 관리자 / POS / 회원앱 URL 각각 생성 */
 export default function QrAccessPage() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
-  const [target, setTarget] = useState<QrTarget>("mobile")
+  const searchParams = useSearchParams()
+  const [target, setTarget] = useState<QrTarget>(() => parseQrTarget(searchParams.get("target")))
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [targetUrl, setTargetUrl] = useState<string>("")
   const [copied, setCopied] = useState(false)
@@ -64,6 +82,10 @@ export default function QrAccessPage() {
       .then(setDataUrl)
       .catch(() => setDataUrl(null))
   }, [])
+
+  useEffect(() => {
+    setTarget(parseQrTarget(searchParams.get("target")))
+  }, [searchParams])
 
   useEffect(() => {
     const origin =
@@ -97,6 +119,7 @@ export default function QrAccessPage() {
     { id: "mobile", labelKey: "qrSegmentMobile" },
     { id: "admin", labelKey: "qrSegmentAdmin" },
     { id: "pos", labelKey: "qrSegmentPos" },
+    { id: "member", labelKey: "qrSegmentMember" },
   ]
 
   const handleLangChange = (v: string) => {
@@ -135,7 +158,7 @@ export default function QrAccessPage() {
           </div>
           <p className="mb-4 text-center text-sm text-white/70">{t("qrPageSubtitle")}</p>
 
-          <div className="mb-6 grid grid-cols-3 gap-2">
+          <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {segments.map(({ id, labelKey }) => (
               <button
                 key={id}
@@ -153,7 +176,7 @@ export default function QrAccessPage() {
             ))}
           </div>
 
-          <p className="mb-4 text-center text-xs text-white/55">{t("qrSegmentHint")}</p>
+          <p className="mb-4 text-center text-xs text-white/55">{t(SEGMENT_HINT_KEYS[target])}</p>
 
           {dataUrl ? (
             <>
@@ -209,6 +232,12 @@ export default function QrAccessPage() {
           </span>
           <Link href="/pos/login" className="text-white/60 underline hover:text-white/80">
             {t("qrFooterPosLogin")}
+          </Link>
+          <span className="text-white/30" aria-hidden>
+            |
+          </span>
+          <Link href="/m" className="text-white/60 underline hover:text-white/80">
+            {t("qrFooterMemberPortal")}
           </Link>
         </div>
       </div>

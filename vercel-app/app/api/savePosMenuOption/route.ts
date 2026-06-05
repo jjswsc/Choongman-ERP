@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { recordPriceChanges } from '@/lib/price-history'
-import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
+import {
+  resolveMenuStoreCodesForGrabSync,
+  triggerGrabMenuNotificationPerStoreCodes,
+} from '@/lib/grab-menu-sync-trigger'
 import { createMenuOptionCodeAllocator } from '@/lib/pos-option-code-server'
 import { validateStrictBonelessBbqOption } from '@/lib/pos-bbq-option-guard'
 
@@ -206,10 +209,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    void triggerGrabMenuNotification({
-      reason: 'menu_modifier_updated',
-      partnerMerchantID: body?.storeCode ? String(body.storeCode).trim() : null,
-    })
+    void (async () => {
+      const storeCodesForGrab = await resolveMenuStoreCodesForGrabSync({
+        menuId: String(menuId || '').trim() || null,
+        bodyStoreCode: body?.storeCode,
+      })
+      await triggerGrabMenuNotificationPerStoreCodes({
+        reason: 'menu_modifier_updated',
+        storeCodes: storeCodesForGrab,
+        partnerMerchantID: body?.storeCode ? String(body.storeCode).trim() : null,
+      })
+    })()
     return NextResponse.json(
       {
         success: true,

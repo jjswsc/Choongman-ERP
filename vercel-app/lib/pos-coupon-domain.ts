@@ -80,6 +80,8 @@ export interface PosCouponValidationContext {
 export interface PosCouponCandidateInput {
   code: string
   quantity?: number
+  /** 회원 쿠폰 QR 등에서 특정 발급 건을 지정할 때 */
+  memberIssueId?: number
 }
 
 export interface PosCouponValidationResult {

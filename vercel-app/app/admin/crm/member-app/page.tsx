@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { QrCode } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -307,9 +309,17 @@ export default function CrmMemberAppContentPage() {
               월별 프로모션·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널을 함께 관리합니다.
             </p>
           </div>
-          <Button variant="outline" onClick={() => refresh()} disabled={loading}>
-            {loading ? "불러오는 중..." : "새로고침"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline">
+              <Link href="/qr?target=member">
+                <QrCode className="mr-1.5 h-4 w-4" />
+                회원앱 QR
+              </Link>
+            </Button>
+            <Button variant="outline" onClick={() => refresh()} disabled={loading}>
+              {loading ? "불러오는 중..." : "새로고침"}
+            </Button>
+          </div>
         </div>
 
         {!!notice && (

@@ -73,7 +73,9 @@ export async function POST(req: NextRequest) {
     const candidateRaw = body.candidate
 
     if (candidateRaw && typeof candidateRaw === 'object') {
-      const candidate = candidateRaw as { code?: string; quantity?: number }
+      const candidate = candidateRaw as { code?: string; quantity?: number; memberIssueId?: number }
+      const memberIssueId =
+        Math.max(0, Math.trunc(Number(candidate.memberIssueId ?? 0) || 0)) || undefined
       const res = await validatePosCouponApplication({
         subtotal,
         manualDiscountAmt,
@@ -83,6 +85,7 @@ export async function POST(req: NextRequest) {
         candidate: {
           code: String(candidate.code ?? ''),
           quantity: candidate.quantity,
+          ...(memberIssueId ? { memberIssueId } : {}),
         },
         memberId,
       })

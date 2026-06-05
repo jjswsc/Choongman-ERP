@@ -41,6 +41,7 @@ import { MemberPortalHomeMonthlyPromos } from "@/components/member-portal/member
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
+import { MemberPortalCouponQrButton } from "@/components/member-portal/member-portal-coupon-qr-sheet"
 import {
   MemberPortalTierBenefits,
   MemberPortalTierGuide,
@@ -1165,7 +1166,13 @@ export function MemberPortalApp() {
                     ) : null}
                   </div>
                   {c.status === "issued" ? (
-                    <div className="mt-4">
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <MemberPortalCouponQrButton
+                        memberNo={member.memberNo}
+                        couponCode={c.couponCode}
+                        couponName={c.couponName}
+                        issueId={c.id}
+                      />
                       <CopyButton text={c.couponCode} label={t("copyCode")} />
                     </div>
                   ) : null}

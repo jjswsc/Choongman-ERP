@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { upsertPosMenuFromBody } from '@/lib/pos-menu-upsert-server'
-import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
+import {
+  resolveMenuStoreCodesForGrabSync,
+  triggerGrabMenuNotificationPerStoreCodes,
+} from '@/lib/grab-menu-sync-trigger'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosMenuAuditTrail } from '@/lib/pos-menu-audit'
 
@@ -136,12 +139,21 @@ export async function POST(req: NextRequest) {
         changed.includes('description_table')
       if (hasMenuImpact) {
         const reason = result.syncHint?.imageChanged ? 'menu_image_changed' : 'menu_updated'
-        void triggerGrabMenuNotification({
-          reason,
-          partnerMerchantID: result.syncHint?.partnerMerchantID ?? null,
-          syncPromoTargetPriceCampaigns:
-            changed.includes('price_delivery') || changed.includes('price'),
-        })
+        const menuIdForSync = String(result.newId || body.id || '').trim()
+        void (async () => {
+          const storeCodesForGrab = await resolveMenuStoreCodesForGrabSync({
+            menuId: menuIdForSync || null,
+            bodyStoreCodes: body.storeCodes,
+            bodyStoreCode: (body as { storeCode?: string }).storeCode,
+          })
+          await triggerGrabMenuNotificationPerStoreCodes({
+            reason,
+            storeCodes: storeCodesForGrab,
+            partnerMerchantID: result.syncHint?.partnerMerchantID ?? null,
+            syncPromoTargetPriceCampaigns:
+              changed.includes('price_delivery') || changed.includes('price'),
+          })
+        })()
       }
       try {
         const menuId = String(result.newId || body.id || '').trim()

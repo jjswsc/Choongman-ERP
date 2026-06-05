@@ -178,6 +178,10 @@ export type MemberPortalKey =
   | 'showQr'
   | 'hideQr'
   | 'scanAtCounter'
+  | 'showCouponQr'
+  | 'couponQrTitle'
+  | 'couponQrHint'
+  | 'scanCouponAtStore'
   | 'pwaInstallTitle'
   | 'pwaInstallDesc'
   | 'pwaInstallBtn'
@@ -743,6 +747,18 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Scan at the counter',
     th: 'สแกนที่เคาน์เตอร์',
     ko: '카운터에서 스캔',
+  },
+  showCouponQr: { en: 'Show QR', th: 'แสดง QR', ko: 'QR 보기' },
+  couponQrTitle: { en: 'Coupon QR', th: 'QR คูปอง', ko: '쿠폰 QR' },
+  couponQrHint: {
+    en: 'Show this at the counter for checkout',
+    th: 'แสดงที่เคาน์เตอร์เพื่อชำระเงิน',
+    ko: '결제 시 카운터에서 보여 주세요',
+  },
+  scanCouponAtStore: {
+    en: 'Staff will scan this QR at POS payment',
+    th: 'พนักงานจะสแกน QR นี้ตอนชำระเงินที่ POS',
+    ko: '매장 POS 결제 화면에서 QR을 스캔합니다',
   },
   pwaInstallTitle: {
     en: 'Install as app',

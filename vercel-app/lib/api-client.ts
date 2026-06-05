@@ -8960,7 +8960,7 @@ export async function validatePosCoupons(params: {
   }>
   applied?: PosAppliedCoupon[]
   appliedCoupons?: PosAppliedCoupon[]
-  candidate?: { code: string; quantity?: number }
+  candidate?: { code: string; quantity?: number; memberIssueId?: number }
   memberId?: number
 }) {
   const res = await apiFetchWithOffline('/api/validatePosCoupons', {

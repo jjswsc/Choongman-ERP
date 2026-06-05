@@ -181,14 +181,25 @@ async function loadCouponTemplateBySerial(code: string): Promise<{
 async function findMemberCouponIssue(params: {
   memberId?: number
   code: string
+  issueId?: number
 }): Promise<MemberIssueRow | null> {
   const memberId = Math.max(0, Math.trunc(Number(params.memberId ?? 0) || 0))
   const code = normalizeCode(params.code)
+  const issueId = Math.max(0, Math.trunc(Number(params.issueId ?? 0) || 0))
   if (!memberId || !code) return null
   const nowBangkok = getBangkokDateTimeString()
+  const expiryFilter = `or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(nowBangkok)})`
+  if (issueId > 0) {
+    const rows = (await supabaseSelectFilter(
+      'member_coupon_issues',
+      `id=eq.${issueId}&member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&${expiryFilter}`,
+      { limit: 1 }
+    )) as MemberIssueRow[] | null
+    return rows?.[0] ?? null
+  }
   const rows = (await supabaseSelectFilter(
     'member_coupon_issues',
-    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(nowBangkok)})`,
+    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&${expiryFilter}`,
     { order: 'expires_at.asc,id.asc', limit: 1 }
   )) as MemberIssueRow[] | null
   return rows?.[0] ?? null
@@ -206,7 +217,11 @@ async function resolveTemplateForCandidate(
   const direct = await loadCouponTemplateByCode(code)
   if (direct) {
     if (direct.redemptionMode === 'member_issue') {
-      const memberIssue = await findMemberCouponIssue({ memberId, code })
+      const memberIssue = await findMemberCouponIssue({
+        memberId,
+        code,
+        issueId: candidate.memberIssueId,
+      })
       return { template: direct, serial: null, memberIssue }
     }
     return { template: direct, serial: null, memberIssue: null }

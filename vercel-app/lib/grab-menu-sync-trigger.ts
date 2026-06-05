@@ -5,8 +5,14 @@ import {
   listAllGrabPortalMerchantIdsFromEnv,
   resolveGrabMenuNotificationMerchantIDs,
 } from '@/lib/grab-resolve-menu-notification-merchants'
-import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import {
+  listGrabPartnerStoreCodesFromPortalMap,
+  parseGrabStoreMap,
+} from '@/lib/grab-store-map-env'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+
+/** Grab menu notification 연속 호출 시 409 완화(초) */
+const GRAB_MENU_SYNC_INTER_STORE_DELAY_MS = 2000
 
 type TriggerParams = {
   reason: string
@@ -65,6 +71,111 @@ async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promi
     }
   }
   return Array.from(out).sort()
+}
+
+export function normalizeGrabMenuSyncStoreCodes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const v of raw) {
+    const code = String(v ?? '').trim()
+    if (!code) continue
+    if (out.some((x) => x.toLowerCase() === code.toLowerCase())) continue
+    out.push(code)
+  }
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+/** 메뉴 노출 매장·요청 storeCodes → Grab sync 대상 매장 코드 */
+export async function resolveMenuStoreCodesForGrabSync(params: {
+  menuId?: string | null
+  bodyStoreCodes?: unknown
+  bodyStoreCode?: unknown
+}): Promise<string[]> {
+  const fromBody = normalizeGrabMenuSyncStoreCodes(params.bodyStoreCodes)
+  if (fromBody.length > 0) return fromBody
+  const single = String(params.bodyStoreCode ?? '').trim()
+  if (single) return [single]
+  const menuId = String(params.menuId ?? '').trim()
+  if (menuId) {
+    try {
+      const rows = (await supabaseSelectFilter(
+        'pos_menu_store_scopes',
+        `menu_id=eq.${encodeURIComponent(menuId)}&enabled=eq.true`,
+        { limit: 1000, select: 'store_code' }
+      )) as { store_code?: string | null }[] | null
+      const fromScope = normalizeGrabMenuSyncStoreCodes(
+        (rows || []).map((r) => String(r.store_code ?? '').trim()).filter(Boolean)
+      )
+      if (fromScope.length > 0) return fromScope
+    } catch (e) {
+      console.warn('[grab-menu-sync] menu_store_scope_lookup_failed', { menuId, error: String(e) })
+    }
+  }
+  return listGrabPartnerStoreCodesFromPortalMap()
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 매장별 Grab menu notification — 설명·메뉴 저장 시 409·미반영 완화 */
+export async function triggerGrabMenuNotificationPerStoreCodes(
+  params: TriggerParams & { storeCodes?: string[] }
+): Promise<{
+  attempted: number
+  sent: number
+  failed: number
+  promoCampaignSynced: number
+  promoCampaignSyncFailed: number
+  storeCodes: string[]
+}> {
+  const explicit = normalizeGrabMenuSyncStoreCodes(params.storeCodes)
+  const legacy = String(params.partnerMerchantID ?? '').trim()
+  const targets =
+    explicit.length > 0 ? explicit : legacy ? [legacy] : listGrabPartnerStoreCodesFromPortalMap()
+
+  if (targets.length <= 1) {
+    const r = await triggerGrabMenuNotification({
+      reason: params.reason,
+      partnerMerchantID: targets[0] ?? params.partnerMerchantID ?? null,
+      syncPromoTargetPriceCampaigns: params.syncPromoTargetPriceCampaigns,
+    })
+    return { ...r, storeCodes: targets }
+  }
+
+  let attempted = 0
+  let sent = 0
+  let failed = 0
+  let promoCampaignSynced = 0
+  let promoCampaignSyncFailed = 0
+  for (let i = 0; i < targets.length; i++) {
+    if (i > 0) await sleep(GRAB_MENU_SYNC_INTER_STORE_DELAY_MS)
+    const r = await triggerGrabMenuNotification({
+      reason: params.reason,
+      partnerMerchantID: targets[i],
+      syncPromoTargetPriceCampaigns: params.syncPromoTargetPriceCampaigns,
+    })
+    attempted += r.attempted
+    sent += r.sent
+    failed += r.failed
+    promoCampaignSynced += r.promoCampaignSynced
+    promoCampaignSyncFailed += r.promoCampaignSyncFailed
+  }
+  console.info('[grab-menu-sync] per_store_notifications_done', {
+    reason: params.reason,
+    storeCodes: targets,
+    attempted,
+    sent,
+    failed,
+  })
+  return {
+    attempted,
+    sent,
+    failed,
+    promoCampaignSynced,
+    promoCampaignSyncFailed,
+    storeCodes: targets,
+  }
 }
 
 export async function triggerGrabMenuNotification(params: TriggerParams): Promise<{
