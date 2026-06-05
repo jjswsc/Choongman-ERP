@@ -124,6 +124,11 @@ export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
     warnings?: string[]
     usedDevice?: string
   }) => void
+  /**
+   * 하이브리드 셸 printHtml 실패 후 iframe print() 폴백 생략.
+   * 주방(`printRole: 'kitchen'`)은 기본 생략 — 스풀 실패 시 이중 출력 방지.
+   */
+  skipIframeFallbackOnShellFailure?: boolean
 }
 
 async function printPosHtmlDocumentInner(
@@ -198,14 +203,24 @@ async function printPosHtmlDocumentInner(
       if (opts?.suppressPrintError !== true) {
         void appAlert(getRuntimeUiString(uiLang, 'posPrintFailedWithReason', { reason }))
       }
-      await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      const skipIframeFallback =
+        opts?.skipIframeFallbackOnShellFailure === true ||
+        (opts?.printRole === 'kitchen' && useShell)
+      if (!skipIframeFallback) {
+        await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      }
       opts?.onAfterCleanup?.()
     } catch {
       opts?.onShellPrintResult?.({ ok: false, reason: 'shell_invoke_error' })
       if (opts?.suppressPrintError !== true) {
         void appAlert(getRuntimeUiString(getClientUiLang(), 'posPrintRequestError'))
       }
-      await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      const skipIframeFallback =
+        opts?.skipIframeFallbackOnShellFailure === true ||
+        (opts?.printRole === 'kitchen' && useShell)
+      if (!skipIframeFallback) {
+        await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      }
       opts?.onAfterCleanup?.()
     }
     return
