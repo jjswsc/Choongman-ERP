@@ -199,6 +199,8 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     total: Number(po.total ?? 0) || 0,
     status: mapOrderStatus(po.status),
     createdAt: new Date(po.createdAt || Date.now()),
+    paidAt: String(po.paidAt ?? '').trim() || undefined,
+    updatedAt: String(po.updatedAt ?? '').trim() || undefined,
     tableName: tableDisplay || undefined,
     customerName: tableDisplay || undefined,
     memo: String(po.memo || '').trim() || undefined,

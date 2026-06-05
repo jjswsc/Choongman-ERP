@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useLang, type LangCode } from '@/lib/lang-context'
 import { formatPosTimeHm24Bangkok } from '@/lib/pos-datetime-locale'
+import { getOrderBarCookElapsedMinutes } from '@/lib/pos-order-bar-cook-elapsed'
 
 export type OrderBarStatus = 'pending' | 'preparing' | 'partial_served' | 'packaged' | 'completed' | null
 type OrderBarStage = 'fresh' | 'warning' | 'urgent'
@@ -26,6 +27,8 @@ export interface OrderBarItem {
   deliveryAppAccent?: DeliveryAppAccent
   /** 배달앱 표시명 (설정 기반) */
   deliveryAppName?: string
+  /** 결제 완료 등 Cook 경과 분 계산 종료 시각(ISO) */
+  elapsedEndAt?: string
 }
 
 interface OrderBarListProps {
@@ -44,12 +47,6 @@ interface OrderBarListProps {
   /** 배달/포장일 때 partial_served를 "일부포장"으로 표시 */
   usePackagingLabel?: boolean
   className?: string
-}
-
-function getElapsedMinutes(createdAt?: string): number {
-  if (!createdAt) return 0
-  const ms = Date.now() - new Date(createdAt).getTime()
-  return Math.max(0, Math.floor(ms / 60000))
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): OrderBarStage {
@@ -128,7 +125,12 @@ export function OrderBarList({
                 ? getPreparingStageByRecipeDiff(item.createdAt, targetMin, recipeWarningDiffMin, recipeUrgentDiffMin)
                 : getPreparingStageByElapsed(item.createdAt, freshMaxMin, warningMaxMin))
             : null
-          const elapsedMin = getElapsedMinutes(item.createdAt)
+          const elapsedMin = getOrderBarCookElapsedMinutes(item.createdAt, item.elapsedEndAt)
+          const showCookElapsed =
+            item.status === 'preparing' ||
+            item.status === 'partial_served' ||
+            item.status === 'packaged' ||
+            (item.status === 'completed' && Boolean(item.elapsedEndAt))
           const delayOver = getDelayOverMinutes({
             stage,
             elapsedMin,
@@ -227,7 +229,7 @@ export function OrderBarList({
                     <span className="text-sm tabular-nums text-slate-600 shrink-0">
                       {formatOrderTime(item.createdAt, lang)}
                     </span>
-                    {(item.status === 'preparing' || item.status === 'partial_served' || item.status === 'packaged' || item.status === 'completed') && (
+                    {showCookElapsed && (
                       <span className="inline-flex items-center rounded-full px-2.5 py-1 text-sm font-bold tabular-nums shrink-0 ring-1 ring-black/10 bg-slate-100 text-slate-700" title={t('posCookingElapsed') || '조리 경과'}>
                         {t('posCookingElapsed') || '조리'} {elapsedMin}{t('posMinuteUnit') || '분'}
                       </span>
@@ -263,7 +265,7 @@ export function OrderBarList({
                         {t('posDelayBadge') || '지연'}
                       </span>
                     ) : null}
-                    {item.status === 'preparing' || item.status === 'partial_served' || item.status === 'packaged' || item.status === 'completed' ? (
+                    {showCookElapsed ? (
                       <>
                         <span className="text-[11px] tabular-nums opacity-80">{formatOrderTime(item.createdAt, lang)}</span>
                         <span className="rounded bg-black/20 px-1.5 py-0.5 text-[11px] font-bold tabular-nums" title={t('posCookingElapsed') || '조리 경과'}>

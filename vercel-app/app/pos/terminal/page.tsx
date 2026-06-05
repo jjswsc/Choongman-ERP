@@ -8,7 +8,8 @@ import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
 import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
-import { OrderBarList, type OrderBarItem } from '@/components/pos/order-bar-list'
+import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
+import { resolveOrderBarCookElapsedEndAt } from '@/lib/pos-order-bar-cook-elapsed'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
 import {
   CartPanel,
@@ -7564,6 +7565,14 @@ export default function PosTerminalPage() {
     return null
   }
 
+  const cookElapsedBarFields = (
+    order: Order,
+    barStatus: OrderBarStatus
+  ): Pick<OrderBarItem, 'elapsedEndAt'> => {
+    const elapsedEndAt = resolveOrderBarCookElapsedEndAt(order, barStatus)
+    return elapsedEndAt ? { elapsedEndAt } : {}
+  }
+
   const buildDeliveryBarFields = (
     order: Order
   ): Pick<OrderBarItem, 'deliveryAppAccent' | 'deliveryAppName' | 'posOrderNo' | 'platformOrderNo' | 'rightLabel'> => {
@@ -7654,6 +7663,7 @@ export default function PosTerminalPage() {
         createdAt: order.createdAt ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt)) : undefined,
         targetMin: 0,
         subLabel: formatPosOrderNoForPrint(order.orderNo || ''),
+        ...cookElapsedBarFields(order, 'completed'),
         ...bar,
       } satisfies OrderBarItem
     })
@@ -7711,6 +7721,7 @@ export default function PosTerminalPage() {
               : visual.status === 'pending'
                 ? t('posOrderBarPendingAccept') || '수락 대기'
                 : t('posOrderStatusPreparing') || '진행 중',
+        ...(barStatus === 'completed' ? cookElapsedBarFields(order, 'completed') : {}),
         ...bar,
       } satisfies OrderBarItem
     })
@@ -7806,6 +7817,7 @@ export default function PosTerminalPage() {
         targetMin: 0,
         subLabel: barFields.subLabel || formatPosOrderNoForPrint(order.orderNo || ''),
         rightLabel: barFields.rightLabel,
+        ...cookElapsedBarFields(order, 'completed'),
       } satisfies OrderBarItem
     })
   }, [completedTakeoutOrders, t, lang])
@@ -7863,6 +7875,7 @@ export default function PosTerminalPage() {
                 ? t('posOrderBarPendingAccept') || '수락 대기'
                 : t('posOrderStatusPreparing') || '진행 중'),
         rightLabel: barFields.rightLabel,
+        ...(barStatus === 'completed' ? cookElapsedBarFields(order, 'completed') : {}),
       } satisfies OrderBarItem
     })
   }, [takeoutOrders, packagedTakeoutOrders, completedTakeoutOrders, menuTargets, t, lang])

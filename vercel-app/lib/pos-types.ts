@@ -30,6 +30,9 @@ export interface Order {
   total: number
   status: "pending" | "preparing" | "ready" | "paid" | "completed" | "cancelled"
   createdAt: Date
+  /** 결제 완료 시각 (pos_orders.paid_at) — Cook 타이머 종료 기준 */
+  paidAt?: string
+  updatedAt?: string
   /** API `table_name` (배달: 플랫폼/테이블 표시 — 주문 번호·채널 추론에 사용) */
   tableName?: string
   customerName?: string
