@@ -94,7 +94,7 @@ import { PosKbankPaymentOutcomeDialog } from '@/components/pos/pos-kbank-payment
 import { useAuth } from '@/lib/auth-context'
 import { isLangCode, useLang, type LangCode } from '@/lib/lang-context'
 import { tr, useT } from '@/lib/i18n'
-import { translateApiMessage } from '@/lib/translate-api-message'
+import { localizeApiMessage, translateApiMessage } from '@/lib/translate-api-message'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import {
@@ -7257,6 +7257,7 @@ export default function PosTerminalPage() {
     try {
       const res = await updatePosOrder({
         id: orderId,
+        terminalStoreCode: currentStoreId,
         items: buildPosOrderItemsForUpdate(taxInvoiceTargetOrder),
         tableName: String(taxInvoiceTargetOrder.tableName || ''),
         memo: nextMemo,
@@ -8049,6 +8050,7 @@ export default function PosTerminalPage() {
                   memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
+                    terminalStoreCode: currentStoreId,
                     items: itemsForPaymentSave,
                     tableName: payload.orderLabel,
                     memo: memoWithKbank,
@@ -8066,7 +8068,9 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
-                    await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
+                    await appAlert(
+                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    )
                     return false
                   }
                   if (!kbankQrPending) {
@@ -8215,6 +8219,7 @@ export default function PosTerminalPage() {
                   memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
+                    terminalStoreCode: currentStoreId,
                     items: itemsForPaymentSave,
                     tableName: payload.orderLabel,
                     memo: memoWithKbank,
@@ -8232,7 +8237,9 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
-                    await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
+                    await appAlert(
+                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    )
                     return false
                   }
                   if (!kbankQrPending) {
@@ -9133,6 +9140,7 @@ export default function PosTerminalPage() {
                   }
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
+                    terminalStoreCode: currentStoreId,
                     items: itemsForPaymentSave,
                     tableName: payload.tableName,
                     memo: memoWithKbank,
@@ -9151,7 +9159,9 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
-                    await appAlert(updateRes.message || t('msg_save_fail') || '저장 실패')
+                    await appAlert(
+                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    )
                     return false
                   }
                   orderIdToComplete = existingOrderId

@@ -7,7 +7,8 @@ import {
   grabOrderMemoPostgrestIlikeFilter,
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
-import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import { parseGrabStoreMap, resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
+import { normStoreKey } from '@/lib/store-list-keys'
 import {
   buildGrabPosCatalog,
   deepReadGrabLineMinorTotal,
@@ -386,14 +387,29 @@ export function resolveGrabStoreCode(order: Record<string, unknown>): string {
   const merchantID = String(order.merchantID ?? '').trim()
   const map = parseGrabStoreMap()
   const payloadDerived = extractStoreCodeFromOrderPayload(order)
-  const mapped = map[partnerMerchantID] || map[merchantID] || ''
-  return (
+  const mapped =
+    lookupGrabStoreMapSeed(map, partnerMerchantID) || lookupGrabStoreMapSeed(map, merchantID) || ''
+  const raw =
     normalizeStoreCodeCandidate(mapped) ||
     payloadDerived ||
     normalizeStoreCodeCandidate(partnerMerchantID) ||
     normalizeStoreCodeCandidate(merchantID) ||
-    partnerMerchantID
-  )
+    partnerMerchantID ||
+    merchantID
+  return resolveErpStoreCodeFromGrabMap(raw) || raw
+}
+
+function lookupGrabStoreMapSeed(map: Record<string, string>, key: string): string {
+  const trimmed = String(key || '').trim()
+  if (!trimmed) return ''
+  const direct = String(map[trimmed] ?? '').trim()
+  if (direct) return direct
+  const nk = normStoreKey(trimmed)
+  if (!nk) return ''
+  for (const [k, v] of Object.entries(map)) {
+    if (normStoreKey(k) === nk) return String(v || '').trim()
+  }
+  return ''
 }
 
 function resolveEcoCutlerySummary(order: Record<string, unknown>): string | null {

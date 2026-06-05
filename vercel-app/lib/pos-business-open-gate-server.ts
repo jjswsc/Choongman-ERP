@@ -2,6 +2,8 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { POS_BUSINESS_OPEN_REQUIRED_CODE } from '@/lib/pos-business-open-gate'
+import { resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 export type PosBusinessOpenCheckResult =
   | { ok: true; businessDateYmd: string }
@@ -46,14 +48,65 @@ export async function assertPosBusinessOpenForOrderSave(storeCode: string): Prom
       code: 'store_required',
     }
   }
-  const { businessDateYmd, isOpen } = await loadPosBusinessOpenStatus(store)
-  if (!isOpen) {
-    return {
-      ok: false,
-      businessDateYmd,
-      message: POS_BUSINESS_OPEN_REQUIRED_CODE,
-      code: POS_BUSINESS_OPEN_REQUIRED_CODE,
+  const candidates = await resolvePosStoreFilterCandidates(store).catch(() => [] as string[])
+  const lookupCodes = candidates.length > 0 ? candidates : [store]
+
+  let businessDateYmd = ''
+  for (const candidate of lookupCodes) {
+    const status = await loadPosBusinessOpenStatus(candidate)
+    if (status.businessDateYmd) businessDateYmd = status.businessDateYmd
+    if (status.isOpen) {
+      return { ok: true, businessDateYmd: status.businessDateYmd }
     }
   }
-  return { ok: true, businessDateYmd }
+
+  if (!businessDateYmd) {
+    const primary = await loadPosBusinessOpenStatus(store)
+    businessDateYmd = primary.businessDateYmd
+  }
+
+  return {
+    ok: false,
+    businessDateYmd,
+    message: POS_BUSINESS_OPEN_REQUIRED_CODE,
+    code: POS_BUSINESS_OPEN_REQUIRED_CODE,
+  }
+}
+
+function storeCandidateKeys(codes: string[]): Set<string> {
+  const out = new Set<string>()
+  for (const raw of codes) {
+    const key = normStoreKey(String(raw || '').trim())
+    if (key) out.add(key)
+  }
+  return out
+}
+
+/** 기존 주문 결제 — 주문 store_code에 시재가 없으면 POS 단말 매장(연동된 별칭)으로 폴백 */
+export async function assertPosBusinessOpenForExistingOrderSave(params: {
+  orderStoreCode: string
+  terminalStoreCode?: string
+}): Promise<PosBusinessOpenCheckResult> {
+  const orderStore = String(params.orderStoreCode ?? '').trim()
+  const orderCheck = await assertPosBusinessOpenForOrderSave(orderStore)
+  if (orderCheck.ok) return orderCheck
+
+  const terminal = String(params.terminalStoreCode ?? '').trim()
+  if (!terminal) return orderCheck
+
+  const terminalCheck = await assertPosBusinessOpenForOrderSave(terminal)
+  if (!terminalCheck.ok) return orderCheck
+
+  const [orderCandidates, terminalCandidates] = await Promise.all([
+    resolvePosStoreFilterCandidates(orderStore).catch(() => [] as string[]),
+    resolvePosStoreFilterCandidates(terminal).catch(() => [] as string[]),
+  ])
+  const terminalKeys = storeCandidateKeys(terminalCandidates)
+  const linked =
+    orderCandidates.some((code) => terminalKeys.has(normStoreKey(code))) ||
+    terminalCandidates.some((code) => orderCandidates.includes(code)) ||
+    normStoreKey(orderStore) === normStoreKey(terminal) ||
+    terminalCandidates.includes(orderStore)
+
+  return linked ? terminalCheck : orderCheck
 }

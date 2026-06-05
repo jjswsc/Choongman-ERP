@@ -164,3 +164,72 @@ export function expandGrabStoreMapLinkedCodes(seeds: readonly string[]): string[
   }
   return Array.from(out)
 }
+
+function lookupGrabStoreMapTarget(map: Record<string, string>, key: string): string {
+  const trimmed = String(key || '').trim()
+  if (!trimmed) return ''
+  const direct = String(map[trimmed] ?? '').trim()
+  if (direct) return direct
+  const nk = normStoreKey(trimmed)
+  if (!nk) return ''
+  for (const [k, v] of Object.entries(map)) {
+    if (normStoreKey(k) === nk) return String(v || '').trim()
+  }
+  return ''
+}
+
+/**
+ * Grab 맵 체인을 따라 ERP `store_code`(예: CM Silom)까지 해석.
+ * `GFSBPOS-… → 1042 → CM Silom`처럼 1단계만 매핑된 값도 최종 ERP 코드로 정규화.
+ */
+export function resolveErpStoreCodeFromGrabMap(seed: string): string {
+  const map = parseGrabStoreMap()
+  const start = String(seed || '').trim()
+  if (!start) return ''
+
+  const chain: string[] = []
+  const seen = new Set<string>()
+  let cur = start
+
+  for (let guard = 0; guard < 16; guard++) {
+    const nk = normStoreKey(cur)
+    if (!nk || seen.has(nk)) break
+    seen.add(nk)
+    chain.push(cur)
+
+    const next = lookupGrabStoreMapTarget(map, cur)
+    if (!next || normStoreKey(next) === nk) break
+    cur = next
+  }
+
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const code = chain[i].trim()
+    if (code && !/^\d{3,6}$/.test(code)) return code
+  }
+  return chain[chain.length - 1] || start
+}
+
+/** 파트너 스토어 ID(숫자) → ERP store_code 보정 목록 — 기존 Grab POS 주문 repair용 */
+export function listGrabPartnerStoreCodeRepairs(): Array<{ from: string; to: string }> {
+  const map = parseGrabStoreMap()
+  const repairs = new Map<string, string>()
+  const seeds = new Set<string>()
+
+  for (const [k, v] of Object.entries(map)) {
+    const kt = String(k || '').trim()
+    const vt = String(v || '').trim()
+    if (kt) seeds.add(kt)
+    if (vt) seeds.add(vt)
+  }
+
+  for (const code of seeds) {
+    if (!/^\d{3,6}$/.test(code)) continue
+    const erp = resolveErpStoreCodeFromGrabMap(code)
+    if (!erp || erp === code || /^\d{3,6}$/.test(erp)) continue
+    repairs.set(code, erp)
+  }
+
+  return Array.from(repairs.entries())
+    .map(([from, to]) => ({ from, to }))
+    .sort((a, b) => a.from.localeCompare(b.from))
+}

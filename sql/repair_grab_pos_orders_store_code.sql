@@ -1,0 +1,15 @@
+-- Grab POS 주문이 파트너 스토어 ID(예: 1042)로 저장된 경우 ERP store_code로 보정.
+-- GRAB_STORE_MAP_JSON에 "1042":"CM Silom" 등 2단계 맵이 있어야 API repairGrabPosOrderStoreCodes가 동일 규칙으로 처리함.
+-- 긴급 수동(Silom 2건): 아래 주석 해제 후 Supabase SQL Editor에서 실행.
+
+-- UPDATE pos_orders
+-- SET store_code = 'CM Silom',
+--     updated_at = NOW()
+-- WHERE store_code = '1042'
+--   AND (
+--     memo ILIKE '%grab_order:%'
+--     OR lower(trim(coalesce(delivery_app_code, ''))) = 'grab'
+--   )
+--   AND lower(trim(coalesce(status, ''))) IN (
+--     'pending', 'cooking', 'preparing', 'ready', 'paid', 'completed'
+--   );

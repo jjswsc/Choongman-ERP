@@ -10350,6 +10350,8 @@ export async function finalizePosClose(params: {
 export async function updatePosOrder(params: {
   id: number
   items: PosOrderItem[]
+  /** 결제 단말 매장 — 주문 store_code와 시재 store_code 불일치 시 영업 시작 폴백 */
+  terminalStoreCode?: string
   tableName?: string
   memo?: string
   discountAmt?: number

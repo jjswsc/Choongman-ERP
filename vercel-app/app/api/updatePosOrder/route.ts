@@ -25,7 +25,7 @@ import {
   persistPosOrderCouponRedemptions,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
-import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
+import { assertPosBusinessOpenForExistingOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
@@ -154,7 +154,10 @@ export async function POST(req: NextRequest) {
 
     const memo = preserveGrabDeliveryMemoAnchor(String(body?.memo ?? ''), String(current?.memo ?? ''))
 
-    const openCheck = await assertPosBusinessOpenForOrderSave(String(current?.store_code ?? ''))
+    const openCheck = await assertPosBusinessOpenForExistingOrderSave({
+      orderStoreCode: String(current?.store_code ?? ''),
+      terminalStoreCode: String(body?.terminalStoreCode ?? body?.storeCode ?? '').trim() || undefined,
+    })
     if (!openCheck.ok) {
       return NextResponse.json(
         { success: false, message: openCheck.message, retryAfterQueue: false },

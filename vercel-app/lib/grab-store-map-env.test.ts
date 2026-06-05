@@ -1,5 +1,10 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { parseGrabPortalMerchantMap, parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import {
+  listGrabPartnerStoreCodeRepairs,
+  parseGrabPortalMerchantMap,
+  parseGrabStoreMap,
+  resolveErpStoreCodeFromGrabMap,
+} from '@/lib/grab-store-map-env'
 import {
   listAllGrabPortalMerchantIdsFromEnv,
   resolveGrabMenuNotificationMerchantIDs,
@@ -80,6 +85,26 @@ describe('parseGrabStoreMap merge', () => {
       '3-C4NKAA4FCNCUGA',
       '3-C6DWPB4VCKK1GT',
       '3-C7JGN2B2DFJ1AE',
+    ])
+  })
+
+  it('walks map chain to ERP store_code', () => {
+    process.env.GRAB_STORE_MAP_JSON = JSON.stringify({
+      'GFSBPOS-811-087': '1042',
+      '1042': 'CM Silom',
+    })
+    expect(resolveErpStoreCodeFromGrabMap('GFSBPOS-811-087')).toBe('CM Silom')
+    expect(resolveErpStoreCodeFromGrabMap('1042')).toBe('CM Silom')
+  })
+
+  it('lists partner numeric store codes that need ERP repair', () => {
+    process.env.GRAB_STORE_MAP_JSON = JSON.stringify({
+      '1040': 'CM True Digital',
+      '1042': 'CM Silom',
+    })
+    expect(listGrabPartnerStoreCodeRepairs()).toEqual([
+      { from: '1040', to: 'CM True Digital' },
+      { from: '1042', to: 'CM Silom' },
     ])
   })
 })

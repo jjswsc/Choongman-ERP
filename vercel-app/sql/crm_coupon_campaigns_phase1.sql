@@ -83,7 +83,10 @@ begin
       add column if not exists set_qty integer,
       add column if not exists item_scope_json jsonb,
       add column if not exists priority integer not null default 0,
-      add column if not exists combinable_with_manual_discount boolean not null default true;
+      add column if not exists combinable_with_manual_discount boolean not null default true,
+      add column if not exists marketing_campaign_id bigint references public.marketing_campaigns(id) on delete set null;
+    create index if not exists idx_pos_coupons_campaign
+      on public.pos_coupons(marketing_campaign_id);
   else
     raise notice 'skip: public.pos_coupons not found';
   end if;

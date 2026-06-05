@@ -20,6 +20,27 @@ function normalizeDiscountType(raw: unknown): string {
   return 'fixed'
 }
 
+async function persistPosCouponRow(
+  row: Record<string, unknown>,
+  persist: (payload: Record<string, unknown>) => Promise<void>
+) {
+  try {
+    await persist(row)
+  } catch (saveErr) {
+    const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
+    const missingCampaignColumn =
+      'marketing_campaign_id' in row &&
+      (msg.includes('PGRST204') || msg.includes('schema cache')) &&
+      msg.includes('marketing_campaign_id')
+    if (!missingCampaignColumn) throw saveErr
+    console.warn(
+      'savePosCoupon: pos_coupons.marketing_campaign_id column missing; retrying without it. Run vercel-app/sql/pos_coupons_marketing_campaign_id.sql on Supabase.'
+    )
+    const { marketing_campaign_id: _omit, ...withoutCampaign } = row
+    await persist(withoutCampaign)
+  }
+}
+
 /** POS 쿠폰 저장 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -73,7 +94,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '할인 금액은 0 이상이어야 합니다.' }, { headers })
     }
 
-    const row = {
+    const row: Record<string, unknown> = {
       code,
       name: name || code,
       discount_type: discountType === 'percent' ? 'percent' : 'fixed',
@@ -82,7 +103,6 @@ export async function POST(req: NextRequest) {
       valid_from: validFrom,
       valid_to: validTo,
       is_active: isActive,
-      marketing_campaign_id: marketingCampaignId,
       min_order_amt: minOrderAmt,
       max_per_order: maxPerOrder,
       redemption_mode: redemptionMode,
@@ -96,6 +116,17 @@ export async function POST(req: NextRequest) {
       combinable_with_manual_discount: allowWithManualDiscount,
       updated_at: new Date().toISOString(),
     }
+    if (marketingCampaignId != null && Number.isFinite(marketingCampaignId) && marketingCampaignId > 0) {
+      row.marketing_campaign_id = marketingCampaignId
+    }
+
+    const persist = async (payload: Record<string, unknown>) => {
+      if (id) {
+        await supabaseUpdate('pos_coupons', id, payload)
+      } else {
+        await supabaseInsert('pos_coupons', payload)
+      }
+    }
 
     if (id) {
       const existing = (await supabaseSelectFilter('pos_coupons', `id=eq.${id}`, { limit: 1 })) as unknown[]
@@ -106,13 +137,13 @@ export async function POST(req: NextRequest) {
       if (byCode?.some((r) => r.id !== id)) {
         return NextResponse.json({ success: false, message: '이미 사용 중인 쿠폰 코드입니다.' }, { headers })
       }
-      await supabaseUpdate('pos_coupons', id, row)
+      await persistPosCouponRow(row, persist)
     } else {
       const byCode = (await supabaseSelectFilter('pos_coupons', `code=eq.${encodeURIComponent(code)}`, { limit: 1 })) as unknown[]
       if (byCode?.length) {
         return NextResponse.json({ success: false, message: '이미 사용 중인 쿠폰 코드입니다.' }, { headers })
       }
-      await supabaseInsert('pos_coupons', row)
+      await persistPosCouponRow(row, persist)
     }
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
