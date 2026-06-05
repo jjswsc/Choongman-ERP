@@ -8,6 +8,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { canViewMobileStoreSales, isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { usePosStore } from "@/hooks/use-pos-store"
+import { useStoreList } from "@/lib/use-store-list"
 import { StoreViewProvider, useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
@@ -41,6 +42,7 @@ function StoreSalesBody() {
     if (isOfficeSelector && viewStore) return viewStore.trim()
     return (auth?.store || "").trim()
   }, [isOfficeSelector, viewStore, auth?.store])
+  const { formatStoreLabel } = useStoreList()
   const {
     stores,
     currentStore,
@@ -51,8 +53,9 @@ function StoreSalesBody() {
   } = usePosStore()
   const selectedStoreLabel = useMemo(() => {
     if (effectiveStoreCode === "All") return t("store_all_stores")
-    return effectiveStoreCode || currentStoreId || t("store")
-  }, [effectiveStoreCode, currentStoreId, t])
+    const code = effectiveStoreCode || currentStoreId
+    return (code ? formatStoreLabel(code) : "") || t("store")
+  }, [effectiveStoreCode, currentStoreId, formatStoreLabel, t])
 
   const allowed = Boolean(auth) && canViewMobileStoreSales(auth?.role || "")
 

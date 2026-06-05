@@ -32,7 +32,7 @@ export function MobileStoreSelectorBar() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { stores, formatStoreLabel } = useStoreList()
   const { viewStore, setViewStore } = useStoreView()
 
   const isOfficeStaff =
@@ -72,7 +72,7 @@ export function MobileStoreSelectorBar() {
         <SelectContent>
           {storeOptions.map((s) => (
             <SelectItem key={s} value={s}>
-              {s === ALL_STORE_VALUE ? t("store_all_stores") : s}
+              {s === ALL_STORE_VALUE ? t("store_all_stores") : formatStoreLabel(s)}
             </SelectItem>
           ))}
         </SelectContent>

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
+import { labelForStore } from '@/lib/store-list-keys'
 import {
   aggregateTodaySalesByCanonical,
   mergeRealtimeStoreSalesRows,
@@ -75,10 +76,14 @@ describe('mergeRealtimeStoreSalesRows', () => {
         '1040': 'CM True Digital',
         '1042': 'CM Silom',
       },
-      storeLabels: {
-        'CM True Digital': 'CM True Digital',
-        '1042': 'CM Silom',
-      },
+      formatStoreLabel: (code) =>
+        labelForStore(
+          {
+            'CM True Digital': 'CM True Digital',
+            '1042': 'CM Silom',
+          },
+          code
+        ),
     })
     expect(rows).toHaveLength(2)
     const trueDigital = rows.find((r) => r.storeId === 'CM True Digital')

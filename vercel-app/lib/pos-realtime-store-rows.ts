@@ -1,4 +1,4 @@
-import { labelForStore, resolveStoreListKey } from '@/lib/store-list-keys'
+import { resolveStoreListKey } from '@/lib/store-list-keys'
 import type { Store } from '@/lib/pos-types'
 
 export type RealtimeStoreSalesRow = {
@@ -73,7 +73,8 @@ export function mergeRealtimeStoreSalesRows(params: {
   storeSalesMap: Record<string, TodaySalesLike>
   storeCodes: string[]
   legacyToCanonical: Record<string, string>
-  storeLabels: Record<string, string>
+  /** `useStoreList().formatStoreLabel` — erp_stores·Grab ID 매핑 반영 */
+  formatStoreLabel: (code: string) => string
 }): RealtimeStoreSalesRow[] {
   const storeCodes = params.storeCodes.map((s) => String(s || '').trim()).filter(Boolean)
   const resolveCanonical = (rawId: string) =>
@@ -97,7 +98,7 @@ export function mergeRealtimeStoreSalesRows(params: {
   return Array.from(groups.entries())
     .map(([storeId, agg]) => ({
       storeId,
-      storeDisplayName: labelForStore(params.storeLabels, storeId) || storeId,
+      storeDisplayName: params.formatStoreLabel(storeId) || storeId,
       paid: agg.paid,
       tableTotal: agg.tableTotal,
     }))

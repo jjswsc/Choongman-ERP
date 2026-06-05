@@ -96,7 +96,7 @@ export function StoreSalesRealtimeView({
   const { lang } = useLang()
   const t = useT(lang)
   const tr = (key: string, fallback: string) => tOr(t, key, fallback)
-  const { stores: storeListCodes, storeLabels, legacyToCanonical } = useStoreList()
+  const { stores: storeListCodes, legacyToCanonical, formatStoreLabel } = useStoreList()
   const isAllStoresSelected = effectiveStoreCode === ALL_STORE_VALUE
 
   /** HQ·TEST 등 비운영 매장 — 관리자 실시간 API와 동일하게 집계·목록에서 제외 */
@@ -210,9 +210,9 @@ export function StoreSalesRealtimeView({
         storeSalesMap,
         storeCodes: storeListCodes,
         legacyToCanonical,
-        storeLabels,
+        formatStoreLabel,
       }),
-    [operationalStores, storeSalesMap, storeListCodes, legacyToCanonical, storeLabels]
+    [operationalStores, storeSalesMap, storeListCodes, legacyToCanonical, formatStoreLabel]
   )
   const byStoreTotal = useMemo(
     () =>
