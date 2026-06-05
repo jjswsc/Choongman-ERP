@@ -15,6 +15,7 @@ import {
   resolveGrabCampaignScheduleMs,
   resolveGrabMenuSalePriceMajor,
   resolveGrabPromoMenuItemPriceMinor,
+  shouldOmitGrabPromoAdvancedPricingForMenu,
   shouldSendGrabPromoSaleAdvancedPricing,
   shouldSuppressGrabPromoCampaignsForConsumerSale,
 } from '@/lib/grab-promo-target-price-campaign'
@@ -102,12 +103,13 @@ describe('consumer list price mode', () => {
     restoreEnv(snap)
   })
 
-  it('regular list + fixPrice campaigns send sale advancedPricing', () => {
+  it('regular list + fixPrice campaigns omit advanced (campaign strikethrough)', () => {
     const snap = saveEnv()
     process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
     process.env.GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE = '0'
     process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'fixPrice'
-    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
+    expect(shouldOmitGrabPromoAdvancedPricingForMenu(true)).toBe(true)
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
     restoreEnv(snap)
   })
 

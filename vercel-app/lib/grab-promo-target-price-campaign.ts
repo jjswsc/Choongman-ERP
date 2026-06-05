@@ -266,16 +266,23 @@ export function resolveGrabPromoMenuItemPriceMinor(params: {
   return Math.max(1, Math.round(params.regularMinor))
 }
 
+/**
+ * fixPrice 캠페인 + list=regular: item.price=정가, advanced 생략 → 캠페인이 ~~정가~~ 111 취소선 담당.
+ * advanced에 111을 넣으면 Grab이 111만 보여 취소선이 사라짐(2026-06 True Digital).
+ */
+export function shouldOmitGrabPromoAdvancedPricingForMenu(showCutPrice: boolean): boolean {
+  if (!showCutPrice) return false
+  if (isGrabPromoConsumerListPriceAsSaleEnabled()) return false
+  if (shouldSuppressGrabPromoCampaignsForConsumerSale()) return false
+  return resolveGrabPromoCampaignDiscountType() === 'fixPrice'
+}
+
 /** GetMenu·updateMenuRecord에 프로모 할인가 advancedPricing을 실을지 */
 export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): boolean {
   if (!showCutPrice) return false
+  if (shouldOmitGrabPromoAdvancedPricingForMenu(showCutPrice)) return false
   /** 손님 앱이 배달 채널 advanced만 쓰는 매장: list=sale 이면 advanced도 할인가로 동일하게 */
   if (isGrabPromoConsumerListPriceAsSaleEnabled()) return true
-  /**
-   * fixPrice 캠페인: % 이중 할인 없음 — advanced에 할인가(111)를 실어 취소선·목록가를 보강.
-   * (percentage 캠페인만 advanced+캠페인 이중 할인 위험 — 2026-06 True Digital)
-   */
-  if (resolveGrabPromoCampaignDiscountType() === 'fixPrice') return true
   /**
    * 정가(list=regular) + percentage CM-POS-PROMO: advanced에 할인가를 함께 내면
    * Grab이 % 캠페인을 할인가 기준으로 또 적용해 69·65처럼 이중 할인됨.

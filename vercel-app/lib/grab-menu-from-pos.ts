@@ -6,6 +6,7 @@ import {
   loadGrabPromoCutPriceByPromoId,
   resolveGrabPromoMenuItemPriceMinor,
   resolveGrabMenuSalePriceMajor,
+  shouldOmitGrabPromoAdvancedPricingForMenu,
   shouldSendGrabPromoSaleAdvancedPricing,
 } from '@/lib/grab-promo-target-price-campaign'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
@@ -1063,8 +1064,9 @@ export async function buildGrabMenuFromPos(params: {
       const promoId = Number(menu.promo_id ?? 0)
       const promoCut = promoId > 0 ? promoCutByPromoId.get(promoId) : undefined
       /**
-       * Grab Cut Price: item.price=정가(minor), advancedPricing=Grab 앱 배달 할인가.
-       * 손님 앱 취소선은 percentage 캠페인 + 정가 item.price 조합. fixPrice만 있으면 111만 보일 수 있음.
+       * Grab Cut Price: item.price=정가(minor).
+       * fixPrice 캠페인+정가 → ~~정가~~ 111 취소선. advanced에 할인가(111) 넣으면 111만 보임.
+       * percentage 캠페인 → advanced 할인가 생략(이중 할인·취소선 상쇄 방지).
        */
       const grabRegularPriceMajor =
         promoCut?.showCutPrice ? promoCut.regularPrice : Number(deliveryPrice ?? 0)
@@ -1085,9 +1087,10 @@ export async function buildGrabMenuFromPos(params: {
        * 이때 advancedPricing(배달가 덮어쓰기=할인가)을 함께 보내면 배달가가 할인가로 고정되어
        * 캠페인 할인 결과와 같아져 상쇄된다 → 취소선·정상가 사라지고 할인가만 노출.
        * 따라서 percentage 전략에서는 advancedPricing을 생략하고 캠페인이 단독으로 할인을 만든다.
-       * (fixPrice 전략일 때만 advancedPricing으로 배달 할인가를 직접 내린다.)
        */
+      const omitPromoAdvanced = shouldOmitGrabPromoAdvancedPricingForMenu(!!promoCut?.showCutPrice)
       const includeAdvancedPricing =
+        !omitPromoAdvanced &&
         shouldSendGrabPromoSaleAdvancedPricing(!!promoCut?.showCutPrice) &&
         !isGrabAdvancedPricingExplicitlyDisabled()
       const policyImageUrl = String(policy?.imageUrl ?? '').trim()
@@ -1107,11 +1110,13 @@ export async function buildGrabMenuFromPos(params: {
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
         ...(available ? {} : { maxStock: 0 }),
         price: grabListPriceMinor,
-        ...(includeAdvancedPricing
-          ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabSalePriceMinor) }
-          : promoCut?.showCutPrice
-            ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabListPriceMinor) }
-            : {}),
+        ...(omitPromoAdvanced
+          ? {}
+          : includeAdvancedPricing
+            ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabSalePriceMinor) }
+            : promoCut?.showCutPrice
+              ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabListPriceMinor) }
+              : {}),
         campaignInfo: null,
         description: menuDesc,
         photos: photoUrl ? [photoUrl] : [],
