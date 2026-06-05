@@ -272,9 +272,13 @@ export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): b
   /** 손님 앱이 배달 채널 advanced만 쓰는 매장: list=sale 이면 advanced도 할인가로 동일하게 */
   if (isGrabPromoConsumerListPriceAsSaleEnabled()) return true
   /**
-   * 정가(list=regular) + CM-POS-PROMO 캠페인: advanced에 할인가(111)를 함께 내면
-   * Grab이 % 캠페인을 할인가 기준으로 또 적용해 69·65처럼 이중 할인됨(2026-06 True Digital).
-   * 캠페인이 정가→할인가를 담당하므로 advanced는 생략한다.
+   * fixPrice 캠페인: % 이중 할인 없음 — advanced에 할인가(111)를 실어 취소선·목록가를 보강.
+   * (percentage 캠페인만 advanced+캠페인 이중 할인 위험 — 2026-06 True Digital)
+   */
+  if (resolveGrabPromoCampaignDiscountType() === 'fixPrice') return true
+  /**
+   * 정가(list=regular) + percentage CM-POS-PROMO: advanced에 할인가를 함께 내면
+   * Grab이 % 캠페인을 할인가 기준으로 또 적용해 69·65처럼 이중 할인됨.
    */
   if (!shouldSuppressGrabPromoCampaignsForConsumerSale()) return false
   return isGrabPromoConsumerSaleViaAdvancedEnabled()
@@ -835,17 +839,25 @@ async function pushGrabMenuRecordForCutTarget(
     saleMinor,
   })
   const pushAdvanced = shouldSendGrabPromoSaleAdvancedPricing(true)
-  const advancedMinor = pushAdvanced ? saleMinor : listMinor
-  await grabUpdateMenuRecord({
+  const payload: {
+    merchantID: string
+    field: 'ITEM'
+    id: string
+    price: number
+    advancedPricings?: Array<{ key: string; price: number }>
+  } = {
     merchantID,
     field: 'ITEM',
     id: target.grabItemId,
     price: listMinor,
-    advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+  }
+  if (pushAdvanced) {
+    payload.advancedPricings = GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
       key,
-      price: advancedMinor,
-    })),
-  })
+      price: saleMinor,
+    }))
+  }
+  await grabUpdateMenuRecord(payload)
   return true
 }
 
@@ -1370,6 +1382,26 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
             grabItemId: target.grabItemId,
             error: formatGrabCampaignApiError(e),
           })
+          try {
+            const result = await replaceGrabCampaign({
+              existingId: String(hit.id),
+              body: buildBody({
+                leadMinutes: GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES,
+                discountType: 'fixPrice',
+              }),
+            })
+            if (result.usedFallback) campaignFallbackUsed += 1
+            campaignDiscountMigrated += 1
+            updated += 1
+            continue
+          } catch (e2) {
+            console.warn('[grab-promo-campaign] fixprice_rounding_replace_failed', {
+              merchantID,
+              promoId: target.promoId,
+              grabItemId: target.grabItemId,
+              error: formatGrabCampaignApiError(e2),
+            })
+          }
         }
       }
     }
@@ -1395,6 +1427,33 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       else if (result.mode === 'replaced') updated += 1
       else created += 1
     } catch (e) {
+      const needsFixPriceCampaign =
+        discountType === 'fixPrice' &&
+        hit?.id &&
+        (needsFixPriceRoundingMigration ||
+          grabCampaignNeedsDiscountTypeMigration(hit, discountType))
+      if (needsFixPriceCampaign) {
+        try {
+          const result = await replaceGrabCampaign({
+            existingId: String(hit.id),
+            body: buildBody({
+              leadMinutes: GRAB_CAMPAIGN_EXTENDED_START_LEAD_MINUTES,
+              discountType: 'fixPrice',
+            }),
+          })
+          if (result.usedFallback) campaignFallbackUsed += 1
+          campaignDiscountMigrated += 1
+          updated += 1
+          continue
+        } catch (e2) {
+          console.warn('[grab-promo-campaign] fixprice_upsert_replace_failed', {
+            merchantID,
+            promoId: target.promoId,
+            grabItemId: target.grabItemId,
+            error: formatGrabCampaignApiError(e2),
+          })
+        }
+      }
       skipped += 1
       const errorCode = classifyGrabCampaignApiError(e)
       const errorMessage = formatGrabCampaignApiError(e)

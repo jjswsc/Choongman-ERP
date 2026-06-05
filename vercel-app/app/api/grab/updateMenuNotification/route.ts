@@ -4,8 +4,10 @@ import { parseGrabMenuNotificationMerchantBulkInput } from '@/lib/grab-menu-noti
 import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
   listAllGrabFoodMerchantIdsFromStoreMap,
+  listAllGrabPortalMerchantIdsFromEnv,
   resolveGrabMenuNotificationMerchantIDs,
 } from '@/lib/grab-resolve-menu-notification-merchants'
+import { resolveGrabPartnerMerchantIdFromPortalMap } from '@/lib/grab-store-map-env'
 
 type UpdateMenuNotificationBody = {
   /**
@@ -70,6 +72,16 @@ export async function POST(req: NextRequest) {
         if (/^\d{1,6}$/.test(trimmed)) {
           for (const grabId of resolved) partnerMerchantIdByGrabId.set(grabId, trimmed)
         }
+      }
+    }
+    for (const grabId of toNotify) {
+      const partner = resolveGrabPartnerMerchantIdFromPortalMap(grabId)
+      if (partner) partnerMerchantIdByGrabId.set(grabId, partner)
+    }
+    if (body.all === true || body.all === 'true' || body.all === 1) {
+      for (const grabId of listAllGrabPortalMerchantIdsFromEnv()) {
+        const partner = resolveGrabPartnerMerchantIdFromPortalMap(grabId)
+        if (partner) partnerMerchantIdByGrabId.set(grabId, partner)
       }
     }
 

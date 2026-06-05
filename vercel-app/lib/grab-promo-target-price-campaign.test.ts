@@ -86,11 +86,11 @@ describe('consumer list price mode', () => {
     restoreEnv(snap)
   })
 
-  it('regular list + no advanced when CM-POS-PROMO campaigns enabled', () => {
+  it('regular list + no advanced when CM-POS-PROMO percentage campaigns enabled', () => {
     const snap = saveEnv()
     process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
     process.env.GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE = '0'
-    delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'percentage'
     expect(
       resolveGrabPromoMenuItemPriceMinor({
         showCutPrice: true,
@@ -99,6 +99,15 @@ describe('consumer list price mode', () => {
       })
     ).toBe(17900)
     expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
+    restoreEnv(snap)
+  })
+
+  it('regular list + fixPrice campaigns send sale advancedPricing', () => {
+    const snap = saveEnv()
+    process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    process.env.GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE = '0'
+    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'fixPrice'
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
     restoreEnv(snap)
   })
 

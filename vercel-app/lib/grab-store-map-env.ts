@@ -100,6 +100,13 @@ export function parseGrabPartnerApiMenuMerchantMap(raw?: string): Record<string,
   return out
 }
 
+/** Prod Grab merchantID → 파트너 스토어 ID(예: `3-C4NKAA4FCNCUGA` → `1042`) */
+export function resolveGrabPartnerMerchantIdFromPortalMap(grabMerchantID: string): string {
+  const id = String(grabMerchantID || '').trim()
+  if (!id) return ''
+  return String(parseGrabPortalMerchantMap()[id] ?? '').trim()
+}
+
 /** GRAB_STORE_MAP_JSON + GRAB_PORTAL_MERCHANT_MAP 병합 */
 export function parseGrabStoreMap(): Record<string, string> {
   const out = parseGrabStoreMapJsonObject()
