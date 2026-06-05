@@ -7632,7 +7632,7 @@ export const i18n = {
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다.',
     helpHow_admin_pos_menus:
-      '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 가격이력 탭 안의 「가격 예약」에서 지정일 가격을 미리 등록할 수 있습니다.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n【메뉴 유형 체크박스】메뉴 정보의 홀/배달/포장 체크박스는 메뉴 화면 구성의 유형(매장·배달·포장)과 연동됩니다. 체크 해제한 유형에서는 해당 메뉴 타일이 POS 메뉴 그리드에서 숨겨집니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션 등을 저장합니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 행 편집, 우측 단계 순서·현재 단계 선택의 3패널 구조입니다. 가운데에서 선택 단계를 저장한 뒤, 옵션 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요. 「값 일괄 추가」에서는 직접 입력하거나「메뉴 검색·선택」으로 등록된 메뉴를 골라 입력란에 넣을 수 있습니다.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·원가율을 저장하고, 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 「가격 이력」 내부의 「가격 예약」에서 예약 등록·조회·취소를 관리할 수 있습니다.\n⑥ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.',
+      '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 가격이력 탭 안의 「가격 예약」에서 지정일 가격을 미리 등록할 수 있습니다.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n【메뉴 유형 체크박스】메뉴 정보의 홀/배달/포장 체크박스는 메뉴 화면 구성의 유형(매장·배달·포장)과 연동됩니다. 체크 해제한 유형에서는 해당 메뉴 타일이 POS 메뉴 그리드에서 숨겨집니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션 등을 저장합니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 행 편집, 우측 단계 순서·현재 단계 선택의 3패널 구조입니다. 가운데에서 선택 단계를 저장한 뒤, 옵션 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요. 「값 일괄 추가」에서는 직접 입력하거나「메뉴 검색·선택」으로 등록된 메뉴를 골라 입력란에 넣을 수 있습니다.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·원가율을 저장합니다. Grab 배달을 켠 프로모는「Grab 캠페인 시각(방콕)」으로 할인 캠페인 시작·종료 시각을 지정할 수 있습니다(유효기간 날짜와 조합). 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 「가격 이력」 내부의 「가격 예약」에서 예약 등록·조회·취소를 관리할 수 있습니다.\n⑥ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.',
     helpSum_admin_items:
       '품목 기본정보와 판매가/원가를 관리하고, 가격 이력과 가격 예약(지정일 자동 반영)을 조회·등록하는 화면입니다.',
     helpHow_admin_items:
@@ -8260,6 +8260,11 @@ export const i18n = {
     posSetTabChannelsRequired: '홀·포장·배달 중 판매 채널을 하나 이상 선택하세요.',
     posSetTabChannelsHint: '복수 선택 가능합니다. 예: 홀+포장만, 배달앱만, 또는 모두.',
     posSetTabDeliveryAppsHint: '배달을 켠 뒤 특정 앱만 지정하려면 아래에서 고릅니다. 아무 것도 고르지 않으면 등록된 배달앱 전체에 적용됩니다.',
+    posSetTabGrabCampaignTimeTitle: 'Grab 캠페인 시각 (방콕)',
+    posSetTabGrabCampaignTimeHint:
+      '프로모 유효기간(valid_from·valid_to) 날짜와 조합해 Grab 할인 캠페인 시작·종료 시각을 지정합니다. 비우면 시작 00:00·종료 23:59입니다. Grab API 리드타임(약 5~120분) 때문에 실제 반영은 지정 시각보다 늦을 수 있습니다.',
+    posSetTabGrabCampaignStartTimeBkk: '시작 시각 (BKK)',
+    posSetTabGrabCampaignEndTimeBkk: '종료 시각 (BKK)',
     posSetTabDeliveryAppsEmpty:
       '등록된 배달앱이 없습니다. POS 설정에서 배달앱을 등록하거나, 로그인 매장 코드가 있으면 해당 매장 기준으로 목록이 로드됩니다.',
     posSetTabDeliveryAppsDefaultOnly:
@@ -16643,7 +16648,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery).',
     helpHow_admin_pos_menus:
-      '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Inside Price history, use “Price schedule” to pre-register future price changes.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n【Menu type checkboxes】Hall/Delivery/Packaging checkboxes in Menu info are linked to the menu-screen type view (dine-in/delivery/takeout). If a type is unchecked, that menu tile is hidden in the POS menu grid for that type.\n① After choosing a store, use the menu grid and form to save items and hall / delivery prices.\n② In Options config, use the 3-panel layout: menu list on the left, option rows in the center, step order / current step on the right. Save steps from the center first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards. Under Bulk add values, type labels or use Search menus to append catalog rows to the field, then press Bulk add values.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ Use related tabs (sets, price history, final price, delivery ops, packaging checklist) as your role allows.\n⑤ In Price history > Price schedule, register, review, and cancel future price updates.\n⑥ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.',
+      '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Inside Price history, use “Price schedule” to pre-register future price changes.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n【Menu type checkboxes】Hall/Delivery/Packaging checkboxes in Menu info are linked to the menu-screen type view (dine-in/delivery/takeout). If a type is unchecked, that menu tile is hidden in the POS menu grid for that type.\n① After choosing a store, use the menu grid and form to save items and hall / delivery prices.\n② In Options config, use the 3-panel layout: menu list on the left, option rows in the center, step order / current step on the right. Save steps from the center first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards. Under Bulk add values, type labels or use Search menus to append catalog rows to the field, then press Bulk add values.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ In the Sets tab, save bundle price and channels. For Grab delivery promos, set Grab campaign times (Bangkok) to control discount campaign start/end (combined with promo valid dates). Use Bundle set inquiry for activate/deactivate/copy/campaign link.\n⑤ In Price history > Price schedule, register, review, and cancel future price updates.\n⑥ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.',
     helpSum_admin_items:
       'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
     helpHow_admin_items:
@@ -31002,6 +31007,11 @@ orderItemQty: 'အရေအတွက်',
     posSetTabChannelsRequired: 'Select at least one sales channel: dine-in, takeout, or delivery.',
     posSetTabDeliveryAppsEmpty: 'No delivery apps found. Register apps under POS settings, or sign in with a store code to load that store’s list.',
     posSetTabDeliveryAppsHint: 'After enabling delivery, pick specific apps below. If none are selected, the promo applies to all configured delivery apps.',
+    posSetTabGrabCampaignTimeTitle: 'Grab campaign time (Bangkok)',
+    posSetTabGrabCampaignTimeHint:
+      'Combined with promo valid_from / valid_to dates. Leave blank for start 00:00 and end 23:59 Bangkok time. Grab API lead time (~5–120 min) may delay actual go-live past the chosen time.',
+    posSetTabGrabCampaignStartTimeBkk: 'Start time (BKK)',
+    posSetTabGrabCampaignEndTimeBkk: 'End time (BKK)',
     posSetTabDeliveryAppsDefaultOnly: 'Grab, Line Man, and Shopee are always available. Other apps from settings appear below when configured.',
     posSetTabPickSearchHint: '',
     posSetTabPickQtyHint: '',
@@ -37715,6 +37725,11 @@ orderItemQty: 'ຈຳນວນ',
     posSetTabChannelsRequired: 'Select at least one sales channel: dine-in, takeout, or delivery.',
     posSetTabDeliveryAppsEmpty: 'No delivery apps found. Register apps under POS settings, or sign in with a store code to load that store’s list.',
     posSetTabDeliveryAppsHint: 'After enabling delivery, pick specific apps below. If none are selected, the promo applies to all configured delivery apps.',
+    posSetTabGrabCampaignTimeTitle: 'Grab campaign time (Bangkok)',
+    posSetTabGrabCampaignTimeHint:
+      'Combined with promo valid_from / valid_to dates. Leave blank for start 00:00 and end 23:59 Bangkok time. Grab API lead time (~5–120 min) may delay actual go-live past the chosen time.',
+    posSetTabGrabCampaignStartTimeBkk: 'Start time (BKK)',
+    posSetTabGrabCampaignEndTimeBkk: 'End time (BKK)',
     posSetTabDeliveryAppsDefaultOnly: 'Grab, Line Man, and Shopee are always available. Other apps from settings appear below when configured.',
     posSetTabPickSearchHint: '',
     posSetTabPickQtyHint: '',
@@ -41450,6 +41465,11 @@ orderItemQty: 'ຈຳນວນ',
     posSetTabChannelsRequired: 'Select at least one sales channel: dine-in, takeout, or delivery.',
     posSetTabDeliveryAppsEmpty: 'No delivery apps found. Register apps under POS settings, or sign in with a store code to load that store’s list.',
     posSetTabDeliveryAppsHint: 'After enabling delivery, pick specific apps below. If none are selected, the promo applies to all configured delivery apps.',
+    posSetTabGrabCampaignTimeTitle: 'Grab campaign time (Bangkok)',
+    posSetTabGrabCampaignTimeHint:
+      'Combined with promo valid_from / valid_to dates. Leave blank for start 00:00 and end 23:59 Bangkok time. Grab API lead time (~5–120 min) may delay actual go-live past the chosen time.',
+    posSetTabGrabCampaignStartTimeBkk: 'Start time (BKK)',
+    posSetTabGrabCampaignEndTimeBkk: 'End time (BKK)',
     posSetTabDeliveryAppsDefaultOnly: 'Grab, Line Man, and Shopee are always available. Other apps from settings appear below when configured.',
     posSetTabPickSearchHint: '',
     posSetTabPickOptionPrompt: 'Selecting an option adds the line to the bundle immediately',
@@ -45455,6 +45475,11 @@ orderItemQty: 'ຈຳນວນ',
     posSetTabChannelsRequired: 'Select at least one sales channel: dine-in, takeout, or delivery.',
     posSetTabDeliveryAppsEmpty: 'No delivery apps found. Register apps under POS settings, or sign in with a store code to load that store’s list.',
     posSetTabDeliveryAppsHint: 'After enabling delivery, pick specific apps below. If none are selected, the promo applies to all configured delivery apps.',
+    posSetTabGrabCampaignTimeTitle: 'Grab campaign time (Bangkok)',
+    posSetTabGrabCampaignTimeHint:
+      'Combined with promo valid_from / valid_to dates. Leave blank for start 00:00 and end 23:59 Bangkok time. Grab API lead time (~5–120 min) may delay actual go-live past the chosen time.',
+    posSetTabGrabCampaignStartTimeBkk: 'Start time (BKK)',
+    posSetTabGrabCampaignEndTimeBkk: 'End time (BKK)',
     posSetTabDeliveryAppsDefaultOnly: 'Grab, Line Man, and Shopee are always available. Other apps from settings appear below when configured.',
     posSetTabPickSearchHint: '',
     posSetTabPickOptionPrompt: 'Selecting an option adds the line to the bundle immediately',
@@ -49428,6 +49453,11 @@ orderItemQty: 'ຈຳນວນ',
     posSetTabChannelsRequired: 'Select at least one sales channel: dine-in, takeout, or delivery.',
     posSetTabDeliveryAppsEmpty: 'No delivery apps found. Register apps under POS settings, or sign in with a store code to load that store’s list.',
     posSetTabDeliveryAppsHint: 'After enabling delivery, pick specific apps below. If none are selected, the promo applies to all configured delivery apps.',
+    posSetTabGrabCampaignTimeTitle: 'Grab campaign time (Bangkok)',
+    posSetTabGrabCampaignTimeHint:
+      'Combined with promo valid_from / valid_to dates. Leave blank for start 00:00 and end 23:59 Bangkok time. Grab API lead time (~5–120 min) may delay actual go-live past the chosen time.',
+    posSetTabGrabCampaignStartTimeBkk: 'Start time (BKK)',
+    posSetTabGrabCampaignEndTimeBkk: 'End time (BKK)',
     posSetTabDeliveryAppsDefaultOnly: 'Grab, Line Man, and Shopee are always available. Other apps from settings appear below when configured.',
     posSetTabPickSearchHint: '',
     posSetTabPickOptionPrompt: 'Selecting an option adds the line to the bundle immediately',

@@ -196,6 +196,8 @@ const emptyForm = () => ({
   deliveryAppCodes: normalizeDeliveryAppCodesList(
     DEFAULT_PICKER_DELIVERY_APPS.map((d) => d.code)
   ),
+  grabCampaignStartTimeBkk: "",
+  grabCampaignEndTimeBkk: "",
 })
 
 export function PosSetMenuTabWorkspace({
@@ -739,6 +741,8 @@ export function PosSetMenuTabWorkspace({
           channelTakeout: promoRow.channelTakeout !== false,
           channelDelivery: promoRow.channelDelivery !== false,
           deliveryAppCodes: normalizeDeliveryAppCodesList(promoRow.deliveryAppCodes ?? null),
+          grabCampaignStartTimeBkk: promoRow.grabCampaignStartTimeBkk ?? "",
+          grabCampaignEndTimeBkk: promoRow.grabCampaignEndTimeBkk ?? "",
         })
         const basis = promoRow.composePricingBasis === "delivery" ? "delivery" : "hall"
         setPickPricingBasis(basis)
@@ -1390,6 +1394,7 @@ export function PosSetMenuTabWorkspace({
     const codeTrim = form.code.trim()
     const effCid = form.marketingCampaignId.trim() || fixedCid
     const dpct = regularSum > 0 ? Math.round(economics.discountPercent * 100) / 100 : null
+    const editingPromo = editPromoId ? promos.find((p) => String(p.id) === String(editPromoId)) : null
     return {
       name,
       codeTrim,
@@ -1413,8 +1418,10 @@ export function PosSetMenuTabWorkspace({
             ? normalizeDeliveryAppCodesList(form.deliveryAppCodes)
             : null,
         discountPercent: dpct,
-        validFrom: null,
-        validTo: null,
+        validFrom: editingPromo?.validFrom?.trim() || null,
+        validTo: editingPromo?.validTo?.trim() || null,
+        grabCampaignStartTimeBkk: form.grabCampaignStartTimeBkk.trim() || null,
+        grabCampaignEndTimeBkk: form.grabCampaignEndTimeBkk.trim() || null,
         marketingActualCost: 0,
         standaloneSetMenu: !editPromoId && !effCid,
         userRole: auth?.role,
@@ -1912,6 +1919,36 @@ export function PosSetMenuTabWorkspace({
                         )
                       })}
                     </div>
+                    {form.deliveryAppCodes.some((c) => normalizeDeliveryAppCode(c) === "grab") ? (
+                      <div className="mt-3 rounded-md border border-border/50 bg-background/80 px-3 py-2.5">
+                        <p className="text-xs font-semibold">{t("posSetTabGrabCampaignTimeTitle")}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">{t("posSetTabGrabCampaignTimeHint")}</p>
+                        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                          <label className="block text-xs">
+                            <span className="font-medium">{t("posSetTabGrabCampaignStartTimeBkk")}</span>
+                            <input
+                              type="time"
+                              value={form.grabCampaignStartTimeBkk}
+                              onChange={(e) =>
+                                setForm((p) => ({ ...p, grabCampaignStartTimeBkk: e.target.value }))
+                              }
+                              className="mt-1 flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                            />
+                          </label>
+                          <label className="block text-xs">
+                            <span className="font-medium">{t("posSetTabGrabCampaignEndTimeBkk")}</span>
+                            <input
+                              type="time"
+                              value={form.grabCampaignEndTimeBkk}
+                              onChange={(e) =>
+                                setForm((p) => ({ ...p, grabCampaignEndTimeBkk: e.target.value }))
+                              }
+                              className="mt-1 flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

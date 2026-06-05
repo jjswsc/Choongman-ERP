@@ -4,7 +4,7 @@ import { campaignNoByIdMap } from '@/lib/marketing-campaign-code-resolve'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const SELECT_EXTENDED =
-  'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to'
+  'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to,grab_campaign_start_time_bkk,grab_campaign_end_time_bkk'
 
 const SELECT_WITH_MARKETING_COST =
   SELECT_EXTENDED + ',marketing_actual_cost,expense_accrual_id'
@@ -33,6 +33,8 @@ type RawRow = {
   discount_percent?: number | null
   valid_from?: string | null
   valid_to?: string | null
+  grab_campaign_start_time_bkk?: string | null
+  grab_campaign_end_time_bkk?: string | null
   marketing_actual_cost?: number | null
   expense_accrual_id?: number | null
   compose_pricing_basis?: string | null
@@ -81,6 +83,12 @@ function mapRow(row: RawRow) {
         : null,
     validFrom: row.valid_from ? String(row.valid_from).slice(0, 10) : null,
     validTo: row.valid_to ? String(row.valid_to).slice(0, 10) : null,
+    grabCampaignStartTimeBkk: row.grab_campaign_start_time_bkk
+      ? String(row.grab_campaign_start_time_bkk).trim().slice(0, 5) || null
+      : null,
+    grabCampaignEndTimeBkk: row.grab_campaign_end_time_bkk
+      ? String(row.grab_campaign_end_time_bkk).trim().slice(0, 5) || null
+      : null,
     marketingActualCost:
       row.marketing_actual_cost != null && Number.isFinite(Number(row.marketing_actual_cost))
         ? Number(row.marketing_actual_cost)

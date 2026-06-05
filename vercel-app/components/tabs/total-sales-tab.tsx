@@ -335,16 +335,27 @@ export function TotalSalesTab() {
     if (canSearchAll) return
     if (isFranchiseeRole(auth?.role || "")) {
       const codes = resolveFranchiseePosSalesFetchStoreCodes(auth, viewStore)
-      const normalized = normalizeStoreCodes(codes)
+      const normalized = normalizeStoreCodes(
+        codes.length > 0 ? codes : storeChoices
+      )
       const key = normalized.join(",")
       if (normalized.length && selectedStoresKey !== key) setSelectedStores(normalized)
       return
     }
-    if (auth?.store) {
-      const fixed = normalizeStoreCodes([auth.store])
-      if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
-    }
-  }, [canSearchAll, auth, viewStore, selectedStoresKey])
+    const fallback = normalizeStoreCodes(
+      storeChoices.length > 0 ? storeChoices : auth?.store ? [auth.store] : []
+    )
+    const key = fallback.join(",")
+    if (fallback.length && selectedStoresKey !== key) setSelectedStores(fallback)
+  }, [
+    canSearchAll,
+    auth?.role,
+    auth?.store,
+    auth?.allowedStores,
+    viewStore,
+    selectedStoresKey,
+    storeChoices,
+  ])
 
   React.useEffect(() => {
     if (!storePickerOpen) return

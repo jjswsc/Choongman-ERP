@@ -1342,10 +1342,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
     }
 
-    if (qStoresKey !== selectedStoresKey && userSelectedRef.current.storesKey !== selectedStoresKey) {
-      if (!(canSearchAll && qStoresKey === "")) {
-        setSelectedStores(qStores)
-      }
+    // URL에 stores가 없을 때 빈 배열로 덮어쓰면 가맹·매장 자동 선택과 무한 경쟁(조회·메뉴 클릭 불가)이 난다
+    if (
+      qStoresKey &&
+      qStoresKey !== selectedStoresKey &&
+      userSelectedRef.current.storesKey !== selectedStoresKey
+    ) {
+      setSelectedStores(qStores)
     }
     if (qOrderTypes !== orderTypesKey && userSelectedRef.current.orderTypesKey !== orderTypesKey) {
       setOrderTypesKey(qOrderTypes)
@@ -1508,16 +1511,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (canSearchAll) return
     if (isFranchiseeRole(auth?.role || "")) {
       const codes = resolveFranchiseePosSalesFetchStoreCodes(auth, viewStore)
-      const normalized = normalizeStoreCodes(codes)
+      const normalized = normalizeStoreCodes(
+        codes.length > 0 ? codes : posBizDayStoreChoices
+      )
       const key = normalized.join(",")
-      if (normalized.length && selectedStoresKey !== key) setSelectedStores(normalized)
+      if (normalized.length && selectedStoresKey !== key) {
+        userSelectedRef.current.storesKey = key
+        setSelectedStores(normalized)
+      }
       return
     }
-    if (auth?.store) {
-      const fixed = normalizeStoreCodes([auth.store])
-      if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
+    const fallback = normalizeStoreCodes(
+      posBizDayStoreChoices.length > 0
+        ? posBizDayStoreChoices
+        : auth?.store
+          ? [auth.store]
+          : []
+    )
+    const key = fallback.join(",")
+    if (fallback.length && selectedStoresKey !== key) {
+      userSelectedRef.current.storesKey = key
+      setSelectedStores(fallback)
     }
-  }, [canSearchAll, auth, viewStore, selectedStoresKey])
+  }, [
+    canSearchAll,
+    auth?.role,
+    auth?.store,
+    auth?.allowedStores,
+    viewStore,
+    selectedStoresKey,
+    posBizDayStoreChoices,
+  ])
 
   const sumPeriodTotal = React.useCallback(
     (res: Awaited<ReturnType<typeof getPosSalesByPeriod>>) => {

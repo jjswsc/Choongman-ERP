@@ -15,6 +15,7 @@ import {
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
 import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
+import { parseBangkokHhmm } from '@/lib/bangkok-time'
 import { requireAuth } from '@/lib/verify-auth'
 
 function isColumnSchemaError(e: unknown): boolean {
@@ -65,6 +66,8 @@ export async function POST(req: NextRequest) {
       discountPercent?: number | null
       validFrom?: string | null
       validTo?: string | null
+      grabCampaignStartTimeBkk?: string | null
+      grabCampaignEndTimeBkk?: string | null
       marketingActualCost?: number | null
       /** true: 캠페인 없이 메뉴 관리 세트만 저장 시 자동 코드(SET-1 …) */
       standaloneSetMenu?: boolean
@@ -174,6 +177,8 @@ export async function POST(req: NextRequest) {
           : null,
       valid_from: body.validFrom?.trim() || null,
       valid_to: body.validTo?.trim() || null,
+      grab_campaign_start_time_bkk: parseBangkokHhmm(body.grabCampaignStartTimeBkk),
+      grab_campaign_end_time_bkk: parseBangkokHhmm(body.grabCampaignEndTimeBkk),
     }
 
     if (hasComposeBasis) {

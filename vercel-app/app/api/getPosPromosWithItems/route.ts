@@ -3,7 +3,7 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const SELECT_EXTENDED =
-  'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to'
+  'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to,grab_campaign_start_time_bkk,grab_campaign_end_time_bkk'
 
 const SELECT_EXTENDED_WITH_COMPOSE = SELECT_EXTENDED + ',compose_pricing_basis'
 
@@ -26,6 +26,8 @@ type RawPromo = {
   discount_percent?: number | null
   valid_from?: string | null
   valid_to?: string | null
+  grab_campaign_start_time_bkk?: string | null
+  grab_campaign_end_time_bkk?: string | null
   compose_pricing_basis?: string | null
 }
 
@@ -103,6 +105,12 @@ export async function GET(req: NextRequest) {
           : null,
       validFrom: p.valid_from ? String(p.valid_from).slice(0, 10) : null,
       validTo: p.valid_to ? String(p.valid_to).slice(0, 10) : null,
+      grabCampaignStartTimeBkk: p.grab_campaign_start_time_bkk
+        ? String(p.grab_campaign_start_time_bkk).trim().slice(0, 5) || null
+        : null,
+      grabCampaignEndTimeBkk: p.grab_campaign_end_time_bkk
+        ? String(p.grab_campaign_end_time_bkk).trim().slice(0, 5) || null
+        : null,
       composePricingBasis: normalizeComposePricingBasis(p.compose_pricing_basis),
     }))
 

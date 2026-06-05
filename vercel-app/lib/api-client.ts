@@ -7719,6 +7719,10 @@ export interface PosPromo {
   discountPercent?: number | null
   validFrom?: string | null
   validTo?: string | null
+  /** Grab 캠페인 시작 시각(방콕 HH:mm) */
+  grabCampaignStartTimeBkk?: string | null
+  /** Grab 캠페인 종료 시각(방콕 HH:mm) */
+  grabCampaignEndTimeBkk?: string | null
   marketingActualCost?: number
   expenseAccrualId?: string | null
   /** 세트 구성 Step 1 가격 기준 (DB 컬럼 compose_pricing_basis, 없으면 hall) */
@@ -7825,6 +7829,8 @@ export async function savePosPromo(params: {
   discountPercent?: number | null
   validFrom?: string | null
   validTo?: string | null
+  grabCampaignStartTimeBkk?: string | null
+  grabCampaignEndTimeBkk?: string | null
   marketingActualCost?: number | null
   /** 메뉴 관리 세트: 캠페인 없이 저장 (서버가 SET-1 … 코드 부여) */
   standaloneSetMenu?: boolean

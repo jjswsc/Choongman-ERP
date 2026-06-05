@@ -93,6 +93,31 @@ export function getBangkokStartOfDayUtcIso(ymd: string): string {
   return new Date(Date.UTC(y, m - 1, d, -7, 0, 0, 0)).toISOString()
 }
 
+/** `HH:mm` 또는 `H:mm` → `HH:mm` (방콕 벽시계). 잘못된 값은 null */
+export function parseBangkokHhmm(raw: string | null | undefined): string | null {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s)
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+    return null
+  }
+  return `${pad2(hh)}:${pad2(mm)}`
+}
+
+/** 방콕 달력 `ymd` + `HH:mm` → UTC ISO */
+export function getBangkokLocalTimeUtcIso(ymd: string, hhmm: string): string {
+  const norm = parseBangkokHhmm(hhmm)
+  if (!norm) {
+    throw new Error(`getBangkokLocalTimeUtcIso: invalid time ${hhmm}`)
+  }
+  const { y, m, d } = parseYmd(ymd)
+  const [hh, mm] = norm.split(':').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, hh - 7, mm, 0, 0)).toISOString()
+}
+
 /** 방콕 다음날 자정 기준 UTC ISO (반열린 구간 end 전용) */
 export function getBangkokNextDayStartUtcIso(ymd: string): string {
   const { y, m, d } = parseYmd(ymd)

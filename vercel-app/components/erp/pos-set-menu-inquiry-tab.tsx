@@ -101,6 +101,8 @@ function buildSavePayload(p: PosPromo, overrides: { isActive?: boolean } = {}) {
     discountPercent: p.discountPercent ?? null,
     validFrom: p.validFrom?.trim() || null,
     validTo: p.validTo?.trim() || null,
+    grabCampaignStartTimeBkk: p.grabCampaignStartTimeBkk?.trim() || null,
+    grabCampaignEndTimeBkk: p.grabCampaignEndTimeBkk?.trim() || null,
     marketingActualCost: p.marketingActualCost ?? 0,
     standaloneSetMenu: !p.marketingCampaignId?.trim(),
   }
@@ -320,6 +322,8 @@ export function PosSetMenuInquiryTab({
         discountPercent: p.discountPercent ?? null,
         validFrom: p.validFrom?.trim() || null,
         validTo: p.validTo?.trim() || null,
+        grabCampaignStartTimeBkk: p.grabCampaignStartTimeBkk?.trim() || null,
+        grabCampaignEndTimeBkk: p.grabCampaignEndTimeBkk?.trim() || null,
         marketingActualCost: 0,
         standaloneSetMenu: standalone,
         userRole: auth?.role,

@@ -85,6 +85,8 @@ export async function GET(req: NextRequest) {
       regularPrice: t.regularPrice,
       validFrom: t.validFrom,
       validTo: t.validTo,
+      grabCampaignStartTimeBkk: t.grabCampaignStartTimeBkk,
+      grabCampaignEndTimeBkk: t.grabCampaignEndTimeBkk,
     }))
 
     if (merchantIDs.length === 0) {

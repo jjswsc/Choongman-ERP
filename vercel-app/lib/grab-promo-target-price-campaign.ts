@@ -1,4 +1,10 @@
-import { bangkokDateStrISO, bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
+import { bangkokDateStrISO } from '@/lib/bangkok-date'
+import {
+  getBangkokEndOfDayUtcIso,
+  getBangkokLocalTimeUtcIso,
+  getBangkokStartOfDayUtcIso,
+  parseBangkokHhmm,
+} from '@/lib/bangkok-time'
 import { getBangkokRequestDtIso } from '@/lib/bangkok-time'
 import { GRAB_DELIVERY_ON_APP_PRICING_KEYS } from '@/lib/grab-menu-advanced-pricing'
 import { buildGrabMenuItemId } from '@/lib/grab-menu-item-id'
@@ -71,6 +77,10 @@ function bangkokYmdFromMs(ms: number): string {
 export function resolveGrabCampaignScheduleMs(params: {
   validFrom?: string | null
   validTo?: string | null
+  /** Grab 캠페인 시작 시각(방콕 HH:mm). null이면 valid_from 당일 00:00 */
+  grabCampaignStartTimeBkk?: string | null
+  /** Grab 캠페인 종료 시각(방콕 HH:mm). null이면 valid_to 당일 23:59:59 */
+  grabCampaignEndTimeBkk?: string | null
   /** 분 단위 리드타임(미지정 시 env·기본 65) */
   startLeadMinutes?: number
   nowMs?: number
@@ -85,12 +95,19 @@ export function resolveGrabCampaignScheduleMs(params: {
     ? clampPromoValidFromYmdToToday(rawFrom, today)
     : rawFrom
   const toYmd = String(params.validTo ?? '').trim() || '2099-12-31'
-  const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(fromYmd, toYmd)
+  const startTimeBkk = parseBangkokHhmm(params.grabCampaignStartTimeBkk)
+  const endTimeBkk = parseBangkokHhmm(params.grabCampaignEndTimeBkk)
+  const scheduledStartIso = startTimeBkk
+    ? getBangkokLocalTimeUtcIso(fromYmd, startTimeBkk)
+    : getBangkokStartOfDayUtcIso(fromYmd)
+  const scheduledEndIso = endTimeBkk
+    ? getBangkokLocalTimeUtcIso(toYmd, endTimeBkk)
+    : getBangkokEndOfDayUtcIso(toYmd)
   const minStartMs = nowMs + getGrabCampaignStartLeadMs(params.startLeadMinutes, {
     immediatePromoDisplay: params.clampValidFromToToday,
   })
-  const startMs = Math.max(new Date(gteIso).getTime(), minStartMs)
-  const promoEndMs = new Date(lteIso).getTime()
+  const startMs = Math.max(new Date(scheduledStartIso).getTime(), minStartMs)
+  const promoEndMs = new Date(scheduledEndIso).getTime()
 
   const addUtcCalendarMonths = (baseMs: number, months: number): number => {
     const d = new Date(baseMs)
@@ -136,6 +153,8 @@ type PromoRow = {
   delivery_app_codes?: string[] | null
   valid_from?: string | null
   valid_to?: string | null
+  grab_campaign_start_time_bkk?: string | null
+  grab_campaign_end_time_bkk?: string | null
 }
 
 type PromoItemRow = {
@@ -459,6 +478,8 @@ export function buildGrabTargetPriceCampaignBody(params: {
   regularPriceMajor: number
   validFrom?: string | null
   validTo?: string | null
+  grabCampaignStartTimeBkk?: string | null
+  grabCampaignEndTimeBkk?: string | null
   /** 분 단위 start 리드타임(Grab 즉시 반영 시도용, 기본 env·65분) */
   campaignStartLeadMinutes?: number
   /** true면 ERP valid_from·valid_to 그대로(Grab 테스트 화면 ‘내일’ 미리보기 유지). false일 때만 오늘로 당김 */
@@ -468,6 +489,8 @@ export function buildGrabTargetPriceCampaignBody(params: {
   const { startMs, endMs } = resolveGrabCampaignScheduleMs({
     validFrom: params.validFrom,
     validTo: params.validTo,
+    grabCampaignStartTimeBkk: params.grabCampaignStartTimeBkk,
+    grabCampaignEndTimeBkk: params.grabCampaignEndTimeBkk,
     startLeadMinutes: params.campaignStartLeadMinutes,
     clampValidFromToToday: params.clampCampaignValidFromToToday === true,
   })
@@ -584,7 +607,7 @@ async function loadPromoBundle(): Promise<{
   const [promos, promoItems, mirrorMenus, menus, options] = await Promise.all([
     supabaseSelectAllPages('pos_promos', {
       select:
-        'id,code,name,price,price_delivery,is_active,channel_delivery,delivery_app_codes,valid_from,valid_to',
+        'id,code,name,price,price_delivery,is_active,channel_delivery,delivery_app_codes,valid_from,valid_to,grab_campaign_start_time_bkk,grab_campaign_end_time_bkk',
       pageSize: 2000,
       order: 'id.asc',
     }).catch(() => []) as Promise<PromoRow[]>,
@@ -643,6 +666,8 @@ export type GrabPromoCutPriceTarget = {
   promoName: string
   validFrom: string | null
   validTo: string | null
+  grabCampaignStartTimeBkk: string | null
+  grabCampaignEndTimeBkk: string | null
 }
 
 /** ERP 관리 화면·진단 API — Grab 컷프라이스 대상 프로모 목록 */
@@ -734,6 +759,8 @@ export function collectGrabPromoCutPriceTargets(
       promoName: String(promo.name ?? promo.code ?? '').trim(),
       validFrom: promo.valid_from ? String(promo.valid_from).slice(0, 10) : null,
       validTo: promo.valid_to ? String(promo.valid_to).slice(0, 10) : null,
+      grabCampaignStartTimeBkk: parseBangkokHhmm(promo.grab_campaign_start_time_bkk),
+      grabCampaignEndTimeBkk: parseBangkokHhmm(promo.grab_campaign_end_time_bkk),
     })
   }
 
@@ -1223,6 +1250,8 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         regularPriceMajor: target.regularPrice,
         validFrom: target.validFrom,
         validTo: target.validTo,
+        grabCampaignStartTimeBkk: target.grabCampaignStartTimeBkk,
+        grabCampaignEndTimeBkk: target.grabCampaignEndTimeBkk,
         campaignStartLeadMinutes: opts?.leadMinutes ?? campaignLeadMinutes,
         clampCampaignValidFromToToday: immediatePromoDisplay,
         discountType: opts?.discountType ?? campaignDiscountType,

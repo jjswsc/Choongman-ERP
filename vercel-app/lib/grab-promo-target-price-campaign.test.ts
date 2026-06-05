@@ -298,6 +298,30 @@ describe('resolveGrabCampaignScheduleMs', () => {
     })
     expect(startMs).toBe(nowMs + 10 * 60_000)
   })
+
+  it('uses grab campaign start time BKK on valid_from day', () => {
+    const nowMs = new Date('2026-06-04T03:00:00.000Z').getTime()
+    const { startMs } = resolveGrabCampaignScheduleMs({
+      validFrom: '2026-06-04',
+      validTo: '2026-12-31',
+      grabCampaignStartTimeBkk: '12:00',
+      startLeadMinutes: 5,
+      nowMs,
+    })
+    expect(startMs).toBe(new Date('2026-06-04T05:00:00.000Z').getTime())
+  })
+
+  it('uses grab campaign end time BKK on valid_to day', () => {
+    const nowMs = new Date('2026-06-04T03:00:00.000Z').getTime()
+    const { endMs } = resolveGrabCampaignScheduleMs({
+      validFrom: '2026-06-04',
+      validTo: '2026-06-30',
+      grabCampaignEndTimeBkk: '22:00',
+      startLeadMinutes: 5,
+      nowMs,
+    })
+    expect(endMs).toBe(new Date('2026-06-30T15:00:00.000Z').getTime())
+  })
 })
 
 describe('classifyGrabCampaignApiError', () => {
