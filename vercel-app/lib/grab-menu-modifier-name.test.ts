@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   GRAB_MENU_MODIFIER_NAME_MAX_LENGTH,
   composeGrabModifierName,
+  maxGrabModifierDescriptionChars,
 } from '@/lib/grab-menu-limits'
 
 /**
@@ -41,5 +42,17 @@ describe('composeGrabModifierName', () => {
     const longName = 'X'.repeat(300)
     const out = composeGrabModifierName(longName, '')
     expect(out.length).toBe(GRAB_MENU_MODIFIER_NAME_MAX_LENGTH)
+  })
+
+  it('Boneless + 태국어 짧은 설명은 40자 이내로 유지한다', () => {
+    expect(composeGrabModifierName('Boneless', '9ชิ้น 315g')).toBe('Boneless (9ชิ้น 315g)')
+    expect(composeGrabModifierName('Boneless', '9ชิ้น 315g').length).toBeLessThanOrEqual(40)
+  })
+})
+
+describe('maxGrabModifierDescriptionChars', () => {
+  it('옵션명 길이에 따라 설명 최대 글자 수를 계산한다', () => {
+    expect(maxGrabModifierDescriptionChars('Boneless')).toBe(29)
+    expect(maxGrabModifierDescriptionChars('Joint Wing')).toBe(27)
   })
 })

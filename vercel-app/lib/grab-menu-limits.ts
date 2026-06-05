@@ -26,11 +26,12 @@ export function sanitizeGrabMenuDescription(raw: string | null | undefined): str
 }
 
 /**
- * Grab 옵션(modifier) 이름 최대 길이.
+ * Grab 옵션(modifier) 이름 최대 길이 — 손님 앱 표시·파트너 연동 기준 약 40자.
  * Grab MenuModifier 에는 description 필드가 없어, 옵션 옆 설명을 이름 텍스트에 합쳐 보낸다.
- * 이름이 길면 메뉴 검증에 영향을 줄 수 있어 보수적으로 200자로 절단한다.
+ * Merchant Portal 옵션 설명란(200자)과 별개로, 손님 앱은 한 줄에서 잘린다.
+ * @see https://kb.sapaad.com/help/what-is-the-character-limit-for-a-grabfood-modifier-option
  */
-export const GRAB_MENU_MODIFIER_NAME_MAX_LENGTH = 200
+export const GRAB_MENU_MODIFIER_NAME_MAX_LENGTH = 40
 
 /**
  * Grab 옵션 이름 + 배달 설명을 한 줄로 합친다(예: "S 사이즈 (뼈 없는 5조각 / 175G.)").
@@ -38,6 +39,16 @@ export const GRAB_MENU_MODIFIER_NAME_MAX_LENGTH = 200
  * - 제어문자 제거·공백 정리 후 합치고, 최종 길이를 절단한다.
  * - 설명이 비어 있으면 이름만 반환한다.
  */
+/** `name (desc)` 형태일 때 desc에 쓸 수 있는 최대 글자 수(괄호·공백 3자 제외). */
+export function maxGrabModifierDescriptionChars(rawName: string | null | undefined): number {
+  const name = String(rawName ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return Math.max(0, GRAB_MENU_MODIFIER_NAME_MAX_LENGTH - name.length - 3)
+}
+
 export function composeGrabModifierName(
   rawName: string | null | undefined,
   rawDescription: string | null | undefined

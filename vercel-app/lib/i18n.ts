@@ -8088,7 +8088,10 @@ export const i18n = {
     posOptionGroupDisplayNameHint:
       'Grab 배달 화면의 옵션 그룹 제목으로 표시됩니다. 비우면 단계 키가 사용됩니다.',
     posOptionDescriptionDeliveryGrabHint:
-      'Grab 배달에서는 옵션 이름 뒤에 괄호로 표시됩니다. 예: S 사이즈 (뼈 없는 5조각 / 175G.)',
+      'Grab 손님 앱에는「옵션명 (배달 설명)」한 줄로 보이며, 합쳐서 최대 40자입니다. 비우면 기본 설명이 쓰입니다. 예: Boneless (9ชิ้น 315g)',
+    posOptionGrabModifierPreview: 'Grab 표시 미리보기',
+    posOptionGrabModifierOverLimit:
+      '40자를 넘으면 Grab 손님 앱에서 잘립니다. 옵션명·설명을 짧게 줄이세요.',
     posOptionSizeAbbrevPlaceholder: 'S / M / L',
     posOptionBulkAddTitle: '선택 그룹에 값 일괄 추가',
     posOptionBulkAddPlaceholder: '예: 치킨무, 김치, 단무지',
@@ -17094,7 +17097,10 @@ orderItemQty: 'Qty',
     posOptionGroupDisplayNameHint:
       'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
     posOptionDescriptionDeliveryGrabHint:
-      'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
+      'Grab shows one line as「option name (delivery desc)」, max 40 characters combined. Falls back to default desc if blank. e.g. Boneless (9pcs 315g)',
+    posOptionGrabModifierPreview: 'Grab display preview',
+    posOptionGrabModifierOverLimit:
+      'Over 40 characters will be cut off in the Grab consumer app. Shorten the option name or description.',
     posOptionSizeAbbrevPlaceholder: 'S / M / L',
     posOptionBulkAddTitle: 'Bulk add values to selected group',
     posOptionBulkAddPlaceholder: 'e.g. pickled radish, kimchi, danmuji',
@@ -25138,7 +25144,10 @@ orderItemQty: 'จำนวน',
     posOptionGroupDisplayNameHint:
       'ใช้เป็นหัวข้อกลุ่มตัวเลือกบนหน้าจอ Grab เดลิเวอรี หากเว้นว่างจะใช้คีย์ของขั้นแทน',
     posOptionDescriptionDeliveryGrabHint:
-      'บน Grab เดลิเวอรีจะแสดงในวงเล็บต่อท้ายชื่อตัวเลือก เช่น S ไซซ์ (ไม่มีกระดูก 5 ชิ้น / 175 ก.)',
+      'Grab แอปลูกค้าแสดง「ชื่อตัวเลือก (คำอธิบายเดลิเวอรี)」รวมไม่เกิน 40 ตัวอักษร หากเว้นว่างจะใช้คำอธิบายหลัก เช่น Boneless (9ชิ้น 315g)',
+    posOptionGrabModifierPreview: 'ตัวอย่างที่แสดงบน Grab',
+    posOptionGrabModifierOverLimit:
+      'เกิน 40 ตัวอักษรจะถูกตัดบนแอป Grab — ย่อชื่อตัวเลือกหรือคำอธิบาย',
     posOptionRuleRequiredStep: 'ขั้นที่บังคับ',
     posOptionStepDisplayNameLabel: 'ชื่อแสดงของขั้น',
     posOptionStepListDefaultHint: 'ยังไม่มีขั้นเลือก',
@@ -32114,7 +32123,11 @@ orderItemQty: 'အရေအတွက်',
     posKbankStatusCancelled: 'CANCELLED',
     posKbankStatusPaid: 'PAID',
     posMemberPortalOrder: 'Member order',
-    posOptionDescriptionDeliveryGrabHint: 'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
+    posOptionDescriptionDeliveryGrabHint:
+      'Grab shows one line as「option name (delivery desc)」, max 40 characters combined. Falls back to default desc if blank. e.g. Boneless (9pcs 315g)',
+    posOptionGrabModifierPreview: 'Grab display preview',
+    posOptionGrabModifierOverLimit:
+      'Over 40 characters will be cut off in the Grab consumer app. Shorten the option name or description.',
     posOptionGroupDisplayName: 'Group display name (delivery)',
     posOptionGroupDisplayNameHint: 'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
     posOrderTimeShort: 'Order',
@@ -38859,7 +38872,11 @@ orderItemQty: 'ຈຳນວນ',
     posKbankStatusCancelled: 'CANCELLED',
     posKbankStatusPaid: 'PAID',
     posMemberPortalOrder: 'Member order',
-    posOptionDescriptionDeliveryGrabHint: 'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
+    posOptionDescriptionDeliveryGrabHint:
+      'Grab shows one line as「option name (delivery desc)」, max 40 characters combined. Falls back to default desc if blank. e.g. Boneless (9pcs 315g)',
+    posOptionGrabModifierPreview: 'Grab display preview',
+    posOptionGrabModifierOverLimit:
+      'Over 40 characters will be cut off in the Grab consumer app. Shorten the option name or description.',
     posOptionGroupDisplayName: 'Group display name (delivery)',
     posOptionGroupDisplayNameHint: 'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
     posOrderTimeShort: 'Order',
@@ -42879,7 +42896,11 @@ orderItemQty: 'ຈຳນວນ',
     posKbankStatusCancelled: 'CANCELLED',
     posKbankStatusPaid: 'PAID',
     posMemberPortalOrder: 'Member order',
-    posOptionDescriptionDeliveryGrabHint: 'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
+    posOptionDescriptionDeliveryGrabHint:
+      'Grab shows one line as「option name (delivery desc)」, max 40 characters combined. Falls back to default desc if blank. e.g. Boneless (9pcs 315g)',
+    posOptionGrabModifierPreview: 'Grab display preview',
+    posOptionGrabModifierOverLimit:
+      'Over 40 characters will be cut off in the Grab consumer app. Shorten the option name or description.',
     posOptionGroupDisplayName: 'Group display name (delivery)',
     posOptionGroupDisplayNameHint: 'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
     posOrderTimeShort: 'Order',
@@ -46868,7 +46889,11 @@ orderItemQty: 'ຈຳນວນ',
     posKbankStatusCancelled: 'CANCELLED',
     posKbankStatusPaid: 'PAID',
     posMemberPortalOrder: 'Member order',
-    posOptionDescriptionDeliveryGrabHint: 'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
+    posOptionDescriptionDeliveryGrabHint:
+      'Grab shows one line as「option name (delivery desc)」, max 40 characters combined. Falls back to default desc if blank. e.g. Boneless (9pcs 315g)',
+    posOptionGrabModifierPreview: 'Grab display preview',
+    posOptionGrabModifierOverLimit:
+      'Over 40 characters will be cut off in the Grab consumer app. Shorten the option name or description.',
     posOptionGroupDisplayName: 'Group display name (delivery)',
     posOptionGroupDisplayNameHint: 'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
     posOrderTimeShort: 'Order',
@@ -50878,7 +50903,11 @@ orderItemQty: 'ຈຳນວນ',
     posKbankStatusCancelled: 'CANCELLED',
     posKbankStatusPaid: 'PAID',
     posMemberPortalOrder: 'Member order',
-    posOptionDescriptionDeliveryGrabHint: 'On Grab delivery this appears in parentheses after the option name. e.g. S size (boneless 5pcs / 175g)',
+    posOptionDescriptionDeliveryGrabHint:
+      'Grab shows one line as「option name (delivery desc)」, max 40 characters combined. Falls back to default desc if blank. e.g. Boneless (9pcs 315g)',
+    posOptionGrabModifierPreview: 'Grab display preview',
+    posOptionGrabModifierOverLimit:
+      'Over 40 characters will be cut off in the Grab consumer app. Shorten the option name or description.',
     posOptionGroupDisplayName: 'Group display name (delivery)',
     posOptionGroupDisplayNameHint: 'Shown as the option group title on the Grab delivery screen. Leave blank to use the step key.',
     posOrderTimeShort: 'Order',

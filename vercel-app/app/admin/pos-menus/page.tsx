@@ -108,7 +108,12 @@ import { OptionItemRowCard } from "@/components/erp/option-item-row-card"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
-import { GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH } from "@/lib/grab-menu-limits"
+import {
+  GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH,
+  GRAB_MENU_MODIFIER_NAME_MAX_LENGTH,
+  composeGrabModifierName,
+  maxGrabModifierDescriptionChars,
+} from "@/lib/grab-menu-limits"
 import { resolvePosOptionGroupCode } from "@/lib/pos-option-group-code"
 import {
   PROMOTION_MAIN_CATEGORY,
@@ -1047,6 +1052,29 @@ export default function PosMenusPage() {
     setOptionDescDeliveryDraft(opt?.descriptionDelivery ?? "")
     setOptionDescTableDraft(opt?.descriptionTable ?? "")
   }, [selectedOptionDescId, menuOptions])
+
+  const selectedOptionForDesc = React.useMemo(
+    () => menuOptions.find((o) => o.id === selectedOptionDescId),
+    [menuOptions, selectedOptionDescId]
+  )
+  const grabModifierDescMaxLen = React.useMemo(
+    () => maxGrabModifierDescriptionChars(selectedOptionForDesc?.name ?? ""),
+    [selectedOptionForDesc?.name]
+  )
+  const grabModifierEffectiveDesc =
+    optionDescDeliveryDraft.trim() || optionDescDefaultDraft.trim()
+  const grabModifierPreview = React.useMemo(
+    () =>
+      selectedOptionForDesc
+        ? composeGrabModifierName(selectedOptionForDesc.name, grabModifierEffectiveDesc)
+        : "",
+    [selectedOptionForDesc, grabModifierEffectiveDesc]
+  )
+  const grabModifierDescTooLong =
+    !!grabModifierEffectiveDesc && grabModifierEffectiveDesc.length > grabModifierDescMaxLen
+  const grabModifierNameTooLong =
+    composeGrabModifierName(selectedOptionForDesc?.name ?? "", "").length >=
+    GRAB_MENU_MODIFIER_NAME_MAX_LENGTH
 
   React.useEffect(() => {
     if (!editingId) return
@@ -5003,20 +5031,45 @@ export default function PosMenusPage() {
                                   className="min-h-[48px] text-xs"
                                   placeholder={t("posOptionDescriptionDeliveryPh") || "배달앱 옵션 설명 (비우면 기본 설명)"}
                                   value={optionDescDeliveryDraft}
-                                  maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                  maxLength={grabModifierDescMaxLen}
                                   onChange={(e) =>
-                                    setOptionDescDeliveryDraft(e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH))
+                                    setOptionDescDeliveryDraft(
+                                      e.target.value.slice(0, grabModifierDescMaxLen)
+                                    )
                                   }
                                 />
                                 <div className="mt-0.5 flex items-start justify-between gap-2 text-[10px] text-muted-foreground">
                                   <span className="leading-snug">
                                     {t("posOptionDescriptionDeliveryGrabHint") ||
-                                      "Grab 배달에서는 옵션 이름 뒤에 괄호로 표시됩니다. 예: S 사이즈 (뼈 없는 5조각 / 175G.)"}
+                                      "Grab 손님 앱에는「옵션명 (배달 설명)」한 줄로 보이며, 합쳐서 최대 40자입니다. 비우면 기본 설명이 쓰입니다. 예: Boneless (9ชิ้น 315g)"}
                                   </span>
                                   <span className="shrink-0">
-                                    {optionDescDeliveryDraft.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
+                                    {optionDescDeliveryDraft.length}/{grabModifierDescMaxLen}
                                   </span>
                                 </div>
+                                {selectedOptionForDesc && (
+                                  <div
+                                    className={`mt-1 rounded border px-2 py-1.5 text-[10px] leading-snug ${
+                                      grabModifierDescTooLong || grabModifierNameTooLong
+                                        ? "border-amber-500/60 bg-amber-500/10 text-amber-900 dark:text-amber-100"
+                                        : "border-border/60 bg-muted/30 text-muted-foreground"
+                                    }`}
+                                  >
+                                    <span className="font-medium">
+                                      {t("posOptionGrabModifierPreview") || "Grab 표시 미리보기"}:{" "}
+                                    </span>
+                                    <span className="font-mono break-all">{grabModifierPreview || "-"}</span>
+                                    <span className="ml-1 tabular-nums">
+                                      ({grabModifierPreview.length}/{GRAB_MENU_MODIFIER_NAME_MAX_LENGTH})
+                                    </span>
+                                    {(grabModifierDescTooLong || grabModifierNameTooLong) && (
+                                      <p className="mt-0.5">
+                                        {t("posOptionGrabModifierOverLimit") ||
+                                          "40자를 넘으면 Grab 손님 앱에서 잘립니다. 옵션명·설명을 짧게 줄이세요."}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               <Textarea
                                 className="min-h-[48px] text-xs"
