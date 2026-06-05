@@ -1515,6 +1515,7 @@ export default function PosMenusPage() {
             : m
         )
       )
+      if (!(await saveSelectedOptionDescriptionIfAny())) return
       if (imageSave.mismatchMessage) {
         await appAlert(
           `${t("posMenuSavedWithoutImageMismatch") || "메뉴 정보는 저장했습니다. 다만 사진 URL이 다른 메뉴용이라 사진은 그대로 두었습니다."}\n\n${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드해 주세요."}`
@@ -1603,6 +1604,7 @@ export default function PosMenusPage() {
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
+      if (!(await saveSelectedOptionDescriptionIfAny())) return
       if (imageSave.mismatchMessage) {
         await appAlert(
           `${t("posMenuSavedWithoutImageMismatch") || "메뉴 정보는 저장했습니다. 다만 사진 URL이 다른 메뉴용이라 사진은 그대로 두었습니다."}\n\n${imageSave.mismatchMessage}\n\n${t("posMenuImageUploadHint") || "이 메뉴에서 사진을 다시 업로드해 주세요."}`
@@ -1813,10 +1815,21 @@ export default function PosMenusPage() {
     }
   }
 
-  const handleSaveOptionDescription = async () => {
-    if (!editingId || !selectedOptionDescId) return
+  /** 설명 탭 하단「저장」과 함께 호출 — 캐시 재조회 없이 로컬 상태만 갱신(즉시 사라짐 방지) */
+  const saveSelectedOptionDescriptionIfAny = async (): Promise<boolean> => {
+    if (!editingId || !selectedOptionDescId) return true
     const opt = menuOptions.find((o) => o.id === selectedOptionDescId)
-    if (!opt) return
+    if (!opt) return true
+    const descDefault = optionDescDefaultDraft.trim()
+    const descDelivery = optionDescDeliveryDraft.trim() || null
+    const descTable = optionDescTableDraft.trim() || null
+    if (
+      descDefault === (opt.descriptionDefault ?? "") &&
+      (descDelivery ?? "") === (opt.descriptionDelivery ?? "") &&
+      (descTable ?? "") === (opt.descriptionTable ?? "")
+    ) {
+      return true
+    }
     const res = await savePosMenuOption({
       id: opt.id,
       menuId: Number(editingId),
@@ -1834,17 +1847,27 @@ export default function PosMenusPage() {
       sellHall: opt.sellHall ?? true,
       sellDelivery: opt.sellDelivery ?? true,
       sellPackaging: opt.sellPackaging ?? true,
-      descriptionDefault: optionDescDefaultDraft.trim(),
-      descriptionDelivery: optionDescDeliveryDraft.trim() || null,
-      descriptionTable: optionDescTableDraft.trim() || null,
+      descriptionDefault: descDefault,
+      descriptionDelivery: descDelivery,
+      descriptionTable: descTable,
     })
     if (!res.success) {
       await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
-      return
+      return false
     }
-    const opts = await getPosMenuOptions({ menuId: editingId })
-    setMenuOptions(opts || [])
-    await appAlert(t("itemsAlertUpdated") || "수정되었습니다.")
+    setMenuOptions((prev) =>
+      prev.map((o) =>
+        o.id === selectedOptionDescId
+          ? {
+              ...o,
+              descriptionDefault: descDefault,
+              descriptionDelivery: descDelivery,
+              descriptionTable: descTable,
+            }
+          : o
+      )
+    )
+    return true
   }
 
   /** 메뉴 목록 펼침에서 옵션 삭제 시 DB 반영 및 화면 갱신 */
@@ -5077,11 +5100,6 @@ export default function PosMenusPage() {
                                 value={optionDescTableDraft}
                                 onChange={(e) => setOptionDescTableDraft(e.target.value)}
                               />
-                              <div className="flex justify-end">
-                                <Button size="sm" onClick={handleSaveOptionDescription}>
-                                  {t("itemsBtnSave") || "저장"}
-                                </Button>
-                              </div>
                             </div>
                           )}
                         </>
