@@ -252,7 +252,12 @@ export function shouldSendGrabPromoSaleAdvancedPricing(showCutPrice: boolean): b
   if (!showCutPrice) return false
   /** 손님 앱이 배달 채널 advanced만 쓰는 매장: list=sale 이면 advanced도 할인가로 동일하게 */
   if (isGrabPromoConsumerListPriceAsSaleEnabled()) return true
-  if (resolveGrabPromoCampaignDiscountType() === 'fixPrice') return true
+  /**
+   * 정가(list=regular) + CM-POS-PROMO 캠페인: advanced에 할인가(111)를 함께 내면
+   * Grab이 % 캠페인을 할인가 기준으로 또 적용해 69·65처럼 이중 할인됨(2026-06 True Digital).
+   * 캠페인이 정가→할인가를 담당하므로 advanced는 생략한다.
+   */
+  if (!shouldSuppressGrabPromoCampaignsForConsumerSale()) return false
   return isGrabPromoConsumerSaleViaAdvancedEnabled()
 }
 
@@ -753,19 +758,16 @@ async function pushGrabMenuRecordForCutTarget(
     saleMinor,
   })
   const pushAdvanced = shouldSendGrabPromoSaleAdvancedPricing(true)
+  const advancedMinor = pushAdvanced ? saleMinor : listMinor
   await grabUpdateMenuRecord({
     merchantID,
     field: 'ITEM',
     id: target.grabItemId,
     price: listMinor,
-    ...(pushAdvanced
-      ? {
-          advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
-            key,
-            price: saleMinor,
-          })),
-        }
-      : {}),
+    advancedPricings: GRAB_DELIVERY_ON_APP_PRICING_KEYS.map((key) => ({
+      key,
+      price: advancedMinor,
+    })),
   })
   return true
 }

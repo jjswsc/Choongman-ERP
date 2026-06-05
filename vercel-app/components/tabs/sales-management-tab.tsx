@@ -12,7 +12,10 @@ import {
   isManagerRole,
   canSelectAllStoresForPosSalesManagement,
 } from "@/lib/permissions"
-import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import {
+  canFranchiseeAggregateAllowedStores,
+  resolveFranchiseePosSalesFetchStoreCodes,
+} from "@/lib/franchisee-multi-store"
 import { useStoreView } from "@/lib/store-view-context"
 import {
   parseOrderTypesParam,
@@ -398,7 +401,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   )
   const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
     auth?.role,
-    auth?.allowedStores
+    auth?.allowedStores,
+    auth?.store
   )
   const canMultiStorePicker = canSearchAll || canFranchiseeMultiStore
   const canEditPosBizDayStore = React.useMemo(() => {
@@ -1502,31 +1506,18 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   React.useEffect(() => {
     if (canSearchAll) return
-    if (!canFranchiseeMultiStore) {
-      if (auth?.store) {
-        const fixed = normalizeStoreCodes([auth.store])
-        if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
-      }
+    if (isFranchiseeRole(auth?.role || "")) {
+      const codes = resolveFranchiseePosSalesFetchStoreCodes(auth, viewStore)
+      const normalized = normalizeStoreCodes(codes)
+      const key = normalized.join(",")
+      if (normalized.length && selectedStoresKey !== key) setSelectedStores(normalized)
       return
     }
-    const all = normalizeStoreCodes(posBizDayStoreChoices)
-    const allKey = all.join(",")
-    const v = String(viewStore || "").trim()
-    if (!v || v === "All") {
-      if (selectedStoresKey !== allKey) setSelectedStores(all)
-      return
+    if (auth?.store) {
+      const fixed = normalizeStoreCodes([auth.store])
+      if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
     }
-    const pick = normalizeStoreCodes([v])
-    const pickKey = pick.join(",")
-    if (pick.length && selectedStoresKey !== pickKey) setSelectedStores(pick)
-  }, [
-    canSearchAll,
-    canFranchiseeMultiStore,
-    auth?.store,
-    posBizDayStoreChoices,
-    viewStore,
-    selectedStoresKey,
-  ])
+  }, [canSearchAll, auth, viewStore, selectedStoresKey])
 
   const sumPeriodTotal = React.useCallback(
     (res: Awaited<ReturnType<typeof getPosSalesByPeriod>>) => {

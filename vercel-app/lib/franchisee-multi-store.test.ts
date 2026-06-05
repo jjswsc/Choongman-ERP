@@ -18,6 +18,8 @@ describe('franchisee multi-store sales scope', () => {
     expect(canFranchiseeAggregateAllowedStores('franchisee', ['CM A'])).toBe(false)
     expect(canFranchiseeAggregateAllowedStores('franchisee', ['CM A', 'CM B'])).toBe(true)
     expect(canFranchiseeAggregateAllowedStores('manager', ['CM A', 'CM B'])).toBe(false)
+    expect(canFranchiseeAggregateAllowedStores('franchisee', ['CM B'], 'CM A')).toBe(true)
+    expect(canFranchiseeAggregateAllowedStores('franchisee', [], 'CM A')).toBe(false)
   })
 
   it('isFranchiseeAggregateAllStoresView', () => {

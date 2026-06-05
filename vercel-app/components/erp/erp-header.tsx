@@ -82,7 +82,11 @@ export function ErpHeader() {
     return a
   }, [auth])
 
-  const canFranchiseeAll = canFranchiseeAggregateAllowedStores(auth?.role, auth?.allowedStores)
+  const canFranchiseeAll = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores,
+    auth?.store
+  )
 
   const isLoginPage = pathname === "/admin/login"
   const isDashboard = pathname === "/admin" || pathname === "/admin/"

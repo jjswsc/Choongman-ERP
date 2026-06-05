@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/lib/auth-context"
-import { canSelectAllStoresForPosSalesManagement } from "@/lib/permissions"
-import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
+import { canSelectAllStoresForPosSalesManagement, isFranchiseeRole } from "@/lib/permissions"
+import {
+  canFranchiseeAggregateAllowedStores,
+  resolveFranchiseePosSalesFetchStoreCodes,
+} from "@/lib/franchisee-multi-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -133,7 +136,8 @@ export function TotalSalesTab() {
   )
   const canFranchiseeMultiStore = canFranchiseeAggregateAllowedStores(
     auth?.role,
-    auth?.allowedStores
+    auth?.allowedStores,
+    auth?.store
   )
   const canMultiStorePicker = canSearchAll || canFranchiseeMultiStore
   const today = todayStrBangkok()
@@ -329,31 +333,18 @@ export function TotalSalesTab() {
 
   React.useEffect(() => {
     if (canSearchAll) return
-    if (!canFranchiseeMultiStore) {
-      if (auth?.store) {
-        const fixed = normalizeStoreCodes([auth.store]).join(",")
-        if (selectedStoresKey !== fixed) setSelectedStores(normalizeStoreCodes([auth.store]))
-      }
+    if (isFranchiseeRole(auth?.role || "")) {
+      const codes = resolveFranchiseePosSalesFetchStoreCodes(auth, viewStore)
+      const normalized = normalizeStoreCodes(codes)
+      const key = normalized.join(",")
+      if (normalized.length && selectedStoresKey !== key) setSelectedStores(normalized)
       return
     }
-    const all = normalizeStoreCodes(storeChoices)
-    const allKey = all.join(",")
-    const v = String(viewStore || "").trim()
-    if (!v || v === "All") {
-      if (selectedStoresKey !== allKey) setSelectedStores(all)
-      return
+    if (auth?.store) {
+      const fixed = normalizeStoreCodes([auth.store])
+      if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
     }
-    const pick = normalizeStoreCodes([v])
-    const pickKey = pick.join(",")
-    if (pick.length && selectedStoresKey !== pickKey) setSelectedStores(pick)
-  }, [
-    canSearchAll,
-    canFranchiseeMultiStore,
-    auth?.store,
-    storeChoices,
-    viewStore,
-    selectedStoresKey,
-  ])
+  }, [canSearchAll, auth, viewStore, selectedStoresKey])
 
   React.useEffect(() => {
     if (!storePickerOpen) return

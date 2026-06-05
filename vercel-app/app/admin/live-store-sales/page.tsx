@@ -31,7 +31,11 @@ export default function AdminLiveStoreSalesPage() {
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""))
 
-  const canFranchiseeAll = canFranchiseeAggregateAllowedStores(auth?.role, auth?.allowedStores)
+  const canFranchiseeAll = canFranchiseeAggregateAllowedStores(
+    auth?.role,
+    auth?.allowedStores,
+    auth?.store
+  )
 
   useEffect(() => {
     if (!canFranchiseeAll) return

@@ -1109,7 +1109,9 @@ export async function buildGrabMenuFromPos(params: {
         price: grabListPriceMinor,
         ...(includeAdvancedPricing
           ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabSalePriceMinor) }
-          : {}),
+          : promoCut?.showCutPrice
+            ? { advancedPricing: buildGrabDeliveryAdvancedPricing(grabListPriceMinor) }
+            : {}),
         campaignInfo: null,
         description: menuDesc,
         photos: photoUrl ? [photoUrl] : [],

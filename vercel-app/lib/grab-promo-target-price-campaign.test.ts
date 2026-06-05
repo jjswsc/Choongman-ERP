@@ -39,6 +39,7 @@ describe('consumer list price mode', () => {
     'GRAB_PROMO_CONSUMER_LIST_PRICE',
     'GRAB_PROMO_CONSUMER_SALE_VIA_ADVANCED',
     'GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE',
+    'GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE',
   ] as const
 
   function saveEnv(): Record<string, string | undefined> {
@@ -75,9 +76,10 @@ describe('consumer list price mode', () => {
     restoreEnv(snap)
   })
 
-  it('regular list + advanced when GRAB_PROMO_CONSUMER_LIST_PRICE=regular', () => {
+  it('regular list + no advanced when CM-POS-PROMO campaigns enabled', () => {
     const snap = saveEnv()
     process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    process.env.GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE = '0'
     delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
     expect(
       resolveGrabPromoMenuItemPriceMinor({
@@ -86,7 +88,15 @@ describe('consumer list price mode', () => {
         saleMinor: 11100,
       })
     ).toBe(17900)
-    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(true)
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
+    restoreEnv(snap)
+  })
+
+  it('regular list never sends advanced (정가+캠페인이 할인 담당)', () => {
+    const snap = saveEnv()
+    process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    process.env.GRAB_PROMO_SUPPRESS_CAMPAIGNS_FOR_CONSUMER_SALE = '1'
+    expect(shouldSendGrabPromoSaleAdvancedPricing(true)).toBe(false)
     restoreEnv(snap)
   })
 })
