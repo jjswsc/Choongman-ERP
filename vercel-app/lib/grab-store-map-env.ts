@@ -10,9 +10,11 @@ import { normStoreKey } from '@/lib/store-list-keys'
  *    예: `"1048":"CM Asoke"`
  *
  * Prod Grab Store ID(`3-C6DWPB4VCKK1GT` 등) — menu/campaign sync·주문 공통. **별도 env 권장:**
- * `GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040`
- * (쉼표로 여러 매장: `포털ID=1040,다른포털=1048`)
- * True Digital: Prod=`3-C6DWPB4VCKK1GT`, test sandbox=`GFSBPOS-811-087` — 1040에 test GFSBPOS 묶지 말 것.
+ * `GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040,3-C4NKAA4FCNCUGA=1042,3-C7JGN2B2DFJ1AE=1043`
+ * (쉼표로 여러 매장 — Portal ID는 Grab Dashboard 그대로, 공백 없이)
+ * True Digital 1040=`3-C6DWPB4VCKK1GT` · Silom 1042=`3-C4NKAA4FCNCUGA` · Ekkamai 1043=`3-C7JGN2B2DFJ1AE`
+ * `GRAB_STORE_MAP_JSON`에 `"1042":"CM Silom"`, `"1043":"CM Ekkamai"` 등 ERP store_code 연결.
+ * test sandbox `GFSBPOS-811-087` — Prod partner ID에 묶지 말 것.
  * GRAB_* env만 바꿀 때: Vercel Deployments에서 Redeploy 필요(빈 커밋은 ignored-build-step으로 스킵됨).
  */
 export function parseGrabPortalMerchantMap(raw?: string): Record<string, string> {
