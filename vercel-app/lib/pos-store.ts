@@ -94,7 +94,14 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       quantity: number
       price: number
       menuId?: string
+      menuId1?: string
+      menuId2?: string
       optionId?: string
+      optionId1?: string
+      optionId2?: string
+      optionCode?: string
+      optionCode1?: string
+      optionCode2?: string
       note?: string
       servedAt?: string | null
       servedBy?: string | null
@@ -123,6 +130,8 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
     const menuId2 = String(it.menuId2 ?? '').trim()
     const optionId1 = String(it.optionId1 ?? '').trim()
     const optionId2 = String(it.optionId2 ?? '').trim()
+    const optionCode1 = String(it.optionCode1 ?? '').trim()
+    const optionCode2 = String(it.optionCode2 ?? '').trim()
     const note = typeof it.note === 'string' && String(it.note).trim() ? String(it.note).trim() : ''
     const promoId = String(it.promoId ?? '').trim()
     const promoCode = String(it.promoCode ?? '').trim()
@@ -163,8 +172,15 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       name,
       quantity: qty,
       price,
+      ...(menuId1 ? { menuId1 } : {}),
+      ...(menuId2 ? { menuId2 } : {}),
       ...(menuId1 || menuId2 ? { menuId: menuId1 || menuId2 } : {}),
+      ...(optionId1 ? { optionId1 } : {}),
+      ...(optionId2 ? { optionId2 } : {}),
       ...(optionId1 || optionId2 ? { optionId: optionId1 || optionId2 } : {}),
+      ...(optionCode1 ? { optionCode1 } : {}),
+      ...(optionCode2 ? { optionCode2 } : {}),
+      ...(optionCode1 || optionCode2 ? { optionCode: optionCode1 || optionCode2 } : {}),
       ...(note ? { note } : {}),
       servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
       servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,

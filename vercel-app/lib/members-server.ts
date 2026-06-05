@@ -16,6 +16,7 @@ import {
   pickTierByQualification,
   type MemberTierUpgradeBasis,
 } from '@/lib/member-tier-policy'
+import { buildMemberSearchPostgrestOrFilter } from '@/lib/member-search-filter'
 
 export type MemberSummary = {
   id: number
@@ -308,23 +309,8 @@ export async function listMembers(params?: { q?: string; limit?: number }): Prom
   if (!q) {
     rows = (await supabaseSelect('members', { order: 'id.desc', limit })) as MemberRow[]
   } else {
+    const memberFilter = buildMemberSearchPostgrestOrFilter(q)
     const escaped = encodeURIComponent(`*${q}*`)
-    const normalizedDigits = q.replace(/[^\d]/g, '')
-    const normalizedDigitsEscaped = normalizedDigits ? encodeURIComponent(`*${normalizedDigits}*`) : ''
-    const memberOrClauses = [
-      `name.ilike.${escaped}`,
-      `full_name.ilike.${escaped}`,
-      `line_display_name.ilike.${escaped}`,
-      `phone.ilike.${escaped}`,
-      `email.ilike.${escaped}`,
-      `birth_date.ilike.${escaped}`,
-      `member_no.ilike.${escaped}`,
-      `tier_code.ilike.${escaped}`,
-    ]
-    if (normalizedDigits && normalizedDigits !== q) {
-      memberOrClauses.push(`phone.ilike.${normalizedDigitsEscaped}`)
-    }
-    const memberFilter = `or=(${memberOrClauses.join(',')})`
     const membersByMemberFields = (await supabaseSelectFilter('members', memberFilter, {
       order: 'id.desc',
       limit,

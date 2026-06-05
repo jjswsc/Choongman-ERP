@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  enrichBanbanKitchenLineForPrint,
   expandBanbanComposeLineForPrint,
   getBanbanFlavorMenuList,
   isBanbanMenu,
   isBanbanFlavorWhitelistMissing,
   parseBanbanFlavorsFromName,
+  resolveBanbanFlavorPairForKitchenPrint,
   splitBanbanSlashOptionParts,
 } from './pos-banban-utils'
 
@@ -174,5 +176,60 @@ describe('getBanbanFlavorMenuList', () => {
       '2026-05-26'
     )
     expect(list.map((menu) => menu.id)).toEqual(['1', '2'])
+  })
+})
+
+describe('resolveBanbanFlavorPairForKitchenPrint', () => {
+  const menus = [
+    { id: '11', name: 'GOLDEN FRIED CHICKEN', code: 'C011' },
+    { id: '12', name: 'SOY SAUCE CHICKEN', code: 'C001' },
+    { id: '24', name: 'Banban Chicken', code: 'C024', isBanban: true },
+  ]
+
+  it('menuId1·menuId2 로 재인쇄 맛을 복원한다', () => {
+    expect(
+      resolveBanbanFlavorPairForKitchenPrint(
+        {
+          id: 'banban-11-12',
+          name: 'Banban Chicken',
+          menuId1: '11',
+          menuId2: '12',
+        },
+        menus
+      )
+    ).toEqual({
+      flavor1: 'GOLDEN FRIED CHICKEN',
+      flavor2: 'SOY SAUCE CHICKEN',
+    })
+  })
+
+  it('Grab mods note 로 맛을 복원한다', () => {
+    expect(
+      resolveBanbanFlavorPairForKitchenPrint(
+        {
+          id: 'grab:item-24-banban',
+          name: 'Banban Chicken',
+          note: 'mods:CURRY SNOW ONION,CURRYCANE',
+        },
+        menus
+      )
+    ).toEqual({
+      flavor1: 'CURRY SNOW ONION',
+      flavor2: 'CURRYCANE',
+    })
+  })
+
+  it('enrichBanbanKitchenLineForPrint 는 이름에 슬래시 맛을 붙인다', () => {
+    expect(
+      enrichBanbanKitchenLineForPrint(
+        {
+          id: 'banban-11-12',
+          name: 'Banban Chicken',
+          menuId1: '11',
+          menuId2: '12',
+        },
+        menus
+      ).name
+    ).toBe('Banban Chicken (GOLDEN FRIED CHICKEN / SOY SAUCE CHICKEN)')
   })
 })

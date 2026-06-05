@@ -635,6 +635,16 @@ function getPosIncomingWavDataUri(): string {
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
 type TakeoutMode = 'slot' | 'member'
+/** 신규 배달 유입 시 탭 포커스·수락 안내에 쓰는 파라미터 */
+type IncomingDeliveryFocusParams = {
+  orderId: number
+  orderType?: string
+  deliveryAppCode?: string
+  status?: string
+  createdAt?: string
+  storeCode?: string
+  memo?: string
+}
 type PendingPayRequest = {
   tableName: string
   items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
@@ -1679,14 +1689,16 @@ export default function PosTerminalPage() {
                 menuId2?: string
               }
             ).menu_id1 ??
-            (
-              it as {
-                menuId?: string
-                menuId1?: string
-                menu_id1?: string
-                menuId2?: string
-              }
-            ).menuId2 ??
+            ''
+        ).trim()
+        const menuId2 = String(
+          (
+            it as {
+              menuId2?: string
+              menu_id2?: string
+            }
+          ).menuId2 ??
+            (it as { menu_id2?: string }).menu_id2 ??
             ''
         ).trim()
         const pit = it as {
@@ -1731,7 +1743,8 @@ export default function PosTerminalPage() {
           name: grabLine ? String(it.name ?? displayName) : displayName,
           price: Number(it.price ?? 0),
           qty: Number(it.qty ?? it.quantity ?? 1),
-          ...(menuId ? { menuId } : {}),
+          ...(menuId ? { menuId, menuId1: menuId } : {}),
+          ...(menuId2 ? { menuId2 } : {}),
           ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
           ...(optionCode2 ? { optionCode2 } : {}),
           ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
@@ -2328,6 +2341,12 @@ export default function PosTerminalPage() {
     Boolean(pendingDineInOrderId) ||
     Boolean(pendingTakeoutOrderId) ||
     Boolean(pendingDeliveryOrderId)
+  /** 결제 모달·QR 대기·거스름 확인 등 — 신규 배달 자동 탭 전환 억제 */
+  const isIncomingDeliveryFocusLocked =
+    tourPaymentModalOpen ||
+    hasPendingPaymentFlow ||
+    postPaymentCashChangeBaht != null ||
+    kbankCallbackState === 'waiting'
   const customerDisplayOrderItems = useMemo(
     () =>
       terminalCartLines.map((line) => {
@@ -2412,6 +2431,9 @@ export default function PosTerminalPage() {
   const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
   const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
+  /** 결제 등 화면 잠금 중 유입된 배달 — 잠금 해제 후 순서대로 포커스 */
+  const deferredIncomingDeliveryQueueRef = useRef<IncomingDeliveryFocusParams[]>([])
+  const [deferredIncomingDeliveryCount, setDeferredIncomingDeliveryCount] = useState(0)
   const promptedGrabCustomerCancelIdsRef = useRef<Set<number>>(new Set())
   const grabCancelWatchSnapshotRef = useRef<Map<number, GrabCancelWatchSnap>>(new Map())
   const grabCancelWatchSeededRef = useRef(false)
@@ -2429,6 +2451,8 @@ export default function PosTerminalPage() {
     printedPaymentReceiptIdsRef.current = new Set()
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
+    deferredIncomingDeliveryQueueRef.current = []
+    setDeferredIncomingDeliveryCount(0)
     paymentReceiptScanSeededRef.current = false
     dineInRemoteItemQtySnapshotRef.current = new Map()
     mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
@@ -3304,33 +3328,14 @@ export default function PosTerminalPage() {
   )
 
   /**
-   * 신규 "배달" 주문 자동 처리:
-   * - 배달 탭으로 전환
-   * - 해당 주문 자동 선택
-   * - 배달앱 코드가 있으면 Grab/LineMan/Shopee 자동 선택
-   * - 알림음 재생
+   * 신규 "배달" 주문 UI 포커스(탭 전환·선택·알림음·수락 안내).
+   * `promptedPendingDeliveryOrderIdsRef` 등록은 호출 전에 완료되어야 함.
    */
-  const autoFocusIncomingDeliveryOrder = useCallback(
-    (params: {
-      orderId: number
-      orderType?: string
-      deliveryAppCode?: string
-      status?: string
-      createdAt?: string
-      storeCode?: string
-      memo?: string
-    }) => {
+  const applyIncomingDeliveryFocusUi = useCallback(
+    (params: IncomingDeliveryFocusParams) => {
       const orderId = Number(params.orderId)
-      if (!Number.isFinite(orderId) || orderId <= 0) return
-      if (!isSessionNewOrder(params.createdAt, posSessionStartedAtRef.current)) return
-      const orderType = String(params.orderType ?? '').trim().toLowerCase()
-      if (orderType !== 'delivery') return
-      const status = String(params.status ?? '').trim().toLowerCase()
-      if (status === 'cancelled' || status === 'refunded') return
-      if (promptedPendingDeliveryOrderIdsRef.current.has(orderId)) return
-      promptedPendingDeliveryOrderIdsRef.current.add(orderId)
-
       const deliveryCode = String(params.deliveryAppCode ?? '').trim().toLowerCase()
+      const status = String(params.status ?? '').trim().toLowerCase()
       if (deliveryCode) setDeliveryApp(deliveryCode)
       refetchStores({ scope: 'all' })
       setActiveTab('delivery')
@@ -3354,11 +3359,8 @@ export default function PosTerminalPage() {
       window.setTimeout(() => {
         void (async () => {
           const accepted = await appConfirm(
-            status === 'pending'
-              ? (t('posIncomingDeliveryApprovePrompt') ||
-                  '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?')
-              : (t('posIncomingDeliveryArrivedPrompt') ||
-                  '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?')
+            t('posIncomingDeliveryArrivedPrompt') ||
+              '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?'
           )
           if (!accepted) return
           refetchStores({ scope: 'all' })
@@ -3370,6 +3372,74 @@ export default function PosTerminalPage() {
     },
     [playIncomingOrderBeep, t, refetchStores, decideIncomingPendingDeliveryOrder]
   )
+
+  /**
+   * 신규 "배달" 주문 자동 처리:
+   * - 배달 탭으로 전환(결제 중이면 대기 큐)
+   * - 해당 주문 자동 선택
+   * - 배달앱 코드가 있으면 Grab/LineMan/Shopee 자동 선택
+   * - 알림음 재생
+   */
+  const autoFocusIncomingDeliveryOrder = useCallback(
+    (params: IncomingDeliveryFocusParams) => {
+      const orderId = Number(params.orderId)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      if (!isSessionNewOrder(params.createdAt, posSessionStartedAtRef.current)) return
+      const orderType = String(params.orderType ?? '').trim().toLowerCase()
+      if (orderType !== 'delivery') return
+      const status = String(params.status ?? '').trim().toLowerCase()
+      if (status === 'cancelled' || status === 'refunded') return
+      if (promptedPendingDeliveryOrderIdsRef.current.has(orderId)) return
+      if (deferredIncomingDeliveryQueueRef.current.some((entry) => entry.orderId === orderId)) return
+
+      if (isIncomingDeliveryFocusLocked) {
+        deferredIncomingDeliveryQueueRef.current.push({ ...params, orderId })
+        setDeferredIncomingDeliveryCount(deferredIncomingDeliveryQueueRef.current.length)
+        refetchStores({ scope: 'all' })
+        playIncomingOrderBeep()
+        return
+      }
+
+      promptedPendingDeliveryOrderIdsRef.current.add(orderId)
+      applyIncomingDeliveryFocusUi({ ...params, orderId })
+    },
+    [
+      applyIncomingDeliveryFocusUi,
+      isIncomingDeliveryFocusLocked,
+      playIncomingOrderBeep,
+      refetchStores,
+    ]
+  )
+
+  const flushDeferredIncomingDeliveryOrders = useCallback(() => {
+    if (isIncomingDeliveryFocusLocked) return
+    const batch = [...deferredIncomingDeliveryQueueRef.current]
+    if (batch.length === 0) return
+    deferredIncomingDeliveryQueueRef.current = []
+    setDeferredIncomingDeliveryCount(0)
+
+    const first = batch[0]
+    if (!promptedPendingDeliveryOrderIdsRef.current.has(first.orderId)) {
+      promptedPendingDeliveryOrderIdsRef.current.add(first.orderId)
+      applyIncomingDeliveryFocusUi(first)
+    }
+    for (let i = 1; i < batch.length; i += 1) {
+      promptedPendingDeliveryOrderIdsRef.current.add(batch[i].orderId)
+    }
+    if (batch.length > 1) {
+      void appAlert(
+        (t('posIncomingDeliveryDeferredBatchHint') ||
+          '결제 중 배달 주문 {{count}}건이 대기했습니다. 배달 탭에서 확인해 주세요.').replace(
+          '{{count}}',
+          String(batch.length)
+        )
+      )
+    }
+  }, [applyIncomingDeliveryFocusUi, isIncomingDeliveryFocusLocked, t])
+
+  useEffect(() => {
+    flushDeferredIncomingDeliveryOrders()
+  }, [flushDeferredIncomingDeliveryOrders])
 
   /** Grab 고객 취소(push order state) — Realtime UPDATE 시 팝업·알림음 */
   const notifyGrabCustomerCancelledOrder = useCallback(
@@ -3385,9 +3455,6 @@ export default function PosTerminalPage() {
         window.setTimeout(() => playIncomingOrderBeep(), 420)
       }
       refetchCurrentStore()
-      setActiveTab('delivery')
-      setDeliveryListMode('all')
-      setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
 
       const label =
         String(params.tableName ?? '').trim() ||
@@ -3396,9 +3463,18 @@ export default function PosTerminalPage() {
         '{{label}}',
         label
       )
+
+      if (isIncomingDeliveryFocusLocked) {
+        void appAlert(msg)
+        return
+      }
+
+      setActiveTab('delivery')
+      setDeliveryListMode('all')
+      setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
       void appAlert(msg)
     },
-    [playIncomingOrderBeep, refetchCurrentStore, t]
+    [isIncomingDeliveryFocusLocked, playIncomingOrderBeep, refetchCurrentStore, t]
   )
 
   const runGrabCancelWatchOnOrders = useCallback(
@@ -9896,12 +9972,31 @@ export default function PosTerminalPage() {
                   <TabsTrigger
                     value="delivery"
                     data-tour="pos-tour-tab-delivery"
-                    title={t('posOrderTypeDelivery') || '배달'}
-                    aria-label={t('posOrderTypeDelivery') || '배달'}
-                    className="shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                    title={
+                      deferredIncomingDeliveryCount > 0
+                        ? (t('posIncomingDeliveryDeferredTabHint') || '배달 ({{count}}건 결제 중 대기)').replace(
+                            '{{count}}',
+                            String(deferredIncomingDeliveryCount)
+                          )
+                        : t('posOrderTypeDelivery') || '배달'
+                    }
+                    aria-label={
+                      deferredIncomingDeliveryCount > 0
+                        ? (t('posIncomingDeliveryDeferredTabHint') || '배달 ({{count}}건 결제 중 대기)').replace(
+                            '{{count}}',
+                            String(deferredIncomingDeliveryCount)
+                          )
+                        : t('posOrderTypeDelivery') || '배달'
+                    }
+                    className="relative shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
                   >
                     <Bike className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posOrderTypeDelivery') || '배달'}</span>
+                    {deferredIncomingDeliveryCount > 0 ? (
+                      <span className="absolute -top-1 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground">
+                        {deferredIncomingDeliveryCount > 9 ? '9+' : deferredIncomingDeliveryCount}
+                      </span>
+                    ) : null}
                   </TabsTrigger>
                   <TabsTrigger
                     value="takeout"

@@ -6615,6 +6615,9 @@ export const i18n = {
     posIncomingDeliveryApprovePrompt: '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?',
     posIncomingDeliveryArrivedPrompt: '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?',
     posIncomingDeliveryDecisionPrompt: '신규 배달 주문입니다.\n이 주문을 수락할까요?',
+    posIncomingDeliveryDeferredBatchHint:
+      '결제 중 배달 주문 {{count}}건이 대기했습니다. 배달 탭에서 확인해 주세요.',
+    posIncomingDeliveryDeferredTabHint: '배달 ({{count}}건 결제 중 대기)',
     posGrabCustomerCancelledAlert:
       '고객이 Grab에서 주문을 취소했습니다.\n\n{{label}}\n\n배달 탭에서 확인해 주세요.',
     posGrabDeliveryProgressTitle: 'Grab 배달 단계',
@@ -15678,6 +15681,9 @@ orderItemQty: 'Qty',
     posIncomingDeliveryApprovePrompt: 'A new delivery order has arrived. Move to the order acceptance screen now?',
     posIncomingDeliveryArrivedPrompt: 'A new delivery order has arrived. Move to the order screen now?',
     posIncomingDeliveryDecisionPrompt: 'New delivery order.\nDo you want to accept this order?',
+    posIncomingDeliveryDeferredBatchHint:
+      '{{count}} delivery order(s) waited while checkout was in progress. Please check the Delivery tab.',
+    posIncomingDeliveryDeferredTabHint: 'Delivery ({{count}} waiting during checkout)',
     posGrabCustomerCancelledAlert:
       'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
     posGrabDeliveryProgressTitle: 'Grab delivery stages',
@@ -24001,6 +24007,9 @@ orderItemQty: 'จำนวน',
     posIncomingDeliveryApprovePrompt: 'มีออเดอร์เดลิเวอรีใหม่ เข้าหน้ารับออเดอร์ตอนนี้หรือไม่?',
     posIncomingDeliveryArrivedPrompt: 'มีออเดอร์เดลิเวอรีใหม่ ไปหน้ารายการออเดอร์ตอนนี้หรือไม่?',
     posIncomingDeliveryDecisionPrompt: 'มีออเดอร์เดลิเวอรีใหม่\nต้องการรับออเดอร์นี้หรือไม่?',
+    posIncomingDeliveryDeferredBatchHint:
+      'มีออเดอร์เดลิเวอรี {{count}} รายการรอระหว่างคิดเงิน โปรดตรวจสอบที่แท็บเดลิเวอรี',
+    posIncomingDeliveryDeferredTabHint: 'เดลิเวอรี (รอ {{count}} ระหว่างคิดเงิน)',
     posGrabCustomerCancelledAlert:
       'ลูกค้ายกเลิกออเดอร์นี้ใน Grab แล้ว\n\n{{label}}\n\nโปรดตรวจสอบที่แท็บเดลิเวอรี',
     posGrabDeliveryProgressTitle: 'ขั้น Grab',

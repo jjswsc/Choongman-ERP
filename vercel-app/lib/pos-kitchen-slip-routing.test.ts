@@ -3,6 +3,7 @@ import {
   buildKitchenSlipGroups,
   buildPartialCancelKitchenSlips,
   kitchenRoutingItemFromOrderItem,
+  preparePosOrderItemsForKitchenSlip,
   resolveEffectiveKitchenRouteForMenu,
   type KitchenSlipRoutingItem,
 } from '@/lib/pos-kitchen-slip-routing'
@@ -188,5 +189,29 @@ describe('buildPartialCancelKitchenSlips', () => {
       [{ label: 'K2', station: 2 as const, items: [{ id: 'tteok', name: 'Tteokbokki', qty: 1 }] }]
     )
     expect(slips).toEqual([])
+  })
+})
+
+describe('preparePosOrderItemsForKitchenSlip banban reprint', () => {
+  it('restores slash flavors from menuId1 and menuId2 when name was stripped', () => {
+    const menus = [
+      { id: '11', name: 'GOLDEN FRIED CHICKEN', code: 'C011' },
+      { id: '12', name: 'SOY SAUCE CHICKEN', code: 'C001' },
+      { id: '24', name: 'Banban Chicken', code: 'C024', isBanban: true },
+    ]
+    const prepared = preparePosOrderItemsForKitchenSlip(
+      [
+        {
+          id: 'banban-11-12',
+          name: 'Banban Chicken',
+          qty: 1,
+          menuId1: '11',
+          menuId2: '12',
+        },
+      ],
+      { menus }
+    )
+    expect(prepared[0]?.name).toBe('Banban Chicken (GOLDEN FRIED CHICKEN / SOY SAUCE CHICKEN)')
+    expect(String(prepared[0]?.note ?? '')).toContain('/')
   })
 })

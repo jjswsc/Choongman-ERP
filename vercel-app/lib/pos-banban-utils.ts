@@ -247,3 +247,150 @@ export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu
   if (configured) return configured
   return getAutoBanbanFlavorMenuList(allMenus, banbanMenu, { todayStr })
 }
+
+export type BanbanKitchenLineLike = {
+  id?: string | null
+  name?: string | null
+  note?: string | null
+  menuId?: string | null
+  menuId1?: string | null
+  menu_id1?: string | null
+  menuId2?: string | null
+  menu_id2?: string | null
+  promoItems?: Array<{
+    menuId?: string
+    menuName?: string | null
+    optionName?: string | null
+  }> | null
+}
+
+function resolveMenuNameById(
+  menus: Pick<PosMenu, 'id' | 'name'>[],
+  rawId: string | null | undefined
+): string {
+  const id = String(rawId ?? '').trim()
+  if (!id) return ''
+  const hit = menus.find((m) => String(m.id ?? '').trim() === id)
+  return String(hit?.name ?? '').trim()
+}
+
+function stripTrailingParenOption(rawName: string): string {
+  return String(rawName ?? '')
+    .trim()
+    .replace(/\s*\([^)]*\)\s*$/u, '')
+    .trim()
+}
+
+function extractBanbanFlavorsFromModsNote(note: string | null | undefined): [string, string] | null {
+  const raw = String(note ?? '').trim()
+  if (!raw) return null
+  const modsChunk = raw
+    .split('·')
+    .map((s) => s.trim())
+    .find((c) => /^mods?:/i.test(c))
+  if (!modsChunk) return null
+  const body = modsChunk.replace(/^mods?:/i, '').trim()
+  const parts = body
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const human = parts.filter((p) => !/^\d+$/.test(p))
+  const pick = human.length >= 2 ? human : parts
+  if (pick.length < 2) return null
+  return [pick[0], pick[1]]
+}
+
+function extractBanbanFlavorsFromCommaName(name: string): [string, string] | null {
+  const trimmed = String(name ?? '').trim()
+  const m = /^(.+?)\s*\(([^()]+)\)\s*$/u.exec(trimmed)
+  if (!m) return null
+  const baseName = m[1].trim()
+  const optionPart = m[2].trim()
+  if (!baseName || optionPart.includes('/')) return null
+  const parts = optionPart
+    .split(/\s*,\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length !== 2) return null
+  if (!isBanbanMenu({ isBanban: false, name: baseName, code: '' })) return null
+  return [parts[0], parts[1]]
+}
+
+/** 주방·재인쇄: 이름·note·menuId1/2·promoItems 에서 반반 2맛 라벨을 복원한다. */
+export function resolveBanbanFlavorPairForKitchenPrint(
+  item: BanbanKitchenLineLike,
+  menus: Pick<PosMenu, 'id' | 'name' | 'code' | 'isBanban'>[] = []
+): { flavor1: string; flavor2: string } | null {
+  const name = String(item.name ?? '').trim()
+  const fromSlash = parseBanbanFlavorsFromName(name)
+  if (fromSlash) return { flavor1: fromSlash.flavor1, flavor2: fromSlash.flavor2 }
+
+  const fromComma = extractBanbanFlavorsFromCommaName(name)
+  if (fromComma) return { flavor1: fromComma[0], flavor2: fromComma[1] }
+
+  const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
+  const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
+  if (mid1 && mid2 && mid1 !== mid2) {
+    const flavor1 = resolveMenuNameById(menus, mid1)
+    const flavor2 = resolveMenuNameById(menus, mid2)
+    if (flavor1 && flavor2) return { flavor1, flavor2 }
+  }
+
+  const fromMods = extractBanbanFlavorsFromModsNote(String(item.note ?? ''))
+  if (fromMods) return { flavor1: fromMods[0], flavor2: fromMods[1] }
+
+  const pis = item.promoItems
+  if (Array.isArray(pis) && pis.length >= 2) {
+    const labels = pis
+      .slice(0, 2)
+      .map((p) => {
+        const opt = String(p.optionName ?? '').trim()
+        if (opt) return opt
+        const menuName = String(p.menuName ?? '').trim()
+        if (menuName && !isBanbanMenu({ isBanban: false, name: menuName, code: '' })) return menuName
+        return resolveMenuNameById(menus, p.menuId)
+      })
+      .filter(Boolean)
+    if (labels.length >= 2) return { flavor1: labels[0], flavor2: labels[1] }
+  }
+
+  return null
+}
+
+export function isBanbanKitchenLine(item: BanbanKitchenLineLike): boolean {
+  const name = String(item.name ?? '').trim()
+  const id = String(item.id ?? '').trim()
+  if (/^banban-/i.test(id)) return true
+  if (isBanbanMenu({ isBanban: false, name, code: '' })) return true
+  if (parseBanbanFlavorsFromName(name)) return true
+  const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
+  const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
+  return Boolean(mid1 && mid2 && mid1 !== mid2)
+}
+
+/**
+ * DB·Grab 스냅샷에 맛이 빠진 반반 줄을 주방 인쇄용 `이름 (맛1 / 맛2)` 형태로 보강한다.
+ * (초기 인쇄·재인쇄·Grab 자동주문 공통)
+ */
+export function enrichBanbanKitchenLineForPrint<T extends BanbanKitchenLineLike>(
+  item: T,
+  menus: Pick<PosMenu, 'id' | 'name' | 'code' | 'isBanban'>[] = []
+): T {
+  if (!isBanbanKitchenLine(item)) return item
+  if (parseBanbanFlavorsFromName(String(item.name ?? ''))) return item
+
+  const pair = resolveBanbanFlavorPairForKitchenPrint(item, menus)
+  if (!pair) return item
+
+  const rawName = String(item.name ?? '').trim()
+  const baseName = (() => {
+    const stripped = stripTrailingParenOption(rawName)
+    if (stripped && isBanbanMenu({ isBanban: false, name: stripped, code: '' })) return stripped
+    return stripped || rawName || 'Banban Chicken'
+  })()
+
+  return {
+    ...item,
+    name: `${baseName} (${pair.flavor1} / ${pair.flavor2})`,
+  }
+}

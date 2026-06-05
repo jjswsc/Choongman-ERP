@@ -24,6 +24,7 @@ import {
   parseGrabSetChildLineName,
   type GrabSetPosLine,
 } from '@/lib/grab-set-pos-lines'
+import { isBanbanMenu } from '@/lib/pos-banban-utils'
 
 type GrabOrderPersistResult =
   | {
@@ -338,6 +339,59 @@ function formatGrabKitchenDisplayName(baseName: string, modifierLabels: string[]
   const tail = grouped.slice(1).join(', ')
   if (/^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(head) && tail) return `${name} (${head} - ${tail})`
   return `${name} (${grouped.join(', ')})`
+}
+
+function isGrabBanbanSizeOrPartLabel(raw: string): boolean {
+  const lab = String(raw ?? '').trim()
+  if (!lab) return false
+  return (
+    /^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(lab) ||
+    /\b(size|part|boneless|drumette|joint wing|wing|leg|순살|뼈|โดบา|ปีก)\b/i.test(lab) ||
+    /^flavor\s*[12]\b/i.test(lab)
+  )
+}
+
+function parseGrabBanbanFlavorMenuIdFromModifierId(modId: string): string {
+  const m = /(?:^|-)f-(\d+)(?:-|$)/i.exec(String(modId ?? '').trim())
+  return m?.[1] ? String(m[1]).trim() : ''
+}
+
+/** Grab submit_order: `-banban-1-` / `-banban-2-` modifier id 에서 맛 이름·메뉴 id 추출 */
+function extractGrabBanbanFlavorSelections(
+  flatModifiers: Record<string, unknown>[],
+  extractNames: (mod: Record<string, unknown>) => string[]
+): { flavors: string[]; flavorMenuIds: string[] } {
+  const bySlot = new Map<number, { name: string; menuId: string }>()
+  for (const mod of flatModifiers) {
+    const modId = String(mod.id ?? mod.modifierID ?? mod.modifierId ?? '').trim()
+    const slotMatch = /banban[-_]([12])\b/i.exec(modId)
+    if (!slotMatch) continue
+    const slot = Number(slotMatch[1])
+    if (slot !== 1 && slot !== 2) continue
+    const names = extractNames(mod).map((n) => String(n ?? '').trim()).filter(Boolean)
+    const name =
+      names.find((n) => !isGrabBanbanSizeOrPartLabel(n) && !/^flavor\s*[12]\b/i.test(n)) ||
+      names[0] ||
+      ''
+    const menuId = parseGrabBanbanFlavorMenuIdFromModifierId(modId)
+    bySlot.set(slot, { name, menuId })
+  }
+  const flavors: string[] = []
+  const flavorMenuIds: string[] = []
+  for (const slot of [1, 2]) {
+    const hit = bySlot.get(slot)
+    if (!hit) continue
+    if (hit.name) flavors.push(hit.name)
+    if (hit.menuId) flavorMenuIds.push(hit.menuId)
+  }
+  return { flavors, flavorMenuIds }
+}
+
+function formatGrabBanbanKitchenDisplayName(baseName: string, flavorLabels: string[]): string {
+  const base = String(baseName ?? '').trim()
+  const flavors = (flavorLabels || []).map((x) => String(x ?? '').trim()).filter(Boolean)
+  if (!base || flavors.length < 2) return base
+  return `${base} (${flavors[0]} / ${flavors[1]})`
 }
 
 function readLineMinorTotal(item: Record<string, unknown>): number {
@@ -883,6 +937,38 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     )
     if (inferredDefaultSize && !modifierNamesForNote.includes(inferredDefaultSize)) {
       modifierNamesForNote.unshift(inferredDefaultSize)
+    }
+    const resolvedMenuRow = resolved.menuId
+      ? catalog.menuById.get(Number(resolved.menuId))
+      : undefined
+    const isBanbanGrabLine =
+      isBanbanMenu({
+        isBanban: false,
+        name: itemName,
+        code: resolvedMenuCode,
+      }) ||
+      (resolvedMenuRow
+        ? isBanbanMenu({
+            isBanban: false,
+            name: resolvedMenuRow.name,
+            code: resolvedMenuRow.code,
+          })
+        : false)
+    if (isBanbanGrabLine) {
+      const banbanSlots = extractGrabBanbanFlavorSelections(flatModifiers, extractReadableModifierNames)
+      const flavorLabels =
+        banbanSlots.flavors.length >= 2
+          ? banbanSlots.flavors.slice(0, 2)
+          : modifierNamesForNote.filter((lab) => !isGrabBanbanSizeOrPartLabel(lab)).slice(0, 2)
+      if (flavorLabels.length >= 2) {
+        const baseBanbanName = String(resolvedMenuRow?.name ?? itemName).trim() || itemName
+        itemName = formatGrabBanbanKitchenDisplayName(baseBanbanName, flavorLabels)
+        const remainder = modifierNamesForNote.filter(
+          (lab) => !flavorLabels.some((f) => f.toLowerCase() === lab.toLowerCase())
+        )
+        modifierNamesForNote.length = 0
+        modifierNamesForNote.push(...remainder)
+      }
     }
     itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
     const noteParts = [

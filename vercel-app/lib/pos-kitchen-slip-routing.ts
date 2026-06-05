@@ -1,5 +1,6 @@
 import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import { resolveCartLineQuantityForSave } from "@/lib/pos-order-item-map"
+import { enrichBanbanKitchenLineForPrint, isBanbanKitchenLine } from '@/lib/pos-banban-utils'
 import { resolvePosOrderItemMenuDisplayName } from "@/lib/pos-order-item-display-name"
 import { resolveGrabItemPrintNote } from "@/lib/grab-pos-order-enrich"
 import { splitPosPrintItemLine } from "@/lib/pos-print-item-line"
@@ -576,13 +577,15 @@ export function kitchenRoutingItemFromOrderItem(it: OrderItem, displayName: stri
     optionCode1: String(it.optionCode1 ?? "").trim() || null,
     optionCode2: String(it.optionCode2 ?? "").trim() || null,
   })
-  const menuId = String(it.menuId ?? "").trim()
+  const menuId1 = String(it.menuId1 ?? it.menuId ?? "").trim()
+  const menuId2 = String(it.menuId2 ?? "").trim()
   const row: KitchenSlipRoutingItem = {
     id: String(it.id ?? ""),
     name: displayName,
     qty,
     ...(note ? { note } : {}),
-    ...(menuId ? { menuId1: menuId } : {}),
+    ...(menuId1 ? { menuId1 } : {}),
+    ...(menuId2 ? { menuId2 } : {}),
   }
   if (Array.isArray(it.promoItems) && it.promoItems.length > 0) {
     row.promoItems = it.promoItems
@@ -747,9 +750,9 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
   ) as T[]
 
   return enriched.map((it) => {
-    const menuId = String(
-      it.menuId ?? it.menuId1 ?? it.menu_id1 ?? it.menuId2 ?? ''
-    ).trim()
+    const menuId = isBanbanKitchenLine(it)
+      ? String(it.menuId ?? '').trim()
+      : String(it.menuId ?? it.menuId1 ?? it.menu_id1 ?? it.menuId2 ?? '').trim()
     const resolvedName = resolvePosOrderItemMenuDisplayName(
       {
         id: String(it.id ?? ''),
@@ -761,6 +764,11 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
       menus as Parameters<typeof resolvePosOrderItemMenuDisplayName>[1],
       opts.promoCatalogById ? Array.from(opts.promoCatalogById.values()) : undefined
     )
+    const banbanPrepared = enrichBanbanKitchenLineForPrint(
+      { ...it, name: resolvedName },
+      menus as Parameters<typeof enrichBanbanKitchenLineForPrint>[1]
+    )
+    const displayName = String(banbanPrepared.name ?? resolvedName)
     let promoItems = enrichPromoItemsMenuNames(it.promoItems, lookup)
     const promoItemsForPrint = Array.isArray(promoItems)
       ? promoItems.map((p) => {
@@ -790,12 +798,12 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
     const hasPromoChildren = Array.isArray(promoItems) && promoItems.length > 0
     let injectedNote = existingNote
     if (!existingNote && !hasOptionCodeField && !hasPromoChildren) {
-      const optionFromName = splitPosPrintItemLine(String(resolvedName ?? '')).optionLine
+      const optionFromName = splitPosPrintItemLine(String(displayName ?? '')).optionLine
       if (optionFromName) injectedNote = optionFromName
     }
     return {
       ...it,
-      name: resolvedName,
+      name: displayName,
       ...(injectedNote ? { note: injectedNote } : {}),
       ...(promoItems ? { promoItems } : {}),
     } as T

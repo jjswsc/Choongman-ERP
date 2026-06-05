@@ -11635,7 +11635,13 @@ export async function getMembers(params?: { q?: string; limit?: number }) {
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()
   const url = '/api/members' + (suffix ? `?${suffix}` : '')
-  const cacheKey = `erp:posMembers:${params?.q?.trim() || ''}:${params?.limit ?? 'default'}`
+  const searchQ = params?.q?.trim() || ''
+  if (searchQ) {
+    const res = await apiFetchWithOffline(url)
+    const data = await res.json().catch(() => [])
+    return Array.isArray(data) ? (data as Member[]) : []
+  }
+  const cacheKey = `erp:posMembers::${params?.limit ?? 'default'}`
   const list = await fetchPosCatalogCached<unknown>(cacheKey, url, [])
   return Array.isArray(list) ? (list as Member[]) : []
 }
