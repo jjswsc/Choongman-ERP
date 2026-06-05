@@ -48,7 +48,7 @@ export type MarketingPerformanceDashboardPanelProps = {
 export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }: MarketingPerformanceDashboardPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, formatStoreLabel } = useStoreList()
 
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [campaignFilter, setCampaignFilter] = React.useState("")
@@ -152,7 +152,7 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
                 <SelectItem value="__all__">{t("marketingPerformanceAllStores")}</SelectItem>
                 {storeList.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {s}
+                    {formatStoreLabel(s)}
                   </SelectItem>
                 ))}
               </SelectContent>

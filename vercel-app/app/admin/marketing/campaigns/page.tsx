@@ -237,7 +237,25 @@ export default function MarketingCampaignsPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const { stores, loading: storesLoading } = useStoreList()
+  const { stores, loading: storesLoading, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const normalizeBranchCodes = React.useCallback(
+    (codes: string[]) => {
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const c of codes) {
+        const n = resolveStoreKey(String(c || "").trim())
+        if (!n || seen.has(n)) continue
+        seen.add(n)
+        out.push(n)
+      }
+      return out
+    },
+    [resolveStoreKey]
+  )
+  const formatBranchList = React.useCallback(
+    (codes: string[]) => normalizeBranchCodes(codes).map((c) => formatStoreLabel(c)).join(", "),
+    [formatStoreLabel, normalizeBranchCodes]
+  )
   const [materialTypeOptions, setMaterialTypeOptions] = React.useState<MarketingMaterialTypeOption[]>(
     defaultMarketingMaterialTypeOptions
   )
@@ -639,7 +657,7 @@ export default function MarketingCampaignsPage() {
                 endDate: p.endDate ?? "",
               }))
             : [],
-          branches: Array.isArray(c.branches) ? [...c.branches] : [],
+          branches: normalizeBranchCodes(Array.isArray(c.branches) ? c.branches : []),
           discountType: ["amount", "fixed"].includes(c.discountType ?? "") ? "amount" : "percent",
           discountValue: String(c.discountValue ?? ""),
           discountPricePromotion: c.discountPricePromotion ?? "",
@@ -872,7 +890,7 @@ export default function MarketingCampaignsPage() {
         designEndDate: "",
         designNote: "",
         phasePeriods: [],
-        branches: Array.isArray(detail.branches) ? [...detail.branches] : [],
+        branches: normalizeBranchCodes(Array.isArray(detail.branches) ? detail.branches : []),
         discountType: ["amount", "fixed"].includes(detail.discountType ?? "") ? "amount" : "percent",
         discountValue: String(detail.discountValue ?? ""),
         discountPricePromotion: detail.discountPricePromotion ?? "",
@@ -1695,14 +1713,14 @@ export default function MarketingCampaignsPage() {
                           checked={form.branches.includes(store)}
                           onCheckedChange={() => toggleBranch(store)}
                         />
-                        <span className="truncate">{store}</span>
+                        <span className="truncate">{formatStoreLabel(store)}</span>
                       </label>
                     ))}
                   </div>
                 )}
                 {form.branches.length > 0 && (
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    {tr("선택됨", "Selected", "เลือกแล้ว")}: {form.branches.join(", ")}
+                    {tr("선택됨", "Selected", "เลือกแล้ว")}: {formatBranchList(form.branches)}
                   </p>
                 )}
                 <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
@@ -2126,7 +2144,7 @@ export default function MarketingCampaignsPage() {
                             <label key={store} className="flex cursor-pointer items-center gap-1 text-xs">
                               <Checkbox checked={matForm.branches.includes(store)}
                                 onCheckedChange={() => toggleMatBranch(store)} />
-                              <span className="truncate">{store}</span>
+                              <span className="truncate">{formatStoreLabel(store)}</span>
                             </label>
                           ))}
                         </div>
@@ -2259,7 +2277,12 @@ export default function MarketingCampaignsPage() {
                                       {tr("실비", "Actual", "จริง")} ฿{(mat.actualCost ?? 0).toLocaleString()}
                                     </span>
                                   )}
-                                  {mat.branches.length > 0 && <span>{mat.branches.slice(0, 3).join(", ")}{mat.branches.length > 3 ? "..." : ""}</span>}
+                                  {mat.branches.length > 0 && (
+                                    <span>
+                                      {formatBranchList(mat.branches.slice(0, 3))}
+                                      {mat.branches.length > 3 ? "..." : ""}
+                                    </span>
+                                  )}
                                   {spots.length > 0 && (
                                     <span>
                                       {tr("위치", "Placement", "ตำแหน่ง")}:{" "}
@@ -2331,7 +2354,7 @@ export default function MarketingCampaignsPage() {
                                             <option value="">{tr("매장 선택", "Select store", "เลือกสาขา")}</option>
                                             {stores.map((s) => (
                                               <option key={s} value={s}>
-                                                {s}
+                                                {formatStoreLabel(s)}
                                               </option>
                                             ))}
                                           </select>
@@ -2470,7 +2493,7 @@ export default function MarketingCampaignsPage() {
                                       <option value="">{tr("매장 선택", "Select store", "เลือกสาขา")}</option>
                                       {stores.map((s) => (
                                         <option key={s} value={s}>
-                                          {s}
+                                          {formatStoreLabel(s)}
                                         </option>
                                       ))}
                                     </select>
@@ -2697,7 +2720,7 @@ export default function MarketingCampaignsPage() {
                     <option value="_allStoresPlan">{tr("전체 매장(기획)만", "All stores (plan) only", "เฉพาะทุกสาขา (แผน)")}</option>
                     {stores.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {formatStoreLabel(s)}
                       </option>
                     ))}
                   </select>
@@ -3022,7 +3045,10 @@ export default function MarketingCampaignsPage() {
                         </span>
                       )}
                       {c.branches && c.branches.length > 0 ? (
-                        <span>{c.branches.slice(0, 3).join(", ")}{c.branches.length > 3 ? ` +${c.branches.length - 3}` : ""}</span>
+                        <span>
+                          {formatBranchList(c.branches.slice(0, 3))}
+                          {c.branches.length > 3 ? ` +${c.branches.length - 3}` : ""}
+                        </span>
                       ) : (
                         <span className="text-amber-800/90 dark:text-amber-200/90">
                           {tr("전체 매장(기획)", "All stores (plan)", "ทุกสาขา (แผน)")}

@@ -173,7 +173,7 @@ export default function MarketingMaterialsPage() {
     () => new Set()
   )
 
-  const { stores } = useStoreList()
+  const { stores, formatStoreLabel } = useStoreList()
 
   const activeCampaignId = (campaignFilter || campaignIdFromQuery || "").trim()
 
@@ -1105,7 +1105,7 @@ export default function MarketingMaterialsPage() {
                           checked={materialAddForm.branches.includes(store)}
                           onCheckedChange={() => toggleMaterialAddBranch(store)}
                         />
-                        {store}
+                        {formatStoreLabel(store)}
                       </label>
                     ))}
                   </div>
@@ -1163,7 +1163,7 @@ export default function MarketingMaterialsPage() {
                             <option value="">{tr("선택", "Select", "เลือก")}</option>
                             {stores.map((s) => (
                               <option key={s} value={s}>
-                                {s}
+                                {formatStoreLabel(s)}
                               </option>
                             ))}
                           </select>
@@ -1324,7 +1324,7 @@ export default function MarketingMaterialsPage() {
               <option value="">{tr("전체 매장", "All Stores", "ทุกสาขา")}</option>
               {stores.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {formatStoreLabel(s)}
                 </option>
               ))}
             </select>
@@ -1761,7 +1761,7 @@ export default function MarketingMaterialsPage() {
                     <option value="">{tr("전체 매장", "All Stores", "ทุกสาขา")}</option>
                     {stores.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {formatStoreLabel(s)}
                       </option>
                     ))}
                   </select>

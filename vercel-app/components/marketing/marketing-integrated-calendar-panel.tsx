@@ -163,7 +163,7 @@ export function MarketingIntegratedCalendarPanel({
     [t]
   )
 
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, formatStoreLabel } = useStoreList()
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [rawEvents, setRawEvents] = React.useState<MarketingCalendarEvent[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -367,7 +367,7 @@ export function MarketingIntegratedCalendarPanel({
                   <SelectItem value="__all__">{t("marketingPerformanceAllStores")}</SelectItem>
                   {storeList.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s}
+                      {formatStoreLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>

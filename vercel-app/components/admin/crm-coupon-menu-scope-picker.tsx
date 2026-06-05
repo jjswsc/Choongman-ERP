@@ -64,7 +64,7 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
     return filtered.slice(0, 80)
   }, [menus, query, showInactive])
 
-  const summary = formatCouponItemScopeSummary(value, menuById)
+  const summary = formatCouponItemScopeSummary(value, menuById, t)
   const hasScope = value.menuIds.length > 0 || value.categoryCodes.length > 0
 
   const toggleMenu = (menuId: string) => {

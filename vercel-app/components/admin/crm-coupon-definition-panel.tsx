@@ -177,7 +177,7 @@ export function CrmCouponDefinitionPanel() {
         itemScope: buildItemScopePayload(itemScope),
       })
       if (!res.success) {
-        await appAlert(res.message || "저장 실패")
+        await appAlert(res.message || t("posSaveFail") || "저장 실패")
         return
       }
       await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -214,15 +214,16 @@ export function CrmCouponDefinitionPanel() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-950">
-        <p className="font-medium">POS · 회원앱 연동</p>
+        <p className="font-medium">{t("crmCouponPosAppTitle") || "POS · 회원앱 연동"}</p>
         <p className="mt-1 text-xs text-indigo-900/80">
-          「회원 발급」 유형 쿠폰은 CRM에서 지급 → 회원앱 「내 혜택」에 표시 → POS 결제 시 회원 연결 후 자동 적용됩니다.
+          {t("crmCouponPosAppDesc") ||
+            "「회원 발급」 유형 쿠폰은 CRM에서 지급 → 회원앱 「내 혜택」에 표시 → POS 결제 시 회원 연결 후 자동 적용됩니다."}
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          placeholder="코드·이름 검색"
+          placeholder={t("crmCouponSearchPh") || "코드·이름 검색"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
@@ -242,13 +243,13 @@ export function CrmCouponDefinitionPanel() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left">
               <tr>
-                <th className="p-3 font-medium">코드</th>
-                <th className="p-3 font-medium">이름</th>
-                <th className="p-3 font-medium">혜택</th>
+                <th className="p-3 font-medium">{t("crmCouponColCode") || "코드"}</th>
+                <th className="p-3 font-medium">{t("crmCouponColName") || "이름"}</th>
+                <th className="p-3 font-medium">{t("crmCouponBenefit") || "혜택"}</th>
                 <th className="p-3 font-medium">{t("crmCouponScopeTitle") || "적용 메뉴"}</th>
-                <th className="p-3 font-medium">사용 방식</th>
-                <th className="p-3 font-medium">유효기간</th>
-                <th className="p-3 font-medium">상태</th>
+                <th className="p-3 font-medium">{t("posCouponRedemptionMode") || "사용 방식"}</th>
+                <th className="p-3 font-medium">{t("crmCouponColValidPeriod") || "유효기간"}</th>
+                <th className="p-3 font-medium">{t("crmCouponColStatus") || "상태"}</th>
                 <th className="p-3 font-medium" />
               </tr>
             </thead>
@@ -264,19 +265,21 @@ export function CrmCouponDefinitionPanel() {
                   <tr key={c.id ?? c.code} className="border-t hover:bg-muted/20">
                     <td className="p-3 font-mono font-semibold">{c.code}</td>
                     <td className="p-3">{c.name || c.code}</td>
-                    <td className="p-3 tabular-nums">{formatCouponBenefit(c)}</td>
+                    <td className="p-3 tabular-nums">{formatCouponBenefit(c, t)}</td>
                     <td className="p-3 max-w-[200px] text-xs text-muted-foreground">
-                      {formatCouponItemScopeSummary(itemScopeFromCoupon(c), menuById)}
+                      {formatCouponItemScopeSummary(itemScopeFromCoupon(c), menuById, t)}
                     </td>
                     <td className="p-3">
-                      <Badge variant="outline">{redemptionModeLabel(c.redemptionMode)}</Badge>
+                      <Badge variant="outline">{redemptionModeLabel(c.redemptionMode, t)}</Badge>
                     </td>
                     <td className="p-3 text-xs text-muted-foreground">
                       {(c.validFrom || "—") + " ~ " + (c.validTo || "—")}
                     </td>
                     <td className="p-3">
                       <Badge variant={c.isActive === false ? "secondary" : "default"}>
-                        {c.isActive === false ? "비활성" : "활성"}
+                        {c.isActive === false
+                          ? t("crmCouponStatusInactive") || "비활성"
+                          : t("crmCouponStatusActive") || "활성"}
                       </Badge>
                     </td>
                     <td className="p-3">
@@ -337,17 +340,19 @@ export function CrmCouponDefinitionPanel() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixed">정액</SelectItem>
-                    <SelectItem value="percent">정률</SelectItem>
-                    <SelectItem value="bogo">1+1</SelectItem>
-                    <SelectItem value="set_fixed">세트</SelectItem>
-                    <SelectItem value="item_fixed">품목</SelectItem>
+                    <SelectItem value="fixed">{t("posCouponTypeFixed") || "정액"}</SelectItem>
+                    <SelectItem value="percent">{t("posCouponTypePercent") || "정률"}</SelectItem>
+                    <SelectItem value="bogo">{t("posCouponTypeBogo") || "1+1"}</SelectItem>
+                    <SelectItem value="set_fixed">{t("posCouponTypeSetFixed") || "세트"}</SelectItem>
+                    <SelectItem value="item_fixed">{t("posCouponTypeItemFixed") || "품목"}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">
-                  {form.discountType === "percent" ? "할인율 (%)" : "할인 값"}
+                  {form.discountType === "percent"
+                    ? t("posCouponDiscountPercentLabel") || "할인율 (%)"
+                    : t("posCouponDiscountValueLabel") || "할인 값"}
                 </label>
                 <Input
                   type="number"
@@ -380,7 +385,9 @@ export function CrmCouponDefinitionPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member_issue">{t("posCouponModeMember") || "회원 발급 (권장)"}</SelectItem>
+                  <SelectItem value="member_issue">
+                    {t("posCouponModeMemberRecommended") || t("posCouponModeMember") || "회원 발급 (권장)"}
+                  </SelectItem>
                   <SelectItem value="reusable_code">{t("posCouponModeReusable") || "공통 코드"}</SelectItem>
                   <SelectItem value="single_use_serial">{t("posCouponModeSerial") || "1회용 시리얼"}</SelectItem>
                 </SelectContent>
@@ -411,7 +418,7 @@ export function CrmCouponDefinitionPanel() {
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))} />
-              활성 (비활성 시 발급·사용 불가)
+              {t("crmCouponActiveCheckbox") || "활성 (비활성 시 발급·사용 불가)"}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -419,7 +426,7 @@ export function CrmCouponDefinitionPanel() {
                 checked={form.allowWithManualDiscount}
                 onChange={(e) => setForm((f) => ({ ...f, allowWithManualDiscount: e.target.checked }))}
               />
-              수동 할인과 동시 사용 허용
+              {t("crmCouponAllowManualDiscount") || "수동 할인과 동시 사용 허용"}
             </label>
             <CrmCouponMenuScopePicker value={itemScope} onChange={setItemScope} t={t} />
             <div className="flex gap-2 pt-2">

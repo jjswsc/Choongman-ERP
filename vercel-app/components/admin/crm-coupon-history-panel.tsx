@@ -112,9 +112,9 @@ export function CrmCouponHistoryPanel() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("crmCouponFilterAll") || "전체"}</SelectItem>
-              <SelectItem value="issued">{couponIssueStatusLabel("issued")}</SelectItem>
-              <SelectItem value="used">{couponIssueStatusLabel("used")}</SelectItem>
-              <SelectItem value="expired">{couponIssueStatusLabel("expired")}</SelectItem>
+              <SelectItem value="issued">{couponIssueStatusLabel("issued", t)}</SelectItem>
+              <SelectItem value="used">{couponIssueStatusLabel("used", t)}</SelectItem>
+              <SelectItem value="expired">{couponIssueStatusLabel("expired", t)}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -153,14 +153,14 @@ export function CrmCouponHistoryPanel() {
             <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="p-3 font-medium">{t("memberNo") || "회원번호"}</th>
-                <th className="p-3 font-medium">{t("name") || "이름"}</th>
+                <th className="p-3 font-medium">{t("crmCouponColName") || "이름"}</th>
                 <th className="p-3 font-medium">{t("posCouponCode") || "쿠폰"}</th>
                 <th className="p-3 font-medium">{t("crmCouponBenefit") || "혜택"}</th>
                 <th className="p-3 font-medium">{t("crmCouponIssuedAt") || "발급"}</th>
                 <th className="p-3 font-medium">{t("crmCouponExpiresAt") || "만료"}</th>
                 <th className="p-3 font-medium">{t("crmCouponUsedAt") || "사용"}</th>
                 <th className="p-3 font-medium">{t("crmCouponOrderId") || "주문"}</th>
-                <th className="p-3 font-medium">{t("status") || "상태"}</th>
+                <th className="p-3 font-medium">{t("crmCouponColStatus") || "상태"}</th>
               </tr>
             </thead>
             <tbody>
@@ -185,7 +185,7 @@ export function CrmCouponHistoryPanel() {
                       ) : null}
                     </td>
                     <td className="p-3 tabular-nums">
-                      {formatCouponBenefit({ discountType: r.discountType, discountValue: r.discountValue })}
+                      {formatCouponBenefit({ discountType: r.discountType, discountValue: r.discountValue }, t)}
                     </td>
                     <td className="p-3 text-xs whitespace-nowrap">{r.issuedAt || "—"}</td>
                     <td className="p-3 text-xs whitespace-nowrap">{r.expiresAt || r.validTo || "—"}</td>
@@ -193,7 +193,7 @@ export function CrmCouponHistoryPanel() {
                     <td className="p-3 text-xs">{r.orderId ? `#${r.orderId}` : "—"}</td>
                     <td className="p-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
-                        {couponIssueStatusLabel(r.status)}
+                        {couponIssueStatusLabel(r.status, t)}
                       </span>
                     </td>
                   </tr>

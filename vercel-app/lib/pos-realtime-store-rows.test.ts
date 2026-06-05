@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
+import { enrichStoreListWithGrabMap, dedupeStoreListByCanonical } from '@/lib/erp-store-list-grab-enrich'
 import { labelForStore } from '@/lib/store-list-keys'
 import {
   aggregateTodaySalesByCanonical,
@@ -32,10 +32,29 @@ describe('enrichStoreListWithGrabMap', () => {
       legacyToCanonical: {},
       usedMaster: true,
     })
+    expect(out.stores).toEqual(['CM True Digital', '1042'])
     expect(out.legacyToCanonical['1040']).toBe('CM True Digital')
     expect(out.legacyToCanonical['cm silom']).toBe('1042')
     expect(out.storeLabels['1040']).toBe('CM True Digital')
     expect(out.storeLabels['1042']).toBe('CM Silom')
+  })
+
+  it('dedupes ERP name and Grab partner id for the same branch', () => {
+    const out = dedupeStoreListByCanonical({
+      stores: ['CM True Digital', '1040', '1042'],
+      users: { '1040': ['Alice'], 'CM True Digital': ['Bob'] },
+      staffByStore: {},
+      storeLabels: {
+        'CM True Digital': 'CM True Digital',
+        '1040': 'CM True Digital',
+        '1042': 'CM Silom',
+      },
+      legacyToCanonical: { '1040': 'CM True Digital' },
+      usedMaster: true,
+    })
+    expect(out.stores).toEqual(['CM True Digital', '1042'])
+    expect(out.users['CM True Digital']).toEqual(['Bob', 'Alice'])
+    expect(out.legacyToCanonical['1040']).toBe('CM True Digital')
   })
 })
 

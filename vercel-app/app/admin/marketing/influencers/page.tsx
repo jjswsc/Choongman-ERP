@@ -102,7 +102,7 @@ export default function MarketingInfluencersPage() {
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const { auth } = useAuth()
-  const { stores, loading: storesLoading } = useStoreList()
+  const { stores, loading: storesLoading, formatStoreLabel } = useStoreList()
   const [mainTab, setMainTab] = React.useState<MainTab>("compose")
   const [inquirySearchApplyToken, setInquirySearchApplyToken] = React.useState(0)
   const [inquirySearchApplyQuery, setInquirySearchApplyQuery] = React.useState("")
@@ -694,7 +694,7 @@ export default function MarketingInfluencersPage() {
                         <option value="">{t("marketingInfluencersStorePlaceholder")}</option>
                         {stores.map((s) => (
                           <option key={s} value={s}>
-                            {s}
+                            {formatStoreLabel(s)}
                           </option>
                         ))}
                       </select>

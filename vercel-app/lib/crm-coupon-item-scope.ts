@@ -60,12 +60,14 @@ export function collectCategoryOptions(menus: PosMenu[], mainCategories: string[
 
 export function formatCouponItemScopeSummary(
   scope: CouponItemScope | undefined | null,
-  menuById?: Map<string, PosMenu>
+  menuById?: Map<string, PosMenu>,
+  t?: (key: string) => string
 ): string {
-  if (!scope) return '전체 메뉴'
+  const allMenus = t?.('crmCouponScopeClear') || '전체 메뉴'
+  if (!scope) return allMenus
   const menuIds = scope.menuIds || []
   const categoryCodes = scope.categoryCodes || []
-  if (menuIds.length === 0 && categoryCodes.length === 0) return '전체 메뉴'
+  if (menuIds.length === 0 && categoryCodes.length === 0) return allMenus
 
   const parts: string[] = []
   if (menuIds.length > 0) {
@@ -73,11 +75,21 @@ export function formatCouponItemScopeSummary(
       const menu = menuById?.get(String(id))
       return menu ? menu.name || menu.code : `#${id}`
     })
-    const rest = menuIds.length > 2 ? ` 외 ${menuIds.length - 2}개` : ''
-    parts.push(`메뉴 ${menuIds.length}개 (${names.join(', ')}${rest})`)
+    const rest =
+      menuIds.length > 2
+        ? (t?.('crmCouponScopeMenusMore') || ' 외 {count}개').replace('{count}', String(menuIds.length - 2))
+        : ''
+    parts.push(
+      (t?.('crmCouponScopeMenusCount') || '메뉴 {count}개 ({names}{more})')
+        .replace('{count}', String(menuIds.length))
+        .replace('{names}', names.join(', '))
+        .replace('{more}', rest)
+    )
   }
   if (categoryCodes.length > 0) {
-    parts.push(`카테고리 ${categoryCodes.join(', ')}`)
+    parts.push(
+      (t?.('crmCouponScopeCategoriesLabel') || '카테고리 {codes}').replace('{codes}', categoryCodes.join(', '))
+    )
   }
   return parts.join(' · ')
 }

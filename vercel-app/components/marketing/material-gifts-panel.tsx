@@ -72,7 +72,7 @@ export function MarketingMaterialGiftsPanel({
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const { stores, loading: storesLoading } = useStoreList()
+  const { stores, loading: storesLoading, formatStoreLabel } = useStoreList()
 
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [gifts, setGifts] = React.useState<MarketingMaterialGift[]>([])
@@ -437,7 +437,7 @@ export function MarketingMaterialGiftsPanel({
             <option value="">{t("marketingMaterialGiftAllStores")}</option>
             {stores.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {formatStoreLabel(s)}
               </option>
             ))}
           </select>
@@ -637,7 +637,7 @@ export function MarketingMaterialGiftsPanel({
             <option value="">{t("marketingMaterialGiftStoreOption")}</option>
             {stores.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {formatStoreLabel(s)}
               </option>
             ))}
           </select>
@@ -739,7 +739,7 @@ export function MarketingMaterialGiftsPanel({
                       >
                         {stores.map((s) => (
                           <option key={s} value={s}>
-                            {s}
+                            {formatStoreLabel(s)}
                           </option>
                         ))}
                       </select>

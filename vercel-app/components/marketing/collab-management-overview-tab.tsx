@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { MarketingCampaign } from "@/lib/api-client"
+import { useStoreList } from "@/lib/use-store-list"
 import { normalizeMarketingCollabDetail, type MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { campaignMatchesPeriodFilter } from "@/lib/marketing-campaign-filters"
 import {
@@ -116,6 +117,7 @@ export function CollabManagementOverviewTab(props: {
   onGoToEdit: (campaignId: string) => void
 }) {
   const { campaigns, stores, storesLoading, loading, t, allStoresLabel, onGoToEdit } = props
+  const { formatStoreLabel } = useStoreList()
   const [subTab, setSubTab] = React.useState<"campaigns" | "partners">("campaigns")
   const [storeFilter, setStoreFilter] = React.useState("")
   const [search, setSearch] = React.useState("")
@@ -333,7 +335,7 @@ export function CollabManagementOverviewTab(props: {
               <option value="_all">{t("all")}</option>
               {stores.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {formatStoreLabel(s)}
                 </option>
               ))}
             </select>

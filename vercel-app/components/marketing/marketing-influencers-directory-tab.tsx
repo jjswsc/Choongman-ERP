@@ -9,6 +9,7 @@ import {
   getBangkokCurrentMonthRangeYmd,
   getBangkokRolling30DayRangeYmd,
 } from "@/lib/collab-overview-period"
+import { useStoreList } from "@/lib/use-store-list"
 
 type TFn = (key: string) => string
 
@@ -119,6 +120,7 @@ export function MarketingInfluencersDirectoryTab(props: {
     onComposeQuickEdit,
     onOpenInquiryWithSearch,
   } = props
+  const { formatStoreLabel } = useStoreList()
 
   const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
   const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
@@ -249,7 +251,7 @@ export function MarketingInfluencersDirectoryTab(props: {
               <option value="_all">{t("all")}</option>
               {stores.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {formatStoreLabel(s)}
                 </option>
               ))}
             </select>

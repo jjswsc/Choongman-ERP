@@ -28,33 +28,55 @@ export function parseCrmCouponAdminTab(raw: string | null | undefined): CrmCoupo
   return 'definitions'
 }
 
-export function formatCouponBenefit(coupon: {
-  discountType?: string
-  discountValue?: number
-}): string {
+type CouponLabelT = (key: string) => string
+
+const COUPON_ISSUE_STATUS_KEYS: Record<string, string> = {
+  issued: 'crmCouponIssueStatusIssued',
+  used: 'crmCouponIssueStatusUsed',
+  expired: 'crmCouponIssueStatusExpired',
+  cancelled: 'crmCouponIssueStatusCancelled',
+  restored: 'crmCouponIssueStatusRestored',
+}
+
+const COUPON_ISSUE_STATUS_FALLBACKS: Record<string, string> = {
+  issued: '사용 가능',
+  used: '사용 완료',
+  expired: '만료',
+  cancelled: '취소',
+  restored: '복원',
+}
+
+export function formatCouponBenefit(
+  coupon: {
+    discountType?: string
+    discountValue?: number
+  },
+  t?: CouponLabelT
+): string {
   const type = String(coupon.discountType || 'fixed').trim()
   const val = Number(coupon.discountValue || 0)
   if (type === 'percent') return `${val}%`
   if (type === 'bogo') return '1+1'
-  if (type === 'set_fixed') return `세트 ${val}฿`
-  if (type === 'item_fixed') return `품목 ${val}฿`
+  if (type === 'set_fixed') {
+    return (t?.('crmCouponBenefitSet') || '세트 {val}฿').replace('{val}', String(val))
+  }
+  if (type === 'item_fixed') {
+    return (t?.('crmCouponBenefitItem') || '품목 {val}฿').replace('{val}', String(val))
+  }
   return `${val}฿`
 }
 
-export function redemptionModeLabel(mode: string | undefined | null): string {
+export function redemptionModeLabel(mode: string | undefined | null, t?: CouponLabelT): string {
   const s = String(mode || 'reusable_code').trim()
-  if (s === 'member_issue') return '회원 발급'
-  if (s === 'single_use_serial') return '1회용 시리얼'
-  return '공통 코드'
+  if (s === 'member_issue') return t?.('posCouponModeMember') || '회원 발급'
+  if (s === 'single_use_serial') return t?.('posCouponModeSerial') || '1회용 시리얼'
+  return t?.('posCouponModeReusable') || '재사용 코드'
 }
 
-export function couponIssueStatusLabel(status: string): string {
+export function couponIssueStatusLabel(status: string, t?: CouponLabelT): string {
   const s = String(status || '').trim().toLowerCase()
-  if (s === 'issued') return '사용 가능'
-  if (s === 'used') return '사용 완료'
-  if (s === 'expired') return '만료'
-  if (s === 'cancelled') return '취소'
-  if (s === 'restored') return '복원'
+  const key = COUPON_ISSUE_STATUS_KEYS[s]
+  if (key) return t?.(key) || COUPON_ISSUE_STATUS_FALLBACKS[s] || status
   return status || '-'
 }
 

@@ -121,7 +121,7 @@ export function CrmCouponIssuePanel() {
                 selectedMemberId === m.id ? "border-indigo-400 bg-indigo-50" : "hover:bg-muted/40"
               }`}
             >
-              <span className="font-medium">{m.name || "(이름 없음)"}</span>
+              <span className="font-medium">{m.name || t("memberNoName") || "(이름 없음)"}</span>
               <span className="text-xs text-muted-foreground">
                 {m.memberNo} · {m.phone || `ID ${m.id}`}
               </span>
@@ -146,14 +146,14 @@ export function CrmCouponIssuePanel() {
             <SelectItem value="_">{t("crmCouponIssueSelectPh") || "쿠폰 선택"}</SelectItem>
             {coupons.map((c) => (
               <SelectItem key={c.code} value={c.code}>
-                {c.code} · {c.name || c.code} · {formatCouponBenefit(c)}
+                {c.code} · {c.name || c.code} · {formatCouponBenefit(c, t)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         {selectedCoupon ? (
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <Badge variant="outline">{redemptionModeLabel(selectedCoupon.redemptionMode)}</Badge>
+            <Badge variant="outline">{redemptionModeLabel(selectedCoupon.redemptionMode, t)}</Badge>
             {(selectedCoupon.validFrom || selectedCoupon.validTo) && (
               <Badge variant="secondary">
                 {selectedCoupon.validFrom || "—"} ~ {selectedCoupon.validTo || "—"}
@@ -171,7 +171,7 @@ export function CrmCouponIssuePanel() {
         </p>
         <p className="mt-1 text-xs text-emerald-900/80">
           {selectedCoupon
-            ? `${selectedCoupon.code} · ${formatCouponBenefit(selectedCoupon)}`
+            ? `${selectedCoupon.code} · ${formatCouponBenefit(selectedCoupon, t)}`
             : t("crmCouponIssueNoCoupon") || "쿠폰을 선택하세요"}
         </p>
         <Button className="mt-3" onClick={issue} disabled={issuing || !selectedMemberId || !couponCode}>

@@ -69,7 +69,7 @@ export function MarketingCampaignFinderPanel({
   const isCompactToolbar = toolbarLayout === "compact"
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores, loading: storesLoading } = useStoreList()
+  const { stores, loading: storesLoading, formatStoreLabel } = useStoreList()
 
   const tr = React.useCallback(
     (ko: string, en: string, th: string) => {
@@ -342,7 +342,7 @@ export function MarketingCampaignFinderPanel({
               <option value="_allStoresPlan">{tr("전체 매장(기획)만", "All stores (plan) only", "เฉพาะทุกสาขา (แผน)")}</option>
               {stores.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {formatStoreLabel(s)}
                 </option>
               ))}
             </select>

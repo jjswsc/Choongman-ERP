@@ -20,6 +20,7 @@ import {
 } from "@/lib/marketing-material-type-options"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
+import { useStoreList } from "@/lib/use-store-list"
 
 type DeploymentDraft = {
   key: string
@@ -69,6 +70,7 @@ export function MarketingMaterialDeploymentEditor({
   onSaved,
 }: Props) {
   const { auth } = useAuth()
+  const { formatStoreLabel } = useStoreList()
   const [rows, setRows] = React.useState<DeploymentDraft[]>([])
   const [savingKey, setSavingKey] = React.useState("")
   const depSig = React.useMemo(
@@ -193,7 +195,7 @@ export function MarketingMaterialDeploymentEditor({
                   <option value="">{tr("선택", "Select", "เลือก")}</option>
                   {stores.map((s) => (
                     <option key={s} value={s}>
-                      {s}
+                      {formatStoreLabel(s)}
                     </option>
                   ))}
                 </select>
