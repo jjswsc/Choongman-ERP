@@ -461,8 +461,39 @@ export function grabCampaignDiscountMatchesTarget(
   const type = String(discount.type ?? '').trim()
   if (type !== expected.type) return false
   if (Math.round(Number(discount.value ?? 0)) !== Math.round(expected.value)) return false
+  if (
+    type === 'percentage' &&
+    !grabPercentageDiscountMatchesSale(
+      target.regularPriceMajor,
+      target.salePriceMajor,
+      Math.round(Number(discount.value ?? 0))
+    )
+  ) {
+    return false
+  }
   const objectIDs = discount.scope?.objectIDs || []
   return objectIDs.length === 1 && objectIDs[0] === target.grabItemId
+}
+
+/** Grab % 캠페인이 ERP 할인가와 1바트 이상 어긋나면 fixPrice로 바꿔야 함 (ongoing은 discount-only PUT) */
+export function grabCampaignNeedsFixPriceRoundingMigration(
+  row: GrabCampaignListRow | undefined,
+  target: {
+    grabItemId: string
+    salePriceMajor: number
+    regularPriceMajor: number
+    discountType?: GrabPromoCampaignDiscountType
+  }
+): boolean {
+  if (!row?.discount) return false
+  const existingType = String(row.discount.type ?? '').trim().toLowerCase()
+  const expected = buildGrabCampaignDiscountForTarget({
+    grabItemId: target.grabItemId,
+    salePriceMajor: target.salePriceMajor,
+    regularPriceMajor: target.regularPriceMajor,
+    discountType: target.discountType,
+  })
+  return existingType === 'percentage' && expected.type === 'fixPrice'
 }
 
 function indexManagedCampaigns(payload: unknown): Map<string, IndexedGrabCampaign> {
@@ -1315,6 +1346,34 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
       continue
     }
 
+    const needsFixPriceRoundingMigration =
+      !force &&
+      grabCampaignNeedsFixPriceRoundingMigration(hit, {
+        grabItemId: target.grabItemId,
+        salePriceMajor: target.salePrice,
+        regularPriceMajor: target.regularPrice,
+        discountType,
+      })
+
+    if (needsFixPriceRoundingMigration && hit?.id) {
+      const discount = primaryBody.discount
+      if (discount && typeof discount === 'object') {
+        try {
+          await updateGrabCampaignDiscountOnly(String(hit.id), discount as Record<string, unknown>)
+          campaignDiscountMigrated += 1
+          updated += 1
+          continue
+        } catch (e) {
+          console.warn('[grab-promo-campaign] fixprice_rounding_discount_put_failed', {
+            merchantID,
+            promoId: target.promoId,
+            grabItemId: target.grabItemId,
+            error: formatGrabCampaignApiError(e),
+          })
+        }
+      }
+    }
+
     try {
       const result = await upsertGrabPromoCampaignForTarget({
         existingId: hit?.id ? String(hit.id) : undefined,
@@ -1326,7 +1385,10 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         initialLeadMinutes: campaignLeadMinutes,
       })
       if (result.usedFallback) campaignFallbackUsed += 1
-      if (needsTypeMigration && (result.mode === 'updated' || result.mode === 'replaced')) {
+      if (
+        (needsTypeMigration || needsFixPriceRoundingMigration) &&
+        (result.mode === 'updated' || result.mode === 'replaced')
+      ) {
         campaignDiscountMigrated += 1
       }
       if (result.mode === 'updated') updated += 1

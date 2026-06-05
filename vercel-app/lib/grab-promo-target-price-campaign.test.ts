@@ -10,6 +10,7 @@ import {
   classifyGrabCampaignApiError,
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
+  grabCampaignNeedsFixPriceRoundingMigration,
   isGrabPromoConsumerListPriceAsSaleEnabled,
   resolveGrabCampaignScheduleMs,
   resolveGrabMenuSalePriceMajor,
@@ -164,6 +165,28 @@ describe('buildGrabCampaignDiscountForTarget', () => {
   })
 })
 
+describe('grabCampaignNeedsFixPriceRoundingMigration', () => {
+  it('detects percentage on Grab when ERP needs fixPrice 111', () => {
+    process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'percentage'
+    expect(
+      grabCampaignNeedsFixPriceRoundingMigration(
+        {
+          discount: { type: 'percentage', value: 41, scope: { objectIDs: ['item-2'] } },
+        },
+        {
+          grabItemId: 'item-2',
+          salePriceMajor: 111,
+          regularPriceMajor: 189,
+          discountType: 'percentage',
+        }
+      )
+    ).toBe(true)
+    delete process.env.GRAB_PROMO_CONSUMER_LIST_PRICE
+    delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
+  })
+})
+
 describe('buildGrabTargetPriceCampaignBody', () => {
   it('uses fixPrice discount scoped to grab item id', () => {
     const body = buildGrabTargetPriceCampaignBody({
@@ -209,6 +232,26 @@ describe('grabCampaignDiscountMatchesTarget', () => {
         }
       )
     ).toBe(true)
+  })
+
+  it('returns false when percentage rounds 1 baht off (189 -> 111 at 41%)', () => {
+    process.env.GRAB_PROMO_CONSUMER_LIST_PRICE = 'regular'
+    process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE = 'percentage'
+    expect(
+      grabCampaignDiscountMatchesTarget(
+        {
+          discount: { type: 'percentage', value: 41, scope: { objectIDs: ['item-99'] } },
+        },
+        {
+          grabItemId: 'item-99',
+          salePriceMajor: 111,
+          regularPriceMajor: 189,
+          discountType: 'percentage',
+        }
+      )
+    ).toBe(false)
+    delete process.env.GRAB_PROMO_CONSUMER_LIST_PRICE
+    delete process.env.GRAB_PROMO_CAMPAIGN_DISCOUNT_TYPE
   })
 
   it('returns false when old fixPrice campaign still on Grab', () => {
