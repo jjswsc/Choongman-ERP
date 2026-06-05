@@ -40,7 +40,10 @@ import { POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 import {
   PROMOTION_DEFAULT_SUBCATEGORIES,
   PROMOTION_MAIN_CATEGORY,
+  normalizePromotionSubcategory,
+  uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
+import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import {
   buildCostAnalysisLookups,
   calcPromoEconomics,
@@ -306,6 +309,22 @@ export function PosSetMenuTabWorkspace({
     }
     return [...base, ...extras]
   }, [remoteDeliveryApps, t])
+
+  /** Grab·POS 프로모 소분류 — 카테고리 설정 + 기존 프로모 + 현재 편집값 */
+  const promoSubcategoryOptions = React.useMemo(() => {
+    const presetFromConfig = categoriesConfig?.categoriesByMain?.[PROMOTION_MAIN_CATEGORY] ?? []
+    const fromPromos = promos.map((p) => normalizePromotionSubcategory(p.category)).filter(Boolean)
+    const cur = normalizePromotionSubcategory(form.category)
+    const raw = Array.from(
+      new Set([...PROMOTION_DEFAULT_SUBCATEGORIES, ...presetFromConfig, ...fromPromos, cur])
+    ).filter(Boolean) as string[]
+    return uniqueSubcategoriesForMainMenu(PROMOTION_MAIN_CATEGORY, raw)
+  }, [categoriesConfig, promos, form.category])
+
+  const promoCategorySelectValue =
+    normalizePromotionSubcategory(form.category) ||
+    promoSubcategoryOptions[0] ||
+    PROMOTION_DEFAULT_SUBCATEGORIES[0]
 
   React.useEffect(() => {
     let cancelled = false
@@ -732,7 +751,8 @@ export function PosSetMenuTabWorkspace({
           marketingCampaignId: promoRow.marketingCampaignId?.trim() ?? "",
           code: promoRow.code ?? "",
           name: promoRow.name ?? "",
-          category: promoRow.category?.trim() || PROMOTION_DEFAULT_SUBCATEGORIES[0],
+          category:
+            normalizePromotionSubcategory(promoRow.category) || PROMOTION_DEFAULT_SUBCATEGORIES[0],
           price: String(promoRow.price),
           priceDelivery: promoRow.priceDelivery != null ? String(promoRow.priceDelivery) : "",
           vatIncluded: promoRow.vatIncluded !== false,
@@ -1403,7 +1423,8 @@ export function PosSetMenuTabWorkspace({
         id: editPromoId || undefined,
         code: editPromoId ? codeTrim : undefined,
         name,
-        category: form.category.trim() || PROMOTION_DEFAULT_SUBCATEGORIES[0],
+        category:
+          normalizePromotionSubcategory(form.category.trim()) || PROMOTION_DEFAULT_SUBCATEGORIES[0],
         categoryMain: PROMOTION_MAIN_CATEGORY,
         price: saleHall,
         priceDelivery: form.priceDelivery.trim() !== "" ? Number(form.priceDelivery) : null,
@@ -1860,6 +1881,25 @@ export function PosSetMenuTabWorkspace({
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 />
                 <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPromoNameFieldHint")}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] font-medium text-muted-foreground">{t("posSetTabPromoCategoryLabel")}</label>
+                <Select
+                  value={promoCategorySelectValue}
+                  onValueChange={(v) => setForm((p) => ({ ...p, category: v }))}
+                >
+                  <SelectTrigger className="mt-1 h-9 text-xs">
+                    <SelectValue placeholder={t("posSetTabPromoCategoryPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {promoSubcategoryOptions.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {`${translatePosMenuCategoryLabel(c, t)} (${c})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPromoCategoryHint")}</p>
               </div>
               {editPromoId && form.code.trim() ? (
                 <div className="sm:col-span-2">

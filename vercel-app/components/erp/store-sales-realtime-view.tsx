@@ -19,6 +19,11 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { getPosTodaySales } from "@/lib/api-client"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
+import { useStoreList } from "@/lib/use-store-list"
+import {
+  aggregateTodaySalesByCanonical,
+  mergeRealtimeStoreSalesRows,
+} from "@/lib/pos-realtime-store-rows"
 import type { Store } from "@/lib/pos-types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -91,6 +96,7 @@ export function StoreSalesRealtimeView({
   const { lang } = useLang()
   const t = useT(lang)
   const tr = (key: string, fallback: string) => tOr(t, key, fallback)
+  const { stores: storeListCodes, storeLabels, legacyToCanonical } = useStoreList()
   const isAllStoresSelected = effectiveStoreCode === ALL_STORE_VALUE
 
   /** HQ·TEST 등 비운영 매장 — 관리자 실시간 API와 동일하게 집계·목록에서 제외 */
@@ -147,22 +153,23 @@ export function StoreSalesRealtimeView({
     )
       .then((rows) => {
         const nextMap: Record<string, TodaySalesSummary> = {}
-        const total = { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 }
         for (const [code, data] of rows) {
           nextMap[code] = data
-          total.completedCount += Number(data.completedCount ?? 0)
-          total.completedTotal += Number(data.completedTotal ?? 0)
-          total.completedCash += Number(data.completedCash ?? 0)
-          total.pendingCount += Number(data.pendingCount ?? 0)
         }
         setStoreSalesMap(nextMap)
-        setTodaySales(total)
+        setTodaySales(
+          aggregateTodaySalesByCanonical({
+            entries: rows,
+            storeCodes: storeListCodes,
+            legacyToCanonical,
+          })
+        )
       })
       .catch(() => {
         setStoreSalesMap({})
         setTodaySales(null)
       })
-  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
+  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey, storeListCodes, legacyToCanonical])
 
   const refreshRealtimeSection = useCallback(() => {
     loadTodaySales({ forceNetwork: true })
@@ -196,25 +203,17 @@ export function StoreSalesRealtimeView({
       return String(a.name || "").localeCompare(String(b.name || ""), "ko")
     })
   }, [currentStore?.tables, tableSortMode])
-  const byStoreRows = useMemo(() => {
-    return operationalStores
-      .map((store) => {
-        const paid = Number(storeSalesMap[store.id]?.completedTotal ?? 0)
-        const tableTotal = Number(
-          (store.tables || []).reduce((acc, tbl) => acc + Number(tbl.order?.total ?? 0), 0)
-        )
-        return {
-          storeId: store.id,
-          paid,
-          tableTotal,
-        }
-      })
-      .sort((a, b) => {
-        if (b.paid !== a.paid) return b.paid - a.paid
-        if (b.tableTotal !== a.tableTotal) return b.tableTotal - a.tableTotal
-        return String(a.storeId || "").localeCompare(String(b.storeId || ""), "ko")
-      })
-  }, [operationalStores, storeSalesMap])
+  const byStoreRows = useMemo(
+    () =>
+      mergeRealtimeStoreSalesRows({
+        operationalStores,
+        storeSalesMap,
+        storeCodes: storeListCodes,
+        legacyToCanonical,
+        storeLabels,
+      }),
+    [operationalStores, storeSalesMap, storeListCodes, legacyToCanonical, storeLabels]
+  )
   const byStoreTotal = useMemo(
     () =>
       byStoreRows.reduce(
@@ -260,6 +259,7 @@ export function StoreSalesRealtimeView({
     () =>
       byStoreRows.map((r) => ({
         storeId: r.storeId,
+        storeDisplayName: r.storeDisplayName,
         paid: r.paid,
         tableTotal: r.tableTotal,
       })),
@@ -436,7 +436,7 @@ export function StoreSalesRealtimeView({
                   <BarChart data={byStoreChartRows} layout="vertical" margin={{ left: 4, right: 12 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" {...chartYAxisProps} />
-                    <YAxis dataKey="storeId" type="category" width={88} tick={{ fontSize: 10 }} />
+                    <YAxis dataKey="storeDisplayName" type="category" width={108} tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v: number) => formatBahtInt(v)} />
                     <Legend />
                     <Bar
@@ -464,7 +464,7 @@ export function StoreSalesRealtimeView({
                       <Pie
                         data={byStoreChartRows}
                         dataKey="paid"
-                        nameKey="storeId"
+                        nameKey="storeDisplayName"
                         cx="50%"
                         cy="50%"
                         outerRadius={88}
@@ -473,7 +473,7 @@ export function StoreSalesRealtimeView({
                         }
                       >
                         {byStoreChartRows.map((r, i) => (
-                          <Cell key={r.storeId} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          <Cell key={`${r.storeId}-${i}`} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}
                       </Pie>
                       <Tooltip formatter={(v: number) => formatBahtInt(v)} />
@@ -513,7 +513,9 @@ export function StoreSalesRealtimeView({
               <ul className="max-h-[52vh] divide-y divide-border/60 overflow-auto">
                 {byStoreRows.map((row) => (
                   <li key={row.storeId} className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 px-3 py-2 text-sm">
-                    <p className="truncate font-medium text-foreground">{row.storeId}</p>
+                    <p className="truncate font-medium text-foreground" title={row.storeId}>
+                      {row.storeDisplayName}
+                    </p>
                     <p className="text-right tabular-nums font-semibold text-orange-600 dark:text-orange-400">
                       {formatBahtInt(row.paid)}
                     </p>

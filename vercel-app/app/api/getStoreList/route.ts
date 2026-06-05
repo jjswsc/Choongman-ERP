@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
 
 /** 매장·직원 목록 경량 조회 (store,name,nick) — erp_stores 가 있으면 store_code 기준·표시명은 storeLabels */
 export async function GET() {
@@ -24,7 +25,7 @@ export async function GET() {
     }[] | null
 
     const masters = await fetchErpStoresMaster()
-    const built = buildStoreListFromEmployees(empList, masters)
+    const built = enrichStoreListWithGrabMap(buildStoreListFromEmployees(empList, masters))
 
     return NextResponse.json(
       {

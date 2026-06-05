@@ -7632,7 +7632,7 @@ export const i18n = {
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다.',
     helpHow_admin_pos_menus:
-      '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 가격이력 탭 안의 「가격 예약」에서 지정일 가격을 미리 등록할 수 있습니다.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n【메뉴 유형 체크박스】메뉴 정보의 홀/배달/포장 체크박스는 메뉴 화면 구성의 유형(매장·배달·포장)과 연동됩니다. 체크 해제한 유형에서는 해당 메뉴 타일이 POS 메뉴 그리드에서 숨겨집니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션 등을 저장합니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 행 편집, 우측 단계 순서·현재 단계 선택의 3패널 구조입니다. 가운데에서 선택 단계를 저장한 뒤, 옵션 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요. 「값 일괄 추가」에서는 직접 입력하거나「메뉴 검색·선택」으로 등록된 메뉴를 골라 입력란에 넣을 수 있습니다.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·원가율을 저장합니다. Grab 배달을 켠 프로모는「Grab 캠페인 시각(방콕)」으로 할인 캠페인 시작·종료 시각을 지정할 수 있습니다(유효기간 날짜와 조합). 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 「가격 이력」 내부의 「가격 예약」에서 예약 등록·조회·취소를 관리할 수 있습니다.\n⑥ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.',
+      '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 가격이력 탭 안의 「가격 예약」에서 지정일 가격을 미리 등록할 수 있습니다.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n【메뉴 유형 체크박스】메뉴 정보의 홀/배달/포장 체크박스는 메뉴 화면 구성의 유형(매장·배달·포장)과 연동됩니다. 체크 해제한 유형에서는 해당 메뉴 타일이 POS 메뉴 그리드에서 숨겨집니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션 등을 저장합니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 행 편집, 우측 단계 순서·현재 단계 선택의 3패널 구조입니다. 가운데에서 선택 단계를 저장한 뒤, 옵션 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요. 「값 일괄 추가」에서는 직접 입력하거나「메뉴 검색·선택」으로 등록된 메뉴를 골라 입력란에 넣을 수 있습니다.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·「프로모 카테고리」(Grab·POS 소분류)를 저장합니다. 새 소분류는 상단 「카테고리 설정」→ Promotion에서 추가합니다. Grab 배달 프로모는「Grab 캠페인 시각(방콕)」으로 할인 시작·종료 시각을 지정할 수 있습니다. 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 「가격 이력」 내부의 「가격 예약」에서 예약 등록·조회·취소를 관리할 수 있습니다.\n⑥ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.',
     helpSum_admin_items:
       '품목 기본정보와 판매가/원가를 관리하고, 가격 이력과 가격 예약(지정일 자동 반영)을 조회·등록하는 화면입니다.',
     helpHow_admin_items:
@@ -8404,6 +8404,10 @@ export const i18n = {
     posSetTabPromoGroupSelectNew: '— 신규 프로모션명 —',
     posSetTabPromoNameFieldLabel: '프로모션명 (표시명)',
     posSetTabPromoNameFieldHint: '그룹과 동일한 문자열이면 POS에 같은 프로모션명으로 묶여 보입니다. 필요 시 여기서만 고쳐도 됩니다.',
+    posSetTabPromoCategoryLabel: '프로모 카테고리 (Grab·POS)',
+    posSetTabPromoCategoryPlaceholder: '소분류 선택',
+    posSetTabPromoCategoryHint:
+      'Grab 손님 앱 메뉴의 카테고리 헤더(예: Set)에 쓰입니다. 목록에 없으면 메뉴 관리 상단 「카테고리 설정」에서 Promotion 소분류를 추가한 뒤 새로고침하세요. 저장 시 미러 메뉴 분류도 함께 갱신됩니다.',
     posSetTabPickMenusCategoryHint:
       '이 대·소분류는 세트에 넣을 일반 메뉴를 찾을 때만 쓰입니다. 프로모션 그룹은 가운데 「프로모션명 (그룹)」에서 선택합니다.',
     posSetTabShowAllSavedGroups: '전체 그룹 보기',
@@ -16648,7 +16652,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery).',
     helpHow_admin_pos_menus:
-      '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Inside Price history, use “Price schedule” to pre-register future price changes.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n【Menu type checkboxes】Hall/Delivery/Packaging checkboxes in Menu info are linked to the menu-screen type view (dine-in/delivery/takeout). If a type is unchecked, that menu tile is hidden in the POS menu grid for that type.\n① After choosing a store, use the menu grid and form to save items and hall / delivery prices.\n② In Options config, use the 3-panel layout: menu list on the left, option rows in the center, step order / current step on the right. Save steps from the center first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards. Under Bulk add values, type labels or use Search menus to append catalog rows to the field, then press Bulk add values.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ In the Sets tab, save bundle price and channels. For Grab delivery promos, set Grab campaign times (Bangkok) to control discount campaign start/end (combined with promo valid dates). Use Bundle set inquiry for activate/deactivate/copy/campaign link.\n⑤ In Price history > Price schedule, register, review, and cancel future price updates.\n⑥ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.',
+      '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Inside Price history, use “Price schedule” to pre-register future price changes.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n【Menu type checkboxes】Hall/Delivery/Packaging checkboxes in Menu info are linked to the menu-screen type view (dine-in/delivery/takeout). If a type is unchecked, that menu tile is hidden in the POS menu grid for that type.\n① After choosing a store, use the menu grid and form to save items and hall / delivery prices.\n② In Options config, use the 3-panel layout: menu list on the left, option rows in the center, step order / current step on the right. Save steps from the center first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards. Under Bulk add values, type labels or use Search menus to append catalog rows to the field, then press Bulk add values.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ In the Sets tab, save bundle price, channels, and Promo category (Grab/POS subcategory). Add new subcategories under Category settings → Promotion. For Grab delivery promos, set Grab campaign times (Bangkok). Use Bundle set inquiry for activate/deactivate/copy/campaign link.\n⑤ In Price history > Price schedule, register, review, and cancel future price updates.\n⑥ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.',
     helpSum_admin_items:
       'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
     helpHow_admin_items:
@@ -17991,6 +17995,10 @@ orderItemQty: 'Qty',
     posSetTabPromoNameFieldLabel: 'Display name',
     posSetTabPromoNameFieldHint:
       'If this matches the group string, POS shows them under the same promotion name. You can fine-tune the text here.',
+    posSetTabPromoCategoryLabel: 'Promo category (Grab · POS)',
+    posSetTabPromoCategoryPlaceholder: 'Choose subcategory',
+    posSetTabPromoCategoryHint:
+      'Used as the category header on the Grab customer menu (e.g. Set). Add new options under Menu management → Category settings → Promotion, then refresh. Saving updates the mirror menu category too.',
     posSetTabPickMenusCategoryHint:
       'Main/sub category here is only for finding regular menus to add to the bundle. Pick the promotion group in the center column.',
     posSetTabShowAllSavedGroups: 'Show all groups',
@@ -24328,6 +24336,10 @@ orderItemQty: 'จำนวน',
     posSetTabPromoNameFieldLabel: 'ชื่อที่แสดง',
     posSetTabPromoNameFieldHint:
       'ถ้าตรงกับกลุ่ม POS จะจัดเป็นชื่อโปรโมชันเดียวกัน แก้เฉพาะที่นี่ได้',
+    posSetTabPromoCategoryLabel: 'หมวดโปรโม (Grab · POS)',
+    posSetTabPromoCategoryPlaceholder: 'เลือกหมวดย่อย',
+    posSetTabPromoCategoryHint:
+      'ใช้เป็นหัวข้อหมวดในเมนู Grab (เช่น Set) ถ้าไม่มีในรายการ ให้เพิ่มที่ จัดการเมนู → ตั้งค่าหมวด → Promotion แล้วรีเฟรช บันทึกแล้วจะอัปเดตหมวดเมนูกระจกด้วย',
     posSetTabPickMenusCategoryHint:
       'หมวดหลัก/ย่อยซ้ายใช้ค้นหาเมนูทั่วไปใส่ในชุดเท่านั้น เลือกกลุ่มโปรโมชันที่คอลัมน์กลาง',
     posSetTabShowAllSavedGroups: 'แสดงทุกกลุ่ม',
