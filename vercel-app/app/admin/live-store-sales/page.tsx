@@ -5,7 +5,10 @@ import { LayoutDashboard } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
-import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
+import { isOfficeRole, isOfficeStore, prefersLogisticsOperationsDashboard } from "@/lib/permissions"
+import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
+import { AdminOperationsDashboardPanel } from "@/components/erp/admin-operations-dashboard-panel"
+import { AdminDashboardPendingOrdersAlert } from "@/components/erp/admin-dashboard-pending-orders-alert"
 import {
   canFranchiseeAggregateAllowedStores,
   FRANCHISEE_AGGREGATE_ALL_STORES_VALUE,
@@ -28,8 +31,13 @@ export default function AdminLiveStoreSalesPage() {
   const t = useT(lang)
   const { viewStore, setViewStore } = useStoreView()
 
+  const role = auth?.role || ""
+  const isLogisticsDashboard = prefersLogisticsOperationsDashboard(role)
+
   const isOfficeSelector =
-    Boolean(auth) && (isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""))
+    Boolean(auth) && (isOfficeRole(role) || isOfficeStore(auth?.store || ""))
+
+  const { stats: dashboardStats } = useAdminDashboardStats({ poll: isLogisticsDashboard })
 
   const canFranchiseeAll = canFranchiseeAggregateAllowedStores(
     auth?.role,
@@ -91,6 +99,9 @@ export default function AdminLiveStoreSalesPage() {
   }, [showBranchRealtime, effectiveStoreCode, stores, setCurrentStoreId])
 
   const dashboardSubtitle = useMemo(() => {
+    if (isLogisticsDashboard) {
+      return tOr(t, "adminDashboardLogisticsSub", "물류 · 미승인 주문·입출고 현황")
+    }
     if (isOfficeSelector) {
       return effectiveStoreCode === ALL_STORE_VALUE
         ? tOr(t, "adminDashboardOfficeAllStores", "전체 매장 · 당일 매출·운영 지표")
@@ -100,7 +111,7 @@ export default function AdminLiveStoreSalesPage() {
       return tOr(t, "adminDashboardFranchiseAllStores", "내 매장 전체 · 당일 매출·운영 지표")
     }
     return effectiveStoreCode || "—"
-  }, [isOfficeSelector, effectiveStoreCode, showFranchiseAllRealtime, t])
+  }, [isLogisticsDashboard, isOfficeSelector, effectiveStoreCode, showFranchiseAllRealtime, t])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -117,31 +128,42 @@ export default function AdminLiveStoreSalesPage() {
               <p className="text-xs text-muted-foreground">{dashboardSubtitle}</p>
             </div>
           </div>
+          {!isLogisticsDashboard ? (
+            <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
+          ) : null}
         </div>
 
-        {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
+        {isLogisticsDashboard ? (
+          <div className="space-y-6">
+            <AdminOperationsDashboardPanel />
+          </div>
+        ) : (
+          <>
+            {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
-        <AdminSalesDashboardCharts
-          effectiveStoreCode={effectiveStoreCode}
-          isOfficeSelector={isOfficeSelector}
-          salesStoreCodes={franchiseSalesStoreCodes}
-        />
-        <PosRevenueRealtimeDashboard
-          effectiveStoreCode={effectiveStoreCode}
-          isOfficeSelector={isOfficeSelector}
-          salesStoreCodes={franchiseSalesStoreCodes}
-        />
+            <AdminSalesDashboardCharts
+              effectiveStoreCode={effectiveStoreCode}
+              isOfficeSelector={isOfficeSelector}
+              salesStoreCodes={franchiseSalesStoreCodes}
+            />
+            <PosRevenueRealtimeDashboard
+              effectiveStoreCode={effectiveStoreCode}
+              isOfficeSelector={isOfficeSelector}
+              salesStoreCodes={franchiseSalesStoreCodes}
+            />
 
-        {showBranchRealtime || showFranchiseAllRealtime ? (
-          <StoreSalesRealtimeView
-            effectiveStoreCode={effectiveStoreCode}
-            stores={storesForRealtime}
-            loadingTables={loadingTables}
-            refetchStores={refetchStores}
-            currentStore={showFranchiseAllRealtime ? undefined : currentStore}
-            showSalesCharts
-          />
-        ) : null}
+            {showBranchRealtime || showFranchiseAllRealtime ? (
+              <StoreSalesRealtimeView
+                effectiveStoreCode={effectiveStoreCode}
+                stores={storesForRealtime}
+                loadingTables={loadingTables}
+                refetchStores={refetchStores}
+                currentStore={showFranchiseAllRealtime ? undefined : currentStore}
+                showSalesCharts
+              />
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   )

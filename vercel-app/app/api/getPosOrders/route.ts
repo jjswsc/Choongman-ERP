@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import {
   loadPosBusinessDaySettingsContext,
@@ -197,16 +197,23 @@ async function loadPromoComponentMenuMap(
     }
   }
   const map = new Map<string, { name: string; code: string }>()
-  if (promoMenuIds.size === 0) return map
+  const ids = Array.from(promoMenuIds)
+  if (ids.length === 0) return map
+  const CHUNK = 200
   try {
-    const menuRows = (await supabaseSelect('pos_menus', {
-      limit: 10000,
-      select: 'id,code,name',
-    })) as { id?: number | string; code?: string; name?: string }[]
-    for (const m of menuRows || []) {
-      const id = String(m.id ?? '').trim()
-      if (!id || !promoMenuIds.has(id)) continue
-      map.set(id, { name: String(m.name ?? '').trim(), code: String(m.code ?? '').trim() })
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const part = ids.slice(i, i + CHUNK)
+      if (!part.length) continue
+      const filter = `id=in.(${part.join(',')})`
+      const menuRows = (await supabaseSelectFilter('pos_menus', filter, {
+        select: 'id,code,name',
+        limit: part.length,
+      })) as { id?: number | string; code?: string; name?: string }[] | null
+      for (const m of menuRows || []) {
+        const id = String(m.id ?? '').trim()
+        if (!id) continue
+        map.set(id, { name: String(m.name ?? '').trim(), code: String(m.code ?? '').trim() })
+      }
     }
   } catch {
     /* pos_menus 조회 실패 시 보강 생략 (기존 동작 유지) */
@@ -273,8 +280,24 @@ export async function GET(request: NextRequest) {
   const primaryStoreFilter = storeFilterCandidates[0] || ''
   const limitRaw = searchParams.get('limit')?.trim()
   const parsedListLimit = limitRaw && /^\d+$/.test(limitRaw) ? parseInt(limitRaw, 10) : null
+  const posBizDayScopeParam =
+    searchParams.get('posBizDayScope') === '1' || searchParams.get('posBizDayScope') === 'true'
+  const isSingleStoreBizDayList =
+    orderId == null &&
+    pollMinimal &&
+    posBizDayScopeParam &&
+    startStr &&
+    endStr &&
+    startStr.slice(0, 10) === endStr.slice(0, 10) &&
+    Boolean(primaryStoreFilter) &&
+    primaryStoreFilter !== 'All'
+  /** pollMinimal·단일 매장·단일 영업일 목록만 기본 1000(주문 건). 영수증 등 full select는 10000 유지 */
   const listLimit =
-    parsedListLimit != null ? Math.min(Math.max(parsedListLimit, 1), 2000) : 10000
+    parsedListLimit != null
+      ? Math.min(Math.max(parsedListLimit, 1), 2000)
+      : isSingleStoreBizDayList
+        ? 1000
+        : 10000
   const orderByRaw = String(searchParams.get('orderBy') || '').trim().toLowerCase()
   const listOrder: 'created_at.desc' | 'id.desc' | 'updated_at.desc' =
     orderByRaw === 'id.desc'
@@ -334,8 +357,7 @@ export async function GET(request: NextRequest) {
 
     const startDate = startStr ? startStr.slice(0, 10) : ''
     const endDate = endStr ? endStr.slice(0, 10) : ''
-    const posBizDayScope =
-      searchParams.get('posBizDayScope') === '1' || searchParams.get('posBizDayScope') === 'true'
+    const posBizDayScope = posBizDayScopeParam
     let bizDayUtcRange: { startISO: string; endISOExclusive: string } | null = null
     let posBizDayFilterCtx: PosBusinessDaySettingsContext | null = null
     if (posBizDayScope && startDate && endDate) {
@@ -508,13 +530,15 @@ export async function GET(request: NextRequest) {
     }
 
     let serviceById = new Map<number, PosOrderServiceColumnsRow>()
-    const serviceFetchIds = orderIdsMissingServiceColumns(rows || [])
-    if (serviceFetchIds.length > 0) {
-      try {
-        serviceById = await loadServiceColumnsByOrderId(serviceFetchIds)
-      } catch {
-        // DB에 service_amt/service_reason 컬럼이 아직 없으면 무시하고 진행
-        serviceById = new Map<number, PosOrderServiceColumnsRow>()
+    if (!pollMinimal) {
+      const serviceFetchIds = orderIdsMissingServiceColumns(rows || [])
+      if (serviceFetchIds.length > 0) {
+        try {
+          serviceById = await loadServiceColumnsByOrderId(serviceFetchIds)
+        } catch {
+          // DB에 service_amt/service_reason 컬럼이 아직 없으면 무시하고 진행
+          serviceById = new Map<number, PosOrderServiceColumnsRow>()
+        }
       }
     }
 

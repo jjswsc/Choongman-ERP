@@ -46,8 +46,12 @@ export async function getPosOrdersWithCache(params: {
   /** POS 단말 당일 스냅샷 — 영업일 경계 UTC 구간 */
   posBizDayScope?: boolean
   orderBy?: 'created_at.desc' | 'id.desc' | 'updated_at.desc'
+  /** 테이블·실시간 목록 — linkpos 제외 경량 select (영수증 탭은 생략) */
+  pollMinimal?: boolean
+  limit?: number
 }): Promise<PosOrder[]> {
-  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope, orderBy } = params
+  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope, orderBy, pollMinimal, limit } =
+    params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
@@ -70,8 +74,13 @@ export async function getPosOrdersWithCache(params: {
         debugPosOrders,
         ...(orderBy ? { orderBy } : {}),
         ...(posBizDayScope ? { posBizDayScope: true } : {}),
+        ...(pollMinimal ? { pollMinimal: true } : {}),
+        ...(limit != null && limit > 0 ? { limit } : {}),
       })
-      await setCache('pos_orders_cache', key, data)
+      /** pollMinimal은 테이블 스냅샷용 — 영수증(linkpos) 캐시를 덮어쓰지 않음 */
+      if (!pollMinimal) {
+        await setCache('pos_orders_cache', key, data)
+      }
       return mergePendingIntoRows(data, range)
     } catch {
       const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
@@ -93,6 +102,8 @@ export async function getPosOrdersWithCache(params: {
       debugPosOrders,
       ...(orderBy ? { orderBy } : {}),
       ...(posBizDayScope ? { posBizDayScope: true } : {}),
+      ...(pollMinimal ? { pollMinimal: true } : {}),
+      ...(limit != null && limit > 0 ? { limit } : {}),
     })
     await setCache('pos_orders_cache', key, data)
     const merged = await mergePendingIntoRows(data, range)

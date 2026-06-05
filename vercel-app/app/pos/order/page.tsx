@@ -1222,6 +1222,9 @@ export default function PosOrderPage() {
       endStr: today,
       posBizDayScope: true,
       storeCode: storeCode || undefined,
+      pollMinimal: true,
+      limit: 50,
+      orderBy: 'id.desc',
     })
       .then((list) => setRecentOrders((list || []).slice(0, 10)))
       .catch(() => setRecentOrders([]))

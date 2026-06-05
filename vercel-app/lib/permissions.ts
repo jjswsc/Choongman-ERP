@@ -165,6 +165,11 @@ export function isLogisticsStaffRole(role: string): boolean {
   return r.includes("logistic") || r.includes("물류")
 }
 
+/** 물류 전용 운영 대시보드(미승인 주문·입출고) — logistic 역할이면 본사 Office 소속이어도 운영 화면 */
+export function prefersLogisticsOperationsDashboard(role: string): boolean {
+  return isLogisticsStaffRole(role)
+}
+
 /** 품목 `order_disabled`(매장 발주 일시중지) 토글 — 본사(Office) 또는 물류 */
 export function canToggleItemOrderDisabled(role: string): boolean {
   return isOfficeRole(role) || isLogisticsStaffRole(role)

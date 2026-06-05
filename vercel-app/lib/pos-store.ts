@@ -540,6 +540,8 @@ export function usePosStore() {
             startStr: businessDate,
             endStr: businessDate,
             posBizDayScope: true,
+            pollMinimal: true,
+            limit: 1000,
           }).catch(() => [])
         )
       ),

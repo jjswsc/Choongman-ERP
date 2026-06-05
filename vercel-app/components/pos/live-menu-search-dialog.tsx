@@ -261,6 +261,8 @@ export function LiveMenuSearchDialog({
           startStr: today,
           endStr: today,
           posBizDayScope: true,
+          pollMinimal: true,
+          limit: 500,
         }),
       ])
       const mains = normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY])

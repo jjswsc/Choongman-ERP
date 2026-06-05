@@ -73,7 +73,9 @@ import {
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
   canAccessAiCenter,
+  isLogisticsStaffRole,
 } from "@/lib/permissions"
+import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
 interface MenuItem {
   titleKey: string
   icon: React.ElementType
@@ -249,6 +251,19 @@ function interiorNavBadge(
   return null
 }
 
+function logisticsNavBadge(
+  href: string,
+  stats: { unapprovedOrders: number; leavePending: number }
+): { n: number; variant: "default" | "destructive" | "warning" } | null {
+  if (href === "/admin/orders" && stats.unapprovedOrders > 0) {
+    return { n: stats.unapprovedOrders, variant: "destructive" }
+  }
+  if (href === "/admin/leave" && stats.leavePending > 0) {
+    return { n: stats.leavePending, variant: "warning" }
+  }
+  return null
+}
+
 function buildCollapsedSections(): Record<string, boolean> {
   return Object.fromEntries(menuSections.map((s) => [s.titleKey, false])) as Record<string, boolean>
 }
@@ -283,6 +298,8 @@ export function ErpSidebar() {
   const brand = useAppBrandConfig()
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
   const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
+  const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
+  const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
 
   React.useEffect(() => {
     let cancelled = false
@@ -335,6 +352,21 @@ export function ErpSidebar() {
       return next
     })
   }, [pathname])
+
+  /** 물류 담당 로그인 시 물류 섹션 자동 펼침 */
+  React.useEffect(() => {
+    if (!isLogisticsStaff) return
+    setExpandedSections((prev) => {
+      if (prev.adminSectionLogistics === true) return prev
+      const next = { ...prev, adminSectionLogistics: true }
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [isLogisticsStaff])
 
   /** 인테리어 화면에 있을 때 사이드바 인테리어 섹션을 펼쳐 하위 항목이 보이게 함 */
   React.useEffect(() => {
@@ -468,8 +500,13 @@ export function ErpSidebar() {
                           section.titleKey === "adminSectionInterior" && interiorDashTotals
                             ? interiorNavBadge(item.href, interiorDashTotals)
                             : null
-                        const badgeVal = interiorExtra?.n ?? item.badge
-                        const badgeVariantEff = interiorExtra?.variant ?? item.badgeVariant
+                        const logisticsExtra =
+                          section.titleKey === "adminSectionLogistics" ||
+                          section.titleKey === "adminSectionHr"
+                            ? logisticsNavBadge(item.href, dashboardStats)
+                            : null
+                        const badgeVal = logisticsExtra?.n ?? interiorExtra?.n ?? item.badge
+                        const badgeVariantEff = logisticsExtra?.variant ?? interiorExtra?.variant ?? item.badgeVariant
                         return (
                         <Link
                           key={item.href}
