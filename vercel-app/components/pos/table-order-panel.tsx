@@ -84,6 +84,8 @@ export interface TableOrderPanelProps {
   onAfterTableTransfer?: (keepOrderId: number) => void | Promise<void>
   /** 합석 API 호출 직전 — Realtime 추가주문 인쇄와 중복 방지 */
   onBeforeTableMerge?: (keepOrderId: number) => void
+  /** 테이블 이동 API 호출 직전 — Realtime 추가주문 인쇄와 중복 방지 */
+  onBeforeTableMove?: (orderId: number) => void
   onClose?: () => void
   t?: (key: string) => string
   /** 데모: 서빙 API 없이 부모 state만 갱신 */
@@ -106,6 +108,7 @@ export function TableOrderPanel({
   onAfterFullOrderKitchenReprint,
   onAfterTableTransfer,
   onBeforeTableMerge,
+  onBeforeTableMove,
   onClose,
   t: tProp,
   isDemo,
@@ -505,6 +508,7 @@ export function TableOrderPanel({
     if (!(await appConfirm(`${t('posTableMoveConfirm') || '이동'}? ${msg}`))) return
     setTransferSubmitting(true)
     try {
+      onBeforeTableMove?.(Number(order.id))
       const res = await posDineInTableMove({
         orderId: Number(order.id),
         targetTableName: moveTargetName.trim(),

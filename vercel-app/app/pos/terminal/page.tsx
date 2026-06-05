@@ -133,6 +133,7 @@ import {
   filterKitchenCartLinesForDineInAdd,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
+import { isPosDineInTableNameOnlyUpdate } from '@/lib/pos-dine-in-realtime-update'
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -4677,16 +4678,41 @@ export default function PosTerminalPage() {
       const list = await getPosOrders({ orderId: keepOrderId, storeCode: currentStoreId, strictStore: true })
       const po = list?.[0] as PosOrder | undefined
       if (!po?.items?.length) return
-      const snapItems = (po.items || []).map((it) => ({
-        id: String(it.id ?? ''),
-        name: String(it.name ?? ''),
-        price: Number(it.price ?? 0),
-        qty: Math.max(1, Number(it.qty ?? 1) || 1),
-        ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-        ...(String(it.menuId1 ?? it.menuId2 ?? '').trim()
-          ? { menuId: String(it.menuId1 ?? it.menuId2 ?? '').trim() }
-          : {}),
-      }))
+      const snapItems = (po.items || []).map(
+        (it: {
+          id?: string
+          name?: string
+          price?: number
+          qty?: number
+          quantity?: number
+          note?: string
+          menuId1?: string
+          menu_id1?: string
+          menuId?: string
+          menuId2?: string
+          optionCode1?: string
+          option_code1?: string
+          optionCode?: string
+        }) => {
+          const note = String(it.note ?? '').trim()
+          const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? it.menuId2 ?? '').trim()
+          const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
+          const displayName = resolveOrderItemDisplayName({
+            id: String(it.id ?? ''),
+            name: String(it.name ?? ''),
+            menuId,
+          })
+          return {
+            id: String(it.id ?? ''),
+            name: displayName,
+            price: Number(it.price ?? 0),
+            qty: Math.max(1, Number(it.qty ?? it.quantity ?? 1) || 1),
+            ...(menuId ? { menuId } : {}),
+            ...(optionCode ? { optionCode } : {}),
+            ...(note ? { note } : {}),
+          }
+        }
+      )
       const newQtyById = buildDineInQtySnapshot(snapItems)
       if (newQtyById.size > 0) dineInRemoteItemQtySnapshotRef.current.set(keepOrderId, newQtyById)
     } catch (e) {
@@ -5221,6 +5247,17 @@ export default function PosTerminalPage() {
       if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
       const st = String(row.status ?? '').trim().toLowerCase()
       if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
+
+      const oldRow = payload.old as Record<string, unknown> | undefined
+      if (oldRow && isPosDineInTableNameOnlyUpdate(oldRow, row)) {
+        const parsedTableMove = parseRealtimePosOrderRowItemsJson(row)
+        if (parsedTableMove.ok && parsedTableMove.items.length > 0) {
+          const sid = buildDineInQtySnapshot(parsedTableMove.items)
+          if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
+        }
+        logPosPrintDebug('realtime_update_skip_table_name_only', { orderId })
+        return
+      }
 
       const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId)
       if (suppressUntil != null) {
@@ -10416,6 +10453,16 @@ export default function PosTerminalPage() {
                   : (keepOrderId) => {
                       mainPosSelfDineInUpdateSuppressUntilRef.current.set(
                         keepOrderId,
+                        Date.now() + 15_000
+                      )
+                    }
+              }
+              onBeforeTableMove={
+                isPosDemo
+                  ? undefined
+                  : (orderId) => {
+                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                        orderId,
                         Date.now() + 15_000
                       )
                     }
