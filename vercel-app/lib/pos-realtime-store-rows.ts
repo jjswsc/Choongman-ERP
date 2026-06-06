@@ -1,6 +1,24 @@
 import { resolveStoreListKey } from '@/lib/store-list-keys'
 import type { Store } from '@/lib/pos-types'
 
+/** 매장 스냅샷의 진행 중 테이블 주문 금액 합 */
+export function sumStoreTableOrders(store: Store | undefined | null): number {
+  return (store?.tables || []).reduce((acc, tbl) => acc + Number(tbl.order?.total ?? 0), 0)
+}
+
+/** 단일 매장 또는 전체 매장 선택 시 테이블 총액 */
+export function computeRealtimeTableTotal(params: {
+  isAllStores: boolean
+  stores: ReadonlyArray<Store>
+  currentStore?: Store
+}): number {
+  if (params.isAllStores) {
+    return params.stores.reduce((acc, s) => acc + sumStoreTableOrders(s), 0)
+  }
+  if (params.currentStore) return sumStoreTableOrders(params.currentStore)
+  return params.stores.reduce((acc, s) => acc + sumStoreTableOrders(s), 0)
+}
+
 export type RealtimeStoreSalesRow = {
   /** 집계·정렬용 canonical store_code */
   storeId: string
@@ -88,10 +106,7 @@ export function mergeRealtimeStoreSalesRows(params: {
     const canon = resolveCanonical(rawId)
     const prev = groups.get(canon) || { paid: 0, tableTotal: 0 }
     prev.paid += Number(params.storeSalesMap[rawId]?.completedTotal ?? 0)
-    prev.tableTotal += (store.tables || []).reduce(
-      (acc, tbl) => acc + Number(tbl.order?.total ?? 0),
-      0
-    )
+    prev.tableTotal += sumStoreTableOrders(store)
     groups.set(canon, prev)
   }
 

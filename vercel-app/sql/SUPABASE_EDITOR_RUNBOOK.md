@@ -11,14 +11,29 @@ SQL Editor에 스크립트를 **계속 쌓아두지 말고**, 이 문서에서 �
 
 | 하지 말 것 | 대신 |
 |---|---|
-| 여러 스크립트를 한 탭에 이어 붙여 두기 | **`supabase_one_paste_all_in_one.sql` 한 파일만** 복사·실행 |
-| 진단용 `SELECT`를 DDL과 섞어 실행 | 진단은 §6 파일만, 결과 확인 후 닫기 |
+| 여러 스크립트를 한 탭에 이어 붙여 두기 | **붙여넣기 파일 2개만** (§1b·§1c) |
+| 진단용 `SELECT`를 DDL과 섞어 실행 | [`supabase_editor_diagnostic_only.sql`](./supabase_editor_diagnostic_only.sql) — 필요할 때만 열고 닫기 |
 | 회원 CRM·메뉴 복구 SQL을 매번 전체 실행 | 증상별로 해당 파일 **1개**만 |
-| `get_pos_sales_period_summary` 등 **같은 RPC 2번** | 아래 표의 파일 1개만 |
+| `get_pos_sales_period_summary` · `get_pos_channel_settlement_gross` **2번** | all-in-one에 이미 포함 — **중복 블록 삭제** |
+
+### SQL Editor에 쌓인 덩어리 — 지울 것 / 남길 것
+
+**Editor 탭 전체를 비우고**, 아래 **2개 파일만** 순서대로 Run 하면 됩니다. (이미 스키마가 맞으면 재실행해도 안전)
+
+| Editor에 있던 내용 | 조치 | 대신 |
+|---|---|---|
+| `supabase_one_paste_all_in_one` 헤더 ~ END | **유지(1회 Run)** | [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql) |
+| `paid_at` · HR · 등급 · CRM 쿠폰 · 패티캐시 VAT · compliance RPC | **삭제 후 phase2로 대체** | [`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql) |
+| Grab 주문/웹훅 `SELECT` · `#058` · SOY SAUCE SET · `option_code` 빈 품목 | **삭제** (스키마 변경 없음) | [`supabase_editor_diagnostic_only.sql`](./supabase_editor_diagnostic_only.sql) 참고만 |
+| `information_schema.columns` · `pos_grab_webhook_events` 조회 | **삭제** | 위 diagnostic 파일 |
+| `seed_erp_store_aliases()` + `select *` | **삭제** (매장 alias 보강할 때만) | [`erp_stores_seed_all_aliases.sql`](./erp_stores_seed_all_aliases.sql) |
+| `get_pos_channel_settlement_gross` **두 번째** 정의 (배달 gross 보정판) | **삭제** | all-in-one §11에 최신版 포함 |
+| `pos_coupons marketing_campaign_id` **중복 ALTER** | **삭제** | phase2 §29 1회만 |
+| K001/T001 메뉴 코드 복구 | **삭제** (ID 확인 후만) | [`supabase_one_paste_optional_menu_code_recovery.sql`](./supabase_one_paste_optional_menu_code_recovery.sql) |
 
 ---
 
-## 1b. 한 번에 붙여넣기 (운영 DB 추천)
+## 1b. 한 번에 붙여넣기 — 1차 (운영 DB 기본)
 
 Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 
@@ -27,7 +42,20 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 포함: 회계·세무·POS·결산·RLS·채널정산·CRM·회원포털·RPC (22개 섹션, 재실행 가능)  
 제외: 진단 SELECT, K001/T001 메뉴 코드 복구(ID 확인 필요)
 
-재생성(개별 sql 수정 후): `vercel-app/scripts/build-supabase-one-paste-all-in-one.ps1`
+재생성: `vercel-app/scripts/build-supabase-one-paste-all-in-one.ps1`
+
+---
+
+## 1c. 한 번에 붙여넣기 — 2차 (최근 기능)
+
+**1b 실행 후** 같은 Editor 탭을 비우고 아래 **전체** Run:
+
+**[`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql)**
+
+포함: `paid_at` · BOM 단위 · 인사 규정 · 회원 등급 · CRM 쿠폰 캠페인 · 지출/패티캐시 세금계산서 · `get_petty_cash_summary` · POS/VAT 대사 RPC  
+제외: 진단 SELECT, `erp_stores` alias 시드
+
+재생성: `vercel-app/scripts/build-supabase-one-paste-phase2.ps1`
 
 ---
 
@@ -70,7 +98,10 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 |---|---|
 | 복식부기·VAT·WHT·KT20k 한 번에 | [`supabase_one_paste_accounting_and_pos_printer_cut_clean.sql`](./supabase_one_paste_accounting_and_pos_printer_cut_clean.sql) |
 | 배달앱/카드 수수료 계정과목(5528·5529) | [`account_subjects_delivery_card_fee.sql`](./account_subjects_delivery_card_fee.sql) |
-| 채널 정산·플랫폼 %·`card_fee_amt` | [`pos_channel_settlement_deploy_one_paste.sql`](./pos_channel_settlement_deploy_one_paste.sql) |
+| 채널 정산·플랫폼 %·`card_fee_amt` | [`pos_channel_settlement_deploy_one_paste.sql`](./pos_channel_settlement_deploy_one_paste.sql) (all-in-one §11) |
+| 지출 발생 세금계산서 수령 | [`expense_accruals_invoice_received.sql`](./expense_accruals_invoice_received.sql) (phase2 §31) |
+| 패티캐시 세금계산서·매입 VAT | [`petty_cash_invoice_vat.sql`](./petty_cash_invoice_vat.sql) + [`get_petty_cash_summary.sql`](./get_petty_cash_summary.sql) (phase2 §32–33) |
+| POS vs VAT draft 대사 RPC | [`accounting_pos_compliance_reconciliation_rpc.sql`](./accounting_pos_compliance_reconciliation_rpc.sql) (phase2 §34) |
 
 ### POS 주문 · 결산 · 매출
 
@@ -104,6 +135,10 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 |---|---|
 | 회원 필드·OTP·RFM·LINE import | [`members_crm_scale_phase1_to_4.sql`](./members_crm_scale_phase1_to_4.sql) **1번만** |
 | 회원 앱 팝업/매장 사진 CMS | [`member_portal_content_cms.sql`](./member_portal_content_cms.sql) |
+| CRM 쿠폰 캠페인·member_coupon_issues | [`crm_coupon_campaigns_phase1.sql`](./crm_coupon_campaigns_phase1.sql) (phase2 §28) |
+| 회원 등급·혜택 문구 | [`member_tiers_portal_benefits.sql`](./member_tiers_portal_benefits.sql) (phase2 §26) |
+| 등급 승급 기준(tier_points) | [`member_tier_upgrade_basis.sql`](./member_tier_upgrade_basis.sql) (phase2 §27) |
+| 인사 규정·열람 확인 | [`hr_policies_hr_policy_reads.sql`](./hr_policies_hr_policy_reads.sql) (phase2 §25) |
 
 ---
 
@@ -166,10 +201,12 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 
 ---
 
-## 7. 추천 Editor 북마크 (최소 2개)
+## 7. 추천 Editor 북마크 (최소 3개)
 
-1. **한 번에 전체** — `supabase_one_paste_all_in_one.sql` ← **이것만 써도 됨**
-2. **K/T 메뉴 코드 복구** — `supabase_one_paste_optional_menu_code_recovery.sql` (확인 후만)
-3. **가이드** — `SUPABASE_EDITOR_RUNBOOK.md`
+1. **1차 전체** — [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql)
+2. **2차 최근 기능** — [`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql)
+3. **K/T 메뉴 코드 복구** — [`supabase_one_paste_optional_menu_code_recovery.sql`](./supabase_one_paste_optional_menu_code_recovery.sql) (확인 후만)
+4. **매장 alias 보강** — [`erp_stores_seed_all_aliases.sql`](./erp_stores_seed_all_aliases.sql) (필요할 때만)
+5. **가이드** — `SUPABASE_EDITOR_RUNBOOK.md`
 
-나머지는 §3 증상표에서 파일명 복사해 GitHub/로컬에서 열면 됩니다.
+진단 SELECT만 필요할 때: [`supabase_editor_diagnostic_only.sql`](./supabase_editor_diagnostic_only.sql) (Editor에 상시 보관 X)

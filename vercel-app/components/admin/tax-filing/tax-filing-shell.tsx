@@ -333,13 +333,6 @@ export function TaxFilingShell() {
           />
         </TabsContent>
         <TabsContent value="pnd5051" className={cn(adminTabsContentCn, "space-y-3")}>
-          <FilingFiltersCard
-            tabKey="pnd5051"
-            yearMonth={tabProps.pnd5051.filingYearMonth}
-            onYearMonthChange={tabProps.pnd5051.onFilingYearMonthChange}
-            storeFilter={tabProps.pnd5051.filingStoreFilter}
-            onStoreFilterChange={tabProps.pnd5051.onFilingStoreFilterChange}
-          />
           <TaxFilingCitTab
             {...tabProps.pnd5051}
             onOpenStoreProfiles={() => {
@@ -350,13 +343,6 @@ export function TaxFilingShell() {
           />
         </TabsContent>
         <TabsContent value="pnd5354" className={cn(adminTabsContentCn, "space-y-3")}>
-          <FilingFiltersCard
-            tabKey="pnd5354"
-            yearMonth={tabProps.pnd5354.filingYearMonth}
-            onYearMonthChange={tabProps.pnd5354.onFilingYearMonthChange}
-            storeFilter={tabProps.pnd5354.filingStoreFilter}
-            onStoreFilterChange={tabProps.pnd5354.onFilingStoreFilterChange}
-          />
           <TaxFilingWhtTab
             {...tabProps.pnd5354}
             whtFocusMode="pnd5354"

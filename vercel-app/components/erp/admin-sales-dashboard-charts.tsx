@@ -25,6 +25,7 @@ import {
   getPosSalesByDeliveryApp,
   getPosSalesByPeriod,
   getPosSalesByStore,
+  getPosSalesByStoreChannel,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
@@ -56,6 +57,8 @@ export type AdminSalesDashboardChartsProps = {
   isOfficeSelector: boolean
   /** 가맹 「내 매장 전체」등 — 명시 매장 코드(본사 All=undefined 와 구분) */
   salesStoreCodes?: string[]
+  /** POS 테이블 스냅샷 — 매장 canonical 키별 진행 중 주문 합계 */
+  tableTotalByStore?: Record<string, number>
 }
 
 function resolveStoresParam(storeCode: string): string[] | undefined {
@@ -64,10 +67,25 @@ function resolveStoresParam(storeCode: string): string[] | undefined {
   return [code]
 }
 
+function resolveTableTotalForStore(
+  storeName: string,
+  tableTotalByStore: Record<string, number> | undefined
+): number {
+  if (!tableTotalByStore) return 0
+  const direct = tableTotalByStore[storeName]
+  if (direct != null && Number.isFinite(direct)) return Math.max(0, direct)
+  const lower = storeName.toLowerCase()
+  for (const [key, value] of Object.entries(tableTotalByStore)) {
+    if (key.toLowerCase() === lower) return Math.max(0, Number(value) || 0)
+  }
+  return 0
+}
+
 export function AdminSalesDashboardCharts({
   effectiveStoreCode,
-  isOfficeSelector,
+  isOfficeSelector: _isOfficeSelector,
   salesStoreCodes,
+  tableTotalByStore,
 }: AdminSalesDashboardChartsProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -85,6 +103,9 @@ export function AdminSalesDashboardCharts({
   const [error, setError] = React.useState("")
   const [storeRows, setStoreRows] = React.useState<
     Awaited<ReturnType<typeof getPosSalesByStore>>
+  >([])
+  const [storeChannelRows, setStoreChannelRows] = React.useState<
+    Awaited<ReturnType<typeof getPosSalesByStoreChannel>>
   >([])
   const [channelRows, setChannelRows] = React.useState<
     Awaited<ReturnType<typeof getPosSalesByChannel>>
@@ -118,8 +139,9 @@ export function AdminSalesDashboardCharts({
     setLoading(true)
     setError("")
     try {
-      const [stores, channels, delivery, periodRes] = await Promise.all([
+      const [stores, storeChannels, channels, delivery, periodRes] = await Promise.all([
         getPosSalesByStore({ startStr: today, endStr: today, stores: storesParam }),
+        getPosSalesByStoreChannel({ startStr: today, endStr: today, stores: storesParam }),
         getPosSalesByChannel({ startStr: today, endStr: today, stores: storesParam }),
         getPosSalesByDeliveryApp({ startStr: today, endStr: today, stores: storesParam }),
         getPosSalesByPeriod({
@@ -135,6 +157,13 @@ export function AdminSalesDashboardCharts({
           )
         : stores
       setStoreRows(scopedStores)
+      setStoreChannelRows(
+        storesParam?.length
+          ? storeChannels.filter((r) =>
+              storesParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+            )
+          : storeChannels
+      )
       setChannelRows(channels)
       setDeliveryData(delivery)
       if (periodRes.kind === "aggregate") {
@@ -150,6 +179,7 @@ export function AdminSalesDashboardCharts({
     } catch {
       setError(tr("errorOccurred", "오류가 발생했습니다."))
       setStoreRows([])
+      setStoreChannelRows([])
       setChannelRows([])
       setDeliveryData({ items: [], total: 0 })
       setHourRows([])
@@ -167,18 +197,59 @@ export function AdminSalesDashboardCharts({
     void loadCharts()
   }, [loadCharts])
 
+  const storeChannelMap = React.useMemo(() => {
+    const map = new Map<string, { dineIn: number; takeout: number; delivery: number }>()
+    for (const r of storeChannelRows) {
+      const key = String(r.storeName || "").trim()
+      if (!key) continue
+      map.set(key, {
+        dineIn: Number(r.dineIn ?? 0) || 0,
+        takeout: Number(r.takeout ?? 0) || 0,
+        delivery: Number(r.delivery ?? 0) || 0,
+      })
+    }
+    return map
+  }, [storeChannelRows])
+
   const storeChartRows = React.useMemo(
     () =>
       [...storeRows]
-        .map((r) => ({
-          storeName: r.storeName,
-          storeDisplayName: posStoreDisplayName(r.storeName),
-          sales: Number(r.total ?? 0) || 0,
-          dineInTotal: Number(r.dineInTotal ?? 0) || 0,
-          count: Number(r.count ?? 0) || 0,
-        }))
+        .map((r) => {
+          const channel = storeChannelMap.get(r.storeName)
+          const dineIn = channel?.dineIn ?? (Number(r.dineInTotal ?? 0) || 0)
+          const takeout = channel?.takeout ?? 0
+          const delivery = channel?.delivery ?? 0
+          const completedTotal = Number(r.total ?? 0) || 0
+          const tableTotal = resolveTableTotalForStore(r.storeName, tableTotalByStore)
+          return {
+            storeName: r.storeName,
+            storeDisplayName: posStoreDisplayName(r.storeName),
+            sales: completedTotal,
+            dineInTotal: dineIn,
+            takeoutTotal: takeout,
+            deliveryTotal: delivery,
+            tableTotal,
+            count: Number(r.count ?? 0) || 0,
+          }
+        })
         .sort((a, b) => b.sales - a.sales),
-    [storeRows, posStoreDisplayName]
+    [storeRows, storeChannelMap, posStoreDisplayName, tableTotalByStore]
+  )
+
+  const storeTableTotals = React.useMemo(
+    () =>
+      storeChartRows.reduce(
+        (acc, r) => {
+          acc.dineIn += r.dineInTotal
+          acc.takeout += r.takeoutTotal
+          acc.delivery += r.deliveryTotal
+          acc.table += r.tableTotal
+          acc.sales += r.sales
+          return acc
+        },
+        { dineIn: 0, takeout: 0, delivery: 0, table: 0, sales: 0 }
+      ),
+    [storeChartRows]
   )
 
   const channelChartRows = React.useMemo(
@@ -216,7 +287,7 @@ export function AdminSalesDashboardCharts({
     return `/admin/sales-management?${q.toString()}`
   }, [today, storesParam])
 
-  const showStoreBar = isOfficeSelector && isAllStores && storeChartRows.length > 0
+  const showStoreTable = isAllStores && storeChartRows.length > 0
   const hasAnyChart =
     storeChartRows.length > 0 ||
     channelChartRows.length > 0 ||
@@ -284,19 +355,22 @@ export function AdminSalesDashboardCharts({
         </div>
       ) : null}
 
-      <div className={`grid gap-6 ${showStoreBar ? "lg:grid-cols-2" : ""}`}>
-        {showStoreBar ? (
+      <div className={`grid gap-6 ${showStoreTable ? "lg:grid-cols-2" : ""}`}>
+        {showStoreTable ? (
           <div className="lg:col-span-2">
             <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
               {tr("salesByStore", "매장별")}
             </h3>
             <div className="overflow-x-auto rounded-lg border">
-              <table className="min-w-full text-xs">
+              <table className="min-w-[720px] w-full text-xs">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindDineIn", "홀")}</th>
-                    <th className="px-3 py-2 text-right">{tr("salesAmount", "매출액")}</th>
+                    <th className="px-3 py-2 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
+                    <th className="px-3 py-2 text-right">{tr("salesAmountKindTakeout", "포장")}</th>
+                    <th className="px-3 py-2 text-right">{tr("mobileStoreSalesTableTotal", "테이블")}</th>
+                    <th className="px-3 py-2 text-right">{tr("salesTotalLabel", "합계")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -304,14 +378,31 @@ export function AdminSalesDashboardCharts({
                     <tr key={r.storeName} className="border-t">
                       <td className="px-3 py-1.5 font-medium">{r.storeDisplayName}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{formatSalesAmount(r.dineInTotal)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatSalesAmount(r.deliveryTotal)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatSalesAmount(r.takeoutTotal)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatSalesAmount(r.tableTotal)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
                         {formatSalesAmount(r.sales)}
                       </td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 bg-muted/40 font-semibold">
+                    <td className="px-3 py-2">{tr("salesTotalLabel", "합계")}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatSalesAmount(storeTableTotals.dineIn)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatSalesAmount(storeTableTotals.delivery)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatSalesAmount(storeTableTotals.takeout)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatSalesAmount(storeTableTotals.table)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatSalesAmount(storeTableTotals.sales)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              {tr(
+                "adminDashboardStoreTableFootnote",
+                "홀·배달·포장·합계는 당일 완료 매출(POS 영업일)입니다. 테이블은 진행 중 주문 합계로 실시간 패널「검색」 시 갱신됩니다."
+              )}
+            </p>
           </div>
         ) : null}
 
@@ -415,22 +506,30 @@ export function AdminSalesDashboardCharts({
         ) : null}
       </div>
 
-      {!showStoreBar && storeChartRows.length === 1 ? (
+      {!showStoreTable && storeChartRows.length === 1 ? (
         <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
           <p className="text-xs text-muted-foreground">{tr("salesStoreName", "매장명")}</p>
           <p className="font-semibold">{storeChartRows[0].storeDisplayName}</p>
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <div>
               <p className="text-[11px] text-muted-foreground">{tr("salesAmountKindDineIn", "홀")}</p>
               <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].dineInTotal)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">{tr("salesAmount", "매출액")}</p>
-              <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].sales)}</p>
+              <p className="text-[11px] text-muted-foreground">{tr("salesAmountKindDelivery", "배달")}</p>
+              <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].deliveryTotal)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">{tr("salesOccupancy", "주문건수")}</p>
-              <p className="text-lg font-bold tabular-nums">{storeChartRows[0].count.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground">{tr("salesAmountKindTakeout", "포장")}</p>
+              <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].takeoutTotal)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">{tr("mobileStoreSalesTableTotal", "테이블")}</p>
+              <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].tableTotal)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">{tr("salesTotalLabel", "합계")}</p>
+              <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].sales)}</p>
             </div>
           </div>
         </div>

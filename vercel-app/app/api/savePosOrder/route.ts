@@ -321,6 +321,16 @@ export async function POST(req: NextRequest) {
     const closeStatusRaw = String(body.closeStatus ?? body.close_status ?? '').trim().toLowerCase()
     const closeStatus =
       closeStatusRaw === 'paid' || closeStatusRaw === 'completed' ? closeStatusRaw : null
+    if (
+      total > 0.02 &&
+      paymentSumForStatus > total + 0.02 &&
+      (closeStatus === 'paid' || closeStatus === 'completed')
+    ) {
+      return NextResponse.json(
+        { success: false, message: 'payment_exceeds_total' },
+        { headers }
+      )
+    }
     let orderStatus = 'pending'
     if (total > 0 && paymentSumForStatus >= total - 0.02) {
       if (closeStatus === 'paid' || closeStatus === 'completed') {

@@ -40,6 +40,9 @@ type ExpenseAccrualRow = {
   rejected_at?: string
   rejection_note?: string
   attachment_urls?: string | null
+  invoice_received?: boolean | null
+  invoice_no?: string | null
+  invoice_photo_url?: string | null
 }
 
 function parseAttachmentUrls(raw: string | null | undefined): string[] {
@@ -99,7 +102,7 @@ function isPurchaseWithdrawalCategory(cat: string | undefined): boolean {
 }
 
 const ACCRUAL_PLAN_SELECT =
-  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls'
+  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls,invoice_received,invoice_no,invoice_photo_url'
 
 async function fetchExpenseAccrualsForPlanRange(
   startStr: string,
@@ -218,6 +221,9 @@ export async function GET(request: NextRequest) {
           paidAmount: paid,
           remainingAmount: remaining,
           ...(attachmentUrls.length > 0 ? { attachmentUrls } : {}),
+          invoiceReceived: Boolean(r.invoice_received),
+          ...(String(r.invoice_no || '').trim() ? { invoiceNo: String(r.invoice_no).trim() } : {}),
+          ...(String(r.invoice_photo_url || '').trim() ? { invoicePhotoUrl: String(r.invoice_photo_url).trim() } : {}),
           expenseDate: r.expense_date || '',
           dueDate: r.due_date || '',
           memo: r.memo || '',

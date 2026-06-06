@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
+import { deletePettyCashInputVatLedger } from '@/lib/petty-input-vat-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     await deleteJournalEntriesBySource('petty_cash', id, {})
+    await deletePettyCashInputVatLedger(id)
 
     if ((payables || []).length > 0) {
       await supabaseDeleteByFilter('payable_transactions', `petty_cash_transaction_id=eq.${id}`)

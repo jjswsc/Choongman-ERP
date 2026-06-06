@@ -36,6 +36,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 const CATEGORY_STYLE: Record<string, string> = {
   promo: "border-violet-200 bg-violet-50 text-violet-700",
+  new_menu: "border-orange-200 bg-orange-50 text-orange-700",
   popup: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700",
   info: "border-slate-200 bg-slate-50 text-slate-700",
   other: "border-muted-foreground/20 bg-muted/40 text-muted-foreground",

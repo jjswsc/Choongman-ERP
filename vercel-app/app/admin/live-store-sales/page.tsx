@@ -22,6 +22,9 @@ import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-vi
 import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
 import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
 import { storeMatches } from "@/lib/admin-employee-store-access"
+import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
+import { computeRealtimeTableTotal, mergeRealtimeStoreSalesRows } from "@/lib/pos-realtime-store-rows"
+import { useStoreList } from "@/lib/use-store-list"
 
 const ALL_STORE_VALUE = "All"
 
@@ -74,6 +77,7 @@ export default function AdminLiveStoreSalesPage() {
   }, [canFranchiseeAll, auth, effectiveStoreCode])
 
   const { stores, currentStore, setCurrentStoreId, loadingTables, refetchStores } = usePosStore()
+  const { stores: storeListCodes, legacyToCanonical, formatStoreLabel } = useStoreList()
 
   const storesForRealtime = useMemo(() => {
     if (effectiveStoreCode !== FRANCHISEE_AGGREGATE_ALL_STORES_VALUE || !franchiseSalesStoreCodes?.length) {
@@ -84,6 +88,40 @@ export default function AdminLiveStoreSalesPage() {
     )
   }, [stores, effectiveStoreCode, franchiseSalesStoreCodes])
 
+  const operationalStoresForTableTotal = useMemo(() => {
+    const allowed = new Set(
+      filterPosSalesStoreOptionsForManagement(
+        storesForRealtime.map((s) => String(s.id || "").trim()).filter(Boolean)
+      )
+    )
+    return storesForRealtime.filter((s) => allowed.has(String(s.id || "").trim()))
+  }, [storesForRealtime])
+
+  const isAllStoresTableTotal =
+    effectiveStoreCode === ALL_STORE_VALUE ||
+    effectiveStoreCode === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
+
+  const adminTableTotal = useMemo(
+    () =>
+      computeRealtimeTableTotal({
+        isAllStores: isAllStoresTableTotal,
+        stores: operationalStoresForTableTotal,
+        currentStore: isAllStoresTableTotal ? undefined : currentStore,
+      }),
+    [isAllStoresTableTotal, operationalStoresForTableTotal, currentStore]
+  )
+
+  const tableTotalByStore = useMemo(() => {
+    const rows = mergeRealtimeStoreSalesRows({
+      operationalStores: operationalStoresForTableTotal,
+      storeSalesMap: {},
+      storeCodes: storeListCodes,
+      legacyToCanonical,
+      formatStoreLabel,
+    })
+    return Object.fromEntries(rows.map((r) => [r.storeId, r.tableTotal]))
+  }, [operationalStoresForTableTotal, storeListCodes, legacyToCanonical, formatStoreLabel])
+
   const showBranchRealtime =
     effectiveStoreCode &&
     effectiveStoreCode !== ALL_STORE_VALUE &&
@@ -91,6 +129,10 @@ export default function AdminLiveStoreSalesPage() {
 
   const showFranchiseAllRealtime =
     canFranchiseeAll && effectiveStoreCode === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
+
+  /** 본사 전체 매장 — 매장별·테이블 총 금액 실시간 패널 */
+  const showOfficeAllRealtime =
+    isOfficeSelector && effectiveStoreCode === ALL_STORE_VALUE
 
   useEffect(() => {
     if (!showBranchRealtime) return
@@ -145,20 +187,27 @@ export default function AdminLiveStoreSalesPage() {
               effectiveStoreCode={effectiveStoreCode}
               isOfficeSelector={isOfficeSelector}
               salesStoreCodes={franchiseSalesStoreCodes}
+              tableTotalByStore={tableTotalByStore}
             />
             <PosRevenueRealtimeDashboard
               effectiveStoreCode={effectiveStoreCode}
               isOfficeSelector={isOfficeSelector}
               salesStoreCodes={franchiseSalesStoreCodes}
+              tableTotal={adminTableTotal}
+              tableTotalLoading={loadingTables}
             />
 
-            {showBranchRealtime || showFranchiseAllRealtime ? (
+            {showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime ? (
               <StoreSalesRealtimeView
                 effectiveStoreCode={effectiveStoreCode}
                 stores={storesForRealtime}
                 loadingTables={loadingTables}
                 refetchStores={refetchStores}
-                currentStore={showFranchiseAllRealtime ? undefined : currentStore}
+                currentStore={
+                  showFranchiseAllRealtime || showOfficeAllRealtime ? undefined : currentStore
+                }
+                showInlineRefresh
+                showHeaderBadge
                 showSalesCharts
               />
             ) : null}

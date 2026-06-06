@@ -318,6 +318,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     const editAccrualId = searchParams.get("editAccrualId")
     const accrualVatParam = searchParams.get("accrualVat")
     const accrualWhtParam = searchParams.get("accrualWht")
+    const invoiceReceivedParam = searchParams.get("invoiceReceived")
+    const invoiceNoParam = searchParams.get("invoiceNo")
     const hasAnyParam =
       amountParam ||
       bankMemoParam ||
@@ -334,7 +336,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       storeNameParam ||
       editAccrualId ||
       accrualVatParam ||
-      accrualWhtParam
+      accrualWhtParam ||
+      invoiceReceivedParam ||
+      invoiceNoParam
     if (hasAnyParam) {
       hasAppliedParams.current = true
       if (amountParam && Number(amountParam) > 0) setAmount(String(Number(amountParam)))
@@ -377,6 +381,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         const w = Math.max(0, Number(accrualWhtParam) || 0)
         setAccrualWithholdingTax(w > 0 ? String(w) : "")
       }
+      if (invoiceReceivedParam === "1" || invoiceReceivedParam === "true") setInvoiceReceived(true)
+      if (invoiceNoParam) setInvoiceNo(invoiceNoParam)
     }
   }, [searchParams, mapCategoryToMainSub])
 
@@ -683,6 +689,18 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       }
     }
 
+    let accrualInvoicePhotoUrl: string | undefined
+    if (
+      (categoryMain === "purchase" || categoryMain === "expense") &&
+      invoicePhotoFile
+    ) {
+      try {
+        accrualInvoicePhotoUrl = await compressImageForUpload(invoicePhotoFile, 1024, 0.7)
+      } catch {
+        accrualInvoicePhotoUrl = undefined
+      }
+    }
+
     setSaving(true)
     try {
       if (isEditAccrualMode && editAccrualIdParam) {
@@ -706,6 +724,13 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           userRole: auth?.role,
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
+          ...(categoryMain === "purchase" || categoryMain === "expense"
+            ? {
+                invoiceReceived,
+                invoiceNo: invoiceNo.trim() || undefined,
+                ...(accrualInvoicePhotoUrl ? { invoicePhotoUrl: accrualInvoicePhotoUrl } : {}),
+              }
+            : {}),
         })
         if (!res.success) {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
@@ -718,6 +743,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         setAccrualAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
+        setInvoiceReceived(false)
+        setInvoiceNo("")
+        setInvoicePhotoFile(null)
         hasAppliedParams.current = false
         onAccrualSaved?.({ expenseDate: transDate })
         await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
@@ -739,6 +767,13 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           userName: auth?.user,
           userRole: auth?.role,
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
+          ...(categoryMain === "purchase" || categoryMain === "expense"
+            ? {
+                invoiceReceived,
+                invoiceNo: invoiceNo.trim() || undefined,
+                ...(accrualInvoicePhotoUrl ? { invoicePhotoUrl: accrualInvoicePhotoUrl } : {}),
+              }
+            : {}),
         })
         if (!res.success) {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
@@ -752,6 +787,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         setAccrualAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
+        setInvoiceReceived(false)
+        setInvoiceNo("")
+        setInvoicePhotoFile(null)
         if (queued) {
           await appAlert(
             tt(
@@ -935,6 +973,10 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         invoiceReceived: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceReceived : undefined,
         invoiceNo: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceNo.trim() || undefined : undefined,
         invoicePhotoUrl,
+        vatAmount:
+          categoryMain === "purchase" || categoryMain === "expense"
+            ? Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0) || undefined
+            : undefined,
         userName: auth?.user,
         userRole: auth?.role,
         userStore: auth?.store,
@@ -2022,7 +2064,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                 />
               </div>
             </div>
-            {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
+            {(categoryMain === "purchase" || categoryMain === "expense") &&
+              (isLaterPayment || (!isLaterPayment && (effectivePaymentMethod === "bank" || effectivePaymentMethod === "petty"))) && (
               <div className="flex flex-wrap items-end gap-3 max-w-6xl rounded-lg border border-border/50 bg-muted/10 p-3">
                 <div className="w-[110px]">
                   <Label className="text-xs text-muted-foreground">{tt("expenseAccrualVat", "VAT")}</Label>
@@ -2039,6 +2082,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                     className="h-9 mt-1"
                   />
                 </div>
+                {isLaterPayment ? (
+                  <>
                 <div className="w-[110px]">
                   <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "Withholding Tax")}</Label>
                   <Input
@@ -2060,6 +2105,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                     ฿{(accrualNetPreview ?? 0).toLocaleString()}
                   </span>
                 </div>
+                  </>
+                ) : null}
               </div>
             )}
             {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
@@ -2086,7 +2133,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                 ) : null}
               </div>
             )}
-            {(categoryMain === "purchase" || categoryMain === "expense") && !isLaterPayment && effectivePaymentMethod === "bank" && (
+            {(categoryMain === "purchase" || categoryMain === "expense") && (isLaterPayment || effectivePaymentMethod === "bank" || effectivePaymentMethod === "petty") && (
               <div className="space-y-2 p-3 rounded-lg border bg-muted/20">
                 <div className="text-sm font-medium">{tt("poInvoice", "Invoice")}</div>
                 <div className="flex flex-wrap items-center gap-4">

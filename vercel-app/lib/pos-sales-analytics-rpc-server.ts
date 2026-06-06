@@ -10,6 +10,7 @@ import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
 
 export type PosSalesAnalyticsAggMode =
   | 'store'
+  | 'store_channel'
   | 'period'
   | 'period_by_store'
   | 'channel'

@@ -2,7 +2,7 @@
 -- Supabase SQL Editor에서 실행 후 /api/posSalesBy* 가 RPC 우선 사용.
 --
 -- p_agg_mode:
---   store | period | period_by_store | channel | payment | delivery_platform | menu
+--   store | store_channel | period | period_by_store | channel | payment | delivery_platform | menu
 -- p_period_group (period*): day | month | year | week | dow | hour
 
 CREATE OR REPLACE FUNCTION public.pos_sales_norm_store_key(p_raw text)
@@ -336,6 +336,32 @@ BEGIN
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'store'
     GROUP BY f.store_code
+
+    UNION ALL
+
+    -- store_channel (bucket_key=store, bucket_key2=dine_in|takeout|delivery)
+    SELECT
+      f.store_code AS bucket_key,
+      CASE
+        WHEN f.norm_order_type IN ('dine_in', '') THEN 'dine_in'
+        WHEN f.norm_order_type IN ('takeout', 'delivery') THEN f.norm_order_type
+        ELSE 'unknown'
+      END AS bucket_key2,
+      count(*)::bigint,
+      sum(f.subtotal),
+      sum(f.vat),
+      sum(f.discount),
+      sum(f.service_amt),
+      sum(f.total),
+      sum(f.guest_count),
+      0::bigint,
+      0::numeric,
+      0::bigint,
+      0::numeric,
+      NULL::text
+    FROM in_range f
+    WHERE lower(coalesce(p_agg_mode, '')) = 'store_channel'
+    GROUP BY f.store_code, 2
 
     UNION ALL
 

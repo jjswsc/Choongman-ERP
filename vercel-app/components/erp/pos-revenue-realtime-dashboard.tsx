@@ -63,6 +63,9 @@ type PosRevenueRealtimeDashboardProps = {
   isOfficeSelector: boolean
   /** 가맹 허용 매장 합산 — stores 쿼리에 명시 */
   salesStoreCodes?: string[]
+  /** POS 테이블 스냅샷 기준 진행 중 주문 합계 */
+  tableTotal?: number
+  tableTotalLoading?: boolean
 }
 
 function formatBaht(value: number): string {
@@ -85,6 +88,8 @@ export function PosRevenueRealtimeDashboard({
   effectiveStoreCode,
   isOfficeSelector,
   salesStoreCodes,
+  tableTotal,
+  tableTotalLoading = false,
 }: PosRevenueRealtimeDashboardProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -112,7 +117,7 @@ export function PosRevenueRealtimeDashboard({
     } finally {
       setLoading(false)
     }
-  }, [storeCode, tr])
+  }, [storeCode, salesStoreCodes, tr])
 
   /** 첫 화면·매장 변경 시 자동 조회. 이후 갱신은 검색 버튼만(60초 폴링 없음) */
   React.useEffect(() => {
@@ -219,6 +224,23 @@ export function PosRevenueRealtimeDashboard({
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           {error}
         </p>
+      ) : null}
+
+      {typeof tableTotal === "number" || tableTotalLoading ? (
+        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            {tr("mobileStoreSalesTableTotal", "테이블 총액")}
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
+            {tableTotalLoading ? "—" : formatBaht(tableTotal ?? 0)}
+          </p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {tr(
+              "adminRealtimeTableTotalHint",
+              "진행 중 테이블 주문 합계입니다. 아래 실시간 매출 패널「검색」으로 갱신합니다."
+            )}
+          </p>
+        </div>
       ) : null}
 
       {loading && !store && !officeRows.length ? (

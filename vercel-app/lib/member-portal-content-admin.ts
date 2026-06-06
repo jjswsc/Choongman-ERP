@@ -1,4 +1,8 @@
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import {
+  MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB,
+  MEMBER_PORTAL_HOME_PROMO_TARGET_TAB,
+} from '@/lib/member-portal-content'
 
 export type MemberPortalContentAdminItem = {
   id: number
@@ -17,11 +21,11 @@ export type MemberPortalContentAdminItem = {
   updatedBy: string
 }
 
-export type MemberPortalContentAdminTab = 'all' | 'popup' | 'info' | 'promo'
+export type MemberPortalContentAdminTab = 'all' | 'popup' | 'info' | 'promo' | 'new_menu'
 
 export type MemberPortalContentDisplayStatus = 'live' | 'scheduled' | 'expired' | 'paused'
 
-export type MemberPortalContentAdminCategory = 'promo' | 'popup' | 'info' | 'other'
+export type MemberPortalContentAdminCategory = 'promo' | 'new_menu' | 'popup' | 'info' | 'other'
 
 export type ContentAdminSort = 'sort_order' | 'updated_desc' | 'title' | 'starts_desc'
 
@@ -37,8 +41,8 @@ export type ContentAdminSummary = {
 
 export function memberPortalContentPlacementLabel(targetTab: string, contentType: string): string {
   const tab = String(targetTab || '').trim()
-  if (tab === 'home_promo') return '홈 · 월별 프로모션'
-  if (tab === 'home_feature') return '홈 · 추천 타일'
+  if (tab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB) return '홈 · 월별 프로모션'
+  if (tab === MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB) return '홈 · 신메뉴'
   if (tab === 'home') return '홈 · 공지'
   if (tab === 'location') return '매장 탭'
   if (contentType === 'popup') return '팝업'
@@ -81,18 +85,24 @@ export function toDatetimeLocalValue(iso: string): string {
 }
 
 export function isHomePromoContent(item: MemberPortalContentAdminItem): boolean {
-  return item.contentType === 'info' && item.targetTab === 'home_promo'
+  return item.contentType === 'info' && item.targetTab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB
+}
+
+export function isHomeNewMenuContent(item: MemberPortalContentAdminItem): boolean {
+  return item.contentType === 'info' && item.targetTab === MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB
 }
 
 export function memberPortalContentAdminCategory(item: MemberPortalContentAdminItem): MemberPortalContentAdminCategory {
   if (item.contentType === 'popup') return 'popup'
   if (isHomePromoContent(item)) return 'promo'
+  if (isHomeNewMenuContent(item)) return 'new_menu'
   if (item.contentType === 'info') return 'info'
   return 'other'
 }
 
 export function memberPortalContentAdminCategoryLabel(category: MemberPortalContentAdminCategory): string {
   if (category === 'promo') return '월별 프로모션'
+  if (category === 'new_menu') return '신메뉴'
   if (category === 'popup') return '팝업'
   if (category === 'info') return '정보·공지'
   return '기타'
@@ -124,7 +134,8 @@ export function filterContentForAdminTab(
   }
   if (tab === 'popup') return items.filter((x) => x.contentType === 'popup')
   if (tab === 'promo') return items.filter((x) => isHomePromoContent(x))
-  return items.filter((x) => x.contentType === 'info' && !isHomePromoContent(x))
+  if (tab === 'new_menu') return items.filter((x) => isHomeNewMenuContent(x))
+  return items.filter((x) => x.contentType === 'info' && !isHomePromoContent(x) && !isHomeNewMenuContent(x))
 }
 
 export function searchContentAdminItems(

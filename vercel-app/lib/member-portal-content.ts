@@ -77,17 +77,25 @@ function contentDateYmd(raw: string): string {
   return ''
 }
 
+export const MEMBER_PORTAL_HOME_PROMO_TARGET_TAB = 'home_promo'
+export const MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB = 'home_feature'
+
 export function isMemberPortalHomePromoItem(item: MemberPortalContentItem): boolean {
-  return item.contentType === 'info' && item.targetTab === 'home_promo'
+  return item.contentType === 'info' && item.targetTab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB
+}
+
+export function isMemberPortalHomeNewMenuItem(item: MemberPortalContentItem): boolean {
+  return item.contentType === 'info' && item.targetTab === MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB
 }
 
 /** 방콕 달력 월(YYYY-MM)과 콘텐츠 노출 기간이 겹치는지 */
-export function memberPortalContentOverlapsBangkokMonth(
+export function memberPortalContentOverlapsBangkokMonthForTarget(
   item: MemberPortalContentItem,
+  targetTab: string,
   yearMonth: string,
   monthRange: { startStr: string; endStr: string }
 ): boolean {
-  if (!item.isActive || !isMemberPortalHomePromoItem(item)) return false
+  if (!item.isActive || item.contentType !== 'info' || item.targetTab !== targetTab) return false
 
   const startYmd = contentDateYmd(item.startsAt)
   const endYmd = contentDateYmd(item.endsAt)
@@ -101,17 +109,48 @@ export function memberPortalContentOverlapsBangkokMonth(
   return periodStart <= monthRange.endStr && periodEnd >= monthRange.startStr
 }
 
+/** @deprecated use memberPortalContentOverlapsBangkokMonthForTarget */
+export function memberPortalContentOverlapsBangkokMonth(
+  item: MemberPortalContentItem,
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string }
+): boolean {
+  return memberPortalContentOverlapsBangkokMonthForTarget(
+    item,
+    MEMBER_PORTAL_HOME_PROMO_TARGET_TAB,
+    yearMonth,
+    monthRange
+  )
+}
+
+export function listMemberPortalHomeContentForMonth(
+  items: MemberPortalContentItem[],
+  targetTab: string,
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string }
+): MemberPortalContentItem[] {
+  return items
+    .filter((x) => memberPortalContentOverlapsBangkokMonthForTarget(x, targetTab, yearMonth, monthRange))
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
+}
+
 export function listMemberPortalHomePromosForMonth(
   items: MemberPortalContentItem[],
   yearMonth: string,
   monthRange: { startStr: string; endStr: string }
 ): MemberPortalContentItem[] {
-  return items
-    .filter((x) => memberPortalContentOverlapsBangkokMonth(x, yearMonth, monthRange))
-    .sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-      return b.updatedAt.localeCompare(a.updatedAt)
-    })
+  return listMemberPortalHomeContentForMonth(items, MEMBER_PORTAL_HOME_PROMO_TARGET_TAB, yearMonth, monthRange)
+}
+
+export function listMemberPortalHomeNewMenusForMonth(
+  items: MemberPortalContentItem[],
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string }
+): MemberPortalContentItem[] {
+  return listMemberPortalHomeContentForMonth(items, MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB, yearMonth, monthRange)
 }
 
 export function shiftBangkokYearMonth(yearMonth: string, deltaMonths: number): string {
@@ -121,28 +160,5 @@ export function shiftBangkokYearMonth(yearMonth: string, deltaMonths: number): s
   const ny = Math.floor(total / 12)
   const nm = (total % 12) + 1
   return `${ny}-${String(nm).padStart(2, '0')}`
-}
-
-/** 홈 통계 타일 — 신메뉴·프로모션 (target_tab=home_feature 우선) */
-export function pickHomeFeatureContent(items: MemberPortalContentItem[]): MemberPortalContentItem | null {
-  const sorted = [...items].sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
-    return b.updatedAt.localeCompare(a.updatedAt)
-  })
-  const featured = sorted.find((x) => x.contentType === 'info' && x.targetTab === 'home_feature')
-  if (featured) return featured
-  const promo = sorted.find(
-    (x) => x.contentType === 'info' && x.targetTab === 'home_promo' && (x.title || x.imageUrl)
-  )
-  if (promo) return promo
-  return (
-    sorted.find(
-      (x) =>
-        x.contentType === 'info' &&
-        x.imageUrl &&
-        (!x.targetTab || x.targetTab === 'home') &&
-        (x.title || x.body)
-    ) || null
-  )
 }
 

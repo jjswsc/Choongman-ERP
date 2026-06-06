@@ -44,7 +44,7 @@ export const ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE =
 
 /** 패티캐시 목록·월별 상세 */
 export const PETTY_CASH_LIST_COLS =
-  'id,store,trans_date,trans_type,amount,balance_after,memo,receipt_url,user_name,account_subject_id'
+  'id,store,trans_date,trans_type,amount,balance_after,memo,receipt_url,user_name,account_subject_id,invoice_received,invoice_no,invoice_photo_url,vat_amount,vendor_code'
 
 /** 출고 통합 이력: Outbound / ForceOutbound 로그 */
 export const STOCK_LOG_OUTBOUND_HISTORY_COLS =

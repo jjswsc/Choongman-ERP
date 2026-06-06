@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   filterContentForAdminTab,
+  isHomeNewMenuContent,
   isHomePromoContent,
   resolveMemberPortalContentDisplayStatus,
   searchContentAdminItems,
@@ -30,20 +31,23 @@ function item(partial: Partial<MemberPortalContentAdminItem>): MemberPortalConte
 }
 
 describe('filterContentForAdminTab', () => {
-  it('splits promo from general info', () => {
+  it('splits promo, new menu, and general info', () => {
     const items = [
       item({ contentKey: 'p', targetTab: 'home_promo' }),
+      item({ contentKey: 'n', targetTab: 'home_feature' }),
       item({ contentKey: 'i', targetTab: 'home' }),
       item({ contentKey: 'pop', contentType: 'popup', targetTab: 'home' }),
     ]
     expect(filterContentForAdminTab(items, 'promo').map((x) => x.contentKey)).toEqual(['p'])
+    expect(filterContentForAdminTab(items, 'new_menu').map((x) => x.contentKey)).toEqual(['n'])
     expect(filterContentForAdminTab(items, 'info').map((x) => x.contentKey)).toEqual(['i'])
     expect(filterContentForAdminTab(items, 'popup').map((x) => x.contentKey)).toEqual(['pop'])
-    expect(filterContentForAdminTab(items, 'all').map((x) => x.contentKey)).toEqual(['p', 'i', 'pop'])
+    expect(filterContentForAdminTab(items, 'all').map((x) => x.contentKey)).toEqual(['p', 'n', 'i', 'pop'])
   })
 
-  it('detects home promo', () => {
+  it('detects home promo and new menu', () => {
     expect(isHomePromoContent(item({ targetTab: 'home_promo' }))).toBe(true)
+    expect(isHomeNewMenuContent(item({ targetTab: 'home_feature' }))).toBe(true)
     expect(isHomePromoContent(item({ targetTab: 'home' }))).toBe(false)
   })
 })

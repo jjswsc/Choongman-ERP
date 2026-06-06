@@ -226,6 +226,21 @@ CREATE TABLE IF NOT EXISTS pos_orders (
 CREATE INDEX IF NOT EXISTS idx_pos_orders_order_no ON pos_orders(order_no);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_created ON pos_orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_status ON pos_orders(status);
+-- SaaS pos_orders(store_name) 등 레거시: store_code 없으면 보강 후 인덱스
+DO $$
+BEGIN
+  IF to_regclass('public.pos_orders') IS NOT NULL THEN
+    ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS store_code TEXT DEFAULT '';
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'store_name'
+    ) THEN
+      UPDATE public.pos_orders
+      SET store_code = COALESCE(NULLIF(trim(store_name), ''), store_code, '')
+      WHERE store_code IS NULL OR trim(store_code) = '';
+    END IF;
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_pos_orders_store ON pos_orders(store_code);
 
 CREATE TABLE IF NOT EXISTS pos_table_layouts (
@@ -302,6 +317,7 @@ CREATE TABLE IF NOT EXISTS pos_settlements (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(store_code, settle_date)
 );
+ALTER TABLE pos_settlements ADD COLUMN IF NOT EXISTS store_code TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_pos_settlements_store ON pos_settlements(store_code);
 CREATE INDEX IF NOT EXISTS idx_pos_settlements_date ON pos_settlements(settle_date);
 ALTER TABLE pos_settlements ENABLE ROW LEVEL SECURITY;

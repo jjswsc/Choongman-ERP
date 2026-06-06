@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS items (
   tax TEXT DEFAULT '과세',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- 레거시/부분 DB: items 행은 있는데 code 컬럼만 없을 때 (Omni 등)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS code TEXT;
+UPDATE items SET code = 'ITEM-' || id::text
+WHERE code IS NULL OR btrim(code) = '';
 CREATE INDEX IF NOT EXISTS idx_items_code ON items(code);
 
 -- 품목–거래처 다대다 매핑 (한 품목을 여러 거래처에서 매입 가능)
@@ -58,6 +62,9 @@ ALTER TABLE vendors ADD COLUMN IF NOT EXISTS gps_name TEXT DEFAULT '';
 ALTER TABLE vendors ADD COLUMN IF NOT EXISTS lat TEXT DEFAULT '';
 ALTER TABLE vendors ADD COLUMN IF NOT EXISTS lng TEXT DEFAULT '';
 ALTER TABLE vendors ADD COLUMN IF NOT EXISTS direct_settlement BOOLEAN DEFAULT FALSE;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS code TEXT;
+UPDATE vendors SET code = 'VND-' || id::text
+WHERE code IS NULL OR btrim(code) = '';
 CREATE INDEX IF NOT EXISTS idx_vendors_code ON vendors(code);
 CREATE INDEX IF NOT EXISTS idx_vendors_gps_name ON vendors(gps_name);
 
@@ -142,6 +149,9 @@ CREATE TABLE IF NOT EXISTS store_settings (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(store, code)
 );
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS code TEXT;
+UPDATE store_settings SET code = 'SS-' || id::text
+WHERE code IS NULL OR btrim(code) = '';
 CREATE INDEX IF NOT EXISTS idx_store_settings_store ON store_settings(store);
 
 -- 직원정보 (기존 시트 "직원정보" / "Users") - 2단계

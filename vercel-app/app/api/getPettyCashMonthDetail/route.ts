@@ -74,7 +74,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let rows: { id?: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; receipt_url?: string; user_name?: string; account_subject_id?: number }[] = []
+    let rows: {
+      id?: number
+      store?: string
+      trans_date?: string
+      trans_type?: string
+      amount?: number
+      memo?: string
+      receipt_url?: string
+      user_name?: string
+      account_subject_id?: number
+      invoice_received?: boolean
+      invoice_no?: string | null
+      invoice_photo_url?: string | null
+      vat_amount?: number | null
+      vendor_code?: string | null
+    }[] = []
     if (effectiveStore) {
       if (effectiveStore === 'Office' && !departmentFilter) {
         rows = (await supabaseSelectFilter(
@@ -100,7 +115,22 @@ export async function GET(request: NextRequest) {
     const startD = new Date(startStr + 'T00:00:00')
     const endD = new Date(endStr + 'T23:59:59')
     const storePrevBal: Record<string, number> = {}
-    const inMonth: { id: number; store: string; trans_date: string; trans_type: string; amount: number; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null }[] = []
+    const inMonth: {
+      id: number
+      store: string
+      trans_date: string
+      trans_type: string
+      amount: number
+      memo: string
+      receipt_url?: string
+      user_name: string
+      account_subject_id?: number | null
+      invoice_received?: boolean
+      invoice_no?: string | null
+      invoice_photo_url?: string | null
+      vat_amount?: number | null
+      vendor_code?: string | null
+    }[] = []
 
     for (const r of rows || []) {
       const dt = toDateStr(r.trans_date)
@@ -126,6 +156,11 @@ export async function GET(request: NextRequest) {
         receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
         user_name: String(r.user_name || '').trim(),
         account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
+        invoice_received: Boolean(r.invoice_received),
+        invoice_no: r.invoice_no,
+        invoice_photo_url: r.invoice_photo_url,
+        vat_amount: r.vat_amount,
+        vendor_code: r.vendor_code,
       })
     }
 
@@ -135,7 +170,24 @@ export async function GET(request: NextRequest) {
     })
 
     const storeBal: Record<string, number> = { ...storePrevBal }
-    const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null; accountSubjectId?: number | null }[] = []
+    const list: {
+      id: number
+      store: string
+      trans_date: string
+      trans_type: string
+      amount: number
+      balance_after: number
+      memo: string
+      receipt_url?: string
+      user_name: string
+      account_subject_id?: number | null
+      accountSubjectId?: number | null
+      invoiceReceived?: boolean
+      invoiceNo?: string
+      invoicePhotoUrl?: string
+      vatAmount?: number
+      vendorCode?: string
+    }[] = []
     for (const it of inMonth) {
       if (!storeBal[it.store]) storeBal[it.store] = 0
       storeBal[it.store] += it.amount
@@ -151,6 +203,11 @@ export async function GET(request: NextRequest) {
         user_name: it.user_name,
         account_subject_id: it.account_subject_id ?? null,
         accountSubjectId: it.account_subject_id ?? null,
+        invoiceReceived: Boolean(it.invoice_received),
+        ...(String(it.invoice_no || '').trim() ? { invoiceNo: String(it.invoice_no).trim() } : {}),
+        ...(String(it.invoice_photo_url || '').trim() ? { invoicePhotoUrl: String(it.invoice_photo_url).trim() } : {}),
+        ...(Number(it.vat_amount || 0) > 0 ? { vatAmount: Number(it.vat_amount) } : {}),
+        ...(String(it.vendor_code || '').trim() ? { vendorCode: String(it.vendor_code).trim() } : {}),
       })
     }
 

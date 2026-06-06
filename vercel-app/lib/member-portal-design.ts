@@ -47,6 +47,23 @@ export function resolveMemberPortalHeroFoodUrl(customUrl: string): string {
   return url || DEFAULT_MEMBER_HERO_FOOD
 }
 
+/** 흰 배경 접시 PNG 등 — 식당 탁자 위에 합성할 때 multiply 블렌드 */
+export function isMemberPortalIsolatedPlateHero(url: string): boolean {
+  const u = String(url || '').trim()
+  if (!u || u === DEFAULT_MEMBER_HERO_FOOD) return true
+  if (u.includes('snow-onion-hero')) return true
+  if (/pos-menu-images/i.test(u)) return false
+  return /\.png(?:\?|$)/i.test(u)
+}
+
+/** 스노우어니언 접시 — 식당 인테리어 탁자면 위치(뷰포트 기준) */
+export const MEMBER_PORTAL_FOOD_ON_TABLE = {
+  top: '11%',
+  width: 'min(68vw, 286px)',
+  rotateXDeg: 7,
+  perspectivePx: 960,
+} as const
+
 /** CRM 전체 배경 오버라이드 (있을 때만) */
 export function resolveMemberAppBackgroundUrl(customUrl: string): string {
   return String(customUrl || '').trim()

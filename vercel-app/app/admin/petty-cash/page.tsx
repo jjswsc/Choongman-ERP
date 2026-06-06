@@ -16,7 +16,7 @@ export default function Page() {
           </div>
           <h1 className="text-xl font-bold tracking-tight">{t("pettyCashTitle")}</h1>
         </div>
-        <PettyCashTab showAccountSubjectEmptyFilter />
+        <PettyCashTab showAccountSubjectEmptyFilter adminEnhancedSearch />
       </div>
     </div>
   )

@@ -4,10 +4,8 @@ import * as React from "react"
 import Image from "next/image"
 import QRCode from "qrcode"
 import {
-  ChevronRight,
   Copy,
   Gift,
-  History,
   Home,
   Loader2,
   MapPin,
@@ -35,9 +33,8 @@ import {
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
-import { pickHomeFeatureContent } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
-import { MemberPortalHomeMonthlyPromos } from "@/components/member-portal/member-portal-home-monthly-promos"
+import { MemberPortalHomeMonthlyPromos, MemberPortalHomeNewMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -54,10 +51,11 @@ import {
   GlassCard,
   MemberPortalAmbienceBackground,
   MemberPortalContentSheet,
+  MemberPortalBenefitStatsGrid,
+  MemberPortalPrivilegeShortcut,
   MemberPortalShell,
   PremiumAppHeader,
   PremiumBottomNav,
-  PremiumStatTile,
   SectionTitle,
   TierProgressCard,
 } from "@/components/member-portal/member-portal-premium-ui"
@@ -193,7 +191,6 @@ export function MemberPortalApp() {
   const [locationSearch, setLocationSearch] = React.useState("")
   const [favoriteStoreCodes, setFavoriteStoreCodes] = React.useState<string[]>([])
   const [showQr, setShowQr] = React.useState(false)
-  const [homeFeatureOpen, setHomeFeatureOpen] = React.useState(false)
   const [homePromoOpen, setHomePromoOpen] = React.useState(false)
   const [tierGuideOpen, setTierGuideOpen] = React.useState(false)
   const [selectedHomePromo, setSelectedHomePromo] = React.useState<MemberPortalContentItem | null>(null)
@@ -511,8 +508,6 @@ export function MemberPortalApp() {
         .slice(0, 4),
     [contentItems]
   )
-
-  const homeFeature = React.useMemo(() => pickHomeFeatureContent(contentItems), [contentItems])
 
   const storePhotoMap = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -940,6 +935,16 @@ export function MemberPortalApp() {
               }}
             />
 
+            <MemberPortalHomeNewMenus
+              contentItems={contentItems}
+              lang={lang}
+              t={t}
+              onSelectItem={(item) => {
+                setSelectedHomePromo(item)
+                setHomePromoOpen(true)
+              }}
+            />
+
             <TierProgressCard
               title={t("tierNext")}
               subtitle={
@@ -962,24 +967,11 @@ export function MemberPortalApp() {
               onAction={portalTiers.length > 0 ? () => setTierGuideOpen(true) : undefined}
             />
 
-            <div className="grid grid-cols-2 gap-3">
-              <PremiumStatTile
-                icon={Sparkles}
-                label={t("homeFeatureLabel")}
-                value={homeFeature?.title || t("homeFeatureEmpty")}
-                sub={homeFeature ? t("homeFeatureTap") : undefined}
-                accent="amber"
-                onClick={homeFeature ? () => setHomeFeatureOpen(true) : undefined}
-              />
-              <PremiumStatTile
-                icon={History}
-                label={t("statVisits")}
-                value={`${activeDashboard.stats.visitCount}`}
-                sub={`${t("statAvgTicket")} ${formatBaht(activeDashboard.stats.avgTicket)}`}
-              />
-              <PremiumStatTile icon={Ticket} label={t("statCoupons")} value={`${activeDashboard.stats.availableCoupons}`} accent="emerald" />
-              <PremiumStatTile icon={Gift} label={t("statPointsEarned")} value={formatPoints(activeDashboard.stats.pointsEarnedTotal)} accent="rose" />
-            </div>
+            <MemberPortalPrivilegeShortcut
+              title={t("privilegeTitle")}
+              subtitle={t("privilegeDesc")}
+              onClick={() => changeTab("privilege")}
+            />
 
             {homePopup ? (
               <GlassCard className="border-fuchsia-300/20 bg-fuchsia-500/10">
@@ -1013,20 +1005,6 @@ export function MemberPortalApp() {
                 />
               </div>
             </GlassCard>
-
-            <button
-              type="button"
-              onClick={() => changeTab("privilege")}
-              className={`${mpGlassCardSoft} flex w-full items-center justify-between px-5 py-4 text-left transition hover:border-white/15`}
-            >
-              <div>
-                <p className="font-medium">{t("recentPoints")}</p>
-                <p className="text-xs text-white/45">
-                  {points[0] ? formatDateTime(points[0].createdAt, dateLocale) : t("noRecords")}
-                </p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-white/35" />
-            </button>
 
             {homeInfoItems.length > 0 ? (
               <GlassCard soft>
@@ -1095,21 +1073,15 @@ export function MemberPortalApp() {
         {tab === "privilege" && (
           <div className="space-y-3">
             <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
+            <MemberPortalBenefitStatsGrid
+              couponsLabel={t("statCoupons")}
+              couponsValue={`${activeDashboard.stats.availableCoupons}`}
+              pointsLabel={t("points")}
+              pointsValue={formatPoints(member.pointBalance || 0)}
+              visitsLabel={t("statVisits")}
+              visitsValue={`${activeDashboard.stats.visitCount}`}
+            />
             <MemberPortalTierBenefits tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
-            <div className="grid grid-cols-3 gap-2">
-              <GlassCard soft className="px-3 py-3 text-center">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("statCoupons")}</p>
-                <p className="mt-1 text-lg font-bold">{activeDashboard.stats.availableCoupons}</p>
-              </GlassCard>
-              <GlassCard soft className="px-3 py-3 text-center">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("points")}</p>
-                <p className="mt-1 text-lg font-bold">{formatPoints(member.pointBalance || 0)}</p>
-              </GlassCard>
-              <GlassCard soft className="px-3 py-3 text-center">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-white/45">{t("statVisits")}</p>
-                <p className="mt-1 text-lg font-bold">{activeDashboard.stats.visitCount}</p>
-              </GlassCard>
-            </div>
             {coupons.length === 0 ? (
               <GlassCard soft className="px-5 py-12 text-center text-white/45">
                 {t("noCoupons")}
@@ -1349,12 +1321,6 @@ export function MemberPortalApp() {
 
       <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
 
-      <MemberPortalContentSheet
-        open={homeFeatureOpen}
-        item={homeFeature}
-        closeLabel={t("contactMenuClose")}
-        onClose={() => setHomeFeatureOpen(false)}
-      />
       <MemberPortalContentSheet
         open={homePromoOpen}
         item={selectedHomePromo}

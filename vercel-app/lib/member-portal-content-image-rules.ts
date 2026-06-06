@@ -15,6 +15,14 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
     aspectW: 4,
     aspectH: 5,
   },
+  /** 신메뉴 가로 카드 — aspect 16:10 (월별 프로모션과 동일) */
+  new_menu: {
+    label: '신메뉴',
+    minWidth: 1280,
+    minHeight: 800,
+    aspectW: 16,
+    aspectH: 10,
+  },
   /** 이달의 프로모션 가로 카드 — aspect 16:10 */
   promo: {
     label: '월별 프로모션',
@@ -23,7 +31,6 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
     aspectW: 16,
     aspectH: 10,
   },
-  /** 정보·공지 · 상세 시트 */
   info: {
     label: '정보·공지',
     minWidth: 1280,
@@ -57,10 +64,11 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
 export type MemberPortalContentImageRuleKey = keyof typeof MEMBER_PORTAL_CONTENT_IMAGE_RULES
 
 export function resolveMemberPortalContentImageRule(
-  variant: 'popup' | 'promo' | 'info'
+  variant: 'popup' | 'promo' | 'new_menu' | 'info'
 ): MemberPortalContentImageRule {
   if (variant === 'popup') return MEMBER_PORTAL_CONTENT_IMAGE_RULES.popup
   if (variant === 'promo') return MEMBER_PORTAL_CONTENT_IMAGE_RULES.promo
+  if (variant === 'new_menu') return MEMBER_PORTAL_CONTENT_IMAGE_RULES.new_menu
   return MEMBER_PORTAL_CONTENT_IMAGE_RULES.info
 }
 

@@ -22,6 +22,7 @@ import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-of
 import { useStoreList } from "@/lib/use-store-list"
 import {
   aggregateTodaySalesByCanonical,
+  computeRealtimeTableTotal,
   mergeRealtimeStoreSalesRows,
 } from "@/lib/pos-realtime-store-rows"
 import type { Store } from "@/lib/pos-types"
@@ -227,6 +228,35 @@ export function StoreSalesRealtimeView({
     [byStoreRows]
   )
 
+  const summaryTableTotal = useMemo(
+    () =>
+      computeRealtimeTableTotal({
+        isAllStores: isAllStoresSelected,
+        stores: operationalStores,
+        currentStore,
+      }),
+    [isAllStoresSelected, operationalStores, currentStore]
+  )
+
+  const summaryMetricsGrid = (
+    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+      <div className="rounded-lg bg-background/60 px-2 py-2">
+        <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
+        <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
+      </div>
+      <div className="rounded-lg bg-background/60 px-2 py-2">
+        <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
+        <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
+      </div>
+      <div className="rounded-lg bg-background/60 px-2 py-2">
+        <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesTableTotal")}</p>
+        <p className="text-sm font-semibold tabular-nums leading-snug">
+          {loadingTables ? "—" : formatBahtInt(summaryTableTotal)}
+        </p>
+      </div>
+    </div>
+  )
+
   const cashMixPieRows = useMemo(() => {
     if (!todaySales) return []
     const cash = Math.max(0, Number(todaySales.completedCash ?? 0))
@@ -249,7 +279,7 @@ export function StoreSalesRealtimeView({
       },
       {
         key: "pending",
-        label: tr("mobileStoreSalesPendingOrders", "진행 주문"),
+        label: tr("mobileStoreSalesPendingOrders", "조리 진행중"),
         count: Number(todaySales.pendingCount ?? 0),
       },
     ]
@@ -343,6 +373,7 @@ export function StoreSalesRealtimeView({
         <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
           {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
         </p>
+        {summaryMetricsGrid}
         {showSalesCharts ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {cashMixPieRows.length > 0 ? (
@@ -392,24 +423,7 @@ export function StoreSalesRealtimeView({
               </div>
             </div>
           </div>
-        ) : (
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-lg bg-background/60 px-2 py-2">
-              <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
-              <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
-            </div>
-            <div className="rounded-lg bg-background/60 px-2 py-2">
-              <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
-              <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
-            </div>
-            <div className="rounded-lg bg-background/60 px-2 py-2">
-              <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCashTotal")}</p>
-              <p className="text-sm font-semibold tabular-nums leading-snug">
-                {todaySales != null ? formatBahtInt(todaySales.completedCash) : "—"}
-              </p>
-            </div>
-          </div>
-        )}
+        ) : null}
       </section>
 
       {isAllStoresSelected ? (

@@ -3,12 +3,14 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -36,25 +38,39 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
-import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import { getBangkokRecentYearMonths, getBangkokMonthRange } from "@/lib/bangkok-time"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import {
   getPettyCashOptions,
   getPettyCashList,
   getPettyCashMonthDetail,
+  getPettyCashSummary,
   addPettyCashTransaction,
   updatePettyCashTransaction,
   deletePettyCashTransaction,
+  updatePettyCashTransactionInvoice,
   getAccountSubjects,
   getAdminEmployeeList,
   type PettyCashItem,
+  type PettyCashSummaryResult,
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { findStaffForScheduleSlotName, type StaffRowForScheduleMatch } from "@/lib/employee-display-name"
+import {
+  applyPettyCashClientFilters,
+  aggregatePettyCashByAccount,
+  aggregatePettyCashByDay,
+  computePettyCashPeriodSummary,
+  resolvePettyPeriodPresetRange,
+  type PettyAdminViewMode,
+  type PettyCashPeriodSummary,
+  type PettyInvoiceFilter,
+  type PettyPeriodPreset,
+} from "@/lib/petty-cash-search"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -67,7 +83,13 @@ const typeKeys: Record<string, string> = {
   settle: "pettyTypeSettle",
 }
 
-export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAccountSubjectEmptyFilter?: boolean } = {}) {
+export function PettyCashTab({
+  showAccountSubjectEmptyFilter = false,
+  adminEnhancedSearch = false,
+}: {
+  showAccountSubjectEmptyFilter?: boolean
+  adminEnhancedSearch?: boolean
+} = {}) {
   const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -82,6 +104,15 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = useState(false)
   const [filterAccountSubjectId, setFilterAccountSubjectId] = useState("")
   const [filterPettyTransType, setFilterPettyTransType] = useState("")
+  const [filterMemoKeyword, setFilterMemoKeyword] = useState("")
+  const [filterInvoiceStatus, setFilterInvoiceStatus] = useState<PettyInvoiceFilter>("")
+  const [filterPp30VatOnly, setFilterPp30VatOnly] = useState(false)
+  const [listPeriodPreset, setListPeriodPreset] = useState<PettyPeriodPreset>("custom")
+  const [monthlyPeriodPreset, setMonthlyPeriodPreset] = useState<PettyPeriodPreset>("custom")
+  const [adminViewMode, setAdminViewMode] = useState<PettyAdminViewMode>("detail")
+  const [listSummaryRpc, setListSummaryRpc] = useState<PettyCashSummaryResult | null>(null)
+  const [monthlySummaryRpc, setMonthlySummaryRpc] = useState<PettyCashSummaryResult | null>(null)
+  const [adminListFullRows, setAdminListFullRows] = useState<PettyCashItem[]>([])
   const [plDrillFetchPending, setPlDrillFetchPending] = useState(false)
   const [listStart, setListStart] = useState(todayStr)
   const [listEnd, setListEnd] = useState(todayStr)
@@ -108,7 +139,12 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [addAccountSubjectId, setAddAccountSubjectId] = useState("")
   const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null)
   const [addReceiptPreview, setAddReceiptPreview] = useState<string | null>(null)
+  const [addInvoiceReceived, setAddInvoiceReceived] = useState(false)
+  const [addInvoiceNo, setAddInvoiceNo] = useState("")
+  const [addVatAmount, setAddVatAmount] = useState("")
+  const [addInvoicePhotoFile, setAddInvoicePhotoFile] = useState<File | null>(null)
   const [addSaving, setAddSaving] = useState(false)
+  const [updatingInvoiceId, setUpdatingInvoiceId] = useState<number | null>(null)
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
   const [accountSubjectOptions, setAccountSubjectOptions] = useState<AccountSubjectItem[]>([])
   const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
@@ -130,6 +166,10 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [editAccountSubjectId, setEditAccountSubjectId] = useState("")
   const [editReceiptFile, setEditReceiptFile] = useState<File | null>(null)
   const [editReceiptPreview, setEditReceiptPreview] = useState<string | null>(null)
+  const [editInvoiceReceived, setEditInvoiceReceived] = useState(false)
+  const [editInvoiceNo, setEditInvoiceNo] = useState("")
+  const [editVatAmount, setEditVatAmount] = useState("")
+  const [editInvoicePhotoFile, setEditInvoicePhotoFile] = useState<File | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [deletingMonthlyId, setDeletingMonthlyId] = useState<number | null>(null)
   const editReceiptFileInputRef = useRef<HTMLInputElement>(null)
@@ -221,36 +261,248 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
 
   /** 저장된 원문 그대로 표시(관리자·모바일 동일, 브라우저 검색·대사 가능) */
   const formatMemo = (memo: string) => String(memo || "").trim() || "-"
-  const filteredListData = listData.filter((r) => {
-    const sid = r.accountSubjectId ?? r.account_subject_id
-    if (filterAccountSubjectEmpty && sid != null && sid !== 0) return false
-    if (filterAccountSubjectId && String(sid ?? 0) !== filterAccountSubjectId) return false
-    if (filterPettyTransType) {
-      const ty = String(r.trans_type ?? "").toLowerCase()
-      if (ty !== filterPettyTransType.toLowerCase()) return false
+
+  const clientFilterOpts = useMemo(
+    () => ({
+      filterAccountSubjectEmpty: showAccountSubjectEmptyFilter ? filterAccountSubjectEmpty : false,
+      filterAccountSubjectId,
+      filterPettyTransType,
+      filterMemoKeyword: adminEnhancedSearch ? filterMemoKeyword : "",
+      filterInvoiceStatus: adminEnhancedSearch ? filterInvoiceStatus : ("" as PettyInvoiceFilter),
+      filterPp30VatOnly: adminEnhancedSearch ? filterPp30VatOnly : false,
+    }),
+    [
+      showAccountSubjectEmptyFilter,
+      filterAccountSubjectEmpty,
+      filterAccountSubjectId,
+      filterPettyTransType,
+      filterMemoKeyword,
+      filterInvoiceStatus,
+      filterPp30VatOnly,
+      adminEnhancedSearch,
+    ]
+  )
+
+  const accountLabelForId = useMemo(() => {
+    return (id: number | null) => {
+      if (id == null) return t("optional") ? `— ${t("optional")}` : "—"
+      const a = accountSubjectOptions.find((x) => x.id === id)
+      return a ? `${a.code} ${asDisplayName(a)}` : `#${id}`
     }
-    return true
-  })
-  const filteredMonthlyData = monthlyData.filter((r) => {
-    const sid = r.accountSubjectId ?? r.account_subject_id
-    if (filterAccountSubjectEmpty && sid != null && sid !== 0) return false
-    if (filterAccountSubjectId && String(sid ?? 0) !== filterAccountSubjectId) return false
-    if (filterPettyTransType) {
-      const ty = String(r.trans_type ?? "").toLowerCase()
-      if (ty !== filterPettyTransType.toLowerCase()) return false
+  }, [accountSubjectOptions, lang, t, asDisplayName])
+
+  const filteredListAll = useMemo(
+    () => applyPettyCashClientFilters(adminEnhancedSearch ? adminListFullRows : listData, clientFilterOpts),
+    [adminEnhancedSearch, adminListFullRows, listData, clientFilterOpts]
+  )
+  const filteredListData = useMemo(() => {
+    if (!adminEnhancedSearch) return filteredListAll
+    const start = (listPage - 1) * listPageSize
+    return filteredListAll.slice(start, start + listPageSize)
+  }, [adminEnhancedSearch, filteredListAll, listPage, listPageSize])
+  const listTotalForBar = adminEnhancedSearch ? filteredListAll.length : listTotal
+
+  const filteredMonthlyData = useMemo(
+    () => applyPettyCashClientFilters(monthlyData, clientFilterOpts),
+    [monthlyData, clientFilterOpts]
+  )
+
+  const listPeriodSummary = useMemo(() => {
+    if (!adminEnhancedSearch) return null
+    if (listSummaryRpc) {
+      return {
+        expenseTotal: listSummaryRpc.expenseTotal,
+        inflowTotal: listSummaryRpc.inflowTotal,
+        netChange: listSummaryRpc.netChange,
+        vatTotal: listSummaryRpc.vatTotal,
+        vatPendingTotal: listSummaryRpc.vatPendingTotal,
+        vatPendingCount: listSummaryRpc.vatPendingCount,
+        rowCount: listSummaryRpc.rowCount,
+      } satisfies PettyCashPeriodSummary
     }
-    return true
-  })
+    if (adminListFullRows.length === 0) return null
+    return computePettyCashPeriodSummary(filteredListAll)
+  }, [adminEnhancedSearch, listSummaryRpc, adminListFullRows.length, filteredListAll])
+
+  const monthlyPeriodSummary = useMemo(() => {
+    if (!adminEnhancedSearch) return null
+    if (monthlySummaryRpc) {
+      return {
+        expenseTotal: monthlySummaryRpc.expenseTotal,
+        inflowTotal: monthlySummaryRpc.inflowTotal,
+        netChange: monthlySummaryRpc.netChange,
+        vatTotal: monthlySummaryRpc.vatTotal,
+        vatPendingTotal: monthlySummaryRpc.vatPendingTotal,
+        vatPendingCount: monthlySummaryRpc.vatPendingCount,
+        rowCount: monthlySummaryRpc.rowCount,
+      } satisfies PettyCashPeriodSummary
+    }
+    if (monthlyData.length === 0) return null
+    return computePettyCashPeriodSummary(filteredMonthlyData)
+  }, [adminEnhancedSearch, monthlySummaryRpc, monthlyData.length, filteredMonthlyData])
+
+  const listDayAggregates = useMemo(
+    () => (adminEnhancedSearch ? aggregatePettyCashByDay(filteredListAll) : []),
+    [adminEnhancedSearch, filteredListAll]
+  )
+  const listAccountAggregates = useMemo(
+    () =>
+      adminEnhancedSearch ? aggregatePettyCashByAccount(filteredListAll, accountLabelForId) : [],
+    [adminEnhancedSearch, filteredListAll, accountLabelForId]
+  )
+  const monthlyDayAggregates = useMemo(
+    () => (adminEnhancedSearch ? aggregatePettyCashByDay(filteredMonthlyData) : []),
+    [adminEnhancedSearch, filteredMonthlyData]
+  )
+  const monthlyAccountAggregates = useMemo(
+    () =>
+      adminEnhancedSearch
+        ? aggregatePettyCashByAccount(filteredMonthlyData, accountLabelForId)
+        : [],
+    [adminEnhancedSearch, filteredMonthlyData, accountLabelForId]
+  )
+
+  useEffect(() => {
+    if (adminEnhancedSearch) setListPage(1)
+  }, [
+    adminEnhancedSearch,
+    filterMemoKeyword,
+    filterInvoiceStatus,
+    filterPettyTransType,
+    filterAccountSubjectId,
+    filterAccountSubjectEmpty,
+    filterPp30VatOnly,
+  ])
   const formatStoreLabel = (store: string) =>
     store.startsWith("Office-") ? `${t("pettyScopeOffice") || "Office"} (${store.slice(7)})` : store
 
-  const loadList = (page?: number) => {
+  const listScopeParams = useMemo(
+    () => ({
+      scopeFilter: canSearchAll ? listScope : undefined,
+      storeFilter: listScope === "store" && listStore !== "All" ? listStore : undefined,
+      departmentFilter: listScope === "office" && listDepartment !== "All" ? listDepartment : undefined,
+    }),
+    [canSearchAll, listScope, listStore, listDepartment]
+  )
+
+  const monthlyScopeParams = useMemo(
+    () => ({
+      scopeFilter: canSearchAll ? monthlyScope : undefined,
+      storeFilter: monthlyScope === "store" && monthlyStore !== "All" ? monthlyStore : undefined,
+      departmentFilter: monthlyScope === "office" && monthlyDepartment !== "All" ? monthlyDepartment : undefined,
+    }),
+    [canSearchAll, monthlyScope, monthlyStore, monthlyDepartment]
+  )
+
+  const summaryFilterParams = useMemo(
+    () => ({
+      filterTransType: filterPettyTransType,
+      filterAccountSubjectId,
+      filterAccountSubjectEmpty: showAccountSubjectEmptyFilter ? filterAccountSubjectEmpty : false,
+      filterMemoKeyword,
+      filterInvoiceStatus,
+      filterPp30VatOnly,
+    }),
+    [
+      filterPettyTransType,
+      filterAccountSubjectId,
+      showAccountSubjectEmptyFilter,
+      filterAccountSubjectEmpty,
+      filterMemoKeyword,
+      filterInvoiceStatus,
+      filterPp30VatOnly,
+    ]
+  )
+
+  const getMonthlyQueryRange = useCallback(() => {
+    if (monthlySearchMode === "period") {
+      return { startStr: monthlyPeriodStart, endStr: monthlyPeriodEnd }
+    }
+    return getBangkokMonthRange(monthlyYm)
+  }, [monthlySearchMode, monthlyPeriodStart, monthlyPeriodEnd, monthlyYm])
+
+  const fetchPettySummaryRpc = useCallback(
+    async (
+      startStr: string,
+      endStr: string,
+      scope: { scopeFilter?: string; storeFilter?: string; departmentFilter?: string }
+    ) => {
+      if (!adminEnhancedSearch || !/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
+        return null
+      }
+      try {
+        return await getPettyCashSummary({
+          startStr,
+          endStr,
+          ...scope,
+          ...summaryFilterParams,
+        })
+      } catch {
+        return null
+      }
+    },
+    [adminEnhancedSearch, summaryFilterParams]
+  )
+
+  useEffect(() => {
+    if (!adminEnhancedSearch || !auth?.store) return
+    if (adminListFullRows.length > 0) {
+      void fetchPettySummaryRpc(listStart, listEnd, listScopeParams).then(setListSummaryRpc)
+    }
+    if (monthlyData.length > 0) {
+      const r = getMonthlyQueryRange()
+      void fetchPettySummaryRpc(r.startStr, r.endStr, monthlyScopeParams).then(setMonthlySummaryRpc)
+    }
+  }, [
+    adminEnhancedSearch,
+    auth?.store,
+    fetchPettySummaryRpc,
+    listStart,
+    listEnd,
+    listScopeParams,
+    monthlyScopeParams,
+    getMonthlyQueryRange,
+    adminListFullRows.length,
+    monthlyData.length,
+    summaryFilterParams,
+  ])
+
+  const loadList = (page?: number, range?: { startStr: string; endStr: string }) => {
     if (!auth?.store) return
     const p = page ?? listPage
+    const startStr = range?.startStr ?? listStart
+    const endStr = range?.endStr ?? listEnd
     setListLoading(true)
+    if (adminEnhancedSearch) {
+      getPettyCashMonthDetail({
+        yearMonth: startStr.slice(0, 7),
+        startStr,
+        endStr,
+        scopeFilter: canSearchAll ? listScope : undefined,
+        storeFilter: listScope === "store" && listStore !== "All" ? listStore : undefined,
+        departmentFilter: listScope === "office" && listDepartment !== "All" ? listDepartment : undefined,
+        userStore: auth.store,
+        userRole: auth.role,
+      })
+        .then((data) => {
+          setAdminListFullRows(data)
+          setListData([])
+          setListTotal(data.length)
+          setListPage(p)
+          void fetchPettySummaryRpc(startStr, endStr, listScopeParams).then(setListSummaryRpc)
+        })
+        .catch(() => {
+          setAdminListFullRows([])
+          setListData([])
+          setListTotal(0)
+          setListSummaryRpc(null)
+        })
+        .finally(() => setListLoading(false))
+      return
+    }
     getPettyCashList({
-      startStr: listStart,
-      endStr: listEnd,
+      startStr,
+      endStr,
       scopeFilter: canSearchAll ? listScope : undefined,
       storeFilter: listScope === "store" && listStore !== "All" ? listStore : undefined,
       departmentFilter: listScope === "office" && listDepartment !== "All" ? listDepartment : undefined,
@@ -277,13 +529,22 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     loadList(1)
   }, [plDrillFetchPending, auth?.store, listStart, listEnd, listStore, listScope, listDepartment])
 
-  const loadMonthly = () => {
+  const loadMonthly = (range?: {
+    startStr: string
+    endStr: string
+    yearMonth: string
+    searchMode?: "month" | "period"
+  }) => {
     if (!auth?.store) return
+    const searchMode = range?.searchMode ?? monthlySearchMode
+    const startStr = range?.startStr ?? (searchMode === "period" ? monthlyPeriodStart : undefined)
+    const endStr = range?.endStr ?? (searchMode === "period" ? monthlyPeriodEnd : undefined)
+    const ym = range?.yearMonth ?? monthlyYm
     setMonthlyLoading(true)
     getPettyCashMonthDetail({
-      yearMonth: monthlyYm,
-      startStr: monthlySearchMode === "period" ? monthlyPeriodStart : undefined,
-      endStr: monthlySearchMode === "period" ? monthlyPeriodEnd : undefined,
+      yearMonth: ym,
+      startStr: searchMode === "period" ? startStr : undefined,
+      endStr: searchMode === "period" ? endStr : undefined,
       scopeFilter: canSearchAll ? monthlyScope : undefined,
       storeFilter: monthlyScope === "store" && monthlyStore !== "All" ? monthlyStore : undefined,
       departmentFilter: monthlyScope === "office" && monthlyDepartment !== "All" ? monthlyDepartment : undefined,
@@ -293,9 +554,50 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       .then((data) => {
         setMonthlyData(data)
         setPendingAccountSubjectByRowId({})
+        const r =
+          range?.startStr && range?.endStr
+            ? { startStr: range.startStr, endStr: range.endStr }
+            : searchMode === "period" && startStr && endStr
+              ? { startStr, endStr }
+              : getBangkokMonthRange(ym)
+        void fetchPettySummaryRpc(r.startStr, r.endStr, monthlyScopeParams).then(setMonthlySummaryRpc)
       })
-      .catch(() => setMonthlyData([]))
+      .catch(() => {
+        setMonthlyData([])
+        setMonthlySummaryRpc(null)
+      })
       .finally(() => setMonthlyLoading(false))
+  }
+
+  const applyListPeriodPreset = (preset: PettyPeriodPreset) => {
+    setListPeriodPreset(preset)
+    if (preset === "custom") return
+    const range = resolvePettyPeriodPresetRange(preset)
+    setListStart(range.startStr)
+    setListEnd(range.endStr)
+    loadList(1, { startStr: range.startStr, endStr: range.endStr })
+  }
+
+  const applyMonthlyPeriodPreset = (preset: PettyPeriodPreset) => {
+    setMonthlyPeriodPreset(preset)
+    if (preset === "custom") return
+    const range = resolvePettyPeriodPresetRange(preset)
+    setMonthlyYm(range.yearMonth)
+    setMonthlySearchMode("period")
+    setMonthlyPeriodStart(range.startStr)
+    setMonthlyPeriodEnd(range.endStr)
+    loadMonthly({
+      startStr: range.startStr,
+      endStr: range.endStr,
+      yearMonth: range.yearMonth,
+      searchMode: "period",
+    })
+  }
+
+  const applyPp30PendingQuickFilter = () => {
+    setFilterPettyTransType("expense")
+    setFilterInvoiceStatus("pending")
+    setFilterPp30VatOnly(true)
   }
 
   const monthlyYmOptions = getBangkokRecentYearMonths(24).map((value) => {
@@ -338,6 +640,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     }
     setAddSaving(true)
     let receiptUrl: string | undefined
+    let invoicePhotoUrl: string | undefined
     if (addReceiptFile) {
       try {
         receiptUrl = await compressImageForUpload(addReceiptFile)
@@ -348,6 +651,14 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
         return
       }
     }
+    if (addType === "expense" && addInvoicePhotoFile) {
+      try {
+        invoicePhotoUrl = await compressImageForUpload(addInvoicePhotoFile, 1024, 0.7)
+      } catch (err) {
+        console.error("compressInvoice:", err)
+      }
+    }
+    const vatV = addType === "expense" ? Math.max(0, Number(String(addVatAmount).replace(/,/g, "")) || 0) : 0
     const res = await addPettyCashTransaction({
       store,
       transDate: addDate,
@@ -356,6 +667,14 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       memo: addMemo,
       receiptUrl,
       accountSubjectId: addAccountSubjectId ? Number(addAccountSubjectId) : null,
+      ...(addType === "expense"
+        ? {
+            invoiceReceived: addInvoiceReceived,
+            invoiceNo: addInvoiceNo.trim() || undefined,
+            invoicePhotoUrl,
+            ...(vatV > 0 ? { vatAmount: vatV } : {}),
+          }
+        : {}),
       userName: auth.user,
       userStore: auth.store,
       userRole: auth.role,
@@ -365,6 +684,10 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       setAddAmount("")
       setAddMemo("")
       setAddAccountSubjectId("")
+      setAddInvoiceReceived(false)
+      setAddInvoiceNo("")
+      setAddVatAmount("")
+      setAddInvoicePhotoFile(null)
       setAddReceiptFile(null)
       setAddReceiptPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev)
@@ -384,6 +707,10 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     setEditAmount(String(Math.abs(r.amount)))
     setEditMemo(r.memo || "")
     setEditAccountSubjectId((r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "")
+    setEditInvoiceReceived(Boolean(r.invoiceReceived))
+    setEditInvoiceNo(r.invoiceNo || "")
+    setEditVatAmount(r.vatAmount && r.vatAmount > 0 ? String(r.vatAmount) : "")
+    setEditInvoicePhotoFile(null)
     setEditReceiptFile(null)
     setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
   }
@@ -449,6 +776,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     }
     setEditSaving(true)
     let receiptUrl: string | null | undefined = undefined
+    let invoicePhotoUrl: string | null | undefined = undefined
     if (editReceiptFile) {
       try {
         receiptUrl = await compressImageForUpload(editReceiptFile)
@@ -459,6 +787,14 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
         return
       }
     }
+    if (editType === "expense" && editInvoicePhotoFile) {
+      try {
+        invoicePhotoUrl = await compressImageForUpload(editInvoicePhotoFile, 1024, 0.7)
+      } catch (err) {
+        console.error("compressInvoice:", err)
+      }
+    }
+    const vatV = editType === "expense" ? Math.max(0, Number(String(editVatAmount).replace(/,/g, "")) || 0) : 0
     const res = await updatePettyCashTransaction({
       id: editModalItem.id,
       transDate: editDate,
@@ -467,6 +803,14 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       memo: editMemo,
       receiptUrl: receiptUrl,
       accountSubjectId: editAccountSubjectId ? Number(editAccountSubjectId) : null,
+      ...(editType === "expense"
+        ? {
+            invoiceReceived: editInvoiceReceived,
+            invoiceNo: editInvoiceNo.trim() || undefined,
+            invoicePhotoUrl: invoicePhotoUrl !== undefined ? invoicePhotoUrl : undefined,
+            vatAmount: vatV,
+          }
+        : {}),
       userStore: auth.store,
       userRole: auth.role,
     })
@@ -479,6 +823,48 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     } else {
       await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "Update failed")
     }
+  }
+
+  const handlePettyInvoiceCheckChange = async (r: PettyCashItem, checked: boolean) => {
+    if (!r.id || r.trans_type !== "expense") return
+    setUpdatingInvoiceId(r.id)
+    try {
+      const res = await updatePettyCashTransactionInvoice({
+        pettyCashId: r.id,
+        invoiceReceived: checked,
+      })
+      if (res.success) {
+        const patch = { invoiceReceived: checked }
+        setListData((prev) => prev.map((x) => (x.id === r.id ? { ...x, ...patch } : x)))
+        setMonthlyData((prev) => prev.map((x) => (x.id === r.id ? { ...x, ...patch } : x)))
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || t("processFail"))
+      }
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setUpdatingInvoiceId(null)
+    }
+  }
+
+  const renderPettyInvoiceCell = (r: PettyCashItem) => {
+    if (r.trans_type !== "expense") return <td className="px-3 py-2.5 text-center align-top text-muted-foreground">—</td>
+    return (
+      <td className="px-3 py-2.5 text-center align-top">
+        <div className="flex flex-col items-center gap-0.5">
+          <Checkbox
+            checked={Boolean(r.invoiceReceived)}
+            onCheckedChange={(c) => handlePettyInvoiceCheckChange(r, c === true)}
+            disabled={updatingInvoiceId === r.id}
+            title={t("poInvoiceReceived") || "Invoice Received"}
+            className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+          />
+          {r.invoiceNo ? (
+            <span className="text-[10px] text-muted-foreground max-w-[4.5rem] truncate" title={r.invoiceNo}>{r.invoiceNo}</span>
+          ) : null}
+        </div>
+      </td>
+    )
   }
 
   const handleDeleteMonthlyRow = async (r: PettyCashItem) => {
@@ -513,6 +899,275 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   }
 
   const fmt = (n: number) => (n || 0).toLocaleString()
+
+  const renderPettySummaryCards = (
+    summary: PettyCashPeriodSummary | null,
+    meta?: { rpc: PettyCashSummaryResult | null; loadedRowCount: number }
+  ) => {
+    if (!adminEnhancedSearch || !summary) return null
+    const rowsPartial =
+      meta?.rpc != null && meta.loadedRowCount > 0 && meta.rpc.rowCount > meta.loadedRowCount
+    const fallbackCap = Boolean(meta?.rpc?.truncated)
+    const cards = [
+      { label: t("pettySummaryExpenseTotal"), value: fmt(summary.expenseTotal), tone: "text-destructive" },
+      { label: t("pettySummaryInflowTotal"), value: fmt(summary.inflowTotal), tone: "text-green-600" },
+      {
+        label: t("pettySummaryNetChange"),
+        value: `${summary.netChange >= 0 ? "+" : "-"}${fmt(Math.abs(summary.netChange))}`,
+        tone: summary.netChange >= 0 ? "text-green-600" : "text-destructive",
+      },
+      { label: t("pettySummaryVatTotal"), value: fmt(summary.vatTotal), tone: "text-foreground" },
+      {
+        label: t("pettySummaryVatPending"),
+        value: `${fmt(summary.vatPendingTotal)}${summary.vatPendingCount > 0 ? ` (${summary.vatPendingCount})` : ""}`,
+        tone: summary.vatPendingTotal > 0 ? "text-amber-600" : "text-muted-foreground",
+      },
+    ]
+    return (
+      <section
+        className="rounded-xl border border-border/60 bg-card p-3 shadow-sm ring-1 ring-border/20 sm:p-4"
+        aria-label={t("pettySummaryTitle")}
+      >
+        <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">{t("pettySummaryTitle")}</h3>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {cards.map((c) => (
+            <div key={c.label} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
+              <p className="text-[11px] leading-snug text-muted-foreground">{c.label}</p>
+              <p className={cn("mt-0.5 text-base font-semibold tabular-nums sm:text-lg", c.tone)}>{c.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {(t("pettySummaryRows") || "{n}건").replace("{n}", String(summary.rowCount))}
+          {meta?.rpc?.source === "rpc" ? ` · ${t("pettySummaryDbAgg")}` : ""}
+        </p>
+        {(rowsPartial || fallbackCap) && (
+          <p className="mt-1 text-[11px] text-amber-600">
+            {rowsPartial
+              ? (t("pettySummaryListPartial") || "").replace("{loaded}", String(meta?.loadedRowCount ?? 0)).replace("{total}", String(summary.rowCount))
+              : t("pettySummaryFallbackCap")}
+          </p>
+        )}
+      </section>
+    )
+  }
+
+  const renderAdminClientFilters = () => {
+    if (!adminEnhancedSearch) return null
+    return (
+      <div className="mt-3 flex w-full flex-wrap items-end gap-x-2 gap-y-2 border-t border-border/40 pt-3 sm:gap-x-3">
+        <div className="min-w-0 w-full min-[480px]:w-auto min-[480px]:min-w-[8.5rem] min-[480px]:max-w-[11rem]">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("pettyColType")}</span>
+          <Select
+            value={filterPettyTransType || "__all__"}
+            onValueChange={(v) => setFilterPettyTransType(v === "__all__" ? "" : v)}
+          >
+            <SelectTrigger className="h-10 w-full text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("pettyFilterTransTypeAll")}</SelectItem>
+              <SelectItem value="expense">{t("pettyTypeExpense")}</SelectItem>
+              <SelectItem value="receive">{t("pettyTypeReceive")}</SelectItem>
+              <SelectItem value="replenish">{t("pettyTypeReplenish")}</SelectItem>
+              <SelectItem value="settle">{t("pettyTypeSettle")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 w-full min-[480px]:w-auto min-[480px]:min-w-[10rem] min-[480px]:max-w-[14rem]">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("accountSubject")}</span>
+          <Select
+            value={filterAccountSubjectId || "__all__"}
+            onValueChange={(v) => setFilterAccountSubjectId(v === "__all__" ? "" : v)}
+          >
+            <SelectTrigger className="h-10 w-full text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("all") || "전체"}</SelectItem>
+              {accountSubjectOptions.map((a) => (
+                <SelectItem key={a.id} value={String(a.id)}>
+                  {a.code} {asDisplayName(a)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 w-full min-[480px]:w-auto min-[480px]:min-w-[10rem] min-[480px]:max-w-xs flex-1">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("pettyColMemo")}</span>
+          <Input
+            value={filterMemoKeyword}
+            onChange={(e) => setFilterMemoKeyword(e.target.value)}
+            placeholder={t("pettyFilterMemoPlaceholder")}
+            className="h-10 text-sm"
+          />
+        </div>
+        <div className="min-w-0 w-full min-[480px]:w-auto min-[480px]:min-w-[9rem] min-[480px]:max-w-[12rem]">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("poInvoice")}</span>
+          <Select
+            value={filterInvoiceStatus || "__all__"}
+            onValueChange={(v) => setFilterInvoiceStatus(v === "__all__" ? "" : (v as PettyInvoiceFilter))}
+          >
+            <SelectTrigger className="h-10 w-full text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("pettyFilterInvoiceAll")}</SelectItem>
+              <SelectItem value="received">{t("pettyFilterInvoiceReceived")}</SelectItem>
+              <SelectItem value="pending">{t("pettyFilterInvoicePending")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="flex h-10 w-full min-[480px]:w-auto cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-background/80 px-2.5">
+          <Checkbox checked={filterPp30VatOnly} onCheckedChange={(c) => setFilterPp30VatOnly(c === true)} />
+          <span className="text-xs leading-snug text-foreground">{t("pettyFilterPp30VatOnly")}</span>
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-10"
+          onClick={applyPp30PendingQuickFilter}
+        >
+          {t("pettyQuickPp30Pending")}
+        </Button>
+      </div>
+    )
+  }
+
+  const renderPeriodPresets = (
+    preset: PettyPeriodPreset,
+    onPreset: (p: PettyPeriodPreset) => void
+  ) => {
+    if (!adminEnhancedSearch) return null
+    const presets: { id: PettyPeriodPreset; label: string }[] = [
+      { id: "today", label: t("pettyPresetToday") || t("today") || "오늘" },
+      { id: "thisMonth", label: t("pettyPresetThisMonth") || "이번 달" },
+      { id: "taxMonth", label: t("pettyPresetTaxMonth") || t("accCompLabelTaxMonth") || "과세월" },
+      { id: "custom", label: t("pettyPresetCustom") || "기간 지정" },
+    ]
+    return (
+      <div className="mb-3 flex flex-wrap gap-2">
+        {presets.map((p) => (
+          <Button
+            key={p.id}
+            type="button"
+            size="sm"
+            variant={preset === p.id ? "default" : "outline"}
+            className="h-8"
+            onClick={() => onPreset(p.id)}
+          >
+            {p.label}
+          </Button>
+        ))}
+      </div>
+    )
+  }
+
+  const renderAdminViewToolbar = () => {
+    if (!adminEnhancedSearch) return null
+    const modes: { id: PettyAdminViewMode; label: string }[] = [
+      { id: "detail", label: t("pettyViewDetail") || "상세" },
+      { id: "by_day", label: t("pettyViewByDay") || "일별" },
+      { id: "by_account", label: t("pettyViewByAccount") || "계정과목별" },
+    ]
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">{t("pettyViewModeLabel") || "보기"}</span>
+        {modes.map((m) => (
+          <Button
+            key={m.id}
+            type="button"
+            size="sm"
+            variant={adminViewMode === m.id ? "default" : "outline"}
+            className="h-8"
+            onClick={() => setAdminViewMode(m.id)}
+          >
+            {m.label}
+          </Button>
+        ))}
+      </div>
+    )
+  }
+
+  const renderAdminAggregationTable = (
+    mode: "by_day" | "by_account",
+    dayRows: ReturnType<typeof aggregatePettyCashByDay>,
+    accountRows: ReturnType<typeof aggregatePettyCashByAccount>,
+    emptySourceLen: number
+  ) => {
+    if (mode === "by_day") {
+      if (dayRows.length === 0) {
+        return (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            {emptySourceLen === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}
+          </p>
+        )
+      }
+      return (
+        <table className="w-full text-xs min-w-[640px]">
+          <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
+            <tr>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettyAggDate") || "일자"}</th>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryExpenseTotal")}</th>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryInflowTotal")}</th>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryNetChange")}</th>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatTotal")}</th>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatPending")}</th>
+              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettyAggCount") || "건수"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dayRows.map((r) => (
+              <tr key={r.date} className="border-t border-border/40 hover:bg-muted/20">
+                <td className="px-3 py-2.5 text-center whitespace-nowrap text-sm">{r.date}</td>
+                <td className="px-3 py-2.5 text-center tabular-nums text-sm text-destructive">{fmt(r.expenseTotal)}</td>
+                <td className="px-3 py-2.5 text-center tabular-nums text-sm text-green-600">{fmt(r.inflowTotal)}</td>
+                <td className={`px-3 py-2.5 text-center tabular-nums text-sm ${r.netChange >= 0 ? "text-green-600" : "text-destructive"}`}>
+                  {r.netChange >= 0 ? "+" : "-"}
+                  {fmt(Math.abs(r.netChange))}
+                </td>
+                <td className="px-3 py-2.5 text-center tabular-nums text-sm">{fmt(r.vatTotal)}</td>
+                <td className="px-3 py-2.5 text-center tabular-nums text-sm text-amber-600">{fmt(r.vatPendingTotal)}</td>
+                <td className="px-3 py-2.5 text-center tabular-nums text-sm text-muted-foreground">{r.rowCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+    if (accountRows.length === 0) {
+      return (
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+          {emptySourceLen === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}
+        </p>
+      )
+    }
+    return (
+      <table className="w-full text-xs min-w-[520px]">
+        <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
+          <tr>
+            <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">{t("accountSubject")}</th>
+            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryExpenseTotal")}</th>
+            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatTotal")}</th>
+            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatPending")}</th>
+            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettyAggCount") || "건수"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {accountRows.map((r) => (
+            <tr key={String(r.accountSubjectId ?? "none") + r.accountLabel} className="border-t border-border/40 hover:bg-muted/20">
+              <td className="px-3 py-2.5 text-left text-sm">{r.accountLabel}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-sm text-destructive">{fmt(r.expenseTotal)}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-sm">{fmt(r.vatTotal)}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-sm text-amber-600">{fmt(r.vatPendingTotal)}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-sm text-muted-foreground">{r.rowCount}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
 
   const downloadMonthlyExcel = () => {
     if (monthlyData.length === 0) return
@@ -615,6 +1270,7 @@ ${rows.map((row, ri) => {
                 <h3 className="mb-2 border-b border-border/50 pb-2 text-sm font-semibold tracking-tight text-foreground">
                   {t("outWhFilterBy")}
                 </h3>
+                {renderPeriodPresets(listPeriodPreset, applyListPeriodPreset)}
                 <div className="flex flex-wrap items-end gap-x-2 gap-y-2 sm:gap-x-3">
                   {canSearchAll && (
                     <div className="min-w-0 w-full min-[480px]:w-auto min-[480px]:min-w-[7.5rem] min-[480px]:max-w-[10rem]">
@@ -661,9 +1317,9 @@ ${rows.map((row, ri) => {
                   <div className="min-w-0 w-full min-[520px]:w-auto min-[520px]:min-w-[17.5rem] min-[520px]:max-w-xl flex-1">
                     <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("searchPeriod")}</span>
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                      <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
+                      <Input type="date" value={listStart} onChange={(e) => { setListPeriodPreset("custom"); setListStart(e.target.value) }} className="date-input-compact date-input-mobile-shrink h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
                       <span className="shrink-0 text-sm text-muted-foreground">~</span>
-                      <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
+                      <Input type="date" value={listEnd} onChange={(e) => { setListPeriodPreset("custom"); setListEnd(e.target.value) }} className="date-input-compact date-input-mobile-shrink h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
                     </div>
                   </div>
                   {showAccountSubjectEmptyFilter && (
@@ -677,11 +1333,24 @@ ${rows.map((row, ri) => {
                     {listLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
                   </Button>
                 </div>
+                {renderAdminClientFilters()}
               </section>
+              {renderPettySummaryCards(listPeriodSummary, {
+                rpc: listSummaryRpc,
+                loadedRowCount: adminListFullRows.length,
+              })}
+              {renderAdminViewToolbar()}
               <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
               <div className="max-h-[min(70vh,_420px)] overflow-x-auto overflow-y-auto sm:max-h-[min(60vh,_480px)]">
-                {filteredListData.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">{listData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
+                {adminEnhancedSearch && adminViewMode !== "detail" ? (
+                  renderAdminAggregationTable(
+                    adminViewMode,
+                    listDayAggregates,
+                    listAccountAggregates,
+                    adminListFullRows.length
+                  )
+                ) : filteredListData.length === 0 ? (
+                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">{(adminEnhancedSearch ? adminListFullRows.length : listData.length) === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
                   <table className={cn("w-full text-xs", canSearchAll ? "min-w-[520px]" : "min-w-[460px]")}>
                     <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
@@ -693,6 +1362,7 @@ ${rows.map((row, ri) => {
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColUser") || "등록자"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[4.5rem]" title={t("poInvoice") || "Invoice"}>{t("poInvoice") || "Invoice"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -722,6 +1392,7 @@ ${rows.map((row, ri) => {
                               "-"
                             )}
                           </td>
+                          {renderPettyInvoiceCell(r)}
                         </tr>
                       ))}
                     </tbody>
@@ -729,14 +1400,19 @@ ${rows.map((row, ri) => {
                 )}
               </div>
               </div>
+              {(adminEnhancedSearch ? adminViewMode === "detail" : true) && (
               <ListPaginationBar
                 className="mt-1 sm:mt-2"
                 page={listPage}
                 pageSize={listPageSize}
-                total={listTotal}
-                onPageChange={(pg) => loadList(pg)}
+                total={listTotalForBar}
+                onPageChange={(pg) => {
+                  if (adminEnhancedSearch) setListPage(pg)
+                  else loadList(pg)
+                }}
                 disabled={listLoading}
               />
+              )}
 
               <div className="mt-2 rounded-xl border border-border/50 bg-muted/10 p-4 sm:mt-3 sm:p-5">
                 <p className="mb-4 text-sm font-semibold text-foreground">{t("pettyAddTitle") || "등록"}</p>
@@ -858,6 +1534,39 @@ ${rows.map((row, ri) => {
                       )}
                     </div>
                   </div>
+                  {addType === "expense" ? (
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
+                      <p className="text-xs font-medium">{t("poInvoice") || "Invoice"} · {t("expenseAccrualVat") || "VAT"} (PP30)</p>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="w-[100px]">
+                          <Label className="text-xs text-muted-foreground">{t("expenseAccrualVat") || "VAT"}</Label>
+                          <Input
+                            value={addVatAmount}
+                            onChange={(e) => setAddVatAmount(e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, ""))}
+                            className="h-9 mt-1 text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer pb-1">
+                          <Checkbox checked={addInvoiceReceived} onCheckedChange={(c) => setAddInvoiceReceived(c === true)} />
+                          <span className="text-xs">{t("poInvoiceReceived") || "Invoice Received"}</span>
+                        </label>
+                        <div className="w-[120px]">
+                          <Label className="text-xs text-muted-foreground">{t("wm_invoiceNoLabel") || "Invoice No."}</Label>
+                          <Input value={addInvoiceNo} onChange={(e) => setAddInvoiceNo(e.target.value)} className="h-9 mt-1 text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">{t("bankInvoicePhotoUpload") || "Invoice Image"}</Label>
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            className="h-9 mt-1 text-xs max-w-[180px]"
+                            onChange={(e) => setAddInvoicePhotoFile(e.target.files?.[0] || null)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   <Button className="h-10 w-full font-medium" onClick={handleAdd} disabled={addSaving}>
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
                     {addSaving ? (t("loading") || "저장중...") : (t("btnSave") || "저장")}
@@ -874,6 +1583,7 @@ ${rows.map((row, ri) => {
                 <h3 className="mb-2 border-b border-border/50 pb-2 text-sm font-semibold tracking-tight text-foreground">
                   {t("outWhFilterBy")}
                 </h3>
+                {renderPeriodPresets(monthlyPeriodPreset, applyMonthlyPeriodPreset)}
                 <div className="flex flex-wrap items-end gap-x-2 gap-y-2 sm:gap-x-3">
                   {canSearchAll && (
                     <div className="min-w-0 w-full min-[480px]:w-auto min-[480px]:min-w-[7.5rem] min-[480px]:max-w-[10rem]">
@@ -919,7 +1629,7 @@ ${rows.map((row, ri) => {
                   </div>
                   <div className="min-w-[7.5rem] w-full min-[480px]:w-auto">
                     <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("pettySearchByMonth")} / {t("pettySearchByPeriod")}</span>
-                    <Select value={monthlySearchMode} onValueChange={(v) => setMonthlySearchMode(v as "month" | "period")}>
+                    <Select value={monthlySearchMode} onValueChange={(v) => { setMonthlyPeriodPreset("custom"); setMonthlySearchMode(v as "month" | "period") }}>
                       <SelectTrigger className="h-10 w-full text-sm">
                         <SelectValue />
                       </SelectTrigger>
@@ -932,7 +1642,7 @@ ${rows.map((row, ri) => {
                   {monthlySearchMode === "month" ? (
                     <div className="min-w-0 w-full min-[480px]:w-44 min-[480px]:max-w-xs">
                       <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("pettyYearMonth") || "연월"}</span>
-                      <Select value={monthlyYm} onValueChange={setMonthlyYm}>
+                      <Select value={monthlyYm} onValueChange={(v) => { setMonthlyPeriodPreset("custom"); setMonthlyYm(v) }}>
                         <SelectTrigger className="h-10 w-full text-sm">
                           <SelectValue placeholder={t("pettyYearMonth") || "연월"} />
                         </SelectTrigger>
@@ -947,9 +1657,9 @@ ${rows.map((row, ri) => {
                     <div className="min-w-0 w-full min-[520px]:w-auto min-[520px]:min-w-[17.5rem] min-[520px]:max-w-xl flex-1">
                       <span className="mb-1 block text-xs font-medium text-muted-foreground">{t("searchPeriod")}</span>
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                        <Input type="date" value={monthlyPeriodStart} onChange={(e) => setMonthlyPeriodStart(e.target.value)} className="date-input-compact h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
+                        <Input type="date" value={monthlyPeriodStart} onChange={(e) => { setMonthlyPeriodPreset("custom"); setMonthlyPeriodStart(e.target.value) }} className="date-input-compact h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
                         <span className="shrink-0 text-sm text-muted-foreground">~</span>
-                        <Input type="date" value={monthlyPeriodEnd} onChange={(e) => setMonthlyPeriodEnd(e.target.value)} className="date-input-compact h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
+                        <Input type="date" value={monthlyPeriodEnd} onChange={(e) => { setMonthlyPeriodPreset("custom"); setMonthlyPeriodEnd(e.target.value) }} className="date-input-compact h-10 w-[min(100%,10.5rem)] min-w-[9rem] text-sm" />
                       </div>
                     </div>
                   )}
@@ -960,7 +1670,7 @@ ${rows.map((row, ri) => {
                     </label>
                   )}
                   <div className="flex w-full flex-wrap gap-2 min-[520px]:ml-auto min-[520px]:w-auto">
-                    <Button size="default" className="h-10 flex-1 gap-1.5 px-5 min-[400px]:flex-initial" onClick={loadMonthly} disabled={monthlyLoading}>
+                    <Button size="default" className="h-10 flex-1 gap-1.5 px-5 min-[400px]:flex-initial" onClick={() => loadMonthly()} disabled={monthlyLoading}>
                       <Search className="h-4 w-4" />
                       {monthlyLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
                     </Button>
@@ -970,10 +1680,23 @@ ${rows.map((row, ri) => {
                     </Button>
                   </div>
                 </div>
+                {renderAdminClientFilters()}
               </section>
+              {renderPettySummaryCards(monthlyPeriodSummary, {
+                rpc: monthlySummaryRpc,
+                loadedRowCount: monthlyData.length,
+              })}
+              {renderAdminViewToolbar()}
               <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
               <div className="max-h-[min(78vh,_560px)] overflow-x-auto overflow-y-auto sm:max-h-[min(72vh,_620px)]">
-                {filteredMonthlyData.length === 0 ? (
+                {adminEnhancedSearch && adminViewMode !== "detail" ? (
+                  renderAdminAggregationTable(
+                    adminViewMode,
+                    monthlyDayAggregates,
+                    monthlyAccountAggregates,
+                    monthlyData.length
+                  )
+                ) : filteredMonthlyData.length === 0 ? (
                   <p className="px-4 py-10 text-center text-sm text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
                   <table className="w-full text-xs min-w-[720px]">
@@ -988,6 +1711,7 @@ ${rows.map((row, ri) => {
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColUser") || "등록자"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap min-w-[4.5rem]" title={t("poInvoice") || "Invoice"}>{t("poInvoice") || "Invoice"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColActions") || "수정·삭제"}</th>
                       </tr>
                     </thead>
@@ -1057,6 +1781,7 @@ ${rows.map((row, ri) => {
                               "-"
                             )}
                           </td>
+                          {renderPettyInvoiceCell(r)}
                           <td className="px-3 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-0.5">
                               <Button
@@ -1189,6 +1914,30 @@ ${rows.map((row, ri) => {
                       )}
                     </div>
                   </div>
+                  {editType === "expense" ? (
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+                      <p className="text-xs font-medium">{t("poInvoice") || "Invoice"} · PP30</p>
+                      <div className="w-[100px]">
+                        <Label className="text-xs text-muted-foreground">{t("expenseAccrualVat") || "VAT"}</Label>
+                        <Input value={editVatAmount} onChange={(e) => setEditVatAmount(e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, ""))} className="h-9 mt-1 text-xs" />
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={editInvoiceReceived} onCheckedChange={(c) => setEditInvoiceReceived(c === true)} />
+                        <span className="text-xs">{t("poInvoiceReceived") || "Invoice Received"}</span>
+                      </label>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">{t("wm_invoiceNoLabel") || "Invoice No."}</Label>
+                        <Input value={editInvoiceNo} onChange={(e) => setEditInvoiceNo(e.target.value)} className="h-9 mt-1 text-xs" />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">{t("bankInvoicePhotoUpload") || "Invoice Image"}</Label>
+                        <Input type="file" accept="image/*" className="h-9 mt-1 text-xs" onChange={(e) => setEditInvoicePhotoFile(e.target.files?.[0] || null)} />
+                        {editModalItem.invoicePhotoUrl && !editInvoicePhotoFile ? (
+                          <span className="text-xs text-muted-foreground mt-1 block">{t("poInvoice") || "Invoice"} ✓</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
               <DialogFooter>

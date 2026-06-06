@@ -4,6 +4,8 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
+import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
+import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
@@ -56,12 +58,16 @@ type ExpenseAccrualRow = {
   payee_name?: string
   amount?: number
   withholding_tax_amount?: number | null
+  vat_amount?: number | null
   expense_date?: string
   due_date?: string
   memo?: string
   store_name?: string
   account_subject_id?: number
   status?: string
+  invoice_received?: boolean | null
+  invoice_no?: string | null
+  invoice_photo_url?: string | null
 }
 
 type PayableTxRow = {
@@ -97,6 +103,18 @@ function mapWithdrawalCategoryToBankCategory(withdrawalCategory: string): string
   if (c === 'correction') return 'correction'
   if (c.includes('advance')) return 'advance'
   return 'expense'
+}
+
+function invoiceFieldsFromAccrual(source: ExpenseAccrualRow): Record<string, unknown> {
+  const vat = Math.max(0, Math.abs(Number(source.vat_amount ?? 0) || 0))
+  const payeeCode = String(source.payee_code || '').split('::wm::')[0]?.trim()
+  return {
+    invoice_received: Boolean(source.invoice_received),
+    invoice_no: String(source.invoice_no || '').trim() || null,
+    invoice_photo_url: String(source.invoice_photo_url || '').trim() || null,
+    ...(vat > 0 ? { vat_amount: vat } : {}),
+    ...(payeeCode && !payeeCode.startsWith('auto_') ? { vendor_code: payeeCode } : {}),
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -142,7 +160,7 @@ export async function POST(request: NextRequest) {
     }
 
     const accrual = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,store_name,account_subject_id,status',
+      select: 'id,payee_code,payee_name,amount,withholding_tax_amount,vat_amount,expense_date,due_date,memo,store_name,account_subject_id,status,invoice_received,invoice_no,invoice_photo_url',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const source = accrual?.[0]
@@ -249,6 +267,7 @@ export async function POST(request: NextRequest) {
           store: store || source.store_name || null,
           user_employee_id: userEmployeeId,
           user_employee_code: userEmployeeCode,
+          ...invoiceFieldsFromAccrual(source),
         })
         try {
           await postPayableSettlementJournal({
@@ -282,6 +301,7 @@ export async function POST(request: NextRequest) {
           category: bankCategory,
           vendor_code: vendorCode,
           expense_date: transDate,
+          ...invoiceFieldsFromAccrual(source),
         })) as { id?: number }[]
         bankId = Number(inserted?.[0]?.id || 0) || null
         try {
@@ -312,6 +332,7 @@ export async function POST(request: NextRequest) {
         user_name: userName || null,
         user_employee_id: userEmployeeId,
         user_employee_code: userEmployeeCode,
+        ...invoiceFieldsFromAccrual(source),
       })) as { id?: number }[]
       pettyId = Number(inserted?.[0]?.id || 0) || null
       try {
@@ -348,6 +369,21 @@ export async function POST(request: NextRequest) {
       status: nextRemaining <= 0 ? 'paid' : 'approved',
       updated_at: new Date().toISOString(),
     })
+
+    if (bankId) {
+      try {
+        await propagateExpenseAccrualInvoiceToLinkedBank(expenseAccrualId)
+      } catch (propErr) {
+        console.error('executeExpensePayment invoice propagate bank:', propErr)
+      }
+    }
+    if (pettyId) {
+      try {
+        await propagateExpenseAccrualInvoiceToLinkedPetty(expenseAccrualId)
+      } catch (propErr) {
+        console.error('executeExpensePayment invoice propagate petty:', propErr)
+      }
+    }
 
     return NextResponse.json(
       {

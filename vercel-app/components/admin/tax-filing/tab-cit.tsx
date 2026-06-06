@@ -16,6 +16,7 @@ export function TaxFilingCitTab(props: Props) {
     <AdminAccountingCompliance
       initialTab="cit"
       hideTabBar
+      citFilingShell
       filingYearMonth={rest.filingYearMonth}
       onFilingYearMonthChange={rest.onFilingYearMonthChange}
       filingStoreFilter={rest.filingStoreFilter}

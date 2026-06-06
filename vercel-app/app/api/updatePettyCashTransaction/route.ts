@@ -6,6 +6,8 @@ import {
   deleteJournalEntriesBySource,
   postPettyCashJournal,
 } from '@/lib/accounting-posting'
+import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
+import { deletePettyCashInputVatLedger } from '@/lib/petty-input-vat-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -34,6 +36,10 @@ export async function POST(request: NextRequest) {
       ? (body.receiptUrl || body.receipt_url ? String(body.receiptUrl || body.receipt_url).trim() : null)
       : undefined
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
+    const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
+    const vatAmountRaw = body.vatAmount ?? body.vat_amount
     const userStore = String(auth.store || '').trim()
     const userRole = String(auth.role || '').toLowerCase()
     const allowedStores =
@@ -95,6 +101,13 @@ export async function POST(request: NextRequest) {
       memo,
     }
     if (receiptUrl !== undefined) patch.receipt_url = receiptUrl || null
+    if (typeof invoiceReceived === 'boolean') patch.invoice_received = invoiceReceived
+    if (invoiceNoRaw !== undefined) patch.invoice_no = String(invoiceNoRaw || '').trim() || null
+    if (invoicePhotoRaw !== undefined) patch.invoice_photo_url = String(invoicePhotoRaw || '').trim() || null
+    if (vatAmountRaw !== undefined) {
+      const v = Math.max(0, Math.abs(Number(vatAmountRaw) || 0))
+      patch.vat_amount = v > 0 ? v : null
+    }
     if (accountSubjectId !== undefined) {
       const asid = accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null
       if (asid) {
@@ -132,6 +145,20 @@ export async function POST(request: NextRequest) {
         { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
         { status: 500, headers }
       )
+    }
+
+    if (transType === 'expense') {
+      try {
+        await syncPettyCashInvoiceEvidence(id)
+      } catch (vatErr) {
+        console.error('updatePettyCashTransaction vat ledger:', vatErr)
+      }
+    } else {
+      try {
+        await deletePettyCashInputVatLedger(id)
+      } catch (vatErr) {
+        console.error('updatePettyCashTransaction vat delete:', vatErr)
+      }
     }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })

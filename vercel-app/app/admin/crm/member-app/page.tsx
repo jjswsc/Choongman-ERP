@@ -27,7 +27,7 @@ export default function CrmMemberAppContentPage() {
   const { auth } = useAuth()
   const canEdit = canEditMemberPortalAdmin(auth?.role || "", auth?.store)
   const [activeTab, setActiveTab] = React.useState<
-    "all" | "design" | "popup" | "promo" | "info" | "stores" | "contact" | "delivery"
+    "all" | "design" | "popup" | "promo" | "new_menu" | "info" | "stores" | "contact" | "delivery"
   >("all")
   const [items, setItems] = React.useState<MemberPortalContentAdminItem[]>([])
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
@@ -306,7 +306,7 @@ export default function CrmMemberAppContentPage() {
           <div>
             <h1 className="text-xl font-bold">회원앱 운영</h1>
             <p className="text-sm text-muted-foreground">
-              월별 프로모션·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널을 함께 관리합니다.
+              월별 프로모션·신메뉴·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널을 함께 관리합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -333,7 +333,7 @@ export default function CrmMemberAppContentPage() {
         ) : null}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-8">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-9">
             <TabsTrigger value="all">
               전체 목록
               {items.length > 0 ? (
@@ -347,6 +347,14 @@ export default function CrmMemberAppContentPage() {
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                   {countContentForAdminTab(items, "promo")}
+                </span>
+              ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="new_menu">
+              신메뉴
+              {items.length > 0 ? (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  {countContentForAdminTab(items, "new_menu")}
                 </span>
               ) : null}
             </TabsTrigger>
@@ -576,6 +584,18 @@ export default function CrmMemberAppContentPage() {
           <TabsContent value="promo" className="space-y-4">
             <MemberPortalContentAdminPanel
               variant="promo"
+              items={items}
+              loading={loading}
+              canEdit={canEdit}
+              onSaved={refresh}
+              onNotice={setNotice}
+              onError={setError}
+            />
+          </TabsContent>
+
+          <TabsContent value="new_menu" className="space-y-4">
+            <MemberPortalContentAdminPanel
+              variant="new_menu"
               items={items}
               loading={loading}
               canEdit={canEdit}

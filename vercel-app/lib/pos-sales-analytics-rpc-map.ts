@@ -82,6 +82,45 @@ export function mapAnalyticsAggToStoreResults(rows: PosSalesAnalyticsAggRow[]) {
     .sort((a, b) => b.total - a.total)
 }
 
+export type StoreChannelSalesRow = {
+  storeName: string
+  dineIn: number
+  takeout: number
+  delivery: number
+}
+
+/** store_channel RPC — 매장×채널(홀·포장·배달) 완료 매출 */
+export function mapAnalyticsAggToStoreChannelResults(
+  rows: import('@/lib/pos-sales-analytics-rpc-server').PosSalesAnalyticsAggRow[]
+): StoreChannelSalesRow[] {
+  const byStore = new Map<string, { dineIn: number; takeout: number; delivery: number }>()
+
+  for (const r of rows) {
+    const rawStore = String(r.bucket_key ?? '').trim()
+    if (!rawStore) continue
+    const store = canonicalSalesStoreRowKey(rawStore)
+    const ch = String(r.bucket_key2 ?? '').trim()
+    const prev = byStore.get(store) || { dineIn: 0, takeout: 0, delivery: 0 }
+    const amt = num(r.total)
+    if (ch === 'dine_in' || ch === '') prev.dineIn += amt
+    else if (ch === 'takeout') prev.takeout += amt
+    else if (ch === 'delivery') prev.delivery += amt
+    byStore.set(store, prev)
+  }
+
+  return Array.from(byStore.entries())
+    .map(([storeName, v]) => ({
+      storeName,
+      dineIn: v.dineIn,
+      takeout: v.takeout,
+      delivery: v.delivery,
+    }))
+    .sort(
+      (a, b) =>
+        b.dineIn + b.takeout + b.delivery - (a.dineIn + a.takeout + a.delivery)
+    )
+}
+
 /** period_by_store RPC 키 → canonical store key 시리즈 */
 export function canonicalizePeriodSeriesKeys(
   series: Record<string, import('@/lib/pos-sales-period-aggregate').PeriodAggRow[]>,

@@ -276,6 +276,12 @@ export async function POST(req: NextRequest) {
       paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
     })
     const nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    if (total > 0.02 && nextPaymentSum > total + 0.02) {
+      return NextResponse.json(
+        { success: false, message: 'payment_exceeds_total' },
+        { headers }
+      )
+    }
     const paidAtStamp = resolvePosOrderPaidAtStampIso({
       existingPaidAt: String(current?.paid_at ?? '').trim() || null,
       total,

@@ -40,6 +40,8 @@ type ExpenseAccrualRow = {
   memo?: string | null
   store_name?: string | null
   created_by?: string | null
+  invoice_received?: boolean | null
+  invoice_no?: string | null
 }
 
 async function lookupVendorTaxId(payeeCode: string): Promise<string | null> {
@@ -83,7 +85,7 @@ export async function syncExpenseAccrualInputVatLedger(
   const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${id}`, {
     limit: 1,
     select:
-      'id,status,payee_code,payee_name,amount,vat_amount,expense_date,memo,store_name,created_by',
+      'id,status,payee_code,payee_name,amount,vat_amount,expense_date,memo,store_name,created_by,invoice_received,invoice_no',
   })) as ExpenseAccrualRow[] | null
   const row = rows?.[0]
   if (!row?.id) return
@@ -126,7 +128,11 @@ export async function syncExpenseAccrualInputVatLedger(
   const payeeName = String(row.payee_name || payeeCode || '지출').trim() || '지출'
   const netAmount = Math.max(0, gross - vatAmount)
   const tin = await lookupVendorTaxId(payeeCode)
-  const invoiceNo = `EA-${id}`.slice(0, 128)
+  const invoiceNoRaw = String(row.invoice_no || '').trim()
+  const invoiceNo = (invoiceNoRaw || `EA-${id}`).slice(0, 128)
+  const invoiceReceived = Boolean(row.invoice_received)
+  const evidenceStatus = invoiceReceived ? 'received' : 'required_pending'
+  const evidenceReasonCode = invoiceReceived ? null : 'missing_invoice'
 
   const useEvidenceColumns = await probeVatLedgerEvidenceColumns()
   const ledgerRow = mergeEvidenceIntoVatLedgerRow(
@@ -148,8 +154,8 @@ export async function syncExpenseAccrualInputVatLedger(
       store_name: String(row.store_name || '').trim() || fallbackStoreName || null,
       updated_at: new Date().toISOString(),
     },
-    'required_pending',
-    null,
+    evidenceStatus,
+    evidenceReasonCode,
     useEvidenceColumns
   )
 

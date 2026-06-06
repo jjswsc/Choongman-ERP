@@ -7,6 +7,7 @@ import {
   type WithdrawalCategory,
 } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
     const invoiceNo = String(body.invoiceNo || body.invoice_no || '').trim()
     const invoicePhotoUrl = String(body.invoicePhotoUrl || body.invoice_photo_url || '').trim()
+    const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
     const accountSubjectCode = String(body.accountSubjectCode || '').trim()
     const accountSubjectName = String(body.accountSubjectName || '').trim()
     const transferToAccountId = body.transferToAccountId ?? body.transfer_to_account_id
@@ -246,9 +248,24 @@ export async function POST(request: NextRequest) {
         user_employee_code: userEmployeeCode,
       }
       if (accountSubjectId != null) row.account_subject_id = Number(accountSubjectId)
+      if (vendorCode) row.vendor_code = vendorCode
+      if (typeof invoiceReceived === 'boolean') row.invoice_received = invoiceReceived
+      if (invoiceNo) row.invoice_no = invoiceNo
+      if (invoicePhotoUrl) row.invoice_photo_url = invoicePhotoUrl
+      if (vatAmount > 0) row.vat_amount = vatAmount
 
       const inserted = await insertPettyTransactionWithIdentityFallback(row)
       pettyCashTransactionId = Number(inserted?.[0]?.id || 0) || null
+
+      const skipPettyVat =
+        category === 'purchase_payment' || category === 'purchase_advance'
+      if (pettyCashTransactionId && !skipPettyVat) {
+        try {
+          await syncPettyCashInvoiceEvidence(pettyCashTransactionId, { skipPurchasePayment: skipPettyVat })
+        } catch (vatErr) {
+          console.error('executeWithdrawal petty vat ledger:', vatErr)
+        }
+      }
 
       if (category === 'transfer_from_petty' && transferToAccountId) {
         await insertBankTransactionWithIdentityFallback({

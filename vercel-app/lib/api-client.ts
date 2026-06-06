@@ -1836,6 +1836,11 @@ export interface PettyCashItem {
   user_name: string
   account_subject_id?: number | null
   accountSubjectId?: number | null
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  vatAmount?: number
+  vendorCode?: string
 }
 
 export async function getPettyCashOptions(): Promise<{ stores: string[]; officeDepartments: string[] }> {
@@ -1896,6 +1901,60 @@ export async function getPettyCashMonthDetail(params: {
   return jsonAsArray<PettyCashItem>(await res.json())
 }
 
+export type PettyCashSummaryResult = {
+  expenseTotal: number
+  inflowTotal: number
+  netChange: number
+  vatTotal: number
+  vatPendingTotal: number
+  vatPendingCount: number
+  rowCount: number
+  source?: 'rpc' | 'fallback'
+  truncated?: boolean
+}
+
+/** DB RPC 기간 합계 — 페이지·2,000건 limit 없이 집계 (RPC 미배포 시 fallback) */
+export async function getPettyCashSummary(params: {
+  startStr: string
+  endStr: string
+  scopeFilter?: string
+  storeFilter?: string
+  departmentFilter?: string
+  filterTransType?: string
+  filterAccountSubjectId?: string
+  filterAccountSubjectEmpty?: boolean
+  filterMemoKeyword?: string
+  filterInvoiceStatus?: string
+  filterPp30VatOnly?: boolean
+}): Promise<PettyCashSummaryResult> {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.scopeFilter) q.set('scopeFilter', params.scopeFilter)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)
+  if (params.filterTransType) q.set('filterTransType', params.filterTransType)
+  if (params.filterAccountSubjectId) q.set('filterAccountSubjectId', params.filterAccountSubjectId)
+  if (params.filterAccountSubjectEmpty) q.set('filterAccountSubjectEmpty', '1')
+  if (params.filterMemoKeyword) q.set('filterMemoKeyword', params.filterMemoKeyword)
+  if (params.filterInvoiceStatus) q.set('filterInvoiceStatus', params.filterInvoiceStatus)
+  if (params.filterPp30VatOnly) q.set('filterPp30VatOnly', '1')
+  const res = await apiFetchWithOffline(`/api/getPettyCashSummary?${q}`)
+  const data = (await res.json()) as PettyCashSummaryResult
+  return {
+    expenseTotal: Number(data.expenseTotal ?? 0) || 0,
+    inflowTotal: Number(data.inflowTotal ?? 0) || 0,
+    netChange: Number(data.netChange ?? 0) || 0,
+    vatTotal: Number(data.vatTotal ?? 0) || 0,
+    vatPendingTotal: Number(data.vatPendingTotal ?? 0) || 0,
+    vatPendingCount: Number(data.vatPendingCount ?? 0) || 0,
+    rowCount: Number(data.rowCount ?? 0) || 0,
+    source: data.source,
+    truncated: Boolean(data.truncated),
+  }
+}
+
 /** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시 */
 export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim()).map((s) => String(s).trim())
@@ -1929,6 +1988,11 @@ export async function addPettyCashTransaction(params: {
   memo?: string
   receiptUrl?: string
   accountSubjectId?: number | null
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  vatAmount?: number
+  vendorCode?: string
   userName?: string
   userStore?: string
   userRole?: string
@@ -2042,6 +2106,10 @@ export async function updatePettyCashTransaction(params: {
   memo?: string
   receiptUrl?: string | null
   accountSubjectId?: number | null
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string | null
+  vatAmount?: number
   userStore?: string
   userRole?: string
 }) {
@@ -2056,9 +2124,28 @@ export async function updatePettyCashTransaction(params: {
       memo: params.memo ?? '',
       receiptUrl: params.receiptUrl,
       accountSubjectId: params.accountSubjectId,
+      invoiceReceived: params.invoiceReceived,
+      invoiceNo: params.invoiceNo,
+      invoicePhotoUrl: params.invoicePhotoUrl,
+      vatAmount: params.vatAmount,
       userStore: params.userStore,
       userRole: params.userRole,
     }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updatePettyCashTransactionInvoice(params: {
+  pettyCashId: number
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  vatAmount?: number
+}) {
+  const res = await apiFetchWithOffline('/api/updatePettyCashTransactionInvoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
@@ -4376,6 +4463,10 @@ export interface ExpenseAccrualPlanItem {
   remainingAmount: number
   /** 인보이스·영수증 등 첨부 URL 목록 */
   attachmentUrls?: string[]
+  /** 세금계산서(텍스 인보이스) 수령 여부 */
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
   expenseDate: string
   dueDate?: string
   memo?: string
@@ -4469,6 +4560,10 @@ export async function addExpenseAccrual(params: {
   userRole?: string
   /** 인보이스·영수증 등 (data URL 또는 https) */
   attachmentUrls?: string[]
+  /** 세금계산서(텍스 인보이스) 수령 여부 */
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
 }) {
   const res = await apiFetchWithOffline('/api/addExpenseAccrual', {
     method: 'POST',
@@ -4546,6 +4641,9 @@ export async function updateExpenseAccrual(params: {
   categorySub?: string
   userRole?: string
   attachmentUrls?: string[]
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
 }) {
   const res = await apiFetchWithOffline('/api/updateExpenseAccrual', {
     method: 'POST',
@@ -4563,6 +4661,20 @@ export async function deleteExpenseAccrual(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...params, action: 'delete' }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateExpenseAccrualInvoice(params: {
+  expenseAccrualId: number
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+}) {
+  const res = await apiFetchWithOffline('/api/updateExpenseAccrualInvoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
@@ -4805,6 +4917,7 @@ export async function executeWithdrawal(params: {
   invoiceReceived?: boolean
   invoiceNo?: string
   invoicePhotoUrl?: string
+  vatAmount?: number
   userName?: string
   userRole?: string
   userStore?: string
@@ -5007,6 +5120,23 @@ export async function getPosSalesByDeliveryApp(params: {
     }[]
     total: number
   }>
+}
+
+export async function getPosSalesByStoreChannel(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+}) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  const res = await apiFetchWithOffline(`/api/posSalesByStoreChannel?${q}`)
+  return res.json() as Promise<
+    { storeName: string; dineIn: number; takeout: number; delivery: number }[]
+  >
 }
 
 export async function getPosSalesByChannel(params: {

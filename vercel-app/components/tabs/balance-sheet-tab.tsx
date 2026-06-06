@@ -452,7 +452,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                 </p>
               )}
               {showBalanceCompareTable && (
-                <div className="flex justify-center px-1 sm:px-2">
+                <div className="w-full">
                   <div className={`${accountingFsDocumentCn} space-y-4`}>
                     <div className="space-y-2 border-b border-border/50 pb-4">
                       <div className={accountingFsTitleCn}>{t("adminBalanceSheet")}</div>
@@ -563,7 +563,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                 )}
 
               {!isRangeCompare && isBalanceSheetData(data) ? (
-                <div className="flex justify-center px-1 sm:px-2">
+                <div className="w-full">
                   <div className={`${accountingFsDocumentCn} space-y-5`}>
                     <div className="space-y-2 border-b border-border/50 pb-4">
                       <div className={accountingFsTitleCn}>{t("adminBalanceSheet")}</div>

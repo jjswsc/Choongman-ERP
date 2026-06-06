@@ -3,7 +3,9 @@
 import {
   DEFAULT_MEMBER_HERO_FOOD,
   DEFAULT_MEMBER_LOUNGE_BG,
+  isMemberPortalIsolatedPlateHero,
   MEMBER_PORTAL_BG_STYLE,
+  MEMBER_PORTAL_FOOD_ON_TABLE,
   resolveMemberPortalHeroFoodUrl,
   resolveMemberPortalLoungeBackgroundUrl,
 } from "@/lib/member-portal-design"
@@ -18,6 +20,25 @@ type MemberPortalLoungeBackdropProps = {
   className?: string
 }
 
+function AmbienceOverlays({ variant }: { variant: "login" | "app" }) {
+  if (variant === "login") {
+    return (
+      <>
+        <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/48 via-[#08080a]/68 to-[#08080a]/84" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(212,175,55,0.14),transparent_42%)]" />
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/38 via-[#08080a]/58 to-[#050506]/90" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_18%,rgba(212,175,55,0.14),transparent_55%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.06),transparent_50%)]" />
+    </>
+  )
+}
+
 export function MemberPortalLoungeBackdrop({
   customFullBackgroundUrl = "",
   heroFoodImageUrl = "",
@@ -27,7 +48,7 @@ export function MemberPortalLoungeBackdrop({
   const customFull = String(customFullBackgroundUrl || "").trim()
   const lounge = resolveMemberPortalLoungeBackgroundUrl("")
   const hero = resolveMemberPortalHeroFoodUrl(heroFoodImageUrl)
-  const heroFocusY = /pos-menu-images/i.test(hero) ? '62%' : 'center'
+  const isolatedPlate = isMemberPortalIsolatedPlateHero(hero)
 
   if (customFull) {
     return (
@@ -54,9 +75,9 @@ export function MemberPortalLoungeBackdrop({
 
   return (
     <div className={`pointer-events-none absolute inset-0 z-0 overflow-hidden ${className}`}>
-      {/* 하단: 기존 합성 배경의 식당 인테리어(아래 절반) */}
+      {/* 식당 인테리어 — 합성 배경 이미지의 하단(탁자·홀)만 전체 화면에 */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 scale-[1.02]"
         style={{
           backgroundImage: `url(${lounge})`,
           backgroundSize: "100% 200%",
@@ -64,30 +85,48 @@ export function MemberPortalLoungeBackdrop({
           backgroundRepeat: "no-repeat",
         }}
       />
-      {/* 상단: POS 스노우 어니언 — 기존 치킨 히어로 자리 */}
+
+      {/* 스노우어니언 — 탁자 위에 올려놓은 접시처럼 합성 */}
       <div
-        className="absolute inset-x-0 top-0 h-[min(52vh,440px)]"
-        style={{
-          backgroundImage: `url(${hero})`,
-          backgroundSize: "cover",
-          backgroundPosition: `center ${heroFocusY}`,
-          backgroundRepeat: "no-repeat",
-        }}
-      />
-      {/* 히어로 ↔ 라운지 자연스러운 블렌드 */}
-      <div className="absolute inset-x-0 top-[36vh] h-28 bg-gradient-to-b from-transparent via-[#08080a]/35 to-[#08080a]/78" />
-      {variant === "login" ? (
-        <>
-          <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/48 via-[#08080a]/68 to-[#08080a]/84" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.14),transparent_42%)]" />
-        </>
-      ) : (
-        <>
-          <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/42 via-[#08080a]/60 to-[#050506]/88" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.16),transparent_55%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.06),transparent_50%)]" />
-        </>
-      )}
+        className="absolute inset-0"
+        style={{ perspective: `${MEMBER_PORTAL_FOOD_ON_TABLE.perspectivePx}px` }}
+      >
+        <div
+          className="absolute left-1/2 z-[1]"
+          style={{
+            top: MEMBER_PORTAL_FOOD_ON_TABLE.top,
+            width: MEMBER_PORTAL_FOOD_ON_TABLE.width,
+            transform: `translateX(-50%) rotateX(${MEMBER_PORTAL_FOOD_ON_TABLE.rotateXDeg}deg)`,
+            transformOrigin: "center bottom",
+          }}
+        >
+          <div className="relative">
+            {/* 탁자 접촉 그림자 */}
+            <div
+              className="absolute -bottom-1 left-1/2 z-0 h-5 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/35 blur-md"
+              aria-hidden
+            />
+            <img
+              src={hero}
+              alt=""
+              draggable={false}
+              className={`relative z-[1] w-full select-none object-contain ${
+                isolatedPlate ? "mix-blend-multiply" : "drop-shadow-[0_18px_28px_rgba(0,0,0,0.42)]"
+              }`}
+              style={
+                isolatedPlate
+                  ? { filter: "contrast(1.06) saturate(1.1)" }
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 접시 하단 → UI 가독용 소프트 페이드 */}
+      <div className="absolute inset-x-0 top-[42%] h-32 bg-gradient-to-b from-transparent via-[#08080a]/20 to-[#08080a]/55" />
+
+      <AmbienceOverlays variant={variant} />
     </div>
   )
 }

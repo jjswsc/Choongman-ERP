@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ import {
   getExpensePaymentPlan,
   getUnlinkedBankWithdrawals,
   translateTexts,
+  updateExpenseAccrualInvoice,
   type AccountSubjectItem,
   type BankAccount,
   type ExpenseAccrualPlanItem,
@@ -115,6 +117,7 @@ export function ExpenseManagementTab() {
   const [rejectingAll, setRejectingAll] = React.useState(false)
   const [cleaningNoStore, setCleaningNoStore] = React.useState(false)
   const [attachmentPreview, setAttachmentPreview] = React.useState<{ urls: string[]; title: string } | null>(null)
+  const [updatingInvoiceAccrualId, setUpdatingInvoiceAccrualId] = React.useState<number | null>(null)
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
@@ -484,9 +487,58 @@ export function ExpenseManagementTab() {
       if (row.withdrawalCategory) q.set("category", row.withdrawalCategory)
       if ((row.storeName || "").trim()) q.set("storeName", (row.storeName || "").trim())
       if ((row.memo || "").trim()) q.set("memo", (row.memo || "").trim())
+      if (row.invoiceReceived) q.set("invoiceReceived", "1")
+      if ((row.invoiceNo || "").trim()) q.set("invoiceNo", (row.invoiceNo || "").trim())
       router.push(`/admin/expense-management?${q.toString()}`)
     },
     [router]
+  )
+
+  const handleAccrualInvoiceCheckChange = React.useCallback(
+    async (row: ExpenseAccrualPlanItem, checked: boolean) => {
+      if (!row.id) return
+      setUpdatingInvoiceAccrualId(row.id)
+      try {
+        const res = await updateExpenseAccrualInvoice({
+          expenseAccrualId: row.id,
+          invoiceReceived: checked,
+        })
+        if (res.success) {
+          const patch = { invoiceReceived: checked }
+          setExpensePlans((prev) => prev.map((x) => (x.id === row.id ? { ...x, ...patch } : x)))
+          setPurchasePlans((prev) => prev.map((x) => (x.id === row.id ? { ...x, ...patch } : x)))
+        } else {
+          await appAlert(res.message || t("processFail"))
+        }
+      } catch (e) {
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setUpdatingInvoiceAccrualId(null)
+      }
+    },
+    [t]
+  )
+
+  const renderAccrualInvoiceCell = React.useCallback(
+    (r: ExpenseAccrualPlanItem) => (
+      <td className="py-2 px-1 text-center align-top min-w-[120px]">
+        <div className="flex flex-col items-center gap-1">
+          <Checkbox
+            checked={Boolean(r.invoiceReceived)}
+            onCheckedChange={(c) => handleAccrualInvoiceCheckChange(r, c === true)}
+            disabled={updatingInvoiceAccrualId === r.id}
+            title={tt("poInvoiceReceived", "Invoice Received")}
+            className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+          />
+          {r.invoiceNo ? (
+            <span className="text-[10px] text-muted-foreground max-w-[7rem] truncate" title={r.invoiceNo}>
+              {r.invoiceNo}
+            </span>
+          ) : null}
+        </div>
+      </td>
+    ),
+    [handleAccrualInvoiceCheckChange, tt, updatingInvoiceAccrualId]
   )
 
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
@@ -707,6 +759,9 @@ export function ExpenseManagementTab() {
                         </th>
                         <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{tt("memo", "Memo")}</th>
                         <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "Attachment")}</th>
+                        <th className="w-[120px] text-center py-2 px-1" title={tt("poInvoice", "Invoice")}>
+                          {tt("poInvoice", "Invoice")}
+                        </th>
                         <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "Action")}</th>
                         <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
                           {tt("att_approval", "Approval")}
@@ -717,7 +772,7 @@ export function ExpenseManagementTab() {
                       {expensePlansByStore.map(([storeLabel, rows]) => (
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
-                            <td colSpan={9} className="py-2 px-3 text-sm font-medium">
+                            <td colSpan={10} className="py-2 px-3 text-sm font-medium">
                               {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
@@ -758,6 +813,7 @@ export function ExpenseManagementTab() {
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </td>
+                            {renderAccrualInvoiceCell(r)}
                             <td className="py-2 px-1 text-center align-top">
                               {r.status === "planned" ? (
                                 <Button
@@ -886,7 +942,7 @@ export function ExpenseManagementTab() {
                           </tr>
                           {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
                             <tr className="border-b bg-muted/20">
-                              <td className="py-2 px-2" colSpan={9}>
+                              <td className="py-2 px-2" colSpan={10}>
                                 <div className="flex flex-wrap items-end gap-2">
                                   <Select
                                     value={payMethodById[r.id] || "bank"}
@@ -999,6 +1055,9 @@ export function ExpenseManagementTab() {
                         </th>
                         <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{tt("memo", "Memo")}</th>
                         <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "Attachment")}</th>
+                        <th className="w-[120px] text-center py-2 px-1" title={tt("poInvoice", "Invoice")}>
+                          {tt("poInvoice", "Invoice")}
+                        </th>
                         <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "Action")}</th>
                         <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
                           {tt("att_approval", "Approval")}
@@ -1009,7 +1068,7 @@ export function ExpenseManagementTab() {
                       {purchasePlansByStore.map(([storeLabel, rows]) => (
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
-                            <td colSpan={9} className="py-2 px-3 text-sm font-medium">
+                            <td colSpan={10} className="py-2 px-3 text-sm font-medium">
                               {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
@@ -1054,6 +1113,7 @@ export function ExpenseManagementTab() {
                                     <span className="text-muted-foreground text-xs">—</span>
                                   )}
                                 </td>
+                                {renderAccrualInvoiceCell(r)}
                                 <td className="py-2 px-1 text-center align-top">
                                   {r.status === "planned" ? (
                                     <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "Edit")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
@@ -1113,7 +1173,7 @@ export function ExpenseManagementTab() {
                               </tr>
                               {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
                                 <tr className="border-b bg-muted/20">
-                                  <td className="py-2 px-2" colSpan={9}>
+                                  <td className="py-2 px-2" colSpan={10}>
                                     <div className="flex flex-wrap items-end gap-2">
                                       <Select value={payMethodById[r.id] || "bank"} onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}>
                                         <SelectTrigger className="w-[120px] h-9">

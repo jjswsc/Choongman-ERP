@@ -3,6 +3,7 @@
 import * as React from "react"
 import Image from "next/image"
 import type { LucideIcon } from "lucide-react"
+import { ChevronRight, Gift, History, Ticket } from "lucide-react"
 import {
   DEFAULT_MEMBER_APP_BG,
   MP_MAX_WIDTH,
@@ -91,6 +92,7 @@ export function PremiumStatTile({
   value,
   sub,
   accent = "amber",
+  size = "default",
   onClick,
 }: {
   icon: LucideIcon
@@ -98,6 +100,7 @@ export function PremiumStatTile({
   value: string
   sub?: string
   accent?: "amber" | "rose" | "emerald"
+  size?: "default" | "compact"
   onClick?: () => void
 }) {
   const accentMap = {
@@ -105,16 +108,21 @@ export function PremiumStatTile({
     rose: "from-rose-400/15 to-rose-600/5 text-rose-200 border-rose-400/20",
     emerald: "from-emerald-400/15 to-emerald-600/5 text-emerald-200 border-emerald-400/20",
   }
-  const className = `${mpGlassCardSoft} p-4 text-left transition ${onClick ? "cursor-pointer hover:border-white/15 active:scale-[0.98]" : ""}`
+  const compact = size === "compact"
+  const className = `${mpGlassCardSoft} ${compact ? "p-3" : "p-4"} text-left transition ${onClick ? "cursor-pointer hover:border-white/15 active:scale-[0.98]" : ""}`
   const inner = (
     <>
       <div
-        className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl border bg-gradient-to-br ${accentMap[accent]}`}
+        className={`${compact ? "mb-2 h-9 w-9" : "mb-3 h-10 w-10"} flex items-center justify-center rounded-xl border bg-gradient-to-br ${accentMap[accent]}`}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
       </div>
-      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/45">{label}</p>
-      <p className="mt-1.5 line-clamp-2 text-base font-semibold leading-snug tracking-tight text-white">{value}</p>
+      <p className={`font-medium uppercase text-white/45 ${compact ? "text-[10px] leading-tight tracking-[0.08em] line-clamp-2" : "text-[11px] tracking-[0.12em]"}`}>
+        {label}
+      </p>
+      <p className={`font-semibold leading-snug tracking-tight text-white ${compact ? "mt-1 text-lg" : "mt-1.5 line-clamp-2 text-base"}`}>
+        {value}
+      </p>
       {sub ? <p className="mt-1 text-[11px] text-white/40">{sub}</p> : null}
     </>
   )
@@ -126,6 +134,67 @@ export function PremiumStatTile({
     )
   }
   return <div className={className}>{inner}</div>
+}
+
+/** 혜택 탭 — 쿠폰·포인트·방문 통계 (아이콘 타일 통일) */
+export function MemberPortalBenefitStatsGrid({
+  couponsLabel,
+  couponsValue,
+  pointsLabel,
+  pointsValue,
+  visitsLabel,
+  visitsValue,
+}: {
+  couponsLabel: string
+  couponsValue: string
+  pointsLabel: string
+  pointsValue: string
+  visitsLabel: string
+  visitsValue: string
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <PremiumStatTile icon={Ticket} label={couponsLabel} value={couponsValue} accent="emerald" size="compact" />
+      <PremiumStatTile icon={Gift} label={pointsLabel} value={pointsValue} accent="rose" size="compact" />
+      <PremiumStatTile icon={History} label={visitsLabel} value={visitsValue} accent="amber" size="compact" />
+    </div>
+  )
+}
+
+/** 홈 — 혜택 탭 바로가기 (숫자 중복 없이 아이콘만) */
+export function MemberPortalPrivilegeShortcut({
+  title,
+  subtitle,
+  onClick,
+}: {
+  title: string
+  subtitle: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${mpGlassCardSoft} group flex w-full items-center gap-3.5 p-4 text-left transition hover:border-amber-400/25 active:scale-[0.99]`}
+    >
+      <div className="flex shrink-0 items-center pl-1">
+        <span className="relative z-[3] flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/20 to-emerald-600/5 text-emerald-200 shadow-lg shadow-black/20">
+          <Ticket className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="relative z-[2] -ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-rose-400/20 bg-gradient-to-br from-rose-400/15 to-rose-600/5 text-rose-200 shadow-lg shadow-black/20">
+          <Gift className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="relative z-[1] -ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/20 bg-gradient-to-br from-amber-400/20 to-amber-600/5 text-amber-200 shadow-lg shadow-black/20">
+          <History className="h-4 w-4" aria-hidden />
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-white">{title}</p>
+        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-white/45">{subtitle}</p>
+      </div>
+      <ChevronRight className="h-5 w-5 shrink-0 text-white/35 transition group-hover:translate-x-0.5 group-hover:text-amber-300/80" aria-hidden />
+    </button>
+  )
 }
 
 export function MemberPortalContentSheet({

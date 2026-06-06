@@ -720,6 +720,8 @@ type AdminAccountingComplianceProps = {
   onFilingSearch?: () => void
   /** P.P30/P.P36 탭 하단 PP36 임베드 전용 — P.N.D 탭 등 다른 wht_only 화면과 구분 */
   embeddedPp36Section?: boolean
+  /** 세무 신고 P.N.D.50/51 탭 — 반기·연간 신고 주기 전용 필터 */
+  citFilingShell?: boolean
 }
 
 export function AdminAccountingCompliance({
@@ -737,6 +739,7 @@ export function AdminAccountingCompliance({
   filingSearchTick,
   onFilingSearch,
   embeddedPp36Section = false,
+  citFilingShell = false,
 }: AdminAccountingComplianceProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -969,12 +972,16 @@ export function AdminAccountingCompliance({
   const [whtRows, setWhtRows] = React.useState<WhtDraft[]>([])
   const [pp36Rows, setPp36Rows] = React.useState<Pp36Draft[]>([])
   const [pnd54Rows, setPnd54Rows] = React.useState<Pnd54Draft[]>([])
-  const [periodType, setPeriodType] = React.useState<"monthly" | "half_year" | "annual">("monthly")
+  const [periodType, setPeriodType] = React.useState<"monthly" | "half_year" | "annual">(() =>
+    citFilingShell ? "half_year" : "monthly"
+  )
   const [ledgerStatusFilter, setLedgerStatusFilter] = React.useState<"all" | "draft" | "submitted">("all")
   /** 법인세 연간: API는 yearMonth의 연도만 사용 — UI는 연도만 고름 */
   const [citFiscalYear, setCitFiscalYear] = React.useState(() => Number(ymNow().slice(0, 4)))
   /** 부가세(ภ.พ.30) 탭: 매출/매입/정산/원천 조회 */
   const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "settlement" | "wht">(initialPp30SubView)
+  /** P.N.D.53/54 탭: 법인 원천(53) / 해외 지급(54) 신고 분리 */
+  const [pnd5354SubView, setPnd5354SubView] = React.useState<"pnd53" | "pnd54">("pnd53")
   const [vatOutputViewMode, setVatOutputViewMode] = React.useState<"vendor" | "detail">("vendor")
   const [vatInputViewMode, setVatInputViewMode] = React.useState<"vendor" | "detail">("vendor")
   const allowedPp30Views = React.useMemo<("output" | "input" | "settlement" | "wht")[]>(() => {
@@ -1058,6 +1065,8 @@ export function AdminAccountingCompliance({
   const showPp36Ledger = whtFocusMode === "all" || whtFocusMode === "pp36"
   const showPnd54Ledger = whtFocusMode === "all" || whtFocusMode === "pnd5354"
   const showWhtLedger = whtFocusMode !== "pp36"
+  const isPnd5354CompactList = whtFocusMode === "pnd5354"
+  const isCitFilingShell = citFilingShell === true
   const [pnd1IssueFilterCodes, setPnd1IssueFilterCodes] = React.useState<Pnd1IssueCode[]>([])
   const [payrollTinGapLoading, setPayrollTinGapLoading] = React.useState(false)
   const [payrollTinGapResult, setPayrollTinGapResult] = React.useState<PayrollWhtTinGapResult | null>(null)
@@ -1192,6 +1201,21 @@ export function AdminAccountingCompliance({
     if (periodType === "annual") return `${citFiscalYear}-01`
     return taxMonth
   }, [periodType, citFiscalYear, taxMonth])
+
+  const citHalfYearSlot = React.useMemo<"H1" | "H2">(() => {
+    const m = Number(String(taxMonth).slice(5, 7))
+    return m <= 6 ? "H1" : "H2"
+  }, [taxMonth])
+
+  const setCitHalfYearControls = React.useCallback(
+    (next: { year?: number; slot?: "H1" | "H2" }) => {
+      const year = next.year ?? citFiscalYear
+      const slot = next.slot ?? citHalfYearSlot
+      setTaxMonth?.(`${year}-${slot === "H1" ? "01" : "07"}`)
+      if (next.year != null) setCitFiscalYear(next.year)
+    },
+    [citFiscalYear, citHalfYearSlot, setTaxMonth]
+  )
 
   const citFiscalYearOptions = React.useMemo(() => {
     const base = Number(getBangkokRecentYearMonths(1)[0].slice(0, 4))
@@ -3360,6 +3384,42 @@ export function AdminAccountingCompliance({
     () => whtRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [whtRows, ledgerStatusFilter]
   )
+  const whtRowsPnd53Display = React.useMemo(() => {
+    if (!isPnd5354CompactList) return whtRowsFiltered
+    return whtRowsFiltered.filter((r) => {
+      const hint = String(r.form_hint || "").toUpperCase()
+      if (!hint) return true
+      if (hint.includes("53")) return true
+      if (hint.includes("3") && !hint.includes("53")) return false
+      return true
+    })
+  }, [isPnd5354CompactList, whtRowsFiltered])
+  const pnd54RowsFiltered = React.useMemo(
+    () => pnd54Rows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
+    [pnd54Rows, ledgerStatusFilter]
+  )
+  const pnd53Summary = React.useMemo(() => {
+    const rows = isPnd5354CompactList ? whtRowsPnd53Display : whtRowsFiltered
+    return {
+      gross: rows.reduce((s, r) => s + (Number(r.gross_amount) || 0), 0),
+      withheld: rows.reduce((s, r) => s + (Number(r.wht_amount) || 0), 0),
+      count: rows.length,
+    }
+  }, [isPnd5354CompactList, whtRowsFiltered, whtRowsPnd53Display])
+  const pnd54Summary = React.useMemo(
+    () => ({
+      gross: pnd54RowsFiltered.reduce((s, r) => s + (Number(r.gross_amount) || 0), 0),
+      withheld: pnd54RowsFiltered.reduce((s, r) => s + (Number(r.wht_amount) || 0), 0),
+      count: pnd54RowsFiltered.length,
+    }),
+    [pnd54RowsFiltered]
+  )
+  const summaryCardTitle = React.useMemo(() => {
+    if (isEmbeddedPp36Section) return t("accCompTabPp36")
+    if (isPnd5354CompactList) return t("taxFilingTabPnd5354")
+    if (whtFocusMode === "pnd1391") return t("taxFilingTabPnd1391")
+    return t("accCompTabPp30")
+  }, [isEmbeddedPp36Section, isPnd5354CompactList, whtFocusMode, t])
   const whtPayeeTinGapCount = React.useMemo(
     () =>
       countWhtPayeeTinGaps(whtRowsFiltered, storeFilterForLedger, storeLabels, legacyToCanonical),
@@ -5555,9 +5615,7 @@ export function AdminAccountingCompliance({
         <TabsContent value="summary" className={cn(tabsContentClass, "space-y-3")}>
           <Card className="border-border/80 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {isEmbeddedPp36Section ? t("accCompTabPp36") : t("accCompTabPp30")}
-              </CardTitle>
+              <CardTitle className="text-base">{summaryCardTitle}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {!isEmbeddedPp36Section ? (
@@ -5788,14 +5846,18 @@ export function AdminAccountingCompliance({
 
               {!pp30Queried ? (
                 <AccountingEmptyState>
-                  {isEmbeddedPp36Section ? t("accCompPp36EmbeddedSearchHint") : t("accCompPp30EmptySearchHint")}
+                  {isEmbeddedPp36Section
+                    ? t("accCompPp36EmbeddedSearchHint")
+                    : isPnd5354CompactList
+                      ? t("accCompPnd5354EmptySearchHint")
+                      : t("accCompPp30EmptySearchHint")}
                 </AccountingEmptyState>
               ) : (
                 <>
-              {vatStoreNameGapsLoading ? (
+              {!isPnd5354CompactList && vatStoreNameGapsLoading ? (
                 <p className="text-xs text-muted-foreground">{t("accCompStoreNameGapsLoading")}</p>
               ) : null}
-              {vatStoreNameGaps && vatStoreNameGaps.emptyStoreNameRowCount > 0 ? (
+              {!isPnd5354CompactList && vatStoreNameGaps && vatStoreNameGaps.emptyStoreNameRowCount > 0 ? (
                 <div className="rounded-md border border-amber-300/80 bg-amber-50/90 dark:bg-amber-950/30 px-3 py-3 text-xs space-y-2">
                   <div className="font-medium text-amber-900 dark:text-amber-100">{t("accCompStoreNameGapsTitle")}</div>
                   <p className="text-amber-800/90 dark:text-amber-200/80 leading-relaxed whitespace-pre-line">
@@ -5810,7 +5872,27 @@ export function AdminAccountingCompliance({
                   ) : null}
                 </div>
               ) : null}
-              {!isEmbeddedPp36Section ? (
+              {!isEmbeddedPp36Section && isPnd5354CompactList ? (
+              <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pnd5354SubView === "pnd53" ? "default" : "outline"}
+                  onClick={() => setPnd5354SubView("pnd53")}
+                >
+                  {t("accCompPnd5354SubPnd53")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pnd5354SubView === "pnd54" ? "default" : "outline"}
+                  onClick={() => setPnd5354SubView("pnd54")}
+                >
+                  {t("accCompPnd5354SubPnd54")}
+                </Button>
+              </div>
+              ) : null}
+              {!isEmbeddedPp36Section && !isPnd5354CompactList ? (
               <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
                 {allowedPp30Views.includes("output") && (
                   <Button
@@ -6700,9 +6782,39 @@ export function AdminAccountingCompliance({
 
               {pp30SubView === "wht" && (
                 <div className="space-y-3 text-sm">
+                  {isPnd5354CompactList && pnd5354SubView === "pnd54" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        {t("accCompWhtGrossShort")}: {pnd54Summary.gross.toLocaleString()}
+                      </div>
+                      <div>
+                        {t("accCompWhtWithheldShort")}: {pnd54Summary.withheld.toLocaleString()}
+                      </div>
+                      <div>
+                        {t("accCompWhtRowsShort")}: {pnd54Summary.count.toLocaleString()}
+                      </div>
+                    </div>
+                  ) : null}
                   {showWhtLedger ? (
                     <>
-                      {pp30Mode !== "wht_only" ? (
+                      {isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                          <div>
+                            {t("accCompWhtGrossShort")}: {pnd53Summary.gross.toLocaleString()}
+                          </div>
+                          <div>
+                            {t("accCompWhtWithheldShort")}: {pnd53Summary.withheld.toLocaleString()}
+                          </div>
+                          <div>
+                            {t("accCompWhtRowsShort")}: {pnd53Summary.count.toLocaleString()}
+                          </div>
+                          <div>
+                            {t("accCompMissingTin")}:{" "}
+                            {whtRowsPnd53Display.filter((r) => !String(r.payee_tax_id || "").trim()).length.toLocaleString()}
+                          </div>
+                        </div>
+                      ) : null}
+                      {!isPnd5354CompactList && pp30Mode !== "wht_only" ? (
                         <StoreVendorTaxLinkBanner
                           t={t}
                           tr={tr}
@@ -6720,11 +6832,12 @@ export function AdminAccountingCompliance({
                             ) : null
                           }
                         />
-                      ) : whtPayeeTinGapCount > 0 ? (
+                      ) : !isPnd5354CompactList && whtPayeeTinGapCount > 0 ? (
                         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
                           {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
                         </div>
                       ) : null}
+                      {!isPnd5354CompactList ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                         <div>
                           {t("accCompWhtGrossShort")}: {(taxSummary?.wht.totalGross || 0).toLocaleString()}
@@ -6742,6 +6855,7 @@ export function AdminAccountingCompliance({
                           {t("accCompMissingCertNo")}: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}
                         </div>
                       </div>
+                      ) : null}
                     </>
                   ) : null}
                   {showPnd1Area ? (
@@ -6793,7 +6907,7 @@ export function AdminAccountingCompliance({
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
-                    {showWhtLedger ? (
+                    {showWhtLedger && !isPnd5354CompactList ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -6809,7 +6923,7 @@ export function AdminAccountingCompliance({
                         {t("accCompVatAdd")}
                       </Button>
                     ) : null}
-                    {showWhtLedger ? (
+                    {showWhtLedger && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
                       <Button type="button" variant="outline" size="sm" asChild>
                         <a
                           href={whtExportUrl}
@@ -6820,7 +6934,14 @@ export function AdminAccountingCompliance({
                         </a>
                       </Button>
                     ) : null}
-                    {showWhtLedger ? (
+                    {isPnd5354CompactList && pnd5354SubView === "pnd54" ? (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">
+                          {t("accCompPnd54ExportCsv")}
+                        </a>
+                      </Button>
+                    ) : null}
+                    {showWhtLedger && !isPnd5354CompactList ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -6843,7 +6964,7 @@ export function AdminAccountingCompliance({
                         </a>
                       </Button>
                     ) : null}
-                    {showPnd353Tools ? (
+                    {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
                       <Select
                         value={whtSubmissionFormHint}
                         onValueChange={(v) => setWhtSubmissionFormHint(v as "PND3" | "PND53" | "ALL")}
@@ -6858,10 +6979,10 @@ export function AdminAccountingCompliance({
                         </SelectContent>
                       </Select>
                     ) : null}
-                    {showPnd353Tools ? (
+                    {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
                       <Button type="button" variant="outline" size="sm" asChild>
                         <a href={whtSubmissionExportUrl} target="_blank" rel="noopener noreferrer">
-                          신고 제출형 CSV
+                          {t("accCompPnd53SubmissionCsv")}
                         </a>
                       </Button>
                     ) : null}
@@ -6876,7 +6997,7 @@ export function AdminAccountingCompliance({
                         {pnd1Validating ? t("loading") : pnd1ValidateBtnLabel}
                       </Button>
                     ) : null}
-                    {showPnd353Tools ? (
+                    {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -6884,7 +7005,7 @@ export function AdminAccountingCompliance({
                         onClick={() => void runPnd353Validation()}
                         disabled={pnd353Validating}
                       >
-                        {pnd353Validating ? t("loading") : "PND3/53 검증"}
+                        {pnd353Validating ? t("loading") : t("accCompPnd53ValidateBtn")}
                       </Button>
                     ) : null}
                     {showPnd1Area ? (
@@ -6907,7 +7028,7 @@ export function AdminAccountingCompliance({
                       <div>경고 건수: {(pnd353ValidationResult.issues || []).length.toLocaleString()}</div>
                     </div>
                   ) : null}
-                  {(showPp36Ledger || showPnd54Ledger) ? (
+                  {(showPp36Ledger || (showPnd54Ledger && (!isPnd5354CompactList || pnd5354SubView === "pnd54"))) ? (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     {showPp36Ledger ? (
                     <Card>
@@ -6942,30 +7063,68 @@ export function AdminAccountingCompliance({
                     {showPnd54Ledger ? (
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">PND54 원장</CardTitle>
+                        <CardTitle className="text-sm">{t("accCompPnd5354SubPnd54")}</CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
-                            <Plus className="h-3 w-3 mr-1" /> 행 추가
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>조회</Button>
+                      <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "space-y-2"}>
+                        <div className={cn("flex gap-2", isPnd5354CompactList ? "px-4 py-3 border-b border-border/60" : "")}>
+                          {!isPnd5354CompactList ? (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
+                              <Plus className="h-3 w-3 mr-1" /> 행 추가
+                            </Button>
+                          ) : null}
+                          {!isPnd5354CompactList ? (
+                            <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>조회</Button>
+                          ) : null}
                           <Button type="button" size="sm" variant="outline" asChild>
                             <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
                           </Button>
                         </div>
-                        {(pnd54Rows || []).slice(0, 20).map((row, idx) => (
-                          <div key={row.id ?? `pnd54-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
-                            <Input type="date" value={row.payment_date} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payment_date: e.target.value } : x))} />
-                            <Input placeholder="Payee" value={row.payee_name} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payee_name: e.target.value } : x))} />
-                            <Input placeholder="Gross" value={row.gross_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, gross_amount: e.target.value } : x))} />
-                            <Input placeholder="WHT" value={row.wht_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, wht_amount: e.target.value } : x))} />
-                            <div className="col-span-2 flex gap-2 justify-end">
-                              <Button type="button" size="sm" onClick={() => void savePnd54Row(row)}>{t("accCompSave")}</Button>
-                              <Button type="button" size="sm" variant="destructive" onClick={() => void removePnd54(row)}>{t("accCompDelete")}</Button>
+                        {isPnd5354CompactList ? (
+                          <table className="w-full text-xs border-collapse min-w-[720px]">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
+                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompStore")}</th>
+                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhPayee")}</th>
+                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhIncomeType")}</th>
+                                <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtGrossShort")}</th>
+                                <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtWithheldShort")}</th>
+                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColStatus")}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pnd54RowsFiltered.map((row, idx) => (
+                                <tr key={row.id ?? `pnd54-${idx}`} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
+                                  <td className="p-2 whitespace-nowrap tabular-nums">{row.tax_month || row.payment_date}</td>
+                                  <td className="p-2 whitespace-nowrap">{row.store_name || "-"}</td>
+                                  <td className="p-2 max-w-[180px] truncate" title={row.payee_name}>{row.payee_name || "-"}</td>
+                                  <td className="p-2 max-w-[140px] truncate" title={row.income_type}>{row.income_type || "-"}</td>
+                                  <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.gross_amount || 0).toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.wht_amount || 0).toLocaleString()}</td>
+                                  <td className="p-2 whitespace-nowrap">{filingStatusLabel(row.filing_status)}</td>
+                                </tr>
+                              ))}
+                              {!pnd54RowsFiltered.length ? (
+                                <tr>
+                                  <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
+                                </tr>
+                              ) : null}
+                            </tbody>
+                          </table>
+                        ) : (
+                          (pnd54Rows || []).slice(0, 20).map((row, idx) => (
+                            <div key={row.id ?? `pnd54-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
+                              <Input type="date" value={row.payment_date} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payment_date: e.target.value } : x))} />
+                              <Input placeholder="Payee" value={row.payee_name} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payee_name: e.target.value } : x))} />
+                              <Input placeholder="Gross" value={row.gross_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, gross_amount: e.target.value } : x))} />
+                              <Input placeholder="WHT" value={row.wht_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, wht_amount: e.target.value } : x))} />
+                              <div className="col-span-2 flex gap-2 justify-end">
+                                <Button type="button" size="sm" onClick={() => void savePnd54Row(row)}>{t("accCompSave")}</Button>
+                                <Button type="button" size="sm" variant="destructive" onClick={() => void removePnd54(row)}>{t("accCompDelete")}</Button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </CardContent>
                     </Card>
                     ) : null}
@@ -7301,9 +7460,50 @@ export function AdminAccountingCompliance({
                       </div>
                     </div>
                   ) : null}
-                  {showWhtLedger ? (
+                  {showWhtLedger && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
                   <Card>
-                    <CardContent className="p-2 overflow-x-auto space-y-3">
+                    {isPnd5354CompactList ? (
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">{t("accCompPnd5354SubPnd53")}</CardTitle>
+                      </CardHeader>
+                    ) : null}
+                    <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto space-y-3"}>
+                      {isPnd5354CompactList ? (
+                        <table className="w-full text-xs border-collapse min-w-[880px]">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompStore")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhPayee")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhIncomeType")}</th>
+                              <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtGrossShort")}</th>
+                              <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtWithheldShort")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhFormHint")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColStatus")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {whtRowsPnd53Display.map((row, idx) => (
+                              <tr key={row.id ?? `wht-${idx}`} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
+                                <td className="p-2 whitespace-nowrap tabular-nums">{row.tax_month || row.payment_date}</td>
+                                <td className="p-2 whitespace-nowrap">{row.store_name || "-"}</td>
+                                <td className="p-2 max-w-[180px] truncate" title={row.payee_name}>{row.payee_name || "-"}</td>
+                                <td className="p-2 max-w-[140px] truncate" title={row.income_type}>{row.income_type || "-"}</td>
+                                <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.gross_amount || 0).toLocaleString()}</td>
+                                <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.wht_amount || 0).toLocaleString()}</td>
+                                <td className="p-2 whitespace-nowrap">{row.form_hint || "-"}</td>
+                                <td className="p-2 whitespace-nowrap">{filingStatusLabel(row.filing_status)}</td>
+                              </tr>
+                            ))}
+                            {!whtRowsPnd53Display.length ? (
+                              <tr>
+                                <td colSpan={8} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      ) : (
+                      <>
                       {whtRows.map((row, idx) => {
                         if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
                         return (
@@ -7477,6 +7677,8 @@ export function AdminAccountingCompliance({
                       {!whtRowsFiltered.length ? (
                         <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
                       ) : null}
+                      </>
+                      )}
                     </CardContent>
                   </Card>
                   ) : null}
@@ -7498,7 +7700,9 @@ export function AdminAccountingCompliance({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
+                  {!isCitFilingShell ? (
+                    <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
+                  ) : null}
                   <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
                   <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
                 </SelectContent>
@@ -7523,7 +7727,43 @@ export function AdminAccountingCompliance({
                   </SelectContent>
                 </Select>
               </div>
-            ) : !externalFiling ? (
+            ) : isCitFilingShell && periodType === "half_year" ? (
+              <>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompCitFiscalYear")}</div>
+                  <Select
+                    value={String(citFiscalYear)}
+                    onValueChange={(v) => setCitHalfYearControls({ year: Number(v) })}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {citFiscalYearOptions.map((y) => (
+                        <SelectItem key={y} value={String(y)}>
+                          {y}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompCitHalfYearSlot")}</div>
+                  <Select
+                    value={citHalfYearSlot}
+                    onValueChange={(v) => setCitHalfYearControls({ slot: v as "H1" | "H2" })}
+                  >
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="H1">{t("accCompCitHalfH1")}</SelectItem>
+                      <SelectItem value="H2">{t("accCompCitHalfH2")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : !isCitFilingShell ? (
               <div>
                 <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
                 <Input
@@ -7534,7 +7774,7 @@ export function AdminAccountingCompliance({
                 />
               </div>
             ) : null}
-            {isOffice && !externalFiling ? (
+            {isOffice ? (
               <div>
                 <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
                 <Select value={storeTb} onValueChange={setStoreTb}>
@@ -7549,6 +7789,13 @@ export function AdminAccountingCompliance({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            ) : isManager && managerStore ? (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
+                <div className="flex h-9 min-w-[140px] max-w-[220px] items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
+                  <span className="truncate">{managerStore}</span>
+                </div>
               </div>
             ) : null}
             <Button type="button" variant="secondary" onClick={() => void loadCit()} disabled={loading}>
@@ -7589,6 +7836,21 @@ export function AdminAccountingCompliance({
           {citPdfHint ? (
             <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
               {citPdfHint}
+            </div>
+          ) : null}
+          {isCitFilingShell && citData?.months?.length ? (
+            <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs">
+              <div className="text-muted-foreground mb-1">{t("accCompCitPeriodMonths")}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {citData.months.map((m) => (
+                  <span
+                    key={m}
+                    className="inline-flex items-center rounded-md border border-border/60 bg-background px-2 py-0.5 font-mono tabular-nums"
+                  >
+                    {m}
+                  </span>
+                ))}
+              </div>
             </div>
           ) : null}
           <StoreVendorTaxLinkBanner

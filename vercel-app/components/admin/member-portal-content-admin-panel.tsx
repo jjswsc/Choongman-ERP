@@ -67,9 +67,18 @@ const VARIANT_META: Record<
     defaultTargetTab: "home_promo",
     contentType: "info",
   },
+  new_menu: {
+    title: "신메뉴",
+    description:
+      "회원앱 홈 「신메뉴」 가로 목록에 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.",
+    empty: "등록된 신메뉴 콘텐츠가 없습니다.",
+    newLabel: "새 신메뉴",
+    defaultTargetTab: "home_feature",
+    contentType: "info",
+  },
   info: {
     title: "정보·공지",
-    description: "홈 공지·추천 타일(home_feature) 등 텍스트 안내를 관리합니다.",
+    description: "홈 하단 공지 등 텍스트 안내를 관리합니다.",
     empty: "등록된 정보 콘텐츠가 없습니다.",
     newLabel: "새 공지",
     defaultTargetTab: "home",
@@ -79,7 +88,6 @@ const VARIANT_META: Record<
 
 const INFO_TARGET_OPTIONS = [
   { value: "home", label: "홈 · 공지" },
-  { value: "home_feature", label: "홈 · 추천 타일" },
   { value: "location", label: "매장 탭" },
 ] as const
 
@@ -131,6 +139,7 @@ function resolveEditVariant(
   if (variant !== "all") return variant
   if (item.contentType === "popup") return "popup"
   if (item.contentType === "info" && item.targetTab === "home_promo") return "promo"
+  if (item.contentType === "info" && item.targetTab === "home_feature") return "new_menu"
   return "info"
 }
 
@@ -459,11 +468,13 @@ export function MemberPortalContentAdminPanel({
             {formVariant !== "popup" ? (
               <div className="space-y-2">
                 <Label htmlFor="mp-content-target-tab">노출 탭</Label>
-                {formVariant === "promo" ? (
+                {formVariant === "promo" || formVariant === "new_menu" ? (
                   <>
                     <Input id="mp-content-target-tab" value={form.targetTab} readOnly />
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      월별 프로모션은 home_promo로 고정됩니다.
+                      {formVariant === "promo"
+                        ? "월별 프로모션은 home_promo로 고정됩니다."
+                        : "신메뉴는 home_feature로 고정됩니다."}
                     </p>
                   </>
                 ) : (
@@ -481,7 +492,7 @@ export function MemberPortalContentAdminPanel({
                       ))}
                     </select>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      home_feature = 홈 신메뉴·프로모션 타일 / home = 홈 하단 공지
+                      home = 홈 하단 공지 / location = 매장 탭
                     </p>
                   </>
                 )}

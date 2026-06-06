@@ -43,6 +43,9 @@ export type MemberPortalKey =
   | 'homeFeatureLabel'
   | 'homeFeatureEmpty'
   | 'homeFeatureTap'
+  | 'homeNewMenuTitle'
+  | 'homeNewMenuThisMonth'
+  | 'homeNewMenuEmpty'
   | 'homePromoTitle'
   | 'homePromoThisMonth'
   | 'homePromoEmpty'
@@ -389,9 +392,24 @@ const MS: Record<MemberPortalKey, Dict> = {
   tierCurrentBadge: { en: 'Current', th: 'ระดับปัจจุบัน', ko: '현재 등급' },
   tierEarnRate: { en: 'Point earn rate', th: 'อัตราแต้มสะสม', ko: '포인트 적립율' },
   statLifetime: { en: 'Lifetime spend', th: 'ยอดใช้จ่ายสะสม', ko: '누적 이용 금액' },
-  homeFeatureLabel: { en: 'New & promo', th: 'เมนูใหม่·โปร', ko: '신메뉴·프로모션' },
+  homeFeatureLabel: { en: 'New menu', th: 'เมนูใหม่', ko: '신메뉴' },
   homeFeatureEmpty: { en: 'Coming soon', th: 'เร็วๆ นี้', ko: '곧 공개' },
   homeFeatureTap: { en: 'Tap for details', th: 'แตะเพื่อดูรายละเอียด', ko: '탭하여 자세히 보기' },
+  homeNewMenuTitle: {
+    en: 'New menu',
+    th: 'เมนูใหม่',
+    ko: '신메뉴',
+  },
+  homeNewMenuThisMonth: {
+    en: 'This month',
+    th: 'เดือนนี้',
+    ko: '이번 달',
+  },
+  homeNewMenuEmpty: {
+    en: 'No new menu items for this month.',
+    th: 'ยังไม่มีเมนูใหม่ในเดือนนี้',
+    ko: '이 달에 등록된 신메뉴가 없습니다.',
+  },
   homePromoTitle: {
     en: 'Monthly promotions',
     th: 'โปรโมชั่นประจำเดือน',

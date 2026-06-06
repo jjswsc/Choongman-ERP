@@ -66,7 +66,23 @@ export async function GET(request: NextRequest) {
   } else if (storeFilter) effectiveStore = storeFilter
 
   try {
-    let rows: { id: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; balance_after?: number; memo?: string; receipt_url?: string; user_name?: string; account_subject_id?: number }[] = []
+    let rows: {
+      id: number
+      store?: string
+      trans_date?: string
+      trans_type?: string
+      amount?: number
+      balance_after?: number
+      memo?: string
+      receipt_url?: string
+      user_name?: string
+      account_subject_id?: number
+      invoice_received?: boolean
+      invoice_no?: string | null
+      invoice_photo_url?: string | null
+      vat_amount?: number | null
+      vendor_code?: string | null
+    }[] = []
     // 잔액 계산을 위해 날짜순(오래된순) 조회
     if (effectiveStore) {
       if (effectiveStore === 'Office' && !departmentFilter) {
@@ -95,7 +111,24 @@ export async function GET(request: NextRequest) {
 
     // 날짜순(이미 asc 조회됨)으로 잔액 계산 (DB에 balance_after가 없을 수 있음)
     const storeBal: Record<string, number> = {}
-    const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number | null; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null; accountSubjectId?: number | null }[] = []
+    const list: {
+      id: number
+      store: string
+      trans_date: string
+      trans_type: string
+      amount: number
+      balance_after: number | null
+      memo: string
+      receipt_url?: string
+      user_name: string
+      account_subject_id?: number | null
+      accountSubjectId?: number | null
+      invoiceReceived?: boolean
+      invoiceNo?: string
+      invoicePhotoUrl?: string
+      vatAmount?: number
+      vendorCode?: string
+    }[] = []
 
     for (const r of rows || []) {
       const dt = toDateStr(r.trans_date)
@@ -122,6 +155,11 @@ export async function GET(request: NextRequest) {
         user_name: String(r.user_name || '').trim(),
         account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
         accountSubjectId: r.account_subject_id != null ? Number(r.account_subject_id) : null,
+        invoiceReceived: Boolean(r.invoice_received),
+        ...(String(r.invoice_no || '').trim() ? { invoiceNo: String(r.invoice_no).trim() } : {}),
+        ...(String(r.invoice_photo_url || '').trim() ? { invoicePhotoUrl: String(r.invoice_photo_url).trim() } : {}),
+        ...(Number(r.vat_amount || 0) > 0 ? { vatAmount: Number(r.vat_amount) } : {}),
+        ...(String(r.vendor_code || '').trim() ? { vendorCode: String(r.vendor_code).trim() } : {}),
       })
     }
 

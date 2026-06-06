@@ -177,6 +177,10 @@ export async function POST(request: NextRequest) {
 
     const attachmentUrlsJson = normalizeAttachmentUrlsJson(body as { attachmentUrls?: unknown; attachment_urls?: unknown })
 
+    const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
+    const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
+
     const accrualRow: Record<string, unknown> = {
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode,
@@ -190,6 +194,12 @@ export async function POST(request: NextRequest) {
       created_by: userName || null,
       status: 'planned',
       ...(attachmentUrlsJson ? { attachment_urls: attachmentUrlsJson } : {}),
+    }
+    if (typeof invoiceReceived === 'boolean') accrualRow.invoice_received = invoiceReceived
+    if (invoiceNoRaw !== undefined) accrualRow.invoice_no = String(invoiceNoRaw || '').trim() || null
+    if (invoicePhotoRaw !== undefined) {
+      const photo = String(invoicePhotoRaw || '').trim()
+      accrualRow.invoice_photo_url = photo || null
     }
     let subjectCode = '5520'
     let subjectName = '기타경비'

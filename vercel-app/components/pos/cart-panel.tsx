@@ -1724,9 +1724,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     onCustomerDisplayPaymentDraftChange?.(customerDisplayPaymentDraft)
   }, [customerDisplayPaymentDraft, onCustomerDisplayPaymentDraftChange])
-  /** 더치 패널을 열지 않아도: 합계 미달·일부 결제 진행 중이면 수단 탭이 더치 방식(1인분/잔액)으로 동작 */
-  const splitFlowForInputs =
-    showSplit || splitPaidSteps > 0 || (total > 0 && !paymentSumMatch)
+  /** 더치페이·일부 결제 단계가 실제로 진행 중일 때만 금액 누적(add) 입력 */
+  const activeDutchSplitFlow = showSplit || splitPaidSteps > 0
+  /** UI 표시용: 합계 불일치 시에도 잔액·진행 바 등 강조 (금액 입력은 activeDutchSplitFlow일 때만 add) */
+  const splitFlowForInputs = activeDutchSplitFlow || (total > 0 && !paymentSumMatch)
   /** 더치 패널: 인원 고정. 그 외: 일부 결제 단계에 맞춰 인원수를 가정(최소 2) */
   const effectiveDutchCount = showSplit
     ? Math.max(1, Number(splitCount) || 1)
@@ -1936,7 +1937,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     paymentSum,
     round2,
   ])
-  const cashRequiredForTendered = splitFlowForInputs ? currentSplitTargetAmount : cashRequiredAmount
+  const cashRequiredForTendered = activeDutchSplitFlow ? currentSplitTargetAmount : cashRequiredAmount
   const cashChangeAmountForTendered = Math.max(0, cashTenderedNum - cashRequiredForTendered)
   const cashShortAmountForTendered = Math.max(0, cashRequiredForTendered - cashTenderedNum)
   /** 더치·일부 결제 단계: 현금 확정 직후 거스름 안내(최종 결제 완료와 동일 UX) */
@@ -2486,8 +2487,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'unionpay' | 'linepay' | 'shopeepay') => {
-    const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const amount = Math.max(0, st - discount - pointUsedNum)
+    const amount = Math.max(0, round2(total))
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
     const walletToAdmin =
@@ -2708,8 +2708,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const applyFullAmountToSingleAdminLine = (lineId: string) => {
-    const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const amount = Math.max(0, st - discount - pointUsedNum)
+    const amount = Math.max(0, round2(total))
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
     setPayAdminLineAmounts(Object.fromEntries(lines.map((li) => [li.id, li.id === lineId ? String(amount) : '0'])))
@@ -3149,17 +3148,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }, [activePaymentTab])
 
-  // 할인/포인트 변경 시 결제 입력 금액 즉시 반영 (더치페이·일부 분할 입력 중에는 건너뜀)
-  // 기존 합계가 일시적으로 불일치해도 즉시 재정렬해서 "결제 완료" 버튼이 바로 복구되도록 한다.
+  // 협업·수동 할인 등으로 합계가 바뀌면 일반 결제(더치 아님)는 입력 금액을 새 합계로 덮어씀
   useEffect(() => {
-    if (!showPaymentModal || total <= 0 || showSplit) return
-    if (splitPaidSteps > 0) return
-    const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const newTotal = computePosPricing({
-      subtotal: st,
-      discountAmt: discount + pointUsedNum,
-      adjustments: pricingAdjustments,
-    }).finalTotal
+    if (!showPaymentModal || total <= 0 || showSplit || splitPaidSteps > 0) return
+    const newTotal = round2(total)
     resetPaymentInputs()
     if (activePaymentTab === 'cash') {
       setPayCash(String(newTotal))
@@ -3195,12 +3187,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     discountValue,
     discountType,
     pointUsedNum,
+    collabDiscountAmt,
+    appliedCollabId,
     showSplit,
     splitPaidSteps,
-    cartItems,
     pricingAdjustments,
     activePaymentTab,
     useAdminPaymentLines,
+  ])
+
+  /** 더치 패널 없이 할인만 바뀐 경우: 일부 결제 단계·누적 입력 초기화 (협업 할인 후 금액 이중 합산 방지) */
+  useEffect(() => {
+    if (!showPaymentModal || showSplit) return
+    if (splitPaidSteps <= 0) return
+    setSplitPaidSteps(0)
+    splitPaymentsByPersonRef.current = []
+    splitDraftAssignedRef.current = null
+    setSplitCaptureTick((t) => t + 1)
+  }, [
+    showPaymentModal,
+    showSplit,
+    discount,
+    collabDiscountAmt,
+    appliedCollabId,
+    pointUsedNum,
   ])
 
   /**
@@ -3476,6 +3486,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     )
     finalizeSplitPaymentsForReceipt()
     const resolvedPayment = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
+    const finalPaySum = round2(sumCartPanelPaymentSnapshot(resolvedPayment))
+    if (!showSplit && total > 0.005 && !paymentTotalsReconcile(finalPaySum, total)) {
+      scrollToPaymentMethods()
+      return
+    }
     const payDel = resolvedPayment.paymentDeliveryApp ?? 0
     const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
       payDel > 0
@@ -5357,7 +5372,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     )}
                     onClick={() => {
                       setActivePaymentTab(tab.id)
-                      if (splitFlowForInputs) {
+                      if (activeDutchSplitFlow) {
                         addDutchAmountOnly(tab.id as MoveTarget, { replaceCurrentDraft: true })
                         if (tab.id === 'other') setShowOtherPayments(true)
                       } else {
@@ -5419,7 +5434,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           type="button"
                           className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
                           onClick={() =>
-                            splitFlowForInputs
+                            activeDutchSplitFlow
                               ? addDutchAmountOnly(key as MoveTarget, { replaceCurrentDraft: true })
                               : moveAllAmountTo(key as 'cash' | 'card' | 'qr')
                           }
@@ -5496,12 +5511,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         </div>
                         <div className="grid gap-1">
                           <Label className="text-[11px] text-violet-800 dark:text-violet-300">
-                            {splitFlowForInputs
+                            {activeDutchSplitFlow
                               ? tr('posCashRequiredAmountCurrentPerson', '필요 현금(현재 인원)')
                               : tr('posCashRequiredAmount', '필요 현금')}
                           </Label>
                           <div className="h-10 rounded-lg border border-violet-300/60 bg-violet-50/70 px-3 text-right text-base font-bold leading-10 tabular-nums text-violet-800 dark:border-violet-500/40 dark:bg-violet-950/30 dark:text-violet-200">
-                            {splitFlowForInputs
+                            {activeDutchSplitFlow
                               ? formatBahtWhole(cashRequiredForTendered)
                               : `${formatBahtNum(cashRequiredForTendered)} ฿`}
                           </div>
@@ -5511,7 +5526,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             {tr('posCashChangeAmount', '거슬러줄 금액')}
                           </Label>
                           <div className="h-10 rounded-lg border border-emerald-300/60 bg-emerald-50 px-3 text-right text-xl font-extrabold leading-10 tabular-nums text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-950/35 dark:text-emerald-300">
-                            {splitFlowForInputs
+                            {activeDutchSplitFlow
                               ? formatBahtWhole(cashChangeAmountForTendered)
                               : `${formatBahtNum(cashChangeAmountForTendered)} ฿`}
                           </div>
@@ -5535,7 +5550,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         {cashShortAmountForTendered > 0.001 && (
                           <p className="font-medium text-amber-700 dark:text-amber-400">
                             {tr('posCashShortAmount', '추가로 받아야 할 금액')}:{' '}
-                            {splitFlowForInputs
+                            {activeDutchSplitFlow
                               ? formatBahtWhole(cashShortAmountForTendered)
                               : `${formatBahtNum(cashShortAmountForTendered)} ฿`}
                           </p>
@@ -5564,7 +5579,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           type="button"
                           className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
                           onClick={() =>
-                            splitFlowForInputs ? addDutchAmountOnly('delivery_app', { replaceCurrentDraft: true }) : moveAllAmountTo('delivery_app')
+                            activeDutchSplitFlow ? addDutchAmountOnly('delivery_app', { replaceCurrentDraft: true }) : moveAllAmountTo('delivery_app')
                           }
                         >
                           {tr('posPayAllToThisMethod', '이 수단으로 전액')}
@@ -5670,7 +5685,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                     type="button"
                                     className="min-w-0 shrink text-left text-sm font-medium hover:underline"
                                     onClick={() =>
-                                      splitFlowForInputs
+                                      activeDutchSplitFlow
                                         ? addDutchAmountToAdminLine(item.id)
                                         : applyFullAmountToSingleAdminLine(item.id)
                                     }
@@ -5678,7 +5693,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                     {item.name}
                                   </button>
                                 </div>
-                                {splitFlowForInputs && (
+                                {activeDutchSplitFlow && (
                                   <Button
                                     type="button"
                                     size="sm"
@@ -5727,7 +5742,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                 type="button"
                                 className="min-w-0 shrink text-left text-sm font-medium hover:underline"
                                 onClick={() =>
-                                  splitFlowForInputs ? addDutchAmountOnly(moveKey, { replaceCurrentDraft: true }) : moveAllAmountTo(moveKey)
+                                  activeDutchSplitFlow ? addDutchAmountOnly(moveKey, { replaceCurrentDraft: true }) : moveAllAmountTo(moveKey)
                                 }
                               >
                                 {t(labelKey)}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { postPettyCashJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -41,6 +42,10 @@ export async function POST(request: NextRequest) {
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const category = String(body.category || '').toLowerCase()
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
+    const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
+    const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
+    const vatAmountRaw = body.vatAmount ?? body.vat_amount
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0) || null
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const userEmployeeId =
@@ -90,6 +95,17 @@ export async function POST(request: NextRequest) {
       user_employee_code: userEmployeeCode,
     }
     if (receiptUrl) row.receipt_url = receiptUrl
+    if (vendorCode) row.vendor_code = vendorCode
+    if (typeof invoiceReceived === 'boolean') row.invoice_received = invoiceReceived
+    if (invoiceNoRaw !== undefined) row.invoice_no = String(invoiceNoRaw || '').trim() || null
+    if (invoicePhotoRaw !== undefined) {
+      const photo = String(invoicePhotoRaw || '').trim()
+      row.invoice_photo_url = photo || null
+    }
+    if (vatAmountRaw !== undefined) {
+      const v = Math.max(0, Math.abs(Number(vatAmountRaw) || 0))
+      row.vat_amount = v > 0 ? v : null
+    }
     if (accountSubjectId != null) {
       const asid = Number(accountSubjectId)
       if (!isNaN(asid)) {
@@ -108,6 +124,15 @@ export async function POST(request: NextRequest) {
       inserted = (await supabaseInsert('petty_cash_transactions', stripIdentityColumns(row))) as { id?: number }[]
     }
     const pettyCashId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
+
+    const skipPurchaseVat = category === 'purchase_payment' || category === 'purchase_advance'
+    if (pettyCashId && transType === 'expense' && !skipPurchaseVat) {
+      try {
+        await syncPettyCashInvoiceEvidence(Number(pettyCashId), { skipPurchasePayment: skipPurchaseVat })
+      } catch (vatErr) {
+        console.error('addPettyCashTransaction vat ledger:', vatErr)
+      }
+    }
 
     if (transType === 'expense' && category === 'purchase_payment' && vendorCode) {
       await supabaseInsert('payable_transactions', {

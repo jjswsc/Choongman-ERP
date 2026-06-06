@@ -200,6 +200,10 @@ export async function POST(request: NextRequest) {
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)
 
     const attachmentUrlsSerialized = normalizeAttachmentUrlsFromBody(body as Record<string, unknown>)
+    const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
+    const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
+
     const accrualPatch: Record<string, unknown> = {
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode || null,
@@ -215,6 +219,11 @@ export async function POST(request: NextRequest) {
     }
     if (attachmentUrlsSerialized !== undefined) {
       accrualPatch.attachment_urls = attachmentUrlsSerialized
+    }
+    if (typeof invoiceReceived === 'boolean') accrualPatch.invoice_received = invoiceReceived
+    if (invoiceNoRaw !== undefined) accrualPatch.invoice_no = String(invoiceNoRaw || '').trim() || null
+    if (invoicePhotoRaw !== undefined) {
+      accrualPatch.invoice_photo_url = String(invoicePhotoRaw || '').trim() || null
     }
     await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
 
