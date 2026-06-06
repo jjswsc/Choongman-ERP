@@ -1,4 +1,5 @@
 import type { ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { isPosSalesTestOfficeStoreCode } from '@/lib/pos-sales-test-office'
 
 export type MemberPortalStoreDto = {
   storeCode: string
@@ -84,11 +85,21 @@ export function mapErpStoreToMemberPortal(row: ErpStoreMasterRow): MemberPortalS
   }
 }
 
+/** 회원앱 공개 매장 — test·본사(hq/office) 등 비운영 매장 제외 */
+export function isMemberPortalPublicStore(
+  store: Pick<MemberPortalStoreDto, 'storeCode' | 'displayName'>
+): boolean {
+  if (isPosSalesTestOfficeStoreCode(store.storeCode)) return false
+  if (isPosSalesTestOfficeStoreCode(store.displayName)) return false
+  return true
+}
+
 export function memberPortalStoresFromMasters(rows: ErpStoreMasterRow[]): MemberPortalStoreDto[] {
   return rows
     .map(mapErpStoreToMemberPortal)
     .filter((s): s is MemberPortalStoreDto => Boolean(s))
     .filter((s) => s.isActive)
+    .filter(isMemberPortalPublicStore)
     .sort((a, b) => {
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
       return a.displayName.localeCompare(b.displayName, 'ko')

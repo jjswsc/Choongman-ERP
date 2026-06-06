@@ -29,7 +29,11 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'order_failed'
     const status =
-      msg === 'pickup_too_soon' || msg === 'invalid_pickup_time' || msg === 'empty_cart' || msg === 'store_required'
+      msg === 'pickup_too_soon' ||
+      msg === 'invalid_pickup_time' ||
+      msg === 'empty_cart' ||
+      msg === 'store_required' ||
+      msg === 'store_not_available'
         ? 400
         : 500
     return NextResponse.json({ success: false, message: msg }, { status })

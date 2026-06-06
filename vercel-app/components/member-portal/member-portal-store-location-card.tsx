@@ -54,9 +54,6 @@ export function MemberPortalStoreLocationCard({
               <span>{store.address}</span>
             </p>
           ) : null}
-          <p className="mt-1.5 text-[11px] text-white/40">
-            {t("locationCode")} · {store.storeCode}
-          </p>
         </div>
 
         <div className="flex flex-col gap-2">

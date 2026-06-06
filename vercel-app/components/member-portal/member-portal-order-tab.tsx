@@ -914,7 +914,6 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-white">{s.displayName}</p>
-                        <p className="text-[11px] text-white/40">{s.storeCode}</p>
                       </div>
                       {selected ? (
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 text-black">

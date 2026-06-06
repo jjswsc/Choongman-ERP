@@ -1212,7 +1212,9 @@ export function MemberPortalApp() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-medium">{formatBaht(v.total)}</p>
-                          <p className="text-xs text-white/45">{v.storeCode || t("store")} · {v.orderNo || `#${v.orderId}`}</p>
+                          <p className="text-xs text-white/45">
+                            {stores.find((s) => s.storeCode === v.storeCode)?.displayName || t("store")} · {v.orderNo || `#${v.orderId}`}
+                          </p>
                         </div>
                         <p className="text-xs text-white/45">{formatDateTime(v.visitedAt, dateLocale)}</p>
                       </div>

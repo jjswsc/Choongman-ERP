@@ -102,6 +102,57 @@ const LOGIN_LANG_FLAG_EMOJI: Record<LangCode, string> = {
 
 type LoginApp = "erp" | "pos" | "mobile"
 
+/** 마지막 로그인 선택(회사·매장·이름) — PIN은 저장하지 않음 */
+const LOGIN_LAST_SELECTION_KEY = "cm_login_last_selection"
+
+type LoginLastSelection = {
+  company?: string
+  store?: string
+  user?: string
+}
+
+function readLoginLastSelection(): LoginLastSelection | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(LOGIN_LAST_SELECTION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== "object") return null
+    const o = parsed as Record<string, unknown>
+    const company = String(o.company ?? "").trim()
+    const store = String(o.store ?? "").trim()
+    const user = String(o.user ?? "").trim()
+    if (!store && !user && !company) return null
+    return {
+      ...(company ? { company } : {}),
+      ...(store ? { store } : {}),
+      ...(user ? { user } : {}),
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveLoginLastSelection(sel: { company?: string; store: string; user: string }) {
+  if (typeof window === "undefined") return
+  const store = sel.store.trim()
+  const user = sel.user.trim()
+  if (!store || !user) return
+  try {
+    const company = String(sel.company ?? "").trim()
+    localStorage.setItem(
+      LOGIN_LAST_SELECTION_KEY,
+      JSON.stringify({
+        ...(company ? { company } : {}),
+        store,
+        user,
+      })
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
 function normalizeLoginPathname(pathname: string): string {
   const p = (pathname || "/").replace(/\/+$/, "") || "/"
   return p
@@ -176,6 +227,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [hybridPosShell, setHybridPosShell] = useState(false)
   const initialNoticeShownRef = useRef(false)
   const loginAppPrefHydratedRef = useRef(false)
+  const lastLoginSelectionRef = useRef<LoginLastSelection | null>(null)
+  const lastLoginSelectionHydratedRef = useRef(false)
   const companyPrefillAppliedRef = useRef(false)
   const storePrefillAppliedRef = useRef(false)
   const userPrefillAppliedRef = useRef(false)
@@ -210,6 +263,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       /* ignore */
     }
   }, [pathname])
+
+  useLayoutEffect(() => {
+    if (lastLoginSelectionHydratedRef.current) return
+    lastLoginSelectionHydratedRef.current = true
+    lastLoginSelectionRef.current = readLoginLastSelection()
+  }, [])
 
   useEffect(() => {
     const p = normalizeLoginPathname(pathname)
@@ -421,16 +480,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   useEffect(() => {
     if (companyPrefillAppliedRef.current) return
-    if (!queryCompany) {
+    const savedCompany = lastLoginSelectionRef.current?.company || ""
+    const targetCompany = queryCompany || savedCompany
+    if (!targetCompany) {
       companyPrefillAppliedRef.current = true
       return
     }
     if (companies.length === 0) return
-    const found = companies.find((x) => String(x || "").trim().toLowerCase() === queryCompany.toLowerCase())
+    const found = companies.find(
+      (x) => String(x || "").trim().toLowerCase() === targetCompany.toLowerCase()
+    )
     if (found) {
       setCompany(found)
-      setStore("")
-      setUser("")
+      if (queryCompany) {
+        setStore("")
+        setUser("")
+      }
     }
     companyPrefillAppliedRef.current = true
   }, [companies, queryCompany])
@@ -482,6 +547,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         isAdminPage: effectiveIsAdminPage,
       })
       if (res.success && res.storeName && res.userName) {
+        saveLoginLastSelection({
+          company: res.companyName || company || undefined,
+          store: res.storeName,
+          user: res.userName,
+        })
         setAuth({
           ...(res.companyName ? { company: res.companyName } : {}),
           ...(res.tenantId ? { tenantId: res.tenantId } : {}),
@@ -600,28 +670,34 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [loading, company, stores.length, filteredStores.length])
   useEffect(() => {
     if (storePrefillAppliedRef.current) return
-    if (!queryStore) {
+    const savedStore = lastLoginSelectionRef.current?.store || ""
+    const targetStore = queryStore || savedStore
+    if (!targetStore) {
       storePrefillAppliedRef.current = true
       return
     }
     if (filteredStores.length === 0) return
-    const found = filteredStores.find((x) => String(x || "").trim().toLowerCase() === queryStore.toLowerCase())
+    const found = filteredStores.find(
+      (x) => String(x || "").trim().toLowerCase() === targetStore.toLowerCase()
+    )
     if (found) {
       setStore(found)
-      setUser("")
+      if (queryStore) setUser("")
     }
     storePrefillAppliedRef.current = true
   }, [filteredStores, queryStore])
   const users = store ? (loginData[store] || []) : []
   useEffect(() => {
     if (userPrefillAppliedRef.current) return
-    if (!queryUser) {
+    const savedUser = lastLoginSelectionRef.current?.user || ""
+    const targetUser = queryUser || savedUser
+    if (!targetUser) {
       userPrefillAppliedRef.current = true
       return
     }
     if (!store) return
     if (users.length === 0) return
-    const found = users.find((x) => String(x || "").trim().toLowerCase() === queryUser.toLowerCase())
+    const found = users.find((x) => String(x || "").trim().toLowerCase() === targetUser.toLowerCase())
     if (found) setUser(found)
     userPrefillAppliedRef.current = true
   }, [queryUser, store, users])

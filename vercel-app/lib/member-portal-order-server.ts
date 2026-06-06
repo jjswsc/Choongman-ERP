@@ -6,6 +6,7 @@ import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { isMemberPortalPublicStore } from '@/lib/member-portal-stores'
 import type { MemberSummary } from '@/lib/members-server'
 
 export type MemberPortalDeliveryLinks = {
@@ -78,6 +79,9 @@ export async function createMemberPickupOrder(params: {
 }): Promise<{ orderId: number; orderNo: string }> {
   const storeCode = String(params.storeCode || '').trim()
   if (!storeCode) throw new Error('store_required')
+  if (!isMemberPortalPublicStore({ storeCode, displayName: storeCode })) {
+    throw new Error('store_not_available')
+  }
   const itemsIn = (params.items || []).filter((it) => it.qty > 0 && String(it.name || '').trim())
   if (itemsIn.length === 0) throw new Error('empty_cart')
 
