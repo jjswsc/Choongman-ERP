@@ -178,6 +178,10 @@ export type MemberPortalKey =
   | 'showQr'
   | 'hideQr'
   | 'scanAtCounter'
+  | 'membershipQrHint'
+  | 'membershipQrReady'
+  | 'copyMemberNo'
+  | 'memberNoCopied'
   | 'showCouponQr'
   | 'couponQrTitle'
   | 'couponQrHint'
@@ -747,6 +751,26 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Scan at the counter',
     th: 'สแกนที่เคาน์เตอร์',
     ko: '카운터에서 스캔',
+  },
+  membershipQrHint: {
+    en: 'Present this screen at checkout for staff to scan',
+    th: 'แสดงหน้านี้ที่เคาน์เตอร์เพื่อให้พนักงานสแกน',
+    ko: '결제 시 이 화면을 카운터에 보여 주세요',
+  },
+  membershipQrReady: {
+    en: 'Ready to scan',
+    th: 'พร้อมสแกน',
+    ko: '스캔 준비 완료',
+  },
+  copyMemberNo: {
+    en: 'Copy member no.',
+    th: 'คัดลอกหมายเลขสมาชิก',
+    ko: '회원번호 복사',
+  },
+  memberNoCopied: {
+    en: 'Copied',
+    th: 'คัดลอกแล้ว',
+    ko: '복사됨',
   },
   showCouponQr: { en: 'Show QR', th: 'แสดง QR', ko: 'QR 보기' },
   couponQrTitle: { en: 'Coupon QR', th: 'QR คูปอง', ko: '쿠폰 QR' },

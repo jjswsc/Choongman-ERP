@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Image from "next/image"
-import QRCode from "qrcode"
 import {
   ChevronRight,
   Copy,
@@ -41,6 +40,7 @@ import { MemberPortalHomeMonthlyPromos } from "@/components/member-portal/member
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
+import { buildMemberPortalQrDataUrl } from "@/lib/member-portal-qr"
 import { MemberPortalCouponQrButton } from "@/components/member-portal/member-portal-coupon-qr-sheet"
 import {
   MemberPortalTierBenefits,
@@ -198,6 +198,7 @@ export function MemberPortalApp() {
   const [tierGuideOpen, setTierGuideOpen] = React.useState(false)
   const [selectedHomePromo, setSelectedHomePromo] = React.useState<MemberPortalContentItem | null>(null)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
+  const [qrLoading, setQrLoading] = React.useState(false)
   const [profile, setProfile] = React.useState<PortalProfileForm>({
     name: "",
     birthDate: "",
@@ -367,10 +368,26 @@ export function MemberPortalApp() {
   }, [lang, loadSession, t])
 
   React.useEffect(() => {
-    if (!member?.memberNo) return
-    QRCode.toDataURL(member.memberNo, { width: 360, margin: 1, errorCorrectionLevel: "H" })
-      .then(setQrDataUrl)
-      .catch(() => setQrDataUrl(""))
+    if (!member?.memberNo) {
+      setQrDataUrl("")
+      setQrLoading(false)
+      return
+    }
+    let cancelled = false
+    setQrLoading(true)
+    buildMemberPortalQrDataUrl(member.memberNo)
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url)
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl("")
+      })
+      .finally(() => {
+        if (!cancelled) setQrLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [member?.memberNo])
 
   const loginWithPhoneBirth = async () => {
@@ -926,6 +943,7 @@ export function MemberPortalApp() {
               member={member}
               dashboard={activeDashboard}
               qrDataUrl={qrDataUrl}
+              qrLoading={qrLoading}
               showQr={showQr}
               onToggleQr={() => setShowQr((v) => !v)}
             />
@@ -1194,7 +1212,9 @@ export function MemberPortalApp() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-medium">{formatBaht(v.total)}</p>
-                          <p className="text-xs text-white/45">{v.storeCode || t("store")} · {v.orderNo || `#${v.orderId}`}</p>
+                          <p className="text-xs text-white/45">
+                            {stores.find((s) => s.storeCode === v.storeCode)?.displayName || t("store")} · {v.orderNo || `#${v.orderId}`}
+                          </p>
                         </div>
                         <p className="text-xs text-white/45">{formatDateTime(v.visitedAt, dateLocale)}</p>
                       </div>

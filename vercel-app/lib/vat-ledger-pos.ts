@@ -48,14 +48,12 @@ export function consolidatePosOutputRowsForTaxExport(rows: VatLedgerRow[]): VatL
     let vat = 0
     let total = 0
     let maxDoc = ''
-    const ids: number[] = []
     for (const r of list) {
       net += num(r.net_amount)
       vat += num(r.vat_amount)
       total += num(r.total_amount)
       const d = String(r.doc_date || '')
       if (d && d > maxDoc) maxDoc = d
-      if (r.id != null && Number(r.id) > 0) ids.push(Number(r.id))
     }
     const filing = normalizeFilingStatus(list)
     merged.push({
@@ -73,7 +71,7 @@ export function consolidatePosOutputRowsForTaxExport(rows: VatLedgerRow[]): VatL
       filing_status: filing,
       submitted_at: undefined,
       submitted_by: undefined,
-      memo: `[AGG:POS_ORDER_ROWS:${list.length}건] 원장 id: ${ids.slice(0, 12).join(',')}${ids.length > 12 ? '…' : ''}`,
+      memo: null,
       store_name: null,
     })
   }

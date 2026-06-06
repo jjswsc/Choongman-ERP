@@ -67,9 +67,20 @@ import {
 } from "@/lib/income-statement-export"
 import { formatBahtInteger as formatBath, roundFinancialAmount } from "@/lib/financial-amount-format"
 import {
-  accountingFinancialRowCn,
-  accountingFinancialTableCn,
-  accountingFinancialTheadCn,
+  accountingPlDocumentCn,
+  accountingPlGrossProfitRowCn,
+  accountingPlNetProfitRowCn,
+  accountingPlSubRowCn,
+  accountingPlSubTdLabelCn,
+  accountingPlTableCn,
+  accountingPlTableShellCn,
+  accountingPlTdAmountCn,
+  accountingPlTdLabelCn,
+  accountingPlTdPctCn,
+  accountingPlTheadCn,
+  accountingPlThCn,
+  accountingPlThRightCn,
+  accountingPlTitleCn,
 } from "@/lib/accounting-result-ui"
 import {
   AccountingEmptyState,
@@ -825,8 +836,8 @@ function IncomePlDetailTableContent({
   onToggleExpenseAccounts,
   printRef,
   purchaseDrillContext,
-  titleClassName = "text-lg font-semibold mb-1",
-  wrapperClassName = "rounded-md bg-white p-3 text-foreground",
+  titleClassName = accountingPlTitleCn,
+  wrapperClassName = accountingPlDocumentCn,
 }: {
   data: IncomeStatementData
   view: IncomeStatementViewModel
@@ -903,8 +914,10 @@ function IncomePlDetailTableContent({
 
   return (
     <div ref={printRef ?? undefined} className={wrapperClassName}>
-      <div className={titleClassName}>{t("incomeStatementTitle")}</div>
-      <AccountingPeriodChip className="mb-3">{periodLine}</AccountingPeriodChip>
+      <div className="mb-5 space-y-2 border-b border-border/50 pb-4">
+        <div className={titleClassName}>{t("incomeStatementTitle")}</div>
+        <AccountingPeriodChip>{periodLine}</AccountingPeriodChip>
+      </div>
       {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
         <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {data.diagnostics?.warnings?.join(" / ")}
@@ -971,25 +984,30 @@ function IncomePlDetailTableContent({
           </ul>
         </div>
       )}
-      <div className="overflow-x-auto rounded-lg border border-border/80 bg-card shadow-sm">
-      <table className={`${accountingFinancialTableCn} max-w-md w-full`}>
+      <div className={accountingPlTableShellCn}>
+      <table className={accountingPlTableCn}>
+        <colgroup>
+          <col className="w-[52%]" />
+          <col className="w-[30%]" />
+          <col className="w-[18%]" />
+        </colgroup>
         <thead>
-          <tr className={accountingFinancialTheadCn}>
-            <th className="py-2.5 text-left font-medium pl-3"></th>
-            <th className="py-2.5 text-right font-medium pr-3">{t("pL_colAmount") || "Amount"}</th>
-            <th className="py-2.5 text-right font-medium w-14 pr-3">{t("pL_pctOfSales")}</th>
+          <tr className={accountingPlTheadCn}>
+            <th className={accountingPlThCn}></th>
+            <th className={accountingPlThRightCn}>{t("pL_colAmount") || "Amount"}</th>
+            <th className={accountingPlThRightCn}>{t("pL_pctOfSales")}</th>
           </tr>
         </thead>
         <tbody>
           {incomeStatementSalesBreakdown(data).length > 0 ? (
             <>
               <tr
-                className="border-b cursor-pointer hover:bg-muted/40 select-none"
+                className="border-b border-border/50 cursor-pointer transition-colors hover:bg-muted/35 select-none"
                 onClick={onToggleSales}
                 title={t("pL_clickToExpand") || ""}
               >
-                <td className="py-2 font-medium">
-                  <span className="inline-flex items-center gap-1">
+                <td className={`${accountingPlTdLabelCn} font-semibold`}>
+                  <span className="inline-flex items-center gap-1.5">
                     {expandSales ? (
                       <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
                     ) : (
@@ -998,43 +1016,43 @@ function IncomePlDetailTableContent({
                     {t("pL_sales")}
                   </span>
                 </td>
-                <td className="py-2 text-right font-mono pr-2">{formatBath(view.sales)}</td>
-                <td className="py-2 text-right text-muted-foreground">100.0%</td>
+                <td className={`${accountingPlTdAmountCn} font-semibold`}>{formatBath(view.sales)}</td>
+                <td className={accountingPlTdPctCn}>100.0%</td>
               </tr>
               {expandSales &&
                 incomeStatementSalesBreakdown(data).map((row) => (
-                  <tr key={row.key} className="border-b bg-muted/20">
-                    <td className="py-1.5 text-muted-foreground pl-10 text-xs">
+                  <tr key={row.key} className={accountingPlSubRowCn}>
+                    <td className={accountingPlSubTdLabelCn}>
                       {salesBreakdownRowLabel(row, t, salesBreakdownIsDaily(data))}
                     </td>
-                    <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
+                    <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                       {formatBath(row.amount)}
                     </td>
-                    <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
+                    <td className={`${accountingPlTdPctCn} text-xs`}>{view.pct(row.amount)}</td>
                   </tr>
                 ))}
             </>
           ) : (
-            <tr className="border-b">
-              <td className="py-2 font-medium">{t("pL_sales")}</td>
-              <td className="py-2 text-right font-mono pr-2">{formatBath(view.sales)}</td>
-              <td className="py-2 text-right text-muted-foreground">100.0%</td>
+            <tr className="border-b border-border/50">
+              <td className={`${accountingPlTdLabelCn} font-semibold`}>{t("pL_sales")}</td>
+              <td className={`${accountingPlTdAmountCn} font-semibold`}>{formatBath(view.sales)}</td>
+              <td className={accountingPlTdPctCn}>100.0%</td>
             </tr>
           )}
-          <tr className="border-b">
-            <td className="py-2 text-muted-foreground pl-4">+ {t("pL_beginningInv")}</td>
-            <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+          <tr className="border-b border-border/50">
+            <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground`}>+ {t("pL_beginningInv")}</td>
+            <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
               {formatBath(view.beginningInventory)}
             </td>
-            <td className="py-2 text-right text-muted-foreground">{view.pct(view.beginningInventory)}</td>
+            <td className={accountingPlTdPctCn}>{view.pct(view.beginningInventory)}</td>
           </tr>
           <tr
-            className="border-b cursor-pointer hover:bg-muted/40 select-none"
+            className="border-b border-border/50 cursor-pointer transition-colors hover:bg-muted/35 select-none"
             onClick={onTogglePurchases}
             title={t("pL_clickToExpand") || ""}
           >
-            <td className="py-2 text-muted-foreground pl-4">
-              <span className="inline-flex items-center gap-1">
+            <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground`}>
+              <span className="inline-flex items-center gap-1.5">
                 {expandPurchases ? (
                   <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
                 ) : (
@@ -1043,8 +1061,8 @@ function IncomePlDetailTableContent({
                 + {t("pL_purchases")}
               </span>
             </td>
-            <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(data.purchases)}</td>
-            <td className="py-2 text-right text-muted-foreground">{view.pct(data.purchases)}</td>
+            <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>{formatBath(data.purchases)}</td>
+            <td className={accountingPlTdPctCn}>{view.pct(data.purchases)}</td>
           </tr>
           {expandPurchases &&
             (data.purchaseByVendor?.length || 0) > 0 &&
@@ -1053,54 +1071,54 @@ function IncomePlDetailTableContent({
                 key={row.key}
                 className={
                   purchaseDrillContext?.yearMonth
-                    ? "border-b bg-muted/20 cursor-pointer hover:bg-muted/40"
-                    : "border-b bg-muted/20"
+                    ? `${accountingPlSubRowCn} cursor-pointer transition-colors hover:bg-muted/40`
+                    : accountingPlSubRowCn
                 }
                 onClick={purchaseDrillContext?.yearMonth ? () => openPurchaseDrill(row) : undefined}
                 title={
                   purchaseDrillContext?.yearMonth ? t("pL_purchaseDrillClickHint") : undefined
                 }
               >
-                <td className="py-1.5 text-muted-foreground pl-10 text-xs">{purchaseVendorRowLabel(row, t)}</td>
-                <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
+                <td className={accountingPlSubTdLabelCn}>{purchaseVendorRowLabel(row, t)}</td>
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(row.amount)}
                 </td>
-                <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
+                <td className={`${accountingPlTdPctCn} text-xs`}>{view.pct(row.amount)}</td>
               </tr>
             ))}
           {expandPurchases && !(data.purchaseByVendor?.length || 0) && (
-            <tr className="border-b bg-muted/20">
-              <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
+            <tr className={accountingPlSubRowCn}>
+              <td colSpan={3} className={`${accountingPlSubTdLabelCn} py-2.5`}>
                 {t("inNoData") || "No data found."}
               </td>
             </tr>
           )}
-          <tr className="border-b">
-            <td className="py-2 text-muted-foreground pl-4">- {t("pL_endingInv")}</td>
-            <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+          <tr className="border-b border-border/50">
+            <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground`}>- {t("pL_endingInv")}</td>
+            <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
               {formatBath(data.endingInventory ?? 0)}
             </td>
-            <td className="py-2 text-right text-muted-foreground">{view.pct(-(data.endingInventory ?? 0))}</td>
+            <td className={accountingPlTdPctCn}>{view.pct(-(data.endingInventory ?? 0))}</td>
           </tr>
-          <tr className="border-b">
-            <td className="py-2 text-muted-foreground">= {t("pL_cogs")}</td>
-            <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(view.cogs)}</td>
-            <td className="py-2 text-right text-muted-foreground">{view.pct(view.cogs)}</td>
+          <tr className="border-b border-border/50 bg-muted/10">
+            <td className={`${accountingPlTdLabelCn} font-medium text-muted-foreground`}>= {t("pL_cogs")}</td>
+            <td className={`${accountingPlTdAmountCn} font-medium text-muted-foreground`}>{formatBath(view.cogs)}</td>
+            <td className={`${accountingPlTdPctCn} font-medium`}>{view.pct(view.cogs)}</td>
           </tr>
-          <tr className="border-b">
-            <td className="py-2 font-medium text-primary">{t("pL_grossProfit")}</td>
-            <td className="py-2 text-right font-mono font-medium text-primary pr-2">
+          <tr className={accountingPlGrossProfitRowCn}>
+            <td className={`${accountingPlTdLabelCn} font-semibold text-primary`}>{t("pL_grossProfit")}</td>
+            <td className={`${accountingPlTdAmountCn} font-semibold text-primary`}>
               {formatBath(view.grossProfit)}
             </td>
-            <td className="py-2 text-right text-primary font-medium">{view.pct(view.grossProfit)}</td>
+            <td className={`${accountingPlTdPctCn} font-semibold text-primary`}>{view.pct(view.grossProfit)}</td>
           </tr>
           <tr
-            className="border-b cursor-pointer hover:bg-muted/40 select-none"
+            className="border-b border-border/50 cursor-pointer transition-colors hover:bg-muted/35 select-none"
             onClick={onToggleExpenseAccounts}
             title={t("pL_clickToExpand") || ""}
           >
-            <td className="py-2 text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
+            <td className={`${accountingPlTdLabelCn} text-muted-foreground`}>
+              <span className="inline-flex items-center gap-1.5">
                 {expandExpenseAccounts ? (
                   <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
                 ) : (
@@ -1109,8 +1127,8 @@ function IncomePlDetailTableContent({
                 - {t("pL_expenses")}
               </span>
             </td>
-            <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(data.expenses)}</td>
-            <td className="py-2 text-right text-muted-foreground">{view.pct(data.expenses)}</td>
+            <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>{formatBath(data.expenses)}</td>
+            <td className={accountingPlTdPctCn}>{view.pct(data.expenses)}</td>
           </tr>
           {expandExpenseAccounts &&
             (data.expenseByAccountSubject?.length || 0) > 0 &&
@@ -1119,13 +1137,13 @@ function IncomePlDetailTableContent({
                 key={`${row.accountSubjectId ?? "u"}-${idx}`}
                 className={
                   purchaseDrillContext?.yearMonth
-                    ? "border-b bg-muted/20 cursor-pointer hover:bg-muted/40"
-                    : "border-b bg-muted/20"
+                    ? `${accountingPlSubRowCn} cursor-pointer transition-colors hover:bg-muted/40`
+                    : accountingPlSubRowCn
                 }
                 onClick={purchaseDrillContext?.yearMonth ? () => openExpenseDrill(row) : undefined}
                 title={purchaseDrillContext?.yearMonth ? t("pL_expenseDrillClickHint") : undefined}
               >
-                <td className="py-1.5 text-muted-foreground pl-10 text-xs">
+                <td className={accountingPlSubTdLabelCn}>
                   {row.accountSubjectId == null
                     ? t("pL_accountUnclassified") || "Unclassified account"
                     : formatAccountSubjectLabel(lang, {
@@ -1135,82 +1153,92 @@ function IncomePlDetailTableContent({
                         nameTh: row.nameTh,
                       }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")}
                 </td>
-                <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(row.amount)}
                 </td>
-                <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
+                <td className={`${accountingPlTdPctCn} text-xs`}>{view.pct(row.amount)}</td>
               </tr>
             ))}
           {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
-            <tr className="border-b bg-muted/20">
-              <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
+            <tr className={accountingPlSubRowCn}>
+              <td colSpan={3} className={`${accountingPlSubTdLabelCn} py-2.5`}>
                 {t("inNoData") || "No data found."}
               </td>
             </tr>
           )}
           {showExpenseDetails && (
             <>
-              <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourcePetty") || "Petty Cash"}</td>
-                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+              <tr className="border-b border-border/40">
+                <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground text-xs`}>
+                  - {t("pL_expenseSourcePetty") || "Petty Cash"}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className={`${accountingPlTdPctCn} text-xs`}>
                   {view.pct(data.expenseBreakdown?.pettyCash ?? 0)}
                 </td>
               </tr>
-              <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceBank") || "Bank Withdrawal"}</td>
-                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+              <tr className="border-b border-border/40">
+                <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground text-xs`}>
+                  - {t("pL_expenseSourceBank") || "Bank Withdrawal"}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className={`${accountingPlTdPctCn} text-xs`}>
                   {view.pct(data.expenseBreakdown?.bankWithdraw ?? 0)}
                 </td>
               </tr>
-              <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">
+              <tr className="border-b border-border/40">
+                <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground text-xs`}>
                   - {t("pL_expenseSourceDeliveryApps")}
                 </td>
-                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.deliveryAppFees ?? 0)}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className={`${accountingPlTdPctCn} text-xs`}>
                   {view.pct(data.expenseBreakdown?.deliveryAppFees ?? 0)}
                 </td>
               </tr>
-              <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">
+              <tr className="border-b border-border/40">
+                <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground text-xs`}>
                   - {t("pL_expenseSourceCardFees")}
                 </td>
-                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.cardFees ?? 0)}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className={`${accountingPlTdPctCn} text-xs`}>
                   {view.pct(data.expenseBreakdown?.cardFees ?? 0)}
                 </td>
               </tr>
-              <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceFixed") || "Fixed Cost"}</td>
-                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+              <tr className="border-b border-border/40">
+                <td className={`${accountingPlTdLabelCn} pl-8 text-muted-foreground text-xs`}>
+                  - {t("pL_expenseSourceFixed") || "Fixed Cost"}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className={`${accountingPlTdPctCn} text-xs`}>
                   {view.pct(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
               </tr>
             </>
           )}
-          <tr>
-            <td className="py-3 font-bold">{t("pL_netProfit")}</td>
+          <tr className={accountingPlNetProfitRowCn}>
+            <td className={`${accountingPlTdLabelCn} py-3.5 text-base font-bold`}>{t("pL_netProfit")}</td>
             <td
-              className={`py-3 text-right font-mono font-bold pr-2 ${
+              className={`${accountingPlTdAmountCn} py-3.5 text-base font-bold ${
                 view.netProfit >= 0 ? "text-primary" : "text-destructive"
               }`}
             >
               {formatBath(view.netProfit)}
             </td>
-            <td className={`py-3 text-right font-bold ${view.netProfit >= 0 ? "text-primary" : "text-destructive"}`}>
+            <td
+              className={`${accountingPlTdPctCn} py-3.5 text-base font-bold ${
+                view.netProfit >= 0 ? "text-primary" : "text-destructive"
+              }`}
+            >
               {view.pct(view.netProfit)}
             </td>
           </tr>
@@ -3300,7 +3328,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 </div>
               ) : null}
               {!isRangeCompare && isIncomeStatementData(data) && !data.error && view ? (
-                <div className="overflow-x-auto">
+                <div className="flex justify-center px-1 sm:px-2">
                   <IncomePlDetailTableContent
                     data={data}
                     view={view}

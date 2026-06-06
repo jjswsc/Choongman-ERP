@@ -113,13 +113,98 @@ export function isEmployeeSsoExemptFlag(raw: unknown): boolean {
   return raw === true || raw === 'true' || raw === 1 || raw === '1'
 }
 
-/** SSO 미가입·면제 인력 급여/용역 3% 원천세. 급여 화면은 정수 바트로 운용한다. */
+/** SSO 미가입·면제 인력 급여/용역 3% 원천세 (PND3). 급여 화면은 정수 바트로 운용한다. */
 export const PAYROLL_WITHHOLDING_TAX_RATE = 0.03
+
+/** 태국 근로소득(40(1)) PND1 월 원천징수 — 연간화 공제 상수 */
+export const THAI_PIT_PERSONAL_ALLOWANCE_YEAR = 60_000
+export const THAI_PIT_EMPLOYMENT_EXPENSE_MAX_YEAR = 100_000
+export const THAI_PIT_EMPLOYMENT_EXPENSE_RATE = 0.5
+
+/** 태국 개인소득세 누진세율 (연 과세표준, 바트) */
+export const THAI_PIT_BRACKETS: { upTo: number; rate: number }[] = [
+  { upTo: 150_000, rate: 0 },
+  { upTo: 300_000, rate: 0.05 },
+  { upTo: 500_000, rate: 0.1 },
+  { upTo: 750_000, rate: 0.15 },
+  { upTo: 1_000_000, rate: 0.2 },
+  { upTo: 2_000_000, rate: 0.25 },
+  { upTo: 5_000_000, rate: 0.3 },
+  { upTo: Number.POSITIVE_INFINITY, rate: 0.35 },
+]
+
+export type PayrollWithholdingTaxForm = 'PND3' | 'PND1'
+
+export function calcThaiProgressiveIncomeTaxAnnual(annualNetTaxable: number): number {
+  const base = Math.max(0, Math.floor(Number(annualNetTaxable) || 0))
+  if (base <= 0) return 0
+  let tax = 0
+  let prev = 0
+  for (const bracket of THAI_PIT_BRACKETS) {
+    const cap = bracket.upTo
+    const bandTop = Math.min(base, cap)
+    const band = bandTop - prev
+    if (band > 0) tax += band * bracket.rate
+    prev = cap
+    if (base <= cap) break
+  }
+  return tax
+}
+
+export function breakdownPayrollPnd1Withholding(
+  monthlyGrossBeforeSso: number,
+  monthlySsoEmployee: number
+): {
+  monthlyTax: number
+  monthlyAssessable: number
+  annualTaxableNet: number
+  annualTax: number
+} {
+  const gross = Math.max(0, Math.floor(Number(monthlyGrossBeforeSso) || 0))
+  const sso = Math.max(0, Math.floor(Number(monthlySsoEmployee) || 0))
+  const monthlyAssessable = Math.max(0, gross - sso)
+  const annualAssessable = monthlyAssessable * 12
+  const expenseDed = Math.min(
+    annualAssessable * THAI_PIT_EMPLOYMENT_EXPENSE_RATE,
+    THAI_PIT_EMPLOYMENT_EXPENSE_MAX_YEAR
+  )
+  const annualTaxableNet = Math.max(
+    0,
+    annualAssessable - expenseDed - THAI_PIT_PERSONAL_ALLOWANCE_YEAR
+  )
+  const annualTax = calcThaiProgressiveIncomeTaxAnnual(annualTaxableNet)
+  const monthlyTax = Math.round(annualTax / 12)
+  return { monthlyTax, monthlyAssessable, annualTaxableNet, annualTax }
+}
+
+/** SSO 가입 근로자 PND1 월 원천징수 (40(1) 연간화·50% 경비·6만 공제·누진세 ÷12) */
+export function calcPayrollWithholdingTaxPnd1Monthly(
+  monthlyGrossBeforeSso: number,
+  monthlySsoEmployee: number
+): number {
+  return breakdownPayrollPnd1Withholding(monthlyGrossBeforeSso, monthlySsoEmployee).monthlyTax
+}
 
 export function calcPayrollWithholdingTax3Percent(grossPayBeforeTax: number): number {
   const base = Math.max(0, Number(grossPayBeforeTax) || 0)
   if (base <= 0) return 0
   return Math.round(base * PAYROLL_WITHHOLDING_TAX_RATE)
+}
+
+export function resolvePayrollWithholdingTax(params: {
+  ssoExempt: boolean
+  monthlyGrossBeforeSso: number
+  monthlySso: number
+}): { tax: number; form: PayrollWithholdingTaxForm } {
+  const gross = Math.max(0, Number(params.monthlyGrossBeforeSso) || 0)
+  if (params.ssoExempt) {
+    return { tax: calcPayrollWithholdingTax3Percent(gross), form: 'PND3' }
+  }
+  const sso = Math.max(0, Number(params.monthlySso) || 0)
+  return {
+    tax: calcPayrollWithholdingTaxPnd1Monthly(gross, sso),
+    form: 'PND1',
+  }
 }
 
 export function ssoContributionBaseWage(isHourly: boolean, salAmt: number, hourlyMonthBaseSalary: number): number {

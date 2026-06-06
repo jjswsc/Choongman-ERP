@@ -80,6 +80,9 @@ import {
   validatePnd3Pnd53,
   saveCorporateTaxAdjustments,
   getPayrollWhtTinGaps,
+  getPnd91AnnualSummary,
+  getExportPnd91AnnualCsvUrl,
+  type Pnd91AnnualSummaryResult,
   type ValidatePnd1RdPrepResult,
   type ValidatePnd3Pnd53Result,
   getHeadOfficeInfo,
@@ -160,6 +163,12 @@ import {
   SSO_ESERVICE_BULK_COLUMN_HELP,
 } from "@/lib/thai-sso-eservice-bulk-export"
 import { type SsoFilingWageMode } from "@/lib/payroll-utils"
+import {
+  readPnd91ChecklistEntry,
+  readPnd91ChecklistForScope,
+  writePnd91ChecklistEntry,
+  type Pnd91ChecklistStatus,
+} from "@/lib/pnd91-checklist-storage"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 import {
@@ -1052,6 +1061,9 @@ export function AdminAccountingCompliance({
   const [pnd1IssueFilterCodes, setPnd1IssueFilterCodes] = React.useState<Pnd1IssueCode[]>([])
   const [payrollTinGapLoading, setPayrollTinGapLoading] = React.useState(false)
   const [payrollTinGapResult, setPayrollTinGapResult] = React.useState<PayrollWhtTinGapResult | null>(null)
+  const [pnd91Loading, setPnd91Loading] = React.useState(false)
+  const [pnd91Summary, setPnd91Summary] = React.useState<Pnd91AnnualSummaryResult | null>(null)
+  const [pnd91ChecklistTick, setPnd91ChecklistTick] = React.useState(0)
   const whtRowRefs = React.useRef<Record<number, HTMLDivElement | null>>({})
   const [kt20kYear, setKt20kYear] = React.useState(() => getBangkokRecentYearMonths(1)[0].slice(0, 4))
   const [kt20kLoading, setKt20kLoading] = React.useState(false)
@@ -2472,6 +2484,7 @@ export function AdminAccountingCompliance({
     setVatRows([])
     setWhtRows([])
     setTaxSummary(null)
+    setPnd91Summary(null)
   }, [
     taxMonth,
     storeFilterForApi,
@@ -4184,6 +4197,55 @@ export function AdminAccountingCompliance({
       setPayrollTinGapLoading(false)
     }
   }, [canUse, role, taxMonth, periodType, storeFilterForLedger, t])
+
+  const pnd91Year = React.useMemo(() => {
+    const y = Number(String(taxMonth || "").slice(0, 4))
+    return Number.isFinite(y) && y >= 2000 && y <= 2100 ? y : null
+  }, [taxMonth])
+
+  const loadPnd91 = React.useCallback(async () => {
+    if (!canUse || !showPnd1Area || pnd91Year == null) return
+    setPnd91Loading(true)
+    try {
+      const data = await getPnd91AnnualSummary({ year: pnd91Year, storeFilter: storeFilterForApi })
+      if (!data.success) throw new Error(data.error || "LOAD_FAILED")
+      setPnd91Summary(data)
+    } catch {
+      setPnd91Summary(null)
+      appAlert(t("accCompLoadFail"))
+    } finally {
+      setPnd91Loading(false)
+    }
+  }, [canUse, showPnd1Area, pnd91Year, storeFilterForApi, t])
+
+  const pnd91ExportUrl = React.useMemo(() => {
+    if (pnd91Year == null) return "#"
+    const checklist = readPnd91ChecklistForScope(pnd91Year, storeFilterForApi)
+    const map = Object.fromEntries(
+      Object.entries(checklist).map(([k, v]) => [k, { status: v.status, note: v.note }])
+    )
+    return getExportPnd91AnnualCsvUrl({
+      year: pnd91Year,
+      storeFilter: storeFilterForApi,
+      checklistJson: JSON.stringify(map),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tick forces URL refresh after checklist edits
+  }, [pnd91Year, storeFilterForApi, pnd91ChecklistTick])
+
+  React.useEffect(() => {
+    if (!canUse || tab !== "summary" || !pp30Queried || pp30SubView !== "wht" || !showPnd1Area) return
+    void loadPnd91()
+  }, [
+    canUse,
+    tab,
+    pp30Queried,
+    pp30SubView,
+    showPnd1Area,
+    taxMonth,
+    storeFilterForApi,
+    pp30SearchSeq,
+    loadPnd91,
+  ])
 
   const storeOptionLabel = React.useCallback(
     (code: string) => (code === "All" ? t("all") : formatStoreLabel(code) || code),
@@ -5927,9 +5989,6 @@ export function AdminAccountingCompliance({
                                 <div className="text-right tabular-nums font-medium">
                                   {Number(row.total_amount || 0).toLocaleString()}
                                 </div>
-                                <div className="col-span-2 sm:col-span-4 text-[10px] text-muted-foreground break-all">
-                                  {String(row.memo || "")}
-                                </div>
                               </div>
                             ))}
                           </div>
@@ -6926,6 +6985,131 @@ export function AdminAccountingCompliance({
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
+                  ) : null}
+                  {showPnd1Area ? (
+                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="text-sm font-medium">{t("accCompPnd91Title")}</div>
+                          <p className="text-xs text-muted-foreground">{t("taxFilingNotePnd91Annual")}</p>
+                          <p className="text-xs text-muted-foreground">{t("accCompPnd91ChecklistLocalNote")}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={pnd91Loading || pnd91Year == null}
+                            onClick={() => void loadPnd91()}
+                          >
+                            {pnd91Loading ? t("loading") : t("accCompPnd91Load")}
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" asChild disabled={pnd91Year == null}>
+                            <a href={pnd91ExportUrl} target="_blank" rel="noopener noreferrer">
+                              <Download className="h-3 w-3 mr-1" />
+                              {t("accCompPnd91ExportCsv")}
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                      {pnd91Year != null ? (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>
+                            {t("holiday_year")}: {pnd91Year}
+                          </span>
+                          <span>
+                            {t("accCompPnd91FilingDue")}:{" "}
+                            {pnd91Summary?.filingDueDate || `${pnd91Year + 1}-03-31`}
+                          </span>
+                          {pnd91Summary ? (
+                            <span>
+                              {t("accCompPnd91SummaryEmployees")}:{" "}
+                              {pnd91Summary.totals.employeeCount.toLocaleString()}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {pnd91Summary && pnd91Summary.totals.whtMismatchCount > 0 ? (
+                        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-900 dark:text-amber-200">
+                          {t("accCompPnd91WhtMismatchWarn")} ({pnd91Summary.totals.whtMismatchCount.toLocaleString()})
+                        </div>
+                      ) : null}
+                      {pnd91Summary && !pnd91Summary.employees.length ? (
+                        <div className="text-xs text-muted-foreground py-2">{t("accCompPnd91Empty")}</div>
+                      ) : null}
+                      {pnd91Summary && pnd91Summary.employees.length > 0 ? (
+                        <div className="overflow-x-auto rounded border border-border/60">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2">{t("accCompPnd91ColEmployee")}</th>
+                                <th className="text-left p-2">{t("accCompPnd91ColTaxId")}</th>
+                                <th className="text-right p-2">{t("accCompPnd91ColMonths")}</th>
+                                <th className="text-right p-2">{t("accCompPnd91ColGross")}</th>
+                                <th className="text-right p-2">{t("accCompPnd91ColWhtPayroll")}</th>
+                                <th className="text-right p-2">{t("accCompPnd91ColWhtLedger")}</th>
+                                <th className="text-right p-2">{t("accCompPnd91ColSso")}</th>
+                                <th className="text-right p-2">{t("accCompPnd91ColNet")}</th>
+                                <th className="text-left p-2 min-w-[120px]">{t("accCompPnd91ColStatus")}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pnd91Summary.employees.map((emp) => {
+                                const checklistStatus =
+                                  (pnd91Year != null
+                                    ? readPnd91ChecklistEntry(pnd91Year, storeFilterForApi, emp.employeeKey)?.status
+                                    : null) || "pending"
+                                return (
+                                  <tr
+                                    key={emp.employeeKey}
+                                    className={cn(
+                                      "border-b border-border/40",
+                                      emp.whtLedgerMismatch && "bg-amber-500/5"
+                                    )}
+                                  >
+                                    <td className="p-2">
+                                      <div>{emp.name}</div>
+                                      <div className="text-muted-foreground">{emp.store}</div>
+                                    </td>
+                                    <td className="p-2">{emp.taxId || "-"}</td>
+                                    <td className="p-2 text-right">{emp.monthCount.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{emp.annualGross.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{emp.annualWhtPayroll.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{emp.annualWhtLedger.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{emp.annualSso.toLocaleString()}</td>
+                                    <td className="p-2 text-right">{emp.annualNetPay.toLocaleString()}</td>
+                                    <td className="p-2">
+                                      <Select
+                                        value={checklistStatus}
+                                        onValueChange={(v) => {
+                                          if (pnd91Year == null) return
+                                          writePnd91ChecklistEntry(
+                                            pnd91Year,
+                                            storeFilterForApi,
+                                            emp.employeeKey,
+                                            v as Pnd91ChecklistStatus
+                                          )
+                                          setPnd91ChecklistTick((n) => n + 1)
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="pending">{t("accCompPnd91StatusPending")}</SelectItem>
+                                          <SelectItem value="notified">{t("accCompPnd91StatusNotified")}</SelectItem>
+                                          <SelectItem value="filed">{t("accCompPnd91StatusFiled")}</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                   {showPnd1Area && payrollTinGapResult ? (
                     <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">

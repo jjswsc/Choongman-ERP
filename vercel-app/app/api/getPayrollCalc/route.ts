@@ -10,12 +10,13 @@ import {
 } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import {
-  calcPayrollWithholdingTax3Percent,
+  breakdownPayrollPnd1Withholding,
   clockOutCountsForPayroll,
   calcSSO,
   grossWageBeforeSSO,
   isEmployeePayrollEligibleForMonth,
   isEmployeeSsoExemptFlag,
+  resolvePayrollWithholdingTax,
   ssoContributableWageBaht,
   ssoContributionBaseWage,
   OT_PAYROLL_MIN_MINUTES,
@@ -1498,7 +1499,12 @@ export async function GET(request: NextRequest) {
       })
       const ssoContributableWage = ssoExempt ? 0 : ssoContributableWageBaht(ssoGrossWage, year)
       const sso = ssoExempt ? 0 : calcSSO(ssoGrossWage, year)
-      const tax = ssoExempt ? calcPayrollWithholdingTax3Percent(ssoGrossWage) : 0
+      const wht = resolvePayrollWithholdingTax({
+        ssoExempt,
+        monthlyGrossBeforeSso: ssoGrossWage,
+        monthlySso: sso,
+      })
+      const tax = wht.tax
       const deduct = lateDed + earlyDed + sso + tax + unpaidAbsenceDed
       const netPay = Math.max(0, income - deduct)
       const ot15 = Math.round((otMin / 60) * 10) / 10
@@ -1733,10 +1739,17 @@ export async function GET(request: NextRequest) {
         amount: sso,
       })
       explain.tax.push({
-        reason: '원천징수세(3%)',
-        detail: ssoExempt
-          ? `SSO 제외 대상: 과세기준 ${fmtMoney(ssoGrossWage)} × 3%`
-          : 'SSO 적용 대상: 3% 원천징수세 미적용',
+        reason: wht.form === 'PND3' ? '원천징수세(3%)' : '원천징수세(PND1)',
+        detail:
+          wht.form === 'PND3'
+            ? `SSO 제외 대상: 과세기준 ${fmtMoney(ssoGrossWage)} × 3%`
+            : (() => {
+                const b = breakdownPayrollPnd1Withholding(ssoGrossWage, sso)
+                if (b.monthlyTax <= 0) {
+                  return 'SSO 적용(PND1): 과세표준 미달 — 월 원천세 0'
+                }
+                return `SSO 적용(PND1): 총지급 ${fmtMoney(ssoGrossWage)} − SSO ${fmtMoney(sso)}, 연간 과세표준 ${fmtMoney(b.annualTaxableNet)} → 월 ${fmtMoney(b.monthlyTax)}`
+              })(),
         amount: tax,
       })
 

@@ -6,12 +6,12 @@ import {
 } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 import {
-  calcPayrollWithholdingTax3Percent,
   calcSSO,
   clockOutCountsForPayroll,
   grossWageBeforeSSO,
   isEmployeeSsoExemptFlag,
   otMinutesForPayroll,
+  resolvePayrollWithholdingTax,
 } from '@/lib/payroll-utils'
 import { hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
@@ -420,7 +420,11 @@ export async function GET(request: NextRequest) {
         earlyDed,
       })
       const sso = ssoExempt ? 0 : calcSSO(ssoGrossWage, payrollYear)
-      const tax = ssoExempt ? calcPayrollWithholdingTax3Percent(ssoGrossWage) : 0
+      const tax = resolvePayrollWithholdingTax({
+        ssoExempt,
+        monthlyGrossBeforeSso: ssoGrossWage,
+        monthlySso: sso,
+      }).tax
       const deduct = lateDed + earlyDed + sso + tax
       const netPay = Math.max(0, income - deduct)
 

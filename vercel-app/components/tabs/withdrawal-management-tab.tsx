@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/select"
 import { Wallet, Camera, ArrowLeft } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -124,8 +131,14 @@ const DELIVERY_APP_FEE_PRESETS = [
 ] as const
 
 const CARD_FEE_PRESETS = [
-  { id: "card", code: "CARD_FEE", name: "Card Fee", memo: "Card fee" },
-  { id: "card_installment", code: "CARD_INSTALLMENT_FEE", name: "Card Installment Fee", memo: "Card installment fee" },
+  { id: "card", code: "CARD_FEE", nameKey: "wm_cardFeeLabel", name: "Card Fee", memo: "Card fee" },
+  {
+    id: "card_installment",
+    code: "CARD_INSTALLMENT_FEE",
+    nameKey: "wm_cardInstallmentFeeLabel",
+    name: "Card Installment Fee",
+    memo: "Card installment fee",
+  },
 ] as const
 
 function resolveMonthEndDate(month: string): string | null {
@@ -193,6 +206,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
   const [cardFeeAmounts, setCardFeeAmounts] = React.useState<Record<string, string>>(() =>
     Object.fromEntries(CARD_FEE_PRESETS.map((preset) => [preset.id, ""]))
   )
+  const [deliveryFeeDialogOpen, setDeliveryFeeDialogOpen] = React.useState(false)
+  const [cardFeeDialogOpen, setCardFeeDialogOpen] = React.useState(false)
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
   const [payeeCode, setPayeeCode] = React.useState("")
   const [payeeName, setPayeeName] = React.useState("")
@@ -991,6 +1006,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     if (deliveryFeeAccountSubjectId) {
       setAccountSubjectId(deliveryFeeAccountSubjectId)
     }
+    setDeliveryFeeDialogOpen(false)
   }, [deliveryFeeAccountSubjectId])
   const cardFeeAccountSubjectId = React.useMemo(() => {
     const byCode = subjects.find((s) => String(s.code || "").trim() === "5529")
@@ -1021,6 +1037,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     if (cardFeeAccountSubjectId) {
       setAccountSubjectId(cardFeeAccountSubjectId)
     }
+    setCardFeeDialogOpen(false)
   }, [cardFeeAccountSubjectId])
   const handleDeliveryFeeAmountChange = React.useCallback((presetId: string, raw: string) => {
     const cleaned = String(raw || "").replace(/[^\d.,]/g, "").replace(/,/g, "")
@@ -1094,6 +1111,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         }
       }
       setDeliveryFeeAmounts(Object.fromEntries(DELIVERY_APP_FEE_PRESETS.map((preset) => [preset.id, ""])))
+      setDeliveryFeeDialogOpen(false)
       await appAlert(
         tt("deliveryFeeBatchDone", "월별 배달앱 수수료가 등록되었습니다.")
           + ` (${deliveryFeeMonth}, ${rows.length}${tt("receivPayCount", "건")})`
@@ -1171,6 +1189,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         }
       }
       setCardFeeAmounts(Object.fromEntries(CARD_FEE_PRESETS.map((preset) => [preset.id, ""])))
+      setCardFeeDialogOpen(false)
       await appAlert(
         tt("cardFeeBatchDone", "월별 카드 수수료가 등록되었습니다.")
           + ` (${cardFeeMonth}, ${rows.length}${tt("receivPayCount", "건")})`
@@ -1465,7 +1484,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
 
           <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
-            <div className="flex items-end gap-2">
+            <div className="flex flex-wrap items-end gap-2 w-full">
               <Label className="pb-2.5">{tt("wm_subType", "Detail")}</Label>
               <Select value={categorySub} onValueChange={setCategorySub}>
                 <SelectTrigger className="w-[120px] h-9">
@@ -1485,6 +1504,28 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                   <Input type="number" min={1} value={advanceInstallmentCurrent} onChange={(e) => setAdvanceInstallmentCurrent(e.target.value)} className="w-[70px] h-9" />
                   <span className="text-sm font-medium tabular-nums pb-2.5">({advanceInstallmentCurrent}/{advanceInstallments})</span>
                 </>
+              )}
+              {categoryMain === "expense" && (
+                <div className="ml-auto flex flex-wrap gap-2 pb-0.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => setDeliveryFeeDialogOpen(true)}
+                  >
+                    {tt("pL_expenseSourceDeliveryApps", "배달앱 수수료")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => setCardFeeDialogOpen(true)}
+                  >
+                    {tt("pL_expenseSourceCardFees", "카드 수수료")}
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -1584,150 +1625,6 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
               )}
               {categoryMain === "expense" && (
                 <>
-                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                    <div className="text-sm font-medium">
-                      {tt("deliveryFeePresetTitle", "Delivery App Fee (Quick Fill)")}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {DELIVERY_APP_FEE_PRESETS.map((preset) => (
-                        <Button
-                          key={preset.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => applyDeliveryFeePreset(preset)}
-                        >
-                          {preset.name}
-                        </Button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {tt(
-                        "deliveryFeePresetHint",
-                        "Click one app to auto-fill payee/memo, and account subject if a delivery fee subject exists."
-                      )}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-                    <div className="text-sm font-medium">
-                      {tt("deliveryFeeBatchTitle", "Delivery App Fee (Monthly Batch)")}
-                    </div>
-                    <div className="flex flex-wrap items-end gap-3">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">
-                          {tt("deliveryFeeBatchMonth", "Month")}
-                        </Label>
-                        <Input
-                          type="month"
-                          value={deliveryFeeMonth}
-                          onChange={(e) => setDeliveryFeeMonth(e.target.value)}
-                          className="h-9 w-[140px] mt-1"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground pb-1">
-                        {tt("deliveryFeeBatchDateHint", "Posting date is month-end automatically.")}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {DELIVERY_APP_FEE_PRESETS.map((preset) => (
-                        <div key={`batch-${preset.id}`}>
-                          <Label className="text-xs text-muted-foreground">{preset.name}</Label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={deliveryFeeAmounts[preset.id] || ""}
-                            onChange={(e) => handleDeliveryFeeAmountChange(preset.id, e.target.value)}
-                            placeholder="0"
-                            className="h-9 mt-1"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        onClick={handleRegisterDeliveryFeeBatch}
-                        disabled={deliveryFeeSaving}
-                      >
-                        {deliveryFeeSaving
-                          ? tt("loading", "Processing...")
-                          : tt("deliveryFeeBatchRegister", "Register Monthly Delivery Fees")}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                    <div className="text-sm font-medium">
-                      {tt("cardFeePresetTitle", "Card Fee (Quick Fill)")}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {CARD_FEE_PRESETS.map((preset) => (
-                        <Button
-                          key={preset.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => applyCardFeePreset(preset)}
-                        >
-                          {preset.name}
-                        </Button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {tt(
-                        "cardFeePresetHint",
-                        "Click to auto-fill card-fee payee/memo, and account subject if a card-fee subject exists."
-                      )}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-                    <div className="text-sm font-medium">
-                      {tt("cardFeeBatchTitle", "Card Fee (Monthly Batch)")}
-                    </div>
-                    <div className="flex flex-wrap items-end gap-3">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">
-                          {tt("cardFeeBatchMonth", "Month")}
-                        </Label>
-                        <Input
-                          type="month"
-                          value={cardFeeMonth}
-                          onChange={(e) => setCardFeeMonth(e.target.value)}
-                          className="h-9 w-[140px] mt-1"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground pb-1">
-                        {tt("cardFeeBatchDateHint", "Posting date is month-end automatically.")}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {CARD_FEE_PRESETS.map((preset) => (
-                        <div key={`card-batch-${preset.id}`}>
-                          <Label className="text-xs text-muted-foreground">{preset.name}</Label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={cardFeeAmounts[preset.id] || ""}
-                            onChange={(e) => handleCardFeeAmountChange(preset.id, e.target.value)}
-                            placeholder="0"
-                            className="h-9 mt-1"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        onClick={handleRegisterCardFeeBatch}
-                        disabled={cardFeeSaving}
-                      >
-                        {cardFeeSaving
-                          ? tt("loading", "Processing...")
-                          : tt("cardFeeBatchRegister", "Register Monthly Card Fees")}
-                      </Button>
-                    </div>
-                  </div>
                   <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
                     {expensePayMode === "immediate" && (
                       <>
@@ -2265,6 +2162,182 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={deliveryFeeDialogOpen} onOpenChange={setDeliveryFeeDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{tt("pL_expenseSourceDeliveryApps", "배달앱 수수료")}</DialogTitle>
+            <DialogDescription>
+              {tt(
+                "deliveryFeeDialogDesc",
+                "앱별 빠른 입력 또는 월별 일괄 등록. 계정과목 5528(배달앱수수료)로 재무제표·손익에 반영됩니다."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <div className="text-sm font-medium">
+                {tt("deliveryFeePresetTitle", "배달앱 수수료 (빠른 입력)")}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {DELIVERY_APP_FEE_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => applyDeliveryFeePreset(preset)}
+                  >
+                    {preset.name}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {tt(
+                  "deliveryFeePresetHint",
+                  "앱 버튼을 누르면 거래처·적요가 채워집니다. 금액 입력 후 아래 출금 등록을 진행하세요."
+                )}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <div className="text-sm font-medium">
+                {tt("deliveryFeeBatchTitle", "배달앱 수수료 (월별 일괄)")}
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    {tt("deliveryFeeBatchMonth", "대상 월")}
+                  </Label>
+                  <Input
+                    type="month"
+                    value={deliveryFeeMonth}
+                    onChange={(e) => setDeliveryFeeMonth(e.target.value)}
+                    className="h-9 w-[140px] mt-1"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground pb-1">
+                  {tt("deliveryFeeBatchDateHint", "전기일은 해당 월 말일(방콕)로 자동 설정됩니다.")}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {DELIVERY_APP_FEE_PRESETS.map((preset) => (
+                  <div key={`dlg-batch-${preset.id}`}>
+                    <Label className="text-xs text-muted-foreground">{preset.name}</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={deliveryFeeAmounts[preset.id] || ""}
+                      onChange={(e) => handleDeliveryFeeAmountChange(preset.id, e.target.value)}
+                      placeholder="0"
+                      className="h-9 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={handleRegisterDeliveryFeeBatch}
+                  disabled={deliveryFeeSaving}
+                >
+                  {deliveryFeeSaving
+                    ? tt("loading", "처리 중...")
+                    : tt("deliveryFeeBatchRegister", "월별 배달앱 수수료 등록")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cardFeeDialogOpen} onOpenChange={setCardFeeDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{tt("pL_expenseSourceCardFees", "카드 수수료")}</DialogTitle>
+            <DialogDescription>
+              {tt(
+                "cardFeeDialogDesc",
+                "유형별 빠른 입력 또는 월별 일괄 등록. 계정과목 5529(카드수수료)로 재무제표·손익에 반영됩니다."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <div className="text-sm font-medium">
+                {tt("cardFeePresetTitle", "카드 수수료 (빠른 입력)")}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {CARD_FEE_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => applyCardFeePreset(preset)}
+                  >
+                    {tt(preset.nameKey, preset.name)}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {tt(
+                  "cardFeePresetHint",
+                  "유형 버튼을 누르면 거래처·적요가 채워집니다."
+                )}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <div className="text-sm font-medium">
+                {tt("cardFeeBatchTitle", "카드 수수료 (월별 일괄)")}
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    {tt("cardFeeBatchMonth", "대상 월")}
+                  </Label>
+                  <Input
+                    type="month"
+                    value={cardFeeMonth}
+                    onChange={(e) => setCardFeeMonth(e.target.value)}
+                    className="h-9 w-[140px] mt-1"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground pb-1">
+                  {tt("cardFeeBatchDateHint", "전기일은 해당 월 말일(방콕)로 자동 설정됩니다.")}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {CARD_FEE_PRESETS.map((preset) => (
+                  <div key={`dlg-card-batch-${preset.id}`}>
+                    <Label className="text-xs text-muted-foreground">{tt(preset.nameKey, preset.name)}</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={cardFeeAmounts[preset.id] || ""}
+                      onChange={(e) => handleCardFeeAmountChange(preset.id, e.target.value)}
+                      placeholder="0"
+                      className="h-9 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={handleRegisterCardFeeBatch}
+                  disabled={cardFeeSaving}
+                >
+                  {cardFeeSaving
+                    ? tt("loading", "처리 중...")
+                    : tt("cardFeeBatchRegister", "월별 카드 수수료 등록")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
