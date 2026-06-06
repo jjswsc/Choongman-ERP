@@ -35,9 +35,27 @@ import {
 } from "@/lib/financial-statements-compare"
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
 import {
-  accountingFinancialRowCn,
-  accountingFinancialTableCn,
-  accountingFinancialTheadCn,
+  accountingBsBalanceCheckOkCn,
+  accountingBsBalanceCheckWarnCn,
+  accountingBsCompareShellCn,
+  accountingBsCompareTdAmountCn,
+  accountingBsCompareTdStickyCn,
+  accountingBsCompareTheadCn,
+  accountingBsCompareThColCn,
+  accountingBsCompareThStickyCn,
+  accountingBsCompareTotalRowCn,
+  accountingBsLineLabelCn,
+  accountingBsLineRowCn,
+  accountingBsLineValueCn,
+  accountingBsSectionAccentClass,
+  accountingBsSectionCardCn,
+  accountingBsSectionTitleCn,
+  accountingBsSubLineLabelCn,
+  accountingBsSubLineRowCn,
+  accountingBsSubLineValueCn,
+  accountingBsTotalRowCn,
+  accountingFsDocumentCn,
+  accountingFsTitleCn,
 } from "@/lib/accounting-result-ui"
 import {
   AccountingPeriodChip,
@@ -434,89 +452,98 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                 </p>
               )}
               {showBalanceCompareTable && (
-                <div className="mb-6 space-y-3">
-                  {periodRangeTruncated && (
-                    <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      {t("fs_periodTruncated").replace("{n}", String(FINANCIAL_COMPARE_MAX_MONTHS))}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={compareGranularity === "month" ? "default" : "outline"}
-                      onClick={() => setCompareGranularity("month")}
-                    >
-                      {t("fs_compareByMonth")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={compareGranularity === "year" ? "default" : "outline"}
-                      onClick={() => setCompareGranularity("year")}
-                    >
-                      {t("fs_compareByYear")}
-                    </Button>
-                  </div>
-                  <AccountingPeriodChip>
-                    {yearMonthStart === yearMonthEnd
-                      ? yearMonthEnd
-                      : `${yearMonthStart} ~ ${yearMonthEnd}`}{" "}
-                    · {storeLabel}
-                  </AccountingPeriodChip>
-                  {balanceCompareCols.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      {t("inNoData") || "No data found."}
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg border border-border/80 bg-card shadow-sm">
-                      <table className={accountingFinancialTableCn}>
-                        <thead>
-                          <tr className={accountingFinancialTheadCn}>
-                            <th className="text-left p-2 font-medium sticky left-0 bg-muted/40 z-10 min-w-[160px]">
-                              {t("pL_colItem")}
-                            </th>
-                            {balanceCompareCols.map((c) => (
-                              <th
-                                key={c.key}
-                                className="text-right p-2 font-medium font-mono whitespace-nowrap align-bottom"
-                              >
-                                <div>{c.label}</div>
-                                {("sub" in c && c.sub) ? (
-                                  <div className="text-[10px] font-normal text-muted-foreground font-sans">
-                                    ({String(c.sub)})
-                                  </div>
-                                ) : null}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {balanceCompareMetricRows.map((row) => (
-                            <tr key={row.key} className={accountingFinancialRowCn}>
-                              <td className="p-2 font-medium sticky left-0 bg-background z-10">{row.label}</td>
-                              {balanceCompareCols.map((c) => {
-                                const m = c.metrics
-                                const v = m ? row.pick(m) : null
-                                const isChk = row.key === "chk"
-                                const ok = v != null && Math.abs(v) < 1
-                                return (
-                                  <td
-                                    key={c.key}
-                                    className={`p-2 text-right font-mono whitespace-nowrap ${
-                                      isChk && v != null && !ok ? "text-amber-800 font-medium" : ""
-                                    } ${isChk && v != null && ok ? "text-emerald-800" : ""}`}
-                                  >
-                                    {v == null || m == null ? "—" : formatBaht(v)}
-                                  </td>
-                                )
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                <div className="flex justify-center px-1 sm:px-2">
+                  <div className={`${accountingFsDocumentCn} space-y-4`}>
+                    <div className="space-y-2 border-b border-border/50 pb-4">
+                      <div className={accountingFsTitleCn}>{t("adminBalanceSheet")}</div>
+                      <AccountingPeriodChip>
+                        {yearMonthStart === yearMonthEnd
+                          ? yearMonthEnd
+                          : `${yearMonthStart} ~ ${yearMonthEnd}`}{" "}
+                        · {storeLabel}
+                      </AccountingPeriodChip>
                     </div>
-                  )}
+                    {periodRangeTruncated && (
+                      <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        {t("fs_periodTruncated").replace("{n}", String(FINANCIAL_COMPARE_MAX_MONTHS))}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={compareGranularity === "month" ? "default" : "outline"}
+                        onClick={() => setCompareGranularity("month")}
+                      >
+                        {t("fs_compareByMonth")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={compareGranularity === "year" ? "default" : "outline"}
+                        onClick={() => setCompareGranularity("year")}
+                      >
+                        {t("fs_compareByYear")}
+                      </Button>
+                    </div>
+                    {balanceCompareCols.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {t("inNoData") || "No data found."}
+                      </p>
+                    ) : (
+                      <div className={accountingBsCompareShellCn}>
+                        <table className="w-full min-w-max text-sm border-collapse">
+                          <thead>
+                            <tr className={accountingBsCompareTheadCn}>
+                              <th className={accountingBsCompareThStickyCn}>{t("pL_colItem")}</th>
+                              {balanceCompareCols.map((c) => (
+                                <th key={c.key} className={accountingBsCompareThColCn}>
+                                  <div>{c.label}</div>
+                                  {"sub" in c && c.sub ? (
+                                    <div className="mt-0.5 text-[10px] font-normal normal-case tracking-normal text-muted-foreground font-sans">
+                                      ({String(c.sub)})
+                                    </div>
+                                  ) : null}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {balanceCompareMetricRows.map((row) => {
+                              const isTotal =
+                                row.key === "assets" || row.key === "liab" || row.key === "eq"
+                              return (
+                                <tr
+                                  key={row.key}
+                                  className={`border-b border-border/40 transition-colors hover:bg-muted/25 last:border-0 ${
+                                    isTotal ? accountingBsCompareTotalRowCn : ""
+                                  }`}
+                                >
+                                  <td className={accountingBsCompareTdStickyCn}>{row.label}</td>
+                                  {balanceCompareCols.map((c) => {
+                                    const m = c.metrics
+                                    const v = m ? row.pick(m) : null
+                                    const isChk = row.key === "chk"
+                                    const ok = v != null && Math.abs(v) < 1
+                                    return (
+                                      <td
+                                        key={c.key}
+                                        className={`${accountingBsCompareTdAmountCn} ${
+                                          isChk && v != null && !ok ? "text-amber-800 font-semibold" : ""
+                                        } ${isChk && v != null && ok ? "text-emerald-700 font-semibold" : ""}`}
+                                      >
+                                        {v == null || m == null ? "—" : formatBaht(v)}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               {isRangeCompare &&
@@ -536,130 +563,178 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                 )}
 
               {!isRangeCompare && isBalanceSheetData(data) ? (
-                <div className="space-y-3">
-                  <AccountingPeriodChip>
-                    {data.yearMonth} · {storeLabel}
-                  </AccountingPeriodChip>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-lg border border-border/80 bg-card p-4 shadow-sm">
-                      <div className="text-sm font-semibold mb-3">{t("bs_assets")}</div>
-                      <div className="text-xs text-muted-foreground">{t("bs_cashAndBanks")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.assets.cashAndBanks)}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{t("bs_inventory")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.assets.inventory)}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{t("bs_receivables")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.assets.receivables)}</div>
-                      {data.ledgerBreakdown ? (
-                        <>
-                          <div className="text-[11px] text-muted-foreground mt-1 pl-2">
-                            {t("bs_receivablesGl1130")}
+                <div className="flex justify-center px-1 sm:px-2">
+                  <div className={`${accountingFsDocumentCn} space-y-5`}>
+                    <div className="space-y-2 border-b border-border/50 pb-4">
+                      <div className={accountingFsTitleCn}>{t("adminBalanceSheet")}</div>
+                      <AccountingPeriodChip>
+                        {data.yearMonth} · {storeLabel}
+                      </AccountingPeriodChip>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className={`${accountingBsSectionCardCn} ${accountingBsSectionAccentClass("assets")}`}>
+                        <div className={accountingBsSectionTitleCn}>{t("bs_assets")}</div>
+                        <div className="flex-1 space-y-0.5">
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_cashAndBanks")}</span>
+                            <span className={accountingBsLineValueCn}>{formatBaht(data.assets.cashAndBanks)}</span>
                           </div>
-                          <div className="font-mono text-right text-sm">
-                            {formatBaht(data.ledgerBreakdown.glAccount1130)}
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_inventory")}</span>
+                            <span className={accountingBsLineValueCn}>{formatBaht(data.assets.inventory)}</span>
                           </div>
-                          <div className="text-[11px] text-muted-foreground mt-0.5 pl-2">
-                            {t("bs_receivablesSubledger")}
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_receivables")}</span>
+                            <span className={accountingBsLineValueCn}>{formatBaht(data.assets.receivables)}</span>
                           </div>
-                          <div className="font-mono text-right text-sm text-muted-foreground">
-                            {formatBaht(data.ledgerBreakdown.subledgerReceivables)}
+                          {data.ledgerBreakdown ? (
+                            <>
+                              <div className={accountingBsSubLineRowCn}>
+                                <span className={accountingBsSubLineLabelCn}>{t("bs_receivablesGl1130")}</span>
+                                <span className={accountingBsSubLineValueCn}>
+                                  {formatBaht(data.ledgerBreakdown.glAccount1130)}
+                                </span>
+                              </div>
+                              <div className={accountingBsSubLineRowCn}>
+                                <span className={accountingBsSubLineLabelCn}>{t("bs_receivablesSubledger")}</span>
+                                <span className={accountingBsSubLineValueCn}>
+                                  {formatBaht(data.ledgerBreakdown.subledgerReceivables)}
+                                </span>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                        <div className={accountingBsTotalRowCn}>
+                          <span>{t("bs_total")}</span>
+                          <span className="font-mono tabular-nums">{formatBaht(data.assets.total)}</span>
+                        </div>
+                      </div>
+
+                      <div className={`${accountingBsSectionCardCn} ${accountingBsSectionAccentClass("liabilities")}`}>
+                        <div className={accountingBsSectionTitleCn}>{t("bs_liabilities")}</div>
+                        <div className="flex-1 space-y-0.5">
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_payables")}</span>
+                            <span className={accountingBsLineValueCn}>{formatBaht(data.liabilities.payables)}</span>
                           </div>
-                        </>
-                      ) : null}
-                      <div className="border-t mt-2 pt-2 text-sm font-semibold flex justify-between">
-                        <span>{t("bs_total")}</span>
-                        <span className="font-mono">{formatBaht(data.assets.total)}</span>
+                          {data.ledgerBreakdown ? (
+                            <>
+                              <div className={accountingBsSubLineRowCn}>
+                                <span className={accountingBsSubLineLabelCn}>{t("bs_payablesGl2110")}</span>
+                                <span className={accountingBsSubLineValueCn}>
+                                  {formatBaht(data.ledgerBreakdown.glAccount2110)}
+                                </span>
+                              </div>
+                              <div className={accountingBsSubLineRowCn}>
+                                <span className={accountingBsSubLineLabelCn}>{t("bs_payablesSubledger")}</span>
+                                <span className={accountingBsSubLineValueCn}>
+                                  {formatBaht(data.ledgerBreakdown.subledgerPayables)}
+                                </span>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                        <div className={accountingBsTotalRowCn}>
+                          <span>{t("bs_total")}</span>
+                          <span className="font-mono tabular-nums">{formatBaht(data.liabilities.total)}</span>
+                        </div>
+                      </div>
+
+                      <div className={`${accountingBsSectionCardCn} ${accountingBsSectionAccentClass("equity")}`}>
+                        <div className={accountingBsSectionTitleCn}>{t("bs_equity")}</div>
+                        <div className="flex-1 space-y-0.5">
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_openingCapital")}</span>
+                            <span className={accountingBsLineValueCn}>{formatBaht(data.equity.openingCapital)}</span>
+                          </div>
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_currentPeriodProfit")}</span>
+                            <span className={accountingBsLineValueCn}>
+                              {formatBaht(data.equity.currentPeriodProfit)}
+                            </span>
+                          </div>
+                          <div className={accountingBsLineRowCn}>
+                            <span className={accountingBsLineLabelCn}>{t("bs_retainedEarningsYtd")}</span>
+                            <span className={accountingBsLineValueCn}>
+                              {formatBaht(data.equity.retainedEarningsYtd)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={accountingBsTotalRowCn}>
+                          <span>{t("bs_total")}</span>
+                          <span className="font-mono tabular-nums">{formatBaht(data.equity.total)}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="rounded-lg border border-border/80 bg-card p-4 shadow-sm">
-                      <div className="text-sm font-semibold mb-3">{t("bs_liabilities")}</div>
-                      <div className="text-xs text-muted-foreground">{t("bs_payables")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.liabilities.payables)}</div>
-                      {data.ledgerBreakdown ? (
-                        <>
-                          <div className="text-[11px] text-muted-foreground mt-1 pl-2">
-                            {t("bs_payablesGl2110")}
-                          </div>
-                          <div className="font-mono text-right text-sm">
-                            {formatBaht(data.ledgerBreakdown.glAccount2110)}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground mt-0.5 pl-2">
-                            {t("bs_payablesSubledger")}
-                          </div>
-                          <div className="font-mono text-right text-sm text-muted-foreground">
-                            {formatBaht(data.ledgerBreakdown.subledgerPayables)}
-                          </div>
-                        </>
-                      ) : null}
-                      <div className="border-t mt-2 pt-2 text-sm font-semibold flex justify-between">
-                        <span>{t("bs_total")}</span>
-                        <span className="font-mono">{formatBaht(data.liabilities.total)}</span>
+                    <div
+                      className={
+                        Math.abs(data.balanceCheckDiff) < 1
+                          ? accountingBsBalanceCheckOkCn
+                          : accountingBsBalanceCheckWarnCn
+                      }
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold">{t("bs_balanceCheck")}</span>
+                        <span className="font-mono text-base font-bold tabular-nums">
+                          {formatBaht(data.balanceCheckDiff)}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="rounded-lg border border-border/80 bg-card p-4 shadow-sm">
-                      <div className="text-sm font-semibold mb-3">{t("bs_equity")}</div>
-                      <div className="text-xs text-muted-foreground">{t("bs_openingCapital")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.equity.openingCapital)}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{t("bs_currentPeriodProfit")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.equity.currentPeriodProfit)}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{t("bs_retainedEarningsYtd")}</div>
-                      <div className="font-mono text-right">{formatBaht(data.equity.retainedEarningsYtd)}</div>
-                      <div className="border-t mt-2 pt-2 text-sm font-semibold flex justify-between">
-                        <span>{t("bs_total")}</span>
-                        <span className="font-mono">{formatBaht(data.equity.total)}</span>
+                    {data.unpostedBankWithdrawals && data.unpostedBankWithdrawals.length > 0 && (
+                      <div className="rounded-xl border border-amber-300/70 bg-gradient-to-br from-amber-50/80 via-amber-50/50 to-amber-50/80 px-4 py-4 text-sm shadow-sm dark:from-amber-950/30 dark:via-amber-950/20 dark:to-amber-950/30">
+                        <div className="mb-3 font-semibold text-amber-900 dark:text-amber-100">
+                          {t("bs_unpostedWithdrawals")} ({data.unpostedBankWithdrawals.length}건, 합계{" "}
+                          {formatBaht(data.unpostedBankWithdrawals.reduce((s, x) => s + x.amount, 0))})
+                        </div>
+                        <div className="overflow-hidden rounded-lg border border-amber-200/80 bg-white/60 dark:bg-background/40">
+                          <div className="max-h-48 overflow-x-auto overflow-y-auto text-xs text-amber-900 dark:text-amber-100">
+                            <table className="w-full min-w-[320px] border-collapse">
+                              <thead>
+                                <tr className="border-b border-amber-200/80 bg-amber-100/50 dark:bg-amber-950/30">
+                                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide">
+                                    {t("date")}
+                                  </th>
+                                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide">
+                                    {t("amount")}
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide">
+                                    {t("visit_col_purpose")}
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide min-w-0">
+                                    {t("memo")}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {data.unpostedBankWithdrawals.map((row) => (
+                                  <tr
+                                    key={row.id}
+                                    className="border-b border-amber-100/80 last:border-0 transition-colors hover:bg-amber-50/60"
+                                  >
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.transDate}</td>
+                                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                                      {formatBaht(row.amount)}
+                                    </td>
+                                    <td className="px-3 py-2 text-amber-800 dark:text-amber-200">{row.category}</td>
+                                    <td
+                                      className="px-3 py-2 truncate max-w-[180px]"
+                                      title={row.memo ?? row.store ?? ""}
+                                    >
+                                      {getMemo(row.memo ?? undefined, row.store ?? undefined)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs text-amber-800 dark:text-amber-200">{t("bs_unpostedWithdrawalsHint")}</p>
                       </div>
-                    </div>
+                    )}
                   </div>
-
-
-                  <div
-                    className={`rounded-lg border px-3 py-2 text-sm ${
-                      Math.abs(data.balanceCheckDiff) < 1
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                        : "border-amber-300 bg-amber-50 text-amber-900"
-                    }`}
-                  >
-                    {t("bs_balanceCheck")}:{" "}
-                    <span className="font-mono font-semibold">{formatBaht(data.balanceCheckDiff)}</span>
-                  </div>
-
-                  {data.unpostedBankWithdrawals && data.unpostedBankWithdrawals.length > 0 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-sm">
-                      <div className="font-semibold text-amber-900 mb-2">
-                        {t("bs_unpostedWithdrawals")} ({data.unpostedBankWithdrawals.length}건, 합계{" "}
-                        {formatBaht(data.unpostedBankWithdrawals.reduce((s, x) => s + x.amount, 0))})
-                      </div>
-                      <div className="text-xs text-amber-800 overflow-x-auto max-h-48 overflow-y-auto">
-                        <table className="w-full min-w-[320px]">
-                          <thead>
-                            <tr className="border-b border-amber-200">
-                              <th className="text-left py-1 pr-2">{t("date")}</th>
-                              <th className="text-right py-1 pr-2">{t("amount")}</th>
-                              <th className="text-left py-1 pr-2">{t("visit_col_purpose")}</th>
-                              <th className="text-left py-1 min-w-0">{t("memo")}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {data.unpostedBankWithdrawals.map((row) => (
-                              <tr key={row.id} className="border-b border-amber-100 last:border-0">
-                                <td className="py-1 pr-2">{row.transDate}</td>
-                                <td className="font-mono text-right py-1 pr-2">{formatBaht(row.amount)}</td>
-                                <td className="py-1 pr-2 text-amber-700">{row.category}</td>
-                                <td
-                                  className="py-1 truncate max-w-[180px]"
-                                  title={row.memo ?? row.store ?? ""}
-                                >
-                                  {getMemo(row.memo ?? undefined, row.store ?? undefined)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="text-xs text-amber-700 mt-2">{t("bs_unpostedWithdrawalsHint")}</p>
-                    </div>
-                  )}
                 </div>
               ) : !isRangeCompare ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query")}</p>

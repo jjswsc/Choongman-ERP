@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import {
+  breakdownPayrollPnd1Withholding,
   calcPayrollWithholdingTax3Percent,
+  calcPayrollWithholdingTaxPnd1Monthly,
+  calcThaiProgressiveIncomeTaxAnnual,
   getSSOLimitsByYear,
   calcSSO,
   grossWageBeforeSSO,
   isEmployeeActiveInPayrollPeriod,
   isEmployeePayrollEligibleForMonth,
   otMinutesForPayroll,
+  resolvePayrollWithholdingTax,
   roundSsoContributionBaht,
   ssoContributableWageBaht,
   ssoContributionBaseWage,
@@ -222,6 +226,48 @@ describe('payroll-utils', () => {
 
     it('2026: above ceiling 17500 → maxDed 875', () => {
       expect(calcSSO(30000, 2026)).toBe(875)
+    })
+  })
+
+  describe('calcThaiProgressiveIncomeTaxAnnual', () => {
+    it('15만 이하는 0%', () => {
+      expect(calcThaiProgressiveIncomeTaxAnnual(150_000)).toBe(0)
+    })
+
+    it('누진 구간 합산', () => {
+      expect(calcThaiProgressiveIncomeTaxAnnual(300_000)).toBe(7_500)
+      expect(calcThaiProgressiveIncomeTaxAnnual(500_000)).toBe(27_500)
+    })
+  })
+
+  describe('calcPayrollWithholdingTaxPnd1Monthly', () => {
+    it('저소득 월급은 원천세 0', () => {
+      expect(calcPayrollWithholdingTaxPnd1Monthly(20_000, 875)).toBe(0)
+    })
+
+    it('중간 소득은 연간화 후 월 원천세 산출', () => {
+      const tax = calcPayrollWithholdingTaxPnd1Monthly(50_000, 875)
+      expect(tax).toBeGreaterThan(0)
+      expect(breakdownPayrollPnd1Withholding(50_000, 875).monthlyTax).toBe(tax)
+    })
+  })
+
+  describe('resolvePayrollWithholdingTax', () => {
+    it('SSO 제외 → PND3 3%', () => {
+      expect(resolvePayrollWithholdingTax({ ssoExempt: true, monthlyGrossBeforeSso: 10_000, monthlySso: 0 })).toEqual({
+        tax: 300,
+        form: 'PND3',
+      })
+    })
+
+    it('SSO 가입 → PND1', () => {
+      const r = resolvePayrollWithholdingTax({
+        ssoExempt: false,
+        monthlyGrossBeforeSso: 50_000,
+        monthlySso: 875,
+      })
+      expect(r.form).toBe('PND1')
+      expect(r.tax).toBe(calcPayrollWithholdingTaxPnd1Monthly(50_000, 875))
     })
   })
 

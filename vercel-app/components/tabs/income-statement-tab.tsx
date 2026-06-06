@@ -67,9 +67,18 @@ import {
 } from "@/lib/income-statement-export"
 import { formatBahtInteger as formatBath, roundFinancialAmount } from "@/lib/financial-amount-format"
 import {
-  accountingFinancialRowCn,
-  accountingFinancialTableCn,
-  accountingFinancialTheadCn,
+  accountingPlDocumentCn,
+  accountingPlGrossProfitRowCn,
+  accountingPlNetProfitRowCn,
+  accountingPlTableCn,
+  accountingPlTableShellCn,
+  accountingPlTdAmountCn,
+  accountingPlTdLabelCn,
+  accountingPlTdPctCn,
+  accountingPlTheadCn,
+  accountingPlThCn,
+  accountingPlThRightCn,
+  accountingPlTitleCn,
 } from "@/lib/accounting-result-ui"
 import {
   AccountingEmptyState,
@@ -825,8 +834,8 @@ function IncomePlDetailTableContent({
   onToggleExpenseAccounts,
   printRef,
   purchaseDrillContext,
-  titleClassName = "text-lg font-semibold mb-1",
-  wrapperClassName = "rounded-md bg-white p-3 text-foreground",
+  titleClassName = accountingPlTitleCn,
+  wrapperClassName = accountingPlDocumentCn,
 }: {
   data: IncomeStatementData
   view: IncomeStatementViewModel
@@ -903,8 +912,10 @@ function IncomePlDetailTableContent({
 
   return (
     <div ref={printRef ?? undefined} className={wrapperClassName}>
-      <div className={titleClassName}>{t("incomeStatementTitle")}</div>
-      <AccountingPeriodChip className="mb-3">{periodLine}</AccountingPeriodChip>
+      <div className="mb-5 space-y-2 border-b border-border/50 pb-4">
+        <div className={titleClassName}>{t("incomeStatementTitle")}</div>
+        <AccountingPeriodChip>{periodLine}</AccountingPeriodChip>
+      </div>
       {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
         <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {data.diagnostics?.warnings?.join(" / ")}
@@ -971,13 +982,18 @@ function IncomePlDetailTableContent({
           </ul>
         </div>
       )}
-      <div className="overflow-x-auto rounded-lg border border-border/80 bg-card shadow-sm">
-      <table className={`${accountingFinancialTableCn} max-w-md w-full`}>
+      <div className={accountingPlTableShellCn}>
+      <table className={accountingPlTableCn}>
+        <colgroup>
+          <col className="w-[52%]" />
+          <col className="w-[30%]" />
+          <col className="w-[18%]" />
+        </colgroup>
         <thead>
-          <tr className={accountingFinancialTheadCn}>
-            <th className="py-2.5 text-left font-medium pl-3"></th>
-            <th className="py-2.5 text-right font-medium pr-3">{t("pL_colAmount") || "Amount"}</th>
-            <th className="py-2.5 text-right font-medium w-14 pr-3">{t("pL_pctOfSales")}</th>
+          <tr className={accountingPlTheadCn}>
+            <th className={accountingPlThCn}></th>
+            <th className={accountingPlThRightCn}>{t("pL_colAmount") || "Amount"}</th>
+            <th className={accountingPlThRightCn}>{t("pL_pctOfSales")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1087,12 +1103,12 @@ function IncomePlDetailTableContent({
             <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(view.cogs)}</td>
             <td className="py-2 text-right text-muted-foreground">{view.pct(view.cogs)}</td>
           </tr>
-          <tr className="border-b">
-            <td className="py-2 font-medium text-primary">{t("pL_grossProfit")}</td>
-            <td className="py-2 text-right font-mono font-medium text-primary pr-2">
+          <tr className={accountingPlGrossProfitRowCn}>
+            <td className={`${accountingPlTdLabelCn} font-semibold text-primary`}>{t("pL_grossProfit")}</td>
+            <td className={`${accountingPlTdAmountCn} font-semibold text-primary`}>
               {formatBath(view.grossProfit)}
             </td>
-            <td className="py-2 text-right text-primary font-medium">{view.pct(view.grossProfit)}</td>
+            <td className={`${accountingPlTdPctCn} font-semibold text-primary`}>{view.pct(view.grossProfit)}</td>
           </tr>
           <tr
             className="border-b cursor-pointer hover:bg-muted/40 select-none"
@@ -1201,16 +1217,20 @@ function IncomePlDetailTableContent({
               </tr>
             </>
           )}
-          <tr>
-            <td className="py-3 font-bold">{t("pL_netProfit")}</td>
+          <tr className={accountingPlNetProfitRowCn}>
+            <td className={`${accountingPlTdLabelCn} py-3.5 font-bold`}>{t("pL_netProfit")}</td>
             <td
-              className={`py-3 text-right font-mono font-bold pr-2 ${
+              className={`${accountingPlTdAmountCn} py-3.5 font-bold ${
                 view.netProfit >= 0 ? "text-primary" : "text-destructive"
               }`}
             >
               {formatBath(view.netProfit)}
             </td>
-            <td className={`py-3 text-right font-bold ${view.netProfit >= 0 ? "text-primary" : "text-destructive"}`}>
+            <td
+              className={`${accountingPlTdPctCn} py-3.5 font-bold ${
+                view.netProfit >= 0 ? "text-primary" : "text-destructive"
+              }`}
+            >
               {view.pct(view.netProfit)}
             </td>
           </tr>
@@ -3300,7 +3320,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 </div>
               ) : null}
               {!isRangeCompare && isIncomeStatementData(data) && !data.error && view ? (
-                <div className="overflow-x-auto">
+                <div className="flex justify-center px-1 sm:px-2">
                   <IncomePlDetailTableContent
                     data={data}
                     view={view}

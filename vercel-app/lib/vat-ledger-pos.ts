@@ -73,7 +73,7 @@ export function consolidatePosOutputRowsForTaxExport(rows: VatLedgerRow[]): VatL
       filing_status: filing,
       submitted_at: undefined,
       submitted_by: undefined,
-      memo: `[AGG:POS_ORDER_ROWS:${list.length}건] 원장 id: ${ids.slice(0, 12).join(',')}${ids.length > 12 ? '…' : ''}`,
+      memo: null,
       store_name: null,
     })
   }

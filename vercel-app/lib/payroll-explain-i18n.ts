@@ -37,6 +37,7 @@ const REASON_KEY: Record<string, string> = {
   "기타 공제 합계": "pay_explain_reason_other_sum",
   "SSO(사회보험) 공제": "pay_explain_reason_sso",
   "원천징수세(3%)": "pay_explain_reason_wht3",
+  "원천징수세(PND1)": "pay_explain_reason_wht_pnd1",
 }
 
 export function isPayrollExplainSumRow(reason: string): boolean {
@@ -63,7 +64,7 @@ const DETAIL_FIXED: Record<string, string> = {
   "지각·조퇴 또는 반차 공제 대상": "pay_explain_d_diligence_miss_late",
   "조건 미충족": "pay_explain_d_diligence_miss_other",
   "인사 설정: SSO 공제 제외 (미가입 등)": "pay_explain_d_sso_exempt_hr",
-  "SSO 적용 대상: 3% 원천징수세 미적용": "pay_explain_d_wht3_not_applicable",
+  "SSO 적용(PND1): 과세표준 미달 — 월 원천세 0": "pay_explain_d_wht_pnd1_zero",
 }
 
 export function translatePayrollExplainDetail(detail: string, t: (k: string) => string): string {
@@ -133,6 +134,18 @@ export function translatePayrollExplainDetail(detail: string, t: (k: string) => 
 
   m = d.match(/^SSO 제외 대상: 과세기준 (.+) × 3%$/)
   if (m) return i18nVar(t("pay_explain_d_wht3_formula"), { base: m[1] })
+
+  m = d.match(
+    /^SSO 적용\(PND1\): 총지급 (.+) − SSO (.+), 연간 과세표준 (.+) → 월 (.+)$/
+  )
+  if (m) {
+    return i18nVar(t("pay_explain_d_wht_pnd1_formula"), {
+      gross: m[1],
+      sso: m[2],
+      annualTaxable: m[3],
+      tax: m[4],
+    })
+  }
 
   const leaveLine = tryTranslatePayrollLeaveDetail(d, t)
   if (leaveLine != null) return leaveLine

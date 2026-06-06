@@ -3592,6 +3592,62 @@ export function getExportKt20kCsvUrl(params: { userRole: string; year: number; s
   return `/api/exportKt20kCsv?${q}`
 }
 
+export type Pnd91EmployeeAnnual = {
+  employeeKey: string
+  employeeId: number | null
+  name: string
+  store: string
+  taxId: string | null
+  monthCount: number
+  annualGross: number
+  annualWhtPayroll: number
+  annualWhtLedger: number
+  annualSso: number
+  annualNetPay: number
+  whtLedgerMismatch: boolean
+}
+
+export type Pnd91AnnualSummaryResult = {
+  success: boolean
+  year: number
+  storeFilter: string
+  filingDueDate: string
+  employees: Pnd91EmployeeAnnual[]
+  totals: {
+    employeeCount: number
+    annualGross: number
+    annualWhtPayroll: number
+    annualWhtLedger: number
+    annualSso: number
+    annualNetPay: number
+    whtMismatchCount: number
+  }
+  warnings: string[]
+  error?: string
+}
+
+export async function getPnd91AnnualSummary(params: {
+  year: number
+  storeFilter?: string
+}): Promise<Pnd91AnnualSummaryResult> {
+  const q = new URLSearchParams({ year: String(params.year) })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getPnd91AnnualSummary?${q}`)
+  return res.json() as Promise<Pnd91AnnualSummaryResult>
+}
+
+export function getExportPnd91AnnualCsvUrl(params: {
+  year: number
+  storeFilter?: string
+  checklistJson?: string
+}) {
+  const q = new URLSearchParams({ year: String(params.year) })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.checklistJson) q.set('checklistJson', params.checklistJson)
+  if (typeof window !== 'undefined') return `${window.location.origin}/api/exportPnd91AnnualCsv?${q}`
+  return `/api/exportPnd91AnnualCsv?${q}`
+}
+
 export type ThaiTaxFilingSummary = {
   period: {
     periodType: 'monthly' | 'half_year' | 'annual'
