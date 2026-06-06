@@ -191,6 +191,25 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('SNOW ONION')
   })
 
+  it('keeps banban slash flavors in line name when note has customer request (Grab reprint)', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'grab:banban-1',
+        name: 'Banban Chicken (SWEET YANGNYEOM / SOY SAUCE CHICKEN)',
+        qty: 1,
+        note: 'หากไม่มี ให้ติดต่อลูกค้า',
+        deliveryAppCode: 'grab',
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems: slipItems,
+      grabInbound: true,
+    })
+    expect(lines).toHaveLength(1)
+    expect(lines[0].name).toBe('Banban Chicken (SWEET YANGNYEOM / SOY SAUCE CHICKEN)')
+    expect(lines[0].note).toBeUndefined()
+  })
+
   it('grab banban compose shows flavor only without repeating menu name', () => {
     const orderItems: KitchenSlipRoutingItem[] = [
       {
@@ -314,8 +333,8 @@ describe('pos-kitchen-slip-display', () => {
       { id: 'cart-snow-1', name: 'SNOW ONION (M - Drumette)', qty: 1 },
     ]
     const lines = buildKitchenHallStyleSlipLines(slipItems, { grabInbound: false })
-    expect(lines[0].name).toBe('Banban Chicken')
-    expect(lines[0].note).toBe('CURRY SNOW ONION / CURRYCANE')
+    expect(lines[0].name).toBe('Banban Chicken (CURRY SNOW ONION / CURRYCANE)')
+    expect(lines[0].note).toBeUndefined()
     expect(lines[1].name).toBe('SNOW ONION')
     expect(lines[1].note).toBe('M - Drumette')
   })

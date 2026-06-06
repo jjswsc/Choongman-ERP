@@ -10582,6 +10582,18 @@ export async function grabMarkOrderReadyApi(params: { orderID: string; markStatu
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function grabPrepareOrderApi(params: {
+  orderID: string
+  toState: 'Accepted' | 'Rejected'
+}) {
+  const res = await apiFetchWithOffline('/api/grab/prepareOrder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function grabCancelOrderByStoreApi(params: {
   orderID: string
   storeCode?: string

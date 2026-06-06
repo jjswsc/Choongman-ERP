@@ -174,6 +174,24 @@ export async function grabCancelOrder(payload: GrabCancelOrderPayload) {
   })
 }
 
+/** GrabFood Partner: POST /partner/v1/order/prepare — 가맹 수동 수락/거절 */
+export type GrabPrepareOrderPayload = {
+  orderID: string
+  /** Grab API enum: `Accepted` | `Rejected` */
+  toState: 'Accepted' | 'Rejected'
+}
+
+export async function grabPrepareOrder(payload: GrabPrepareOrderPayload): Promise<void> {
+  await grabJsonRequest({
+    path: '/partner/v1/order/prepare',
+    method: 'POST',
+    body: {
+      orderID: String(payload.orderID || '').trim(),
+      toState: payload.toState,
+    },
+  })
+}
+
 export type GrabMarkOrderReadyPayload = {
   orderID: string
   markStatus: 1 | 2

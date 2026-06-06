@@ -130,4 +130,36 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     expect(html).toContain('Rice x1')
     expect(html).not.toContain('#22 x1')
   })
+
+  it('simple receipt lists banban grab flavors once (no slash + individual duplicate)', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: {
+        ...baseReceipt,
+        memo: 'grab_order:GF-010',
+        items: [
+          {
+            id: 'grab:banban-1',
+            name: 'Banban Chicken (SWEET YANGNYEOM / SOY SAUCE CHICKEN)',
+            price: 279,
+            qty: 1,
+            note: 'หากไม่มี ให้ติดต่อลูกค้า',
+            deliveryAppCode: 'grab',
+          },
+        ],
+        subtotal: 279,
+        total: 279,
+        paymentCash: 279,
+      },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://example.com',
+      printedAt: new Date('2026-06-05T16:35:00.000Z'),
+      forceSimpleTextMode: true,
+    })
+    expect(html).toContain('SWEET YANGNYEOM')
+    expect(html).toContain('SOY SAUCE CHICKEN')
+    expect(html).not.toContain('SWEET YANGNYEOM / SOY SAUCE CHICKEN')
+  })
 })

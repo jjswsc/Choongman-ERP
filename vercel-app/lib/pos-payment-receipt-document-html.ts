@@ -665,7 +665,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         const lineNote = grabInbound
           ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, t)
           : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
-        const detailLines = [...baseOptionLine, ...banbanFlavorLines, ...promoComposeLinesExpanded]
+        const optionDetailLines = banban ? banbanFlavorLines : baseOptionLine
+        const detailLines = [...optionDetailLines, ...promoComposeLinesExpanded]
         const detailRows = detailLines
           .map(
             (line) =>
@@ -952,9 +953,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                       ),
                     ]
                   : []
+            const optionDetailLines = banban ? banbanFlavorLines : baseOptionLine
             const noteHtml =
               lineNote &&
-              !lineNoteDuplicatesOptions(lineNote, [...baseOptionLine, ...banbanFlavorLines])
+              !lineNoteDuplicatesOptions(lineNote, optionDetailLines)
                 ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
                 : ''
             const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
@@ -969,8 +971,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     .join('<br/>')}</div>`
                 : ''
             const banbanComposeHtml =
-              [...baseOptionLine, ...banbanFlavorLines].length > 0
-                ? `<div class="receipt-line-note">${[...baseOptionLine, ...banbanFlavorLines]
+              optionDetailLines.length > 0
+                ? `<div class="receipt-line-note">${optionDetailLines
                     .map((line) => `- ${esc(line)}`)
                     .join('<br/>')}</div>`
                 : ''

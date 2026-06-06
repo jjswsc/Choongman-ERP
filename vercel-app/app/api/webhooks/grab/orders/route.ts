@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 import { persistGrabOrderToPos, resolveGrabStoreCode } from '@/lib/grab-order-to-pos'
-import { grabListOrdersByIds } from '@/lib/grab-partner-api'
+import { grabListOrdersByIds, grabPrepareOrder } from '@/lib/grab-partner-api'
 import { getPosDeliveryPolicyBundle, resolveOrderAcceptanceMode } from '@/lib/pos-delivery-policy'
+import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { buildKitchenJobInboundDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +87,39 @@ export async function POST(req: NextRequest) {
       persistError: persisted.message,
     })
     return NextResponse.json({ reason: 'persist_failed' }, { status: 500 })
+  }
+
+  if (persisted.storeCode && persisted.orderId) {
+    try {
+      await enqueueKitchenPrintJob({
+        storeCode: persisted.storeCode,
+        orderId: persisted.orderId,
+        orderNo: persisted.orderNo,
+        source: 'grab_submit_order',
+        dedupeKey: buildKitchenJobInboundDedupeKey(persisted.orderId),
+        payload: {
+          action: 'inbound_delivery',
+          acceptanceMode,
+          initialStatus,
+        },
+      })
+    } catch (e) {
+      logGrabWebhook('submit_order', req, {
+        orderID,
+        kitchenPrintEnqueueError: String(e ?? 'unknown'),
+      })
+    }
+  }
+
+  if (acceptanceMode === 'auto' && !persisted.duplicate) {
+    try {
+      await grabPrepareOrder({ orderID, toState: 'Accepted' })
+    } catch (e) {
+      logGrabWebhook('submit_order', req, {
+        orderID,
+        grabPrepareError: String(e ?? 'unknown'),
+      })
+    }
   }
 
   logGrabWebhook('submit_order', req, {

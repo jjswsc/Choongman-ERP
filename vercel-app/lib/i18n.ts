@@ -6613,8 +6613,14 @@ export const i18n = {
     posDeliveryOrderReject: '주문 거절',
     posOrderRejected: '주문을 반려했습니다.',
     posIncomingDeliveryApprovePrompt: '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?',
-    posIncomingDeliveryArrivedPrompt: '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?',
-    posIncomingDeliveryDecisionPrompt: '신규 배달 주문입니다.\n이 주문을 수락할까요?',
+    posIncomingDeliveryArrivedPrompt:
+      '신규 배달 주문이 도착했습니다.\n주문 화면으로 이동할까요? (거절·수락과 무관하며, 주방·영수증은 이미 자동 출력됩니다.)',
+    posIncomingDeliveryDismissLater: '나중에',
+    posIncomingDeliveryDecisionPrompt:
+      '신규 Grab 배달 주문입니다.\n수락하면 Grab·주방에 전달됩니다.\n거절하면 주문이 취소됩니다.',
+    posGrabPrepareFailed: 'Grab 수락 연동에 실패했습니다. Grab 앱에서 수락했는지 확인해 주세요.\n{{detail}}',
+    posGrabMarkReadyFailed:
+      'POS 포장 완료는 저장됐지만 Grab 준비완료(พร้อมส่ง) 연동에 실패했습니다. Grab 앱에서 확인해 주세요.\n{{detail}}',
     posIncomingDeliveryDeferredBatchHint:
       '결제 중 배달 주문 {{count}}건이 대기했습니다. 배달 탭에서 확인해 주세요.',
     posIncomingDeliveryDeferredTabHint: '배달 ({{count}}건 결제 중 대기)',
@@ -15681,8 +15687,14 @@ orderItemQty: 'Qty',
     posDeliveryOrderReject: 'Reject order',
     posOrderRejected: 'Order rejected.',
     posIncomingDeliveryApprovePrompt: 'A new delivery order has arrived. Move to the order acceptance screen now?',
-    posIncomingDeliveryArrivedPrompt: 'A new delivery order has arrived. Move to the order screen now?',
-    posIncomingDeliveryDecisionPrompt: 'New delivery order.\nDo you want to accept this order?',
+    posIncomingDeliveryArrivedPrompt:
+      'A new delivery order has arrived.\nOpen the order screen now? (Kitchen/receipt may already be printing. This does not accept or reject the order.)',
+    posIncomingDeliveryDismissLater: 'Later',
+    posIncomingDeliveryDecisionPrompt:
+      'New Grab delivery order.\nAccept sends it to Grab and the kitchen.\nReject cancels the order.',
+    posGrabPrepareFailed: 'Failed to accept on Grab. Please verify in the Grab app.\n{{detail}}',
+    posGrabMarkReadyFailed:
+      'Packaging saved in POS, but Grab ready-for-pickup sync failed. Please confirm in the Grab app.\n{{detail}}',
     posIncomingDeliveryDeferredBatchHint:
       '{{count}} delivery order(s) waited while checkout was in progress. Please check the Delivery tab.',
     posIncomingDeliveryDeferredTabHint: 'Delivery ({{count}} waiting during checkout)',
@@ -24009,8 +24021,14 @@ orderItemQty: 'จำนวน',
     posDeliveryOrderReject: 'ปฏิเสธออเดอร์',
     posOrderRejected: 'ปฏิเสธออเดอร์แล้ว',
     posIncomingDeliveryApprovePrompt: 'มีออเดอร์เดลิเวอรีใหม่ เข้าหน้ารับออเดอร์ตอนนี้หรือไม่?',
-    posIncomingDeliveryArrivedPrompt: 'มีออเดอร์เดลิเวอรีใหม่ ไปหน้ารายการออเดอร์ตอนนี้หรือไม่?',
-    posIncomingDeliveryDecisionPrompt: 'มีออเดอร์เดลิเวอรีใหม่\nต้องการรับออเดอร์นี้หรือไม่?',
+    posIncomingDeliveryArrivedPrompt:
+      'มีออเดอร์เดลิเวอรีใหม่\nไปหน้ารายการออเดอร์ตอนนี้หรือไม่? (ใบครัว/ใบรับอาจพิมพ์แล้ว ไม่ใช่การรับหรือปฏิเสธออเดอร์)',
+    posIncomingDeliveryDismissLater: 'ภายหลัง',
+    posIncomingDeliveryDecisionPrompt:
+      'ออเดอร์ Grab ใหม่\nรับ = ส่งไป Grab และครัว\nปฏิเสธ = ยกเลิกออเดอร์',
+    posGrabPrepareFailed: 'เชื่อม Grab รับออเดอร์ไม่สำเร็จ โปรดตรวจในแอป Grab\n{{detail}}',
+    posGrabMarkReadyFailed:
+      'บันทึกแพ็กใน POS แล้ว แต่ส่งสถานะพร้อมส่ง(พร้อมส่ง) ไป Grab ไม่สำเร็จ โปรดตรวจในแอป Grab\n{{detail}}',
     posIncomingDeliveryDeferredBatchHint:
       'มีออเดอร์เดลิเวอรี {{count}} รายการรอระหว่างคิดเงิน โปรดตรวจสอบที่แท็บเดลิเวอรี',
     posIncomingDeliveryDeferredTabHint: 'เดลิเวอรี (รอ {{count}} ระหว่างคิดเงิน)',

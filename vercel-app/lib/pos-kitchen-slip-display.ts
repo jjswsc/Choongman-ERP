@@ -9,6 +9,7 @@ import {
   isLikelyPosOptionCode,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
+import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import {
   isLikelyPosMenuSkuCode,
@@ -41,6 +42,31 @@ function stripOneLeadingBracketTag(raw: string): string {
     .trim()
     .replace(/^\[[^\]]+\]\s*/u, '')
     .trim()
+}
+
+/** 주방 표시: 이름 괄호 `(맛1 / 맛2)` 반반 패턴 (코드 접두·note 분리 후에도 복원) */
+function resolveBanbanSlashFromKitchenLineName(rawName: string): {
+  baseName: string
+  flavor1: string
+  flavor2: string
+} | null {
+  const stripped = stripLeadingPrintCodeBrackets(String(rawName ?? ''))
+  const fromFull = parseBanbanFlavorsFromName(stripped)
+  if (fromFull) return fromFull
+  const split = splitPosPrintItemLine(String(rawName ?? ''))
+  if (!split.optionLine.includes('/')) return null
+  return parseBanbanFlavorsFromName(
+    `${stripLeadingPrintCodeBrackets(split.mainName || rawName)} (${split.optionLine})`
+  )
+}
+
+function formatBanbanKitchenLineDisplayName(
+  rawName: string,
+  banban: { baseName: string; flavor1: string; flavor2: string }
+): string {
+  const codePrefixMatch = String(rawName ?? '').match(/^(\[[^\]]+\]\s*)/u)
+  const codePrefix = codePrefixMatch?.[1] ?? ''
+  return `${codePrefix}${banban.baseName} (${banban.flavor1} / ${banban.flavor2})`
 }
 
 /** `[CODE] [세트명] 구성메뉴` 또는 `[세트명] 구성메뉴` 분리 */
@@ -638,7 +664,9 @@ export function buildKitchenHallStyleSlipLines(
       })
       continue
     }
-    const lineSplit = splitPosPrintItemLine(String(it.name ?? ''))
+    const rawItemName = String(it.name ?? '')
+    const lineSplit = splitPosPrintItemLine(rawItemName)
+    const banbanParsed = resolveBanbanSlashFromKitchenLineName(rawItemName)
     const hasOptionCodeToken = /(^|[\s,])optc:/i.test(String(resolvedNote ?? ''))
     if (lineSplit.optionLine && !hasOptionCodeToken) {
       console.error('[POS_PRINT_OPTION_CODE_MISSING]', {
@@ -664,7 +692,7 @@ export function buildKitchenHallStyleSlipLines(
     // 옵션 텍스트로 폴백한다. 코드가 정상 해석되면 formattedNote를 그대로 쓰므로 중복 없음.
     // (이름에 있는 값을 쓰는 것이라 추론이 아니며 홀 영수증과 동일 값)
     const optionLineFallback =
-      !formattedNote && lineSplit.optionLine
+      !banbanParsed && !formattedNote && lineSplit.optionLine
         ? String(lineSplit.optionLine).trim()
         : ''
     const effectiveNote = formattedNote || optionLineFallback
@@ -676,8 +704,11 @@ export function buildKitchenHallStyleSlipLines(
       ) === normalizePromoParentKey(fallbackNameFromNote)
         ? undefined
         : effectiveNote
+    const displayName = banbanParsed
+      ? formatBanbanKitchenLineDisplayName(rawItemName, banbanParsed)
+      : resolvedMainName
     out.push({
-      name: resolvedMainName,
+      name: displayName,
       qty: Math.max(1, Number(it.qty ?? 1) || 1),
       ...(dedupedNote ? { note: dedupedNote } : {}),
       ...((it as { kitchenLineCancelled?: boolean }).kitchenLineCancelled

@@ -52,6 +52,9 @@ import {
   executeLinkposDisplayQr,
   executeLinkposPayment,
   grabCancelOrderByStoreApi,
+  grabPrepareOrderApi,
+  claimKitchenPrintJob,
+  markKitchenPrintJob,
   upsertPosTaxInvoiceRecipient,
   updatePosOrder,
   updatePosOrderStatus,
@@ -125,6 +128,7 @@ import {
   isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
+import { buildKitchenJobInboundDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import {
   buildDineInAddKitchenAutoPrintDedupeKey,
   buildDineInAddKitchenPrintDedupeSuffix,
@@ -2822,9 +2826,12 @@ export default function PosTerminalPage() {
         logPosPrintDebug('accept_flow_skip_empty_items', { orderId })
         return
       }
+      const kitchenDedupeKey = isApiInboundDeliveryOrderMemo(String(params.memo ?? order.memo ?? ''))
+        ? buildKitchenJobInboundDedupeKey(orderId)
+        : `order:${orderId}:kitchen`
       const runKitchenForAcceptedOrder = () => {
         if (!autoPrintKitchenSlipOnOrder) return
-        if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
         void printKitchenFromPosOrder(order).catch((e) => {
           console.error('Kitchen slip print (accept flow):', e)
         })
@@ -2869,6 +2876,75 @@ export default function PosTerminalPage() {
     ]
   )
 
+  const drainKitchenPrintJobQueue = useCallback(async () => {
+    if (!isMainPosDevice || !currentStoreId) return
+    if (!autoPrintKitchenSlipOnOrder && !autoPrintReceiptOnOrder) return
+    try {
+      const claimRes = await claimKitchenPrintJob({ storeCode: currentStoreId })
+      if (!claimRes.success || !claimRes.job?.id) return
+      const jobId = Number(claimRes.job.id)
+      const orderId = Number(claimRes.job.order_id)
+      if (!Number.isFinite(jobId) || jobId <= 0 || !Number.isFinite(orderId) || orderId <= 0) {
+        await markKitchenPrintJob({ jobId, status: 'failed', reason: 'invalid_job' })
+        return
+      }
+      let list = await getPosOrders({
+        orderId,
+        storeCode: currentStoreId,
+        strictStore: true,
+        limit: 1,
+      })
+      const order = list[0]
+      if (!order?.items?.length) {
+        await markKitchenPrintJob({ jobId, status: 'failed', reason: 'empty_items' })
+        return
+      }
+      const kitchenDedupeKey = buildKitchenJobInboundDedupeKey(orderId)
+      const runKitchenFromJob = () => {
+        if (!autoPrintKitchenSlipOnOrder) return
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+        void printKitchenFromPosOrder(order).catch((e) => {
+          console.error('Kitchen slip print (print job queue):', e)
+        })
+      }
+      if (autoPrintReceiptOnOrder) {
+        const hallPayload = {
+          ...hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+            ...posReceiptLineOpts,
+            orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+            storeCodeFallback: currentStoreId,
+          }),
+          _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
+        }
+        await printReceiptNow(
+          hallPayload,
+          undefined,
+          false,
+          undefined,
+          true,
+          autoPrintKitchenSlipOnOrder ? runKitchenFromJob : undefined
+        )
+      } else if (autoPrintKitchenSlipOnOrder) {
+        setTimeout(runKitchenFromJob, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
+      }
+      await markKitchenPrintJob({ jobId, status: 'printed' })
+      logPosPrintDebug('kitchen_print_job_done', { jobId, orderId })
+    } catch (e) {
+      console.error('drainKitchenPrintJobQueue:', e)
+    }
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    autoPrintKitchenSlipOnOrder,
+    autoPrintReceiptOnOrder,
+    reserveKitchenAutoPrintKey,
+    printKitchenFromPosOrder,
+    pricingAdjustments,
+    posReceiptLineOpts,
+    t,
+    logPosPrintDebug,
+  ])
+
   const decideIncomingPendingDeliveryOrder = useCallback(
     async (params: {
       orderId: number
@@ -2901,6 +2977,20 @@ export default function PosTerminalPage() {
             await appAlert(localizeApiPopupMessage(res.message, t('processFail') || '처리 실패'))
             return
           }
+          if (grabOrderId) {
+            try {
+              const prepRes = await grabPrepareOrderApi({ orderID: grabOrderId, toState: 'Accepted' })
+              if (!prepRes.success) {
+                await appAlert(
+                  tr(t, 'posGrabPrepareFailed', {
+                    detail: String(prepRes.message ?? 'grab_prepare_failed'),
+                  })
+                )
+              }
+            } catch (e) {
+              await appAlert(tr(t, 'posGrabPrepareFailed', { detail: String(e) }))
+            }
+          }
           if (!res.success && res.statusAlreadyApplied && res.message) {
             await appAlert(localizeApiPopupMessage(res.message, t('processFail') || '처리 실패'))
           }
@@ -2926,9 +3016,10 @@ export default function PosTerminalPage() {
             }
             const order = list[0]
             if (order?.items?.length) {
+              const kitchenDedupeKey = buildKitchenJobInboundDedupeKey(orderId)
               const runKitchenForAcceptedOrder = () => {
                 if (!autoPrintKitchenSlipOnOrder) return
-                if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
+                if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
                 void printKitchenFromPosOrder(order).catch((e) => {
                   console.error('Kitchen slip print (accept flow):', e)
                 })
@@ -2978,6 +3069,14 @@ export default function PosTerminalPage() {
           await appAlert(localizeApiPopupMessage(rejectRes.message, t('processFail') || '처리 실패'))
         }
         if (grabOrderId) {
+          try {
+            const prepRes = await grabPrepareOrderApi({ orderID: grabOrderId, toState: 'Rejected' })
+            if (!prepRes.success) {
+              console.error('grabPrepareOrderApi Rejected:', prepRes.message)
+            }
+          } catch (e) {
+            console.error('grabPrepareOrderApi Rejected:', e)
+          }
           await grabCancelOrderByStoreApi({
             orderID: grabOrderId,
             storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
@@ -3037,7 +3136,12 @@ export default function PosTerminalPage() {
         void (async () => {
           const accepted = await appConfirm(
             t('posIncomingDeliveryArrivedPrompt') ||
-              '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?'
+              '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?',
+            {
+              title: t('posOrderTypeDelivery') || '배달',
+              confirmLabel: t('confirm') || '확인',
+              cancelLabel: t('posIncomingDeliveryDismissLater') || '나중에',
+            }
           )
           if (!accepted) return
           refetchStores({ scope: 'all' })
@@ -4573,8 +4677,16 @@ export default function PosTerminalPage() {
         ),
         _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
       }
+      const isPendingDelivery =
+        String(orderType).trim().toLowerCase() === 'delivery' &&
+        String(row.status ?? '').trim().toLowerCase() === 'pending'
+      const isPendingInboundDelivery =
+        isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
+      const kitchenDedupeKey = isPendingInboundDelivery
+        ? buildKitchenJobInboundDedupeKey(orderId)
+        : `order:${orderId}:kitchen`
       const runKitchenFromRealtimeOrderInsert = () => {
-        if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
         const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
         void getPosOrders({
           orderId,
@@ -4589,33 +4701,20 @@ export default function PosTerminalPage() {
           })
           .catch((e) => console.error('Kitchen slip print:', e))
       }
-      const isPendingDelivery =
-        String(orderType).trim().toLowerCase() === 'delivery' &&
-        String(row.status ?? '').trim().toLowerCase() === 'pending'
-      const shouldWaitForDeliveryAccept =
-        isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
-      if (!shouldWaitForDeliveryAccept) {
-        logPosPrintDebug('realtime_insert_autoprint_start', {
-          orderId,
-          autoPrintReceiptOnOrder,
-          autoPrintKitchenSlipOnOrder,
-          itemCount: items.length,
-          isPendingDelivery,
-          shouldWaitForDeliveryAccept,
-        })
-        if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
-          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
-        } else if (autoPrintReceiptOnOrder) {
-          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
-        } else if (autoPrintKitchenSlipOnOrder) {
-          setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-        }
-      } else {
-        logPosPrintDebug('realtime_insert_pending_delivery_wait_accept', {
-          orderId,
-          status: String(row.status ?? ''),
-          isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(memo ?? '')),
-        })
+      logPosPrintDebug('realtime_insert_autoprint_start', {
+        orderId,
+        autoPrintReceiptOnOrder,
+        autoPrintKitchenSlipOnOrder,
+        itemCount: items.length,
+        isPendingDelivery,
+        isPendingInboundDelivery,
+      })
+      if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+        printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
+      } else if (autoPrintReceiptOnOrder) {
+        printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
+      } else if (autoPrintKitchenSlipOnOrder) {
+        setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
       if (autoPrintReceiptOnPayment) {
         const st = String(row.status ?? '').toLowerCase()
@@ -4836,6 +4935,7 @@ export default function PosTerminalPage() {
     isCurrentStoreOrder,
     notifyGrabCustomerCancelledOrder,
     refetchCurrentStore,
+    drainKitchenPrintJobQueue,
   ])
 
   useEffect(() => {
@@ -5370,38 +5470,33 @@ export default function PosTerminalPage() {
             }),
             _autoPrintDedupeKey: `order:${oid}:hall:auto`,
           }
-          const runKitchenForPolledOrder = () => {
-            if (!autoPrintKitchenSlipOnOrder) return
-            if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
-            void printKitchenFromPosOrder(order).catch((e) => console.error('Kitchen slip print:', e))
-          }
           const isPendingDelivery =
             String(order.orderType ?? '').trim().toLowerCase() === 'delivery' &&
             String(order.status ?? '').trim().toLowerCase() === 'pending'
-          const shouldWaitForDeliveryAccept =
+          const isPendingInboundDelivery =
             isPendingDelivery && isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))
-          if (!shouldWaitForDeliveryAccept) {
-            logPosPrintDebug('poll_autoprint_start', {
-              orderId: oid,
-              autoPrintReceiptOnOrder,
-              autoPrintKitchenSlipOnOrder,
-              itemCount: items.length,
-              isPendingDelivery,
-              shouldWaitForDeliveryAccept,
-            })
-            if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
-              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
-            } else if (autoPrintReceiptOnOrder) {
-              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
-            } else if (autoPrintKitchenSlipOnOrder) {
-              setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-            }
-          } else {
-            logPosPrintDebug('poll_pending_delivery_wait_accept', {
-              orderId: oid,
-              status: String(order.status ?? ''),
-              isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(order.memo ?? '')),
-            })
+          const kitchenDedupeKey = isPendingInboundDelivery
+            ? buildKitchenJobInboundDedupeKey(oid)
+            : `order:${oid}:kitchen`
+          const runKitchenForPolledOrder = () => {
+            if (!autoPrintKitchenSlipOnOrder) return
+            if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+            void printKitchenFromPosOrder(order).catch((e) => console.error('Kitchen slip print:', e))
+          }
+          logPosPrintDebug('poll_autoprint_start', {
+            orderId: oid,
+            autoPrintReceiptOnOrder,
+            autoPrintKitchenSlipOnOrder,
+            itemCount: items.length,
+            isPendingDelivery,
+            isPendingInboundDelivery,
+          })
+          if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+            printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
+          } else if (autoPrintReceiptOnOrder) {
+            printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
+          } else if (autoPrintKitchenSlipOnOrder) {
+            setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
           }
           if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
             const qtySnap = buildDineInQtySnapshot(items)
@@ -5608,6 +5703,7 @@ export default function PosTerminalPage() {
         }
 
         await runPaymentReceiptScan()
+        await drainKitchenPrintJobQueue()
       } catch {
         // ignore poll errors
       } finally {
@@ -5668,6 +5764,7 @@ export default function PosTerminalPage() {
     printReceiptNow,
     dispatchDineInAddonKitchenPrint,
     formatLineNoteForPrint,
+    drainKitchenPrintJobQueue,
   ])
 
   /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */

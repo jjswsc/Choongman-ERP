@@ -21,7 +21,7 @@ import {
 import {
   getPosPackagingChecklistByOrder,
   grabCancelOrderByStoreApi,
-  grabMarkOrderReadyApi,
+  grabPrepareOrderApi,
   markPosOrderItemServed,
   updatePosOrderStatus,
 } from '@/lib/api-client'
@@ -33,6 +33,7 @@ import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { extractGrabOrderIdFromMemo, extractGrabStateFromMemo } from '@/lib/grab-order-memo'
+import { markPosDeliveryPackagedWithGrab } from '@/lib/grab-delivery-packaging-ready'
 import { markPosSelfInitiatedGrabCancel } from '@/lib/pos-grab-cancel-alert-suppress'
 import {
   grabStateToStageIndex,
@@ -534,20 +535,20 @@ export function DeliveryOrderPanel({
     if (Number.isNaN(id)) return
     const completeReady = async () => {
       try {
-        await updatePosOrderStatus({ id, status: 'ready' })
-        if (grabOrderId) {
-          try {
-            const markRes = await grabMarkOrderReadyApi({ orderID: grabOrderId, markStatus: 1 })
-            if (!markRes.success) {
-              console.error('grabMarkOrderReadyApi:', markRes.message || 'failed')
-            }
-          } catch (e) {
-            console.error('grabMarkOrderReadyApi:', e)
-          }
+        const result = await markPosDeliveryPackagedWithGrab({ orderId: id, grabOrderId })
+        if (!result.posOk) {
+          await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(result.grabError ?? 'update_failed') }))
+          return
+        }
+        if (!result.grabOk) {
+          await appAlert(
+            i18nTr(ti, 'posGrabMarkReadyFailed', { detail: String(result.grabError ?? 'grab_mark_ready_failed') })
+          )
         }
         onPackaged?.()
       } catch (e) {
-        console.error('updatePosOrderStatus:', e)
+        console.error('markPosDeliveryPackagedWithGrab:', e)
+        await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
       }
     }
     try {
@@ -584,8 +585,20 @@ export function DeliveryOrderPanel({
           status: 'cooking',
           ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}),
         })
-        if (!res.success) {
+        if (!res.success && !res.statusAlreadyApplied) {
           throw new Error(res.message || (t('processFail') || '처리 실패'))
+        }
+        if (grabOrderId) {
+          try {
+            const prepRes = await grabPrepareOrderApi({ orderID: grabOrderId, toState: 'Accepted' })
+            if (!prepRes.success) {
+              await appAlert(
+                i18nTr(ti, 'posGrabPrepareFailed', { detail: String(prepRes.message ?? 'grab_prepare_failed') })
+              )
+            }
+          } catch (e) {
+            await appAlert(i18nTr(ti, 'posGrabPrepareFailed', { detail: String(e) }))
+          }
         }
         await onAccepted?.({
           orderId: id,
@@ -614,6 +627,14 @@ export function DeliveryOrderPanel({
         await updatePosOrderStatus({ id, status: 'cancelled', ...(grabOrderId ? { grabState: 'CANCELLED' } : {}) })
       }
       if (grabOrderId) {
+        try {
+          const prepRes = await grabPrepareOrderApi({ orderID: grabOrderId, toState: 'Rejected' })
+          if (!prepRes.success) {
+            console.error('grabPrepareOrderApi Rejected:', prepRes.message)
+          }
+        } catch (e) {
+          console.error('grabPrepareOrderApi Rejected:', e)
+        }
         await grabCancelOrderByStoreApi({
           orderID: grabOrderId,
           storeCode: storeCode || undefined,
@@ -960,7 +981,18 @@ export function DeliveryOrderPanel({
           if (Number.isNaN(id)) return
           setChecklistSubmitting(true)
           try {
-            await updatePosOrderStatus({ id, status: 'ready' })
+            const result = await markPosDeliveryPackagedWithGrab({ orderId: id, grabOrderId })
+            if (!result.posOk) {
+              await appAlert(
+                i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(result.grabError ?? 'update_failed') })
+              )
+              return
+            }
+            if (!result.grabOk) {
+              await appAlert(
+                i18nTr(ti, 'posGrabMarkReadyFailed', { detail: String(result.grabError ?? 'grab_mark_ready_failed') })
+              )
+            }
             console.info('[packaging-checklist] delivery confirmed', {
               orderId: id,
               checkedCount: checkedItemIds.length,

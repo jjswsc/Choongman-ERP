@@ -18,7 +18,7 @@ import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
-import { buildKitchenJobUpdateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
+import { buildKitchenJobUpdateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key-update.server'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   parseAppliedCouponsFromBody,
