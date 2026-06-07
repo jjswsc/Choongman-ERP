@@ -193,6 +193,22 @@ describe('buildPartialCancelKitchenSlips', () => {
 })
 
 describe('preparePosOrderItemsForKitchenSlip banban reprint', () => {
+  it('restores slash flavors from banbanFlavors note when name was stripped', () => {
+    const menus = [{ id: '24', name: 'Banban Chicken', code: 'C024', isBanban: true }]
+    const prepared = preparePosOrderItemsForKitchenSlip(
+      [
+        {
+          id: 'grab:gf-010',
+          name: 'Banban Chicken',
+          qty: 1,
+          note: 'mods:Pickled Radish · banbanFlavors:SWEET YANGNYEOM,SOY SAUCE CHICKEN',
+        },
+      ],
+      { menus }
+    )
+    expect(prepared[0]?.name).toBe('Banban Chicken (SWEET YANGNYEOM / SOY SAUCE CHICKEN)')
+  })
+
   it('restores slash flavors from menuId1 and menuId2 when name was stripped', () => {
     const menus = [
       { id: '11', name: 'GOLDEN FRIED CHICKEN', code: 'C011' },

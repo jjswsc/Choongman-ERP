@@ -31,7 +31,7 @@ import {
 } from '@/lib/pos-member-portal-takeout-label'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
-import { canStartPosLinePartialCancel } from '@/lib/pos-order-line-update'
+import { canStartPosLinePartialCancel, orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
   alertPosLineCancelBlocked,
@@ -45,6 +45,8 @@ export interface TakeoutOrderPanelProps {
   order: Order | null
   menus?: PosMenu[]
   onPackaged?: () => void
+  /** 기존 포장 주문에 메뉴 추가(메뉴 화면으로) */
+  onAddOrder?: () => void
   onPay?: () => void
   onOpenTaxInvoice?: () => void
   /** 주문 취소 시 */
@@ -62,6 +64,7 @@ export function TakeoutOrderPanel({
   order,
   menus: menusFromProps = [],
   onPackaged,
+  onAddOrder,
   onPay,
   onOpenTaxInvoice,
   onCancel,
@@ -219,6 +222,15 @@ export function TakeoutOrderPanel({
   const canCancel =
     order &&
     !['completed', 'cancelled', 'paid', 'refunded'].includes(normalizedStatus)
+  const canAddOrder = Boolean(
+    order &&
+      onAddOrder &&
+      !isCompleted &&
+      !isPaid &&
+      normalizedStatus !== 'cancelled' &&
+      normalizedStatus !== 'refunded' &&
+      orderPaymentsSum(order) <= 0.005
+  )
   const [cancelling, setCancelling] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
@@ -463,11 +475,20 @@ export function TakeoutOrderPanel({
                   })}
                 </ul>
               </ScrollArea>
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
-                {isPaid
-                  ? (t('posPaymentComplete') || '결제 완료')
-                  : (t('posTablePayInStore') || '매장 결제')}
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={!canAddOrder}
+                  onClick={() => onAddOrder?.()}
+                >
+                  {t('posOrderButton') || '주문'}
+                </Button>
+                <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
+                  {isPaid
+                    ? (t('posPaymentComplete') || '결제 완료')
+                    : (t('posTablePayInStore') || '매장 결제')}
+                </Button>
+              </div>
               {canCancel && (
                 <div className="space-y-1.5">
                   {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
@@ -625,10 +646,12 @@ export function TakeoutOrderPanel({
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Button onClick={handlePackComplete} className="h-11 text-base font-semibold" disabled={!allPackaged}>
-                  {allPackaged
-                    ? (t('posDeliveryPackagingComplete') || '포장 완료')
-                    : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeItems.length || order.items.length})`}
+                <Button
+                  className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={!canAddOrder}
+                  onClick={() => onAddOrder?.()}
+                >
+                  {t('posOrderButton') || '주문'}
                 </Button>
                 <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
                   {isPaid
@@ -636,6 +659,15 @@ export function TakeoutOrderPanel({
                     : (t('posTablePayInStore') || '매장 결제')}
                 </Button>
               </div>
+              <Button
+                onClick={handlePackComplete}
+                className="h-11 w-full text-base font-semibold"
+                disabled={!allPackaged}
+              >
+                {allPackaged
+                  ? (t('posDeliveryPackagingComplete') || '포장 완료')
+                  : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeItems.length || order.items.length})`}
+              </Button>
               {canCancel && (
                 <div className="space-y-1.5">
                   {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (

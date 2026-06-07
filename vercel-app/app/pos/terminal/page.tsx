@@ -1664,43 +1664,20 @@ export default function PosTerminalPage() {
       if (!rawItems.length) throw new Error('empty_order_items')
       const items = rawItems.map((it) => {
         const note = String(it.note ?? '').trim()
-        const menuId = String(
-          (
-            it as {
-              menuId?: string
-              menuId1?: string
-              menu_id1?: string
-              menuId2?: string
-            }
-          ).menuId1 ??
-            (
-              it as {
-                menuId?: string
-                menuId1?: string
-                menu_id1?: string
-                menuId2?: string
-              }
-            ).menuId ??
-            (
-              it as {
-                menuId?: string
-                menuId1?: string
-                menu_id1?: string
-                menuId2?: string
-              }
-            ).menu_id1 ??
+        const parentMenuId = String((it as { menuId?: string; menu_id?: string }).menuId ?? (it as { menu_id?: string }).menu_id ?? '').trim()
+        const flavorMenuId1 = String(
+          (it as { menuId1?: string; menu_id1?: string }).menuId1 ??
+            (it as { menu_id1?: string }).menu_id1 ??
             ''
         ).trim()
-        const menuId2 = String(
-          (
-            it as {
-              menuId2?: string
-              menu_id2?: string
-            }
-          ).menuId2 ??
+        const flavorMenuId2 = String(
+          (it as { menuId2?: string; menu_id2?: string }).menuId2 ??
             (it as { menu_id2?: string }).menu_id2 ??
             ''
         ).trim()
+        const hasDistinctFlavorIds =
+          Boolean(flavorMenuId1 && flavorMenuId2 && flavorMenuId1 !== flavorMenuId2)
+        const menuId = parentMenuId || (hasDistinctFlavorIds ? '' : flavorMenuId1)
         const pit = it as {
           optionCode?: string
           optionCode1?: string
@@ -1743,8 +1720,9 @@ export default function PosTerminalPage() {
           name: grabLine ? String(it.name ?? displayName) : displayName,
           price: Number(it.price ?? 0),
           qty: Number(it.qty ?? it.quantity ?? 1),
-          ...(menuId ? { menuId, menuId1: menuId } : {}),
-          ...(menuId2 ? { menuId2 } : {}),
+          ...(parentMenuId ? { menuId: parentMenuId } : menuId ? { menuId } : {}),
+          ...(flavorMenuId1 ? { menuId1: flavorMenuId1 } : {}),
+          ...(flavorMenuId2 ? { menuId2: flavorMenuId2 } : {}),
           ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
           ...(optionCode2 ? { optionCode2 } : {}),
           ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
@@ -2600,8 +2578,19 @@ export default function PosTerminalPage() {
       memo?: string
       guestCount?: number
       logEvent: string
+      orderTypeKey?: 'dine_in' | 'takeout' | 'delivery'
     }) => {
-      const { kitchenCartLines, dedupeKey, orderNo, storeCode, tableName, memo, guestCount, logEvent } = params
+      const {
+        kitchenCartLines,
+        dedupeKey,
+        orderNo,
+        storeCode,
+        tableName,
+        memo,
+        guestCount,
+        logEvent,
+        orderTypeKey = 'dine_in',
+      } = params
       if (!kitchenCartLines.length) return
       const fallbackDedupeKey = buildDineInAddonKitchenFallbackDedupeKey(orderNo, kitchenCartLines)
       // 추가주문 주방 dedupe는 "내용 기반 add 키"(+fallback)만 쓴다.
@@ -2678,7 +2667,10 @@ export default function PosTerminalPage() {
               label: slip.label,
               orderNo,
               storeCode: printSettingsStoreCode,
-              orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
+              orderTypeLabel:
+                ki.orderTypeLabels[normalizePosOrderTypeKey(orderTypeKey)] ||
+                ki.orderTypeLabels.dine_in ||
+                '매장',
               tablePart: tablePartR,
               dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
               items: kitchenSlipItemsForPrint(
@@ -9435,6 +9427,239 @@ export default function PosTerminalPage() {
                 if (!(await ensureBusinessOpenForOrder())) return false
                 /** `await` 사이에 카트가 비면 터미널 보정이 불가 → 링크포스/결제 대기 전에 스냅샷 */
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
+                const paymentSumForTakeoutAddCheck =
+                  Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
+                const existingTakeoutId = Number(pendingTakeoutOrderId ?? 0)
+                const isTakeoutAddOrder =
+                  payload.orderType === 'takeout' &&
+                  Number.isFinite(existingTakeoutId) &&
+                  existingTakeoutId > 0 &&
+                  paymentSumForTakeoutAddCheck <= 0.0001
+                if (isTakeoutAddOrder) {
+                  const rows = await getPosOrders({
+                    orderId: existingTakeoutId,
+                    storeCode: currentStoreId,
+                    strictStore: true,
+                    limit: 1,
+                  })
+                  const hit = Array.isArray(rows) ? rows[0] : null
+                  const hitType = normalizePosOrderTypeKey(hit?.orderType)
+                  const hitStatus = String(hit?.status ?? '').trim().toLowerCase()
+                  const hitPaySum = hit ? posOrderPaymentSum(hit) : 0
+                  const hitItems = Array.isArray(hit?.items) ? hit!.items! : []
+                  const openForTakeoutAdd =
+                    Boolean(hit?.id) &&
+                    hitType === 'takeout' &&
+                    hitItems.length > 0 &&
+                    !isPosOrderPaidLikeStatus(hitStatus) &&
+                    hitStatus !== 'completed' &&
+                    hitStatus !== 'cancelled' &&
+                    hitStatus !== 'canceled' &&
+                    hitStatus !== 'refunded' &&
+                    hitPaySum <= 0.0001
+                  if (!openForTakeoutAdd) {
+                    setPendingTakeoutOrderId(null)
+                    await appAlert(t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
+                    return false
+                  }
+                  const existingUiItems: OrderItem[] = hitItems.map((it, idx) => ({
+                    id: String(it.id ?? `line-${idx}`),
+                    name: String(it.name ?? ''),
+                    quantity: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
+                    price: Number(it.price ?? 0) || 0,
+                    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+                    ...(String(
+                      (it as { menuId?: string }).menuId ??
+                        it.menuId1 ??
+                        (it as { menu_id1?: string }).menu_id1 ??
+                        ''
+                    ).trim()
+                      ? {
+                          menuId: String(
+                            (it as { menuId?: string }).menuId ??
+                              it.menuId1 ??
+                              (it as { menu_id1?: string }).menu_id1 ??
+                              ''
+                          ).trim(),
+                        }
+                      : {}),
+                    ...(String(it.promoId ?? '').trim() ? { promoId: String(it.promoId).trim() } : {}),
+                    ...(String(it.promoCode ?? '').trim() ? { promoCode: String(it.promoCode).trim() } : {}),
+                    ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+                    ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
+                    ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
+                  }))
+                  const orderLabelFromDb =
+                    String(hit!.tableName ?? '').trim() ||
+                    String(payload.orderLabel ?? '').trim() ||
+                    (t('posOrderTypeTakeout') || '포장')
+                  const incomingItems = cartLinesToPosOrderItems(payloadItemsNormalized)
+                  const existingItemsBeforeAdd = orderUiItemsToPosOrderItems(existingUiItems)
+                  const posItemsForSave = mergeDineInAddonCartPosItemsWithExisting(
+                    existingItemsBeforeAdd,
+                    incomingItems
+                  )
+                  const updateRes = await updatePosOrder({
+                    id: existingTakeoutId,
+                    terminalStoreCode: currentStoreId,
+                    items: posItemsForSave,
+                    tableName: orderLabelFromDb,
+                    memo: String(hit!.memo ?? payload.memo ?? '').trim() || undefined,
+                    discountAmt: Math.max(0, Number(hit!.discountAmt ?? payload.discountAmt ?? 0) || 0),
+                    discountReason: String(hit!.discountReason ?? payload.discountReason ?? '').trim(),
+                    serviceAmt: Math.max(0, Number(hit!.serviceAmt ?? payload.serviceAmt ?? 0) || 0),
+                    serviceReason: String(hit!.serviceReason ?? payload.serviceReason ?? '').trim(),
+                    memberId: hit!.memberId ?? payload.memberId,
+                    memberNo: hit!.memberNo ?? payload.memberNo,
+                    couponCode: hit!.couponCode ?? payload.couponCode,
+                    couponDiscountAmt: Math.max(0, Number(hit!.couponDiscountAmt ?? payload.couponDiscountAmt ?? 0) || 0),
+                    pointUsed: Math.max(0, Math.trunc(Number(hit!.pointUsed ?? payload.pointUsed ?? 0) || 0)),
+                    paymentCash: 0,
+                    paymentCard: 0,
+                    paymentQr: 0,
+                    paymentOther: 0,
+                    paymentDeliveryApp: 0,
+                    deliveryPaymentChannel: null,
+                    pricingAdjustments,
+                  })
+                  if (!updateRes.success) {
+                    await appAlert(
+                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    )
+                    return false
+                  }
+                  const savedOrderNo = String(hit!.orderNo ?? '').trim()
+                  type ReceiptPrintLine = {
+                    id: string
+                    name: string
+                    price: number
+                    qty: number
+                    note?: string
+                    isAddon?: boolean
+                  }
+                  const mapPosItemToReceiptLine = (
+                    it: (typeof posItemsForSave)[number],
+                    addon: boolean
+                  ): ReceiptPrintLine => ({
+                    id: String(it.id ?? ''),
+                    name: String(it.name ?? ''),
+                    price: Number(it.price ?? 0),
+                    qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
+                    ...(String((it as { note?: string }).note ?? '').trim()
+                      ? { note: String((it as { note?: string }).note).trim() }
+                      : {}),
+                    ...(addon ? { isAddon: true as const } : {}),
+                  })
+                  const receiptPrintItems: ReceiptPrintLine[] = posItemsForSave.map((it) => {
+                    const id = normalizeCartLineIdForSave(it.id)
+                    const prev = existingUiItems.find((e) => normalizeCartLineIdForSave(e.id) === id)
+                    const qNow = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
+                    const qPrev = prev
+                      ? resolveCartLineQuantityForSave(prev as { quantity?: unknown; qty?: unknown })
+                      : 0
+                    const addon = !prev || qNow > qPrev
+                    return mapPosItemToReceiptLine(it, addon)
+                  })
+                  const mergeSubtotal = receiptPrintItems.reduce((s, i) => s + i.price * i.qty, 0)
+                  const discountAmt = Math.max(0, Number(hit!.discountAmt ?? payload.discountAmt ?? 0) || 0)
+                  const pricing = computePosPricing({
+                    subtotal: mergeSubtotal,
+                    discountAmt,
+                    cardPaymentAmount: 0,
+                    adjustments: pricingAdjustments,
+                  })
+                  const kitchenCartLines = (() => {
+                    const delta = filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd, {
+                      formatNote: formatLineNoteForPrint,
+                    })
+                    if (delta.length === 0 && incomingItems.length > 0) return incomingItems
+                    return delta
+                  })()
+                  const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
+                  const shouldAutoPrintReceipt = storeAutoPrint.receiptOnAddOrder
+                  const autoPrintKitchenForSubmit = storeAutoPrint.kitchenOnOrder
+                  const receiptPayloadSubmit = {
+                    orderNo: savedOrderNo,
+                    storeCode: currentStoreId,
+                    orderType: t('posOrderTypeTakeout') || '포장',
+                    tableName: orderLabelFromDb,
+                    memo: String(hit!.memo ?? payload.memo ?? '').trim() || undefined,
+                    items: receiptPrintItems,
+                    subtotal: mergeSubtotal,
+                    discountAmt,
+                    couponDiscountAmt: Math.max(
+                      0,
+                      Number(hit!.couponDiscountAmt ?? payload.couponDiscountAmt ?? 0) || 0
+                    ),
+                    discountReason: String(hit!.discountReason ?? payload.discountReason ?? '').trim() || undefined,
+                    total: pricing.finalTotal,
+                    vatFeeAmt: pricing.vatFeeAmt,
+                    vatFeeMode: pricing.vatFeeMode,
+                    ...receiptTaxDisplayFieldsFromPricing(pricing),
+                    serviceFeeAmt: pricing.serviceFeeAmt,
+                    serviceFeeMode: pricing.serviceFeeMode,
+                    cardFeeAmt: pricing.cardFeeAmt,
+                    cardFeeMode: pricing.cardFeeMode,
+                    otherFeeAmt: pricing.otherFeeAmt,
+                    otherFeeMode: pricing.otherFeeMode,
+                    _autoPrintDedupeKey: `order:${existingTakeoutId}:takeout:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+                  }
+                  const kitchenDelayAfterReceiptMs =
+                    typeof window !== 'undefined' && window.cmPosShell
+                      ? resolveAfterReceiptToKitchenDelayMs()
+                      : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+                  if (isMainPosDevice) {
+                    if (shouldAutoPrintReceipt) {
+                      logPosPrintDebug('takeout_add_receipt_autoprint_dispatch', {
+                        orderId: existingTakeoutId,
+                        orderNo: savedOrderNo,
+                        receiptItems: receiptPrintItems.length,
+                      })
+                      void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
+                    }
+                    if (autoPrintKitchenForSubmit && kitchenCartLines.length > 0) {
+                      const scheduleKitchen = () => {
+                        dispatchDineInAddonKitchenPrint({
+                          kitchenCartLines,
+                          dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(
+                            existingTakeoutId,
+                            kitchenCartLines
+                          ),
+                          orderNo: savedOrderNo,
+                          storeCode: currentStoreId,
+                          tableName: orderLabelFromDb,
+                          memo: String(hit!.memo ?? payload.memo ?? '').trim() || undefined,
+                          logEvent: 'takeout_add_kitchen_autoprint_dispatch',
+                          orderTypeKey: 'takeout',
+                        })
+                      }
+                      setTimeout(
+                        scheduleKitchen,
+                        shouldAutoPrintReceipt ? kitchenDelayAfterReceiptMs : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+                      )
+                    }
+                    if (!shouldAutoPrintReceipt && !autoPrintKitchenForSubmit) {
+                      setReceiptData({
+                        ...receiptPayloadSubmit,
+                        receiptAutoPrintContext: 'add_order',
+                      })
+                    }
+                  }
+                  const barLabel = translateTakeoutOrderDisplayLabel(orderLabelFromDb, t, {
+                    fallbackOrderId: existingTakeoutId,
+                  })
+                  setPendingTakeoutOrderId(null)
+                  setPendingReceiptOrderNo(null)
+                  setSelectedTakeoutTargetId(`takeout-order-${existingTakeoutId}`)
+                  setSelectedTakeoutTargetLabel(barLabel)
+                  clearCartFromTerminal()
+                  await refetchCurrentStore()
+                  return true
+                }
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                 if (!linkpos.ok) return false
                 const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
@@ -10165,6 +10390,7 @@ export default function PosTerminalPage() {
                       onClick={() => {
                         setTakeoutMode('slot')
                         setTakeoutSlot(String(slotNo))
+                        setPendingTakeoutOrderId(null)
                       }}
                     >
                       {formatTakeoutSlotLabel(String(slotNo))}
@@ -10179,6 +10405,7 @@ export default function PosTerminalPage() {
                       const v = e.target.value
                       setTakeoutMemberName(v)
                       setTakeoutMode(v.trim() ? 'member' : 'slot')
+                      setPendingTakeoutOrderId(null)
                     }}
                     onFocus={(e) => {
                       scrollIntoViewOnFocus(e)
@@ -10197,6 +10424,7 @@ export default function PosTerminalPage() {
                     className="h-8"
                     data-tour="pos-tour-takeout-new"
                     onClick={() => {
+                      setPendingTakeoutOrderId(null)
                       setSelectedTakeoutTargetId('takeout-draft')
                       setSelectedTakeoutTargetLabel(baseTakeoutLabel)
                     }}
@@ -10660,6 +10888,17 @@ export default function PosTerminalPage() {
                     }
               }
               onCancel={refetchCurrentStore}
+              onAddOrder={() => {
+                if (!selectedTakeoutOrder) return
+                if (isPosOrderPaidLikeStatus(String(selectedTakeoutOrder.status ?? ''))) return
+                if (orderPaymentsSum(selectedTakeoutOrder) > 0.005) return
+                const oid = Number(selectedTakeoutOrder.id)
+                if (!Number.isFinite(oid) || oid <= 0) return
+                setPendingTakeoutOrderId(oid)
+                setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
+                setSelectedTakeoutTargetLabel(resolveTakeoutOrderBarLabel(selectedTakeoutOrder))
+                setSelectedTakeoutTargetId(null)
+              }}
               onPay={() => {
                 if (!selectedTakeoutOrder) return
                 setPendingTakeoutOrderId(Number(selectedTakeoutOrder.id))

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   enrichBanbanKitchenLineForPrint,
   expandBanbanComposeLineForPrint,
+  filterReceiptOptionLinesForBanban,
   getBanbanFlavorMenuList,
   isBanbanMenu,
   isBanbanFlavorWhitelistMissing,
@@ -179,6 +180,18 @@ describe('getBanbanFlavorMenuList', () => {
   })
 })
 
+describe('filterReceiptOptionLinesForBanban', () => {
+  it('removes slash-combined and per-flavor duplicates', () => {
+    const banban = { flavor1: 'SNOW ONION', flavor2: 'CHEESE TORNADO' }
+    expect(
+      filterReceiptOptionLinesForBanban(
+        ['SNOW ONION / CHEESE TORNADO', 'Pickled Radish', 'SNOW ONION', 'CHEESE TORNADO'],
+        banban
+      )
+    ).toEqual(['Pickled Radish'])
+  })
+})
+
 describe('resolveBanbanFlavorPairForKitchenPrint', () => {
   const menus = [
     { id: '11', name: 'GOLDEN FRIED CHICKEN', code: 'C011' },
@@ -199,6 +212,19 @@ describe('resolveBanbanFlavorPairForKitchenPrint', () => {
       )
     ).toEqual({
       flavor1: 'GOLDEN FRIED CHICKEN',
+      flavor2: 'SOY SAUCE CHICKEN',
+    })
+  })
+
+  it('banbanFlavors note 토큰으로 재인쇄 맛을 복원한다', () => {
+    expect(
+      resolveBanbanFlavorPairForKitchenPrint({
+        id: 'grab:gf-010',
+        name: 'Banban Chicken',
+        note: 'mods:Pickled Radish · banbanFlavors:SWEET YANGNYEOM,SOY SAUCE CHICKEN',
+      })
+    ).toEqual({
+      flavor1: 'SWEET YANGNYEOM',
       flavor2: 'SOY SAUCE CHICKEN',
     })
   })

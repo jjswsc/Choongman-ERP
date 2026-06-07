@@ -874,6 +874,7 @@ export function resolveGrabDeliveryLineNote(
   }
 
   for (const chunk of chunks) {
+    if (/^banbanFlavors:/i.test(chunk)) continue
     const modMatch = /^mods:\s*(.+)$/i.exec(chunk)
     if (modMatch?.[1]) {
       for (const part of modMatch[1].split(',')) pushOptionToken(part)

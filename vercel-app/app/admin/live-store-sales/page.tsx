@@ -1,13 +1,12 @@
 "use client"
 
 import { useEffect, useMemo } from "react"
-import { LayoutDashboard } from "lucide-react"
+import { Radio } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
-import { isOfficeRole, isOfficeStore, prefersLogisticsOperationsDashboard } from "@/lib/permissions"
+import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
-import { AdminOperationsDashboardPanel } from "@/components/erp/admin-operations-dashboard-panel"
 import { AdminDashboardPendingOrdersAlert } from "@/components/erp/admin-dashboard-pending-orders-alert"
 import {
   canFranchiseeAggregateAllowedStores,
@@ -35,12 +34,10 @@ export default function AdminLiveStoreSalesPage() {
   const { viewStore, setViewStore } = useStoreView()
 
   const role = auth?.role || ""
-  const isLogisticsDashboard = prefersLogisticsOperationsDashboard(role)
-
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(role) || isOfficeStore(auth?.store || ""))
 
-  const { stats: dashboardStats } = useAdminDashboardStats({ poll: isLogisticsDashboard })
+  const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
 
   const canFranchiseeAll = canFranchiseeAggregateAllowedStores(
     auth?.role,
@@ -140,79 +137,68 @@ export default function AdminLiveStoreSalesPage() {
     setCurrentStoreId(effectiveStoreCode)
   }, [showBranchRealtime, effectiveStoreCode, stores, setCurrentStoreId])
 
-  const dashboardSubtitle = useMemo(() => {
-    if (isLogisticsDashboard) {
-      return tOr(t, "adminDashboardLogisticsSub", "물류 · 미승인 주문·입출고 현황")
-    }
+  const liveSalesSubtitle = useMemo(() => {
     if (isOfficeSelector) {
       return effectiveStoreCode === ALL_STORE_VALUE
-        ? tOr(t, "adminDashboardOfficeAllStores", "전체 매장 · 당일 매출·운영 지표")
-        : `${effectiveStoreCode} · ${tOr(t, "adminDashboardBranchFocus", "지점 상세")}`
+        ? tOr(t, "adminLiveStoreSalesSubtitleAll", "전체 매장 · 당일 실시간 매출·테이블 현황")
+        : `${effectiveStoreCode} · ${tOr(t, "adminLiveStoreSalesSubtitleBranch", "지점 실시간 매출")}`
     }
     if (showFranchiseAllRealtime) {
-      return tOr(t, "adminDashboardFranchiseAllStores", "내 매장 전체 · 당일 매출·운영 지표")
+      return tOr(t, "adminLiveStoreSalesSubtitleFranchiseAll", "내 매장 전체 · 실시간 매출·테이블")
     }
     return effectiveStoreCode || "—"
-  }, [isLogisticsDashboard, isOfficeSelector, effectiveStoreCode, showFranchiseAllRealtime, t])
+  }, [isOfficeSelector, effectiveStoreCode, showFranchiseAllRealtime, t])
 
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <LayoutDashboard className="h-4 w-4 text-primary" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
+              <Radio className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">
-                {tOr(t, "adminDashboard", "대시보드")}
+                {tOr(t, "adminLiveStoreSales", "실시간 매출")}
               </h1>
-              <p className="text-xs text-muted-foreground">{dashboardSubtitle}</p>
+              <p className="text-xs text-muted-foreground">{liveSalesSubtitle}</p>
             </div>
           </div>
-          {!isLogisticsDashboard ? (
-            <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
-          ) : null}
+          <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
         </div>
 
-        {isLogisticsDashboard ? (
-          <div className="space-y-6">
-            <AdminOperationsDashboardPanel />
-          </div>
-        ) : (
-          <>
-            {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
+        <>
+          {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
-            <AdminSalesDashboardCharts
-              effectiveStoreCode={effectiveStoreCode}
-              isOfficeSelector={isOfficeSelector}
-              salesStoreCodes={franchiseSalesStoreCodes}
-              tableTotalByStore={tableTotalByStore}
-            />
-            <PosRevenueRealtimeDashboard
-              effectiveStoreCode={effectiveStoreCode}
-              isOfficeSelector={isOfficeSelector}
-              salesStoreCodes={franchiseSalesStoreCodes}
-              tableTotal={adminTableTotal}
-              tableTotalLoading={loadingTables}
-            />
+          <AdminSalesDashboardCharts
+            effectiveStoreCode={effectiveStoreCode}
+            isOfficeSelector={isOfficeSelector}
+            salesStoreCodes={franchiseSalesStoreCodes}
+            tableTotalByStore={tableTotalByStore}
+          />
+          <PosRevenueRealtimeDashboard
+            effectiveStoreCode={effectiveStoreCode}
+            isOfficeSelector={isOfficeSelector}
+            salesStoreCodes={franchiseSalesStoreCodes}
+            tableTotal={adminTableTotal}
+            tableTotalLoading={loadingTables}
+          />
 
-            {showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime ? (
-              <StoreSalesRealtimeView
-                effectiveStoreCode={effectiveStoreCode}
-                stores={storesForRealtime}
-                loadingTables={loadingTables}
-                refetchStores={refetchStores}
-                currentStore={
-                  showFranchiseAllRealtime || showOfficeAllRealtime ? undefined : currentStore
-                }
-                showInlineRefresh
-                showHeaderBadge
-                showSalesCharts
-              />
-            ) : null}
-          </>
-        )}
+          {showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime ? (
+            <StoreSalesRealtimeView
+              effectiveStoreCode={effectiveStoreCode}
+              stores={storesForRealtime}
+              loadingTables={loadingTables}
+              refetchStores={refetchStores}
+              currentStore={
+                showFranchiseAllRealtime || showOfficeAllRealtime ? undefined : currentStore
+              }
+              showInlineRefresh
+              showHeaderBadge
+              showSalesCharts
+            />
+          ) : null}
+        </>
       </div>
     </div>
   )

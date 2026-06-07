@@ -130,4 +130,43 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     expect(html).toContain('Rice x1')
     expect(html).not.toContain('#22 x1')
   })
+
+  it('does not duplicate banban grab flavors on simple receipt', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: {
+        ...baseReceipt,
+        memo: 'grab_order:GF-832',
+        deliveryAppCode: 'grab',
+        items: [
+          {
+            id: 'grab:banban-832',
+            name: 'Banban Chicken (SNOW ONION / CHEESE TORNADO)',
+            price: 279,
+            qty: 1,
+            note: 'mods:Pickled Radish · banbanFlavors:SNOW ONION,CHEESE TORNADO',
+            deliveryAppCode: 'grab',
+          },
+        ],
+        subtotal: 279,
+        total: 279,
+        paymentCash: 279,
+      },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://example.com',
+      printedAt: new Date('2026-06-06T10:24:00.000Z'),
+      forceSimpleTextMode: true,
+    })
+    expect(html).toContain('Banban Chicken')
+    expect(html).toContain('SNOW ONION')
+    expect(html).toContain('CHEESE TORNADO')
+    expect(html).toContain('Pickled Radish')
+    expect(html).not.toContain('SNOW ONION / CHEESE TORNADO')
+    const snowCount = (html.match(/SNOW ONION/g) || []).length
+    const cheeseCount = (html.match(/CHEESE TORNADO/g) || []).length
+    expect(snowCount).toBe(1)
+    expect(cheeseCount).toBe(1)
+  })
 })

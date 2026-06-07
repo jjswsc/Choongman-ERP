@@ -495,20 +495,6 @@ export function StoreSalesRealtimeView({
                   </ResponsiveContainer>
                 </div>
               ) : null}
-              <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                <div className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
-                  <p>{t("mobileStoreSalesStoreName")}</p>
-                  <p className="text-right">{t("mobileStoreSalesPaidAmount")}</p>
-                  <p className="text-right">{t("mobileStoreSalesTableTotalAmount")}</p>
-                </div>
-                <div className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 bg-primary/5 px-3 py-2 text-xs font-semibold">
-                  <p>{t("mobileStoreSalesSummaryTotal")}</p>
-                  <p className="text-right tabular-nums text-orange-600 dark:text-orange-400">
-                    {formatBahtInt(byStoreTotal.paid)}
-                  </p>
-                  <p className="text-right tabular-nums text-foreground">{formatBahtInt(byStoreTotal.tableTotal)}</p>
-                </div>
-              </div>
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">

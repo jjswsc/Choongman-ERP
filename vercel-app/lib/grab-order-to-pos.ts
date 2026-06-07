@@ -24,7 +24,7 @@ import {
   parseGrabSetChildLineName,
   type GrabSetPosLine,
 } from '@/lib/grab-set-pos-lines'
-import { isBanbanMenu } from '@/lib/pos-banban-utils'
+import { formatBanbanFlavorsNoteToken, isBanbanMenu } from '@/lib/pos-banban-utils'
 
 type GrabOrderPersistResult =
   | {
@@ -954,6 +954,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
             code: resolvedMenuRow.code,
           })
         : false)
+    let grabBanbanFlavorMenuId1: string | undefined
+    let grabBanbanFlavorMenuId2: string | undefined
+    let grabBanbanFlavorLabels: string[] = []
     if (isBanbanGrabLine) {
       const banbanSlots = extractGrabBanbanFlavorSelections(flatModifiers, extractReadableModifierNames)
       const flavorLabels =
@@ -961,6 +964,11 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
           ? banbanSlots.flavors.slice(0, 2)
           : modifierNamesForNote.filter((lab) => !isGrabBanbanSizeOrPartLabel(lab)).slice(0, 2)
       if (flavorLabels.length >= 2) {
+        grabBanbanFlavorLabels = flavorLabels
+        if (banbanSlots.flavorMenuIds.length >= 2) {
+          grabBanbanFlavorMenuId1 = banbanSlots.flavorMenuIds[0]
+          grabBanbanFlavorMenuId2 = banbanSlots.flavorMenuIds[1]
+        }
         const baseBanbanName = String(resolvedMenuRow?.name ?? itemName).trim() || itemName
         itemName = formatGrabBanbanKitchenDisplayName(baseBanbanName, flavorLabels)
         const remainder = modifierNamesForNote.filter(
@@ -971,6 +979,10 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       }
     }
     itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
+    const banbanFlavorsToken =
+      grabBanbanFlavorLabels.length >= 2
+        ? formatBanbanFlavorsNoteToken(grabBanbanFlavorLabels[0], grabBanbanFlavorLabels[1])
+        : ''
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,
@@ -981,11 +993,12 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       ),
       modifierNamesForNote.length ? `mods:${modifierNamesForNote.join(',')}` : '',
       optionCodes.length ? `optc:${optionCodes.join(',')}` : '',
+      banbanFlavorsToken,
       ecoSummary || '',
     ].filter(Boolean)
 
     const itemNote = noteParts.length ? noteParts.join(' · ') : undefined
-    const menuId1 = resolved.menuId || (menuRef ? String(menuRef.menuId) : undefined)
+    const banbanParentMenuId = resolved.menuId || (menuRef ? String(menuRef.menuId) : undefined)
 
     const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {
       if (rowQty <= 0) return
@@ -994,7 +1007,10 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         name: itemName,
         price: minorToMajor(unitMinor, exponent),
         qty: rowQty,
-        ...(menuId1 ? { menuId1 } : {}),
+        ...(banbanParentMenuId ? { menuId: banbanParentMenuId } : {}),
+        ...(grabBanbanFlavorMenuId1 && grabBanbanFlavorMenuId2
+          ? { menuId1: grabBanbanFlavorMenuId1, menuId2: grabBanbanFlavorMenuId2 }
+          : {}),
         ...(optionCodes.length > 0
           ? {
               optionCodes,

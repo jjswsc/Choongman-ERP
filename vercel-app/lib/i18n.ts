@@ -3126,6 +3126,17 @@ export const i18n = {
     adminDashboardBranchFocus: '지점 상세',
     adminDashboardLogisticsSub: '물류 · 미승인 주문·입출고 현황',
     adminDashboardPendingOrdersAlert: '미승인 주문 — 승인 필요',
+    adminDashboardHomeSub: '자주 쓰는 메뉴와 알림을 모아 둔 홈입니다.',
+    adminDashboardQuickLinksTitle: '바로가기',
+    adminDashboardLinkLiveSalesDesc: '당일 매출·테이블·조리 진행 현황',
+    adminDashboardLinkSalesMgmtDesc: '기간·채널·매장별 매출 분석',
+    adminDashboardLinkOpsDesc: '주문·결제·인쇄·마감 운영 KPI',
+    adminDashboardLinkMobileSalesDesc: '휴대폰용 매출·테이블 화면',
+    adminDashboardHomeHint:
+      '실시간 테이블·조리 현황은「실시간 매출」메뉴에서 확인하세요. 당일 완료 매출 차트도 같은 화면에 있습니다.',
+    adminLiveStoreSalesSubtitleAll: '전체 매장 · 당일 실시간 매출·테이블 현황',
+    adminLiveStoreSalesSubtitleBranch: '지점 실시간 매출',
+    adminLiveStoreSalesSubtitleFranchiseAll: '내 매장 전체 · 실시간 매출·테이블',
     adminRealtimeSalesCashMix: '실매출 구성 (현금/기타)',
     adminRealtimeSalesNonCash: '현금 외',
     adminRealtimeSalesOrderCounts: '주문 건수 (실시간)',
@@ -7737,10 +7748,14 @@ export const i18n = {
       '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
       '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 「주문 유형」(전체·홀·포장·배달)으로 범위를 맞추고, 필요하면 메뉴 검색어를 입력한 뒤 「조회」합니다.\n② 「채널별 비교」를 켜면 같은 품목을 홀·포장·배달 열로 나란히 비교합니다(주문 유형 선택 시 해당 채널만).\n③ 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다.\n④ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n⑤ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
+    helpSum_admin:
+      'ERP 홈입니다. 실시간 매출·매출 관리·운영 센터 등 자주 쓰는 메뉴로 바로 이동하고, 미승인 발주 알림을 확인합니다. 물류 역할은 입출고·미승인 주문 운영 패널이 표시됩니다.',
+    helpHow_admin:
+      '① 상단 알림에서 미승인 발주가 있으면「주문 승인」으로 이동해 처리합니다.\n②「실시간 매출」: 당일 완료 매출 차트, 대기·지연 KPI, 테이블·조리 진행 현황.\n③「매출 관리」: 기간·채널·메뉴·매장별 상세 분석.\n④「운영 센터」: 주문·결제·인쇄·일마감 KPI와 경보.\n⑤ 휴대폰 매출 화면은 `/store-sales` 링크를 이용하세요.',
     helpSum_admin_live_store_sales:
-      '본사는 기본「전체 매장」당일 매출·운영 차트 대시보드입니다. 지점 선택 시 해당 매장만 집계합니다.',
+      '당일 실시간 매출 전용 화면입니다. 완료 매출 차트, 운영 KPI, 테이블·조리 진행 현황을 봅니다. 홈「대시보드」와 별도 메뉴입니다.',
     helpHow_admin_live_store_sales:
-      '① 본사(오피스) 로그인 시 기본이「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 당일 매출 차트: 시간대·매장별·홀/포장/배달·배달앱(60초 갱신). 상세는「매출 관리」.\n③ 운영 대시보드: 실매출·대기·지연·품절·취소율을 매장별 그래프로 비교합니다.\n④ 가맹/매장 계정은 자기 매장 차트와 하단 테이블·주문 현황이 추가로 보입니다.\n⑤ 테이블·좌석 실시간 화면은 `/store-sales`(모바일)를 이용하세요.',
+      '① 본사(오피스)는 기본「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 당일 매출 차트: 시간대·매장별·홀/배달/포장·배달앱 —「검색」으로 갱신. 상세 분석은「매출 관리」.\n③ 운영 대시보드: 실매출·대기·지연·테이블 총액·품절·취소율.\n④ 하단: 매장별 테이블·주문 실시간 차트(지점·가맹 전체 선택 시).\n⑤ 모바일 전용 UI는 `/store-sales`를 이용하세요.',
     helpSum_admin_ops_center:
       '주문·결제·인쇄·일마감 지표를 한 화면에서 모니터링하고, 임계치 경보를 빠르게 확인하는 운영 관제 화면입니다.',
     helpHow_admin_ops_center:
@@ -12253,6 +12268,17 @@ Only matters the employee must handle personally on a working day:
     adminDashboardBranchFocus: 'Branch detail',
     adminDashboardLogisticsSub: 'Logistics · pending orders & inbound/outbound',
     adminDashboardPendingOrdersAlert: 'Unapproved orders — approval needed',
+    adminDashboardHomeSub: 'Home for quick links and alerts.',
+    adminDashboardQuickLinksTitle: 'Quick links',
+    adminDashboardLinkLiveSalesDesc: 'Today sales, tables, and in-progress orders',
+    adminDashboardLinkSalesMgmtDesc: 'Period, channel, and store analytics',
+    adminDashboardLinkOpsDesc: 'Order, payment, print, and close KPIs',
+    adminDashboardLinkMobileSalesDesc: 'Mobile sales and table view',
+    adminDashboardHomeHint:
+      'Live table and cooking status are under Live sales. Today’s completed-sales charts are on the same page.',
+    adminLiveStoreSalesSubtitleAll: 'All stores · live sales and tables',
+    adminLiveStoreSalesSubtitleBranch: 'Branch live sales',
+    adminLiveStoreSalesSubtitleFranchiseAll: 'All my stores · live sales and tables',
     adminRealtimeSalesCashMix: 'Completed sales mix (cash / other)',
     adminRealtimeSalesNonCash: 'Non-cash',
     adminRealtimeSalesOrderCounts: 'Order counts (live)',
@@ -16873,10 +16899,14 @@ orderItemQty: 'Qty',
       'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:
       '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑤ If orders are truncated, split the date range and query again.',
+    helpSum_admin:
+      'ERP home: quick links to live sales, sales management, and ops center, plus unapproved order alerts. Logistics roles see the inbound/outbound operations panel.',
+    helpHow_admin:
+      '① Check unapproved purchase orders at the top and open Order approval when needed.\n② Live sales: today’s charts, waiting/delay KPIs, and live table/cooking status.\n③ Sales management: period, channel, menu, and store analytics.\n④ Ops center: order, payment, print, and close KPIs with alerts.\n⑤ Use the `/store-sales` link for the mobile sales UI.',
     helpSum_admin_live_store_sales:
-      'POS business-day dashboard: today’s sales charts (store, hall/takeout/delivery, delivery apps), realtime ops KPIs, and table/order status for HQ and stores.',
+      'Dedicated live sales screen: completed-sales charts, ops KPIs, and live table/cooking status. Separate from the home Dashboard menu.',
     helpHow_admin_live_store_sales:
-      '① Head-office users switch stores at the top; pick All stores to compare bar/pie charts by branch.\n② Today’s sales charts show hourly revenue, hall/takeout/delivery mix, and delivery apps (Grab, etc.). Open Sales management for deeper period analysis.\n③ The revenue-first ops block shows waiting, delay, and cooking-time metrics.\n④ HQ can compare peak hour, stockout rate, and cancel rate in the table below.\n⑤ Today’s totals reload when you change the store; press Refresh for the latest table/seat view.\n⑥ Use the Mobile sales screen link for `/store-sales` on a phone.',
+      '① Head office defaults to All stores; pick a branch at the top for detail.\n② Today’s charts: hourly, by store, hall/delivery/takeout, delivery apps — press Search to refresh. Use Sales management for deep dives.\n③ Ops block: completed/waiting/delay revenue, table total, stockout/cancel rates.\n④ Bottom: per-store live table charts when a branch or franchise-all view is selected.\n⑤ Use `/store-sales` on mobile.',
     helpSum_admin_ops_center:
       'Monitor order, payment, print, and day-close KPIs in one place and quickly triage threshold-based alerts.',
     helpHow_admin_ops_center:

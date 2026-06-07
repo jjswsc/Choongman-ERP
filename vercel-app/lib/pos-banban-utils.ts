@@ -281,6 +281,61 @@ function stripTrailingParenOption(rawName: string): string {
     .trim()
 }
 
+/** Grab BanBan 주문 note에 저장하는 맛 스냅샷 — 주방 재인쇄 복원용(영수증 옵션에서 제외) */
+export function formatBanbanFlavorsNoteToken(flavor1: string, flavor2: string): string {
+  const f1 = String(flavor1 ?? '').trim()
+  const f2 = String(flavor2 ?? '').trim()
+  if (!f1 || !f2) return ''
+  return `banbanFlavors:${f1},${f2}`
+}
+
+export function parseBanbanFlavorsFromPersistedNote(
+  note: string | null | undefined
+): { flavor1: string; flavor2: string } | null {
+  const raw = String(note ?? '').trim()
+  if (!raw) return null
+  const chunk = raw
+    .split('·')
+    .map((s) => s.trim())
+    .find((c) => /^banbanFlavors:/i.test(c))
+  if (!chunk) return null
+  const parts = chunk
+    .replace(/^banbanFlavors:/i, '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return null
+  return { flavor1: parts[0], flavor2: parts[1] }
+}
+
+/** 영수증: BanBan 맛이 이미 별도 줄로 나갈 때 Grab 옵션 칩 중복 제거 */
+export function filterReceiptOptionLinesForBanban(
+  optionLines: string[],
+  banban: { flavor1: string; flavor2: string }
+): string[] {
+  const norm = (s: string) =>
+    String(s ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+  const f1 = norm(banban.flavor1)
+  const f2 = norm(banban.flavor2)
+  const combined = norm(`${banban.flavor1} / ${banban.flavor2}`)
+  const combinedRev = norm(`${banban.flavor2} / ${banban.flavor1}`)
+  return optionLines.filter((line) => {
+    const k = norm(line)
+    if (!k) return false
+    if (k === f1 || k === f2) return false
+    if (k === combined || k === combinedRev) return false
+    const slashParts = line
+      .split(/\s*\/\s*/)
+      .map((p) => norm(p))
+      .filter(Boolean)
+    if (slashParts.length === 2 && slashParts.includes(f1) && slashParts.includes(f2)) return false
+    return true
+  })
+}
+
 function extractBanbanFlavorsFromModsNote(note: string | null | undefined): [string, string] | null {
   const raw = String(note ?? '').trim()
   if (!raw) return null
@@ -328,6 +383,9 @@ export function resolveBanbanFlavorPairForKitchenPrint(
   const fromComma = extractBanbanFlavorsFromCommaName(name)
   if (fromComma) return { flavor1: fromComma[0], flavor2: fromComma[1] }
 
+  const fromPersisted = parseBanbanFlavorsFromPersistedNote(String(item.note ?? ''))
+  if (fromPersisted) return fromPersisted
+
   const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
   const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
   if (mid1 && mid2 && mid1 !== mid2) {
@@ -363,6 +421,7 @@ export function isBanbanKitchenLine(item: BanbanKitchenLineLike): boolean {
   if (/^banban-/i.test(id)) return true
   if (isBanbanMenu({ isBanban: false, name, code: '' })) return true
   if (parseBanbanFlavorsFromName(name)) return true
+  if (parseBanbanFlavorsFromPersistedNote(item.note)) return true
   const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
   const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
   return Boolean(mid1 && mid2 && mid1 !== mid2)
