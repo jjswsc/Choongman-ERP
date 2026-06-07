@@ -34,6 +34,13 @@ describe('pos-barbq-option-picker-ui', () => {
     ).toBe(true)
   })
 
+  it('strips legacy bare size-letter group keys (m/l/s) from ancillary groups', () => {
+    expect(getBarBqAncillarySelectionGroups(['m', 'sidedish'])).toEqual(['sidedish'])
+    expect(getBarBqAncillarySelectionGroups(['l', 'sidedish'])).toEqual(['sidedish'])
+    expect(getBarBqAncillarySelectionGroups(['size', 'part', 'sidedish'])).toEqual(['sidedish'])
+    expect(getBarBqAncillarySelectionGroups(['sidedish'])).toEqual(['sidedish'])
+  })
+
   it('uses two-phase when only sidedish group and M options exist', () => {
     expect(
       shouldUseFlatBarBqChickenOptionPicker({

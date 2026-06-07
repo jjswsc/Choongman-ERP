@@ -24,9 +24,19 @@ export function hasBarBqMNamedSubstitutionOptions(options: PosMenuOption[]): boo
   )
 }
 
-/** size/part 제외 — sidedish 등 부가 선택 단계 */
+/**
+ * size/part + 잘못 저장된 사이즈 letter('m'/'l'/'s') 제외 — sidedish 등 부가 선택 단계만.
+ * ⚠️ 'm' 은 유효한 선택단계 키가 아니라 사이즈(M)가 그룹키로 잘못 들어간 레거시 데이터.
+ *    남겨두면 M 선택 후 다음 단계가 'm'(값 없음)으로 잡혀 사이드 선택이 멈춘다.
+ */
 export function getBarBqAncillarySelectionGroups(groups: string[]): string[] {
-  return groups.filter((g) => !BBQ_FORBIDDEN_SELECTION_GROUP_KEYS.has(String(g ?? '').trim().toLowerCase()))
+  return groups.filter((g) => {
+    const k = String(g ?? '').trim().toLowerCase()
+    if (!k) return false
+    if (BBQ_FORBIDDEN_SELECTION_GROUP_KEYS.has(k)) return false
+    if (/^[sml]$/.test(k)) return false
+    return true
+  })
 }
 
 /**
