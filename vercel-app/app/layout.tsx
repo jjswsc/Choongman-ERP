@@ -7,6 +7,7 @@ import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { SwPreregister } from "@/components/sw-preregister"
+import { SwAutoUpdate } from "@/components/sw-auto-update"
 import { AppBrandProvider } from "@/components/app-brand-provider"
 import { getServerAppBrandConfig } from "@/lib/app-brand-server"
 
@@ -104,6 +105,7 @@ export default async function RootLayout({
             <AuthProvider>
               <SwPreregister />
               <LangProvider>
+                <SwAutoUpdate />
                 <AppMessageProvider>{children}</AppMessageProvider>
               </LangProvider>
             </AuthProvider>
