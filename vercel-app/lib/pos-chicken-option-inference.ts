@@ -193,6 +193,7 @@ export function collectPosOptionPickerStepValues(params: {
  * 레거시 치킨 옵션(이름: `M - Boneless` 등)이 일부 메뉴만 step 값(part)으로 저장된 경우,
  * 같은 카테고리 메뉴라도 옵션 UI가 `M 목록` vs `part 목록`으로 갈라진다.
  * size 그룹이 없고 M-이름 옵션이 주류인 메뉴는 평면 목록으로 강제해 메뉴 간 UI를 맞춘다.
+ * 단, part 다음 sidedish 등 부가 단계가 있으면 평면 목록을 쓰지 않는다(배달에서 사이드 선택 누락 방지).
  */
 export function shouldUseFlatChickenMOptionPicker(params: {
   menuCode: string | undefined
@@ -204,6 +205,11 @@ export function shouldUseFlatChickenMOptionPicker(params: {
   if (!isChickenMenuCodeForOptions(menuCode)) return false
   if (!Array.isArray(groups) || groups.length === 0) return false
   if (groups.includes("size")) return false
+  const hasAncillaryStep = groups.some((g) => {
+    const k = String(g ?? "").trim().toLowerCase()
+    return k && k !== "part" && k !== "size"
+  })
+  if (hasAncillaryStep) return false
   const substitutions = options.filter(
     (o) => o.optionType === "substitution" && !isChickenDefaultOptionName(o.name)
   )

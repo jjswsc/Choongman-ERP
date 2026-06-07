@@ -124,6 +124,48 @@ describe("shouldUseFlatChickenMOptionPicker", () => {
       })
     ).toBe(false)
   })
+
+  it("does not force flat picker when sidedish follows part (delivery multistep)", () => {
+    const rows: PosMenuOption[] = [
+      {
+        id: "1",
+        menuId: "c003",
+        name: "M - Boneless",
+        priceModifier: 90,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 0,
+        optionType: "substitution",
+        optionStepValues: { part: "Boneless" },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+      {
+        id: "2",
+        menuId: "c003",
+        name: "Kimchi",
+        priceModifier: 0,
+        priceModifierDelivery: null,
+        priceModifierPackaging: null,
+        sortOrder: 1,
+        optionType: "substitution",
+        optionStepValues: { sidedish: "Kimchi" },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      },
+    ]
+    const withSteps = rows.filter((o) => o.optionStepValues && Object.keys(o.optionStepValues).length > 0)
+    expect(
+      shouldUseFlatChickenMOptionPicker({
+        menuCode: "C003",
+        groups: ["part", "sidedish"],
+        options: rows,
+        optionsWithSteps: withSteps,
+      })
+    ).toBe(false)
+  })
 })
 
 describe("fixed-size specialty chicken (Supreme)", () => {
