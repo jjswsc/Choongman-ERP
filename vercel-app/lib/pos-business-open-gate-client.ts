@@ -1,4 +1,4 @@
-import { getPosBusinessDaySettings } from '@/lib/api-client'
+import { getPosBusinessDaySettings, getPosSettlement } from '@/lib/api-client'
 import {
   addDaysYmd,
   getPosBusinessDateStrFromConfig,
@@ -7,6 +7,7 @@ import {
   type PosBusinessHoursConfig,
 } from '@/lib/pos-business-day'
 import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
+import { isOnline } from '@/lib/offline/network'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
@@ -80,8 +81,19 @@ function buildStoreLookupCandidates(
 }
 
 async function isBusinessOpenForStoreDate(storeCode: string, settleDate: string): Promise<boolean> {
-  const data = await getPosSettlementWithCache({ storeCode, settleDate })
-  return isPosBusinessOpenRecorded(normalizeSettlement(data.settlement))
+  try {
+    const data = await getPosSettlementWithCache({ storeCode, settleDate })
+    if (isPosBusinessOpenRecorded(normalizeSettlement(data.settlement))) return true
+  } catch {
+    /* fall through — API 직접 조회 */
+  }
+  if (!isOnline()) return false
+  try {
+    const data = await getPosSettlement({ storeCode, settleDate })
+    return isPosBusinessOpenRecorded(normalizeSettlement(data.settlement))
+  } catch {
+    return false
+  }
 }
 
 async function isBusinessOpenForCandidates(

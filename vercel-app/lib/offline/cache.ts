@@ -70,7 +70,12 @@ export async function getFromCache<T>(
   storeName: 'pos_orders_cache' | 'pos_sales_cache',
   cacheKey: string
 ): Promise<T | null> {
-  const db = await getDB()
+  let db: IDBDatabase
+  try {
+    db = await getDB()
+  } catch {
+    return null
+  }
   return new Promise((resolve) => {
     const tx = db.transaction(storeName, 'readonly')
     const store = tx.objectStore(storeName)
@@ -113,7 +118,12 @@ export async function setCache<T>(
   cacheKey: string,
   data: T
 ): Promise<void> {
-  const db = await getDB()
+  let db: IDBDatabase
+  try {
+    db = await getDB()
+  } catch {
+    return
+  }
   const entry: CacheEntry<T> = {
     cacheKey,
     data,

@@ -4,7 +4,9 @@
 
 const DB_NAME = 'cm_offline'
 const DB_VERSION = 4
-const OPEN_DB_TIMEOUT_MS = 4_000
+/** POS 기기(탭·하이브리드)에서 upgrade·다중 탭 경합 시 4초는 부족한 경우가 많음 */
+const OPEN_DB_TIMEOUT_MS = 12_000
+const OPEN_DB_MAX_ATTEMPTS = 3
 const STORES = {
   PENDING_REQUESTS: 'pending_requests',
   POS_ORDER_LOCAL: 'pos_order_local',
@@ -21,12 +23,25 @@ const STORES = {
 } as const
 
 let dbInstance: IDBDatabase | null = null
+/** 동시 getDB() 호출이 open을 여러 번 걸어 blocked 되는 것 방지 */
+let openInFlight: Promise<IDBDatabase> | null = null
 
-function openDB(): Promise<IDBDatabase> {
+/** 타임아웃·blocked 후 stale 연결 제거 */
+export function resetOfflineDbConnection(): void {
+  openInFlight = null
+  if (!dbInstance) return
+  try {
+    dbInstance.close()
+  } catch {
+    /* ignore */
+  }
+  dbInstance = null
+}
+
+function openDBOnce(): Promise<IDBDatabase> {
   if (typeof indexedDB === 'undefined') {
     return Promise.reject(new Error('IndexedDB is not supported'))
   }
-  if (dbInstance) return Promise.resolve(dbInstance)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     let settled = false
@@ -43,12 +58,16 @@ function openDB(): Promise<IDBDatabase> {
     req.onblocked = () => finish(() => reject(new Error('IndexedDB open blocked')))
     req.onsuccess = () => {
       finish(() => {
-        dbInstance = req.result
-        dbInstance.onversionchange = () => {
-          if (dbInstance === req.result) dbInstance = null
-          req.result.close()
+        const db = req.result
+        db.onversionchange = () => {
+          if (dbInstance === db) dbInstance = null
+          try {
+            db.close()
+          } catch {
+            /* ignore */
+          }
         }
-        resolve(dbInstance)
+        resolve(db)
       })
     }
     req.onupgradeneeded = (e) => {
@@ -85,8 +104,33 @@ function openDB(): Promise<IDBDatabase> {
   })
 }
 
+async function openDBWithRetry(): Promise<IDBDatabase> {
+  let lastErr: unknown = new Error('IndexedDB open failed')
+  for (let attempt = 0; attempt < OPEN_DB_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      resetOfflineDbConnection()
+      await new Promise((r) => setTimeout(r, 250 * attempt))
+    }
+    try {
+      const db = await openDBOnce()
+      dbInstance = db
+      return db
+    } catch (e) {
+      lastErr = e
+      resetOfflineDbConnection()
+    }
+  }
+  throw lastErr
+}
+
 export async function getDB(): Promise<IDBDatabase> {
-  return openDB()
+  if (dbInstance) return dbInstance
+  if (!openInFlight) {
+    openInFlight = openDBWithRetry().finally(() => {
+      openInFlight = null
+    })
+  }
+  return openInFlight
 }
 
 export { STORES }

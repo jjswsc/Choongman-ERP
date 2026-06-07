@@ -39,28 +39,32 @@ export async function applyPosSettlementSaveToCache(params: {
   settleDate: string
   cashActual: number
 }): Promise<void> {
-  const storeCode = String(params.storeCode || '').trim()
-  const settleDate = String(params.settleDate || '').trim().slice(0, 10)
-  if (!storeCode || !settleDate) return
+  try {
+    const storeCode = String(params.storeCode || '').trim()
+    const settleDate = String(params.settleDate || '').trim().slice(0, 10)
+    if (!storeCode || !settleDate) return
 
-  const key = cacheKeySettlement(storeCode, settleDate)
-  const cached = (await getFromCache<PosSettlementResponse>('pos_sales_cache', key)) ?? EMPTY_SETTLEMENT_RESPONSE()
-  const prev = cached.settlement
-  const single = Array.isArray(prev) ? prev[0] : prev
-  const nextSettlement: PosSettlement = single
-    ? { ...single, storeCode, settleDate, cashActual: params.cashActual }
-    : {
-        storeCode,
-        settleDate,
-        cashActual: params.cashActual,
-        cardAmt: 0,
-        qrAmt: 0,
-        deliveryAppAmt: 0,
-        otherAmt: 0,
-        memo: '',
-        closed: false,
-      }
-  await setCache('pos_sales_cache', key, { ...cached, settlement: nextSettlement })
+    const key = cacheKeySettlement(storeCode, settleDate)
+    const cached = (await getFromCache<PosSettlementResponse>('pos_sales_cache', key)) ?? EMPTY_SETTLEMENT_RESPONSE()
+    const prev = cached.settlement
+    const single = Array.isArray(prev) ? prev[0] : prev
+    const nextSettlement: PosSettlement = single
+      ? { ...single, storeCode, settleDate, cashActual: params.cashActual }
+      : {
+          storeCode,
+          settleDate,
+          cashActual: params.cashActual,
+          cardAmt: 0,
+          qrAmt: 0,
+          deliveryAppAmt: 0,
+          otherAmt: 0,
+          memo: '',
+          closed: false,
+        }
+    await setCache('pos_sales_cache', key, { ...cached, settlement: nextSettlement })
+  } catch {
+    /* IndexedDB 불능 시에도 서버 저장·게이트 이벤트는 상위에서 처리 */
+  }
 }
 
 export type PosSettlementResponse = {
@@ -96,7 +100,11 @@ export async function getPosSettlementWithCache(params: {
   if (isOnline()) {
     try {
       const data = await getPosSettlement(params)
-      await setCache('pos_sales_cache', key, data)
+      try {
+        await setCache('pos_sales_cache', key, data)
+      } catch {
+        /* 캐시 실패해도 서버 응답 우선 */
+      }
       return data
     } catch {
       const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)

@@ -1146,11 +1146,15 @@ ${footerStamp}
           setClosedSavedOnce(true)
         }
         if (openMode && Number.isFinite(cashActualNum)) {
-          await applyPosSettlementSaveToCache({
-            storeCode: effectiveStore,
-            settleDate,
-            cashActual: cashActualNum,
-          })
+          try {
+            await applyPosSettlementSaveToCache({
+              storeCode: effectiveStore,
+              settleDate,
+              cashActual: cashActualNum,
+            })
+          } catch {
+            /* IndexedDB 불능 — 서버 저장은 이미 성공 */
+          }
           dispatchPosBusinessOpenUpdated({ storeCode: effectiveStore, settleDate })
         }
         /** 영업 시작 저장 또는 마감 체크 후 결산 저장: 요약(오픈/마감) 영수증 자동 인쇄 — 알림 전, 웹 제스처·하이브리드 ESC/POS */
