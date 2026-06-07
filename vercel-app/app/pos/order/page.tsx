@@ -2724,6 +2724,10 @@ export default function PosOrderPage() {
               options: opts,
               ancillaryGroups,
             })
+            // BBQ 2단계: init effect와 render의 그룹 계산이 어긋나 phase가 "size"로
+            // 안 잡혀도(특히 배달에서 사이드 옵션이 존재할 때) 사이즈 단계를 건너뛰지
+            // 않도록, "ancillary"가 아니면 사이즈 단계로 본다.
+            const barBqInSizePhase = useBarBqTwoPhase && barBqPickerPhase !== "ancillary"
             const activeStepGroups =
               useBarBqTwoPhase && barBqPickerPhase === "ancillary" ? ancillaryGroups : groups
             const visibleGroupKeys = new Set(activeStepGroups)
@@ -2752,10 +2756,10 @@ export default function PosOrderPage() {
               optsWithStepsToShow.length > 0 &&
               !useFlatBarBqLegacy &&
               !useFlatChickenMLegacy &&
-              !(useBarBqTwoPhase && barBqPickerPhase === "size")
+              !barBqInSizePhase
             const barBqFlatSource = pickBarBqSizePhaseOptions({
               useBarBqTwoPhase,
-              phase: barBqPickerPhase,
+              phase: barBqInSizePhase ? "size" : barBqPickerPhase,
               optionsRaw: (isChickenBasePrice ? opts.filter((o) => !isChickenHiddenSizeOption(o.name)) : opts).filter(
                 (o) => o.optionType === "substitution"
               ),
@@ -2811,7 +2815,7 @@ export default function PosOrderPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (useBarBqTwoPhase && barBqPickerPhase === "size") {
+                  if (barBqInSizePhase) {
                     beginBarBqAncillaryPhase(null)
                     return
                   }
@@ -2823,7 +2827,7 @@ export default function PosOrderPage() {
                 <span className="font-bold text-amber-600">{formatBahtNum(getMenuPrice(optionPickerMenu))} ฿</span>
               </button>
             )
-            if (useBarBqTwoPhase && barBqPickerPhase === "size") {
+            if (barBqInSizePhase) {
               return (
                 <div className="flex flex-col gap-2 py-2">
                   {defaultBtn}
