@@ -76,7 +76,15 @@ import {
   resolveChickenDefaultOptionDisplayName,
   shouldUseFlatChickenMOptionPicker,
 } from '@/lib/pos-chicken-option-inference'
-import { shouldUseFlatBarBqChickenOptionPicker } from '@/lib/pos-barbq-option-picker-ui'
+import {
+  filterPosOptionsForBarBqFlatMList,
+  getBarBqAncillarySelectionGroups,
+  isBarBqChickenMenu,
+  mergeBarBqSizeAndAncillaryForCart,
+  pickBarBqSizePhaseOptions,
+  shouldUseBarBqTwoPhaseOptionPicker,
+  shouldUseFlatBarBqChickenOptionPicker,
+} from '@/lib/pos-barbq-option-picker-ui'
 import { resolvePosMenuImageUrlPayloadForSave } from '@/lib/pos-menu-image-storage-path'
 import {
   collectPosOptionPickerStepValues,
@@ -181,6 +189,8 @@ export function PosTerminalMenuScreen({
   const [optionPickerStep, setOptionPickerStep] = React.useState(0)
   const [optionPickerSelections, setOptionPickerSelections] = React.useState<Record<string, string>>({})
   const [optionPickerBanbanFirst, setOptionPickerBanbanFirst] = React.useState<PosMenu | null>(null)
+  const [barBqPickerPhase, setBarBqPickerPhase] = React.useState<'size' | 'ancillary' | null>(null)
+  const [barBqPendingSizeOpt, setBarBqPendingSizeOpt] = React.useState<PosMenuOption | null>(null)
   const [promoChoiceDialog, setPromoChoiceDialog] = React.useState<PromoChoiceDialogState | null>(null)
   /**
    * 세트 구성품 API가 순간적으로 빈 배열을 줄 때를 대비한 메모리 캐시.
@@ -332,6 +342,41 @@ export function PosTerminalMenuScreen({
     }
     return m
   }, [allOptions, orderType])
+
+  React.useEffect(() => {
+    if (!optionPickerMenu) {
+      setBarBqPickerPhase(null)
+      setBarBqPendingSizeOpt(null)
+      return
+    }
+    const opts = allOptions.filter((o) => String(o.menuId) === String(optionPickerMenu.id))
+    const cfg = new Map(
+      (optionPickerMenu.optionSelectionConfig || [])
+        .map((c) => [String(c?.key ?? '').trim(), c] as const)
+        .filter(([k]) => !!k)
+    )
+    const aud = resolveStepAudienceFromOrderType(orderType)
+    const g = filterOptionSelectionGroupsForAudience(
+      optionPickerMenu.optionSelectionGroups || [],
+      cfg,
+      aud
+    )
+    const ancillary = getBarBqAncillarySelectionGroups(g)
+    if (
+      shouldUseBarBqTwoPhaseOptionPicker({
+        menu: optionPickerMenu,
+        options: opts,
+        ancillaryGroups: ancillary,
+      })
+    ) {
+      setBarBqPickerPhase('size')
+      setBarBqPendingSizeOpt(null)
+      setOptionPickerStep(0)
+      setOptionPickerSelections({})
+    } else {
+      setBarBqPickerPhase(null)
+    }
+  }, [optionPickerMenu?.id, allOptions, orderType])
 
   const todayStr = React.useMemo(
     () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
@@ -566,6 +611,8 @@ export function PosTerminalMenuScreen({
     setOptionPickerMenu(null)
     setOptionPickerStep(0)
     setOptionPickerSelections({})
+    setBarBqPickerPhase(null)
+    setBarBqPendingSizeOpt(null)
   }
 
   const addBanban = (banbanMenu: PosMenu, menu1: PosMenu, menu2: PosMenu) => {
@@ -1517,6 +1564,8 @@ export function PosTerminalMenuScreen({
             setOptionPickerStep(0)
             setOptionPickerSelections({})
             setOptionPickerBanbanFirst(null)
+            setBarBqPickerPhase(null)
+            setBarBqPendingSizeOpt(null)
           }
         }}
       >
@@ -1524,9 +1573,25 @@ export function PosTerminalMenuScreen({
           <DialogHeader>
             <DialogTitle>
               {optionPickerMenu?.name} — {t('posSelectOption') || '옵션 선택'}
-              {optionPickerMenu?.optionSelectionGroups?.length
-                ? ` (${(optionPickerStep || 0) + 1}/${optionPickerMenu.optionSelectionGroups.length})`
-                : ''}
+              {(() => {
+                if (!optionPickerMenu) return ''
+                const cfg = new Map(
+                  (optionPickerMenu.optionSelectionConfig || [])
+                    .map((c) => [String(c?.key ?? '').trim(), c] as const)
+                    .filter(([k]) => !!k)
+                )
+                const aud = resolveStepAudienceFromOrderType(orderType)
+                const allG = filterOptionSelectionGroupsForAudience(
+                  optionPickerMenu.optionSelectionGroups || [],
+                  cfg,
+                  aud
+                )
+                const stepG =
+                  barBqPickerPhase === 'ancillary'
+                    ? getBarBqAncillarySelectionGroups(allG)
+                    : allG
+                return stepG.length ? ` (${(optionPickerStep || 0) + 1}/${stepG.length})` : ''
+              })()}
             </DialogTitle>
             {showMenuDescriptions && optionPickerMenu
               ? (() => {
@@ -1651,7 +1716,16 @@ export function PosTerminalMenuScreen({
               groupConfigMap,
               stepAudience
             )
-            const visibleGroupKeys = new Set(groups)
+            const ancillaryGroups = getBarBqAncillarySelectionGroups(groups)
+            const useBarBqTwoPhase = shouldUseBarBqTwoPhaseOptionPicker({
+              menu: optionPickerMenu,
+              options: opts,
+              ancillaryGroups,
+            })
+            const barBqInSizePhase = useBarBqTwoPhase && barBqPickerPhase !== 'ancillary'
+            const activeStepGroups =
+              useBarBqTwoPhase && barBqPickerPhase === 'ancillary' ? ancillaryGroups : groups
+            const visibleGroupKeys = new Set(activeStepGroups)
             const optsFilteredByGroup = filterPosOptionsForVisibleGroups(opts, visibleGroupKeys)
             const optsToShow = isChickenBase
               ? optsFilteredByGroup.filter((o) => !isChickenHiddenSizeOption(o.name))
@@ -1665,7 +1739,7 @@ export function PosTerminalMenuScreen({
             const optsWithStepsToShow = isChickenBase
               ? optsWithSteps.filter((o) => !isChickenHiddenSizeOption(o.name))
               : optsWithSteps
-            const useFlatBarBqList = shouldUseFlatBarBqChickenOptionPicker({
+            const useFlatBarBqLegacy = shouldUseFlatBarBqChickenOptionPicker({
               menu: optionPickerMenu,
               options: opts,
             })
@@ -1673,38 +1747,129 @@ export function PosTerminalMenuScreen({
               isChickenBase &&
               shouldUseFlatChickenMOptionPicker({
                 menuCode: optionPickerMenu.code,
-                groups,
+                groups: activeStepGroups,
                 options: opts,
                 optionsWithSteps: optsWithStepsToShow,
               })
             const useMultiStep =
-              groups.length > 0 &&
+              activeStepGroups.length > 0 &&
               optsWithStepsToShow.length > 0 &&
-              !useFlatBarBqList &&
-              !useFlatChickenMList
+              !useFlatBarBqLegacy &&
+              !useFlatChickenMList &&
+              !barBqInSizePhase
+            const barBqFlatSource = pickBarBqSizePhaseOptions({
+              useBarBqTwoPhase,
+              phase: barBqInSizePhase ? 'size' : barBqPickerPhase,
+              optionsRaw: (isChickenBase ? opts.filter((o) => !isChickenHiddenSizeOption(o.name)) : opts).filter(
+                (o) => o.optionType === 'substitution'
+              ),
+              optionsFiltered: optsToShow.filter((o) => o.optionType === 'substitution'),
+            })
+            const flatBarBqOpts = isBarBqChickenMenu(optionPickerMenu)
+              ? filterPosOptionsForBarBqFlatMList(barBqFlatSource)
+              : optsToShow
             const flatChickenMOpts = useFlatChickenMList
               ? filterFlatChickenMListOptions(
                   optsToShow.filter((o) => o.optionType === 'substitution')
                 )
               : optsToShow
+            const beginBarBqAncillaryPhase = (sizeOpt: PosMenuOption | null) => {
+              setBarBqPendingSizeOpt(sizeOpt)
+              setBarBqPickerPhase('ancillary')
+              setOptionPickerStep(0)
+              setOptionPickerSelections({})
+            }
+            const completeBarBqAncillaryPick = (ancillaryMatch: PosMenuOption | null) => {
+              const sizeOpt = barBqPendingSizeOpt
+              const hallMod =
+                (sizeOpt ? getOptionModifier(sizeOpt) : 0) +
+                (ancillaryMatch ? getOptionModifier(ancillaryMatch) : 0)
+              const delMod =
+                sizeOpt?.priceModifierDelivery != null || ancillaryMatch?.priceModifierDelivery != null
+                  ? (sizeOpt?.priceModifierDelivery != null
+                      ? Number(sizeOpt.priceModifierDelivery)
+                      : Number(sizeOpt?.priceModifier ?? 0)) +
+                    (ancillaryMatch?.priceModifierDelivery != null
+                      ? Number(ancillaryMatch.priceModifierDelivery)
+                      : ancillaryMatch
+                        ? Number(ancillaryMatch.priceModifier ?? 0)
+                        : 0)
+                  : null
+              const merged = mergeBarBqSizeAndAncillaryForCart(sizeOpt, ancillaryMatch, {
+                hallModifier: hallMod,
+                deliveryModifier: delMod,
+                sizeLabel: sizeOpt ? resolvePosCartOptionDisplayName(optionPickerMenu, sizeOpt) : null,
+                ancillaryLabel: ancillaryMatch
+                  ? resolvePosCartOptionDisplayName(optionPickerMenu, ancillaryMatch)
+                  : null,
+              })
+              if (merged) void addWithOption(optionPickerMenu, merged)
+              else if (sizeOpt) void addWithOption(optionPickerMenu, sizeOpt)
+              else void addWithOption(optionPickerMenu, null, resolveChickenDefaultOptionDisplayName(opts) || undefined)
+              setBarBqPickerPhase(null)
+              setBarBqPendingSizeOpt(null)
+            }
             const chickenDefaultDisplay = resolveChickenDefaultOptionDisplayName(opts)
             const defaultBtn = isChickenBase && chickenDefaultDisplay && (
               <button
                 type="button"
-                onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null, chickenDefaultDisplay) })}
+                onClick={() =>
+                  fireMenuAction(() => {
+                    if (barBqInSizePhase) {
+                      beginBarBqAncillaryPhase(null)
+                      return
+                    }
+                    void addWithOption(optionPickerMenu, null, chickenDefaultDisplay)
+                  })
+                }
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
                 <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S Boneless)'}</span>
                 <span className="font-bold text-amber-600">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
               </button>
             )
+            if (barBqInSizePhase) {
+              return (
+                <div className="flex flex-col gap-2 py-2">
+                  {defaultBtn}
+                  <p className="text-xs text-muted-foreground">
+                    {t('posBarBqPickSizeFirst') || '1. 사이즈(M) 선택 → 2. 사이드(치킨무·김치 등)'}
+                  </p>
+                  {flatBarBqOpts.map((opt) => {
+                    const optDesc = showMenuDescriptions
+                      ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
+                      : ''
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => fireMenuAction(() => beginBarBqAncillaryPhase(opt))}
+                        className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                      >
+                        <span className="min-w-0 flex-1 text-slate-800">
+                          <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
+                          {optDesc ? (
+                            <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
+                              {optDesc}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="shrink-0 font-bold text-emerald-600">
+                          {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            }
             if (useMultiStep) {
-              const groupKey = groups[optionPickerStep]
+              const groupKey = activeStepGroups[optionPickerStep]
               const groupCfg = groupConfigMap.get(groupKey)
               const groupRequired = groupCfg?.required !== false
               const values = collectPosOptionPickerStepValues({
                 groupKey,
-                groups,
+                groups: activeStepGroups,
                 menuCode: optionPickerMenu.code,
                 options: opts,
                 optionsWithSteps: optsWithStepsToShow,
@@ -1760,16 +1925,20 @@ export function PosTerminalMenuScreen({
               const handleStepSelect = (value: string) => {
                 const next = { ...optionPickerSelections, [groupKey]: value }
                 setOptionPickerSelections(next)
-                if (optionPickerStep >= groups.length - 1) {
+                if (optionPickerStep >= activeStepGroups.length - 1) {
                   const match = resolvePosOptionPickerMatch({
                     menuCode: optionPickerMenu.code,
-                    groups,
+                    groups: activeStepGroups,
                     selections: next,
                     optionsWithSteps: optsWithStepsToShow,
                     allOptions: opts,
                     groupConfigByKey: groupConfigMap,
                   })
-                  if (match) addWithOption(optionPickerMenu, match)
+                  if (useBarBqTwoPhase && barBqPickerPhase === 'ancillary') {
+                    completeBarBqAncillaryPick(match)
+                  } else if (match) {
+                    void addWithOption(optionPickerMenu, match)
+                  }
                 } else {
                   setOptionPickerStep((s) => s + 1)
                 }
@@ -1814,17 +1983,22 @@ export function PosTerminalMenuScreen({
                         const next = { ...optionPickerSelections }
                         delete next[groupKey]
                         setOptionPickerSelections(next)
-                        if (optionPickerStep >= groups.length - 1) {
+                        if (optionPickerStep >= activeStepGroups.length - 1) {
                           const match = resolvePosOptionPickerMatch({
                             menuCode: optionPickerMenu.code,
-                            groups,
+                            groups: activeStepGroups,
                             selections: next,
                             optionsWithSteps: optsWithStepsToShow,
                             allOptions: opts,
                             groupConfigByKey: groupConfigMap,
                           })
-                          if (match) void addWithOption(optionPickerMenu, match)
-                          else void addWithOption(optionPickerMenu, null)
+                          if (useBarBqTwoPhase && barBqPickerPhase === 'ancillary') {
+                            completeBarBqAncillaryPick(match)
+                          } else if (match) {
+                            void addWithOption(optionPickerMenu, match)
+                          } else {
+                            void addWithOption(optionPickerMenu, null)
+                          }
                         } else {
                           setOptionPickerStep((s) => s + 1)
                         }
@@ -1833,7 +2007,20 @@ export function PosTerminalMenuScreen({
                       {t('skip') || '건너뛰기'}
                     </Button>
                   )}
-                  {optionPickerStep > 0 && (
+                  {useBarBqTwoPhase && barBqPickerPhase === 'ancillary' ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        setBarBqPickerPhase('size')
+                        setOptionPickerStep(0)
+                        setOptionPickerSelections({})
+                      }}
+                    >
+                      ← {t('posBack') || '이전'} ({t('posBarBqBackToSize') || '사이즈'})
+                    </Button>
+                  ) : optionPickerStep > 0 ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1842,14 +2029,14 @@ export function PosTerminalMenuScreen({
                     >
                       ← {t('posBack') || '이전'}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               )
             }
             return (
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
-                {(useFlatChickenMList ? flatChickenMOpts : optsToShow).map((opt) => {
+                {(useFlatBarBqLegacy ? flatBarBqOpts : useFlatChickenMList ? flatChickenMOpts : optsToShow).map((opt) => {
                   const optDesc = showMenuDescriptions
                     ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
                     : ''
