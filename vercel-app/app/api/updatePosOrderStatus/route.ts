@@ -13,8 +13,8 @@ import {
   isPosCompletionStatus,
   isPosPaidLikeStatus,
   isPosReversalStatus,
-  resolvePosBusinessAccountingDateForStore,
 } from '@/lib/pos-order-policy'
+import { resolvePosBusinessAccountingDateForStore } from '@/lib/pos-order-policy-server'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobStatusDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'

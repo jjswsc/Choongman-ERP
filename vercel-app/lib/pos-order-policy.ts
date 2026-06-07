@@ -3,7 +3,6 @@ import {
   getPosBusinessDateStrFromConfig,
   type PosBusinessHoursConfig,
 } from '@/lib/pos-business-day'
-import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 
 export const POS_COMPLETION_STATUSES = new Set(['completed'])
 export const POS_PAID_LIKE_STATUSES = new Set(['paid', 'completed', 'ready'])
@@ -39,12 +38,4 @@ export function resolvePosBusinessAccountingDate(
   const base = iso ? new Date(iso) : new Date()
   if (Number.isNaN(base.getTime())) return getPosBusinessDateStrFromConfig(new Date(), hours)
   return getPosBusinessDateStrFromConfig(base, hours)
-}
-
-export async function resolvePosBusinessAccountingDateForStore(
-  createdAtIso: string | undefined,
-  storeCode: string
-): Promise<string> {
-  const hours = await loadPosBusinessHoursForServer(storeCode)
-  return resolvePosBusinessAccountingDate(createdAtIso, hours)
 }

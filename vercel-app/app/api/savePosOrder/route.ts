@@ -10,7 +10,8 @@ import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipient
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
-import { resolvePosBusinessAccountingDateForStore, isPosCompletionStatus } from '@/lib/pos-order-policy'
+import { isPosCompletionStatus } from '@/lib/pos-order-policy'
+import { resolvePosBusinessAccountingDateForStore } from '@/lib/pos-order-policy-server'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 import {
   coercePaymentOtherBreakdownForSave,
