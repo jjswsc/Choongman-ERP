@@ -68,11 +68,12 @@ import {
   resolvePosMenuDescriptionForChannel,
   resolvePosMenuOptionDescriptionForChannel,
 } from '@/lib/pos-menu-display-description'
-import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
 import {
   filterFlatChickenMListOptions,
-  isChickenDefaultOptionName,
+  isChickenSizeOnlyOptionName,
+  resolveChickenDefaultOptionDisplayName,
   shouldUseFlatChickenMOptionPicker,
 } from '@/lib/pos-chicken-option-inference'
 import { shouldUseFlatBarBqChickenOptionPicker } from '@/lib/pos-barbq-option-picker-ui'
@@ -89,7 +90,7 @@ import {
 } from '@/lib/pos-option-selection-groups'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
 
-const isChickenDefaultOption = isChickenDefaultOptionName
+const isChickenHiddenSizeOption = isChickenSizeOnlyOptionName
 
 export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
 
@@ -587,8 +588,10 @@ export function PosTerminalMenuScreen({
         ? option && menu
           ? resolvePosCartOptionDisplayName(menu, option) || String(option.name ?? '').trim()
           : (option?.name?.trim() || '')
-        : isChickenMenu(menu?.code)
-          ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
+        : isChickenMenu(menu?.code) && menu
+          ? resolveChickenDefaultOptionDisplayName(
+              allOptions.filter((o) => String(o.menuId) === String(menu.id))
+            )
           : ''
       const menuName = (menu?.name ?? '').trim()
       return {
@@ -1651,7 +1654,7 @@ export function PosTerminalMenuScreen({
             const visibleGroupKeys = new Set(groups)
             const optsFilteredByGroup = filterPosOptionsForVisibleGroups(opts, visibleGroupKeys)
             const optsToShow = isChickenBase
-              ? optsFilteredByGroup.filter((o) => !isChickenDefaultOption(o.name))
+              ? optsFilteredByGroup.filter((o) => !isChickenHiddenSizeOption(o.name))
               : optsFilteredByGroup
             const optsWithSteps = opts.filter(
               (o) =>
@@ -1660,7 +1663,7 @@ export function PosTerminalMenuScreen({
                 Object.keys(o.optionStepValues).length > 0
             )
             const optsWithStepsToShow = isChickenBase
-              ? optsWithSteps.filter((o) => !isChickenDefaultOption(o.name))
+              ? optsWithSteps.filter((o) => !isChickenHiddenSizeOption(o.name))
               : optsWithSteps
             const useFlatBarBqList = shouldUseFlatBarBqChickenOptionPicker({
               menu: optionPickerMenu,
@@ -1684,10 +1687,11 @@ export function PosTerminalMenuScreen({
                   optsToShow.filter((o) => o.optionType === 'substitution')
                 )
               : optsToShow
-            const defaultBtn = isChickenBase && (
+            const chickenDefaultDisplay = resolveChickenDefaultOptionDisplayName(opts)
+            const defaultBtn = isChickenBase && chickenDefaultDisplay && (
               <button
                 type="button"
-                onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null, POS_CHICKEN_DEFAULT_OPTION_DISPLAY) })}
+                onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null, chickenDefaultDisplay) })}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
                 <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S Boneless)'}</span>

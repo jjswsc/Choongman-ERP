@@ -500,7 +500,7 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '최소 현재 시간 30분 이후부터 선택 가능 (방콕 시간)',
   },
   orderPickupContinue: { en: 'Choose menu', th: 'เลือกเมนู', ko: '메뉴 선택' },
-  orderPickupSetupBack: { en: 'Change store/time', th: 'เปลี่ยนสาขา/เวลา', ko: '매장·시간 변경' },
+  orderPickupSetupBack: { en: 'Change store', th: 'เปลี่ยนสาขา', ko: '매장 변경' },
   orderPickupSummary: {
     en: '{store} · Pickup {time}',
     th: '{store} · รับ {time}',

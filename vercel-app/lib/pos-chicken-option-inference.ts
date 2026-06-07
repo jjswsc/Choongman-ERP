@@ -1,4 +1,5 @@
 import type { PosMenuOption } from "@/lib/api-client"
+import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 
 const CHICKEN_CODE_PREFIX = "c"
 
@@ -21,8 +22,41 @@ export function isChickenDefaultOptionName(name: string | undefined): boolean {
     n === "S-순살" ||
     n === "S Boneless" ||
     n === "S - Boneless" ||
-    n === "S-Boneless"
+    n === "S-Boneless" ||
+    /^size\s+s(?:\s*[-–—]\s*boneless)?\s*$/i.test(n)
   )
+}
+
+/** S/M/L·Size S 등 사이즈 전용 substitution — 고정 사이즈(Specialties 등) 메뉴 목록에서 제외 */
+export function isChickenSizeOnlyOptionName(name: string | undefined): boolean {
+  if (isChickenDefaultOptionName(name)) return true
+  const n = String(name ?? "").trim()
+  if (!n) return false
+  if (/^size\s+[sml](?:\s*[-–—]|\s|$)/i.test(n)) return true
+  if (/^\s*[sml]\s*[-–—]\s*(?:boneless|순살|wing|drumette)\s*$/i.test(n)) return true
+  return false
+}
+
+/** 메뉴에 M/L(또는 Size M/L) 옵션이 있으면 S 기본가 치킨 — Supreme 등 단일 SKU는 false */
+export function menuHasChickenSizeProfile(
+  options: Pick<PosMenuOption, "name" | "optionType" | "optionStepValues">[]
+): boolean {
+  for (const o of options || []) {
+    if (o.optionType !== "substitution") continue
+    const n = String(o.name ?? "").trim()
+    if (/(^|[\s\-–—])(size\s*)?(m|l)([\s\-–—]|$)/i.test(n)) return true
+    if (/\bsize\s*(m|l)\b/i.test(n)) return true
+    const size = inferChickenOptionSizeValue(o)
+    if (size === "M" || size === "L") return true
+  }
+  return false
+}
+
+/** S/M/L 프로필이 있는 치킨만 기본 `S Boneless` 표기 — 고정 사이즈 메뉴는 빈 문자열 */
+export function resolveChickenDefaultOptionDisplayName(
+  options: Pick<PosMenuOption, "name" | "optionType" | "optionStepValues">[]
+): string {
+  return menuHasChickenSizeProfile(options) ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY : ""
 }
 
 export function isSizePartOptionGroups(groups: string[]): boolean {

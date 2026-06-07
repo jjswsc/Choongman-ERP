@@ -1250,6 +1250,14 @@ export async function listMemberCouponIssues(params?: {
   })
 }
 
+function isMissingColumnError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error || '')
+  return (
+    /PGRST204/i.test(msg) ||
+    (/column/i.test(msg) && (/does not exist/i.test(msg) || /could not find/i.test(msg)))
+  )
+}
+
 export async function issueMemberCoupon(params: { memberId: number; couponCode: string }) {
   const memberId = Number(params.memberId || 0)
   const couponCode = toText(params.couponCode).toUpperCase()
@@ -1259,8 +1267,8 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
   const couponRows = (await supabaseSelectFilter(
     'pos_coupons',
     `code=eq.${encodeURIComponent(couponCode)}`,
-    { limit: 1, select: 'id,is_active,valid_to' }
-  )) as Array<{ id?: number; is_active?: boolean; valid_to?: string | null }>
+    { limit: 1, select: 'id,is_active,valid_to,redemption_mode' }
+  )) as Array<{ id?: number; is_active?: boolean; valid_to?: string | null; redemption_mode?: string | null }>
   const coupon = couponRows?.[0]
   if (!coupon?.id) {
     throw new Error(`POS 쿠폰 마스터에 ${couponCode} 코드가 없습니다.`)
@@ -1268,14 +1276,39 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
   if (coupon.is_active === false) {
     throw new Error('비활성 상태의 쿠폰은 발급할 수 없습니다.')
   }
+  const redemptionMode = toText(coupon.redemption_mode) || 'reusable_code'
+  if (redemptionMode !== 'member_issue') {
+    throw new Error(
+      '「회원 발급」 유형 쿠폰만 회원에게 지급할 수 있습니다. 쿠폰 정의에서 사용 방식을 확인해 주세요.'
+    )
+  }
 
-  await supabaseInsert('member_coupon_issues', {
+  const duplicateRows = (await supabaseSelectFilter(
+    'member_coupon_issues',
+    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(couponCode)}&status=eq.issued`,
+    { limit: 1, select: 'id' }
+  )) as Array<{ id?: number }>
+  if (duplicateRows?.length) {
+    throw new Error('이 회원에게 이미 사용 가능한 동일 쿠폰이 있습니다.')
+  }
+
+  const issuedAt = getBangkokDateTimeString()
+  const baseRow = {
     member_id: memberId,
     coupon_code: couponCode,
-    issued_at: getBangkokDateTimeString(),
+    issued_at: issuedAt,
     status: 'issued',
-    expires_at: toText(coupon.valid_to) || null,
-  })
+  }
+  const expiresAt = toText(coupon.valid_to) || null
+  try {
+    await supabaseInsert('member_coupon_issues', {
+      ...baseRow,
+      ...(expiresAt ? { expires_at: expiresAt } : {}),
+    })
+  } catch (e) {
+    if (!isMissingColumnError(e)) throw e
+    await supabaseInsert('member_coupon_issues', baseRow)
+  }
 }
 
 export async function getMemberVisits(params?: { memberId?: number; limit?: number }) {

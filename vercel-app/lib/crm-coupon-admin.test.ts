@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   couponIssueStatusLabel,
+  couponsForMemberIssue,
   filterMemberCouponIssues,
   formatCouponBenefit,
   parseCrmCouponAdminTab,
@@ -16,6 +17,16 @@ describe('crm-coupon-admin', () => {
   it('formats benefit labels', () => {
     expect(formatCouponBenefit({ discountType: 'percent', discountValue: 10 })).toBe('10%')
     expect(redemptionModeLabel('member_issue')).toBe('회원 발급')
+  })
+
+  it('limits member issue picker to member_issue coupons', () => {
+    expect(
+      couponsForMemberIssue([
+        { id: 1, code: 'A', isActive: true, redemptionMode: 'member_issue' },
+        { id: 2, code: 'B', isActive: true, redemptionMode: 'reusable_code' },
+        { id: 3, code: 'C', isActive: false, redemptionMode: 'member_issue' },
+      ] as Parameters<typeof couponsForMemberIssue>[0])
+    ).toEqual([{ id: 1, code: 'A', isActive: true, redemptionMode: 'member_issue' }])
   })
 
   it('filters issue rows', () => {

@@ -115,5 +115,7 @@ export function sortCouponsForAdmin(coupons: PosCoupon[]): PosCoupon[] {
 }
 
 export function couponsForMemberIssue(coupons: PosCoupon[]): PosCoupon[] {
-  return sortCouponsForAdmin(coupons).filter((c) => c.isActive !== false)
+  return sortCouponsForAdmin(coupons).filter(
+    (c) => c.isActive !== false && String(c.redemptionMode || 'reusable_code') === 'member_issue'
+  )
 }

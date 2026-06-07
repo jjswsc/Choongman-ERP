@@ -52,7 +52,6 @@ import {
   MemberPortalAmbienceBackground,
   MemberPortalContentSheet,
   MemberPortalBenefitStatsGrid,
-  MemberPortalPrivilegeShortcut,
   MemberPortalShell,
   PremiumAppHeader,
   PremiumBottomNav,
@@ -75,7 +74,7 @@ import {
 } from "@/components/member-portal/portal-ui"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
-import { memberPortalGreetingKey, mpGlassCardSoft, mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
+import { memberPortalGreetingKey, mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
 import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type MemberPortalStoreRow = MemberPortalStoreDto
@@ -484,6 +483,34 @@ export function MemberPortalApp() {
     if (tab !== "location" || !member) return
     if (stores.length === 0) void loadMemberStores()
   }, [tab, member, stores.length, loadMemberStores])
+
+  React.useEffect(() => {
+    if (tab !== "privilege" || !member) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [couponsRes, dashRes] = await Promise.all([
+          getJson<{ success: boolean; rows?: PortalCouponRow[] }>("/api/member-portal/me/coupons"),
+          getJson<{ success: boolean } & PortalDashboard>("/api/member-portal/me/dashboard"),
+        ])
+        if (cancelled) return
+        if (couponsRes.success) setCoupons(couponsRes.rows || [])
+        if (dashRes.success && dashRes.member) {
+          setDashboard({
+            member: dashRes.member,
+            referralCode: dashRes.referralCode,
+            stats: dashRes.stats,
+            tierProgress: dashRes.tierProgress,
+          })
+        }
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, member])
 
   const homePopup = React.useMemo(
     () =>
@@ -965,12 +992,6 @@ export function MemberPortalApp() {
               accentClass={tier.accent}
               actionLabel={portalTiers.length > 0 ? t("tierGuideViewBtn") : undefined}
               onAction={portalTiers.length > 0 ? () => setTierGuideOpen(true) : undefined}
-            />
-
-            <MemberPortalPrivilegeShortcut
-              title={t("privilegeTitle")}
-              subtitle={t("privilegeDesc")}
-              onClick={() => changeTab("privilege")}
             />
 
             {homePopup ? (

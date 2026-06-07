@@ -1,6 +1,6 @@
 import type { PosMenuOption } from '@/lib/api-client'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
-import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
+import { resolveChickenDefaultOptionDisplayName } from '@/lib/pos-chicken-option-inference'
 
 export type PosPromoSublineOrderChannel = 'dine-in' | 'takeout' | 'delivery'
 
@@ -63,7 +63,9 @@ export function resolvePromoSublineOptionDisplayName(params: {
     if (hit) return hit
   }
 
-  if (!id && isChickenMenu(menuCode ?? undefined)) return POS_CHICKEN_DEFAULT_OPTION_DISPLAY
+  if (!id && isChickenMenu(menuCode ?? undefined)) {
+    return resolveChickenDefaultOptionDisplayName(menuOptions || [])
+  }
 
   const opts = (menuOptions || []).filter((o) => channelSellAllowed(o, orderChannel))
   if (opts.length === 0) return ''

@@ -96,11 +96,12 @@ import { buildOptionNameByCodeFromMenus } from "@/lib/grab-pos-order-enrich"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
-import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
+import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
 import {
   filterFlatChickenMListOptions,
-  isChickenDefaultOptionName,
+  isChickenSizeOnlyOptionName,
+  resolveChickenDefaultOptionDisplayName,
   shouldUseFlatChickenMOptionPicker,
 } from "@/lib/pos-chicken-option-inference"
 import {
@@ -159,7 +160,7 @@ import {
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
-const isChickenDefaultOption = isChickenDefaultOptionName
+const isChickenHiddenSizeOption = isChickenSizeOnlyOptionName
 
 interface CartItem {
   id: string
@@ -896,8 +897,10 @@ export default function PosOrderPage() {
           const menu = menus.find((m) => String(m.id) === String(r.menuId ?? ""))
           const optName = optId
             ? (option?.name?.trim() || '')
-            : isChickenMenu(menu?.code)
-              ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
+            : isChickenMenu(menu?.code) && menu
+              ? resolveChickenDefaultOptionDisplayName(
+                  allOptions.filter((o) => String(o.menuId) === String(menu.id))
+                )
               : ''
           const menuName = (menu?.name ?? "").trim()
           return {
@@ -1069,8 +1072,10 @@ export default function PosOrderPage() {
       const menu = menus.find((m) => String(m.id) === String(x.menuId))
       const optName = optId
         ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
-        : isChickenMenu(menu?.code)
-          ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
+        : isChickenMenu(menu?.code) && menu
+          ? resolveChickenDefaultOptionDisplayName(
+              allOptions.filter((o) => String(o.menuId) === String(menu.id))
+            )
           : ''
       const menuName = (menu?.name ?? "").trim()
       return {
@@ -2724,12 +2729,12 @@ export default function PosOrderPage() {
             const visibleGroupKeys = new Set(activeStepGroups)
             const optsFilteredByGroup = filterPosOptionsForVisibleGroups(opts, visibleGroupKeys)
             const optsToShow = isChickenBasePrice
-              ? optsFilteredByGroup.filter((o) => !isChickenDefaultOption(o.name))
+              ? optsFilteredByGroup.filter((o) => !isChickenHiddenSizeOption(o.name))
               : optsFilteredByGroup
             const optsWithSteps = opts.filter(
               (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
             )
-            const optsWithStepsToShow = isChickenBasePrice ? optsWithSteps.filter((o) => !isChickenDefaultOption(o.name)) : optsWithSteps
+            const optsWithStepsToShow = isChickenBasePrice ? optsWithSteps.filter((o) => !isChickenHiddenSizeOption(o.name)) : optsWithSteps
             const useFlatBarBqLegacy = shouldUseFlatBarBqChickenOptionPicker({
               menu: optionPickerMenu,
               options: opts,
@@ -2751,7 +2756,7 @@ export default function PosOrderPage() {
             const barBqFlatSource = pickBarBqSizePhaseOptions({
               useBarBqTwoPhase,
               phase: barBqPickerPhase,
-              optionsRaw: (isChickenBasePrice ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts).filter(
+              optionsRaw: (isChickenBasePrice ? opts.filter((o) => !isChickenHiddenSizeOption(o.name)) : opts).filter(
                 (o) => o.optionType === "substitution"
               ),
               optionsFiltered: optsToShow.filter((o) => o.optionType === "substitution"),
@@ -2796,12 +2801,13 @@ export default function PosOrderPage() {
               })
               if (merged) addToCartWithOption(optionPickerMenu, merged)
               else if (sizeOpt) addToCartWithOption(optionPickerMenu, sizeOpt)
-              else addToCartWithOption(optionPickerMenu, null, POS_CHICKEN_DEFAULT_OPTION_DISPLAY)
+              else addToCartWithOption(optionPickerMenu, null, resolveChickenDefaultOptionDisplayName(opts) || undefined)
               setBarBqPickerPhase(null)
               setBarBqPendingSizeOpt(null)
             }
-            /** S 사이즈 기본(S Boneless)은 배달에서만 사용: 배달일 때만 기본 버튼 표시 */
-            const defaultBtn = isChickenBasePrice && orderType === "delivery" && (
+            /** S 사이즈 기본(S Boneless)은 M/L 있는 치킨·배달에서만 */
+            const chickenDefaultDisplay = resolveChickenDefaultOptionDisplayName(opts)
+            const defaultBtn = isChickenBasePrice && orderType === "delivery" && chickenDefaultDisplay && (
               <button
                 type="button"
                 onClick={() => {
@@ -2809,7 +2815,7 @@ export default function PosOrderPage() {
                     beginBarBqAncillaryPhase(null)
                     return
                   }
-                  addToCartWithOption(optionPickerMenu, null, POS_CHICKEN_DEFAULT_OPTION_DISPLAY)
+                  addToCartWithOption(optionPickerMenu, null, chickenDefaultDisplay)
                 }}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >

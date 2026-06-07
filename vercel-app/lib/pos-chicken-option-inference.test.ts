@@ -3,6 +3,9 @@ import type { PosMenuOption } from "@/lib/api-client"
 import {
   collectPosOptionPickerStepValues,
   filterFlatChickenMListOptions,
+  isChickenSizeOnlyOptionName,
+  menuHasChickenSizeProfile,
+  resolveChickenDefaultOptionDisplayName,
   shouldUseFlatChickenMOptionPicker,
 } from "@/lib/pos-chicken-option-inference"
 
@@ -120,6 +123,49 @@ describe("shouldUseFlatChickenMOptionPicker", () => {
         optionsWithSteps: rows,
       })
     ).toBe(false)
+  })
+})
+
+describe("fixed-size specialty chicken (Supreme)", () => {
+  const supremeOpts: PosMenuOption[] = [
+    {
+      id: "1",
+      menuId: "5",
+      name: "Size S - Boneless",
+      priceModifier: 0,
+      priceModifierDelivery: null,
+      priceModifierPackaging: null,
+      sortOrder: 0,
+      optionType: "substitution",
+      optionStepValues: { size: "S", part: "Boneless" },
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+    },
+    {
+      id: "2",
+      menuId: "5",
+      name: "Kimchi",
+      priceModifier: 0,
+      priceModifierDelivery: null,
+      priceModifierPackaging: null,
+      sortOrder: 1,
+      optionType: "substitution",
+      optionStepValues: { sidedish: "Kimchi" },
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+    },
+  ]
+
+  it("does not treat Supreme as having S/M/L size profile when only Size S row exists", () => {
+    expect(menuHasChickenSizeProfile(supremeOpts)).toBe(false)
+    expect(resolveChickenDefaultOptionDisplayName(supremeOpts)).toBe("")
+  })
+
+  it("hides Size S - Boneless from option lists", () => {
+    expect(isChickenSizeOnlyOptionName("Size S - Boneless")).toBe(true)
+    expect(isChickenSizeOnlyOptionName("Kimchi")).toBe(false)
   })
 })
 

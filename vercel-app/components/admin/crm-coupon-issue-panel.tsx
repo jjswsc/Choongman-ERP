@@ -84,7 +84,14 @@ export function CrmCouponIssuePanel() {
         await appAlert(res.message || t("memberCouponsIssueFail"))
         return
       }
-      await appAlert(t("crmCouponIssueDone") || "쿠폰을 발급했습니다. 회원앱 「내 혜택」과 POS에서 사용할 수 있습니다.")
+      const memberLabel = selectedMember
+        ? `${selectedMember.name} · ${selectedMember.memberNo}`
+        : ""
+      await appAlert(
+        `${t("crmCouponIssueDone") || "쿠폰을 발급했습니다. 회원앱 「내 혜택」과 POS에서 사용할 수 있습니다."}${
+          memberLabel ? `\n\n회원: ${memberLabel}\n회원앱 「내 정보」의 회원번호와 일치하는지 확인해 주세요.` : ""
+        }`
+      )
       setCouponCode("")
     } finally {
       setIssuing(false)
@@ -151,6 +158,12 @@ export function CrmCouponIssuePanel() {
             ))}
           </SelectContent>
         </Select>
+        {coupons.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {t("crmCouponIssueMemberIssueOnly") ||
+              "「회원 발급」 유형의 활성 쿠폰만 지급할 수 있습니다. 쿠폰 정의 탭에서 사용 방식을 확인해 주세요."}
+          </p>
+        ) : null}
         {selectedCoupon ? (
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <Badge variant="outline">{redemptionModeLabel(selectedCoupon.redemptionMode, t)}</Badge>

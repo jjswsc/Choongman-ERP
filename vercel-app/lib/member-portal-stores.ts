@@ -1,5 +1,7 @@
-import type { ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { buildLegacyToCanonicalMap, type ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
 import { isPosSalesTestOfficeStoreCode } from '@/lib/pos-sales-test-office'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 export type MemberPortalStoreDto = {
   storeCode: string
@@ -94,16 +96,69 @@ export function isMemberPortalPublicStore(
   return true
 }
 
+function isGrabPartnerNumericId(storeCode: string): boolean {
+  return /^\d{3,6}$/.test(String(storeCode || '').trim())
+}
+
+function resolveMemberPortalStoreCanonicalKey(
+  storeCode: string,
+  legacyToCanonical: Record<string, string>
+): string {
+  const code = String(storeCode || '').trim()
+  if (!code) return code
+
+  const fromLegacy = legacyToCanonical[normStoreKey(code)]
+  if (fromLegacy && fromLegacy !== code) return fromLegacy
+
+  const fromGrab = resolveErpStoreCodeFromGrabMap(code)
+  if (fromGrab && fromGrab !== code && !isGrabPartnerNumericId(fromGrab)) return fromGrab
+
+  return code
+}
+
+function pickPrimaryMemberPortalStore(members: MemberPortalStoreDto[]): MemberPortalStoreDto {
+  return members.reduce((best, cur) => {
+    const bestNum = isGrabPartnerNumericId(best.storeCode)
+    const curNum = isGrabPartnerNumericId(cur.storeCode)
+    if (bestNum && !curNum) return cur
+    if (!bestNum && curNum) return best
+    if (cur.sortOrder !== best.sortOrder) return cur.sortOrder < best.sortOrder ? cur : best
+    return cur.displayName.localeCompare(best.displayName, 'ko') < 0 ? cur : best
+  })
+}
+
 export function memberPortalStoresFromMasters(rows: ErpStoreMasterRow[]): MemberPortalStoreDto[] {
-  return rows
+  const legacyToCanonical = buildLegacyToCanonicalMap(rows)
+  const mapped = rows
     .map(mapErpStoreToMemberPortal)
     .filter((s): s is MemberPortalStoreDto => Boolean(s))
     .filter((s) => s.isActive)
     .filter(isMemberPortalPublicStore)
-    .sort((a, b) => {
+
+  if (mapped.length <= 1) {
+    return mapped.sort((a, b) => {
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
       return a.displayName.localeCompare(b.displayName, 'ko')
     })
+  }
+
+  const groups = new Map<string, MemberPortalStoreDto[]>()
+  for (const store of mapped) {
+    const canonical = resolveMemberPortalStoreCanonicalKey(store.storeCode, legacyToCanonical)
+    const g = groups.get(canonical) || []
+    g.push(store)
+    groups.set(canonical, g)
+  }
+
+  const result: MemberPortalStoreDto[] = []
+  for (const members of groups.values()) {
+    result.push(pickPrimaryMemberPortalStore(members))
+  }
+
+  return result.sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+    return a.displayName.localeCompare(b.displayName, 'ko')
+  })
 }
 
 export function memberPortalStoreMatchesQuery(store: MemberPortalStoreDto, query: string): boolean {

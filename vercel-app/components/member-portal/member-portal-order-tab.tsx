@@ -5,7 +5,6 @@ import { startTransition } from "react"
 import {
   ArrowLeft,
   Check,
-  Clock,
   ExternalLink,
   Minus,
   Plus,
@@ -46,6 +45,7 @@ import {
 } from "@/lib/pos-option-selection-groups"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
+import { MemberPortalDeliveryAppLogo } from "@/components/member-portal/member-portal-delivery-app-logo"
 import {
   PROMOTION_MAIN_CATEGORY,
   normalizePosMainCategoryTabs,
@@ -654,13 +654,19 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
     resetPickupFlow()
   }
 
+  const refreshPickupTimeBounds = React.useCallback(() => {
+    const min = formatBangkokDateTimeLocalInput(new Date(), 30)
+    setPickupMinAt(min)
+    setPickupAt((prev) => {
+      if (!prev || prev < min) return formatBangkokDateTimeLocalInput(new Date(), 45)
+      return prev
+    })
+    return min
+  }, [])
+
   const startPickupMenu = () => {
     if (!pickupStore) {
       setOrderError(t("orderSelectStoreFirst"))
-      return
-    }
-    if (!pickupAt || pickupAt < pickupMinAt) {
-      setOrderError(t("orderPickupTooSoon"))
       return
     }
     setOrderError("")
@@ -695,8 +701,17 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
 
   const openCartConfirm = React.useCallback(() => {
     if (cart.length === 0) return
+    const min = refreshPickupTimeBounds()
+    const at =
+      pickupAt && pickupAt >= min ? pickupAt : formatBangkokDateTimeLocalInput(new Date(), 45)
+    if (!at || at < min) {
+      setOrderError(t("orderPickupTooSoon"))
+      return
+    }
+    if (at !== pickupAt) setPickupAt(at)
+    setOrderError("")
     scheduleAfterPaint(() => setCartConfirmOpen(true))
-  }, [cart.length])
+  }, [cart.length, pickupAt, refreshPickupTimeBounds, t])
 
   const submitPickupOrder = React.useCallback(async () => {
     if (!pickupStore || cart.length === 0) return
@@ -839,8 +854,11 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                 rel="noopener noreferrer"
                 className={`flex items-center justify-between rounded-2xl border border-white/10 bg-gradient-to-r ${app.color} px-5 py-4 text-white shadow-lg transition hover:brightness-110`}
               >
-                <span className="font-semibold">{app.label}</span>
-                <ExternalLink className="h-4 w-4 opacity-80" />
+                <span className="flex min-w-0 items-center gap-3">
+                  <MemberPortalDeliveryAppLogo code={app.code} className="h-8 w-8 shrink-0" />
+                  <span className="font-semibold">{app.label}</span>
+                </span>
+                <ExternalLink className="h-4 w-4 shrink-0 opacity-80" />
               </a>
             ))}
           </div>
@@ -928,17 +946,6 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
               )}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] uppercase tracking-wider text-white/45">{t("orderPickupTime")}</Label>
-            <Input
-              type="datetime-local"
-              value={pickupAt}
-              min={pickupMinAt}
-              onChange={(e) => setPickupAt(e.target.value)}
-              className="h-12 rounded-2xl border-white/10 bg-black/20 text-white [color-scheme:dark]"
-            />
-            <p className="text-[11px] text-white/40">{t("orderPickupTimeHint")}</p>
-          </div>
           <Button
             type="button"
             onClick={startPickupMenu}
@@ -951,15 +958,9 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
         <>
           <div className="flex items-start gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
             <Store className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">
-                {stores.find((s) => s.storeCode === pickupStore)?.displayName || pickupStore}
-              </p>
-              <p className="mt-0.5 flex items-center gap-1 text-xs text-white/55">
-                <Clock className="h-3 w-3 shrink-0" />
-                {pickupAt.replace("T", " ")}
-              </p>
-            </div>
+            <p className="min-w-0 truncate text-sm font-semibold text-white">
+              {stores.find((s) => s.storeCode === pickupStore)?.displayName || pickupStore}
+            </p>
           </div>
 
           <div
@@ -989,7 +990,11 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
               <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4">
                 <button
                   type="button"
-                  onClick={() => setCartSheetOpen(true)}
+                  onClick={() => {
+                    refreshPickupTimeBounds()
+                    setOrderError("")
+                    setCartSheetOpen(true)
+                  }}
                   className="pointer-events-auto flex w-full max-w-[430px] items-center gap-3 rounded-2xl bg-amber-400 px-4 py-3.5 text-left text-black shadow-[0_8px_28px_rgba(212,175,55,0.38)] active:scale-[0.99]"
                 >
                   <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/10">
@@ -1042,14 +1047,26 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                       </button>
                     </div>
 
-                    <div className="mx-5 mb-3 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-2.5 text-xs text-amber-950">
+                    <div className="mx-5 mb-3 space-y-2 rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3 text-xs text-amber-950">
                       <p className="font-semibold">
                         {stores.find((s) => s.storeCode === pickupStore)?.displayName || pickupStore}
                       </p>
-                      <p className="mt-0.5 flex items-center gap-1 text-amber-900/75">
-                        <Clock className="h-3 w-3 shrink-0" />
-                        {pickupAt.replace("T", " ")}
-                      </p>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-amber-900/70">
+                          {t("orderPickupTime")}
+                        </Label>
+                        <Input
+                          type="datetime-local"
+                          value={pickupAt}
+                          min={pickupMinAt}
+                          onChange={(e) => {
+                            setPickupAt(e.target.value)
+                            setOrderError("")
+                          }}
+                          className="h-11 rounded-xl border-amber-200/80 bg-white text-neutral-900 [color-scheme:light]"
+                        />
+                        <p className="text-[11px] text-amber-900/65">{t("orderPickupTimeHint")}</p>
+                      </div>
                     </div>
 
                     <div className="flex-1 space-y-3 overflow-y-auto px-5 pb-2">
@@ -1102,6 +1119,11 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                         </button>
                         <span className="text-xs text-neutral-500">{t("orderPayAtPickup")}</span>
                       </div>
+                      {!!orderError ? (
+                        <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                          {orderError}
+                        </p>
+                      ) : null}
                       <div className="mb-4 flex items-end justify-between">
                         <span className="text-sm text-neutral-500">{t("orderCartTotal")}</span>
                         <span className="text-2xl font-bold tabular-nums text-neutral-900">
