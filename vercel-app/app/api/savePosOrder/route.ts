@@ -10,7 +10,7 @@ import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipient
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
-import { resolveBangkokAccountingDate, isPosCompletionStatus } from '@/lib/pos-order-policy'
+import { resolvePosBusinessAccountingDateForStore, isPosCompletionStatus } from '@/lib/pos-order-policy'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 import {
   coercePaymentOtherBreakdownForSave,
@@ -102,7 +102,7 @@ async function runCompletionSideEffects(params: {
 }): Promise<void> {
   const { orderId, orderNo, storeCode, total, subtotal, vat, serviceAmount, createdAtIso, createdBy } = params
   if (!storeCode) return
-  const salesDate = resolveBangkokAccountingDate(createdAtIso)
+  const salesDate = await resolvePosBusinessAccountingDateForStore(createdAtIso, storeCode)
   try {
     const settings = (await supabaseSelectFilter(
       'pos_printer_settings',

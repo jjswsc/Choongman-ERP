@@ -13,7 +13,7 @@ import {
   isPosCompletionStatus,
   isPosPaidLikeStatus,
   isPosReversalStatus,
-  resolveBangkokAccountingDate,
+  resolvePosBusinessAccountingDateForStore,
 } from '@/lib/pos-order-policy'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
@@ -141,7 +141,10 @@ export async function POST(req: NextRequest) {
       }
       if (isPosCompletionStatus(nextStatus)) {
         const storeCode = String(prev?.store_code ?? '').trim()
-        const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))
+        const salesDate = await resolvePosBusinessAccountingDateForStore(
+          String(prev?.created_at ?? ''),
+          storeCode
+        )
         if (storeCode) {
           try {
             const settings = (await supabaseSelectFilter(
@@ -215,7 +218,10 @@ export async function POST(req: NextRequest) {
         }
       } else if (isPosReversalStatus(nextStatus)) {
         const storeCode = String(prev?.store_code ?? '').trim()
-        const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))
+        const salesDate = await resolvePosBusinessAccountingDateForStore(
+          String(prev?.created_at ?? ''),
+          storeCode
+        )
         try {
           await reversePosStockDeduction(id)
         } catch (e) {
@@ -341,7 +347,10 @@ export async function POST(req: NextRequest) {
     })
 
     const storeCode = String(prev?.store_code ?? '').trim()
-    const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))
+    const salesDate = await resolvePosBusinessAccountingDateForStore(
+      String(prev?.created_at ?? ''),
+      storeCode
+    )
     if (isPosCompletionStatus(nextStatus)) {
       if (storeCode) {
         try {

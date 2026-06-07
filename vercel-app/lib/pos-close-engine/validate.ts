@@ -1,14 +1,5 @@
-import { supabaseRpc, supabaseUpsert } from '@/lib/supabase-server'
-
-type CloseSnapshotRow = {
-  store_code?: string
-  business_date?: string
-  system_total?: number
-  settlement_total?: number
-  diff_total?: number
-  has_settlement?: boolean
-  close_status?: string
-}
+import { supabaseUpsert } from '@/lib/supabase-server'
+import { computePosCloseSnapshot } from '@/lib/pos-close-engine/snapshot'
 
 export type PosCloseValidateResult = {
   storeCode: string
@@ -33,20 +24,14 @@ export async function validatePosCloseRun(params: {
   if (!storeCode || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
     throw new Error('INVALID_POS_CLOSE_VALIDATE_PARAMS')
   }
-  const rows = await supabaseRpc<CloseSnapshotRow[]>('get_pos_close_snapshot', {
-    p_store_code: storeCode,
-    p_settle_date: businessDate,
-  })
-  const row = rows?.[0] || {}
-  const systemTotal = Number(row.system_total || 0)
-  const settlementTotal = Number(row.settlement_total || 0)
-  const diffTotal = Number(row.diff_total || 0)
-  const hasSettlement = Boolean(row.has_settlement)
-  const diffWithinTolerance = Math.abs(diffTotal) <= 0.5
-  const status: 'validated' | 'draft' = hasSettlement && diffWithinTolerance ? 'validated' : 'draft'
+
+  const snap = await computePosCloseSnapshot({ storeCode, businessDate })
+  const diffWithinTolerance = Math.abs(snap.diffTotal) <= 0.5
+  const status: 'validated' | 'draft' =
+    snap.hasSettlement && diffWithinTolerance ? 'validated' : 'draft'
 
   const checks = {
-    hasSettlement,
+    hasSettlement: snap.hasSettlement,
     diffWithinTolerance,
   }
   await supabaseUpsert(
@@ -58,9 +43,9 @@ export async function validatePosCloseRun(params: {
         status,
         checks_json: checks,
         totals_json: {
-          systemTotal,
-          settlementTotal,
-          diffTotal,
+          systemTotal: snap.systemTotal,
+          settlementTotal: snap.settlementTotal,
+          diffTotal: snap.diffTotal,
         },
         validated_at: new Date().toISOString(),
       },
@@ -71,10 +56,10 @@ export async function validatePosCloseRun(params: {
   return {
     storeCode,
     businessDate,
-    systemTotal,
-    settlementTotal,
-    diffTotal,
-    hasSettlement,
+    systemTotal: snap.systemTotal,
+    settlementTotal: snap.settlementTotal,
+    diffTotal: snap.diffTotal,
+    hasSettlement: snap.hasSettlement,
     status,
     checks,
   }

@@ -1,8 +1,11 @@
--- POS close snapshot RPC.
+-- POS close snapshot RPC — 영업일 UTC 구간 기준 (결산·getPosSettlement과 동일)
+-- p_start_utc / p_end_utc_exclusive 가 있으면 해당 구간, 없으면 달력일 폴백(하위 호환)
 
 create or replace function public.get_pos_close_snapshot(
   p_store_code text,
-  p_settle_date date
+  p_settle_date date,
+  p_start_utc timestamptz default null,
+  p_end_utc_exclusive timestamptz default null
 )
 returns table (
   store_code text,
@@ -21,8 +24,20 @@ as $$
       coalesce(sum(o.total), 0)::numeric as system_total
     from public.pos_orders o
     where o.store_code = p_store_code
-      and (o.created_at at time zone 'Asia/Bangkok')::date = p_settle_date
-      and lower(coalesce(o.status, '')) in ('paid', 'preparing', 'cooking', 'ready', 'completed')
+      and lower(coalesce(o.status, '')) in ('paid', 'ready', 'completed')
+      and (
+        (
+          p_start_utc is not null
+          and p_end_utc_exclusive is not null
+          and o.created_at >= p_start_utc
+          and o.created_at < p_end_utc_exclusive
+        )
+        or (
+          p_start_utc is null
+          and p_end_utc_exclusive is null
+          and (o.created_at at time zone 'Asia/Bangkok')::date = p_settle_date
+        )
+      )
   ),
   settlement_rows as (
     select

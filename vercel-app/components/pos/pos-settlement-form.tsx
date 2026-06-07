@@ -55,7 +55,13 @@ import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { PosChannelSettlementPanel } from '@/components/erp/pos-channel-settlement-panel'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
-import { isOfficeRole, canAccessSettings, isAccountingRole } from '@/lib/permissions'
+import {
+  isOfficeRole,
+  canAccessSettings,
+  isAccountingRole,
+  isManagerRole,
+  isFranchiseeRole,
+} from '@/lib/permissions'
 import { filterNonOfficeStores } from '@/lib/store-view-context'
 import { cn, escapeHtml, formatBahtNum } from '@/lib/utils'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
@@ -64,7 +70,13 @@ import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
-import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
+import Link from 'next/link'
+import {
+  formatPosBusinessDateRangeLabel,
+  getPosBusinessDateStr,
+  setPosBusinessHoursClient,
+  type PosBusinessHoursConfig,
+} from '@/lib/pos-business-day'
 import {
   Collapsible,
   CollapsibleContent,
@@ -267,6 +279,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const online = useOnlineStatus()
 
   const [settleDate, setSettleDate] = React.useState(() => getBangkokDateYmd())
+  const [businessHours, setBusinessHours] = React.useState<PosBusinessHoursConfig | null>(null)
+  const userPickedSettleDateRef = React.useRef(false)
   const [storeFilter, setStoreFilter] = React.useState('')
   const [systemTotal, setSystemTotal] = React.useState(0)
   /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
@@ -371,6 +385,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canUnclose = canAccessSettings(auth?.role || '')
+  const canEditBusinessHours =
+    canSearchAll || isManagerRole(auth?.role || '') || isFranchiseeRole(auth?.role || '')
   /** 주문 집계(AUTO) QR·배달·기타 — 매장 역할은 수정 불가(본사·회계만). 데모 튜토리얼은 입력 가능 유지 */
   const payAutoBreakdownStaffLocked =
     !isPosDemoFromQuery(searchParams) &&
@@ -381,7 +397,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     return trimmed ? resolveStoreKey(trimmed) || trimmed : ''
   }, [canSearchAll, storeFilter, auth?.store, resolveStoreKey])
 
-  /** 매장별 영업시간 반영 + 영업 시작 화면은 항상 현재 영업일로 맞춤(터미널 게이트와 동일) */
+  React.useEffect(() => {
+    userPickedSettleDateRef.current = false
+  }, [effectiveStore])
+
+  /** 매장별 영업시간 반영 + 결산·영업 시작 모두 현재 영업일 기본(터미널 게이트와 동일) */
   React.useEffect(() => {
     if (!effectiveStore) return
     let cancel = false
@@ -389,11 +409,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       try {
         const j = await getPosBusinessDaySettings(effectiveStore)
         if (cancel) return
-        setPosBusinessHoursClient({
+        const hours: PosBusinessHoursConfig = {
           start: { hour: j.hour, minute: j.minute },
           end: { hour: j.endHour, minute: j.endMinute },
-        })
-        if (openMode) {
+        }
+        setBusinessHours(hours)
+        setPosBusinessHoursClient(hours)
+        if (openMode || !userPickedSettleDateRef.current) {
           setSettleDate(getPosBusinessDateStr())
         }
       } catch {
@@ -404,6 +426,16 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       cancel = true
     }
   }, [effectiveStore, openMode])
+
+  const businessDayRangeLabel = React.useMemo(() => {
+    if (!businessHours || !settleDate) return ''
+    return formatPosBusinessDateRangeLabel(settleDate, businessHours)
+  }, [businessHours, settleDate])
+
+  const syncSettleDateToCurrentBusinessDay = React.useCallback(() => {
+    userPickedSettleDateRef.current = false
+    setSettleDate(getPosBusinessDateStr())
+  }, [])
 
   /** loadData는 결제 키 로드 후 재실행되면 권종 입력을 덮어쓰므로 ref로 최신 키만 참조 */
   const cardKeysRef = React.useRef(cardKeys)
@@ -1274,12 +1306,30 @@ ${footerStamp}
           className={cn('flex flex-wrap items-center gap-3', compact ? 'mb-4' : 'mb-6')}
           data-tour="pos-tour-settlement-toolbar"
         >
-          <Input
-            type="date"
-            value={settleDate}
-            onChange={(e) => setSettleDate(e.target.value)}
-            className="h-10 w-40"
-          />
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t('posSettleBusinessDayLabel') || '영업일'}
+            </span>
+            <Input
+              type="date"
+              value={settleDate}
+              onChange={(e) => {
+                userPickedSettleDateRef.current = true
+                setSettleDate(e.target.value)
+              }}
+              className="h-10 w-40"
+              aria-label={t('posSettleBusinessDayLabel') || '영업일'}
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-10 self-end"
+            onClick={syncSettleDateToCurrentBusinessDay}
+          >
+            {t('posSettleCurrentBusinessDay') || '현재 영업일'}
+          </Button>
           {canSearchAll && (
             <Select value={storeFilter} onValueChange={setStoreFilter}>
               <SelectTrigger className="h-10 w-36">
@@ -1309,6 +1359,31 @@ ${footerStamp}
             {t('mobileStoreSalesBackHome') || '홈으로 돌아가기'}
           </Button>
         </div>
+
+        {effectiveStore && businessDayRangeLabel ? (
+          <div
+            className={cn(
+              'rounded-lg border bg-muted/30 px-4 py-3 text-sm',
+              compact ? 'mb-4' : 'mb-6'
+            )}
+            data-tour="pos-tour-settlement-business-day-range"
+          >
+            <p className="font-medium">{t('posSettleBusinessDayRange') || '집계 구간 (방콕)'}</p>
+            <p className="mt-1 font-erp-numeric text-muted-foreground">{businessDayRangeLabel}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('posSettleBusinessDayRangeHint') ||
+                '영업 시작·종료 시각과 동일합니다. 결산·POS 매출·일마감이 이 구간으로 묶입니다.'}
+            </p>
+            {canEditBusinessHours ? (
+              <Link
+                href="/admin/sales-management?hours=1"
+                className="mt-2 inline-block text-xs font-medium text-primary underline underline-offset-2"
+              >
+                {t('posSettleBusinessHoursSettingsLink') || '영업시간 설정'}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="max-h-[calc(100vh-260px)] min-h-0 overflow-y-auto overflow-x-hidden -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
         {loading && (

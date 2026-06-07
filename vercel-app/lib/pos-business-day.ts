@@ -247,3 +247,27 @@ export function getPosBusinessDateStr(base: Date = new Date()): string {
   const h = clientOverride ?? POS_BUSINESS_DAY_DEFAULT_HOURS
   return getPosBusinessDateStrFromConfig(base, h)
 }
+
+function formatBangkokYmdHmFromIso(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const date = d.toLocaleDateString('en-CA', { timeZone: POS_TIMEZONE })
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: POS_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00'
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00'
+  return `${date} ${hour}:${minute}`
+}
+
+/** 영업일 라벨 YYYY-MM-DD에 해당하는 방콕 집계 구간 표시 (끝 시각 미포함) */
+export function formatPosBusinessDateRangeLabel(
+  businessDateYmd: string,
+  hours: PosBusinessHoursConfig
+): string {
+  const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(businessDateYmd, hours)
+  return `${formatBangkokYmdHmFromIso(startISO)} ~ ${formatBangkokYmdHmFromIso(endISOExclusive)}`
+}
