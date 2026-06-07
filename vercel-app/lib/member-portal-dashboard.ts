@@ -3,7 +3,7 @@ import {
   getMemberSummaryById,
   getMemberTierQualificationPoints,
   getMemberVisits,
-  listMemberCouponIssues,
+  listMemberCouponIssuesForPortalMember,
   listMemberPoints,
   listMemberTiers,
   resolveMemberTierQualificationValue,
@@ -47,7 +47,7 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
   const referralCode = await ensureMemberReferralCode(memberId)
   const [visits, coupons, points, tiers, upgradeBasis, memberRow] = await Promise.all([
     getMemberVisits({ memberId, limit: 200 }),
-    listMemberCouponIssues({ memberId, limit: 100 }),
+    listMemberCouponIssuesForPortalMember(memberId, 100),
     listMemberPoints({ memberId, limit: 200 }),
     listMemberTiers(),
     loadMemberTierUpgradeBasis(),

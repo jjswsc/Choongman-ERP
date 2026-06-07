@@ -7,6 +7,8 @@ import {
   menuHasChickenSizeProfile,
   resolveChickenDefaultOptionDisplayName,
   shouldUseFlatChickenMOptionPicker,
+  collectChickenMultistepPriceListRows,
+  computeChickenMultistepRowPrice,
 } from "@/lib/pos-chicken-option-inference"
 
 describe("collectPosOptionPickerStepValues", () => {
@@ -254,5 +256,76 @@ describe("filterFlatChickenMListOptions", () => {
     ]
     const filtered = filterFlatChickenMListOptions(rows)
     expect(filtered.map((x) => x.name)).toEqual(["M - Boneless"])
+  })
+})
+
+describe("collectChickenMultistepPriceListRows", () => {
+  const mBoneless: PosMenuOption = {
+    id: "m1",
+    menuId: "c008",
+    name: "M - Boneless",
+    priceModifier: 90,
+    priceModifierDelivery: null,
+    priceModifierPackaging: null,
+    sortOrder: 0,
+    optionType: "substitution",
+    optionStepValues: { part: "Boneless" },
+    sellHall: true,
+    sellDelivery: true,
+    sellPackaging: true,
+  }
+  const mWing: PosMenuOption = {
+    id: "m2",
+    menuId: "c008",
+    name: "M - Wing",
+    priceModifier: 90,
+    priceModifierDelivery: null,
+    priceModifierPackaging: null,
+    sortOrder: 1,
+    optionType: "substitution",
+    optionStepValues: { part: "Wing" },
+    sellHall: true,
+    sellDelivery: true,
+    sellPackaging: true,
+  }
+  const kimchi: PosMenuOption = {
+    id: "s1",
+    menuId: "c008",
+    name: "Kimchi 30g.",
+    priceModifier: 0,
+    priceModifierDelivery: null,
+    priceModifierPackaging: null,
+    sortOrder: 2,
+    optionType: "substitution",
+    optionStepValues: { sidedish: "Kimchi" },
+    sellHall: true,
+    sellDelivery: true,
+    sellPackaging: true,
+  }
+
+  it("returns M-named part rows with step values for multistep part phase", () => {
+    const rows = collectChickenMultistepPriceListRows({
+      groupKey: "part",
+      groups: ["part", "sidedish"],
+      menuCode: "C008",
+      options: [mBoneless, mWing, kimchi],
+      optionsWithSteps: [mBoneless, mWing, kimchi],
+    })
+    expect(rows.map((r) => r.stepValue)).toEqual(["Boneless", "Wing"])
+    expect(rows[0].option.name).toBe("M - Boneless")
+  })
+
+  it("computes sidedish row price including prior part modifier", () => {
+    const price = computeChickenMultistepRowPrice({
+      menuBasePrice: 159,
+      groupKey: "sidedish",
+      option: kimchi,
+      groups: ["part", "sidedish"],
+      menuCode: "C008",
+      pendingSelections: { part: "Boneless" },
+      optionsWithSteps: [mBoneless, mWing, kimchi],
+      getOptionModifier: (o) => o.priceModifier ?? 0,
+    })
+    expect(price).toBe(249)
   })
 })

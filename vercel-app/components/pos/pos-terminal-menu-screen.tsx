@@ -75,6 +75,9 @@ import {
   isChickenSizeOnlyOptionName,
   resolveChickenDefaultOptionDisplayName,
   shouldUseFlatChickenMOptionPicker,
+  shouldUseChickenMultistepPriceList,
+  collectChickenMultistepPriceListRows,
+  computeChickenMultistepRowPrice,
 } from '@/lib/pos-chicken-option-inference'
 import {
   filterPosOptionsForBarBqFlatMList,
@@ -1955,25 +1958,86 @@ export function PosTerminalMenuScreen({
                 soup: t('posOptionGroupSoup') || '스프',
                 rice: t('posOptionGroupRice') || '밥',
               }
+              const chickenPriceListRows =
+                isChickenBase && shouldUseChickenMultistepPriceList(isChickenBase, groupKey)
+                  ? collectChickenMultistepPriceListRows({
+                      groupKey,
+                      groups: activeStepGroups,
+                      menuCode: optionPickerMenu.code,
+                      options: opts,
+                      optionsWithSteps: optsWithStepsToShow,
+                    })
+                  : []
+              const useChickenPriceList = chickenPriceListRows.length > 0
+              const showChickenPartSideHint =
+                useChickenPriceList &&
+                groupKey === 'part' &&
+                activeStepGroups.some((g) => g === 'sidedish' || g === 'side')
+              const groupLabelText =
+                (String(groupCfg?.label ?? '').trim() || groupLabels[groupKey] || groupKey) +
+                (groupRequired ? '' : ` (${t('optional') || '선택'})`)
               return (
                 <div className="flex flex-col gap-3 py-2">
-                  {defaultBtn}
-                  <p className="text-xs text-muted-foreground">
-                    {(String(groupCfg?.label ?? '').trim() || groupLabels[groupKey] || groupKey) +
-                      (groupRequired ? '' : ` (${t('optional') || '선택'})`)}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {values.map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => fireMenuAction(() => handleStepSelect(val))}
-                        className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
-                      >
-                        {translateChickenPartLabel(val)}
-                      </button>
-                    ))}
-                  </div>
+                  {groupKey !== 'sidedish' && groupKey !== 'side' ? defaultBtn : null}
+                  {showChickenPartSideHint ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('posBarBqPickSizeFirst') || '1. 사이즈(M) 선택 → 2. 사이드(치킨무·김치 등)'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{groupLabelText}</p>
+                  )}
+                  {useChickenPriceList ? (
+                    <div className="flex flex-col gap-2">
+                      {chickenPriceListRows.map(({ stepValue, option: opt }) => {
+                        const optDesc = showMenuDescriptions
+                          ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
+                          : ''
+                        const rowPrice = computeChickenMultistepRowPrice({
+                          menuBasePrice: getMenuPrice(optionPickerMenu),
+                          groupKey,
+                          option: opt,
+                          groups: activeStepGroups,
+                          menuCode: optionPickerMenu.code,
+                          pendingSelections: optionPickerSelections,
+                          optionsWithSteps: optsWithStepsToShow,
+                          getOptionModifier,
+                        })
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => fireMenuAction(() => handleStepSelect(stepValue))}
+                            className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                          >
+                            <span className="min-w-0 flex-1 text-slate-800">
+                              <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
+                              {optDesc ? (
+                                <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
+                                  {optDesc}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="shrink-0 font-bold text-emerald-600">
+                              {rowPrice.toLocaleString()} ฿
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {values.map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => fireMenuAction(() => handleStepSelect(val))}
+                          className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
+                        >
+                          {translateChickenPartLabel(val)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {!groupRequired && (
                     <Button
                       variant="outline"

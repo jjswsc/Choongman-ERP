@@ -6163,6 +6163,27 @@ export const i18n = {
     memberStatus: '상태(active/inactive)',
     memberRegisterMaster: '신규 등록 (마스터)',
     memberClearSelection: '선택 해제',
+    memberMergeTitle: '중복 회원 병합',
+    memberMergeDesc:
+      '같은 사람의 중복 계정(예: 전화번호·LINE 중복 가입)을 하나로 합칩니다. 유지할 회원을 목록에서 선택한 뒤, 흡수할 중복 회원번호를 입력하세요. 쿠폰·포인트·주문·LINE 연결이 유지 회원으로 이전되고 중복 계정은 inactive 처리됩니다.',
+    memberMergeSelectTarget: '목록에서 유지할 회원을 먼저 선택해 주세요.',
+    memberMergeKeep: '유지',
+    memberMergeAbsorb: '흡수(비활성)',
+    memberMergeSourceLabel: '병합할 중복 회원',
+    memberMergeSourcePh: '회원번호(M004719) 또는 ID',
+    memberMergeLookup: '조회',
+    memberMergeRun: '병합 실행',
+    memberMerging: '병합 중…',
+    memberMergeSourceRequired: '병합할 중복 회원번호 또는 ID를 입력해 주세요.',
+    memberMergeSourceNotFound: '해당 회원을 찾을 수 없습니다.',
+    memberMergeSameMember: '유지 회원과 동일한 회원은 병합할 수 없습니다.',
+    memberMergeTargetRequired: '유지할 회원을 목록에서 선택해 주세요.',
+    memberMergePreviewFirst: '먼저 중복 회원을 조회해 주세요.',
+    memberMergeSourceInactive: '이미 inactive 상태인 회원은 병합 소스로 사용할 수 없습니다.',
+    memberMergeConfirm:
+      '「{target}」(유지) ← 「{source}」(흡수·비활성) 병합을 실행합니다. 쿠폰·포인트·주문이 이전됩니다. 계속할까요?',
+    memberMergeDone: '병합 완료 — 쿠폰 {coupons}건, 주문 {orders}건, 포인트 원장 {points}건 이전',
+    memberMergeFail: '회원 병합에 실패했습니다.',
     memberListMasterTitle: '회원 목록 (마스터 기준)',
     memberSearchPh: '이름·LINE표시명·전화·이메일·성명·등급·생일·회원번호·LINE ID 검색',
     memberLineSyncTitle: 'LINE Messaging API 기반 보조 동기화',
@@ -7785,7 +7806,7 @@ export const i18n = {
     helpSum_admin_members:
       '회원 마스터를 조회·등록·수정하고 LINE·앱 가입 정보를 ERP 기준으로 관리하는 화면입니다.',
     helpHow_admin_members:
-      '① 목록에서 회원을 검색·선택합니다.\n② 좌측 폼에서 이름·전화·등급 등을 등록·수정합니다.\n③ 상단 탭에서 포인트·쿠폰·방문·등급·세그먼트·RFM으로 이동합니다.',
+      '① 목록에서 회원을 검색·선택합니다.\n② 좌측 폼에서 이름·전화·등급 등을 등록·수정합니다.\n③ 같은 사람의 중복 계정(전화·LINE 중복 등)은 좌측 「중복 회원 병합」에서 유지 회원을 선택한 뒤 중복 회원번호를 입력해 합칩니다.\n④ 상단 탭에서 포인트·쿠폰·방문·등급·세그먼트·RFM으로 이동합니다.',
     helpSum_admin_members_points:
       '회원 포인트 잔액·원장 조회, 수기 조정, POS 매출 연동 적립 규칙(등급별 적립율)을 관리하는 화면입니다.',
     helpHow_admin_members_points:
@@ -15322,6 +15343,27 @@ orderItemQty: 'Qty',
     memberStatus: 'Status(active/inactive)',
     memberRegisterMaster: 'New register (master)',
     memberClearSelection: 'Clear selection',
+    memberMergeTitle: 'Merge duplicate members',
+    memberMergeDesc:
+      'Combine duplicate accounts for the same person (e.g. duplicate phone or LINE signup). Select the member to keep, then enter the duplicate member number to absorb. Coupons, points, orders, and LINE links move to the kept account; the duplicate becomes inactive.',
+    memberMergeSelectTarget: 'Select the member to keep from the list first.',
+    memberMergeKeep: 'Keep',
+    memberMergeAbsorb: 'Absorb (deactivate)',
+    memberMergeSourceLabel: 'Duplicate member to merge',
+    memberMergeSourcePh: 'Member no. (M004719) or ID',
+    memberMergeLookup: 'Look up',
+    memberMergeRun: 'Run merge',
+    memberMerging: 'Merging…',
+    memberMergeSourceRequired: 'Enter the duplicate member number or ID.',
+    memberMergeSourceNotFound: 'Member not found.',
+    memberMergeSameMember: 'Cannot merge a member into itself.',
+    memberMergeTargetRequired: 'Select the member to keep from the list.',
+    memberMergePreviewFirst: 'Look up the duplicate member first.',
+    memberMergeSourceInactive: 'An inactive member cannot be used as merge source.',
+    memberMergeConfirm:
+      'Merge 「{source}」 into 「{target}」(keep). Coupons, points, and orders will move. Continue?',
+    memberMergeDone: 'Merge complete — {coupons} coupon(s), {orders} order(s), {points} ledger row(s) moved',
+    memberMergeFail: 'Member merge failed.',
     memberListMasterTitle: 'Member list (master)',
     memberSearchPh: 'Search name, LINE name, phone, email, full name, tier, birthday, member no, LINE ID',
     memberLineSyncTitle: 'Supplementary sync via LINE Messaging API',
@@ -16942,7 +16984,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members:
       'Look up, register, and edit member master data; manage app and LINE-linked profiles in ERP.',
     helpHow_admin_members:
-      '① Search and select a member in the list.\n② Register or edit name, phone, tier, and other fields in the left form.\n③ Use the top tabs for points, coupons, visits, tiers, segments, and RFM.',
+      '① Search and select a member in the list.\n② Register or edit name, phone, tier, and other fields in the left form.\n③ To merge duplicate accounts for the same person, use Merge duplicate members on the left: select the member to keep, then enter the duplicate member number.\n④ Use the top tabs for points, coupons, visits, tiers, segments, and RFM.',
     helpSum_admin_members_points:
       'View member point balances and ledger, manual adjustments, and POS sales-based earn rules (tier rates).',
     helpHow_admin_members_points:

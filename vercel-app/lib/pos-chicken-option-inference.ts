@@ -225,3 +225,109 @@ export function shouldUseFlatChickenMOptionPicker(params: {
   if (hasExplicitSizeStep) return false
   return true
 }
+
+export type ChickenMultistepPriceListRow = {
+  stepValue: string
+  option: PosMenuOption
+}
+
+/** 치킨 multistep에서 BBQ와 같이 옵션명+가격 행으로 보여 줄 단계 */
+export function shouldUseChickenMultistepPriceList(
+  isChickenMenu: boolean,
+  groupKey: string
+): boolean {
+  if (!isChickenMenu) return false
+  const gk = String(groupKey ?? "").trim().toLowerCase()
+  return gk === "part" || gk === "size" || gk === "sidedish" || gk === "side"
+}
+
+/** multistep 단계별 가격 행 — part/size는 M 목록, sidedish 등은 해당 단계 옵션 */
+export function collectChickenMultistepPriceListRows(params: {
+  groupKey: string
+  groups: string[]
+  menuCode: string | undefined
+  options: PosMenuOption[]
+  optionsWithSteps: PosMenuOption[]
+}): ChickenMultistepPriceListRow[] {
+  const { groupKey, groups, menuCode, options, optionsWithSteps } = params
+  const gk = String(groupKey ?? "").trim().toLowerCase()
+  const substitutions = optionsWithSteps.filter(
+    (o) => o.optionType === "substitution" && !isChickenDefaultOptionName(o.name)
+  )
+
+  const pushUnique = (
+    pool: PosMenuOption[],
+    out: ChickenMultistepPriceListRow[],
+    seen: Set<string>
+  ) => {
+    for (const opt of pool) {
+      const stepValue = optionStepValueForPicker(opt, groupKey, menuCode, groups)
+      if (!stepValue) continue
+      const sk = stepValue.toLowerCase()
+      if (seen.has(sk)) continue
+      seen.add(sk)
+      out.push({ stepValue, option: opt })
+    }
+  }
+
+  if (gk === "part" || gk === "size") {
+    const mNamed = filterFlatChickenMListOptions(substitutions)
+    const out: ChickenMultistepPriceListRow[] = []
+    const seen = new Set<string>()
+    pushUnique(mNamed.length > 0 ? mNamed : substitutions, out, seen)
+    if (out.length > 0) return out
+    const pool = options.filter(
+      (o) => o.optionType === "substitution" && !isChickenDefaultOptionName(o.name)
+    )
+    pushUnique(pool, out, seen)
+    return out
+  }
+
+  if (gk === "sidedish" || gk === "side") {
+    const out: ChickenMultistepPriceListRow[] = []
+    const seen = new Set<string>()
+    pushUnique(substitutions, out, seen)
+    return out
+  }
+
+  return []
+}
+
+/** multistep 가격 행 표시용 — part/size는 해당 행 단가, sidedish는 이전 단계 반영 합산 */
+export function computeChickenMultistepRowPrice(params: {
+  menuBasePrice: number
+  groupKey: string
+  option: PosMenuOption
+  groups: string[]
+  menuCode: string | undefined
+  pendingSelections: Record<string, string>
+  optionsWithSteps: PosMenuOption[]
+  getOptionModifier: (o: PosMenuOption) => number
+}): number {
+  const {
+    menuBasePrice,
+    groupKey,
+    option,
+    groups,
+    menuCode,
+    pendingSelections,
+    optionsWithSteps,
+    getOptionModifier,
+  } = params
+  const gk = String(groupKey ?? "").trim().toLowerCase()
+  if (gk === "part" || gk === "size") {
+    return menuBasePrice + getOptionModifier(option)
+  }
+  let extra = getOptionModifier(option)
+  for (const g of groups) {
+    if (g === groupKey) break
+    const val = String(pendingSelections[g] ?? "").trim()
+    if (!val) continue
+    const prior = optionsWithSteps.find(
+      (o) =>
+        optionStepValueForPicker(o, g, menuCode, groups).toLowerCase() === val.toLowerCase()
+    )
+    if (prior) extra += getOptionModifier(prior)
+  }
+  return menuBasePrice + extra
+}

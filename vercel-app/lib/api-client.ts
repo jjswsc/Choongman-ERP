@@ -11897,6 +11897,48 @@ export async function updateMember(params: {
   return res.json() as Promise<{ success: boolean; code?: string; message?: string; member?: Member }>
 }
 
+export type MemberMergeResult = {
+  targetMemberId: number
+  targetMemberNo: string
+  sourceMemberId: number
+  sourceMemberNo: string
+  transferred: {
+    coupons: number
+    couponDuplicatesCancelled: number
+    pointLedgerRows: number
+    orders: number
+    identitiesMoved: number
+    identitiesDeactivated: number
+    notes: number
+    events: number
+    tierHistories: number
+    campaignRunMembers: number
+    referralEventsUpdated: number
+    referredByUpdated: number
+  }
+}
+
+export async function mergeMembers(params: {
+  targetMemberId: number
+  sourceMemberId?: number
+  sourceRef?: string
+}) {
+  const res = await apiFetchWithOffline(`/api/members/${params.targetMemberId}/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sourceMemberId: params.sourceMemberId,
+      sourceRef: params.sourceRef,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    result?: MemberMergeResult
+    member?: Member
+  }>
+}
+
 export async function registerLineMember(params: {
   lineUserId: string
   displayName?: string

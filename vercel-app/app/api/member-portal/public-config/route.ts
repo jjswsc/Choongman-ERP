@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
-import { getMemberPortalSnowOnionBackgroundUrl } from '@/lib/member-portal-snow-onion-background'
 import { getSignupWelcomeCouponCode } from '@/lib/member-portal-signup-welcome-coupon'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -27,8 +26,6 @@ export async function GET() {
       map.set(key, value)
     }
 
-    const heroFoodImageUrl = await getMemberPortalSnowOnionBackgroundUrl()
-
     return NextResponse.json({
       success: true,
       facebookUrl: map.get(KEY_FACEBOOK) || brand.memberContactFacebookUrl,
@@ -36,11 +33,10 @@ export async function GET() {
       lineOfficialUrl: map.get(KEY_LINE_OFFICIAL) || '',
       loginBackgroundUrl: map.get(KEY_LOGIN_BG) || '',
       appBackgroundUrl: map.get(KEY_APP_BG) || '',
-      heroFoodImageUrl,
+      heroFoodImageUrl: '',
       signupWelcomeCouponEnabled: Boolean(await getSignupWelcomeCouponCode()),
     })
   } catch {
-    const heroFoodImageUrl = await getMemberPortalSnowOnionBackgroundUrl().catch(() => '')
     return NextResponse.json({
       success: true,
       facebookUrl: brand.memberContactFacebookUrl,
@@ -48,7 +44,7 @@ export async function GET() {
       lineOfficialUrl: '',
       loginBackgroundUrl: '',
       appBackgroundUrl: '',
-      heroFoodImageUrl,
+      heroFoodImageUrl: '',
       signupWelcomeCouponEnabled: false,
     })
   }

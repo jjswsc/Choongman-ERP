@@ -1094,6 +1094,9 @@ export function MemberPortalApp() {
         {tab === "privilege" && (
           <div className="space-y-3">
             <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
+            <p className="-mt-1 text-xs text-white/40">
+              {t("memberNo")} {member.memberNo}
+            </p>
             <MemberPortalBenefitStatsGrid
               couponsLabel={t("statCoupons")}
               couponsValue={`${activeDashboard.stats.availableCoupons}`}

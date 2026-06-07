@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { createMember, updateMember, type Member } from "@/lib/api-client"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberListPanel, type MemberListPanelHandle } from "@/components/admin/member-list-panel"
+import { MemberMergePanel } from "@/components/admin/member-merge-panel"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -221,6 +222,7 @@ export default function MembersPage() {
   const listRef = React.useRef<MemberListPanelHandle>(null)
   const [saving, setSaving] = React.useState(false)
   const [form, setForm] = React.useState<MemberForm>({ ...emptyForm })
+  const [selectedMember, setSelectedMember] = React.useState<Member | null>(null)
 
   const handleFormChange = React.useCallback((patch: Partial<MemberForm>) => {
     setForm((p) => ({ ...p, ...patch }))
@@ -228,10 +230,18 @@ export default function MembersPage() {
 
   const handleSelectMember = React.useCallback((m: Member) => {
     setForm(memberToForm(m))
+    setSelectedMember(m)
   }, [])
 
   const handleClearForm = React.useCallback(() => {
     setForm({ ...emptyForm })
+    setSelectedMember(null)
+  }, [])
+
+  const handleMerged = React.useCallback((m: Member) => {
+    setForm(memberToForm(m))
+    setSelectedMember(m)
+    listRef.current?.reload()
   }, [])
 
   const onSave = async () => {
@@ -282,6 +292,7 @@ export default function MembersPage() {
           return
         }
         setForm({ ...emptyForm })
+        setSelectedMember(null)
         listRef.current?.reload()
         return
       }
@@ -307,6 +318,7 @@ export default function MembersPage() {
         return
       }
       setForm({ ...emptyForm })
+      setSelectedMember(null)
       listRef.current?.reload()
     } finally {
       setSaving(false)
@@ -328,7 +340,7 @@ export default function MembersPage() {
         <CrmSubnav />
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-          <div className="lg:sticky lg:top-0 lg:self-start">
+          <div className="lg:sticky lg:top-0 lg:self-start space-y-4">
             <MemberFormPanel
               form={form}
               onFormChange={handleFormChange}
@@ -337,6 +349,7 @@ export default function MembersPage() {
               saving={saving}
               t={t}
             />
+            <MemberMergePanel targetMember={selectedMember} onMerged={handleMerged} t={t} />
           </div>
 
           <MemberListPanel ref={listRef} onSelectMember={handleSelectMember} />

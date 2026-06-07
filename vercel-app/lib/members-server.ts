@@ -17,6 +17,7 @@ import {
   type MemberTierUpgradeBasis,
 } from '@/lib/member-tier-policy'
 import { buildMemberSearchPostgrestOrFilter } from '@/lib/member-search-filter'
+import { memberPhoneLookupVariants, normalizeMemberPhone } from '@/lib/member-phone-lookup'
 
 export type MemberSummary = {
   id: number
@@ -1060,20 +1061,66 @@ export async function applyLoyaltyOnOrder(params: {
   return { pointEarned: appliedEarn, tierCode: recalc.tierCode }
 }
 
+export async function resolveMemberIdsSharingPhone(memberId: number): Promise<number[]> {
+  const id = Number(memberId || 0)
+  if (!id) return []
+  const member = await getMemberSummaryById(id)
+  if (!member) return [id]
+  const phone = normalizeMemberPhone(member.phone)
+  if (!phone) return [id]
+  const ids = new Set<number>([id])
+  for (const candidate of memberPhoneLookupVariants(phone)) {
+    try {
+      const rows = (await supabaseSelectFilter(
+        'members',
+        `phone=eq.${encodeURIComponent(candidate)}`,
+        { limit: 30, select: 'id' }
+      )) as Array<{ id?: number }>
+      for (const row of rows || []) {
+        const mid = Number(row.id || 0)
+        if (mid) ids.add(mid)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...ids].sort((a, b) => a - b)
+}
+
+export async function listMemberCouponIssuesForPortalMember(
+  memberId: number,
+  limit = 100
+): Promise<Awaited<ReturnType<typeof listMemberCouponIssues>>> {
+  const memberIds = await resolveMemberIdsSharingPhone(memberId)
+  if (memberIds.length <= 1) {
+    return listMemberCouponIssues({ memberId: memberIds[0] || memberId, limit })
+  }
+  return listMemberCouponIssues({ memberIds, limit })
+}
+
 export async function listMemberCouponIssues(params?: {
   memberId?: number
+  memberIds?: number[]
   limit?: number
   status?: string
   couponCode?: string
   q?: string
 }) {
+  const filterMemberIds = (params?.memberIds || [])
+    .map((id) => Number(id || 0))
+    .filter((id) => id > 0)
   const memberId = Number(params?.memberId || 0)
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
   const statusFilter = String(params?.status || '').trim().toLowerCase()
   const couponCodeFilter = String(params?.couponCode || '').trim().toUpperCase()
   const q = String(params?.q || '').trim().toLowerCase()
 
-  let filter = memberId ? `member_id=eq.${memberId}` : ''
+  let filter = ''
+  if (filterMemberIds.length > 0) {
+    filter = `member_id=in.(${filterMemberIds.join(',')})`
+  } else if (memberId) {
+    filter = `member_id=eq.${memberId}`
+  }
   if (statusFilter && statusFilter !== 'all') {
     filter = filter ? `${filter}&status=eq.${encodeURIComponent(statusFilter)}` : `status=eq.${encodeURIComponent(statusFilter)}`
   }
