@@ -27,13 +27,16 @@ export function isChickenDefaultOptionName(name: string | undefined): boolean {
   )
 }
 
-/** S/M/L·Size S 등 사이즈 전용 substitution — 고정 사이즈(Specialties 등) 메뉴 목록에서 제외 */
+/**
+ * 기본 사이즈(S) 전용 substitution — 고정 사이즈(Specialties 등) 메뉴 목록에서 제외.
+ * ⚠️ M·L 은 실제 +금액 업셀 옵션이므로 절대 숨기지 않는다(여기서 S 만 대상).
+ */
 export function isChickenSizeOnlyOptionName(name: string | undefined): boolean {
   if (isChickenDefaultOptionName(name)) return true
   const n = String(name ?? "").trim()
   if (!n) return false
-  if (/^size\s+[sml](?:\s*[-–—]|\s|$)/i.test(n)) return true
-  if (/^\s*[sml]\s*[-–—]\s*(?:boneless|순살|wing|drumette)\s*$/i.test(n)) return true
+  if (/^size\s+s(?:\s*[-–—]|\s|$)/i.test(n)) return true
+  if (/^\s*s\s*[-–—]\s*(?:boneless|순살|wing|drumette)\s*$/i.test(n)) return true
   return false
 }
 

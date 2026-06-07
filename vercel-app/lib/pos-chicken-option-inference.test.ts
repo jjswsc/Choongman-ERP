@@ -165,7 +165,16 @@ describe("fixed-size specialty chicken (Supreme)", () => {
 
   it("hides Size S - Boneless from option lists", () => {
     expect(isChickenSizeOnlyOptionName("Size S - Boneless")).toBe(true)
+    expect(isChickenSizeOnlyOptionName("S - Boneless")).toBe(true)
+    expect(isChickenSizeOnlyOptionName("S - Wing")).toBe(true)
     expect(isChickenSizeOnlyOptionName("Kimchi")).toBe(false)
+  })
+
+  it("never hides real M/L upsell part options", () => {
+    expect(isChickenSizeOnlyOptionName("M - Boneless")).toBe(false)
+    expect(isChickenSizeOnlyOptionName("M - Drumette")).toBe(false)
+    expect(isChickenSizeOnlyOptionName("M - Joint Wings")).toBe(false)
+    expect(isChickenSizeOnlyOptionName("L - Boneless")).toBe(false)
   })
 })
 
