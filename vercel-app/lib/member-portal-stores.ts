@@ -1,4 +1,4 @@
-import { buildLegacyToCanonicalMap, type ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { buildLegacyToCanonicalMap, type ErpStoreMasterRow } from '@/lib/erp-store-master-shared'
 import { resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
 import { isPosSalesTestOfficeStoreCode } from '@/lib/pos-sales-test-office'
 import { normStoreKey } from '@/lib/store-list-keys'
