@@ -37,6 +37,7 @@ import { useT, tr as i18nTr } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
 import { PosBusinessOpenGateBlock } from "@/components/pos/pos-business-open-gate-block"
 import { usePosBusinessOpenGate } from "@/lib/use-pos-business-open-gate"
+import { ensurePosBusinessOpenForOrder } from "@/lib/pos-business-open-gate-client"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import {
   computePosPricing,
@@ -212,7 +213,7 @@ export default function PosOrderPage() {
     (name: string | undefined): string => translatePosMenuLineForReceipt(String(name || ""), t),
     [t]
   )
-  const { stores } = useStoreList()
+  const { stores, resolveStoreKey, legacyToCanonical, storeLabels } = useStoreList()
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStores = React.useMemo(
     () => (canSearchAll ? stores : auth?.store ? [auth.store] : stores),
@@ -277,22 +278,22 @@ export default function PosOrderPage() {
   const businessOpenGate = usePosBusinessOpenGate(storeCode)
   const businessOpenBlocked = !businessOpenGate.allowed
   const ensureBusinessOpenForOrder = React.useCallback(async (): Promise<boolean> => {
-    if (businessOpenGate.allowed) return true
-    const msg =
-      businessOpenGate.blockReason === 'new_business_day'
-        ? t('posBusinessOpenNewDayBody') ||
-          `아침에 등록한 시제는 이전 영업일${businessOpenGate.prevBusinessDateYmd ? `(${businessOpenGate.prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessOpenGate.businessDateYmd}) 시제를 다시 저장해 주세요.`
-        : t('posBusinessOpenRequiredBody') ||
-          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
-    await appAlert(msg)
-    return false
-  }, [
-    businessOpenGate.allowed,
-    businessOpenGate.blockReason,
-    businessOpenGate.prevBusinessDateYmd,
-    businessOpenGate.businessDateYmd,
-    t,
-  ])
+    return ensurePosBusinessOpenForOrder({
+      storeCode,
+      resolveStoreKey,
+      legacyToCanonical,
+      storeLabels,
+      messages: {
+        neverOpened:
+          t('posBusinessOpenRequiredBody') ||
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.',
+        newBusinessDay: ({ businessDateYmd, prevBusinessDateYmd }) =>
+          t('posBusinessOpenNewDayBody') ||
+          `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessDateYmd}) 시제를 다시 저장해 주세요.`,
+      },
+      onAlert: appAlert,
+    })
+  }, [storeCode, resolveStoreKey, legacyToCanonical, storeLabels, t])
   const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
     React.useCallback((list) => setMenus(list), []),
     storeCode || null

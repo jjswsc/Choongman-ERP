@@ -7,6 +7,8 @@ import { isOnline, shouldPreferOfflineCache } from './network'
 import { getFromCache, setCache } from './cache'
 import { getPosSettlement, type PosCloseRun, type PosSettlement } from '@/lib/api-client'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
+import { writePosBusinessOpenLocal } from '@/lib/pos-business-open-local'
+import { getBangkokDateStr } from '@/lib/pos-business-day'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
 import { normStoreKey } from '@/lib/store-list-keys'
@@ -134,6 +136,55 @@ export async function applyPosSettlementSaveToCache(params: {
   } catch {
     /* IndexedDB 불능 시에도 서버 저장·게이트 이벤트는 상위에서 처리 */
   }
+}
+
+/** 영업 시작 저장 — IndexedDB·sessionStorage·게이트 이벤트 일괄 반영 */
+export async function persistPosBusinessOpenAfterSave(params: {
+  storeCode: string
+  /** 영업일(게이트 기준). 달력일과 다를 수 있어 둘 다 넘기면 캐시 키를 모두 기록 */
+  settleDates: string[]
+  cashActual: number
+}): Promise<void> {
+  const storeCode = String(params.storeCode || '').trim()
+  if (!storeCode || !Number.isFinite(params.cashActual)) return
+  const dates = (() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const raw of params.settleDates) {
+      const d = String(raw || '').trim().slice(0, 10)
+      if (!d || seen.has(d)) continue
+      seen.add(d)
+      out.push(d)
+    }
+    return out
+  })()
+  if (dates.length === 0) return
+
+  for (const settleDate of dates) {
+    await applyPosSettlementSaveToCache({
+      storeCode,
+      settleDate,
+      cashActual: params.cashActual,
+    })
+    writePosBusinessOpenLocal({ storeCode, settleDate, cashActual: params.cashActual })
+  }
+  dispatchPosBusinessOpenUpdated({ storeCode, settleDate: dates[0] })
+}
+
+/** 영업 시작 저장 시 기록할 settleDate 후보 (영업일 + 달력일) */
+export function resolvePosBusinessOpenSettleDates(
+  businessDateYmd: string,
+  base: Date = new Date()
+): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of [businessDateYmd, getBangkokDateStr(base)]) {
+    const d = String(raw || '').trim().slice(0, 10)
+    if (!d || seen.has(d)) continue
+    seen.add(d)
+    out.push(d)
+  }
+  return out
 }
 
 export type PosSettlementResponse = {

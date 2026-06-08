@@ -43,9 +43,9 @@ import {
 import { hydrateSettlementQrOtherBreakdowns } from '@/lib/pos-settlement-breakdown-hydrate'
 import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
 import {
-  applyPosSettlementSaveToCache,
-  dispatchPosBusinessOpenUpdated,
   getPosSettlementWithCache,
+  persistPosBusinessOpenAfterSave,
+  resolvePosBusinessOpenSettleDates,
 } from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
 import { shouldPreferOfflineCache } from '@/lib/offline/network'
@@ -1104,22 +1104,27 @@ ${footerStamp}
 
     setSaving(true)
     try {
-      if (openMode && Number.isFinite(cashActualNum)) {
+      const openBusinessDate = openMode ? getPosBusinessDateStr() : settleDate
+      const openSettleDates =
+        openMode && Number.isFinite(cashActualNum)
+          ? resolvePosBusinessOpenSettleDates(openBusinessDate)
+          : []
+
+      if (openMode && Number.isFinite(cashActualNum) && openSettleDates.length > 0) {
         try {
-          await applyPosSettlementSaveToCache({
+          await persistPosBusinessOpenAfterSave({
             storeCode: effectiveStore,
-            settleDate,
+            settleDates: openSettleDates,
             cashActual: cashActualNum,
           })
-          dispatchPosBusinessOpenUpdated({ storeCode: effectiveStore, settleDate })
         } catch {
-          /* IndexedDB 불능 — 아래 서버·큐 저장 계속 */
+          /* IndexedDB·sessionStorage 불능 — 아래 서버·큐 저장 계속 */
         }
       }
 
       const res = await savePosSettlementWithOffline({
         storeCode: effectiveStore,
-        settleDate,
+        settleDate: openMode ? openBusinessDate : settleDate,
         cashActual: cashActualNum,
         cashActualDenoms: denomCountsToSavePayload(denomCounts),
         cashAmt: cashAmtNum,
@@ -1159,17 +1164,16 @@ ${footerStamp}
         if (!canUnclose && closed) {
           setClosedSavedOnce(true)
         }
-        if (openMode && Number.isFinite(cashActualNum)) {
+        if (openMode && Number.isFinite(cashActualNum) && openSettleDates.length > 0) {
           try {
-            await applyPosSettlementSaveToCache({
+            await persistPosBusinessOpenAfterSave({
               storeCode: effectiveStore,
-              settleDate,
+              settleDates: openSettleDates,
               cashActual: cashActualNum,
             })
           } catch {
-            /* IndexedDB 불능 — 서버 저장은 이미 성공 */
+            /* IndexedDB·sessionStorage 불능 — 서버 저장은 이미 성공 */
           }
-          dispatchPosBusinessOpenUpdated({ storeCode: effectiveStore, settleDate })
         }
         /** 영업 시작 저장 또는 마감 체크 후 결산 저장: 요약(오픈/마감) 영수증 자동 인쇄 — 알림 전, 웹 제스처·하이브리드 ESC/POS */
         if (autoPrintAfterSuccess) {

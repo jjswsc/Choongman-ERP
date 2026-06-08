@@ -8,8 +8,10 @@ import {
 } from '@/lib/pos-business-day'
 import { getPosSettlementWithCache, settlementStoreCacheKeys } from '@/lib/offline/settlement-offline'
 import { getFromCache } from '@/lib/offline/cache'
+import { readPosBusinessOpenLocal } from '@/lib/pos-business-open-local'
 import { isOnline, shouldPreferOfflineCache } from '@/lib/offline/network'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
+import { getBangkokDateStr } from '@/lib/pos-business-day'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
 import { normStoreKey } from '@/lib/store-list-keys'
@@ -82,6 +84,7 @@ function buildStoreLookupCandidates(
 }
 
 async function isBusinessOpenInLocalCache(storeCode: string, settleDate: string): Promise<boolean> {
+  if (readPosBusinessOpenLocal(storeCode, settleDate)) return true
   for (const sc of settlementStoreCacheKeys(storeCode)) {
     try {
       const key = `settlement:${sc}:${settleDate}`
@@ -159,7 +162,15 @@ export async function checkPosBusinessOpenClient(params: {
   }
 
   const businessDateYmd = getPosBusinessDateStrFromConfig(new Date(), hours)
-  const allowedToday = await isBusinessOpenForCandidates(candidates, businessDateYmd)
+  const calendarYmd = getBangkokDateStr()
+  const todayDatesToCheck = uniqueStoreCandidates([businessDateYmd, calendarYmd])
+  let allowedToday = false
+  for (const probeDate of todayDatesToCheck) {
+    if (await isBusinessOpenForCandidates(candidates, probeDate)) {
+      allowedToday = true
+      break
+    }
+  }
   if (allowedToday) {
     return { allowed: true, businessDateYmd, blockReason: 'none' }
   }
@@ -176,4 +187,46 @@ export async function checkPosBusinessOpenClient(params: {
   }
 
   return { allowed: false, businessDateYmd, blockReason: 'never_opened' }
+}
+
+export type EnsurePosBusinessOpenForOrderParams = {
+  storeCode: string
+  resolveStoreKey?: (raw: string) => string
+  legacyToCanonical?: Record<string, string>
+  storeLabels?: Record<string, string>
+  messages: {
+    neverOpened: string
+    newBusinessDay: (ctx: {
+      businessDateYmd: string
+      prevBusinessDateYmd?: string
+    }) => string
+  }
+  onAlert: (message: string) => void | Promise<void>
+}
+
+/** 주문·테이블 선택 직전 — React 게이트 state가 stale일 수 있어 항상 최신 판정 */
+export async function ensurePosBusinessOpenForOrder(
+  params: EnsurePosBusinessOpenForOrderParams
+): Promise<boolean> {
+  const store = String(params.storeCode ?? '').trim()
+  if (!store) {
+    await params.onAlert(params.messages.neverOpened)
+    return false
+  }
+  const result = await checkPosBusinessOpenClient({
+    storeCode: store,
+    resolveStoreKey: params.resolveStoreKey,
+    legacyToCanonical: params.legacyToCanonical,
+    storeLabels: params.storeLabels,
+  })
+  if (result.allowed) return true
+  const msg =
+    result.blockReason === 'new_business_day'
+      ? params.messages.newBusinessDay({
+          businessDateYmd: result.businessDateYmd,
+          prevBusinessDateYmd: result.prevBusinessDateYmd,
+        })
+      : params.messages.neverOpened
+  await params.onAlert(msg)
+  return false
 }
