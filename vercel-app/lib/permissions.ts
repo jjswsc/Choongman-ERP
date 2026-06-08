@@ -331,6 +331,16 @@ export function canEditPosAttendanceManagement(role: string): boolean {
   )
 }
 
+/** 출퇴근 QR 키오스크 단말 등록·해제 — 매니저·본사(Office)만 */
+export function canRegisterAttendanceQrDevice(role: string): boolean {
+  return isManagerRole(role) || isOfficeRole(role)
+}
+
+/** 출퇴근 QR 단말 목록 조회·revoke (프린터 설정 화면) */
+export function canManageAttendanceQrDevices(role: string): boolean {
+  return canRegisterAttendanceQrDevice(role)
+}
+
 /** POS 주문 내역 가능 (관리자) */
 export function canAccessPosOrders(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)

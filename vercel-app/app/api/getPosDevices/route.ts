@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
 
     const list = Array.isArray(devices) ? devices : []
 
-    const items: PosDeviceItem[] = list.map((row) => ({
+    const items: PosDeviceItem[] = list
+      .filter((row) => row.role !== 'attendance_display')
+      .map((row) => ({
       deviceToken: row.device_token,
       role: (row.role === 'main' ? 'main' : 'order') as 'main' | 'order',
       lastSeenAt: row.last_seen_at,

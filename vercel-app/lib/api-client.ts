@@ -9662,6 +9662,83 @@ export async function revokePosDevice(params: { storeCode: string; deviceToken: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface AttendanceQrDeviceItem {
+  deviceToken: string
+  lastSeenAt: string
+  createdAt: string
+  displayLabel: string | null
+  clientHint: string | null
+}
+
+export async function getAttendanceQrDevices(params: { storeCode: string }) {
+  const q = new URLSearchParams({ storeCode: params.storeCode })
+  const res = await apiFetch('/api/getAttendanceQrDevices?' + q.toString())
+  const data = (await res.json()) as {
+    success: boolean
+    message?: string
+    devices?: AttendanceQrDeviceItem[]
+  }
+  return { ...data, devices: data.devices ?? [] }
+}
+
+export async function registerAttendanceQrDevice(params: {
+  storeCode: string
+  deviceToken: string
+  displayLabel?: string
+  clientHint?: string
+}) {
+  const res = await apiFetch('/api/registerAttendanceQrDevice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; storeCode?: string; deviceToken?: string }>
+}
+
+export async function checkAttendanceQrDevice(params: { storeCode: string; deviceToken: string }) {
+  const q = new URLSearchParams({
+    storeCode: params.storeCode,
+    deviceToken: params.deviceToken,
+  })
+  const res = await fetch(`/api/checkAttendanceQrDevice?${q.toString()}`, {
+    credentials: 'include',
+    cache: 'no-store',
+  })
+  return res.json() as Promise<{
+    success: boolean
+    registered: boolean
+    reason?: string
+    storeCode?: string
+    displayLabel?: string | null
+    lastSeenAt?: string
+    message?: string
+  }>
+}
+
+export async function getAttendanceQrDisplay(params: { storeCode: string; deviceToken: string }) {
+  const q = new URLSearchParams({
+    storeCode: params.storeCode,
+    deviceToken: params.deviceToken,
+  })
+  const res = await fetch(`/api/getAttendanceQrDisplay?${q.toString()}`, {
+    credentials: 'include',
+    cache: 'no-store',
+    headers: {
+      'X-Cm-Client-Hint': typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 240) : '',
+    },
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    storeCode?: string
+    qrPayload?: string
+    expiresAt?: string
+    bucketStartMs?: number
+    bucketHours?: number
+    displayLabel?: string | null
+  }>
+}
+
 export async function setPosMainDevice(params: { storeCode: string; deviceToken: string }) {
   const res = await apiFetchWithOffline('/api/setPosMainDevice', {
     method: 'POST',
