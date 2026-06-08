@@ -43,7 +43,7 @@ export function PosPaymentSettingsContent() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState('')
   const [loading, setLoading] = React.useState(false)

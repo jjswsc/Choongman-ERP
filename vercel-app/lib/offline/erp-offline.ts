@@ -8,7 +8,7 @@ import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } 
 import { apiFetch } from '../api/fetch'
 
 const CACHE_KEYS = {
-  STORE_LIST: 'erp:storeList',
+  STORE_LIST: 'erp:storeList:v2',
   VENDORS_PURCHASE: 'erp:vendorsPurchase',
   VENDORS_SALES: 'erp:vendorsSales',
   CHECKLIST_ITEMS_ACTIVE: 'erp:checklistItems:active',

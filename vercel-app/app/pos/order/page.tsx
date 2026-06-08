@@ -213,11 +213,11 @@ export default function PosOrderPage() {
     (name: string | undefined): string => translatePosMenuLineForReceipt(String(name || ""), t),
     [t]
   )
-  const { stores, resolveStoreKey, legacyToCanonical, storeLabels } = useStoreList()
+  const { posStores, resolveStoreKey, legacyToCanonical, storeLabels } = useStoreList()
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStores = React.useMemo(
-    () => (canSearchAll ? stores : auth?.store ? [auth.store] : stores),
-    [canSearchAll, auth?.store, stores]
+    () => (canSearchAll ? posStores : auth?.store ? [auth.store] : posStores),
+    [canSearchAll, auth?.store, posStores]
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])

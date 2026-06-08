@@ -12,7 +12,7 @@ import { useT } from '@/lib/i18n'
 export default function PosTableOrderEntryPage() {
   const router = useRouter()
   const { auth } = useAuth()
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
   const storeCode = auth?.store || stores[0] || ''

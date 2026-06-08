@@ -5,7 +5,6 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
-import { filterPosTerminalStoreOptions } from '@/lib/pos-sales-test-office'
 import {
   getPosTableLayout,
   type PosTableItem,
@@ -528,11 +527,7 @@ export function usePosStoreStandalone() {
 }
 
 export function usePosStoreInternal() {
-  const {
-    allStores: storeCodes,
-    legacyToCanonical,
-    loading: storeListLoading,
-  } = useStoreList()
+  const { posStores: storeCodes, legacyToCanonical, loading: storeListLoading } = useStoreList()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canonicalAuthStore = useMemo(() => {
@@ -550,10 +545,10 @@ export function usePosStoreInternal() {
       if (storeCodes.length > 0) codes = storeCodes
       else if (canonicalAuthStore) codes = [canonicalAuthStore]
       else codes = storeCodes
-      return filterPosTerminalStoreOptions(codes)
+      return codes
     }
     codes = canonicalAuthStore ? [canonicalAuthStore] : storeCodes
-    return filterPosTerminalStoreOptions(codes)
+    return codes
   }, [canSearchAll, canonicalAuthStore, storeCodes])
 
   const [stores, setStores] = useState<Store[]>([])

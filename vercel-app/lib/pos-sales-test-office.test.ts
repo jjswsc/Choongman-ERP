@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildPosTerminalStoreCodes,
   filterPosSalesStoreOptionsForManagement,
   filterPosTerminalStoreOptions,
   isPosSalesTestOfficeStoreCode,
   isSandboxStoreCode,
 } from './pos-sales-test-office'
+
+describe('buildPosTerminalStoreCodes', () => {
+  it('adds CM Office from storeLabels when operational list omitted it', () => {
+    expect(
+      buildPosTerminalStoreCodes(['CM Asoke', 'CM Silom'], {
+        'CM Office': 'CM Office',
+        'CM Asoke': 'CM Asoke',
+      })
+    ).toEqual(['CM Asoke', 'CM Office', 'CM Silom'])
+  })
+})
 
 describe('filterPosTerminalStoreOptions', () => {
   it('includes CM Office and other head-office codes for terminal', () => {

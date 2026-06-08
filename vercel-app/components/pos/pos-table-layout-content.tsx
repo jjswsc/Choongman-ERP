@@ -108,7 +108,7 @@ export function PosTableLayoutContent() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState("")
   const [layout, setLayout] = React.useState<PosTableItem[]>([])

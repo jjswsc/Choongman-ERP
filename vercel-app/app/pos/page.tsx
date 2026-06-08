@@ -72,7 +72,7 @@ function POSMainPageInner() {
   const { auth, logout, setAuth } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
-  const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const { posStores, formatStoreLabel, resolveStoreKey } = useStoreList()
   const preferredStoreFromQuery = useMemo(
     () => String(searchParams.get('store') || '').trim(),
     [searchParams]
@@ -80,7 +80,7 @@ function POSMainPageInner() {
   const queryStoreAppliedRef = useRef('')
 
   const selectableStoreCodes = useMemo(() => {
-    const list = stores
+    const list = posStores
     const role = String(auth?.role || '')
     if (isOfficeRole(role)) {
       if (list.length > 0) return list
@@ -98,7 +98,7 @@ function POSMainPageInner() {
     }
     if (auth?.store) return [auth.store]
     return list
-  }, [stores, auth?.role, auth?.store, auth?.allowedStores, resolveStoreKey])
+  }, [posStores, auth?.role, auth?.store, auth?.allowedStores, resolveStoreKey])
 
   const posHomeHeaderStores = useMemo((): Store[] => {
     return selectableStoreCodes.map((id) => ({

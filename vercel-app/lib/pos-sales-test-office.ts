@@ -52,3 +52,22 @@ export function filterPosTerminalStoreOptions(storeCodes: string[]): string[] {
     return !POS_SALES_EXCLUDED_STORE_CODES.has(norm)
   })
 }
+
+/**
+ * POS 터미널·홈 매장 선택 — CM Office 등 본사 시연 매장 포함.
+ * `stores`(매출 집계용)만 캐시된 경우 storeLabels에서 Office 코드를 보강한다.
+ */
+export function buildPosTerminalStoreCodes(
+  catalog: string[],
+  storeLabels?: Record<string, string>
+): string[] {
+  const set = new Set(filterPosTerminalStoreOptions(catalog))
+  for (const [code, label] of Object.entries(storeLabels || {})) {
+    const c = String(code || '').trim()
+    if (!c || isSandboxStoreCode(c)) continue
+    if (isHeadOfficeLikeStoreName(c) || isHeadOfficeLikeStoreName(String(label || ''))) {
+      set.add(c)
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'))
+}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getStoreListWithCache } from './offline/erp-offline'
+import { buildPosTerminalStoreCodes } from './pos-sales-test-office'
 import { resolveStoreListKey, labelForStore } from './store-list-keys'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5분 (메모리 캐시)
@@ -31,9 +32,19 @@ export function useStoreList() {
   const [usedMaster, setUsedMaster] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const catalogStores = useMemo(
+    () => (allStores.length > 0 ? allStores : stores),
+    [allStores, stores]
+  )
+
+  const posStores = useMemo(
+    () => buildPosTerminalStoreCodes(catalogStores, storeLabels),
+    [catalogStores, storeLabels]
+  )
+
   const resolveStoreKey = useCallback(
-    (raw: string) => resolveStoreListKey(raw, stores, legacyToCanonical),
-    [stores, legacyToCanonical]
+    (raw: string) => resolveStoreListKey(raw, catalogStores, legacyToCanonical),
+    [catalogStores, legacyToCanonical]
   )
 
   const formatStoreLabel = useCallback(
@@ -45,7 +56,9 @@ export function useStoreList() {
     const now = Date.now()
     if (cache.data && cache.expiry > now) {
       setStores(cache.data.stores)
-      setAllStores(cache.data.allStores?.length ? cache.data.allStores : cache.data.stores)
+      setAllStores(
+        Array.isArray(cache.data.allStores) ? cache.data.allStores : cache.data.stores
+      )
       setUsers(cache.data.users)
       setStaffByStore(cache.data.staffByStore || {})
       setStoreLabels(cache.data.storeLabels || {})
@@ -59,7 +72,7 @@ export function useStoreList() {
       .then((d) => {
         const payload = {
           stores: d.stores || [],
-          allStores: d.allStores?.length ? d.allStores : d.stores || [],
+          allStores: Array.isArray(d.allStores) ? d.allStores : d.stores || [],
           users: d.users || {},
           staffByStore: d.staffByStore || {},
           storeLabels: d.storeLabels || {},
@@ -78,7 +91,9 @@ export function useStoreList() {
       .catch(() => {
         if (cache.data) {
           setStores(cache.data.stores)
-          setAllStores(cache.data.allStores?.length ? cache.data.allStores : cache.data.stores)
+          setAllStores(
+        Array.isArray(cache.data.allStores) ? cache.data.allStores : cache.data.stores
+      )
           setUsers(cache.data.users)
           setStaffByStore(cache.data.staffByStore || {})
           setStoreLabels(cache.data.storeLabels || {})
@@ -109,6 +124,8 @@ export function useStoreList() {
   return {
     stores,
     allStores,
+    /** POS 홈·터미널·설정 — CM Office 포함, test/HQ 제외 */
+    posStores,
     users,
     staffByStore,
     storeLabels,

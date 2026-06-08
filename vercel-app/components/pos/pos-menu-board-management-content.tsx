@@ -51,7 +51,7 @@ const toNum = (v: string, fallback: number) => {
 export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: string | null }) {
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
   const [rows, setRows] = React.useState<PosMenuBoardConfig[]>([])
   const [loading, setLoading] = React.useState(false)
   const [queryStore, setQueryStore] = React.useState<string>('all')
