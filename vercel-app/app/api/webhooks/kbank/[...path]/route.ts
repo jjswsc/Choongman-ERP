@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   extractKbankPaymentTxnNo,
-  normalizeKbankTxnStatusToPos,
+  normalizeKbankWebhookPaymentStatus,
 } from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
@@ -39,8 +39,13 @@ function parsePathListFromEnv(envName: string, fallback: string[]): string[] {
   return parsed.length > 0 ? parsed : fallback
 }
 
-function normalizeStatus(txnStatus: string, statusCode: string): 'approved' | 'declined' | 'pending' | 'failed' {
-  return normalizeKbankTxnStatusToPos(txnStatus, statusCode)
+function normalizeStatusFromWebhook(
+  txnStatus: string,
+  statusCode: string,
+  amount: number,
+  paymentTxnNo: string
+): 'approved' | 'declined' | 'pending' | 'failed' {
+  return normalizeKbankWebhookPaymentStatus(txnStatus, statusCode, amount, paymentTxnNo)
 }
 
 function parseAmount(raw: unknown): number {
@@ -209,10 +214,10 @@ export async function POST(
     originalTransactionId
   )
   const primaryLocalTxId = localTxCandidates[0] || ''
-  const normalized = normalizeStatus(transactionStatusRaw, statusCode)
   const amountRawPath = amountPaths.find((p) => String(getPathValue(body, p) ?? '').trim() !== '')
   const amount = parseAmount(amountRawPath ? getPathValue(body, amountRawPath) : undefined)
   const paymentTxnNo = extractKbankPaymentTxnNo(body) || extractKbankPaymentTxnNo({ txnNo: pickFirst(body, txnNoPaths) })
+  const normalized = normalizeStatusFromWebhook(transactionStatusRaw, statusCode, amount, paymentTxnNo)
 
   const safeBodyForLog = rawBody.length > 50000 ? `${rawBody.slice(0, 50000)}...` : rawBody
 
@@ -227,7 +232,12 @@ export async function POST(
             response_code: statusCode || null,
             response_text: statusMessage || transactionStatusRaw || null,
             approved_amount: normalized === 'approved' ? amount : 0,
-            ...(paymentTxnNo ? { trace_no: paymentTxnNo.slice(0, 40) } : {}),
+            ...(paymentTxnNo
+              ? {
+                  trace_no: paymentTxnNo.slice(0, 40),
+                  approval_code: paymentTxnNo.slice(0, 20),
+                }
+              : {}),
             response_raw: safeBodyForLog || null,
             error_reason:
               normalized === 'declined' || normalized === 'failed'
@@ -250,6 +260,12 @@ export async function POST(
         response_code: statusCode || null,
         response_text: statusMessage || transactionStatusRaw || null,
         status: normalized,
+        ...(paymentTxnNo
+          ? {
+              trace_no: paymentTxnNo.slice(0, 40),
+              approval_code: paymentTxnNo.slice(0, 20),
+            }
+          : {}),
         error_reason:
           normalized === 'declined' || normalized === 'failed'
             ? (statusMessage || transactionStatusRaw || 'kbank_webhook_declined')

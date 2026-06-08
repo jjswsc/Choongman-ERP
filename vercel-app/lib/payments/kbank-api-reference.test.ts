@@ -20,6 +20,9 @@ import {
   extractKbankPaymentTxnNo,
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankVoidTxnNoForRequest,
+  isKbankInquiryResponseApproved,
+  isKbankPaymentAttemptApproved,
+  normalizeKbankWebhookPaymentStatus,
 } from './kbank-api-reference'
 
 describe('kbank-api-reference', () => {
@@ -141,5 +144,33 @@ describe('kbank-api-reference', () => {
     expect(masked.partnerSecret).toBe('***')
     expect(String(masked.qrCode)).toContain('[qr:')
     expect((masked.nested as Record<string, unknown>).access_token).toBe('***')
+  })
+
+  it('detects inquiry approved from nested txnStatus PAID', () => {
+    expect(
+      isKbankInquiryResponseApproved('pending', { txnStatus: 'PAID', statusCode: '00' }, '00')
+    ).toBe(true)
+    expect(
+      isKbankInquiryResponseApproved(
+        'pending',
+        { statusCode: '00', data: { txnStatus: 'PAID' } },
+        '00'
+      )
+    ).toBe(true)
+    expect(isKbankInquiryResponseApproved('pending', { txnStatus: 'REQUESTED' }, '00')).toBe(false)
+  })
+
+  it('detects payment attempt approved from trace and amount (CC callback)', () => {
+    expect(
+      isKbankPaymentAttemptApproved({
+        status: 'pending',
+        responseCode: '00',
+        approvedAmount: 259,
+        traceNo: '483113',
+      })
+    ).toBe(true)
+    expect(
+      normalizeKbankWebhookPaymentStatus('', '00', 259, '483113')
+    ).toBe('approved')
   })
 })

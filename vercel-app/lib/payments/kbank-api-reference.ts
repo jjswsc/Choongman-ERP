@@ -356,6 +356,75 @@ export function normalizeKbankTxnStatusToPos(
   return 'failed'
 }
 
+/** Inquiry/check-status API 응답에서 승인 여부 (top-level status + nested data.txnStatus). */
+export function isKbankInquiryResponseApproved(
+  status: unknown,
+  data?: Record<string, unknown> | null,
+  statusCode?: unknown
+): boolean {
+  const top = String(status || '').trim().toLowerCase()
+  if (top === 'approved') return true
+  const sources = collectKbankNestedSources(data)
+  if (sources.length === 0) return false
+  for (const src of sources) {
+    const nested = normalizeKbankTxnStatusToPos(
+      src.txnStatus ?? src.transactionStatus ?? src.status ?? src.paymentStatus,
+      statusCode ?? src.statusCode ?? data?.statusCode
+    )
+    if (nested === 'approved') return true
+  }
+  return false
+}
+
+/** pos_payment_attempts / 콜백 폴링 — CC 포함 승인 추론 (status=pending 이어도 trace·금액으로 판단). */
+export function isKbankPaymentAttemptApproved(hit: {
+  status?: string
+  responseCode?: string
+  approvedAmount?: number
+  traceNo?: string
+  approvalCode?: string
+  responseText?: string
+}): boolean {
+  const status = String(hit.status || '').trim().toLowerCase()
+  if (status === 'approved') return true
+  const approvedAmount = Math.max(0, Number(hit.approvedAmount || 0))
+  const responseCode = String(hit.responseCode || '').trim()
+  const traceNo = String(hit.traceNo || '').trim()
+  const approvalCode = String(hit.approvalCode || '').trim()
+  const paymentTxnNo = isKbankPaymentTxnNo(traceNo)
+    ? traceNo
+    : isKbankPaymentTxnNo(approvalCode)
+      ? approvalCode
+      : ''
+  if (approvedAmount > 0.0001 && (responseCode === KBANK_STATUS_CODE_SUCCESS || paymentTxnNo)) {
+    return true
+  }
+  const lowerText = String(hit.responseText || '').trim().toLowerCase()
+  if (paymentTxnNo && (lowerText.includes('paid') || lowerText.includes('success'))) {
+    return true
+  }
+  return false
+}
+
+/** Webhook: CC 콜백이 statusCode 00 + txnNo + amount 만 보내는 경우 승인 처리. */
+export function normalizeKbankWebhookPaymentStatus(
+  txnStatus: unknown,
+  statusCode: unknown,
+  amount: number,
+  paymentTxnNo: string
+): KbankPosTxnStatus {
+  const normalized = normalizeKbankTxnStatusToPos(txnStatus, statusCode)
+  if (
+    normalized === 'pending' &&
+    String(statusCode || '').trim() === KBANK_STATUS_CODE_SUCCESS &&
+    amount > 0 &&
+    isKbankPaymentTxnNo(paymentTxnNo)
+  ) {
+    return 'approved'
+  }
+  return normalized
+}
+
 export function resolveKbankCreditCardBrandLabels(input: {
   sof?: unknown
   cardScheme?: unknown
@@ -415,12 +484,17 @@ function pickKbankPrimitiveField(sources: Record<string, unknown>[], keys: strin
   return ''
 }
 
-/** qrType / sof from Generate or Inquiry response (nested data.*). */
-export function extractKbankQrResponseMeta(raw: unknown): { qrTypeCode: string; sof: string } {
+/** qrType / sof / cardScheme from Generate or Inquiry response (nested data.*). */
+export function extractKbankQrResponseMeta(raw: unknown): {
+  qrTypeCode: string
+  sof: string
+  cardScheme: string
+} {
   const sources = collectKbankNestedSources(raw)
   return {
     qrTypeCode: pickKbankPrimitiveField(sources, ['qrType', 'qr_type']),
     sof: pickKbankPrimitiveField(sources, ['sof']),
+    cardScheme: pickKbankPrimitiveField(sources, ['cardScheme', 'card_scheme']),
   }
 }
 
