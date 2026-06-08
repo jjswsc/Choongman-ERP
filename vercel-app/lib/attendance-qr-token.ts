@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-/** 방콕 기준 QR 버킷 길이(시간). 3시간마다 QR payload 갱신 */
-export const ATTENDANCE_QR_BUCKET_HOURS = 3
+/** 방콕 기준 QR 버킷 길이(시간). 2시간마다 QR payload 갱신 */
+export const ATTENDANCE_QR_BUCKET_HOURS = 2
 
 const TOKEN_PREFIX = 'cmatt1'
 

@@ -239,7 +239,7 @@ export function AttendanceQrKiosk() {
                   "매니저 또는 본사(Office) 직원이 로그인한 뒤 등록해 주세요."}
               </p>
               <Button asChild variant="secondary" className="w-full">
-                <Link href="/pos/login">{t("posLogin") || "POS 로그인"}</Link>
+                <Link href="/pos/login">{t("qrFooterPosLogin") || "POS 로그인"}</Link>
               </Button>
             </div>
           )}
@@ -277,7 +277,7 @@ export function AttendanceQrKiosk() {
       {statusLine ? <p className="mt-2 text-center text-sm text-red-600">{statusLine}</p> : null}
       <p className="mt-6 max-w-sm text-center text-xs text-slate-400">
         {t("attendanceQrKioskFootnote") ||
-          "3시간마다 자동 갱신됩니다. 이 화면을 매장에 고정해 두세요."}
+          "2시간마다 자동 갱신됩니다. 이 화면을 매장에 고정해 두세요."}
       </p>
     </div>
   )

@@ -27,11 +27,11 @@ describe('attendance-qr-token', () => {
     expect(v.reason).toBe('expired_bucket')
   })
 
-  it('aligns bucket to 3-hour windows in Bangkok', () => {
-    const h07 = attendanceQrBucketStartMs(new Date('2026-06-08T07:59:00+07:00'))
-    const h08 = attendanceQrBucketStartMs(new Date('2026-06-08T08:00:00+07:00'))
-    expect(h07).toBe(h08)
-    const h11 = attendanceQrBucketStartMs(new Date('2026-06-08T11:59:00+07:00'))
-    expect(h11).not.toBe(h08)
+  it('aligns bucket to 2-hour windows in Bangkok', () => {
+    const bucket759 = attendanceQrBucketStartMs(new Date('2026-06-08T07:59:00+07:00'))
+    const bucket600 = attendanceQrBucketStartMs(new Date('2026-06-08T06:00:00+07:00'))
+    expect(bucket759).toBe(bucket600)
+    const bucket800 = attendanceQrBucketStartMs(new Date('2026-06-08T08:00:00+07:00'))
+    expect(bucket800).not.toBe(bucket759)
   })
 })
