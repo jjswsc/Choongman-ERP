@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   checkPosBusinessOpenClient,
   type PosBusinessOpenBlockReason,
 } from '@/lib/pos-business-open-gate-client'
 import { POS_BUSINESS_OPEN_UPDATED_EVENT } from '@/lib/offline/settlement-offline'
 import { useStoreList } from '@/lib/api-client'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 export type PosBusinessOpenGateState = {
   loading: boolean
@@ -24,6 +25,7 @@ export function usePosBusinessOpenGate(
 ): PosBusinessOpenGateState {
   const skip = options?.skip ?? false
   const { resolveStoreKey, legacyToCanonical, storeLabels } = useStoreList()
+  const optimisticUntilRef = useRef(0)
   const [loading, setLoading] = useState(!skip)
   const [allowed, setAllowed] = useState(skip)
   const [businessDateYmd, setBusinessDateYmd] = useState('')
@@ -56,8 +58,13 @@ export function usePosBusinessOpenGate(
         storeLabels,
       })
       setBusinessDateYmd(result.businessDateYmd)
-      setAllowed(result.allowed)
-      setBlockReason(result.blockReason)
+      if (result.allowed || Date.now() < optimisticUntilRef.current) {
+        setAllowed(true)
+        setBlockReason('none')
+      } else {
+        setAllowed(false)
+        setBlockReason(result.blockReason)
+      }
       setPrevBusinessDateYmd(result.prevBusinessDateYmd)
     } catch {
       setAllowed(false)
@@ -77,7 +84,24 @@ export function usePosBusinessOpenGate(
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refresh()
     }
-    const onBusinessOpenUpdated = () => {
+    const onBusinessOpenUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ storeCode?: string; settleDate?: string }>).detail
+      const store = String(storeCode ?? '').trim()
+      const savedStore = String(detail?.storeCode ?? '').trim()
+      const savedDate = String(detail?.settleDate ?? '').trim().slice(0, 10)
+      if (store && savedStore && savedDate) {
+        const storeMatch =
+          savedStore === store ||
+          normStoreKey(savedStore) === normStoreKey(store) ||
+          normStoreKey(resolveStoreKey(savedStore)) === normStoreKey(resolveStoreKey(store))
+        if (storeMatch) {
+          optimisticUntilRef.current = Date.now() + 8000
+          setAllowed(true)
+          setBlockReason('none')
+          setBusinessDateYmd(savedDate)
+          setLoading(false)
+        }
+      }
       void refresh()
     }
     document.addEventListener('visibilitychange', onVisible)
@@ -88,7 +112,7 @@ export function usePosBusinessOpenGate(
       window.removeEventListener('focus', onVisible)
       window.removeEventListener(POS_BUSINESS_OPEN_UPDATED_EVENT, onBusinessOpenUpdated)
     }
-  }, [refresh, skip])
+  }, [refresh, skip, storeCode, resolveStoreKey])
 
   return { loading, allowed, businessDateYmd, blockReason, prevBusinessDateYmd, refresh }
 }

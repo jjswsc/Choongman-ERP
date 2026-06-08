@@ -16,6 +16,7 @@ import {
 } from '@/lib/api-client'
 import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
+import { shouldPreferOfflineCache } from '@/lib/offline/network'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 import {
@@ -462,6 +463,15 @@ function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): S
   return { ...nextStore, tables: nextTables }
 }
 
+function withPosSnapshotTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      window.setTimeout(() => resolve(fallback), ms)
+    }),
+  ])
+}
+
 export function usePosStore() {
   const { stores: storeCodes, legacyToCanonical, loading: storeListLoading } = useStoreList()
   const { auth } = useAuth()
@@ -549,19 +559,29 @@ export function usePosStore() {
         }
       }
     }
+    const snapshotTimeoutMs = shouldPreferOfflineCache() ? 2800 : 12000
+    const cachedLayoutFallback = layoutByStoreIdRef.current[storeCode] || []
     const [layoutRes, orderLists] = await Promise.all([
-      getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-      Promise.all(
-        (storeCandidates.length ? storeCandidates : [storeCode]).map((sc) =>
-          getPosOrdersWithCache({
-            storeCode: sc,
-            startStr: businessDate,
-            endStr: businessDate,
-            posBizDayScope: true,
-            pollMinimal: true,
-            limit: 1000,
-          }).catch(() => [])
-        )
+      withPosSnapshotTimeout(
+        getPosTableLayout({ storeCode }).catch(() => ({ layout: cachedLayoutFallback, storeCode })),
+        snapshotTimeoutMs,
+        { layout: cachedLayoutFallback, storeCode }
+      ),
+      withPosSnapshotTimeout(
+        Promise.all(
+          (storeCandidates.length ? storeCandidates : [storeCode]).map((sc) =>
+            getPosOrdersWithCache({
+              storeCode: sc,
+              startStr: businessDate,
+              endStr: businessDate,
+              posBizDayScope: true,
+              pollMinimal: true,
+              limit: 1000,
+            }).catch(() => [])
+          )
+        ),
+        snapshotTimeoutMs,
+        []
       ),
     ])
     const mergedOrdersById = new Map<number, PosOrder>()

@@ -6,12 +6,77 @@
 import { isOnline, shouldPreferOfflineCache } from './network'
 import { getFromCache, setCache } from './cache'
 import { getPosSettlement, type PosCloseRun, type PosSettlement } from '@/lib/api-client'
+import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
+import { OFFICE_STORES } from '@/lib/permissions'
+import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 /** 영업 시작 저장 직후 POS 터미널 게이트가 캐시·상태를 다시 읽도록 알림 */
 export const POS_BUSINESS_OPEN_UPDATED_EVENT = 'cm-pos-business-open-updated'
 
 function cacheKeySettlement(storeCode: string, settleDate: string): string {
   return `settlement:${storeCode}:${settleDate}`
+}
+
+function normalizeSettlementSingle(
+  settlement: PosSettlement | PosSettlement[] | null | undefined
+): PosSettlement | null {
+  if (!settlement) return null
+  return Array.isArray(settlement) ? settlement[0] ?? null : settlement
+}
+
+function uniqueStoreCacheKeys(codes: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of codes) {
+    const t = String(raw || '').trim()
+    if (!t) continue
+    const key = normStoreKey(t)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(t)
+  }
+  return out
+}
+
+/** CM Office ↔ Office 등 — 시제 캐시를 모든 별칭 키에 기록 */
+export function settlementStoreCacheKeys(storeCode: string): string[] {
+  const trimmed = String(storeCode || '').trim()
+  if (!trimmed) return []
+  const aliases = aliasKeysForStore(trimmed)
+  const probe = normStoreKey(trimmed)
+  const officeLike = OFFICE_STORES.some((o) => normStoreKey(o) === probe)
+  const officeAliases = officeLike ? OFFICE_STORES.filter(Boolean) : []
+  return uniqueStoreCacheKeys([trimmed, ...aliases, ...officeAliases])
+}
+
+/** 서버·큐 미반영 시에도 로컬 시제(cash_actual)가 API 응답으로 지워지지 않도록 병합 */
+function mergeSettlementWithLocalOpen(
+  cached: PosSettlementResponse | null,
+  incoming: PosSettlementResponse
+): PosSettlementResponse {
+  const apiSingle = normalizeSettlementSingle(incoming.settlement)
+  const cacheSingle = cached ? normalizeSettlementSingle(cached.settlement) : null
+  const apiRecorded = isPosBusinessOpenRecorded(apiSingle)
+  const cacheRecorded = isPosBusinessOpenRecorded(cacheSingle)
+  if (cacheRecorded && !apiRecorded && cacheSingle) {
+    const mergedSingle: PosSettlement = {
+      ...(apiSingle ?? {
+        storeCode: cacheSingle.storeCode,
+        settleDate: cacheSingle.settleDate,
+        cardAmt: 0,
+        qrAmt: 0,
+        deliveryAppAmt: 0,
+        otherAmt: 0,
+        memo: '',
+        closed: false,
+      }),
+      ...cacheSingle,
+      cashActual: cacheSingle.cashActual,
+    }
+    return { ...incoming, settlement: mergedSingle }
+  }
+  return incoming
 }
 
 const EMPTY_SETTLEMENT_RESPONSE = (): PosSettlementResponse => ({
@@ -40,28 +105,32 @@ export async function applyPosSettlementSaveToCache(params: {
   cashActual: number
 }): Promise<void> {
   try {
-    const storeCode = String(params.storeCode || '').trim()
     const settleDate = String(params.settleDate || '').trim().slice(0, 10)
-    if (!storeCode || !settleDate) return
+    if (!settleDate) return
+    const storeKeys = settlementStoreCacheKeys(params.storeCode)
+    if (storeKeys.length === 0) return
 
-    const key = cacheKeySettlement(storeCode, settleDate)
-    const cached = (await getFromCache<PosSettlementResponse>('pos_sales_cache', key)) ?? EMPTY_SETTLEMENT_RESPONSE()
-    const prev = cached.settlement
-    const single = Array.isArray(prev) ? prev[0] : prev
-    const nextSettlement: PosSettlement = single
-      ? { ...single, storeCode, settleDate, cashActual: params.cashActual }
-      : {
-          storeCode,
-          settleDate,
-          cashActual: params.cashActual,
-          cardAmt: 0,
-          qrAmt: 0,
-          deliveryAppAmt: 0,
-          otherAmt: 0,
-          memo: '',
-          closed: false,
-        }
-    await setCache('pos_sales_cache', key, { ...cached, settlement: nextSettlement })
+    for (const storeCode of storeKeys) {
+      const key = cacheKeySettlement(storeCode, settleDate)
+      const cached =
+        (await getFromCache<PosSettlementResponse>('pos_sales_cache', key)) ?? EMPTY_SETTLEMENT_RESPONSE()
+      const prev = cached.settlement
+      const single = Array.isArray(prev) ? prev[0] : prev
+      const nextSettlement: PosSettlement = single
+        ? { ...single, storeCode, settleDate, cashActual: params.cashActual }
+        : {
+            storeCode,
+            settleDate,
+            cashActual: params.cashActual,
+            cardAmt: 0,
+            qrAmt: 0,
+            deliveryAppAmt: 0,
+            otherAmt: 0,
+            memo: '',
+            closed: false,
+          }
+      await setCache('pos_sales_cache', key, { ...cached, settlement: nextSettlement })
+    }
   } catch {
     /* IndexedDB 불능 시에도 서버 저장·게이트 이벤트는 상위에서 처리 */
   }
@@ -97,26 +166,31 @@ export async function getPosSettlementWithCache(params: {
   const { settleDate, storeCode = '' } = params
   const key = cacheKeySettlement(storeCode || 'all', settleDate)
 
+  const readCached = async () =>
+    getFromCache<PosSettlementResponse>('pos_sales_cache', key)
+
   if (shouldPreferOfflineCache()) {
-    const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)
+    const cached = await readCached()
     if (cached) return cached
   }
 
   if (isOnline()) {
     try {
       const data = await getPosSettlement(params)
+      const cached = await readCached()
+      const merged = mergeSettlementWithLocalOpen(cached, data)
       try {
-        await setCache('pos_sales_cache', key, data)
+        await setCache('pos_sales_cache', key, merged)
       } catch {
-        /* 캐시 실패해도 서버 응답 우선 */
+        /* 캐시 실패해도 병합 응답 반환 */
       }
-      return data
+      return merged
     } catch {
-      const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)
+      const cached = await readCached()
       return cached ?? EMPTY_SETTLEMENT_RESPONSE()
     }
   }
 
-  const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)
+  const cached = await readCached()
   return cached ?? EMPTY_SETTLEMENT_RESPONSE()
 }

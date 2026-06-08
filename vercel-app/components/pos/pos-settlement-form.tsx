@@ -1104,9 +1104,7 @@ ${footerStamp}
 
     setSaving(true)
     try {
-      const preferLocalOpenSave =
-        openMode && offlineAware && (!online || shouldPreferOfflineCache())
-      if (preferLocalOpenSave && Number.isFinite(cashActualNum)) {
+      if (openMode && Number.isFinite(cashActualNum)) {
         try {
           await applyPosSettlementSaveToCache({
             storeCode: effectiveStore,

@@ -6,7 +6,8 @@ import {
   setPosBusinessHoursClient,
   type PosBusinessHoursConfig,
 } from '@/lib/pos-business-day'
-import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
+import { getPosSettlementWithCache, settlementStoreCacheKeys } from '@/lib/offline/settlement-offline'
+import { getFromCache } from '@/lib/offline/cache'
 import { isOnline, shouldPreferOfflineCache } from '@/lib/offline/network'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
 import { OFFICE_STORES } from '@/lib/permissions'
@@ -80,7 +81,24 @@ function buildStoreLookupCandidates(
   ])
 }
 
+async function isBusinessOpenInLocalCache(storeCode: string, settleDate: string): Promise<boolean> {
+  for (const sc of settlementStoreCacheKeys(storeCode)) {
+    try {
+      const key = `settlement:${sc}:${settleDate}`
+      const cached = await getFromCache<{ settlement?: PosSettlement | PosSettlement[] | null }>(
+        'pos_sales_cache',
+        key
+      )
+      if (isPosBusinessOpenRecorded(normalizeSettlement(cached?.settlement))) return true
+    } catch {
+      /* next alias */
+    }
+  }
+  return false
+}
+
 async function isBusinessOpenForStoreDate(storeCode: string, settleDate: string): Promise<boolean> {
+  if (await isBusinessOpenInLocalCache(storeCode, settleDate)) return true
   try {
     const data = await getPosSettlementWithCache({ storeCode, settleDate })
     if (isPosBusinessOpenRecorded(normalizeSettlement(data.settlement))) return true

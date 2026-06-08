@@ -83,6 +83,10 @@ export function OfflineBanner({
   const [queueDetailItems, setQueueDetailItems] = React.useState<PendingRequest[]>([])
   const [queueDetailLoading, setQueueDetailLoading] = React.useState(false)
   const deadLetterAlertSigRef = React.useRef<string>('')
+  const lastAutoSyncAtRef = React.useRef(0)
+  const syncingStartedAtRef = React.useRef(0)
+  const AUTO_SYNC_COOLDOWN_MS = 5000
+  const MIN_SYNCING_DISPLAY_MS = 400
 
   const totalQueued = retriableCount + deadLetterCount
 
@@ -126,35 +130,45 @@ export function OfflineBanner({
       })
   }, [queueScope])
 
-  const triggerSyncNow = React.useCallback(() => {
-    if (syncing) return
-    setSyncing(true)
-    syncPending({ bypassBackoff: true })
-      .then((result) => {
-        if (result.synced > 0) onSync?.()
-        refreshPending()
-      })
-      .finally(() => setSyncing(false))
-  }, [onSync, refreshPending, syncing])
+  const triggerSyncNow = React.useCallback(
+    (options?: { force?: boolean }) => {
+      if (syncing) return
+      const now = Date.now()
+      if (!options?.force && now - lastAutoSyncAtRef.current < AUTO_SYNC_COOLDOWN_MS) return
+      lastAutoSyncAtRef.current = now
+      syncingStartedAtRef.current = now
+      setSyncing(true)
+      syncPending({ bypassBackoff: true })
+        .then((result) => {
+          if (result.synced > 0) onSync?.()
+          refreshPending()
+        })
+        .finally(() => {
+          const elapsed = Date.now() - syncingStartedAtRef.current
+          const hold = Math.max(0, MIN_SYNCING_DISPLAY_MS - elapsed)
+          window.setTimeout(() => setSyncing(false), hold)
+        })
+    },
+    [onSync, refreshPending, syncing]
+  )
 
   React.useEffect(() => {
     refreshPending()
   }, [refreshPending])
 
   React.useEffect(() => {
-    if (!online) return
+    if (!online || retriableCount <= 0) return
     triggerSyncNow()
-  }, [online, triggerSyncNow])
+  }, [online, retriableCount, triggerSyncNow])
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const onQueueUpdated = () => {
       refreshPending()
-      if (online) triggerSyncNow()
     }
     window.addEventListener(OFFLINE_QUEUE_UPDATED_EVENT, onQueueUpdated)
     return () => window.removeEventListener(OFFLINE_QUEUE_UPDATED_EVENT, onQueueUpdated)
-  }, [online, refreshPending, triggerSyncNow])
+  }, [refreshPending])
 
   React.useEffect(() => {
     if (!online || retriableCount <= 0 || syncing) return
@@ -352,7 +366,7 @@ export function OfflineBanner({
               size="sm"
               className="h-7 gap-1 border-amber-600/50 text-amber-700 hover:bg-amber-500/20"
               onClick={() => {
-                triggerSyncNow()
+                triggerSyncNow({ force: true })
               }}
             >
               <RefreshCw className="h-3.5 w-3.5" />
