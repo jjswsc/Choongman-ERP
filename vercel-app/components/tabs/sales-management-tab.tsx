@@ -26,7 +26,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
 import { useT, i18n, tOr } from "@/lib/i18n"
-import { downloadSalesManagementXlsx, type SalesExcelSheet } from "@/lib/sales-management-excel-export"
+import {
+  downloadSalesManagementXlsx,
+  salesExcelCol,
+  type SalesExcelSheet,
+} from "@/lib/sales-management-excel-export"
 import {
   translatePeriodAxisLabel,
   translateChannelKey,
@@ -114,6 +118,48 @@ function periodPaymentAmount(row: PeriodPaymentRow, field: PeriodPaymentField) {
 }
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
+
+type PeriodTrendChartRow = { axisLabel: string; sales: number }
+
+function SalesPeriodTrendChartBlock({
+  rows,
+  periodBarXAxisProps,
+  periodChartYAxisProps,
+  tr,
+  showFootnote = true,
+}: {
+  rows: PeriodTrendChartRow[]
+  periodBarXAxisProps: Record<string, unknown>
+  periodChartYAxisProps: { tick: { fontSize: number }; tickFormatter: (v: number) => string }
+  tr: (key: string, fallback: string) => string
+  showFootnote?: boolean
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div className="mb-4">
+      <p className="mb-2 text-sm font-medium">{tr("salesPeriodTrendChartLabel", "매출 추이 (집계 기간)")}</p>
+      <div className="h-[220px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
+            <YAxis {...periodChartYAxisProps} />
+            <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
+            <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {showFootnote ? (
+        <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+          {tr(
+            "salesTopicPeriodTrendFootnote",
+            "상단 막대 차트는「집계 기간」기준 추이입니다. 아래 표·파이·상세는 선택한 날짜 범위 전체 합계입니다."
+          )}
+        </p>
+      ) : null}
+    </div>
+  )
+}
 
 function formatSalesAmount(n: number) {
   const v = Number(n ?? 0)
@@ -248,6 +294,17 @@ type AnalyticsView =
   | "store-category"
   | "store-period"
   | null
+
+/** 집계 기간 UI·상단 추이 차트를 공유하는 리포트 주제 (실시간 운영 제외) */
+const PERIOD_GROUP_TOPIC_VIEWS: Exclude<AnalyticsView, null>[] = [
+  "period",
+  "store-period",
+  "channel",
+  "menu",
+  "delivery",
+  "store-category",
+  "payment",
+]
 
 const SALES_ORDER_TYPE_TOGGLES: { type: PosOrderTypeValue; labelKey: string; fallback: string }[] = [
   { type: "dine_in", labelKey: "salesAmountKindDineIn", fallback: "홀" },
@@ -914,7 +971,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "payment")
   const insightShowMenu = selectedView === "menu"
   const insightShowChannel = selectedView === "channel"
-  const needsPeriodGroup = selectedView === "period" || selectedView === "store-period"
+  const needsPeriodGroup =
+    selectedView != null && PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView)
 
   const storesForCompareChart = React.useMemo(
     () => selectedStoresParam ?? [],
@@ -1350,6 +1408,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const numCell = (n: number) => Math.round(Number(n || 0) * 100) / 100
     const periodCol =
       periodGroup === "hour" ? tr("salesPeriodHourColumn", "시간대") : tr("salesPeriod", "기간")
+    const paymentColFormats = PERIOD_PAYMENT_COLUMNS.map(() => salesExcelCol.money)
     const sheets: SalesExcelSheet[] = []
 
     if (selectedView === "period" && periodChartRows.length > 0) {
@@ -1365,6 +1424,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           numCell(r.total),
           ...PERIOD_PAYMENT_COLUMNS.map((c) => numCell(periodPaymentAmount(r, c.field))),
         ]),
+        colFormats: [salesExcelCol.text, salesExcelCol.money, ...paymentColFormats],
       })
       sheets.push({
         name: tr("salesExportSheetDetail", "상세"),
@@ -1396,6 +1456,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           numCell(r.total),
           ...PERIOD_PAYMENT_COLUMNS.map((c) => numCell(periodPaymentAmount(r, c.field))),
         ]),
+        colFormats: [
+          salesExcelCol.text,
+          salesExcelCol.int,
+          salesExcelCol.int,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          ...paymentColFormats,
+        ],
       })
     } else if (selectedView === "store-period" && storeByPeriodFlatRows.length > 0) {
       sheets.push({
@@ -1414,6 +1488,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           numCell(r.total),
           ...PERIOD_PAYMENT_COLUMNS.map((c) => numCell(periodPaymentAmount(r, c.field))),
         ]),
+        colFormats: [
+          salesExcelCol.text,
+          salesExcelCol.text,
+          salesExcelCol.int,
+          salesExcelCol.money,
+          ...paymentColFormats,
+        ],
       })
     } else if (selectedView === "store" && scopedStoreData.length > 0) {
       sheets.push({
@@ -1436,24 +1517,36 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           numCell(r.service ?? 0),
           numCell(r.total),
         ]),
+        colFormats: [
+          salesExcelCol.text,
+          salesExcelCol.int,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+        ],
       })
     } else if (selectedView === "channel" && channelChartRows.length > 0) {
       sheets.push({
         name: tr("salesChannel", "채널"),
         headers: [tr("salesChannel", "채널"), tr("pL_sales", "매출")],
         rows: channelChartRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+        colFormats: [salesExcelCol.text, salesExcelCol.money],
       })
     } else if (selectedView === "menu" && menuData.length > 0) {
       sheets.push({
         name: tr("salesMenu", "메뉴"),
         headers: [tr("salesMenu", "메뉴"), tr("salesQuantity", "수량"), tr("pL_sales", "매출")],
         rows: menuData.map((r) => [r.name, r.qty, numCell(r.sales)]),
+        colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
       })
     } else if (selectedView === "delivery" && deliveryPieRows.length > 0) {
       sheets.push({
         name: tr("salesDeliveryChannel", "배달앱/채널"),
         headers: [tr("salesDeliveryChannel", "배달앱/채널"), tr("pL_sales", "매출"), tr("salesRatio", "비율")],
-        rows: deliveryPieRows.map((r) => [r.axisLabel, numCell(r.sales), `${r.pct.toFixed(1)}%`]),
+        rows: deliveryPieRows.map((r) => [r.axisLabel, numCell(r.sales), r.pct / 100]),
+        colFormats: [salesExcelCol.text, salesExcelCol.money, salesExcelCol.pct],
       })
     } else if (selectedView === "payment") {
       if (deliveryPaymentChannelRows.length > 0) {
@@ -1461,6 +1554,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           name: tr("salesPaymentBreakdownDeliveryTitle", "결제수단별 매출 — 배달"),
           headers: [tr("salesPaymentMethod", "결제수단"), tr("pL_sales", "매출")],
           rows: deliveryPaymentChannelRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+          colFormats: [salesExcelCol.text, salesExcelCol.money],
         })
       }
       if (creditPaymentChannelRows.length > 0) {
@@ -1468,6 +1562,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           name: tr("salesPaymentBreakdownCreditTitle", "결제수단별 매출 — 카드/지갑"),
           headers: [tr("salesPaymentMethod", "결제수단"), tr("pL_sales", "매출")],
           rows: creditPaymentChannelRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+          colFormats: [salesExcelCol.text, salesExcelCol.money],
         })
       }
     } else if (selectedView === "store-category") {
@@ -1476,6 +1571,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           name: tr("salesByStore", "매장별"),
           headers: [tr("salesStoreName", "매장명"), tr("salesQuantity", "수량"), tr("salesSalesAmount", "판매 금액")],
           rows: storeChartRows.map((r) => [r.storeDisplayName, r.count, numCell(r.total)]),
+          colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
         })
       }
       if (channelChartRows.length > 0) {
@@ -1483,6 +1579,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           name: tr("salesByCategory", "분류별 (채널)"),
           headers: [tr("salesCategoryName", "분류명"), tr("salesSalesAmount", "판매 금액")],
           rows: channelChartRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+          colFormats: [salesExcelCol.text, salesExcelCol.money],
         })
       }
     } else if (selectedView === "realtime-revenue" && realtimeRevenueData) {
@@ -1500,6 +1597,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           numCell(r.waitingRevenue),
           numCell(r.delayedRevenue),
         ]),
+        colFormats: [salesExcelCol.text, salesExcelCol.money, salesExcelCol.money, salesExcelCol.money],
       })
     }
 
@@ -3279,17 +3377,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis {...periodChartYAxisProps} />
-                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <SalesPeriodTrendChartBlock
+                    rows={periodChartRows}
+                    periodBarXAxisProps={periodBarXAxisProps}
+                    periodChartYAxisProps={periodChartYAxisProps}
+                    tr={tr}
+                  />
                 <div className="flex flex-wrap gap-6">
                   <div className="h-[280px] w-[280px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -3425,17 +3518,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis {...periodChartYAxisProps} />
-                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <SalesPeriodTrendChartBlock
+                    rows={periodChartRows}
+                    periodBarXAxisProps={periodBarXAxisProps}
+                    periodChartYAxisProps={periodChartYAxisProps}
+                    tr={tr}
+                  />
                   <div className="mb-4 h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={channelChartRows} layout="vertical" margin={{ left: 80 }}>
@@ -3476,17 +3564,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis {...periodChartYAxisProps} />
-                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <SalesPeriodTrendChartBlock
+                    rows={periodChartRows}
+                    periodBarXAxisProps={periodBarXAxisProps}
+                    periodChartYAxisProps={periodChartYAxisProps}
+                    tr={tr}
+                  />
                   <div className="mb-4 flex flex-wrap items-center gap-3">
                     <Input
                       placeholder={tr("salesMenuSearch", "메뉴 검색")}
@@ -3726,17 +3809,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis {...periodChartYAxisProps} />
-                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <SalesPeriodTrendChartBlock
+                    rows={periodChartRows}
+                    periodBarXAxisProps={periodBarXAxisProps}
+                    periodChartYAxisProps={periodChartYAxisProps}
+                    tr={tr}
+                  />
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div>
                     <h3 className="mb-3 text-sm font-semibold">{tr("salesByStore", "매장별")}</h3>
@@ -3834,6 +3912,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
+                  <SalesPeriodTrendChartBlock
+                    rows={periodChartRows}
+                    periodBarXAxisProps={periodBarXAxisProps}
+                    periodChartYAxisProps={periodChartYAxisProps}
+                    tr={tr}
+                  />
                   <p className="mb-4 text-xs text-muted-foreground">
                     {tr(
                       "salesPaymentBreakdownFootnote",
