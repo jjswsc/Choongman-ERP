@@ -127,7 +127,7 @@ export default function AdminLiveStoreSalesPage() {
   const showFranchiseAllRealtime =
     canFranchiseeAll && effectiveStoreCode === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
 
-  /** 본사 전체 매장 — 매장별·테이블 총 금액 실시간 패널 */
+  /** 본사 전체 매장 — 매장별·테이블 총 금액 실시간 패널(차트는 AdminSalesDashboardCharts) */
   const showOfficeAllRealtime =
     isOfficeSelector && effectiveStoreCode === ALL_STORE_VALUE
 
@@ -195,7 +195,6 @@ export default function AdminLiveStoreSalesPage() {
               }
               showInlineRefresh
               showHeaderBadge
-              showSalesCharts
             />
           ) : null}
         </>

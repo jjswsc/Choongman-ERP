@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 import { supabaseSelectEmployeesForLoginList } from '@/lib/employees-compat'
+import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { isSandboxStoreCode } from '@/lib/pos-sales-test-office'
 
 type LoginDataPayload = {
   users: Record<string, string[]>
@@ -38,7 +40,10 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
     }) as Promise<{ name?: string; gps_name?: string; type?: string }[] | null>,
   ])
 
-  const built = buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true })
+  const built = enrichStoreListWithGrabMap(
+    buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true }),
+    masters
+  )
 
   const vendorList: string[] = []
   const vRows = vendorRows || []
@@ -63,8 +68,14 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
     storeCompanies[s] = c
   }
 
+  const users: Record<string, string[]> = {}
+  for (const [storeKey, names] of Object.entries(built.users)) {
+    if (isSandboxStoreCode(storeKey)) continue
+    users[storeKey] = names
+  }
+
   return {
-    users: built.users,
+    users,
     vendors: vendorList,
     companies,
     storeCompanies,

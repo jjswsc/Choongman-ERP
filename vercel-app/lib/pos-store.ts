@@ -528,7 +528,11 @@ export function usePosStoreStandalone() {
 }
 
 export function usePosStoreInternal() {
-  const { stores: storeCodes, legacyToCanonical, loading: storeListLoading } = useStoreList()
+  const {
+    allStores: storeCodes,
+    legacyToCanonical,
+    loading: storeListLoading,
+  } = useStoreList()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canonicalAuthStore = useMemo(() => {

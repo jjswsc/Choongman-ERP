@@ -2,7 +2,7 @@
 -- Supabase SQL Editor에서 실행 후 /api/posSalesBy* 가 RPC 우선 사용.
 --
 -- p_agg_mode:
---   store | store_channel | period | period_by_store | channel | payment | delivery_platform | menu
+--   store | store_channel | period | period_by_store | channel | payment | delivery_platform | delivery_payment | menu
 -- p_period_group (period*): day | month | year | week | dow | hour
 
 CREATE OR REPLACE FUNCTION public.pos_sales_norm_store_key(p_raw text)
@@ -454,6 +454,43 @@ BEGIN
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'delivery_platform'
       AND f.norm_order_type = 'delivery'
+    GROUP BY 1
+
+    UNION ALL
+
+    -- delivery_payment: payment_delivery_app by channel (POS 결산·매출관리 Payment/Card 배달 표)
+    SELECT
+      CASE
+        WHEN lower(btrim(coalesce(f.delivery_app_code, ''))) LIKE '%foodpanda%' THEN 'foodpanda'
+        WHEN lower(btrim(coalesce(f.delivery_app_code, f.delivery_payment_channel, ''))) LIKE '%robinhood%' THEN 'robinhood'
+        WHEN lower(btrim(coalesce(f.delivery_app_code, f.delivery_payment_channel, ''))) LIKE '%shopee%pay%' THEN 'shopee_pay'
+        WHEN lower(btrim(coalesce(f.delivery_app_code, f.delivery_payment_channel, ''))) LIKE '%shopee%' THEN 'shopee'
+        WHEN lower(btrim(coalesce(f.delivery_app_code, f.delivery_payment_channel, ''))) IN ('grab', 'lineman', 'line_man') THEN
+          CASE WHEN lower(btrim(coalesce(f.delivery_app_code, f.delivery_payment_channel, ''))) IN ('lineman', 'line_man') THEN 'lineman' ELSE 'grab' END
+        WHEN btrim(coalesce(f.delivery_app_code, '')) <> '' THEN lower(btrim(f.delivery_app_code))
+        WHEN btrim(coalesce(f.delivery_payment_channel, '')) <> '' THEN lower(btrim(f.delivery_payment_channel))
+        ELSE '_unspecified'
+      END,
+      ''::text,
+      count(*)::bigint,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      sum(f.payment_delivery_app),
+      0::bigint,
+      0::bigint,
+      0::numeric,
+      0::bigint,
+      0::numeric,
+      NULL::text
+    FROM in_range f
+    WHERE lower(coalesce(p_agg_mode, '')) = 'delivery_payment'
+      AND coalesce(f.payment_delivery_app, 0) > 0
+      AND NOT (
+        f.norm_order_type = 'dine_in'
+        OR lower(btrim(coalesce(f.delivery_payment_channel, ''))) = 'dine_in'
+      )
     GROUP BY 1
 
     UNION ALL

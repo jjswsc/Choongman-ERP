@@ -5247,6 +5247,36 @@ export async function getPosSalesByPayment(params: {
   return jsonAsArray<{ paymentKey: string; sales: number }>(await res.json())
 }
 
+export type PosSalesPaymentBreakdown = {
+  deliveryByChannel: { channelKey: string; sales: number }[]
+  deliveryTotal: number
+  creditByChannel: { channelKey: string; sales: number }[]
+  creditTotal: number
+  summary: { paymentKey: string; sales: number }[]
+}
+
+export async function getPosSalesByPaymentBreakdown(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+}): Promise<PosSalesPaymentBreakdown> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  const res = await apiFetchWithOffline(`/api/posSalesByPaymentBreakdown?${q}`)
+  const json = (await res.json()) as Partial<PosSalesPaymentBreakdown>
+  return {
+    deliveryByChannel: Array.isArray(json.deliveryByChannel) ? json.deliveryByChannel : [],
+    deliveryTotal: Number(json.deliveryTotal ?? 0) || 0,
+    creditByChannel: Array.isArray(json.creditByChannel) ? json.creditByChannel : [],
+    creditTotal: Number(json.creditTotal ?? 0) || 0,
+    summary: Array.isArray(json.summary) ? json.summary : [],
+  }
+}
+
 // ─── 통장 거래 ───
 export interface BankAccount {
   id: number

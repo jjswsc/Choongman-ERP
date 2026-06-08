@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
+import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 
 /** 매장·직원 목록 경량 조회 (store,name,nick) — erp_stores 가 있으면 store_code 기준·표시명은 storeLabels */
 export async function GET() {
@@ -25,11 +26,15 @@ export async function GET() {
     }[] | null
 
     const masters = await fetchErpStoresMaster()
-    const built = enrichStoreListWithGrabMap(buildStoreListFromEmployees(empList, masters))
+    const built = enrichStoreListWithGrabMap(buildStoreListFromEmployees(empList, masters), masters)
+
+    const operationalStores = filterPosSalesStoreOptionsForManagement(built.stores)
 
     return NextResponse.json(
       {
-        stores: built.stores,
+        stores: operationalStores,
+        /** POS 터미널·본사 시연(CM Office) 등 — 매장 검색/집계용 `stores`와 분리 */
+        allStores: built.stores,
         users: built.users,
         staffByStore: built.staffByStore,
         storeLabels: built.storeLabels,
@@ -41,7 +46,15 @@ export async function GET() {
   } catch (e) {
     console.error('getStoreList:', e)
     return NextResponse.json(
-      { stores: [], users: {}, staffByStore: {}, storeLabels: {}, legacyToCanonical: {}, usedMaster: false },
+      {
+        stores: [],
+        allStores: [],
+        users: {},
+        staffByStore: {},
+        storeLabels: {},
+        legacyToCanonical: {},
+        usedMaster: false,
+      },
       { headers }
     )
   }

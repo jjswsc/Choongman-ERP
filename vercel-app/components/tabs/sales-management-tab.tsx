@@ -31,6 +31,8 @@ import {
   translateChannelKey,
   translatePaymentKey,
   translateDeliveryAppCode,
+  translateDeliveryPaymentChannelKey,
+  translateCreditPaymentChannelKey,
 } from "@/lib/sales-analytics-labels"
 import {
   getAdminVendors,
@@ -39,7 +41,8 @@ import {
   getPosSalesByDeliveryApp,
   getPosSalesByChannel,
   getPosSalesByMenu,
-  getPosSalesByPayment,
+  getPosSalesByPaymentBreakdown,
+  type PosSalesPaymentBreakdown,
   getPosSalesByStore,
   getPosCancelReasonSummary,
   type PosSalesPeriodRow,
@@ -62,7 +65,7 @@ import {
   getPosSalesByDeliveryAppWithCache,
   getPosSalesByChannelWithCache,
   getPosSalesByMenuWithCache,
-  getPosSalesByPaymentWithCache,
+  getPosSalesByPaymentBreakdownWithCache,
   getPosSalesByStoreWithCache,
 } from "@/lib/offline/sales-analytics-offline"
 import {
@@ -511,6 +514,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
   const [menuData, setMenuData] = React.useState<{ name: string; qty: number; sales: number }[]>([])
   const [paymentData, setPaymentData] = React.useState<{ paymentKey: string; sales: number }[]>([])
+  const [paymentBreakdownData, setPaymentBreakdownData] = React.useState<PosSalesPaymentBreakdown>({
+    deliveryByChannel: [],
+    deliveryTotal: 0,
+    creditByChannel: [],
+    creditTotal: 0,
+    summary: [],
+  })
   const [storeData, setStoreData] = React.useState<
     {
       storeName: string
@@ -983,11 +993,29 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const paymentChartRows = React.useMemo(
     () =>
-      paymentData.map((r) => ({
+      (paymentBreakdownData.summary.length > 0 ? paymentBreakdownData.summary : paymentData).map((r) => ({
         ...r,
         axisLabel: translatePaymentKey(r.paymentKey, tr),
       })),
-    [paymentData, tr]
+    [paymentBreakdownData.summary, paymentData, tr]
+  )
+
+  const deliveryPaymentChannelRows = React.useMemo(
+    () =>
+      paymentBreakdownData.deliveryByChannel.map((r) => ({
+        ...r,
+        axisLabel: translateDeliveryPaymentChannelKey(r.channelKey, tr),
+      })),
+    [paymentBreakdownData.deliveryByChannel, tr]
+  )
+
+  const creditPaymentChannelRows = React.useMemo(
+    () =>
+      paymentBreakdownData.creditByChannel.map((r) => ({
+        ...r,
+        axisLabel: translateCreditPaymentChannelKey(r.channelKey, tr),
+      })),
+    [paymentBreakdownData.creditByChannel, tr]
   )
 
   const deliveryPieRows = React.useMemo(
@@ -1109,9 +1137,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [scopedStoreData])
 
   const paymentTotalsSummary = React.useMemo(() => {
-    const total = paymentData.reduce((a, r) => a + Number(r.sales ?? 0), 0)
+    const rows = paymentBreakdownData.summary.length > 0 ? paymentBreakdownData.summary : paymentData
+    const total = rows.reduce((a, r) => a + Number(r.sales ?? 0), 0)
     return { subtotal: 0, vat: 0, discount: 0, service: 0, total, gross: total }
-  }, [paymentData])
+  }, [paymentBreakdownData.summary, paymentData])
 
   const activeTotalsSummary = React.useMemo(() => {
     if (scopedStoreData.length > 0 && (selectedStoresParam?.length ?? 0) > 0) {
@@ -1184,6 +1213,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setChannelData([])
     setMenuData([])
     setPaymentData([])
+    setPaymentBreakdownData({
+      deliveryByChannel: [],
+      deliveryTotal: 0,
+      creditByChannel: [],
+      creditTotal: 0,
+      summary: [],
+    })
     setStoreData([])
     setRealtimeRevenueData(null)
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
@@ -1604,6 +1640,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gDelivery = guarded(setDeliveryAppData)
     const gChannel = guarded(setChannelData)
     const gPayment = guarded(setPaymentData)
+    const gPaymentBreakdown = guarded(setPaymentBreakdownData)
     const gStore = guarded(setStoreData)
     const gMenu = guarded(setMenuData)
     const gRealtimeRevenue = guarded(setRealtimeRevenueData)
@@ -1665,20 +1702,28 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
     if (needPayment) {
       tasks.push(
-        (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
+        (offlineAware ? getPosSalesByPaymentBreakdownWithCache : getPosSalesByPaymentBreakdown)({
           startStr,
           endStr,
           stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
         })
-          .then((rows) => {
-            gPayment(rows)
+          .then((data) => {
+            gPaymentBreakdown(data)
+            gPayment(data.summary)
             if (needCurrentSummaryOnly && !needStore) {
-              const total = rows.reduce((a, r) => a + Number(r.sales ?? 0), 0)
+              const total = data.summary.reduce((a, r) => a + Number(r.sales ?? 0), 0)
               gSummary({ current: total, prevRange: 0, prevWeek: 0 })
             }
           })
           .catch(() => {
+            gPaymentBreakdown({
+              deliveryByChannel: [],
+              deliveryTotal: 0,
+              creditByChannel: [],
+              creditTotal: 0,
+              summary: [],
+            })
             gPayment([])
             if (needCurrentSummaryOnly && !needStore) gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
@@ -3486,63 +3531,131 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   {salesAnalyticsPlaceholder}
                 </p>
-              ) : paymentData.length === 0 ? (
+              ) : deliveryPaymentChannelRows.length === 0 &&
+                creditPaymentChannelRows.length === 0 &&
+                paymentChartRows.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   {tr("salesDataNone", "데이터 없음")}
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-                        <YAxis {...periodChartYAxisProps} />
-                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                <div className="flex flex-wrap gap-6">
-                  <div className="h-[260px] w-[260px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={paymentChartRows}
-                          dataKey="sales"
-                          nameKey="axisLabel"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={90}
-                        >
-                          {paymentChartRows.map((_, i) => (
-                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    {tr(
+                      "salesPaymentBreakdownFootnote",
+                      "배달·카드 표는 POS 결산에 저장한 breakdown(Visa/Grab 등)을 합산합니다. 결산 전 매장·미연동 건만 LINKPOS 또는 주문 배달액으로 보조합니다."
+                    )}
+                  </p>
+                  <div className="mb-6 grid gap-6 lg:grid-cols-2">
+                    <div className="rounded-lg border bg-card p-4">
+                      <h3 className="mb-3 text-sm font-semibold">
+                        {tr("salesPaymentBreakdownDeliveryTitle", "Sales Report by Card Type — Delivery")}
+                      </h3>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
+                            <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {deliveryPaymentChannelRows.map((r) => (
+                            <tr key={r.channelKey} className="border-b">
+                              <td className="py-1.5 pr-4">{r.axisLabel}</td>
+                              <td className="py-1.5 text-right font-erp-numeric">
+                                {formatSalesAmount(r.sales)}
+                              </td>
+                            </tr>
                           ))}
-                        </Pie>
-                        <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
+                          <tr className="font-semibold">
+                            <td className="py-2 pr-4">{tr("salesTotalLabel", "합계")}</td>
+                            <td className="py-2 text-right font-erp-numeric">
+                              {formatSalesAmount(paymentBreakdownData.deliveryTotal)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="rounded-lg border bg-card p-4">
+                      <h3 className="mb-3 text-sm font-semibold">
+                        {tr("salesPaymentBreakdownCreditTitle", "Sales Report by Card Type — Credit Card")}
+                      </h3>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
+                            <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {creditPaymentChannelRows.map((r) => (
+                            <tr key={r.channelKey} className="border-b">
+                              <td className="py-1.5 pr-4">{r.axisLabel}</td>
+                              <td className="py-1.5 text-right font-erp-numeric">
+                                {formatSalesAmount(r.sales)}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="font-semibold">
+                            <td className="py-2 pr-4">{tr("salesTotalLabel", "합계")}</td>
+                            <td className="py-2 text-right font-erp-numeric">
+                              {formatSalesAmount(paymentBreakdownData.creditTotal)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                  <table className="text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
-                        <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paymentChartRows.map((r) => (
-                        <tr key={r.paymentKey} className="border-b">
-                          <td className="py-1.5 pr-4">{r.axisLabel}</td>
-                          <td className="py-1.5 text-right font-erp-numeric">
-                            {formatSalesAmount(r.sales)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                  {paymentChartRows.length > 0 ? (
+                    <Collapsible defaultOpen={false} className="rounded-md border bg-muted/10">
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full justify-between px-4">
+                          {tr("salesTopicExplorePaymentHint", "결제 종류, 카드 관련 관점")}
+                          <span className="text-xs text-muted-foreground">{tr("salesPaymentMethod", "결제수단")}</span>
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-4 pb-4">
+                        <div className="flex flex-wrap gap-6 pt-2">
+                          <div className="h-[220px] w-[220px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={paymentChartRows}
+                                  dataKey="sales"
+                                  nameKey="axisLabel"
+                                  cx="50%"
+                                  cy="50%"
+                                  outerRadius={80}
+                                >
+                                  {paymentChartRows.map((_, i) => (
+                                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <table className="text-sm">
+                            <thead>
+                              <tr className="border-b text-muted-foreground">
+                                <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
+                                <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paymentChartRows.map((r) => (
+                                <tr key={r.paymentKey} className="border-b">
+                                  <td className="py-1.5 pr-4">{r.axisLabel}</td>
+                                  <td className="py-1.5 text-right font-erp-numeric">
+                                    {formatSalesAmount(r.sales)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : null}
                 </>
               )
             )}

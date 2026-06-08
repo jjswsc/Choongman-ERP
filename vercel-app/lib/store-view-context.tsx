@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react'
 import { isOfficeStore } from '@/lib/permissions'
+import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 
 export interface StoreViewContextValue {
   /** 모바일에서 오피스 직원이 선택한 "조회 기준 매장" (없으면 null) */
@@ -34,6 +35,11 @@ export function filterNonOfficeStores(stores: string[]): string[] {
     const x = String(s || '').trim()
     return x && !isOfficeStore(x)
   })
+}
+
+/** 매장 검색·선택 UI — Office·test·HQ·Grab 껍데기 제외(operational `stores` 기준) */
+export function filterOperationalStorePickerOptions(stores: string[]): string[] {
+  return filterPosSalesStoreOptionsForManagement(filterNonOfficeStores(stores))
 }
 
 /** 오피스 직원 기본 조회: 전체 매장(All). 본사(Office) 코드는 집계 대상이 아님 */

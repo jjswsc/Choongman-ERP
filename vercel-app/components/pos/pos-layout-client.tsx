@@ -183,6 +183,8 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isCmPosHybridShell()) return
     if (typeof window === "undefined") return
+    /** 고객용 모니터(/pos/customer-display)에는 캐셔용 프린터 점검 알림을 띄우지 않음 */
+    if (pathname === "/pos/customer-display") return
     const shell = window.cmPosShell
     if (typeof shell?.listPrinters !== "function" || typeof shell?.getPrintConfig !== "function") return
 
@@ -240,7 +242,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [t])
+  }, [pathname, t])
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return

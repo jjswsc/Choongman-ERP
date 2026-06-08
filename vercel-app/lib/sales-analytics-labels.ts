@@ -60,19 +60,79 @@ export function translateDeliveryAppCode(
   code: string,
   tr: (key: string, fallback: string) => string
 ): string {
-  const c = String(code ?? "").trim().toLowerCase()
+  return translateDeliveryPaymentChannelKey(code, tr)
+}
+
+/** Payment/Card — 배달 결제 채널 (Flowaccount Delivery 표) */
+export function translateDeliveryPaymentChannelKey(
+  channelKey: string,
+  tr: (key: string, fallback: string) => string
+): string {
+  const c = String(channelKey ?? "").trim().toLowerCase().replace(/\s+/g, "_")
   if (!c || c === "_unspecified") {
     return tr("salesDeliveryPlatformUnspecified", "앱 미지정")
   }
   const map: Record<string, string> = {
+    foodpanda: "salesDeliveryAppFoodpanda",
     grab: "posDeliveryAppGrab",
     lineman: "posDeliveryAppLineMan",
-    "line man": "posDeliveryAppLineMan",
+    line_man: "posDeliveryAppLineMan",
+    robinhood: "salesDeliveryAppRobinhood",
     shopee: "posDeliveryAppShopee",
-    foodpanda: "salesDeliveryAppFoodpanda",
+    shopee_pay: "posPaymentShopeePay",
+    shopeepay: "posPaymentShopeePay",
+    other: "salesPayOther",
+    dine_in: "salesChannelTypeDineIn",
   }
   const i18nKey = map[c]
   if (i18nKey) return tr(i18nKey, KO[i18nKey] ?? c)
+  return c.replace(/_/g, " ").replace(/\b\w/g, (x) => x.toUpperCase())
+}
+
+/** Payment/Card — 카드·지갑·QR (Flowaccount Credit Card 표 + Kasikorn LINKPOS) */
+export function translateCreditPaymentChannelKey(
+  channelKey: string,
+  tr: (key: string, fallback: string) => string
+): string {
+  const c = String(channelKey ?? "").trim().toLowerCase().replace(/\s+/g, "_")
+  const map: Record<string, string> = {
+    alipay: "posPaymentAlipay",
+    gift_voucher: "salesCreditGiftVoucher",
+    jcb: "salesCreditJcb",
+    master_card: "salesCreditMasterCard",
+    master: "salesCreditMasterCard",
+    mastercard: "salesCreditMasterCard",
+    online_banking: "salesCreditOnlineBanking",
+    promptpay: "salesCreditPromptpay",
+    unionpay: "posPaymentUnionPay",
+    visa: "salesCreditVisa",
+    wechat: "posPaymentWeChat",
+    true_money_wallet: "posPaymentTrueMoney",
+    truemoney: "posPaymentTrueMoney",
+    line_pay: "posPaymentLinePay",
+    shopee_pay: "posPaymentShopeePay",
+    card_other: "salesPayCard",
+    cash: "salesPayCash",
+    card: "salesPayCard",
+    qr: "salesPayQr",
+    other: "salesPayOther",
+    delivery_app: "salesPayDeliveryApp",
+    delivery_grab: "posDeliveryAppGrab",
+    delivery_lineman: "posDeliveryAppLineMan",
+    delivery_shopee: "posDeliveryAppShopee",
+    delivery_dine_in: "salesChannelTypeDineIn",
+    delivery_unknown: "salesDeliveryPlatformUnspecified",
+    other_truemoney: "posPaymentTrueMoney",
+    other_wechat: "posPaymentWeChat",
+    other_alipay: "posPaymentAlipay",
+    other_unionpay: "posPaymentUnionPay",
+    other_linepay: "posPaymentLinePay",
+    other_shopeepay: "posPaymentShopeePay",
+    other_misc: "salesPayOther",
+  }
+  const i18nKey = map[c]
+  if (i18nKey) return tr(i18nKey, KO[i18nKey] ?? c)
+  if (c.startsWith("other_wallet_")) return tr("salesPayOther", "기타")
   return c.replace(/_/g, " ").replace(/\b\w/g, (x) => x.toUpperCase())
 }
 
@@ -80,12 +140,11 @@ export function translatePaymentKey(
   paymentKey: string,
   tr: (key: string, fallback: string) => string
 ): string {
-  const map: Record<string, string> = {
-    cash: "salesPayCash",
-    card: "salesPayCard",
-    qr: "salesPayQr",
-    other: "salesPayOther",
+  if (paymentKey.startsWith("delivery_")) {
+    return translateCreditPaymentChannelKey(paymentKey, tr)
   }
-  const i18nKey = map[paymentKey] ?? "salesPayOther"
-  return tr(i18nKey, KO[i18nKey] ?? paymentKey)
+  if (paymentKey.startsWith("other_")) {
+    return translateCreditPaymentChannelKey(paymentKey, tr)
+  }
+  return translateCreditPaymentChannelKey(paymentKey, tr)
 }

@@ -16,6 +16,7 @@ export type PosSalesAnalyticsAggMode =
   | 'channel'
   | 'payment'
   | 'delivery_platform'
+  | 'delivery_payment'
   | 'menu'
 
 export type PosSalesAnalyticsAggRow = {

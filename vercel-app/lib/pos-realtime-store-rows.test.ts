@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { enrichStoreListWithGrabMap, dedupeStoreListByCanonical } from '@/lib/erp-store-list-grab-enrich'
+import {
+  dedupeStoreCodesForPicker,
+  enrichStoreListWithGrabMap,
+  dedupeStoreListByCanonical,
+} from '@/lib/erp-store-list-grab-enrich'
 import { labelForStore } from '@/lib/store-list-keys'
 import {
   aggregateTodaySalesByCanonical,
@@ -55,6 +59,23 @@ describe('enrichStoreListWithGrabMap', () => {
     expect(out.stores).toEqual(['CM True Digital', '1042'])
     expect(out.users['CM True Digital']).toEqual(['Bob', 'Alice'])
     expect(out.legacyToCanonical['1040']).toBe('CM True Digital')
+  })
+
+  it('dedupes numeric partner IDs when display_name is still 1040/1042 (no Grab env)', () => {
+    delete process.env.GRAB_STORE_MAP_JSON
+    delete process.env.GRAB_PORTAL_MERCHANT_MAP
+    const masters = [
+      { store_code: '1040', display_name: '1040', is_active: true, sort_order: 2 },
+      { store_code: 'CM True Digital', display_name: 'CM True Digital', is_active: true, sort_order: 1 },
+      { store_code: '1042', display_name: '1042', is_active: true, sort_order: 4 },
+      { store_code: 'CM Silom', display_name: 'CM Silom', is_active: true, sort_order: 3 },
+    ]
+    expect(
+      dedupeStoreCodesForPicker(
+        ['1040', 'CM True Digital', '1042', 'CM Silom', 'CM Asoke'],
+        masters
+      )
+    ).toEqual(['CM True Digital', 'CM Silom', 'CM Asoke'])
   })
 })
 

@@ -1,6 +1,12 @@
+import {
+  buildLegacyToCanonicalMap,
+  storeLabelsFromMasters,
+  type ErpStoreMasterRow,
+  type StoreListBuildResult,
+} from '@/lib/erp-store-master-shared'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import { normStoreKey } from '@/lib/store-list-keys'
-import type { StoreListBuildResult } from '@/lib/erp-store-master'
 
 function looksLikeErpStoreLabel(s: string): boolean {
   const t = String(s || '').trim()
@@ -11,6 +17,36 @@ function looksLikeErpStoreLabel(s: string): boolean {
 
 function isGrabPartnerNumericId(s: string): boolean {
   return /^\d{3,6}$/.test(String(s || '').trim())
+}
+
+/** Grab partner store ID → ERP store_code (env 없을 때 erp_stores에 둘 다 있으면 폴백) */
+const DEFAULT_GRAB_PARTNER_ERP_PAIRS: Record<string, string> = {
+  '1040': 'CM True Digital',
+  '1042': 'CM Silom',
+  '1043': 'CM Ekkamai',
+}
+
+function activeMasterStoreCodes(masters: ErpStoreMasterRow[]): Set<string> {
+  const out = new Set<string>()
+  for (const row of masters || []) {
+    if (row.is_active === false) continue
+    const code = String(row.store_code || '').trim()
+    if (code) out.add(code)
+  }
+  return out
+}
+
+/** GRAB_STORE_MAP_JSON + 알려진 partner ID(1040 등) — 정식 CM 매장이 마스터에 있을 때만 */
+export function buildEffectiveGrabPartnerErpMap(masters: ErpStoreMasterRow[] = []): Record<string, string> {
+  const out = { ...parseGrabStoreMap() }
+  const active = activeMasterStoreCodes(masters)
+  if (!active.size) return out
+
+  for (const [partner, erp] of Object.entries(DEFAULT_GRAB_PARTNER_ERP_PAIRS)) {
+    if (out[partner]) continue
+    if (active.has(partner) && active.has(erp)) out[partner] = erp
+  }
+  return out
 }
 
 function pickCanonicalStoreCode(
@@ -62,19 +98,6 @@ export function dedupeStoreListByCanonical(built: StoreListBuildResult): StoreLi
     if (ra !== rb) parent.set(ra, rb)
   }
 
-  for (const s of stores) {
-    const canon = resolveStoreCanonical(s, legacyToCanonical)
-    if (canon !== s && storeSet.has(canon)) unite(s, canon)
-  }
-
-  const groups = new Map<string, string[]>()
-  for (const s of stores) {
-    const root = find(s)
-    const g = groups.get(root) || []
-    g.push(s)
-    groups.set(root, g)
-  }
-
   const pickPrimary = (members: string[]): string => {
     let best = members[0]
     for (const c of members.slice(1)) {
@@ -91,6 +114,36 @@ export function dedupeStoreListByCanonical(built: StoreListBuildResult): StoreLi
       if (cmp > 0) best = c
     }
     return best
+  }
+
+  for (const s of stores) {
+    const canon = resolveStoreCanonical(s, legacyToCanonical)
+    if (canon !== s && storeSet.has(canon)) unite(s, canon)
+  }
+
+  /** erp_stores 껍데기: store_code=1040·display_name=CM True Digital 등 동일 표시명 중복 */
+  const byDisplayLabel = new Map<string, string[]>()
+  for (const s of stores) {
+    const label = normStoreKey(storeLabels[s] || '')
+    if (!label) continue
+    const g = byDisplayLabel.get(label) || []
+    g.push(s)
+    byDisplayLabel.set(label, g)
+  }
+  for (const members of byDisplayLabel.values()) {
+    if (members.length <= 1) continue
+    const primary = pickPrimary(members)
+    for (const m of members) {
+      if (m !== primary) unite(m, primary)
+    }
+  }
+
+  const groups = new Map<string, string[]>()
+  for (const s of stores) {
+    const root = find(s)
+    const g = groups.get(root) || []
+    g.push(s)
+    groups.set(root, g)
   }
 
   const mergeUserNames = (primary: string, alias: string) => {
@@ -159,8 +212,11 @@ function membersOrder(
  * GRAB_STORE_MAP_JSON·GRAB_PORTAL_MERCHANT_MAP의 K↔V를 legacyToCanonical·storeLabels에 반영.
  * 예: `"1042":"CM Silom"` → 1042 표시명·집계 키를 CM Silom(또는 마스터 store_code)으로 통일.
  */
-export function enrichStoreListWithGrabMap(built: StoreListBuildResult): StoreListBuildResult {
-  const map = parseGrabStoreMap()
+export function enrichStoreListWithGrabMap(
+  built: StoreListBuildResult,
+  masters: ErpStoreMasterRow[] = []
+): StoreListBuildResult {
+  const map = buildEffectiveGrabPartnerErpMap(masters)
   if (!Object.keys(map).length) return dedupeStoreListByCanonical(built)
 
   const storesSet = new Set(built.stores.map((s) => String(s || '').trim()).filter(Boolean))
@@ -194,4 +250,31 @@ export function enrichStoreListWithGrabMap(built: StoreListBuildResult): StoreLi
   }
 
   return dedupeStoreListByCanonical({ ...built, legacyToCanonical, storeLabels })
+}
+
+/** 매장 선택 UI·매출 필터 — erp_stores 껍데기(1040 등)·Grab 레거시 중복 제거 */
+export function dedupeStoreCodesForPicker(
+  storeCodes: string[],
+  masters: ErpStoreMasterRow[] = []
+): string[] {
+  const codes = storeCodes.map((s) => String(s || '').trim()).filter(Boolean)
+  if (codes.length <= 1) return codes
+
+  const storeLabels: Record<string, string> = { ...storeLabelsFromMasters(masters) }
+  for (const c of codes) {
+    if (!storeLabels[c]) storeLabels[c] = c
+  }
+
+  const built = enrichStoreListWithGrabMap(
+    {
+      stores: codes,
+      users: {},
+      staffByStore: {},
+      storeLabels,
+      legacyToCanonical: buildLegacyToCanonicalMap(masters),
+      usedMaster: masters.length > 0,
+    },
+    masters
+  )
+  return filterPosSalesStoreOptionsForManagement(built.stores)
 }

@@ -11,6 +11,7 @@ export type StaffByStore = Record<string, { name: string; nick: string; job?: st
 let cache: {
   data: {
     stores: string[]
+    allStores?: string[]
     users: Record<string, string[]>
     staffByStore?: StaffByStore
     storeLabels?: Record<string, string>
@@ -22,6 +23,7 @@ let cache: {
 
 export function useStoreList() {
   const [stores, setStores] = useState<string[]>([])
+  const [allStores, setAllStores] = useState<string[]>([])
   const [users, setUsers] = useState<Record<string, string[]>>({})
   const [staffByStore, setStaffByStore] = useState<StaffByStore>({})
   const [storeLabels, setStoreLabels] = useState<Record<string, string>>({})
@@ -43,6 +45,7 @@ export function useStoreList() {
     const now = Date.now()
     if (cache.data && cache.expiry > now) {
       setStores(cache.data.stores)
+      setAllStores(cache.data.allStores?.length ? cache.data.allStores : cache.data.stores)
       setUsers(cache.data.users)
       setStaffByStore(cache.data.staffByStore || {})
       setStoreLabels(cache.data.storeLabels || {})
@@ -56,6 +59,7 @@ export function useStoreList() {
       .then((d) => {
         const payload = {
           stores: d.stores || [],
+          allStores: d.allStores?.length ? d.allStores : d.stores || [],
           users: d.users || {},
           staffByStore: d.staffByStore || {},
           storeLabels: d.storeLabels || {},
@@ -64,6 +68,7 @@ export function useStoreList() {
         }
         cache = { data: payload, expiry: Date.now() + CACHE_TTL_MS }
         setStores(payload.stores)
+        setAllStores(payload.allStores || payload.stores)
         setUsers(payload.users)
         setStaffByStore(payload.staffByStore)
         setStoreLabels(payload.storeLabels)
@@ -73,6 +78,7 @@ export function useStoreList() {
       .catch(() => {
         if (cache.data) {
           setStores(cache.data.stores)
+          setAllStores(cache.data.allStores?.length ? cache.data.allStores : cache.data.stores)
           setUsers(cache.data.users)
           setStaffByStore(cache.data.staffByStore || {})
           setStoreLabels(cache.data.storeLabels || {})
@@ -81,6 +87,7 @@ export function useStoreList() {
           return
         }
         setStores([])
+        setAllStores([])
         setUsers({})
         setStaffByStore({})
         setStoreLabels({})
@@ -101,6 +108,7 @@ export function useStoreList() {
 
   return {
     stores,
+    allStores,
     users,
     staffByStore,
     storeLabels,

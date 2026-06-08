@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { dedupeStoreCodesForPicker } from '@/lib/erp-store-list-grab-enrich'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
 
@@ -27,8 +28,10 @@ async function mergeErpStoreCodesIntoSet(posSet: Set<string>): Promise<void> {
   }
 }
 
-function finalizePosOptions(posSet: Set<string>): string[] {
-  return filterPosSalesStoreOptionsForManagement(Array.from(posSet)).sort()
+async function finalizePosOptions(posSet: Set<string>): Promise<string[]> {
+  const masters = await fetchErpStoresMaster()
+  const deduped = dedupeStoreCodesForPicker(Array.from(posSet), masters)
+  return filterPosSalesStoreOptionsForManagement(deduped).sort()
 }
 
 export async function GET(request: NextRequest) {
@@ -59,7 +62,7 @@ export async function GET(request: NextRequest) {
         if (p) posSet.add(p)
       }
       await mergeErpStoreCodesIntoSet(posSet)
-      const posOptions = finalizePosOptions(posSet)
+      const posOptions = await finalizePosOptions(posSet)
       return NextResponse.json({ posOptions, source: 'rpc' as const }, { headers })
     } catch (_rpcErr) {
       const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
@@ -77,7 +80,7 @@ export async function GET(request: NextRequest) {
         if (p) posSet.add(p)
       }
       await mergeErpStoreCodesIntoSet(posSet)
-      const posOptions = finalizePosOptions(posSet)
+      const posOptions = await finalizePosOptions(posSet)
       if (rowsRaw.length >= POS_SALES_FILTER_OPTIONS_SCAN_MAX_ROWS) headers.set('X-Sales-Truncated', '1')
 
       return NextResponse.json({ posOptions, source: 'select' as const }, { headers })

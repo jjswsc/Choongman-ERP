@@ -56,6 +56,7 @@ function isErpWarmGetApi(pathname: string): boolean {
     pathname.startsWith("/api/getPosSalesByPeriod") ||
     pathname.startsWith("/api/getPosSalesByDeliveryApp") ||
     pathname.startsWith("/api/getPosSalesByPayment") ||
+    pathname.startsWith("/api/posSalesByPaymentBreakdown") ||
     pathname.startsWith("/api/getPosSalesByStore")
   )
 }

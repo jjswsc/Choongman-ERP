@@ -17,6 +17,8 @@ const CACHE_KEYS = {
 
 export interface StoreListData {
   stores: string[]
+  /** POS 터미널·본사 시연용 — test/HQ/Office 제외 전 dedupe 목록 */
+  allStores?: string[]
   users: Record<string, string[]>
   staffByStore?: Record<string, { name: string; nick: string; job?: string; role?: string }[]>
   /** erp_stores 사용 시 code → 표시명 */
@@ -29,6 +31,7 @@ export interface StoreListData {
 export async function getStoreListWithCache(): Promise<StoreListData> {
   const fallback: StoreListData = {
     stores: [],
+    allStores: [],
     users: {},
     staffByStore: {},
     storeLabels: {},

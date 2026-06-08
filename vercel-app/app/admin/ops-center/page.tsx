@@ -8,7 +8,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useStoreList } from "@/lib/api-client"
-import { useStoreView, filterNonOfficeStores } from "@/lib/store-view-context"
+import { useStoreView, filterOperationalStorePickerOptions } from "@/lib/store-view-context"
 import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { Button } from "@/components/ui/button"
@@ -50,7 +50,7 @@ export default function AdminOpsCenterPage() {
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""))
 
-  const branchStores = React.useMemo(() => filterNonOfficeStores(stores), [stores])
+  const branchStores = React.useMemo(() => filterOperationalStorePickerOptions(stores), [stores])
 
   /** 운영 KPI·경보는 매장 단일만 — 전역「전체 매장」과 분리해 이 화면에서만 지점 선택 */
   const [opsStoreCode, setOpsStoreCode] = React.useState("")

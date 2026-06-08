@@ -48,7 +48,6 @@ import {
   resolvePosBusinessOpenSettleDates,
 } from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
-import { shouldPreferOfflineCache } from '@/lib/offline/network'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
 import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
@@ -63,7 +62,7 @@ import {
   isManagerRole,
   isFranchiseeRole,
 } from '@/lib/permissions'
-import { filterNonOfficeStores } from '@/lib/store-view-context'
+import { filterOperationalStorePickerOptions } from '@/lib/store-view-context'
 import { cn, escapeHtml, formatBahtNum } from '@/lib/utils'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
@@ -827,7 +826,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setStoreFilter(authStoreMatched)
         return
       }
-      const branches = filterNonOfficeStores(stores)
+      const branches = filterOperationalStorePickerOptions(stores)
       const first = branches[0] || stores[0]
       if (first) setStoreFilter(first)
       return

@@ -9,7 +9,7 @@ import { resolveStoreListKey } from '@/lib/store-list-keys'
 /** POS 단말에서 `getPosBusinessDateStr()`이 서버 설정과 맞도록 주입 (로그인 매장 기준) */
 export function PosBusinessDayHydrate() {
   const { auth } = useAuth()
-  const { stores: storeCodes, legacyToCanonical } = useStoreList()
+  const { allStores: storeCodes, legacyToCanonical } = useStoreList()
 
   const storeForQuery = useMemo(() => {
     const raw = String(auth?.store || '').trim()

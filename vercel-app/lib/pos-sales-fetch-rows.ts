@@ -35,7 +35,7 @@ export const POS_SALES_DELIVERY_ROW_SELECT =
   `${POS_SALES_ORDER_ROW_SELECT},delivery_app_code,items_json`
 
 export const POS_SALES_PAYMENT_ROW_SELECT =
-  `${POS_SALES_ORDER_ROW_SELECT},payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel`
+  `${POS_SALES_ORDER_ROW_SELECT},id,linkpos_response_code,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,items_json`
 
 /** 단일 select 상한(레거시). 실제 조회는 페이지 반복으로 수집 */
 export const POS_SALES_BY_STORE_FETCH_LIMIT = 50_000

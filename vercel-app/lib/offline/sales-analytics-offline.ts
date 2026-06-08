@@ -12,6 +12,8 @@ import {
   getPosSalesByChannel,
   getPosSalesByMenu,
   getPosSalesByPayment,
+  getPosSalesByPaymentBreakdown,
+  type PosSalesPaymentBreakdown,
   getPosSalesByStore,
   type PosSalesByPeriodResult,
   type PosSalesPeriodRow,
@@ -216,6 +218,40 @@ export async function getPosSalesByPaymentWithCache(params: {
     { paymentKey: string; sales: number }[]
   >('pos_sales_cache', key)
   return cached ?? []
+}
+
+export async function getPosSalesByPaymentBreakdownWithCache(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+}): Promise<PosSalesPaymentBreakdown> {
+  const empty: PosSalesPaymentBreakdown = {
+    deliveryByChannel: [],
+    deliveryTotal: 0,
+    creditByChannel: [],
+    creditTotal: 0,
+    summary: [],
+  }
+  const key = cacheKeyAnalytics('payment_breakdown', {
+    ...params,
+    pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
+    orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
+  })
+  if (isOnline()) {
+    try {
+      const data = await getPosSalesByPaymentBreakdown(params)
+      await setCache('pos_sales_cache', key, data)
+      return data
+    } catch {
+      const cached = await getFromCache<PosSalesPaymentBreakdown>('pos_sales_cache', key)
+      return cached ?? empty
+    }
+  }
+  const cached = await getFromCache<PosSalesPaymentBreakdown>('pos_sales_cache', key)
+  return cached ?? empty
 }
 
 export async function getPosSalesByStoreWithCache(params: {
