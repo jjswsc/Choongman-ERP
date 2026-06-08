@@ -372,6 +372,7 @@ export function resolveChickenMultistepMatch(params: {
   const { menu, plan, selections } = params
   return resolvePosOptionPickerMatch({
     menuCode: menu.code,
+    optionSelectionGroups: menu.optionSelectionGroups,
     groups: plan.activeStepGroups,
     selections,
     optionsWithSteps: plan.optsWithStepsToShow,

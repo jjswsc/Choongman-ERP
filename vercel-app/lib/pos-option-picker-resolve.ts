@@ -1,4 +1,5 @@
-import type { PosMenuOption } from "@/lib/api-client"
+import type { PosMenu, PosMenuOption } from "@/lib/api-client"
+import { composePosCartOptionBracketFromPickerRows } from "@/lib/pos-cart-option-display-name"
 import {
   collectPosOptionPickerStepValues,
   inferChickenOptionPartValue,
@@ -28,6 +29,8 @@ function stepValueForMatch(
  */
 export function resolvePosOptionPickerMatch(params: {
   menuCode: string | undefined
+  /** resolvePosCartOptionDisplayName용 — 없으면 groups 사용 */
+  optionSelectionGroups?: string[]
   groups: string[]
   selections: Record<string, string | undefined>
   optionsWithSteps: PosMenuOption[]
@@ -35,6 +38,10 @@ export function resolvePosOptionPickerMatch(params: {
   groupConfigByKey: Map<string, { required?: boolean } | undefined>
 }): PosMenuOption | null {
   const { menuCode, groups, selections, optionsWithSteps, allOptions, groupConfigByKey } = params
+  const menuForDisplay: Pick<PosMenu, 'optionSelectionGroups' | 'code'> = {
+    code: menuCode ?? '',
+    optionSelectionGroups: params.optionSelectionGroups ?? groups,
+  }
 
   const full = optionsWithSteps.find((o) =>
     posOptionRowMatchesPickerSelections(o.optionStepValues, groups, selections, groupConfigByKey)
@@ -71,7 +78,7 @@ export function resolvePosOptionPickerMatch(params: {
   for (const g of requiredGroups) {
     stepValues[g] = String(selections[g] ?? "").trim()
   }
-  const name = requiredGroups.map((g) => stepValues[g]).join(" - ")
+  const name = composePosCartOptionBracketFromPickerRows(menuForDisplay, perGroup)
   const priceModifier = perGroup.reduce((s, o) => s + (Number(o.priceModifier) || 0), 0)
   const priceModifierDelivery = perGroup.some((o) => o.priceModifierDelivery != null)
     ? perGroup.reduce((s, o) => s + (Number(o.priceModifierDelivery ?? o.priceModifier) || 0), 0)

@@ -1,4 +1,9 @@
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
+import {
+  inferChickenOptionPartValue,
+  inferChickenOptionSizeValue,
+  isChickenMenuCodeForOptions,
+} from '@/lib/pos-chicken-option-inference'
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -18,26 +23,63 @@ export function optionStepValueAppearsAsTokenInDisplay(raw: string, value: strin
 }
 
 /**
- * 장바구니·영수증 괄호 안에 넣을 옵션 표시명.
- * `option_step_values`에 사이즈가 있는데 `name`에만 부위가 있는 레거시 행에서 사이즈가 빠지지 않게 한다.
+ * 옵션 피커에서 고른 행들의 표시명을 장바구니 괄호·인쇄용 문자열로 합친다.
+ * (다단계 part+sidedish 등 — 단계 값 Boneless 대신 행 name M - Boneless 사용)
  */
-export function resolvePosCartOptionDisplayName(menu: PosMenu, opt: PosMenuOption): string {
+export function composePosCartOptionBracketFromPickerRows(
+  menu: Pick<PosMenu, 'optionSelectionGroups' | 'code'>,
+  rows: PosMenuOption[]
+): string {
+  const labels: string[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const label = resolvePosCartOptionDisplayName(menu, row)
+    if (!label) continue
+    const key = label.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    labels.push(label)
+  }
+  return labels.join(' - ')
+}
+
+/**
+ * 장바구니·영수증 괄호 안에 넣을 옵션 표시명.
+ * POS 옵션 버튼(translateChickenPartLabel)과 동일 소스 — 인쇄 시 translatePosMenuLineForReceipt 적용.
+ */
+export function resolvePosCartOptionDisplayName(
+  menu: Pick<PosMenu, 'optionSelectionGroups' | 'code'>,
+  opt: PosMenuOption
+): string {
   const raw = String(opt.name ?? '').trim()
   const groups = (menu.optionSelectionGroups ?? []).map((g) => String(g ?? '').trim()).filter(Boolean)
   const step =
     opt.optionStepValues && typeof opt.optionStepValues === 'object' && !Array.isArray(opt.optionStepValues)
       ? opt.optionStepValues
       : null
-  if (!step || groups.length === 0) return raw
 
-  const orderedVals = groups.map((g) => String(step[g] ?? '').trim()).filter((s) => s !== '')
-  const composed = orderedVals.join(' - ')
-  if (!composed) return raw
-
-  const sizeKey = groups.find((g) => g.toLowerCase() === 'size')
-  const sizeVal = sizeKey ? String(step[sizeKey] ?? '').trim() : ''
-  if (sizeVal && !optionStepValueAppearsAsTokenInDisplay(raw, sizeVal)) {
-    return composed
+  let resolved = raw
+  if (step && groups.length > 0) {
+    const orderedVals = groups.map((g) => String(step[g] ?? '').trim()).filter((s) => s !== '')
+    const composed = orderedVals.join(' - ')
+    if (composed) {
+      const sizeKey = groups.find((g) => g.toLowerCase() === 'size')
+      const sizeVal = sizeKey ? String(step[sizeKey] ?? '').trim() : ''
+      if (sizeVal && !optionStepValueAppearsAsTokenInDisplay(raw, sizeVal)) {
+        resolved = composed
+      } else {
+        resolved = raw || composed
+      }
+    }
   }
-  return raw || composed
+
+  if (isChickenMenuCodeForOptions(menu.code)) {
+    const size = inferChickenOptionSizeValue(opt)
+    const part = inferChickenOptionPartValue(opt)
+    if (size && part && !optionStepValueAppearsAsTokenInDisplay(resolved, size)) {
+      return `${size} - ${part}`
+    }
+  }
+
+  return resolved
 }

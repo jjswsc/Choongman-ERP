@@ -119,7 +119,7 @@ export function mergeBarBqSizeAndAncillaryForCart(
   const nameParts = [sizePart ?? (sizeOpt ? null : 'S Boneless'), sidePart].filter(
     (x): x is string => !!x
   )
-  const mergedName = nameParts.join(' / ') || String(ancillaryOpt.name ?? '').trim()
+  const mergedName = nameParts.join(' - ') || String(ancillaryOpt.name ?? '').trim()
   const baseId = sizeOpt?.id ?? 's-default'
   return {
     ...ancillaryOpt,

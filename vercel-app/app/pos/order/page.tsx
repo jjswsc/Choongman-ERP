@@ -2884,6 +2884,7 @@ export default function PosOrderPage() {
                 if (optionPickerStep >= activeStepGroups.length - 1) {
                   const match = resolvePosOptionPickerMatch({
                     menuCode: optionPickerMenu.code,
+                    optionSelectionGroups: optionPickerMenu.optionSelectionGroups,
                     groups: activeStepGroups,
                     selections: nextSelections,
                     optionsWithSteps: optsWithStepsToShow,
@@ -3002,6 +3003,7 @@ export default function PosOrderPage() {
                         if (optionPickerStep >= activeStepGroups.length - 1) {
                           const match = resolvePosOptionPickerMatch({
                             menuCode: optionPickerMenu.code,
+                            optionSelectionGroups: optionPickerMenu.optionSelectionGroups,
                             groups: activeStepGroups,
                             selections: nextSelections,
                             optionsWithSteps: optsWithStepsToShow,
