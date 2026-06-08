@@ -34,9 +34,9 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 import {
-  isPosOfflineBootV2Enabled,
-  persistOfflineBootV2FromQuery,
-} from "@/lib/pos-offline-boot-v2"
+  isPosOfflinePhaseAEnabled,
+  persistOfflinePilotFromQuery,
+} from "@/lib/pos-offline-pilot"
 import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { labelForStore } from "@/lib/store-list-keys"
 import {
@@ -367,7 +367,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [])
 
   useEffect(() => {
-    persistOfflineBootV2FromQuery(searchParams)
+    persistOfflinePilotFromQuery(searchParams)
   }, [searchParams])
 
   const clearFormError = useCallback(() => {
@@ -416,8 +416,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (typeof navigator !== "undefined" && !isBrowserOnline()) {
         await runReachabilityProbe()
       }
-      const bootV2 = isPosOfflineBootV2Enabled()
       const loginSnapshot = loadOfflineResumeAuth()
+      const bootV2 = isPosOfflinePhaseAEnabled(loginSnapshot?.store)
       const hybridFastBoot =
         bootV2 &&
         typeof window !== "undefined" &&
@@ -811,7 +811,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   /** Phase A — 로딩 중에도 스냅샷 있으면 오프라인 진입 버튼 우선 표시 */
   const showOfflineEntryDuringLoad =
-    isPosOfflineBootV2Enabled() && loading && offlineOnlyScreen
+    isPosOfflinePhaseAEnabled(effectiveOfflineResume?.store) && loading && offlineOnlyScreen
 
   /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 */
   const showServerUnreachableBanner =

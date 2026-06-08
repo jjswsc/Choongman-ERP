@@ -585,6 +585,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       storeCode: store || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
       posBizDayScope: true,
+      pollMinimal: true,
       orderBy: 'updated_at.desc' as const,
     }
     fetcher(params)

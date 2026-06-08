@@ -8,8 +8,6 @@ import { isOfficeRole } from '@/lib/permissions'
 import { filterPosTerminalStoreOptions } from '@/lib/pos-sales-test-office'
 import {
   getPosTableLayout,
-  getGrabStoreIntegrations,
-  type GrabStoreIntegrationSnapshot,
   type PosTableItem,
   type PosOrder,
   type PosOrderItem,
@@ -523,122 +521,75 @@ export function usePosStore() {
   const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
   const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
-  const [grabIntegrations, setGrabIntegrations] = useState<GrabStoreIntegrationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     layoutByStoreIdRef.current = layoutByStoreId
   }, [layoutByStoreId])
 
-  useEffect(() => {
-    let cancelled = false
-    getGrabStoreIntegrations({ status: 'ACTIVE', limit: 500 })
-      .then((rows) => {
-        if (cancelled) return
-        setGrabIntegrations(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => {
-        if (cancelled) return
-        setGrabIntegrations([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const fetchStoreSnapshot = useCallback(async (storeCode: string, businessDate: string): Promise<StoreSnapshot> => {
-    const candidates = new Set<string>()
-    const primary = String(storeCode || '').trim()
-    if (primary) candidates.add(primary)
-    const directCanonical = String(legacyToCanonical[primary.toLowerCase()] || '').trim()
-    if (directCanonical) candidates.add(directCanonical)
-    for (const [legacyRaw, canonicalRaw] of Object.entries(legacyToCanonical || {})) {
-      const legacy = String(legacyRaw || '').trim()
-      const canonical = String(canonicalRaw || '').trim()
-      if (!legacy || !canonical) continue
-      if (canonical.toLowerCase() === primary.toLowerCase()) candidates.add(legacy)
-    }
-    const storeCandidates = Array.from(candidates).filter(Boolean)
-    const currentVariantKeys = new Set(storeCandidates.map((c) => String(c).trim().toLowerCase()).filter(Boolean))
-    for (const row of grabIntegrations || []) {
-      const status = String(row.integrationStatus || '').trim().toLowerCase()
-      if (status && status !== 'active') continue
-      const partner = String(row.partnerMerchantID || '').trim()
-      const grab = String(row.grabMerchantID || '').trim()
-      if (!partner || !grab) continue
-      const partnerKey = partner.toLowerCase()
-      const grabKey = grab.toLowerCase()
-      if (currentVariantKeys.has(partnerKey)) {
-        if (!currentVariantKeys.has(grabKey)) {
-          currentVariantKeys.add(grabKey)
-          storeCandidates.push(grab)
-        }
-      } else if (currentVariantKeys.has(grabKey)) {
-        if (!currentVariantKeys.has(partnerKey)) {
-          currentVariantKeys.add(partnerKey)
-          storeCandidates.push(partner)
-        }
-      }
-    }
-    const snapshotTimeoutMs = shouldPreferOfflineCache() ? 2800 : 12000
-    const cachedLayoutFallback = layoutByStoreIdRef.current[storeCode] || []
-    const [layoutRes, orderLists] = await Promise.all([
-      withPosSnapshotTimeout(
-        getPosTableLayout({ storeCode }).catch(() => ({ layout: cachedLayoutFallback, storeCode })),
-        snapshotTimeoutMs,
-        { layout: cachedLayoutFallback, storeCode }
-      ),
-      withPosSnapshotTimeout(
-        Promise.all(
-          (storeCandidates.length ? storeCandidates : [storeCode]).map((sc) =>
-            getPosOrdersWithCache({
-              storeCode: sc,
-              startStr: businessDate,
-              endStr: businessDate,
-              posBizDayScope: true,
-              pollMinimal: true,
-              limit: 1000,
-            }).catch(() => [])
-          )
+  const fetchStoreSnapshot = useCallback(
+    async (
+      storeCode: string,
+      businessDate: string,
+      options?: { layoutFromCacheOnly?: boolean }
+    ): Promise<StoreSnapshot> => {
+      const primary = String(storeCode || '').trim()
+      const snapshotTimeoutMs = shouldPreferOfflineCache() ? 2800 : 12000
+      const cachedLayoutFallback = layoutByStoreIdRef.current[storeCode] || []
+      const layoutPromise =
+        options?.layoutFromCacheOnly && cachedLayoutFallback.length > 0
+          ? Promise.resolve({ layout: cachedLayoutFallback, storeCode: primary })
+          : withPosSnapshotTimeout(
+              getPosTableLayout({ storeCode: primary }).catch(() => ({
+                layout: cachedLayoutFallback,
+                storeCode: primary,
+              })),
+              snapshotTimeoutMs,
+              { layout: cachedLayoutFallback, storeCode: primary }
+            )
+      const [layoutRes, ordersRes] = await Promise.all([
+        layoutPromise,
+        withPosSnapshotTimeout(
+          getPosOrdersWithCache({
+            storeCode: primary,
+            startStr: businessDate,
+            endStr: businessDate,
+            posBizDayScope: true,
+            pollMinimal: true,
+            limit: 1000,
+          }).catch(() => []),
+          snapshotTimeoutMs,
+          []
         ),
-        snapshotTimeoutMs,
-        []
-      ),
-    ])
-    const mergedOrdersById = new Map<number, PosOrder>()
-    for (const rows of orderLists || []) {
-      for (const row of rows || []) {
-        const id = Number(row.id || 0)
-        if (id > 0) mergedOrdersById.set(id, row)
+      ])
+      const fetchedLayout = layoutRes.layout || []
+      const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
+      const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
+      const activeOrders = (ordersRes || []).filter(
+        (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
+      )
+      const dineInOrders = activeOrders.filter(
+        (o) =>
+          isDineInOrderForTableDisplay(o.orderType, o.dbOrderType) &&
+          (o.tableName ?? '').trim() !== '' &&
+          !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
+      )
+      const tables = layoutToTables(layout, dineInOrders)
+      return {
+        storeCode,
+        store: {
+          id: storeCode,
+          name: storeCode,
+          gridCols: DEFAULT_GRID_COLS,
+          gridRows: DEFAULT_GRID_ROWS,
+          tables,
+        },
+        layout,
+        activeOrders,
       }
-    }
-    const ordersRes = Array.from(mergedOrdersById.values())
-    const fetchedLayout = layoutRes.layout || []
-    const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
-    const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
-    const activeOrders = (ordersRes || []).filter(
-      (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
-    )
-    const dineInOrders = activeOrders.filter(
-      (o) =>
-        isDineInOrderForTableDisplay(o.orderType, o.dbOrderType) &&
-        (o.tableName ?? '').trim() !== '' &&
-        !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
-    )
-    const tables = layoutToTables(layout, dineInOrders)
-    return {
-      storeCode,
-      store: {
-        id: storeCode,
-        name: storeCode,
-        gridCols: DEFAULT_GRID_COLS,
-        gridRows: DEFAULT_GRID_ROWS,
-        tables,
-      },
-      layout,
-      activeOrders,
-    }
-  }, [legacyToCanonical, grabIntegrations])
+    },
+    []
+  )
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {
@@ -807,7 +758,11 @@ export function usePosStore() {
       setLoading(true)
     }
     const businessDate = getPosBusinessDateStr()
-    return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
+    return Promise.all(
+      targetStoreCodes.map((storeCode) =>
+        fetchStoreSnapshot(storeCode, businessDate, { layoutFromCacheOnly: backgroundRefresh })
+      )
+    )
       .then((results) => {
         const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
         const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))

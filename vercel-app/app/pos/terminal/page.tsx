@@ -232,6 +232,7 @@ import {
 import {
   isMainPosRealtimeRecentlyActive,
   resolveMainPosPollIntervalMs,
+  shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
 import {
   applyGrabCancelWatchRealtimeRow,
@@ -5522,6 +5523,15 @@ export default function PosTerminalPage() {
       try {
         const runPaymentReceiptScan = async () => {
           if (!autoPrintReceiptOnPayment) return
+          if (
+            paymentReceiptScanSeededRef.current &&
+            !shouldUseMainPosHeavyOrderScanFallback({
+              realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+              lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
+            })
+          ) {
+            return
+          }
           try {
             const paidLikeRows = await getPosOrders({
               startStr: today,
@@ -5857,8 +5867,13 @@ export default function PosTerminalPage() {
           nowMs - lastRealtimeOrderEventAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS
         if (shouldRunMetaScan) {
           lastMetaScanAtRef.current = nowMs
-          try {
-            const watchOrders = await getPosOrders({
+          const needHeavyMetaScan = shouldUseMainPosHeavyOrderScanFallback({
+            realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+            lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
+          })
+          if (needHeavyMetaScan) {
+            try {
+              const watchOrders = await getPosOrders({
               startStr: today,
               endStr: today,
               posBizDayScope: true,
@@ -6042,6 +6057,7 @@ export default function PosTerminalPage() {
             }
           } catch {
             /* grab cancel watch */
+          }
           }
         }
 

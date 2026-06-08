@@ -9,6 +9,8 @@
   "postHtmlPrintSpoolFlushMs": 600,
   "printHtmlQueueGapMs": 120,
   "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
+  "_comment_offlinePilot": "Office 오프라인 Phase B 파일럿 — cold start 시 ?offlinePhaseB=1 전달. 값: office",
+  "offlinePilot": "",
   "print": {
     "silent": true,
     "deviceName": "",

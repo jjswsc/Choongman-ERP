@@ -735,13 +735,21 @@ function posUrlLoadOptions(preferFresh) {
   return {};
 }
 
-/** Phase A — 오프라인·캐시 부팅 시 로그인 화면 v2 플래그(?offlineBootV2=1) 전달 */
+/** Phase A/B — 오프라인·캐시 부팅 시 로그인 URL에 파일럿 쿼리 전달 */
+function isOfflinePilotOfficeFromConfig() {
+  const p = String(runtimeConfig.offlinePilot || process.env.WINDOWS_POS_OFFLINE_PILOT || "").trim().toLowerCase();
+  return p === "office" || p === "1" || p === "true";
+}
+
 function resolvePosLoadUrl(preferFresh) {
   const useBootV2 = !preferFresh || !isSystemOnline();
   if (!useBootV2) return POS_URL;
   try {
     const u = new URL(POS_URL);
     u.searchParams.set("offlineBootV2", "1");
+    if (isOfflinePilotOfficeFromConfig() || process.env.WINDOWS_POS_OFFLINE_PHASE_B === "1") {
+      u.searchParams.set("offlinePhaseB", "1");
+    }
     return u.toString();
   } catch {
     return POS_URL;

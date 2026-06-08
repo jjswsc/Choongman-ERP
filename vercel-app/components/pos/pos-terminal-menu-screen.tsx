@@ -70,38 +70,14 @@ import {
 } from '@/lib/pos-menu-display-description'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
+import { resolveChickenDefaultOptionDisplayName } from '@/lib/pos-chicken-option-inference'
 import {
-  filterFlatChickenMListOptions,
-  isChickenSizeOnlyOptionName,
-  resolveChickenDefaultOptionDisplayName,
-  shouldUseFlatChickenMOptionPicker,
-  shouldUseChickenMultistepPriceList,
-  collectChickenMultistepPriceListRows,
-  computeChickenMultistepRowPrice,
-} from '@/lib/pos-chicken-option-inference'
-import {
-  filterPosOptionsForBarBqFlatMList,
-  getBarBqAncillarySelectionGroups,
-  isBarBqChickenMenu,
-  mergeBarBqSizeAndAncillaryForCart,
-  pickBarBqSizePhaseOptions,
-  shouldUseBarBqTwoPhaseOptionPicker,
-  shouldUseFlatBarBqChickenOptionPicker,
-} from '@/lib/pos-barbq-option-picker-ui'
+  shouldInitChickenTwoPhaseOnMenuOpen,
+  resolveChickenOptionPickerStepTitleSuffix,
+} from '@/lib/pos-chicken-option-picker-plan'
+import { PosChickenOptionPickerPanel } from '@/components/pos/pos-chicken-option-picker-panel'
 import { resolvePosMenuImageUrlPayloadForSave } from '@/lib/pos-menu-image-storage-path'
-import {
-  collectPosOptionPickerStepValues,
-  resolvePosOptionPickerMatch,
-} from '@/lib/pos-option-picker-resolve'
-import {
-  filterOptionSelectionGroupsForAudience,
-  filterPosOptionsForVisibleGroups,
-  inferOptionSelectionGroupsFromOptions,
-  resolveStepAudienceFromOrderType,
-} from '@/lib/pos-option-selection-groups'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
-
-const isChickenHiddenSizeOption = isChickenSizeOnlyOptionName
 
 export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
 
@@ -353,25 +329,7 @@ export function PosTerminalMenuScreen({
       return
     }
     const opts = allOptions.filter((o) => String(o.menuId) === String(optionPickerMenu.id))
-    const cfg = new Map(
-      (optionPickerMenu.optionSelectionConfig || [])
-        .map((c) => [String(c?.key ?? '').trim(), c] as const)
-        .filter(([k]) => !!k)
-    )
-    const aud = resolveStepAudienceFromOrderType(orderType)
-    const g = filterOptionSelectionGroupsForAudience(
-      optionPickerMenu.optionSelectionGroups || [],
-      cfg,
-      aud
-    )
-    const ancillary = getBarBqAncillarySelectionGroups(g)
-    if (
-      shouldUseBarBqTwoPhaseOptionPicker({
-        menu: optionPickerMenu,
-        options: opts,
-        ancillaryGroups: ancillary,
-      })
-    ) {
+    if (shouldInitChickenTwoPhaseOnMenuOpen({ menu: optionPickerMenu, options: opts, orderType })) {
       setBarBqPickerPhase('size')
       setBarBqPendingSizeOpt(null)
       setOptionPickerStep(0)
@@ -1576,25 +1534,14 @@ export function PosTerminalMenuScreen({
           <DialogHeader>
             <DialogTitle>
               {optionPickerMenu?.name} — {t('posSelectOption') || '옵션 선택'}
-              {(() => {
-                if (!optionPickerMenu) return ''
-                const cfg = new Map(
-                  (optionPickerMenu.optionSelectionConfig || [])
-                    .map((c) => [String(c?.key ?? '').trim(), c] as const)
-                    .filter(([k]) => !!k)
-                )
-                const aud = resolveStepAudienceFromOrderType(orderType)
-                const allG = filterOptionSelectionGroupsForAudience(
-                  optionPickerMenu.optionSelectionGroups || [],
-                  cfg,
-                  aud
-                )
-                const stepG =
-                  barBqPickerPhase === 'ancillary'
-                    ? getBarBqAncillarySelectionGroups(allG)
-                    : allG
-                return stepG.length ? ` (${(optionPickerStep || 0) + 1}/${stepG.length})` : ''
-              })()}
+              {optionPickerMenu
+                ? resolveChickenOptionPickerStepTitleSuffix({
+                    menu: optionPickerMenu,
+                    orderType,
+                    twoPhasePhase: barBqPickerPhase,
+                    optionPickerStep,
+                  })
+                : ''}
             </DialogTitle>
             {showMenuDescriptions && optionPickerMenu
               ? (() => {
@@ -1700,434 +1647,34 @@ export function PosTerminalMenuScreen({
               )
             }
             const opts = optionsByMenuId[optionPickerMenu.id] || []
-            const isChickenBase =
-              (optionPickerMenu.categoryMain ?? '') === 'Chicken' ||
-              optionPickerMenu.code?.trim().toLowerCase().startsWith('c')
-            const groupConfigMap = new Map(
-              (optionPickerMenu.optionSelectionConfig || [])
-                .map((cfg) => [String(cfg?.key ?? '').trim(), cfg] as const)
-                .filter(([k]) => !!k)
-            )
-            const stepAudience = resolveStepAudienceFromOrderType(orderType)
-            const fallbackGroups = inferOptionSelectionGroupsFromOptions(opts, optionPickerMenu.code)
-            const configuredGroups =
-              (optionPickerMenu.optionSelectionGroups || []).length > 0
-                ? optionPickerMenu.optionSelectionGroups || []
-                : fallbackGroups
-            const groups = filterOptionSelectionGroupsForAudience(
-              configuredGroups,
-              groupConfigMap,
-              stepAudience
-            )
-            const ancillaryGroups = getBarBqAncillarySelectionGroups(groups)
-            const useBarBqTwoPhase = shouldUseBarBqTwoPhaseOptionPicker({
-              menu: optionPickerMenu,
-              options: opts,
-              ancillaryGroups,
-            })
-            const barBqInSizePhase = useBarBqTwoPhase && barBqPickerPhase !== 'ancillary'
-            const activeStepGroups =
-              useBarBqTwoPhase && barBqPickerPhase === 'ancillary' ? ancillaryGroups : groups
-            const visibleGroupKeys = new Set(activeStepGroups)
-            const optsFilteredByGroup = filterPosOptionsForVisibleGroups(opts, visibleGroupKeys)
-            const optsToShow = isChickenBase
-              ? optsFilteredByGroup.filter((o) => !isChickenHiddenSizeOption(o.name))
-              : optsFilteredByGroup
-            const optsWithSteps = opts.filter(
-              (o) =>
-                o.optionType === 'substitution' &&
-                o.optionStepValues &&
-                Object.keys(o.optionStepValues).length > 0
-            )
-            const optsWithStepsToShow = isChickenBase
-              ? optsWithSteps.filter((o) => !isChickenHiddenSizeOption(o.name))
-              : optsWithSteps
-            const useFlatBarBqLegacy = shouldUseFlatBarBqChickenOptionPicker({
-              menu: optionPickerMenu,
-              options: opts,
-            })
-            const useFlatChickenMList =
-              isChickenBase &&
-              shouldUseFlatChickenMOptionPicker({
-                menuCode: optionPickerMenu.code,
-                groups: activeStepGroups,
-                options: opts,
-                optionsWithSteps: optsWithStepsToShow,
-              })
-            const useMultiStep =
-              activeStepGroups.length > 0 &&
-              optsWithStepsToShow.length > 0 &&
-              !useFlatBarBqLegacy &&
-              !useFlatChickenMList &&
-              !barBqInSizePhase
-            const barBqFlatSource = pickBarBqSizePhaseOptions({
-              useBarBqTwoPhase,
-              phase: barBqInSizePhase ? 'size' : barBqPickerPhase,
-              optionsRaw: (isChickenBase ? opts.filter((o) => !isChickenHiddenSizeOption(o.name)) : opts).filter(
-                (o) => o.optionType === 'substitution'
-              ),
-              optionsFiltered: optsToShow.filter((o) => o.optionType === 'substitution'),
-            })
-            const flatBarBqOpts = isBarBqChickenMenu(optionPickerMenu)
-              ? filterPosOptionsForBarBqFlatMList(barBqFlatSource)
-              : optsToShow
-            const flatChickenMOpts = useFlatChickenMList
-              ? filterFlatChickenMListOptions(
-                  optsToShow.filter((o) => o.optionType === 'substitution')
-                )
-              : optsToShow
-            const beginBarBqAncillaryPhase = (sizeOpt: PosMenuOption | null) => {
-              setBarBqPendingSizeOpt(sizeOpt)
-              setBarBqPickerPhase('ancillary')
-              setOptionPickerStep(0)
-              setOptionPickerSelections({})
-            }
-            const completeBarBqAncillaryPick = (ancillaryMatch: PosMenuOption | null) => {
-              const sizeOpt = barBqPendingSizeOpt
-              const hallMod =
-                (sizeOpt ? getOptionModifier(sizeOpt) : 0) +
-                (ancillaryMatch ? getOptionModifier(ancillaryMatch) : 0)
-              const delMod =
-                sizeOpt?.priceModifierDelivery != null || ancillaryMatch?.priceModifierDelivery != null
-                  ? (sizeOpt?.priceModifierDelivery != null
-                      ? Number(sizeOpt.priceModifierDelivery)
-                      : Number(sizeOpt?.priceModifier ?? 0)) +
-                    (ancillaryMatch?.priceModifierDelivery != null
-                      ? Number(ancillaryMatch.priceModifierDelivery)
-                      : ancillaryMatch
-                        ? Number(ancillaryMatch.priceModifier ?? 0)
-                        : 0)
-                  : null
-              const merged = mergeBarBqSizeAndAncillaryForCart(sizeOpt, ancillaryMatch, {
-                hallModifier: hallMod,
-                deliveryModifier: delMod,
-                sizeLabel: sizeOpt ? resolvePosCartOptionDisplayName(optionPickerMenu, sizeOpt) : null,
-                ancillaryLabel: ancillaryMatch
-                  ? resolvePosCartOptionDisplayName(optionPickerMenu, ancillaryMatch)
-                  : null,
-              })
-              if (merged) void addWithOption(optionPickerMenu, merged)
-              else if (sizeOpt) void addWithOption(optionPickerMenu, sizeOpt)
-              else void addWithOption(optionPickerMenu, null, resolveChickenDefaultOptionDisplayName(opts) || undefined)
-              setBarBqPickerPhase(null)
-              setBarBqPendingSizeOpt(null)
-            }
-            const chickenDefaultDisplay = resolveChickenDefaultOptionDisplayName(opts)
-            const defaultBtn = isChickenBase && chickenDefaultDisplay && (
-              <button
-                type="button"
-                onClick={() =>
-                  fireMenuAction(() => {
-                    if (barBqInSizePhase) {
-                      beginBarBqAncillaryPhase(null)
-                      return
-                    }
-                    void addWithOption(optionPickerMenu, null, chickenDefaultDisplay)
-                  })
-                }
-                className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
-              >
-                <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S Boneless)'}</span>
-                <span className="font-bold text-amber-600">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
-              </button>
-            )
-            if (barBqInSizePhase) {
-              return (
-                <div className="flex flex-col gap-2 py-2">
-                  {defaultBtn}
-                  <p className="text-xs text-muted-foreground">
-                    {t('posBarBqPickSizeFirst') || '1. 사이즈(M) 선택 → 2. 사이드(치킨무·김치 등)'}
-                  </p>
-                  {flatBarBqOpts.map((opt) => {
-                    const optDesc = showMenuDescriptions
-                      ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
-                      : ''
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => fireMenuAction(() => beginBarBqAncillaryPhase(opt))}
-                        className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
-                      >
-                        <span className="min-w-0 flex-1 text-slate-800">
-                          <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
-                          {optDesc ? (
-                            <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
-                              {optDesc}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="shrink-0 font-bold text-emerald-600">
-                          {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )
-            }
-            if (useMultiStep) {
-              const groupKey = activeStepGroups[optionPickerStep]
-              const groupCfg = groupConfigMap.get(groupKey)
-              const groupRequired = groupCfg?.required !== false
-              const values = collectPosOptionPickerStepValues({
-                groupKey,
-                groups: activeStepGroups,
-                menuCode: optionPickerMenu.code,
-                options: opts,
-                optionsWithSteps: optsWithStepsToShow,
-                isChickenMenu: isChickenBase,
-              })
-              // 전매장 데이터 이슈(옵션 단계 키와 option_step_values 불일치) 시
-              // 다단계 값 버튼이 0개가 되어 모달이 빈 화면처럼 보일 수 있다.
-              // 이 경우 단일 옵션 목록으로 폴백해 주문이 막히지 않게 한다.
-              if (values.length === 0) {
-                return (
-                  <div className="flex flex-col gap-2 py-2">
-                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      {t('posOptionStepMismatchFallback') || '옵션 단계 설정이 맞지 않아 일반 옵션 목록으로 표시합니다.'}
-                    </p>
-                    {defaultBtn}
-                    {(useFlatChickenMList ? flatChickenMOpts : optsToShow).length > 0 ? (
-                      (useFlatChickenMList ? flatChickenMOpts : optsToShow).map((opt) => {
-                        const optDesc = showMenuDescriptions
-                          ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
-                          : ''
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, opt) })}
-                            className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
-                          >
-                            <span className="min-w-0 flex-1 text-slate-800">
-                              <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
-                              {optDesc ? (
-                                <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
-                                  {optDesc}
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="shrink-0 font-bold text-emerald-600">
-                              {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
-                            </span>
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <Button
-                        variant="outline"
-                        onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null) })}
-                      >
-                        {t('posAddWithoutOption') || '옵션 없이 담기'}
-                      </Button>
-                    )}
-                  </div>
-                )
-              }
-              const handleStepSelect = (value: string) => {
-                const next = { ...optionPickerSelections, [groupKey]: value }
-                setOptionPickerSelections(next)
-                if (optionPickerStep >= activeStepGroups.length - 1) {
-                  const match = resolvePosOptionPickerMatch({
-                    menuCode: optionPickerMenu.code,
-                    groups: activeStepGroups,
-                    selections: next,
-                    optionsWithSteps: optsWithStepsToShow,
-                    allOptions: opts,
-                    groupConfigByKey: groupConfigMap,
-                  })
-                  if (useBarBqTwoPhase && barBqPickerPhase === 'ancillary') {
-                    completeBarBqAncillaryPick(match)
-                  } else if (match) {
-                    void addWithOption(optionPickerMenu, match)
-                  }
-                } else {
-                  setOptionPickerStep((s) => s + 1)
-                }
-              }
-              const groupLabels: Record<string, string> = {
-                size: t('posOptionGroupSize') || '사이즈',
-                part: t('posOptionGroupPart') || '부위',
-                topping: t('posOptionGroupTopping') || '토핑',
-                bone: t('posOptionGroupBone') || 'Bone / Boneless',
-                type: t('posOptionGroupType') || '타입',
-                set_main: t('posOptionGroupSetMain') || '세트 메인',
-                side: t('posOptionGroupSide') || '사이드',
-                drink: t('posOptionGroupDrink') || '음료',
-                soup: t('posOptionGroupSoup') || '스프',
-                rice: t('posOptionGroupRice') || '밥',
-              }
-              const chickenPriceListRows =
-                isChickenBase && shouldUseChickenMultistepPriceList(isChickenBase, groupKey)
-                  ? collectChickenMultistepPriceListRows({
-                      groupKey,
-                      groups: activeStepGroups,
-                      menuCode: optionPickerMenu.code,
-                      options: opts,
-                      optionsWithSteps: optsWithStepsToShow,
-                    })
-                  : []
-              const useChickenPriceList = chickenPriceListRows.length > 0
-              const showChickenPartSideHint =
-                useChickenPriceList &&
-                groupKey === 'part' &&
-                activeStepGroups.some((g) => g === 'sidedish' || g === 'side')
-              const groupLabelText =
-                (String(groupCfg?.label ?? '').trim() || groupLabels[groupKey] || groupKey) +
-                (groupRequired ? '' : ` (${t('optional') || '선택'})`)
-              return (
-                <div className="flex flex-col gap-3 py-2">
-                  {groupKey !== 'sidedish' && groupKey !== 'side' ? defaultBtn : null}
-                  {showChickenPartSideHint ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t('posBarBqPickSizeFirst') || '1. 사이즈(M) 선택 → 2. 사이드(치킨무·김치 등)'}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">{groupLabelText}</p>
-                  )}
-                  {useChickenPriceList ? (
-                    <div className="flex flex-col gap-2">
-                      {chickenPriceListRows.map(({ stepValue, option: opt }) => {
-                        const optDesc = showMenuDescriptions
-                          ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
-                          : ''
-                        const rowPrice = computeChickenMultistepRowPrice({
-                          menuBasePrice: getMenuPrice(optionPickerMenu),
-                          groupKey,
-                          option: opt,
-                          groups: activeStepGroups,
-                          menuCode: optionPickerMenu.code,
-                          pendingSelections: optionPickerSelections,
-                          optionsWithSteps: optsWithStepsToShow,
-                          getOptionModifier,
-                        })
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => fireMenuAction(() => handleStepSelect(stepValue))}
-                            className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
-                          >
-                            <span className="min-w-0 flex-1 text-slate-800">
-                              <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
-                              {optDesc ? (
-                                <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
-                                  {optDesc}
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="shrink-0 font-bold text-emerald-600">
-                              {rowPrice.toLocaleString()} ฿
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {values.map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => fireMenuAction(() => handleStepSelect(val))}
-                          className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
-                        >
-                          {translateChickenPartLabel(val)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {!groupRequired && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => fireMenuAction(() => {
-                        const next = { ...optionPickerSelections }
-                        delete next[groupKey]
-                        setOptionPickerSelections(next)
-                        if (optionPickerStep >= activeStepGroups.length - 1) {
-                          const match = resolvePosOptionPickerMatch({
-                            menuCode: optionPickerMenu.code,
-                            groups: activeStepGroups,
-                            selections: next,
-                            optionsWithSteps: optsWithStepsToShow,
-                            allOptions: opts,
-                            groupConfigByKey: groupConfigMap,
-                          })
-                          if (useBarBqTwoPhase && barBqPickerPhase === 'ancillary') {
-                            completeBarBqAncillaryPick(match)
-                          } else if (match) {
-                            void addWithOption(optionPickerMenu, match)
-                          } else {
-                            void addWithOption(optionPickerMenu, null)
-                          }
-                        } else {
-                          setOptionPickerStep((s) => s + 1)
-                        }
-                      })}
-                    >
-                      {t('skip') || '건너뛰기'}
-                    </Button>
-                  )}
-                  {useBarBqTwoPhase && barBqPickerPhase === 'ancillary' ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => {
-                        setBarBqPickerPhase('size')
-                        setOptionPickerStep(0)
-                        setOptionPickerSelections({})
-                      }}
-                    >
-                      ← {t('posBack') || '이전'} ({t('posBarBqBackToSize') || '사이즈'})
-                    </Button>
-                  ) : optionPickerStep > 0 ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => setOptionPickerStep((s) => s - 1)}
-                    >
-                      ← {t('posBack') || '이전'}
-                    </Button>
-                  ) : null}
-                </div>
-              )
-            }
             return (
-              <div className="flex flex-col gap-2 py-2">
-                {defaultBtn}
-                {(useFlatBarBqLegacy ? flatBarBqOpts : useFlatChickenMList ? flatChickenMOpts : optsToShow).map((opt) => {
-                  const optDesc = showMenuDescriptions
-                    ? resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
-                    : ''
-                  return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, opt) })}
-                    className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
-                  >
-                    <span className="min-w-0 flex-1 text-slate-800">
-                      <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
-                      {optDesc ? (
-                        <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
-                          {optDesc}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="shrink-0 font-bold text-emerald-600">
-                      {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
-                    </span>
-                  </button>
-                  )
-                })}
-              </div>
-            )
-          })()}
+              <PosChickenOptionPickerPanel
+                menu={optionPickerMenu}
+                options={opts}
+                orderType={orderType}
+                twoPhasePhase={barBqPickerPhase}
+                pendingSizeOpt={barBqPendingSizeOpt}
+                optionPickerStep={optionPickerStep}
+                optionPickerSelections={optionPickerSelections}
+                showMenuDescriptions={showMenuDescriptions}
+                descriptionChannel={descriptionChannel}
+                showDefaultButton
+                getMenuPrice={getMenuPrice}
+                getOptionModifier={getOptionModifier}
+                formatPrice={(n) => n.toLocaleString()}
+                t={t}
+                translateChickenPartLabel={translateChickenPartLabel}
+                resolveCartDisplayName={resolvePosCartOptionDisplayName}
+                onAddToCart={(menu, opt, defaultDisplay) => {
+                  void addWithOption(menu, opt, defaultDisplay)
+                }}
+                setTwoPhasePhase={setBarBqPickerPhase}
+                setPendingSizeOpt={setBarBqPendingSizeOpt}
+                setOptionPickerStep={setOptionPickerStep}
+                setOptionPickerSelections={setOptionPickerSelections}
+                wrapAction={fireMenuAction}
+              />
+            )          })()}
         </DialogContent>
       </Dialog>
 

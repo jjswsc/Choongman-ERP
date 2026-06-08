@@ -4,6 +4,7 @@ import {
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
   isMainPosRealtimeRecentlyActive,
   resolveMainPosPollIntervalMs,
+  shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
 
 describe('pos-main-poll-interval', () => {
@@ -39,5 +40,30 @@ describe('pos-main-poll-interval', () => {
     expect(isMainPosRealtimeRecentlyActive(now - 30_000, now)).toBe(true)
     expect(isMainPosRealtimeRecentlyActive(now - 120_000, now)).toBe(false)
     expect(isMainPosRealtimeRecentlyActive(0, now)).toBe(false)
+  })
+
+  it('skips heavy order scan fallback when realtime is healthy and recent', () => {
+    const now = 1_000_000
+    expect(
+      shouldUseMainPosHeavyOrderScanFallback({
+        realtimeChannelHealthy: true,
+        lastRealtimeOrderEventAtMs: now - 30_000,
+        nowMs: now,
+      })
+    ).toBe(false)
+    expect(
+      shouldUseMainPosHeavyOrderScanFallback({
+        realtimeChannelHealthy: false,
+        lastRealtimeOrderEventAtMs: now - 30_000,
+        nowMs: now,
+      })
+    ).toBe(true)
+    expect(
+      shouldUseMainPosHeavyOrderScanFallback({
+        realtimeChannelHealthy: true,
+        lastRealtimeOrderEventAtMs: now - 120_000,
+        nowMs: now,
+      })
+    ).toBe(true)
   })
 })

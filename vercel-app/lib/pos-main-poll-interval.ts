@@ -20,3 +20,13 @@ export function isMainPosRealtimeRecentlyActive(
   if (!lastEventAtMs || lastEventAtMs <= 0) return false
   return nowMs - lastEventAtMs < MAIN_POS_REALTIME_STALE_MS
 }
+
+/** Realtime 정상·최근 이벤트 있음 → limit 800 풀 스캔(메타·결제 영수증) 폴백 불필요 */
+export function shouldUseMainPosHeavyOrderScanFallback(opts: {
+  realtimeChannelHealthy: boolean
+  lastRealtimeOrderEventAtMs: number
+  nowMs?: number
+}): boolean {
+  if (!opts.realtimeChannelHealthy) return true
+  return !isMainPosRealtimeRecentlyActive(opts.lastRealtimeOrderEventAtMs, opts.nowMs)
+}
