@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { cn, formatBahtNum } from '@/lib/utils'
 import {
+  escapeHtmlReceiptEmphasizeChannelToken,
   escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
   formatPosReceiptOrderNoDisplay,
   pickPosChannelOrderNo,
@@ -40,6 +41,10 @@ export type PosHallOrderReceiptPreviewProps = {
   className?: string
   t: (key: string) => string
   lang: LangCode
+}
+
+function ChannelTokenEmphasis({ token }: { token: string }) {
+  return <span className="receipt-delivery-channel-no font-bold leading-tight [font-size:2em]">{token}</span>
 }
 
 function MetaRow({ label, value }: { label: string; value: ReactNode }) {
@@ -98,7 +103,14 @@ export function PosHallOrderReceiptPreview({
     <div className={cn('receipt-content receipt-order-simple space-y-2 text-sm text-black', className)}>
       <div className="receipt-order-header text-center">
         <div className="receipt-order-label text-[11px] font-extrabold leading-snug">
-          {tr('posOrderNo', '주문')} #{orderNoForPrint}
+          {tr('posOrderNo', '주문')}{' '}
+          {channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim() ? (
+            <>
+              #<ChannelTokenEmphasis token={channelOrderPick.text.trim()} />
+            </>
+          ) : (
+            <>#{orderNoForPrint}</>
+          )}
           <span className="receipt-order-type-chip receipt-order-type-chip--inline ml-1 inline-block rounded-full border-[1.4px] border-black bg-white px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
             {orderTypeLabelText}
           </span>
@@ -114,7 +126,14 @@ export function PosHallOrderReceiptPreview({
         ) : null}
         {guestN > 0 ? <MetaRow label={tr('posOrderGuestCount', 'Guests')} value={String(guestN)} /> : null}
         {channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim() ? (
-          <MetaRow label={tr('posChannelOrderNo', '채널 주문번호')} value={`#${channelOrderPick.text.trim()}`} />
+          <MetaRow
+            label={tr('posChannelOrderNo', '채널 주문번호')}
+            value={
+              <>
+                #<ChannelTokenEmphasis token={channelOrderPick.text.trim()} />
+              </>
+            }
+          />
         ) : null}
         <MetaRow label={tr('date', 'Date')} value={formatPosDateTimeMedium(at, lang)} />
         {posOrderNoDigits ? (

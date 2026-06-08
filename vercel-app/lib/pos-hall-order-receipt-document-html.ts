@@ -1,5 +1,6 @@
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import {
+  escapeHtmlReceiptEmphasizeChannelToken,
   escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
   formatPosReceiptOrderNoDisplay,
   pickPosChannelOrderNo,
@@ -559,8 +560,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
         esc(tr('posChannelOrderNo', '채널 주문번호')) +
         c('span') +
-        '<span class="receipt-meta-value">#' +
-        esc(channelOrderPick.text.trim()) +
+        '<span class="receipt-meta-value">' +
+        esc('#') +
+        escapeHtmlReceiptEmphasizeChannelToken(channelOrderPick.text.trim()) +
         c('span') +
         c('div')
       : ''
@@ -775,11 +777,15 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     tableName: payload.tableName,
     memo: payload.memo,
   })
+  const orderNoHeaderHtml =
+    channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim()
+      ? esc('#') + escapeHtmlReceiptEmphasizeChannelToken(channelOrderPick.text.trim())
+      : esc('#') + esc(orderNoForPrint)
   const printContent =
     '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-order-label">' +
     esc(tr('posOrderNo', '주문')) +
-    ' #' +
-    esc(orderNoForPrint) +
+    ' ' +
+    orderNoHeaderHtml +
     orderTypeChipInline +
     c('div') +
     c('div') +

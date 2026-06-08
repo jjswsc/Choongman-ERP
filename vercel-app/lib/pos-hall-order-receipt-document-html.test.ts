@@ -510,6 +510,25 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('Kimchi 30g.')
   })
 
+  it('emphasizes channel order token (e.g. GF-268) on hall order receipt header and channel row', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '20260608033',
+        storeCode: 'CM Test',
+        orderType: 'delivery',
+        tableName: 'Grab #GF-268',
+        memo: 'grab_order:GF-268',
+        items: [{ id: '1', name: '[April] Set 2', price: 189, qty: 1 }],
+        subtotal: 189,
+        discountAmt: 78,
+        total: 111,
+      },
+      t: (k) => k,
+      lang: 'th',
+    })
+    expect(html.match(/receipt-delivery-channel-no[\s\S]*?GF-268/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+  })
+
   it('replaces promo placeholder code with menu name on hall order receipt', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {

@@ -120,6 +120,22 @@ export function formatPosReceiptOrderNoDisplay(args: {
 }
 
 /**
+ * 채널 주문번호 토큰만 크게(2em). HTML 이스케이프 후 `.receipt-delivery-channel-no` span으로 감쌈.
+ * `.receipt-delivery-channel-no`는 `pos-receipt-html` 등 영수증 CSS에 정의.
+ */
+export function escapeHtmlReceiptEmphasizeChannelToken(token: string): string {
+  const rest = String(token ?? '')
+    .trim()
+    .replace(/\s+$/, '')
+  if (!rest || !/^[A-Za-z0-9-]+$/i.test(rest)) return escapeHtml(rest)
+  return (
+    '<span class="receipt-delivery-channel-no">' +
+    escapeHtml(rest) +
+    '</span>'
+  )
+}
+
+/**
  * 테이블 표시(예: `Line Man #0660`)에서 `#` 뒤 채널 주문번호만 크게 보이게 하는 HTML.
  * `.receipt-delivery-channel-no`는 `pos-receipt-html` 등 영수증 CSS에 정의.
  */
@@ -133,13 +149,7 @@ export function escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableLine: strin
     .replace(/\s+$/, '')
   if (!/^[A-Za-z0-9-]+$/i.test(rest)) return escapeHtml(s)
   const head = s.slice(0, lastHash)
-  return (
-    escapeHtml(head) +
-    escapeHtml('#') +
-    '<span class="receipt-delivery-channel-no">' +
-    escapeHtml(rest) +
-    '</span>'
-  )
+  return escapeHtml(head) + escapeHtml('#') + escapeHtmlReceiptEmphasizeChannelToken(rest)
 }
 
 /** `pos_orders.delivery_payment_channel` 등에 쓰는 소문자 코드 */
