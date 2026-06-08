@@ -5,6 +5,8 @@
  */
 
 import type { PosOrder, PosOrderItem } from '@/lib/api-client'
+import { settlementStoreCacheKeys } from '@/lib/offline/settlement-offline'
+import { normStoreKey } from '@/lib/store-list-keys'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
@@ -177,6 +179,15 @@ function inDateRange(businessYmd: string, startStr: string, endStr: string): boo
   return businessYmd >= startStr && businessYmd <= endStr
 }
 
+function pendingOrderMatchesStore(rowStoreCode: string, filterStoreCode: string): boolean {
+  const row = String(rowStoreCode || '').trim()
+  const want = String(filterStoreCode || '').trim()
+  if (!row || !want) return true
+  if (normStoreKey(row) === normStoreKey(want)) return true
+  const wantKeys = new Set(settlementStoreCacheKeys(want).map((s) => normStoreKey(s)))
+  return wantKeys.has(normStoreKey(row))
+}
+
 /**
  * 오프라인 큐의 updatePosOrderStatus — 주문 id별 최종 status (같은 id는 전송 순서상 나중 항목이 우선).
  * 취소·퇴장·완료가 캐시/합성 행에 반영되도록 getPosOrdersWithCache에서 사용한다.
@@ -218,8 +229,7 @@ export async function getPendingSavePosOrdersMerged(params: {
     if (!inDateRange(biz, startStr, endStr)) continue
 
     if (storeCode && String(storeCode).trim()) {
-      const want = String(storeCode).trim()
-      if (row.storeCode !== want && row.storeCode.toLowerCase() !== want.toLowerCase()) continue
+      if (!pendingOrderMatchesStore(row.storeCode, String(storeCode).trim())) continue
     }
 
     if (status && status !== 'all') {

@@ -77,11 +77,26 @@ export async function getPosOrdersWithCache(params: {
         ...(pollMinimal ? { pollMinimal: true } : {}),
         ...(limit != null && limit > 0 ? { limit } : {}),
       })
-      /** pollMinimal은 테이블 스냅샷용 — 영수증(linkpos) 캐시를 덮어쓰지 않음 */
-      if (!pollMinimal) {
+      let rows = data
+      /** 테이블·배달 목록 폴링 — API 지연·빈 응답 시 직전 캐시와 id 합집합(주문 직후 사라짐 방지) */
+      if (pollMinimal) {
+        const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
+        if (Array.isArray(cached) && cached.length > 0) {
+          const byId = new Map<number, PosOrder>()
+          for (const row of cached) {
+            const id = Number(row.id)
+            if (Number.isFinite(id) && id > 0) byId.set(id, row)
+          }
+          for (const row of data) {
+            const id = Number(row.id)
+            if (Number.isFinite(id) && id > 0) byId.set(id, row)
+          }
+          rows = Array.from(byId.values())
+        }
+      } else {
         await setCache('pos_orders_cache', key, data)
       }
-      return mergePendingIntoRows(data, range)
+      return mergePendingIntoRows(rows, range)
     } catch {
       const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
       const merged = await mergePendingIntoRows(cached ?? [], range)

@@ -351,6 +351,13 @@ function isPendingListSyncOrder(order: Order | undefined | null): boolean {
   return Boolean(order?.pendingListSync)
 }
 
+/** 결제·취소 전 터미널 목록·테이블에 남겨 둘 주문 */
+function isActiveTerminalListOrder(order: Order | undefined | null): boolean {
+  if (!order) return false
+  const st = String(order.status ?? 'pending').toLowerCase()
+  return !['cancelled', 'canceled', 'refunded', 'completed', 'paid'].includes(st)
+}
+
 function orderListMergeKey(order: Order): string {
   const id = String(order.id ?? '').trim()
   const no = String(order.orderNo ?? '').trim()
@@ -428,6 +435,14 @@ function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
     out.unshift(row)
     seen.add(key)
   }
+  /** pollMinimal·캐시 지연 refetch가 방금 저장한 주문을 빼먹을 때 — in-memory 스냅샷 유지 */
+  for (const row of prev) {
+    if (!isActiveTerminalListOrder(row)) continue
+    const key = orderListMergeKey(row)
+    if (!key || seen.has(key)) continue
+    out.unshift(row)
+    seen.add(key)
+  }
   return out
 }
 
@@ -457,7 +472,13 @@ function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): S
     }
     if (tbl.order) return tbl
     if (!prevOrder) return tbl
-    if (!isLocalOfflineOrder(prevOrder) && !isPendingListSyncOrder(prevOrder)) return tbl
+    if (
+      !isLocalOfflineOrder(prevOrder) &&
+      !isPendingListSyncOrder(prevOrder) &&
+      !isActiveTerminalListOrder(prevOrder)
+    ) {
+      return tbl
+    }
     return { ...tbl, order: prevOrder, isOccupied: true }
   })
   return { ...nextStore, tables: nextTables }

@@ -1003,17 +1003,15 @@ export default function PosTerminalPage() {
           items: input.items,
         })
       }
-      if (!input.queuedWithoutServerId) {
-        await refetchStores({ scope: 'current', immediate: true })
-        /** DB 반영 지연 시 옛 스냅샷으로 덮어쓰는 레이스 완화 */
-        if (typeof window !== 'undefined') {
-          window.setTimeout(() => {
-            void refetchStores({ scope: 'current', immediate: true })
-          }, 700)
-          window.setTimeout(() => {
-            void refetchStores({ scope: 'current', immediate: true })
-          }, 1800)
-        }
+      await refetchStores({ scope: 'current', immediate: true })
+      /** DB·캐시 반영 지연 시 옛 스냅샷으로 덮어쓰는 레이스 완화 */
+      if (typeof window !== 'undefined') {
+        window.setTimeout(() => {
+          void refetchStores({ scope: 'current', immediate: true })
+        }, 700)
+        window.setTimeout(() => {
+          void refetchStores({ scope: 'current', immediate: true })
+        }, 1800)
       }
     },
     [currentStoreId, refetchStores, upsertOptimisticOrder]
