@@ -34,6 +34,11 @@ export type PosSalesAnalyticsAggRow = {
   dine_in_guest_sum?: number | string | null
   menu_qty?: number | string | null
   payment_key?: string | null
+  cash_sales?: number | string | null
+  credit_sales?: number | string | null
+  qr_sales?: number | string | null
+  other_sales?: number | string | null
+  delivery_app_sales?: number | string | null
 }
 
 function num(v: unknown): number {
@@ -145,6 +150,11 @@ export function mapAnalyticsAggRowToPeriodRow(r: PosSalesAnalyticsAggRow): Perio
     salesPerGuest:
       dineInGuestSum > 0 ? Math.round((dineInTotal / dineInGuestSum) * 100) / 100 : 0,
     salesPerOrder: count > 0 ? Math.round((total / count) * 100) / 100 : 0,
+    cashSales: num(r.cash_sales),
+    creditSales: num(r.credit_sales),
+    qrSales: num(r.qr_sales),
+    otherSales: num(r.other_sales),
+    deliveryAppSales: num(r.delivery_app_sales),
   }
 }
 

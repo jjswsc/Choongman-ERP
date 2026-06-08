@@ -3748,6 +3748,13 @@ export const i18n = {
     salesInsightBottomMenu: 'LOW 메뉴',
     salesInsightTopChannel: 'TOP 채널',
     salesMinuteUnit: '분',
+    salesPeriodCashSales: '현금 매출',
+    salesPeriodCreditCardSales: '카드 매출',
+    salesPeriodTenderFootnote:
+      '결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다. 한 주문에 복수 결제수단이 있으면 합계 매출과 다를 수 있습니다.',
+    salesExportExcel: '엑셀 다운로드',
+    salesExportSheetSummary: '매출 요약',
+    salesExportSheetDetail: '상세',
     salesAmountBreakdownFootnote:
       '공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합입니다.',
     salesGuestMetricsFootnote:
@@ -6619,6 +6626,9 @@ export const i18n = {
     posKbankCancel: '취소 (Cancel)',
     posKbankVoid: '무효 (Void)',
     posKbankCloseSession: '닫기 (세션 정리)',
+    posLinkposQrDisplayOk: 'EDC 단말에 QR 표시됨',
+    posLinkposQrDisplayFailed:
+      'EDC QR 표시 실패 — 캐셔·고객 화면 QR을 이용하세요. (LinkPOS 브리지·단말 지원 확인)',
     posKbankStatusPaid: '결제완료',
     posKbankStatusCancelled: '취소됨',
     posKbankVoidFailedAlert:
@@ -12949,6 +12959,13 @@ Only matters the employee must handle personally on a working day:
     salesInsightBottomMenu: 'Low menus',
     salesInsightTopChannel: 'Top channels',
     salesMinuteUnit: 'min',
+    salesPeriodCashSales: 'Cash sales',
+    salesPeriodCreditCardSales: 'Credit card sales',
+    salesPeriodTenderFootnote:
+      'Payment columns sum POS order payment_cash, payment_card, payment_qr, payment_delivery_app, and payment_other. Mixed tenders per order may differ from total sales.',
+    salesExportExcel: 'Download Excel',
+    salesExportSheetSummary: 'Sales summary',
+    salesExportSheetDetail: 'Detail',
     salesAmountBreakdownFootnote:
       'Supply amount is the pre-discount line total. Tax and sales reflect POS fee/VAT rules. Discount sums manual discount and coupon discount.',
     salesGuestMetricsFootnote:
@@ -15826,6 +15843,9 @@ orderItemQty: 'Qty',
     posKbankCancel: 'Cancel',
     posKbankVoid: 'Void',
     posKbankCloseSession: 'Close',
+    posLinkposQrDisplayOk: 'QR shown on EDC terminal',
+    posLinkposQrDisplayFailed:
+      'EDC QR not shown — use cashier or customer display QR. (Check LinkPOS bridge and terminal support)',
     posKbankStatusPaid: 'PAID',
     posKbankStatusCancelled: 'CANCELLED',
     posKbankVoidFailedAlert:
@@ -21220,6 +21240,13 @@ orderItemQty: 'จำนวน',
     salesInsightBottomMenu: 'เมนู LOW',
     salesInsightTopChannel: 'ช่องทาง TOP',
     salesMinuteUnit: 'นาที',
+    salesPeriodCashSales: 'ยอดขายเงินสด',
+    salesPeriodCreditCardSales: 'ยอดขายบัตรเครดิต',
+    salesPeriodTenderFootnote:
+      'คอลัมน์การชำระเงินรวม payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other จากออเดอร์ POS หากมีหลายช่องทางต่อออเดอร์ อาจไม่เท่ายอดขายรวม',
+    salesExportExcel: 'ดาวน์โหลด Excel',
+    salesExportSheetSummary: 'สรุปยอดขาย',
+    salesExportSheetDetail: 'รายละเอียด',
     salesAmountBreakdownFootnote:
       'ราคาขายคือยอดรวมรายการก่อนส่วนลด ภาษีและยอดขายสะท้อนกฎค่าธรรมเนียม/ภาษีของ POS คอลัมน์ส่วนลดรวมส่วนลดมือและคูปอง',
     salesGuestMetricsFootnote:

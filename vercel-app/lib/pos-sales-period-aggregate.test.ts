@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
 import {
+  aggregatePosSalesByPeriod,
   buildPosSalesSplitSeriesByStore,
   groupPosSalesRowsByCanonicalStore,
   mergePeriodSeriesToAggregated,
@@ -18,6 +19,7 @@ function row(key: string, total: number, count: number): PeriodAggRow {
     subtotal: total,
     vat: 0,
     discount: 0,
+    service: 0,
     total,
     guestSum: 0,
     dineInOrderCount: 0,
@@ -26,21 +28,37 @@ function row(key: string, total: number, count: number): PeriodAggRow {
     salesPerDineInOrder: 0,
     salesPerGuest: 0,
     salesPerOrder: count > 0 ? total / count : 0,
+    cashSales: 0,
+    creditSales: 0,
+    qrSales: 0,
+    otherSales: 0,
+    deliveryAppSales: 0,
   }
 }
 
 describe('mergePeriodSeriesToAggregated', () => {
   it('sums metrics by key following storeOrder', () => {
     const series = {
-      S1: [row('2025-01', 100, 2), row('2025-02', 50, 1)],
-      S2: [row('2025-01', 30, 1), row('2025-02', 70, 3)],
+      S1: [
+        { ...row('2025-01', 100, 2), cashSales: 40, qrSales: 10 },
+        { ...row('2025-02', 50, 1), creditSales: 50 },
+      ],
+      S2: [
+        { ...row('2025-01', 30, 1), cashSales: 20, deliveryAppSales: 5 },
+        { ...row('2025-02', 70, 3), otherSales: 15 },
+      ],
     }
     const merged = mergePeriodSeriesToAggregated(series, ['S2', 'S1'])
     expect(merged.map((r) => r.key)).toEqual(['2025-01', '2025-02'])
     expect(merged[0]?.total).toBe(130)
     expect(merged[0]?.count).toBe(3)
+    expect(merged[0]?.cashSales).toBe(60)
+    expect(merged[0]?.qrSales).toBe(10)
+    expect(merged[0]?.deliveryAppSales).toBe(5)
     expect(merged[1]?.total).toBe(120)
     expect(merged[1]?.count).toBe(4)
+    expect(merged[1]?.creditSales).toBe(50)
+    expect(merged[1]?.otherSales).toBe(15)
   })
 
   it('returns empty when no series', () => {
@@ -112,6 +130,46 @@ describe('buildPosSalesSplitSeriesByStore', () => {
     const dailyTotal = daily.reduce((s, r) => s + r.total, 0)
     expect(dailyTotal).toBe(150)
     expect(storeTotal).toBe(150)
+  })
+})
+
+describe('aggregatePosSalesByPeriod', () => {
+  it('sums payment columns per day bucket', () => {
+    const rows: PeriodOrderRow[] = [
+      {
+        store_code: 'S1',
+        status: 'completed',
+        total: 100,
+        created_at: '2026-05-01T12:00:00Z',
+        payment_cash: 60,
+        payment_card: 40,
+      },
+      {
+        store_code: 'S1',
+        status: 'completed',
+        total: 50,
+        created_at: '2026-05-01T14:00:00Z',
+        payment_qr: 30,
+        payment_other: 20,
+      },
+      {
+        store_code: 'S1',
+        status: 'completed',
+        total: 80,
+        created_at: '2026-05-02T10:00:00Z',
+        payment_delivery_app: 80,
+      },
+    ]
+    const agg = aggregatePosSalesByPeriod(rows, 'day', null, { start: '06:00', end: '05:59' })
+    expect(agg).toHaveLength(2)
+    const d1 = agg.find((r) => r.key === '2026-05-01')
+    const d2 = agg.find((r) => r.key === '2026-05-02')
+    expect(d1?.total).toBe(150)
+    expect(d1?.cashSales).toBe(60)
+    expect(d1?.creditSales).toBe(40)
+    expect(d1?.qrSales).toBe(30)
+    expect(d1?.otherSales).toBe(20)
+    expect(d2?.deliveryAppSales).toBe(80)
   })
 })
 

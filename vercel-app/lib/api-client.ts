@@ -5056,6 +5056,11 @@ export type PosSalesPeriodRow = {
   salesPerDineInOrder: number
   salesPerGuest: number
   salesPerOrder: number
+  cashSales: number
+  creditSales: number
+  qrSales: number
+  otherSales: number
+  deliveryAppSales: number
 }
 
 export type PosSalesByPeriodResult =
@@ -10991,6 +10996,27 @@ export async function executeLinkposPayment(params: {
   }
 }
 
+async function executeLinkposTransactionAction(
+  action: 'display_qr' | 'clear_qr',
+  fields: Record<string, unknown>,
+  timeoutMs: number
+): Promise<{ success: boolean; source?: 'local'; message?: string }> {
+  if (!isLinkposCardApiEnabled()) {
+    return { success: false, message: 'linkpos_card_api_disabled' }
+  }
+  const payload = { action, protocol: 'hypercom_v2', ...fields }
+  for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
+    const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
+    if (!r.ok) continue
+    if (r.data?.success) return { success: true, source: 'local' as const }
+  }
+  return {
+    success: false,
+    message:
+      action === 'display_qr' ? 'linkpos_display_qr_not_supported' : 'linkpos_clear_qr_not_supported',
+  }
+}
+
 export async function executeLinkposDisplayQr(params: {
   qrPayload: string
   amount?: number
@@ -10999,27 +11025,33 @@ export async function executeLinkposDisplayQr(params: {
   storeCode?: string
   timeoutMs?: number
 }): Promise<{ success: boolean; source?: 'local'; message?: string }> {
-  if (!isLinkposCardApiEnabled()) {
-    return { success: false, message: 'linkpos_card_api_disabled' }
-  }
   const qrPayload = String(params.qrPayload || '').trim()
   if (!qrPayload) return { success: false, message: 'qr_payload_required' }
   const timeoutMs = Math.max(800, Number(params.timeoutMs ?? 2000))
-  const payload = {
-    action: 'display_qr',
-    qrPayload,
-    amount: Number(params.amount ?? 0),
-    reference1: String(params.reference1 || '').slice(0, 20),
-    reference2: String(params.reference2 || '').slice(0, 20),
-    storeCode: String(params.storeCode || ''),
-    protocol: 'hypercom_v2',
-  }
-  for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
-    const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
-    if (!r.ok) continue
-    if (r.data?.success) return { success: true, source: 'local' as const }
-  }
-  return { success: false, message: 'linkpos_display_qr_not_supported' }
+  return executeLinkposTransactionAction(
+    'display_qr',
+    {
+      qrPayload,
+      amount: Number(params.amount ?? 0),
+      reference1: String(params.reference1 || '').slice(0, 20),
+      reference2: String(params.reference2 || '').slice(0, 20),
+      storeCode: String(params.storeCode || ''),
+    },
+    timeoutMs
+  )
+}
+
+/** EDC/LinkPOS QR 화면 해제 — 결제 완료·취소·세션 정리 시 호출 */
+export async function executeLinkposClearQr(params?: {
+  storeCode?: string
+  timeoutMs?: number
+}): Promise<{ success: boolean; source?: 'local'; message?: string }> {
+  const timeoutMs = Math.max(800, Number(params?.timeoutMs ?? 1500))
+  return executeLinkposTransactionAction(
+    'clear_qr',
+    { storeCode: String(params?.storeCode || '') },
+    timeoutMs
+  )
 }
 
 export async function executeKbankGenerateQr(params: {

@@ -50,6 +50,7 @@ import {
   executeKbankSettlement,
   executeKbankVoidPayment,
   executeLinkposDisplayQr,
+  executeLinkposClearQr,
   executeLinkposPayment,
   grabCancelOrderByStoreApi,
   upsertPosTaxInvoiceRecipient,
@@ -1127,6 +1128,7 @@ export default function PosTerminalPage() {
   const [customerDisplayIdleMessage, setCustomerDisplayIdleMessage] = useState('')
   const [customerDisplayPaymentMessage, setCustomerDisplayPaymentMessage] = useState('')
   const [customerDisplayQrPayload, setCustomerDisplayQrPayload] = useState('')
+  const [linkposQrBridgeStatus, setLinkposQrBridgeStatus] = useState<'idle' | 'ok' | 'failed'>('idle')
   const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
   const [liveKbankQrAmount, setLiveKbankQrAmount] = useState(0)
   const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
@@ -3655,24 +3657,18 @@ export default function PosTerminalPage() {
     const q = String(effectiveCustomerDisplayQrPayload || '').trim()
     if (!q) return
     const until = Date.now() + 16000
-    if (dualMonitorEnabled) {
-      setPostPaymentQrUntil(until)
-    }
+    setPostPaymentQrUntil(until)
     window.setTimeout(() => {
-      if (!dualMonitorEnabled) {
-        setLiveKbankQrPayload('')
-        setLiveKbankQrType('THAI_QR')
-        return
-      }
       setPostPaymentQrUntil((prev) => {
         if (prev === until) {
           setLiveKbankQrPayload('')
           setLiveKbankQrType('THAI_QR')
+          void executeLinkposClearQr({ storeCode: currentStoreId })
         }
         return prev === until ? 0 : prev
       })
     }, 16000)
-  }, [dualMonitorEnabled, effectiveCustomerDisplayQrPayload])
+  }, [currentStoreId, effectiveCustomerDisplayQrPayload])
 
   const customerDisplayUiLang = useMemo<LangCode>(() => {
     if (customerDisplayLangMode === 'custom' && isLangCode(customerDisplayLangOverride)) {
@@ -3695,7 +3691,7 @@ export default function PosTerminalPage() {
   }, [currentStoreId, dualMonitorEnabled, customerDisplayAutoOpen, customerDisplayMonitorPreference])
 
   useEffect(() => {
-    if (!currentStoreId || !dualMonitorEnabled) return
+    if (!currentStoreId) return
     const brand = receiptLogoImageUrl.trim() || undefined
     const base: PosCustomerDisplayPayload = {
       storeCode: currentStoreId,
@@ -3713,6 +3709,9 @@ export default function PosTerminalPage() {
     }
     const now = Date.now()
     const showPostPayQr = postPaymentQrUntil > now && String(effectiveCustomerDisplayQrPayload || '').trim().length > 0
+    const showLiveKbankQr =
+      Boolean(String(liveKbankQrPayload || '').trim()) &&
+      String(effectiveCustomerDisplayQrPayload || '').trim().length > 0
 
     const payload: PosCustomerDisplayPayload = showPostPayQr
       ? {
@@ -3723,42 +3722,60 @@ export default function PosTerminalPage() {
           qrPayload: effectiveCustomerDisplayQrPayload,
           qrType: effectiveCustomerDisplayQrType,
         }
-      : hasPendingPaymentFlow
+      : showLiveKbankQr
         ? {
             ...base,
-            kind: 'payment',
-            title: customerDisplayT('posCustomerPayment') || '결제 진행 중',
-            message: customerDisplayPaymentMessage || undefined,
-            items: customerDisplayOrderItems,
-            totalAmount: customerDisplayBreakdown.total,
-            breakdown: customerDisplayBreakdown,
-            paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, customerDisplayT),
+            kind: 'qr',
+            title: customerDisplayT('posCustomerQrTitle') || 'QR 코드',
+            message:
+              customerDisplayPaymentMessage ||
+              customerDisplayT('posScanToPayHint') ||
+              '스캔 후 결제해 주세요.',
+            qrPayload: effectiveCustomerDisplayQrPayload,
+            qrType: effectiveCustomerDisplayQrType,
+            totalAmount:
+              effectiveStaffKbankQrAmount > 0
+                ? effectiveStaffKbankQrAmount
+                : customerDisplayBreakdown.total,
           }
-        : customerDisplayOrderItems.length > 0
+        : hasPendingPaymentFlow
           ? {
               ...base,
-              kind: 'ordering',
-              title: customerDisplayT('posCustomerOrdering') || '주문 확인',
+              kind: 'payment',
+              title: customerDisplayT('posCustomerPayment') || '결제 진행 중',
+              message: customerDisplayPaymentMessage || undefined,
               items: customerDisplayOrderItems,
-              totalAmount: customerDisplayOrderTotal,
+              totalAmount: customerDisplayBreakdown.total,
+              breakdown: customerDisplayBreakdown,
+              paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, customerDisplayT),
             }
-          : customerDisplayDefaultState === 'qr'
+          : customerDisplayOrderItems.length > 0
             ? {
                 ...base,
-                kind: 'qr',
-                title: customerDisplayT('posCustomerQrTitle') || 'QR 코드',
-                qrPayload: effectiveCustomerDisplayQrPayload,
-                qrType: effectiveCustomerDisplayQrType,
+                kind: 'ordering',
+                title: customerDisplayT('posCustomerOrdering') || '주문 확인',
+                items: customerDisplayOrderItems,
+                totalAmount: customerDisplayOrderTotal,
               }
-            : {
-                ...base,
-                kind: 'idle',
-                message: customerDisplayIdleMessage || undefined,
-              }
+            : customerDisplayDefaultState === 'qr'
+              ? {
+                  ...base,
+                  kind: 'qr',
+                  title: customerDisplayT('posCustomerQrTitle') || 'QR 코드',
+                  qrPayload: effectiveCustomerDisplayQrPayload,
+                  qrType: effectiveCustomerDisplayQrType,
+                }
+              : {
+                  ...base,
+                  kind: 'idle',
+                  message: customerDisplayIdleMessage || undefined,
+                }
     publishPosCustomerDisplayState(payload)
-    const shell = window.cmPosShell
-    if (typeof shell?.setCustomerDisplayState === 'function') {
-      void shell.setCustomerDisplayState(payload)
+    if (dualMonitorEnabled) {
+      const shell = window.cmPosShell
+      if (typeof shell?.setCustomerDisplayState === 'function') {
+        void shell.setCustomerDisplayState(payload)
+      }
     }
   }, [
     currentStoreId,
@@ -3777,6 +3794,7 @@ export default function PosTerminalPage() {
     liveKbankQrPayload,
     effectiveCustomerDisplayQrPayload,
     effectiveCustomerDisplayQrType,
+    effectiveStaffKbankQrAmount,
     customerDisplayIdleMessage,
     customerDisplayIdleMediaType,
     customerDisplayIdleMediaUrl,
@@ -6366,6 +6384,36 @@ export default function PosTerminalPage() {
     delete deferredKbankApprovalRef.current[key]
   }, [])
 
+  const clearKbankQrFromLinkpos = useCallback(() => {
+    setLinkposQrBridgeStatus('idle')
+    void executeLinkposClearQr({ storeCode: currentStoreId })
+  }, [currentStoreId])
+
+  const pushKbankQrToLinkposDisplay = useCallback(
+    async (params: {
+      qrPayload: string
+      amount: number
+      reference1?: string
+      reference2?: string
+    }) => {
+      setLinkposQrBridgeStatus('idle')
+      const out = await executeLinkposDisplayQr({
+        qrPayload: params.qrPayload,
+        amount: params.amount,
+        reference1: params.reference1,
+        reference2: params.reference2,
+        storeCode: currentStoreId,
+      })
+      if (out.success) {
+        setLinkposQrBridgeStatus('ok')
+      } else if (out.message !== 'linkpos_card_api_disabled') {
+        setLinkposQrBridgeStatus('failed')
+      }
+      return out
+    },
+    [currentStoreId]
+  )
+
   const presentKbankPaymentApproved = useCallback(
     (input: {
       refId: string
@@ -6383,6 +6431,7 @@ export default function PosTerminalPage() {
       const alreadyNotified = kbankCallbackNotifiedTxRef.current === refId
       // QR 대기 결제: 승인되면 등록된 후처리(주문 paid 마감·영수증). 콜백이 먼저 오면 deferred 후 등록 시 실행.
       if (!alreadyNotified) {
+        clearKbankQrFromLinkpos()
         if (!tryRunKbankPendingFinalize(refId, approval)) {
           deferredKbankApprovalRef.current[refId] = approval
         }
@@ -6416,6 +6465,7 @@ export default function PosTerminalPage() {
       openKbankOutcomeModal,
       lang,
       tryRunKbankPendingFinalize,
+      clearKbankQrFromLinkpos,
     ]
   )
 
@@ -6458,6 +6508,7 @@ export default function PosTerminalPage() {
   /** KBank QR 직원 모니터 세션 정리 (QR 이미지·후속 처리 ID·상태 초기화) */
   const clearKbankQrSession = useCallback(() => {
     purgeKbankPendingFinalize(kbankOpsTxnUidRef.current)
+    clearKbankQrFromLinkpos()
     setLiveKbankQrPayload('')
     setLiveKbankQrType('THAI_QR')
     setKbankOpsTxnUid('')
@@ -6467,7 +6518,7 @@ export default function PosTerminalPage() {
     setKbankCallbackState('idle')
     kbankManualCancelPendingRef.current = false
     kbankCcInquiryTriggeredRef.current = ''
-  }, [purgeKbankPendingFinalize])
+  }, [purgeKbankPendingFinalize, clearKbankQrFromLinkpos])
 
   const runKbankQrPaymentIfNeeded = useCallback(
     async (
@@ -6618,12 +6669,11 @@ export default function PosTerminalPage() {
           )
         }
       }
-      void executeLinkposDisplayQr({
+      void pushKbankQrToLinkposDisplay({
         qrPayload: generatedQrPayload,
         amount: qrAmount,
         reference1: String(context?.orderType || '').slice(0, 20),
         reference2: String(context?.orderLabel || '').slice(0, 20),
-        storeCode: currentStoreId,
       })
       setCustomerDisplayPaymentMessage(
         (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
@@ -6786,6 +6836,7 @@ export default function PosTerminalPage() {
       openKbankOutcomeModal,
       presentKbankPaymentApproved,
       presentKbankApprovedFromInquiry,
+      pushKbankQrToLinkposDisplay,
       isKbankApiPaused,
       noteKbankRateLimitResponse,
       lang,
@@ -6870,6 +6921,7 @@ export default function PosTerminalPage() {
           if (out.success) {
             kbankManualCancelPendingRef.current = true
             purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
+            clearKbankQrFromLinkpos()
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
               {
@@ -6944,6 +6996,7 @@ export default function PosTerminalPage() {
             const nextTxnNo = extractKbankPaymentTxnNo(d).slice(0, 20) || voidTxnNo
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
             purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
+            clearKbankQrFromLinkpos()
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
               {
@@ -7020,6 +7073,7 @@ export default function PosTerminalPage() {
       presentKbankPaymentApproved,
       presentKbankApprovedFromInquiry,
       purgeKbankPendingFinalize,
+      clearKbankQrFromLinkpos,
       alertIfKbankApiPaused,
       noteKbankRateLimitResponse,
       lang,
@@ -11303,6 +11357,16 @@ export default function PosTerminalPage() {
           {kbankSentQrTypeCode ? (
             <p className="mt-0.5 text-[10px] text-muted-foreground">
               {(t('posKbankSentQrTypeCode') || 'Sent qrType')}: {kbankSentQrTypeCode}
+            </p>
+          ) : null}
+          {linkposQrBridgeStatus === 'ok' ? (
+            <p className="mt-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+              {t('posLinkposQrDisplayOk') || 'QR shown on EDC terminal'}
+            </p>
+          ) : linkposQrBridgeStatus === 'failed' ? (
+            <p className="mt-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+              {t('posLinkposQrDisplayFailed') ||
+                'EDC QR not shown — use cashier or customer display QR.'}
             </p>
           ) : null}
           {kbankGenerateAuditText ? (

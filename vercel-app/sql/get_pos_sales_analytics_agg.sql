@@ -175,6 +175,11 @@ BEGIN
 END;
 $$;
 
+-- RETURNS TABLE 컬럼 변경 시 CREATE OR REPLACE 불가 → 기존 시그니처 DROP 후 재생성
+DROP FUNCTION IF EXISTS public.get_pos_sales_analytics_agg(
+  timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean
+);
+
 CREATE OR REPLACE FUNCTION public.get_pos_sales_analytics_agg(
   p_start_utc timestamptz,
   p_end_utc_exclusive timestamptz,
@@ -202,7 +207,12 @@ RETURNS TABLE (
   dine_in_total numeric,
   dine_in_guest_sum bigint,
   menu_qty numeric,
-  payment_key text
+  payment_key text,
+  cash_sales numeric,
+  credit_sales numeric,
+  qr_sales numeric,
+  other_sales numeric,
+  delivery_app_sales numeric
 )
 LANGUAGE plpgsql
 STABLE
@@ -315,7 +325,12 @@ BEGIN
     agg.dine_in_total,
     agg.dine_in_guest_sum,
     agg.menu_qty,
-    agg.payment_key
+    agg.payment_key,
+    agg.cash_sales,
+    agg.credit_sales,
+    agg.qr_sales,
+    agg.other_sales,
+    agg.delivery_app_sales
   FROM (
     -- store
     SELECT
@@ -332,7 +347,12 @@ BEGIN
       coalesce(sum(f.total) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0) AS dine_in_total,
       coalesce(sum(f.guest_count) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0) AS dine_in_guest_sum,
       0::numeric AS menu_qty,
-      NULL::text AS payment_key
+      NULL::text AS payment_key,
+      0::numeric AS cash_sales,
+      0::numeric AS credit_sales,
+      0::numeric AS qr_sales,
+      0::numeric AS other_sales,
+      0::numeric AS delivery_app_sales
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'store'
     GROUP BY f.store_code
@@ -358,7 +378,12 @@ BEGIN
       0::numeric,
       0::bigint,
       0::numeric,
-      NULL::text
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'store_channel'
     GROUP BY f.store_code, 2
@@ -380,7 +405,12 @@ BEGIN
       coalesce(sum(f.total) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0),
       coalesce(sum(f.guest_count) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0),
       0::numeric,
-      NULL::text
+      NULL::text,
+      coalesce(sum(f.payment_cash), 0),
+      coalesce(sum(f.payment_card), 0),
+      coalesce(sum(f.payment_qr), 0),
+      coalesce(sum(f.payment_other), 0),
+      coalesce(sum(f.payment_delivery_app), 0)
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'period'
     GROUP BY 1
@@ -402,7 +432,12 @@ BEGIN
       coalesce(sum(f.total) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0),
       coalesce(sum(f.guest_count) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0),
       0::numeric,
-      NULL::text
+      NULL::text,
+      coalesce(sum(f.payment_cash), 0),
+      coalesce(sum(f.payment_card), 0),
+      coalesce(sum(f.payment_qr), 0),
+      coalesce(sum(f.payment_other), 0),
+      coalesce(sum(f.payment_delivery_app), 0)
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'period_by_store'
     GROUP BY 1, f.store_code
@@ -428,7 +463,12 @@ BEGIN
       0::numeric,
       0::bigint,
       0::numeric,
-      NULL::text
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'channel'
     GROUP BY 1
@@ -450,7 +490,12 @@ BEGIN
       0::numeric,
       0::bigint,
       0::numeric,
-      NULL::text
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'delivery_platform'
       AND f.norm_order_type = 'delivery'
@@ -483,7 +528,12 @@ BEGIN
       0::numeric,
       0::bigint,
       0::numeric,
-      NULL::text
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
     FROM in_range f
     WHERE lower(coalesce(p_agg_mode, '')) = 'delivery_payment'
       AND coalesce(f.payment_delivery_app, 0) > 0
@@ -510,14 +560,19 @@ BEGIN
       0::numeric,
       0::bigint,
       sum(mf.qty),
-      NULL::text
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
     FROM menu_filtered mf
     GROUP BY mf.menu_name
 
     UNION ALL
 
     -- payment (unpivot)
-    SELECT p.bucket_key, ''::text, 0::bigint, 0::numeric, 0::numeric, 0::numeric, 0::numeric, p.sales, 0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric, p.bucket_key
+    SELECT p.bucket_key, ''::text, 0::bigint, 0::numeric, 0::numeric, 0::numeric, 0::numeric, p.sales, 0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric, p.bucket_key, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM (
       SELECT 'cash'::text AS bucket_key, sum(f.payment_cash) AS sales FROM in_range f WHERE f.payment_cash > 0
       UNION ALL SELECT 'card', sum(f.payment_card) FROM in_range f WHERE f.payment_card > 0

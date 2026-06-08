@@ -10,7 +10,7 @@ import {
   aggregatePosSalesByPeriod,
   buildPosSalesSplitSeriesByStore,
 } from '@/lib/pos-sales-period-aggregate'
-import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
+import { fetchPosSalesOrdersForBusinessRange, POS_SALES_PAYMENT_ROW_SELECT } from '@/lib/pos-sales-fetch-rows'
 import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 import {
   buildPeriodSeriesFromAnalyticsAggRows,
@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,
       queryLabel: 'posSalesByPeriod',
+      select: POS_SALES_PAYMENT_ROW_SELECT,
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')

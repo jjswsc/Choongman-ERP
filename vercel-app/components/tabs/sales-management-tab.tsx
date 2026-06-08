@@ -25,7 +25,8 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
-import { useT, i18n } from "@/lib/i18n"
+import { useT, i18n, tOr } from "@/lib/i18n"
+import { downloadSalesManagementXlsx, type SalesExcelSheet } from "@/lib/sales-management-excel-export"
 import {
   translatePeriodAxisLabel,
   translateChannelKey,
@@ -95,6 +96,22 @@ const PERIOD_GROUP = [
 ] as const
 const PERIOD_GROUP_VALUES = new Set(PERIOD_GROUP.map((g) => g.value))
 type PeriodGroupValue = (typeof PERIOD_GROUP)[number]["value"]
+
+type PeriodPaymentField = "cashSales" | "creditSales" | "qrSales" | "otherSales" | "deliveryAppSales"
+
+const PERIOD_PAYMENT_COLUMNS: { field: PeriodPaymentField; labelKey: string; fallback: string }[] = [
+  { field: "cashSales", labelKey: "salesPayCash", fallback: "현금" },
+  { field: "creditSales", labelKey: "salesPayCard", fallback: "카드" },
+  { field: "qrSales", labelKey: "salesPayQr", fallback: "QR" },
+  { field: "deliveryAppSales", labelKey: "salesPayDeliveryApp", fallback: "배달앱" },
+  { field: "otherSales", labelKey: "salesPayOther", fallback: "기타" },
+]
+
+type PeriodPaymentRow = Partial<Record<PeriodPaymentField, number>>
+
+function periodPaymentAmount(row: PeriodPaymentRow, field: PeriodPaymentField) {
+  return Number(row[field] ?? 0) || 0
+}
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
 
@@ -174,6 +191,11 @@ function mapPosSalesPeriodRowToChartRow(
     salesPerDineInOrder,
     salesPerGuestHall,
     salesPerOrder,
+    cashSales: Number(r.cashSales ?? 0) || 0,
+    creditSales: Number(r.creditSales ?? 0) || 0,
+    qrSales: Number(r.qrSales ?? 0) || 0,
+    otherSales: Number(r.otherSales ?? 0) || 0,
+    deliveryAppSales: Number(r.deliveryAppSales ?? 0) || 0,
     axisLabel: translatePeriodAxisLabel(r, periodGroup, tr),
   }
 }
@@ -500,6 +522,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       salesPerDineInOrder?: number
       salesPerGuest?: number
       salesPerOrder?: number
+      cashSales?: number
+      creditSales?: number
+      qrSales?: number
+      otherSales?: number
+      deliveryAppSales?: number
     }[]
   >([])
   const [deliveryAppData, setDeliveryAppData] = React.useState<{
@@ -564,13 +591,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     truncated: false,
   })
 
-  const tr = React.useCallback(
-    (key: string, fallback: string) => {
-      const value = t(key as never)
-      return value === key ? fallback : value
-    },
-    [t]
-  )
+  const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
 
   React.useEffect(() => {
     try {
@@ -1277,6 +1298,234 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     compareStores,
     persistPresets,
     savedPresets,
+  ])
+
+  const canExportExcel = React.useMemo(() => {
+    if (!showSalesResults || isHoursPanel) return false
+    switch (selectedView) {
+      case "period":
+        return periodChartRows.length > 0
+      case "store-period":
+        return storeByPeriodFlatRows.length > 0
+      case "store":
+        return scopedStoreData.length > 0
+      case "channel":
+        return channelChartRows.length > 0
+      case "menu":
+        return menuData.length > 0
+      case "delivery":
+        return deliveryPieRows.length > 0
+      case "payment":
+        return (
+          deliveryPaymentChannelRows.length > 0 ||
+          creditPaymentChannelRows.length > 0 ||
+          paymentChartRows.length > 0
+        )
+      case "store-category":
+        return storeChartRows.length > 0 || channelChartRows.length > 0
+      case "realtime-revenue":
+        return (realtimeRevenueData?.office.stores.length ?? 0) > 0
+      default:
+        return false
+    }
+  }, [
+    showSalesResults,
+    isHoursPanel,
+    selectedView,
+    periodChartRows.length,
+    storeByPeriodFlatRows.length,
+    scopedStoreData.length,
+    channelChartRows.length,
+    menuData.length,
+    deliveryPieRows.length,
+    deliveryPaymentChannelRows.length,
+    creditPaymentChannelRows.length,
+    paymentChartRows.length,
+    storeChartRows.length,
+    realtimeRevenueData,
+  ])
+
+  const handleExportExcel = React.useCallback(async () => {
+    if (!canExportExcel) return
+    const numCell = (n: number) => Math.round(Number(n || 0) * 100) / 100
+    const periodCol =
+      periodGroup === "hour" ? tr("salesPeriodHourColumn", "시간대") : tr("salesPeriod", "기간")
+    const sheets: SalesExcelSheet[] = []
+
+    if (selectedView === "period" && periodChartRows.length > 0) {
+      sheets.push({
+        name: tr("salesExportSheetSummary", "매출 요약"),
+        headers: [
+          periodCol,
+          tr("salesAmount", "매출액"),
+          ...PERIOD_PAYMENT_COLUMNS.map((c) => tr(c.labelKey, c.fallback)),
+        ],
+        rows: periodChartRows.map((r) => [
+          r.axisLabel,
+          numCell(r.total),
+          ...PERIOD_PAYMENT_COLUMNS.map((c) => numCell(periodPaymentAmount(r, c.field))),
+        ]),
+      })
+      sheets.push({
+        name: tr("salesExportSheetDetail", "상세"),
+        headers: [
+          periodCol,
+          tr("salesOccupancy", "주문건수"),
+          tr("salesGuestCount", "손님 수(홀)"),
+          tr("salesHallPerOrder", "홀 건당"),
+          tr("salesHallPerGuest", "홀 1인당"),
+          tr("salesPerOrderInScope", "건당"),
+          tr("salesSupplyAmount", "공급가액"),
+          tr("salesTax", "세금"),
+          tr("salesDiscountAmount", "할인 금액"),
+          tr("salesServiceAmount", "서비스처리 금액"),
+          tr("salesAmount", "매출액"),
+          ...PERIOD_PAYMENT_COLUMNS.map((c) => tr(c.labelKey, c.fallback)),
+        ],
+        rows: periodChartRows.map((r) => [
+          r.axisLabel,
+          r.count,
+          r.hallGuestSum,
+          r.dineInOrderCount > 0 ? numCell(r.salesPerDineInOrder) : "",
+          r.hallGuestSum > 0 ? numCell(r.salesPerGuestHall) : "",
+          r.count > 0 ? numCell(r.salesPerOrder) : "",
+          numCell(r.subtotal),
+          numCell(r.vat),
+          numCell(r.discount),
+          numCell(r.service ?? 0),
+          numCell(r.total),
+          ...PERIOD_PAYMENT_COLUMNS.map((c) => numCell(periodPaymentAmount(r, c.field))),
+        ]),
+      })
+    } else if (selectedView === "store-period" && storeByPeriodFlatRows.length > 0) {
+      sheets.push({
+        name: tr("salesExportSheetDetail", "상세"),
+        headers: [
+          tr("salesStoreName", "매장명"),
+          periodCol,
+          tr("salesOccupancy", "주문건수"),
+          tr("salesAmount", "매출액"),
+          ...PERIOD_PAYMENT_COLUMNS.map((c) => tr(c.labelKey, c.fallback)),
+        ],
+        rows: storeByPeriodFlatRows.map((r) => [
+          r.storeDisplay,
+          r.axisLabel,
+          r.count,
+          numCell(r.total),
+          ...PERIOD_PAYMENT_COLUMNS.map((c) => numCell(periodPaymentAmount(r, c.field))),
+        ]),
+      })
+    } else if (selectedView === "store" && scopedStoreData.length > 0) {
+      sheets.push({
+        name: tr("salesByStore", "매장별"),
+        headers: [
+          tr("salesStoreName", "매장명"),
+          tr("salesOccupancy", "주문건수"),
+          tr("salesSupplyAmount", "공급가액"),
+          tr("salesTax", "세금"),
+          tr("salesDiscountAmount", "할인 금액"),
+          tr("salesServiceAmount", "서비스처리 금액"),
+          tr("salesAmount", "매출액"),
+        ],
+        rows: scopedStoreData.map((r) => [
+          posStoreDisplayName(r.storeName),
+          r.count,
+          numCell(r.subtotal),
+          numCell(r.vat),
+          numCell(r.discount ?? 0),
+          numCell(r.service ?? 0),
+          numCell(r.total),
+        ]),
+      })
+    } else if (selectedView === "channel" && channelChartRows.length > 0) {
+      sheets.push({
+        name: tr("salesChannel", "채널"),
+        headers: [tr("salesChannel", "채널"), tr("pL_sales", "매출")],
+        rows: channelChartRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+      })
+    } else if (selectedView === "menu" && menuData.length > 0) {
+      sheets.push({
+        name: tr("salesMenu", "메뉴"),
+        headers: [tr("salesMenu", "메뉴"), tr("salesQuantity", "수량"), tr("pL_sales", "매출")],
+        rows: menuData.map((r) => [r.name, r.qty, numCell(r.sales)]),
+      })
+    } else if (selectedView === "delivery" && deliveryPieRows.length > 0) {
+      sheets.push({
+        name: tr("salesDeliveryChannel", "배달앱/채널"),
+        headers: [tr("salesDeliveryChannel", "배달앱/채널"), tr("pL_sales", "매출"), tr("salesRatio", "비율")],
+        rows: deliveryPieRows.map((r) => [r.axisLabel, numCell(r.sales), `${r.pct.toFixed(1)}%`]),
+      })
+    } else if (selectedView === "payment") {
+      if (deliveryPaymentChannelRows.length > 0) {
+        sheets.push({
+          name: tr("salesPaymentBreakdownDeliveryTitle", "결제수단별 매출 — 배달"),
+          headers: [tr("salesPaymentMethod", "결제수단"), tr("pL_sales", "매출")],
+          rows: deliveryPaymentChannelRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+        })
+      }
+      if (creditPaymentChannelRows.length > 0) {
+        sheets.push({
+          name: tr("salesPaymentBreakdownCreditTitle", "결제수단별 매출 — 카드/지갑"),
+          headers: [tr("salesPaymentMethod", "결제수단"), tr("pL_sales", "매출")],
+          rows: creditPaymentChannelRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+        })
+      }
+    } else if (selectedView === "store-category") {
+      if (storeChartRows.length > 0) {
+        sheets.push({
+          name: tr("salesByStore", "매장별"),
+          headers: [tr("salesStoreName", "매장명"), tr("salesQuantity", "수량"), tr("salesSalesAmount", "판매 금액")],
+          rows: storeChartRows.map((r) => [r.storeDisplayName, r.count, numCell(r.total)]),
+        })
+      }
+      if (channelChartRows.length > 0) {
+        sheets.push({
+          name: tr("salesByCategory", "분류별 (채널)"),
+          headers: [tr("salesCategoryName", "분류명"), tr("salesSalesAmount", "판매 금액")],
+          rows: channelChartRows.map((r) => [r.axisLabel, numCell(r.sales)]),
+        })
+      }
+    } else if (selectedView === "realtime-revenue" && realtimeRevenueData) {
+      sheets.push({
+        name: tr("salesTopicRealtimeRevenueOps", "실시간 운영(매출 중심)"),
+        headers: [
+          tr("salesStoreName", "매장명"),
+          tr("salesManagementTabSalesStatus", "실매출"),
+          tr("adminLiveStoreSalesWaitingRevenue", "대기매출"),
+          tr("adminLiveStoreSalesDelayedRevenue", "지연매출"),
+        ],
+        rows: realtimeRevenueData.office.stores.map((r) => [
+          posStoreDisplayName(r.storeCode),
+          numCell(r.completedRevenue),
+          numCell(r.waitingRevenue),
+          numCell(r.delayedRevenue),
+        ]),
+      })
+    }
+
+    if (sheets.length === 0) return
+    const topicSlug = String(selectedTopic?.id ?? selectedView ?? "sales").replace(/[^\w-]+/g, "_")
+    const fname = `sales-${topicSlug}-${startStr}_${endStr}.xlsx`
+    await downloadSalesManagementXlsx(fname, sheets)
+  }, [
+    canExportExcel,
+    periodGroup,
+    tr,
+    selectedView,
+    periodChartRows,
+    storeByPeriodFlatRows,
+    scopedStoreData,
+    channelChartRows,
+    menuData,
+    deliveryPieRows,
+    deliveryPaymentChannelRows,
+    creditPaymentChannelRows,
+    storeChartRows,
+    realtimeRevenueData,
+    posStoreDisplayName,
+    selectedTopic?.id,
+    startStr,
+    endStr,
   ])
 
   const applyPreset = React.useCallback((preset: SalesFilterPreset) => {
@@ -2098,6 +2347,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <Button type="button" size="sm" variant="outline" onClick={saveCurrentPreset}>
               {tr("salesSavePreset", "조건 저장")}
             </Button>
+            {showSalesResults ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!canExportExcel || loading}
+                onClick={() => void handleExportExcel()}
+              >
+                {tr("salesExportExcel", "엑셀 다운로드")}
+              </Button>
+            ) : null}
           </div>
           ) : null}
 
@@ -2768,7 +3028,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <table className="mt-4 w-full min-w-[1120px] text-sm">
+                  <table className="mt-4 w-full min-w-[1480px] text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
                         <th className="py-2 text-left">
@@ -2786,6 +3046,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         <th className="py-2 text-right">{tr("salesDiscountAmount", "할인 금액")}</th>
                         <th className="py-2 text-right">{tr("salesServiceAmount", "서비스처리 금액")}</th>
                         <th className="py-2 text-right">{tr("salesAmount", "매출액")}</th>
+                        {PERIOD_PAYMENT_COLUMNS.map((c) => (
+                          <th key={c.field} className="py-2 text-right">
+                            {tr(c.labelKey, c.fallback)}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -2808,6 +3073,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <td className="py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.discount)}</td>
                           <td className="py-1.5 text-right font-erp-numeric">{formatSalesAmount(r.service ?? 0)}</td>
                           <td className="py-1.5 text-right font-erp-numeric font-medium">{formatSalesAmount(r.total)}</td>
+                          {PERIOD_PAYMENT_COLUMNS.map((c) => (
+                            <td key={c.field} className="py-1.5 text-right font-erp-numeric">
+                              {formatSalesAmount(periodPaymentAmount(r, c.field))}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                       {periodChartRows.length > 0 && (
@@ -2861,6 +3131,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <td className="py-2 text-right font-erp-numeric">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.total, 0))}
                           </td>
+                          {PERIOD_PAYMENT_COLUMNS.map((c) => (
+                            <td key={c.field} className="py-2 text-right font-erp-numeric">
+                              {formatSalesAmount(
+                                periodChartRows.reduce((a, x) => a + periodPaymentAmount(x, c.field), 0)
+                              )}
+                            </td>
+                          ))}
                         </tr>
                       )}
                     </tbody>
@@ -2873,6 +3150,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     {tr(
                       "salesGuestMetricsFootnote",
                       "손님 수(홀)·홀 건당·홀 1인당은 dine_in 주문과 POS guest_count만 사용합니다. 건당은 현재 매출액 종류 필터에 포함된 주문 전체의 매출÷건수입니다. 포장·배달은 인원 미입력이므로 홀 지표와 섞지 않습니다."
+                    )}{" "}
+                    {tr(
+                      "salesPeriodTenderFootnote",
+                      "결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다(한 주문에 여러 수단이 있으면 합계 매출과 다를 수 있음)."
                     )}
                   </p>
                 </>
@@ -2903,7 +3184,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     </p>
                   ) : (
                     <div className="overflow-x-auto rounded-md border">
-                      <table className="w-full min-w-[1180px] text-sm">
+                      <table className="w-full min-w-[1480px] text-sm">
                         <thead>
                           <tr className="border-b bg-muted/40 text-muted-foreground">
                             <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
@@ -2922,6 +3203,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             <th className="px-3 py-2 text-right">{tr("salesDiscountAmount", "할인 금액")}</th>
                             <th className="px-3 py-2 text-right">{tr("salesServiceAmount", "서비스처리 금액")}</th>
                             <th className="px-3 py-2 text-right">{tr("salesAmount", "매출액")}</th>
+                            {PERIOD_PAYMENT_COLUMNS.map((c) => (
+                              <th key={c.field} className="px-3 py-2 text-right">
+                                {tr(c.labelKey, c.fallback)}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
@@ -2947,6 +3233,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               <td className="px-3 py-1.5 text-right font-erp-numeric font-medium">
                                 {formatSalesAmount(r.total)}
                               </td>
+                              {PERIOD_PAYMENT_COLUMNS.map((c) => (
+                                <td key={c.field} className="px-3 py-1.5 text-right font-erp-numeric">
+                                  {formatSalesAmount(periodPaymentAmount(r, c.field))}
+                                </td>
+                              ))}
                             </tr>
                           ))}
                         </tbody>
@@ -2967,6 +3258,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     {tr(
                       "salesGuestMetricsFootnote",
                       "손님 수(홀)·홀 건당·홀 1인당은 dine_in 주문과 POS guest_count만 사용합니다. 건당은 현재 매출액 종류 필터에 포함된 주문 전체의 매출÷건수입니다. 포장·배달은 인원 미입력이므로 홀 지표와 섞지 않습니다."
+                    )}{" "}
+                    {tr(
+                      "salesPeriodTenderFootnote",
+                      "결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다(한 주문에 여러 수단이 있으면 합계 매출과 다를 수 있음)."
                     )}
                   </p>
                 </>

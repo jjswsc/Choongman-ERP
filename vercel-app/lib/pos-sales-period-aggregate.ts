@@ -40,6 +40,11 @@ export type PeriodOrderRow = {
   status?: string
   order_type?: string
   store_code?: string
+  payment_cash?: number
+  payment_card?: number
+  payment_qr?: number
+  payment_other?: number
+  payment_delivery_app?: number
 }
 
 type Bucket = {
@@ -53,6 +58,11 @@ type Bucket = {
   dineInOrderCount: number
   dineInTotal: number
   dineInGuestSum: number
+  cashSales: number
+  creditSales: number
+  qrSales: number
+  otherSales: number
+  deliveryAppSales: number
 }
 
 export type PeriodAggRow = {
@@ -72,6 +82,11 @@ export type PeriodAggRow = {
   salesPerDineInOrder: number
   salesPerGuest: number
   salesPerOrder: number
+  cashSales: number
+  creditSales: number
+  qrSales: number
+  otherSales: number
+  deliveryAppSales: number
 }
 
 function toRow(k: string, v: Bucket): PeriodAggRow {
@@ -94,6 +109,11 @@ function toRow(k: string, v: Bucket): PeriodAggRow {
     salesPerGuest:
       v.dineInGuestSum > 0 ? Math.round((v.dineInTotal / v.dineInGuestSum) * 100) / 100 : 0,
     salesPerOrder: v.count > 0 ? Math.round((v.total / v.count) * 100) / 100 : 0,
+    cashSales: v.cashSales,
+    creditSales: v.creditSales,
+    qrSales: v.qrSales,
+    otherSales: v.otherSales,
+    deliveryAppSales: v.deliveryAppSales,
   }
 }
 
@@ -108,6 +128,11 @@ const emptyBucket = (): Bucket => ({
   dineInOrderCount: 0,
   dineInTotal: 0,
   dineInGuestSum: 0,
+  cashSales: 0,
+  creditSales: 0,
+  qrSales: 0,
+  otherSales: 0,
+  deliveryAppSales: 0,
 })
 
 /** posSalesByStore·기간 집계 공통 — 완료 건·주문유형 필터 */
@@ -162,6 +187,11 @@ export function aggregatePosSalesByPeriod(
     b.discount += resolvePosSalesDiscountAmount(Number(r.discount_amt) || 0, Number(r.coupon_discount_amt) || 0)
     b.service += Number(r.service_amt) || 0
     b.total += Number(r.total) || 0
+    b.cashSales += Number(r.payment_cash) || 0
+    b.creditSales += Number(r.payment_card) || 0
+    b.qrSales += Number(r.payment_qr) || 0
+    b.otherSales += Number(r.payment_other) || 0
+    b.deliveryAppSales += Number(r.payment_delivery_app) || 0
     const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
     b.guestSum += gc
     {
@@ -266,6 +296,11 @@ export function mergePeriodSeriesToAggregated(
       salesPerDineInOrder: 0,
       salesPerGuest: 0,
       salesPerOrder: 0,
+      cashSales: 0,
+      creditSales: 0,
+      qrSales: 0,
+      otherSales: 0,
+      deliveryAppSales: 0,
     }
     for (const sc of storeCodes) {
       const row = series[sc]?.find((r) => r.key === key)
@@ -280,6 +315,11 @@ export function mergePeriodSeriesToAggregated(
       merged.dineInOrderCount += row.dineInOrderCount
       merged.dineInTotal += row.dineInTotal
       merged.dineInGuestSum += row.dineInGuestSum
+      merged.cashSales += row.cashSales
+      merged.creditSales += row.creditSales
+      merged.qrSales += row.qrSales
+      merged.otherSales += row.otherSales
+      merged.deliveryAppSales += row.deliveryAppSales
     }
     merged.sales = merged.total
     merged.salesPerDineInOrder =
