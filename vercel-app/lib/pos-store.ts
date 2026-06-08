@@ -28,6 +28,15 @@ import {
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
 import { resolveMemberPortalTakeoutTableDisplay } from '@/lib/pos-member-portal-takeout-label'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import {
+  combineOrdersForTerminalMerge,
+  isActiveTerminalListOrder,
+  orderListMergeKey,
+  persistActiveTerminalOrders,
+  loadPersistedActiveTerminalOrders,
+} from '@/lib/pos-terminal-active-orders-persist'
+import { dropStaleOfflineOrdersWhenServerHasMatch } from '@/lib/pos-order-local-reconcile'
+import { isPosOfflineOnlyOrder } from '@/lib/pos-order-server-id'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
 const GRID_SIZE = 24
@@ -340,28 +349,11 @@ type OptimisticOrderInput = {
 
 function isLocalOfflineOrder(order: Order | undefined | null): boolean {
   if (!order) return false
-  const no = String(order.orderNo ?? '').trim()
-  const id = String(order.id ?? '').trim().toLowerCase()
-  return no.startsWith('LOCAL-') || id.startsWith('local-')
+  return isPosOfflineOnlyOrder(order)
 }
 
 function isPendingListSyncOrder(order: Order | undefined | null): boolean {
   return Boolean(order?.pendingListSync)
-}
-
-/** 결제·취소 전 터미널 목록·테이블에 남겨 둘 주문 */
-function isActiveTerminalListOrder(order: Order | undefined | null): boolean {
-  if (!order) return false
-  const st = String(order.status ?? 'pending').toLowerCase()
-  return !['cancelled', 'canceled', 'refunded', 'completed', 'paid'].includes(st)
-}
-
-function orderListMergeKey(order: Order): string {
-  const id = String(order.id ?? '').trim()
-  const no = String(order.orderNo ?? '').trim()
-  if (id) return `id:${id}`
-  if (no) return `no:${no}`
-  return ''
 }
 
 function orderLineQtySum(order: Order | undefined | null): number {
@@ -402,8 +394,9 @@ function mergeFetchedOrderWithPendingLocal(fetched: Order, pending: Order): Orde
 }
 
 function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
+  const prevClean = dropStaleOfflineOrdersWhenServerHasMatch(fetched, prev)
   const pendingByKey = new Map<string, Order>()
-  for (const row of prev) {
+  for (const row of prevClean) {
     if (!isLocalOfflineOrder(row) && !isPendingListSyncOrder(row)) continue
     const key = orderListMergeKey(row)
     if (key) pendingByKey.set(key, row)
@@ -434,7 +427,7 @@ function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
     seen.add(key)
   }
   /** pollMinimal·캐시 지연 refetch가 방금 저장한 주문을 빼먹을 때 — in-memory 스냅샷 유지 */
-  for (const row of prev) {
+  for (const row of prevClean) {
     if (!isActiveTerminalListOrder(row)) continue
     const key = orderListMergeKey(row)
     if (!key || seen.has(key)) continue
@@ -482,6 +475,45 @@ function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): S
   return { ...nextStore, tables: nextTables }
 }
 
+/** 배달·포장 목록(ordersByStoreId)의 홀 주문을 테이블 order에 다시 연결 */
+function hydrateStoreTablesFromActiveOrders(store: Store, orders: Order[]): Store {
+  const dineInActive = orders.filter(
+    (o) => o.type === 'dine-in' && isActiveTerminalListOrder(o) && String(o.tableName ?? '').trim()
+  )
+  if (dineInActive.length === 0) return store
+  const peers: PosDineInTableRef[] = store.tables.map((pt) => ({
+    id: pt.id,
+    name: pt.name,
+    floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+  }))
+  return {
+    ...store,
+    tables: store.tables.map((tbl) => {
+      if (tbl.order && isActiveTerminalListOrder(tbl.order)) return { ...tbl, isOccupied: true }
+      const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+      const ref = { id: tbl.id, name: tbl.name, floor }
+      const matched = dineInActive.find((o) =>
+        posDineInTableLabelsMatch(String(o.tableName ?? ''), ref, { layoutPeers: peers })
+      )
+      return matched ? { ...tbl, order: matched, isOccupied: true } : tbl
+    }),
+  }
+}
+
+function withPersistedTerminalOrders(
+  storeCode: string,
+  businessDateYmd: string,
+  fetched: Order[],
+  prevOrders: Order[]
+): Order[] {
+  const merged = mergeFetchedOrdersWithLocal(
+    fetched,
+    combineOrdersForTerminalMerge(storeCode, businessDateYmd, prevOrders)
+  )
+  persistActiveTerminalOrders(storeCode, businessDateYmd, merged)
+  return merged
+}
+
 function withPosSnapshotTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
     promise,
@@ -491,7 +523,11 @@ function withPosSnapshotTimeout<T>(promise: Promise<T>, ms: number, fallback: T)
   ])
 }
 
-export function usePosStore() {
+export function usePosStoreStandalone() {
+  return usePosStoreInternal()
+}
+
+export function usePosStoreInternal() {
   const { stores: storeCodes, legacyToCanonical, loading: storeListLoading } = useStoreList()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
@@ -521,11 +557,46 @@ export function usePosStore() {
   const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
   const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
+  const ordersByStoreIdRef = useRef<Record<string, Order[]>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     layoutByStoreIdRef.current = layoutByStoreId
   }, [layoutByStoreId])
+
+  useEffect(() => {
+    ordersByStoreIdRef.current = ordersByStoreId
+  }, [ordersByStoreId])
+
+  /** API 대기 전 sessionStorage 진행 중 주문 즉시 표시 (새로고침·재진입) */
+  useEffect(() => {
+    if (!effectiveStoreCodes.length) return
+    const businessDate = getPosBusinessDateStr()
+    const seeded: Record<string, Order[]> = {}
+    for (const code of effectiveStoreCodes) {
+      const rows = loadPersistedActiveTerminalOrders(code, businessDate)
+      if (rows.length > 0) seeded[code] = rows
+    }
+    if (Object.keys(seeded).length === 0) return
+    setOrdersByStoreId((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const [code, rows] of Object.entries(seeded)) {
+        if ((next[code]?.length ?? 0) > 0) continue
+        next[code] = rows
+        changed = true
+      }
+      if (!changed) return prev
+      ordersByStoreIdRef.current = next
+      return next
+    })
+    setStores((prev) => {
+      if (prev.length === 0) return prev
+      return prev.map((store) =>
+        hydrateStoreTablesFromActiveOrders(store, seeded[store.id] ?? ordersByStoreIdRef.current[store.id] ?? [])
+      )
+    })
+  }, [effectiveStoreCodes.join(',')])
 
   const fetchStoreSnapshot = useCallback(
     async (
@@ -613,25 +684,28 @@ export function usePosStore() {
         results.forEach((r) => {
           nextOrdersByStore[r.storeCode] = (r.activeOrders || []).map(posOrderToOrder)
         })
+        const mergedOrdersByStore: Record<string, Order[]> = {}
+        for (const code of effectiveStoreCodes) {
+          mergedOrdersByStore[code] = withPersistedTerminalOrders(
+            code,
+            businessDate,
+            nextOrdersByStore[code] ?? [],
+            []
+          )
+        }
+        ordersByStoreIdRef.current = mergedOrdersByStore
         setStores((prev) =>
-          storeList.map((nextStore) =>
-            mergeStoreTablesWithLocalOrders(
+          storeList.map((nextStore) => {
+            const merged = mergeStoreTablesWithLocalOrders(
               nextStore,
               prev.find((p) => p.id === nextStore.id)
             )
-          )
+            const orders = mergedOrdersByStore[nextStore.id] ?? []
+            return hydrateStoreTablesFromActiveOrders(merged, orders)
+          })
         )
         setLayoutByStoreId(layouts)
-        setOrdersByStoreId((prev) => {
-          const merged: Record<string, Order[]> = {}
-          for (const code of effectiveStoreCodes) {
-            merged[code] = mergeFetchedOrdersWithLocal(
-              nextOrdersByStore[code] ?? [],
-              prev[code] ?? []
-            )
-          }
-          return merged
-        })
+        setOrdersByStoreId(mergedOrdersByStore)
         setCurrentStoreId((prev) => {
           const next =
             canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)
@@ -641,8 +715,31 @@ export function usePosStore() {
         })
       })
       .catch(() => {
-        setStores([])
-        setOrdersByStoreId({})
+        const businessDate = getPosBusinessDateStr()
+        const fallbackOrders: Record<string, Order[]> = {}
+        for (const code of effectiveStoreCodes) {
+          fallbackOrders[code] = loadPersistedActiveTerminalOrders(code, businessDate)
+        }
+        ordersByStoreIdRef.current = fallbackOrders
+        setOrdersByStoreId(fallbackOrders)
+        setStores((prev) => {
+          if (prev.length > 0) {
+            return prev.map((store) =>
+              hydrateStoreTablesFromActiveOrders(store, fallbackOrders[store.id] ?? [])
+            )
+          }
+          return effectiveStoreCodes.map((code) => {
+            const layout = layoutByStoreIdRef.current[code] ?? []
+            const base: Store = {
+              id: code,
+              name: code,
+              gridCols: DEFAULT_GRID_COLS,
+              gridRows: DEFAULT_GRID_ROWS,
+              tables: layoutToTables(layout, []),
+            }
+            return hydrateStoreTablesFromActiveOrders(base, fallbackOrders[code] ?? [])
+          })
+        })
         setCurrentStoreId((prev) => {
           if (prev && effectiveStoreCodes.includes(prev)) return prev
           if (canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)) {
@@ -768,23 +865,36 @@ export function usePosStore() {
         const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
         const resultOrdersMap = new Map(results.map((r) => [r.storeCode, (r.activeOrders || []).map(posOrderToOrder)]))
 
+        const prevOrders = ordersByStoreIdRef.current
+        const nextOrdersByStore: Record<string, Order[]> = { ...prevOrders }
+        for (const code of targetStoreCodes) {
+          nextOrdersByStore[code] = withPersistedTerminalOrders(
+            code,
+            businessDate,
+            resultOrdersMap.get(code) ?? [],
+            prevOrders[code] ?? []
+          )
+        }
+        ordersByStoreIdRef.current = nextOrdersByStore
+
         setStores((prev) => {
+          const hydrate = (store: Store) =>
+            hydrateStoreTablesFromActiveOrders(store, nextOrdersByStore[store.id] ?? [])
           if (targetStoreCodes.length === effectiveStoreCodes.length) {
             return effectiveStoreCodes
               .map((code) => {
                 const next = resultStoreMap.get(code)
                 if (!next) return null
-                return mergeStoreTablesWithLocalOrders(
-                  next,
-                  prev.find((p) => p.id === code)
+                return hydrate(
+                  mergeStoreTablesWithLocalOrders(next, prev.find((p) => p.id === code))
                 )
               })
               .filter(Boolean) as Store[]
           }
           return prev.map((store) => {
             const next = resultStoreMap.get(store.id)
-            if (!next) return store
-            return mergeStoreTablesWithLocalOrders(next, store)
+            if (!next) return hydrate(store)
+            return hydrate(mergeStoreTablesWithLocalOrders(next, store))
           })
         })
         setLayoutByStoreId((prev) => {
@@ -794,16 +904,7 @@ export function usePosStore() {
           }
           return next
         })
-        setOrdersByStoreId((prev) => {
-          const next = { ...prev }
-          for (const code of targetStoreCodes) {
-            next[code] = mergeFetchedOrdersWithLocal(
-              resultOrdersMap.get(code) ?? [],
-              prev[code] ?? []
-            )
-          }
-          return next
-        })
+        setOrdersByStoreId(nextOrdersByStore)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -854,11 +955,14 @@ export function usePosStore() {
   )
 
   const updateOrderStatus = useCallback((orderId: string, status: Order['status']) => {
+    const businessDate = getPosBusinessDateStr()
     setOrdersByStoreId((prev) => {
       const next: Record<string, Order[]> = {}
       Object.entries(prev).forEach(([storeCode, list]) => {
         next[storeCode] = list.map((order) => (order.id === orderId ? { ...order, status } : order))
+        persistActiveTerminalOrders(storeCode, businessDate, next[storeCode])
       })
+      ordersByStoreIdRef.current = next
       return next
     })
   }, [])
@@ -937,7 +1041,10 @@ export function usePosStore() {
         return true
       })
       next.unshift(optimistic)
-      return { ...prev, [storeCode]: next }
+      const merged = { ...prev, [storeCode]: next }
+      persistActiveTerminalOrders(storeCode, getPosBusinessDateStr(), next)
+      ordersByStoreIdRef.current = merged
+      return merged
     })
 
     if (type === 'dine-in' && tableName) {

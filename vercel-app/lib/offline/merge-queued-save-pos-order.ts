@@ -3,7 +3,28 @@
  * 동기화 시 한 번의 insert 로 반영되게 한다.
  */
 
-import { getAllPending, updateQueueItem } from './queue'
+import { getAllPending, removeFromQueue, updateQueueItem, type PendingRequest } from './queue'
+
+export async function findPendingSavePosOrderByLocalOrderNo(
+  localOrderNo: string
+): Promise<PendingRequest | null> {
+  const want = String(localOrderNo ?? '').trim()
+  if (!want.startsWith('LOCAL-') && !want.startsWith('pos-')) return null
+  const list = await getAllPending()
+  for (const item of list) {
+    if (item.api !== '/api/savePosOrder') continue
+    const metaNo = String(item.metadata?.localOrderNo ?? '').trim()
+    if (metaNo === want) return item
+  }
+  return null
+}
+
+export async function removeQueuedSavePosOrderByLocalOrderNo(localOrderNo: string): Promise<boolean> {
+  const item = await findPendingSavePosOrderByLocalOrderNo(localOrderNo)
+  if (!item) return false
+  await removeFromQueue(item.id)
+  return true
+}
 
 export async function mergeQueuedSavePosOrderByLocalOrderNo(
   localOrderNo: string,

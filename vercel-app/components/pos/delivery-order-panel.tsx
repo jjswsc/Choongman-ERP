@@ -25,6 +25,7 @@ import {
   markPosOrderItemServed,
   updatePosOrderStatus,
 } from '@/lib/api-client'
+import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, FileText } from 'lucide-react'
@@ -455,8 +456,22 @@ export function DeliveryOrderPanel({
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
     setCancelling(true)
     try {
-      const oid = Number(order.id)
-      await updatePosOrderStatus({ id: oid, status: 'cancelled' })
+      const outcome = await executePosFullOrderCancel({
+        order,
+        storeCode: storeCode || '',
+        onAlert: appAlert,
+        onConfirm: appConfirm,
+        failMessageFallback: t('processFail') || '처리 실패',
+      })
+      if (!outcome.ok) {
+        if (outcome.message) {
+          await appAlert(
+            localizeApiMessage(outcome.message, t, t('processFail') || '처리 실패', lang)
+          )
+        }
+        return
+      }
+      const oid = outcome.serverId ?? (posOrderHasServerId(order.id) ? Number(order.id) : 0)
       if (order.items.length > 0) {
         const kitchenLines = order.items.map((it) => {
           const raw = resolvePosOrderItemMenuDisplayName(
@@ -498,6 +513,7 @@ export function DeliveryOrderPanel({
         tDefault: ti,
         lang,
         confirmBeforeApply,
+        storeCode: storeCode || '',
         onAfterPartialLineRemoved,
         onRefresh: () => {
           setSelectedLineItemId(null)

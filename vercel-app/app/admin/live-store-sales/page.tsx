@@ -14,7 +14,7 @@ import {
   isFranchiseeAggregateAllStoresView,
   resolveFranchiseePosSalesFetchStoreCodes,
 } from "@/lib/franchisee-multi-store"
-import { usePosStore } from "@/hooks/use-pos-store"
+import { usePosStoreStandalone } from "@/hooks/use-pos-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
@@ -73,7 +73,7 @@ export default function AdminLiveStoreSalesPage() {
     return codes.length > 0 ? codes : undefined
   }, [canFranchiseeAll, auth, effectiveStoreCode])
 
-  const { stores, currentStore, setCurrentStoreId, loadingTables, refetchStores } = usePosStore()
+  const { stores, currentStore, setCurrentStoreId, loadingTables, refetchStores } = usePosStoreStandalone()
   const { stores: storeListCodes, legacyToCanonical, formatStoreLabel } = useStoreList()
 
   const storesForRealtime = useMemo(() => {

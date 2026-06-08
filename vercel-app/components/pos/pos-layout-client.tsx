@@ -12,6 +12,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
+import { PosStoreProvider } from "@/lib/pos-store-provider"
 import { appAlert } from "@/lib/app-message"
 import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
 import { sendPosHealthAlert } from "@/lib/pos-health-alert-client"
@@ -405,6 +406,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
+      <PosStoreProvider>
       <PosDrawerPinProvider>
       <PosBusinessDayHydrate />
       {topBarRevealStrip}
@@ -481,6 +483,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         )}
       </main>
       </PosDrawerPinProvider>
+      </PosStoreProvider>
     </div>
   )
 }

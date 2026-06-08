@@ -41,6 +41,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
+import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
@@ -88,6 +89,7 @@ export interface TableOrderPanelProps {
   onBeforeTableMove?: (orderId: number) => void
   onClose?: () => void
   t?: (key: string) => string
+  storeCode?: string
   /** 데모: 서빙 API 없이 부모 state만 갱신 */
   isDemo?: boolean
   onDemoOrderReplace?: (order: Order) => void
@@ -111,6 +113,7 @@ export function TableOrderPanel({
   onBeforeTableMove,
   onClose,
   t: tProp,
+  storeCode = '',
   isDemo,
   onDemoOrderReplace,
   takeoutMergePeers = [],
@@ -383,6 +386,7 @@ export function TableOrderPanel({
         onDemoOrderReplace,
         confirmBeforeApply,
         onAfterPartialLineRemoved,
+        storeCode,
         onRefresh: () => {
           setSelectedLineItemId(null)
           onServed?.()
@@ -416,30 +420,22 @@ export function TableOrderPanel({
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
     setCancelling(true)
     try {
-      const first = await updatePosOrderStatus({ id: Number(order.id), status: 'cancelled' })
-      const resolved = await (async () => {
-        if (first.success) return first
-        const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
-        const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
-        if (!canRetry) {
-          await appAlert(msg)
-          return null
+      const outcome = await executePosFullOrderCancel({
+        order,
+        storeCode,
+        onAlert: appAlert,
+        onConfirm: appConfirm,
+        failMessageFallback: t('processFail') || '처리 실패',
+      })
+      if (!outcome.ok) {
+        if (outcome.message) {
+          await appAlert(
+            localizeApiMessage(outcome.message, t, t('processFail') || '처리 실패', lang)
+          )
         }
-        const retryAsk = `${msg}\n\n후속 처리를 다시 시도할까요?`
-        if (!await appConfirm(retryAsk)) return null
-        const retried = await updatePosOrderStatus({
-          id: Number(order.id),
-          status: 'cancelled',
-          retrySideEffects: true,
-        })
-        if (!retried.success) {
-          await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
-          return null
-        }
-        return retried
-      })()
-      if (!resolved) return
-      const oid = Number(order.id)
+        return
+      }
+      const oid = outcome.serverId ?? (posOrderHasServerId(order.id) ? Number(order.id) : 0)
       if (order.items.length > 0) {
         const kitchenLines = order.items.map((it) =>
           kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(it.name, t))

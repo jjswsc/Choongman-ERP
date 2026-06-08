@@ -3,6 +3,7 @@ import { updatePosOrder } from '@/lib/api-client'
 import type { Order } from '@/lib/pos-types'
 import type { PosKitchenReprintPayload } from '@/lib/pos-kitchen-slip-routing'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
+import { resolvePosOrderServerIdForAction } from '@/lib/pos-order-resolve-server-id'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { tr as i18nTr } from '@/lib/i18n'
 import {
@@ -31,6 +32,8 @@ export type ExecutePosLineCancelOptions = {
   onDemoOrderReplace?: (order: Order) => void
   onAfterPartialLineRemoved?: (orderId: number, detail: PosKitchenReprintPayload) => Promise<void> | void
   onRefresh?: () => void
+  /** 일부 취소·서버 id 해석용 */
+  storeCode?: string
   /** 수량 1·전체 줄 삭제 시 확인창 (Dialog 경로는 false) */
   confirmBeforeApply?: boolean
 }
@@ -63,6 +66,7 @@ export async function executePosOrderLineCancel(
     onAfterPartialLineRemoved,
     onRefresh,
     confirmBeforeApply = false,
+    storeCode = '',
   } = opts
 
   const target = order.items.find((it) => it.id === itemId)
@@ -101,8 +105,11 @@ export async function executePosOrderLineCancel(
     return 'ok'
   }
 
-  const id = Number(order.id)
-  if (Number.isNaN(id) || !posOrderHasServerId(order.id)) {
+  const resolved = storeCode
+    ? await resolvePosOrderServerIdForAction(order, storeCode)
+    : { serverId: posOrderHasServerId(order.id) ? Number(order.id) : null, queueOnly: false, localOrderNo: null }
+  const id = resolved.serverId
+  if (id == null || !posOrderHasServerId(id)) {
     const msg = t('posServedNeedsOrderId')
     await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : tDefault('posServedNeedsOrderId'))
     return 'abort'

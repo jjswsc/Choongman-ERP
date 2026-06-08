@@ -10873,6 +10873,7 @@ export default function PosTerminalPage() {
             <TableOrderPanel
               tableName={servingTable.name}
               order={servingTable.order}
+              storeCode={currentStoreId}
               menus={menus}
               allTables={currentStore?.tables ?? []}
               takeoutMergePeers={takeoutMergePeerTables}
@@ -10982,6 +10983,7 @@ export default function PosTerminalPage() {
             <TakeoutOrderPanel
               orderLabel={resolveTakeoutOrderBarLabel(selectedTakeoutOrder)}
               order={selectedTakeoutOrder}
+              storeCode={currentStoreId}
               menus={menus}
               onPackaged={() => refetchStores({ scope: 'all' })}
               onAfterPartialLineRemoved={

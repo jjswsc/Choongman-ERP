@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { canViewMobileStoreSales, isOfficeRole, isOfficeStore } from "@/lib/permissions"
-import { usePosStore } from "@/hooks/use-pos-store"
+import { usePosStoreStandalone } from "@/hooks/use-pos-store"
 import { useStoreList } from "@/lib/use-store-list"
 import { StoreViewProvider, useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
@@ -50,7 +50,7 @@ function StoreSalesBody() {
     setCurrentStoreId,
     loadingTables,
     refetchStores,
-  } = usePosStore()
+  } = usePosStoreStandalone()
   const selectedStoreLabel = useMemo(() => {
     if (effectiveStoreCode === "All") return t("store_all_stores")
     const code = effectiveStoreCode || currentStoreId
