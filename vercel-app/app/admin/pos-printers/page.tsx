@@ -4,7 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy, Monitor } from "lucide-react"
+import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy, Monitor, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -85,6 +85,7 @@ import {
 } from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { PosDualMonitorSettingsContent } from "@/components/pos/pos-dual-monitor-settings-content"
+import { PosScreenConfigStoreSelect } from "@/components/pos/pos-screen-config-store-select"
 import {
   printPosHtmlDocument,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
@@ -355,7 +356,7 @@ export default function PosPrintersPage() {
       }).format(d),
     [bangkokLocaleTag]
   )
-  const { stores } = useStoreList()
+  const { stores, storeOptions, storeLabels } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState("")
   const [kitchenMode, setKitchenMode] = React.useState<1 | 2 | 3>(1)
@@ -1592,24 +1593,31 @@ export default function PosPrintersPage() {
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Select value={storeCode} onValueChange={setStoreCode}>
-            <SelectTrigger className="h-10 w-40">
-              <SelectValue placeholder={tr("store", "매장")} />
-            </SelectTrigger>
-            <SelectContent>
-              {stores.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <PosScreenConfigStoreSelect
+            value={storeCode || undefined}
+            onValueChange={setStoreCode}
+            stores={stores}
+            storeOptions={storeOptions}
+            storeLabels={storeLabels}
+            disabled={!canSearchAll || stores.length === 0}
+            searchPlaceholder={tr("outStoreSearchPh", "매장 검색")}
+          />
           <Button
             variant="outline"
             size="sm"
             className="h-10 gap-1.5"
             onClick={loadData}
-            disabled={loading}
+            disabled={loading || !effectiveStore}
+          >
+            <Search className="h-4 w-4" />
+            {tr("search", "조회")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 gap-1.5"
+            onClick={loadData}
+            disabled={loading || !effectiveStore}
           >
             <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
             {tr("posRefresh", "새로고침")}

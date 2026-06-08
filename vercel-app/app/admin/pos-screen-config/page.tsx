@@ -38,7 +38,7 @@ import { isOfficeRole } from "@/lib/permissions"
 export default function PosScreenConfigPage() {
   const searchParams = useSearchParams()
   const { auth } = useAuth()
-  const { stores } = useStoreList()
+  const { stores, storeOptions, storeLabels } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback(
@@ -71,6 +71,18 @@ export default function PosScreenConfigPage() {
   const [menuConfigReloadNonce, setMenuConfigReloadNonce] = React.useState(0)
   const customerDisplayRef = React.useRef<PosCustomerDisplayContentSettingsHandle>(null)
   const [customerToolbarSaving, setCustomerToolbarSaving] = React.useState(false)
+  const [customerDisplayLoading, setCustomerDisplayLoading] = React.useState(false)
+  /** 듀얼 모니터 탭: 본사는 [조회] 전까지 불러오지 않음. 가맹은 자기 매장만 자동. */
+  const [customerDisplayStore, setCustomerDisplayStore] = React.useState("")
+  const effectiveCustomerDisplayStore = String(
+    canPickStore ? customerDisplayStore : auth?.store || ""
+  ).trim()
+
+  React.useEffect(() => {
+    if (!canPickStore && auth?.store) {
+      setCustomerDisplayStore(auth.store)
+    }
+  }, [canPickStore, auth?.store])
 
   React.useEffect(() => {
     const tab = searchParams.get("tab")
@@ -287,18 +299,21 @@ export default function PosScreenConfigPage() {
                 <PosScreenConfigStoreAndCopyRow
                   canPickStore={canPickStore}
                   stores={stores}
-                  pickedStore={pickedStore}
-                  onPickedStoreChange={setPickedStore}
+                  storeOptions={storeOptions}
+                  storeLabels={storeLabels}
+                  pickedStore={customerDisplayStore}
+                  onPickedStoreChange={setCustomerDisplayStore}
                   readOnlyStoreCode={auth?.store}
-                  effectiveStore={effectiveStoreForMenuAndDisplay}
+                  effectiveStore={effectiveCustomerDisplayStore}
                   showCopy
                   copyVariant="display"
                   tr={tr}
+                  loadOnQuery
                   onRefresh={() => void customerDisplayRef.current?.reload()}
-                  refreshLoading={false}
+                  refreshLoading={customerDisplayLoading}
                   rightSlot={
                     <PosScreenConfigEmeraldSaveButton
-                      disabled={!effectiveStoreForMenuAndDisplay || customerToolbarSaving}
+                      disabled={!effectiveCustomerDisplayStore || customerToolbarSaving}
                       onClick={() => {
                         void (async () => {
                           setCustomerToolbarSaving(true)
@@ -318,7 +333,8 @@ export default function PosScreenConfigPage() {
                 <PosCustomerDisplayContentSettings
                   ref={customerDisplayRef}
                   toolbarMode="embedded"
-                  storeCode={effectiveStoreForMenuAndDisplay || null}
+                  storeCode={effectiveCustomerDisplayStore || null}
+                  onLoadingChange={setCustomerDisplayLoading}
                 />
               </div>
             </div>

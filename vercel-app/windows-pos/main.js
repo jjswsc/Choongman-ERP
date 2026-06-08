@@ -590,15 +590,61 @@ function getCustomerDisplayUrl() {
   }
 }
 
+function getMainPosDisplay() {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  try {
+    const b = mainWindow.getBounds();
+    const cx = Math.round(b.x + Math.max(1, b.width) / 2);
+    const cy = Math.round(b.y + Math.max(1, b.height) / 2);
+    return screen.getDisplayNearestPoint({ x: cx, y: cy });
+  } catch {
+    return null;
+  }
+}
+
 function resolveCustomerDisplayTarget() {
   const displays = screen.getAllDisplays();
   if (!displays.length) return null;
   if (customerDisplayConfig.monitorPreference === "primary-only") {
     return screen.getPrimaryDisplay();
   }
+  /** POS 메인 창이 있는 모니터가 아닌 쪽 — Seacon 등 2대 PC에서 캐셔·고객 모니터 뒤바뀜 방지 */
+  const posDisplay = getMainPosDisplay();
+  if (posDisplay && displays.length >= 2) {
+    const other = displays.find((d) => d.id !== posDisplay.id);
+    if (other) return other;
+  }
   const primary = screen.getPrimaryDisplay();
   const secondary = displays.find((d) => d.id !== primary.id);
   return secondary || primary;
+}
+
+/** 보조 모니터가 실제로 연결돼 있는지 (Windows가 디스플레이 1개만 잡을 때 false) */
+function hasSecondaryDisplay() {
+  const displays = screen.getAllDisplays();
+  if (displays.length < 2) return false;
+  const primary = screen.getPrimaryDisplay();
+  return displays.some((d) => d.id !== primary.id);
+}
+
+/**
+ * secondary-first 인데 모니터 1대뿐이면 고객창을 POS 위에 띄우지 않음.
+ * (Seacon 등 터치 POS 1대 + dualMonitor 설정 켜진 매장에서 주문 중 화면 전환 방지)
+ */
+function shouldSkipCustomerDisplayWindow(forceOpen) {
+  if (forceOpen) return false;
+  if (customerDisplayConfig.monitorPreference === "primary-only") return false;
+  return !hasSecondaryDisplay();
+}
+
+function refocusMainPosWindow() {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.focus();
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function placeCustomerWindowOnTarget(win) {
@@ -607,6 +653,19 @@ function placeCustomerWindowOnTarget(win) {
   if (!target) return;
   const b = target.bounds;
   win.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height }, false);
+  /** 배치 후에도 POS와 같은 모니터면 한 번 더 반대쪽 시도 */
+  try {
+    const posDisplay = getMainPosDisplay();
+    if (posDisplay && posDisplay.id === target.id && screen.getAllDisplays().length >= 2) {
+      const alt = screen.getAllDisplays().find((d) => d.id !== posDisplay.id);
+      if (alt) {
+        const ab = alt.bounds;
+        win.setBounds({ x: ab.x, y: ab.y, width: ab.width, height: ab.height }, false);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function broadcastCustomerDisplayState(payload) {
@@ -619,10 +678,27 @@ function broadcastCustomerDisplayState(payload) {
 async function ensureCustomerDisplayWindow(forceOpen = false) {
   const allowOpen = forceOpen || (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen);
   if (!allowOpen) return { ok: true, reason: "disabled" };
+  if (shouldSkipCustomerDisplayWindow(forceOpen)) {
+    if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+      try {
+        customerDisplayWindow.hide();
+      } catch {
+        /* ignore */
+      }
+    }
+    refocusMainPosWindow();
+    return { ok: true, reason: "single-display-skip" };
+  }
   if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
     placeCustomerWindowOnTarget(customerDisplayWindow);
-    customerDisplayWindow.show();
-    customerDisplayWindow.focus();
+    if (forceOpen) {
+      customerDisplayWindow.show();
+      customerDisplayWindow.focus();
+    } else {
+      /** 주문·결제 상태 갱신마다 focus() 하면 캐셔 POS가 고객 화면으로 바뀜 */
+      customerDisplayWindow.showInactive();
+      refocusMainPosWindow();
+    }
     return { ok: true };
   }
   try {
@@ -631,6 +707,7 @@ async function ensureCustomerDisplayWindow(forceOpen = false) {
       height: 900,
       show: false,
       autoHideMenuBar: true,
+      skipTaskbar: true,
       webPreferences: {
         preload: path.join(__dirname, "preload.js"),
         contextIsolation: true,
@@ -659,7 +736,13 @@ async function ensureCustomerDisplayWindow(forceOpen = false) {
     await customerDisplayWindow.loadURL(getCustomerDisplayUrl());
     placeCustomerWindowOnTarget(customerDisplayWindow);
     customerDisplayWindow.setFullScreen(true);
-    customerDisplayWindow.show();
+    if (forceOpen) {
+      customerDisplayWindow.show();
+      customerDisplayWindow.focus();
+    } else {
+      customerDisplayWindow.showInactive();
+      refocusMainPosWindow();
+    }
     if (customerDisplayLastState) {
       customerDisplayWindow.webContents.send("cm-pos-customer-display-state", customerDisplayLastState);
     }
@@ -2289,6 +2372,7 @@ if (!gotLock) {
       broadcastCustomerDisplayState(normalized);
       if (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen) {
         await ensureCustomerDisplayWindow(false);
+        refocusMainPosWindow();
       }
       return { ok: true };
     });

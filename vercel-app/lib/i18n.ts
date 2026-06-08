@@ -5379,6 +5379,8 @@ export const i18n = {
       '적용할 매장을 먼저 선택해야 이 화면의 설정을 불러오고 저장할 수 있습니다.',
     posScreenConfigStoreRowHint:
       '선택한 매장에만 저장됩니다. 다른 매장과 동일하게 맞추려면 원본 매장을 고른 뒤 복사를 누르세요.',
+    posScreenConfigStoreQueryHint:
+      '매장명·코드로 검색한 뒤 [조회]를 눌러 해당 매장 설정을 불러오세요. [새로고침]은 현재 매장 데이터를 다시 읽습니다.',
     posLineNote: '메모(항목)',
     posLineNotePh: '덜 맵게, 양파 빼기 등',
     posReorder: '재주문',
@@ -14572,6 +14574,8 @@ orderItemQty: 'Qty',
       'Select the target store first to load and save settings on this screen.',
     posScreenConfigStoreRowHint:
       'Saves only to the selected store. To match another store, pick a source store and use Copy.',
+    posScreenConfigStoreQueryHint:
+      'Search by store name or code, then click Query to load that store’s settings. Refresh re-reads the current store.',
     posLineNote: 'Item note',
     posLineNotePh: 'No onion, extra crispy, etc.',
     posReorder: 'Reorder',

@@ -65,8 +65,9 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     storeCode: string | null | undefined
     /** 상단 공통 툴바에 저장·새로고침을 둘 때 본문의 해당 버튼 숨김 */
     toolbarMode?: "default" | "embedded"
+    onLoadingChange?: (loading: boolean) => void
   }
->(function PosCustomerDisplayContentSettings({ storeCode, toolbarMode = "default" }, ref) {
+>(function PosCustomerDisplayContentSettings({ storeCode, toolbarMode = "default", onLoadingChange }, ref) {
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => {
@@ -96,6 +97,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     const sc = String(storeCode || "").trim()
     if (!sc) return
     setLoading(true)
+    onLoadingChange?.(true)
     try {
       const s = await getPosPrinterSettings({ storeCode: sc })
       setEnabled(Boolean(s.dualMonitorEnabled))
@@ -119,8 +121,9 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
       setIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? "").trim())
     } finally {
       setLoading(false)
+      onLoadingChange?.(false)
     }
-  }, [lang, storeCode])
+  }, [lang, onLoadingChange, storeCode])
 
   React.useEffect(() => {
     void load()
