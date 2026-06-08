@@ -11,6 +11,7 @@ import {
   isNetworkDegraded,
   reportNetworkFailure,
   reportNetworkSuccess,
+  shouldPreferOfflineCache,
 } from '@/lib/offline/network'
 
 function isNetworkError(e: unknown): boolean {
@@ -353,7 +354,7 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
   }
 
   /** 오프라인/심각한 degraded 상태면 fetch 대기 없이 곧바로 큐 적재 */
-  if ((!isBrowserOnline() || isNetworkDegraded()) && canQueue(url, init)) {
+  if ((!isBrowserOnline() || isNetworkDegraded() || shouldPreferOfflineCache()) && canQueue(url, init)) {
     try {
       return await queueAndReturnFallback()
     } catch {

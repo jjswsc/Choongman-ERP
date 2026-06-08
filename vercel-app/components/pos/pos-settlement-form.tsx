@@ -48,6 +48,7 @@ import {
   getPosSettlementWithCache,
 } from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
+import { shouldPreferOfflineCache } from '@/lib/offline/network'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
 import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
@@ -1103,6 +1104,21 @@ ${footerStamp}
 
     setSaving(true)
     try {
+      const preferLocalOpenSave =
+        openMode && offlineAware && (!online || shouldPreferOfflineCache())
+      if (preferLocalOpenSave && Number.isFinite(cashActualNum)) {
+        try {
+          await applyPosSettlementSaveToCache({
+            storeCode: effectiveStore,
+            settleDate,
+            cashActual: cashActualNum,
+          })
+          dispatchPosBusinessOpenUpdated({ storeCode: effectiveStore, settleDate })
+        } catch {
+          /* IndexedDB 불능 — 아래 서버·큐 저장 계속 */
+        }
+      }
+
       const res = await savePosSettlementWithOffline({
         storeCode: effectiveStore,
         settleDate,
@@ -1394,7 +1410,7 @@ ${footerStamp}
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t('loading')}</div>
         )}
 
-        {effectiveStore && !loading && openMode && (
+        {effectiveStore && (!loading || offlineAware) && openMode && (
           <div
             className={cn(
               'overflow-hidden rounded-2xl border border-border/70 bg-card shadow-md ring-1 ring-black/[0.04] dark:ring-white/[0.07]',

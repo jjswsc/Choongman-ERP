@@ -7,7 +7,7 @@ import {
   type PosBusinessHoursConfig,
 } from '@/lib/pos-business-day'
 import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
-import { isOnline } from '@/lib/offline/network'
+import { isOnline, shouldPreferOfflineCache } from '@/lib/offline/network'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
@@ -87,7 +87,7 @@ async function isBusinessOpenForStoreDate(storeCode: string, settleDate: string)
   } catch {
     /* fall through — API 직접 조회 */
   }
-  if (!isOnline()) return false
+  if (!isOnline() || shouldPreferOfflineCache()) return false
   try {
     const data = await getPosSettlement({ storeCode, settleDate })
     return isPosBusinessOpenRecorded(normalizeSettlement(data.settlement))

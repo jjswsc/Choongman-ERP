@@ -3,7 +3,7 @@
  * POS 영업관리: 매출 관리와 동일 동작 (인터넷 유무 관계없이 같은 화면)
  */
 
-import { isOnline } from './network'
+import { isOnline, shouldPreferOfflineCache } from './network'
 import { getFromCache, setCache } from './cache'
 import { getPosSettlement, type PosCloseRun, type PosSettlement } from '@/lib/api-client'
 
@@ -96,6 +96,11 @@ export async function getPosSettlementWithCache(params: {
 }): Promise<PosSettlementResponse> {
   const { settleDate, storeCode = '' } = params
   const key = cacheKeySettlement(storeCode || 'all', settleDate)
+
+  if (shouldPreferOfflineCache()) {
+    const cached = await getFromCache<PosSettlementResponse>('pos_sales_cache', key)
+    if (cached) return cached
+  }
 
   if (isOnline()) {
     try {
