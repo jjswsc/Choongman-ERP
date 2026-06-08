@@ -116,16 +116,25 @@ export function useStoreList() {
     load()
   }, [load])
 
+  /** ERP·매출·회계 매장 선택 — CM Office·test/HQ 제외 */
   const storeOptions = useMemo(
     () => stores.map((code) => ({ code, label: labelForStore(storeLabels, code) })),
     [stores, storeLabels]
   )
 
+  /** POS·관리자 POS 설정 — CM Office 포함 */
+  const posStoreOptions = useMemo(
+    () => posStores.map((code) => ({ code, label: labelForStore(storeLabels, code) })),
+    [posStores, storeLabels]
+  )
+
   return {
+    /** 운영(가맹) 매장만 — 매출·회계·대부분 ERP 선택 */
     stores,
     allStores,
     /** POS 홈·터미널·설정 — CM Office 포함, test/HQ 제외 */
     posStores,
+    posStoreOptions,
     users,
     staffByStore,
     storeLabels,

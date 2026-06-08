@@ -356,7 +356,7 @@ export default function PosPrintersPage() {
       }).format(d),
     [bangkokLocaleTag]
   )
-  const { stores, storeOptions, storeLabels } = useStoreList()
+  const { posStores: stores, posStoreOptions: storeOptions, storeLabels } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState("")
   const [kitchenMode, setKitchenMode] = React.useState<1 | 2 | 3>(1)

@@ -38,7 +38,7 @@ import { isOfficeRole } from "@/lib/permissions"
 export default function PosScreenConfigPage() {
   const searchParams = useSearchParams()
   const { auth } = useAuth()
-  const { stores, storeOptions, storeLabels } = useStoreList()
+  const { posStores: stores, posStoreOptions: storeOptions, storeLabels } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback(

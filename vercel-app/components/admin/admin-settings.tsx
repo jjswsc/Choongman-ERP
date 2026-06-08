@@ -155,7 +155,7 @@ export function AdminSettings() {
     }
   }, [])
 
-  const { stores: storeKeys, storeLabels: erpStoreLabels } = useStoreList()
+  const { posStores: storeKeys, storeLabels: erpStoreLabels } = useStoreList()
   const canEditFranchiseeSettings = canAccessSettings(auth?.role || "")
   const loadPermOptions = useCallback(async () => {
     setPermStores(storeKeys)

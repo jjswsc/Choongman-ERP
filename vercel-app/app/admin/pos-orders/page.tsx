@@ -266,7 +266,7 @@ export default function PosOrdersPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
   const [orders, setOrders] = React.useState<PosOrder[]>([])
   const [loading, setLoading] = React.useState(false)
   const [startStr, setStartStr] = React.useState(() =>

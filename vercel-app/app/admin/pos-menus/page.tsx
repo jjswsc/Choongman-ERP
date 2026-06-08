@@ -523,7 +523,7 @@ function newPackagingChecklistRow(sortOrder: number): PackagingChecklistDraftRow
 
 export default function PosMenusPage() {
   const { auth } = useAuth()
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
   /** 옵션 부위명 — 영수증과 동일하게 한글 부위 표기를 Boneless/Wing/Drumette 로 통일 */

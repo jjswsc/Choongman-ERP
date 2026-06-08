@@ -179,7 +179,7 @@ export default function EmployeesPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { auth } = useAuth()
-  const { stores: storeListFromApi, storeLabels: erpStoreLabels, resolveStoreKey } = useStoreList()
+  const { posStores: storeListFromApi, storeLabels: erpStoreLabels, resolveStoreKey } = useStoreList()
   const userStore = (auth?.store || "").trim()
   const userRole = (auth?.role || "").trim()
 
