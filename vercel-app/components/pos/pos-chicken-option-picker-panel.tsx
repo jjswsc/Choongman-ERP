@@ -14,6 +14,7 @@ import {
   resolveChickenOptionPickerPlan,
   type ChickenTwoPhasePhase,
 } from "@/lib/pos-chicken-option-picker-plan"
+import { isPosCartOptionLabelMatchPickerEnabled } from "@/lib/pos-cart-option-label-rollout"
 
 export type PosChickenOptionPickerPanelProps = {
   menu: PosMenu
@@ -27,6 +28,7 @@ export type PosChickenOptionPickerPanelProps = {
   descriptionChannel: PosDescriptionChannel
   /** 터미널: 항상, 주문 페이지: 배달만 */
   showDefaultButton: boolean
+  storeCode?: string | null
   getMenuPrice: (menu: PosMenu) => number
   getOptionModifier: (opt: PosMenuOption) => number
   formatPrice: (amount: number) => string
@@ -81,6 +83,7 @@ export function PosChickenOptionPickerPanel({
   showMenuDescriptions,
   descriptionChannel,
   showDefaultButton,
+  storeCode,
   getMenuPrice,
   getOptionModifier,
   formatPrice,
@@ -95,6 +98,7 @@ export function PosChickenOptionPickerPanel({
   wrapAction,
 }: PosChickenOptionPickerPanelProps) {
   const act = wrapAction ?? ((fn: () => void) => fn())
+  const pickerLabelRollout = isPosCartOptionLabelMatchPickerEnabled(storeCode)
   const plan = resolveChickenOptionPickerPlan({
     menu,
     options,
@@ -124,6 +128,7 @@ export function PosChickenOptionPickerPanel({
       allOptions: options,
       getOptionModifier,
       resolveCartDisplayName,
+      storeCode,
     })
     if (merged) onAddToCart(menu, merged)
     else onAddToCart(menu, null, plan.chickenDefaultDisplay || undefined)
@@ -146,7 +151,11 @@ export function PosChickenOptionPickerPanel({
         }
         className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
       >
-        <span className="font-medium text-slate-800">{t("posOptionDefault") || "기본 (S Boneless)"}</span>
+        <span className="font-medium text-slate-800">
+          {pickerLabelRollout
+            ? plan.chickenDefaultDisplay
+            : t("posOptionDefault") || "Default (S Boneless)"}
+        </span>
         <span className="font-bold text-amber-600">{formatPrice(menuBasePrice)} ฿</span>
       </button>
     ) : null
@@ -190,7 +199,7 @@ export function PosChickenOptionPickerPanel({
     } = plan.multistep
 
     const finishMultistep = (selections: Record<string, string>) => {
-      const match = resolveChickenMultistepMatch({ menu, plan, selections })
+      const match = resolveChickenMultistepMatch({ menu, plan, selections, storeCode })
       if (plan.useTwoPhase && twoPhasePhase === "ancillary") {
         completeTwoPhasePick(match)
       } else if (match) {

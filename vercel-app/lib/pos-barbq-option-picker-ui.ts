@@ -101,6 +101,8 @@ export function pickBarBqSizePhaseOptions<T extends PosMenuOption>(params: {
   return params.optionsFiltered
 }
 
+import { isPosCartOptionLabelMatchPickerEnabled } from '@/lib/pos-cart-option-label-rollout'
+
 /** 1단계 M(또는 S) + 2단계 사이드 선택 후 장바구니용 합성 옵션 */
 export function mergeBarBqSizeAndAncillaryForCart(
   sizeOpt: PosMenuOption | null,
@@ -110,6 +112,7 @@ export function mergeBarBqSizeAndAncillaryForCart(
     deliveryModifier: number | null
     sizeLabel: string | null
     ancillaryLabel: string | null
+    storeCode?: string | null
   }
 ): PosMenuOption | null {
   if (!ancillaryOpt && !sizeOpt) return null
@@ -119,7 +122,8 @@ export function mergeBarBqSizeAndAncillaryForCart(
   const nameParts = [sizePart ?? (sizeOpt ? null : 'S Boneless'), sidePart].filter(
     (x): x is string => !!x
   )
-  const mergedName = nameParts.join(' - ') || String(ancillaryOpt.name ?? '').trim()
+  const joinSep = isPosCartOptionLabelMatchPickerEnabled(params.storeCode) ? ' - ' : ' / '
+  const mergedName = nameParts.join(joinSep) || String(ancillaryOpt.name ?? '').trim()
   const baseId = sizeOpt?.id ?? 's-default'
   return {
     ...ancillaryOpt,

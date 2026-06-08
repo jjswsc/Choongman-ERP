@@ -16,7 +16,8 @@ describe('resolvePosCartOptionDisplayName', () => {
         priceModifier: 110,
         sortOrder: 0,
         optionStepValues: { part: 'Boneless' },
-      } as PosMenuOption
+      } as PosMenuOption,
+      'Office'
     )
     expect(label).toBe('M - Boneless')
   })
@@ -69,7 +70,8 @@ describe('composePosCartOptionBracketFromPickerRows', () => {
     }
     const bracket = composePosCartOptionBracketFromPickerRows(
       { code: 'C005', optionSelectionGroups: ['part', 'sidedish'] },
-      [partRow, sideRow]
+      [partRow, sideRow],
+      'Office'
     )
     expect(bracket).toBe('M - Boneless - Pickled Radish')
   })

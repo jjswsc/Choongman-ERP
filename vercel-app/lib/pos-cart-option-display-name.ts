@@ -4,6 +4,7 @@ import {
   inferChickenOptionSizeValue,
   isChickenMenuCodeForOptions,
 } from '@/lib/pos-chicken-option-inference'
+import { isPosCartOptionLabelMatchPickerEnabled } from '@/lib/pos-cart-option-label-rollout'
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -28,12 +29,13 @@ export function optionStepValueAppearsAsTokenInDisplay(raw: string, value: strin
  */
 export function composePosCartOptionBracketFromPickerRows(
   menu: Pick<PosMenu, 'optionSelectionGroups' | 'code'>,
-  rows: PosMenuOption[]
+  rows: PosMenuOption[],
+  storeCode?: string | null
 ): string {
   const labels: string[] = []
   const seen = new Set<string>()
   for (const row of rows) {
-    const label = resolvePosCartOptionDisplayName(menu, row)
+    const label = resolvePosCartOptionDisplayName(menu, row, storeCode)
     if (!label) continue
     const key = label.toLowerCase()
     if (seen.has(key)) continue
@@ -49,8 +51,10 @@ export function composePosCartOptionBracketFromPickerRows(
  */
 export function resolvePosCartOptionDisplayName(
   menu: Pick<PosMenu, 'optionSelectionGroups' | 'code'>,
-  opt: PosMenuOption
+  opt: PosMenuOption,
+  storeCode?: string | null
 ): string {
+  const usePickerLabelRollout = isPosCartOptionLabelMatchPickerEnabled(storeCode)
   const raw = String(opt.name ?? '').trim()
   const groups = (menu.optionSelectionGroups ?? []).map((g) => String(g ?? '').trim()).filter(Boolean)
   const step =
@@ -73,7 +77,7 @@ export function resolvePosCartOptionDisplayName(
     }
   }
 
-  if (isChickenMenuCodeForOptions(menu.code)) {
+  if (usePickerLabelRollout && isChickenMenuCodeForOptions(menu.code)) {
     const size = inferChickenOptionSizeValue(opt)
     const part = inferChickenOptionPartValue(opt)
     if (size && part && !optionStepValueAppearsAsTokenInDisplay(resolved, size)) {

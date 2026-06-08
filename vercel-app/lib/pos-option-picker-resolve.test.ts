@@ -106,9 +106,10 @@ describe("resolvePosOptionPickerMatch", () => {
       sellDelivery: true,
       sellPackaging: true,
     }
-    const match = resolvePosOptionPickerMatch({
-      menuCode: "C005",
-      optionSelectionGroups: ["part", "sidedish"],
+                  const match = resolvePosOptionPickerMatch({
+                    menuCode: "C005",
+                    storeCode: "Office",
+                    optionSelectionGroups: ["part", "sidedish"],
       groups: ["part", "sidedish"],
       selections: { part: "Boneless", sidedish: "Pickled Radish" },
       optionsWithSteps: [partRow, sideRow],

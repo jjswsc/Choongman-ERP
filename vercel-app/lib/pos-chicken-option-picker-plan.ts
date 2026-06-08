@@ -336,8 +336,9 @@ export function buildChickenTwoPhaseCartOption(params: {
   allOptions: PosMenuOption[]
   getOptionModifier: (o: PosMenuOption) => number
   resolveCartDisplayName: (menu: PosMenu, opt: PosMenuOption) => string
+  storeCode?: string | null
 }): PosMenuOption | null {
-  const { menu, sizeOpt, ancillaryOpt, allOptions, getOptionModifier, resolveCartDisplayName } =
+  const { menu, sizeOpt, ancillaryOpt, allOptions, getOptionModifier, resolveCartDisplayName, storeCode } =
     params
   const hallMod =
     (sizeOpt ? getOptionModifier(sizeOpt) : 0) + (ancillaryOpt ? getOptionModifier(ancillaryOpt) : 0)
@@ -357,6 +358,7 @@ export function buildChickenTwoPhaseCartOption(params: {
     deliveryModifier: delMod,
     sizeLabel: sizeOpt ? resolveCartDisplayName(menu, sizeOpt) : null,
     ancillaryLabel: ancillaryOpt ? resolveCartDisplayName(menu, ancillaryOpt) : null,
+    storeCode,
   })
   if (merged) return merged
   if (sizeOpt) return sizeOpt
@@ -368,10 +370,12 @@ export function resolveChickenMultistepMatch(params: {
   menu: PosMenu
   plan: ChickenOptionPickerPlan
   selections: Record<string, string>
+  storeCode?: string | null
 }): PosMenuOption | null {
-  const { menu, plan, selections } = params
+  const { menu, plan, selections, storeCode } = params
   return resolvePosOptionPickerMatch({
     menuCode: menu.code,
+    storeCode,
     optionSelectionGroups: menu.optionSelectionGroups,
     groups: plan.activeStepGroups,
     selections,

@@ -1,5 +1,6 @@
 import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import { composePosCartOptionBracketFromPickerRows } from "@/lib/pos-cart-option-display-name"
+import { isPosCartOptionLabelMatchPickerEnabled } from "@/lib/pos-cart-option-label-rollout"
 import {
   collectPosOptionPickerStepValues,
   inferChickenOptionPartValue,
@@ -29,6 +30,8 @@ function stepValueForMatch(
  */
 export function resolvePosOptionPickerMatch(params: {
   menuCode: string | undefined
+  /** rollout 게이트 — 미전달 시 비활성(레거시 합성) */
+  storeCode?: string | null
   /** resolvePosCartOptionDisplayName용 — 없으면 groups 사용 */
   optionSelectionGroups?: string[]
   groups: string[]
@@ -78,7 +81,9 @@ export function resolvePosOptionPickerMatch(params: {
   for (const g of requiredGroups) {
     stepValues[g] = String(selections[g] ?? "").trim()
   }
-  const name = composePosCartOptionBracketFromPickerRows(menuForDisplay, perGroup)
+  const name = isPosCartOptionLabelMatchPickerEnabled(params.storeCode)
+    ? composePosCartOptionBracketFromPickerRows(menuForDisplay, perGroup, params.storeCode)
+    : requiredGroups.map((g) => stepValues[g]).join(" - ")
   const priceModifier = perGroup.reduce((s, o) => s + (Number(o.priceModifier) || 0), 0)
   const priceModifierDelivery = perGroup.some((o) => o.priceModifierDelivery != null)
     ? perGroup.reduce((s, o) => s + (Number(o.priceModifierDelivery ?? o.priceModifier) || 0), 0)

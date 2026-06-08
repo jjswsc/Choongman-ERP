@@ -1257,6 +1257,7 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                 if (optionPickerStep >= groups.length - 1) {
                   const match = resolvePosOptionPickerMatch({
                     menuCode: menu.code,
+                    storeCode: pickupStore,
                     optionSelectionGroups: menu.optionSelectionGroups,
                     groups,
                     selections: next,

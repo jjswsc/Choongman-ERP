@@ -99,6 +99,7 @@ import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
+import { isPosCartOptionLabelMatchPickerEnabled } from "@/lib/pos-cart-option-label-rollout"
 import {
   filterFlatChickenMListOptions,
   isChickenSizeOnlyOptionName,
@@ -960,7 +961,7 @@ export default function PosOrderPage() {
       return
     }
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
-    const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt) : ""
+    const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt, storeCode || undefined) : ""
     const name = opt
       ? `${menu.name} (${optBracket})`
       : defaultOptionDisplayName
@@ -2802,10 +2803,11 @@ export default function PosOrderPage() {
               const merged = mergeBarBqSizeAndAncillaryForCart(sizeOpt, ancillaryMatch, {
                 hallModifier: hallMod,
                 deliveryModifier: delMod,
-                sizeLabel: sizeOpt ? resolvePosCartOptionDisplayName(optionPickerMenu, sizeOpt) : null,
+                sizeLabel: sizeOpt ? resolvePosCartOptionDisplayName(optionPickerMenu, sizeOpt, storeCode || undefined) : null,
                 ancillaryLabel: ancillaryMatch
-                  ? resolvePosCartOptionDisplayName(optionPickerMenu, ancillaryMatch)
+                  ? resolvePosCartOptionDisplayName(optionPickerMenu, ancillaryMatch, storeCode || undefined)
                   : null,
+                storeCode,
               })
               if (merged) addToCartWithOption(optionPickerMenu, merged)
               else if (sizeOpt) addToCartWithOption(optionPickerMenu, sizeOpt)
@@ -2815,6 +2817,7 @@ export default function PosOrderPage() {
             }
             /** S 사이즈 기본(S Boneless)은 M/L 있는 치킨·배달에서만 */
             const chickenDefaultDisplay = resolveChickenDefaultOptionDisplayName(opts)
+            const pickerLabelRollout = isPosCartOptionLabelMatchPickerEnabled(storeCode)
             const defaultBtn = isChickenBasePrice && orderType === "delivery" && chickenDefaultDisplay && (
               <button
                 type="button"
@@ -2827,7 +2830,11 @@ export default function PosOrderPage() {
                 }}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
-                <span className="font-medium text-slate-800">{t("posOptionDefault") || "기본 (S Boneless)"}</span>
+                <span className="font-medium text-slate-800">
+                  {pickerLabelRollout
+                    ? chickenDefaultDisplay
+                    : t("posOptionDefault") || "Default (S Boneless)"}
+                </span>
                 <span className="font-bold text-amber-600">{formatBahtNum(getMenuPrice(optionPickerMenu))} ฿</span>
               </button>
             )
@@ -2884,6 +2891,7 @@ export default function PosOrderPage() {
                 if (optionPickerStep >= activeStepGroups.length - 1) {
                   const match = resolvePosOptionPickerMatch({
                     menuCode: optionPickerMenu.code,
+                    storeCode,
                     optionSelectionGroups: optionPickerMenu.optionSelectionGroups,
                     groups: activeStepGroups,
                     selections: nextSelections,
@@ -3003,6 +3011,7 @@ export default function PosOrderPage() {
                         if (optionPickerStep >= activeStepGroups.length - 1) {
                           const match = resolvePosOptionPickerMatch({
                             menuCode: optionPickerMenu.code,
+                            storeCode,
                             optionSelectionGroups: optionPickerMenu.optionSelectionGroups,
                             groups: activeStepGroups,
                             selections: nextSelections,

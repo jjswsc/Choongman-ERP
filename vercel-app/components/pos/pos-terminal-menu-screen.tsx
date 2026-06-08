@@ -555,7 +555,7 @@ export function PosTerminalMenuScreen({
       }
     }
     const id = opt ? `${menu.id}-${opt.id}` : menu.id
-    const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt) : ''
+    const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt, storeCode || undefined) : ''
     const name = opt
       ? `${menu.name} (${optBracket})`
       : defaultOptionName
@@ -594,7 +594,7 @@ export function PosTerminalMenuScreen({
       const menu = menus.find((m) => String(m.id) === String(x.menuId))
       const optName = optId
         ? option && menu
-          ? resolvePosCartOptionDisplayName(menu, option) || String(option.name ?? '').trim()
+          ? resolvePosCartOptionDisplayName(menu, option, storeCode || undefined) || String(option.name ?? '').trim()
           : (option?.name?.trim() || '')
         : isChickenMenu(menu?.code) && menu
           ? resolveChickenDefaultOptionDisplayName(
@@ -1652,6 +1652,7 @@ export function PosTerminalMenuScreen({
                 menu={optionPickerMenu}
                 options={opts}
                 orderType={orderType}
+                storeCode={storeCode}
                 twoPhasePhase={barBqPickerPhase}
                 pendingSizeOpt={barBqPendingSizeOpt}
                 optionPickerStep={optionPickerStep}
@@ -1664,7 +1665,9 @@ export function PosTerminalMenuScreen({
                 formatPrice={(n) => n.toLocaleString()}
                 t={t}
                 translateChickenPartLabel={translateChickenPartLabel}
-                resolveCartDisplayName={resolvePosCartOptionDisplayName}
+                resolveCartDisplayName={(menu, opt) =>
+                  resolvePosCartOptionDisplayName(menu, opt, storeCode || undefined)
+                }
                 onAddToCart={(menu, opt, defaultDisplay) => {
                   void addWithOption(menu, opt, defaultDisplay)
                 }}
