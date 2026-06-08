@@ -58,10 +58,35 @@ import {
   periodRowsForStoreSelection,
   resolvePeriodSeriesStoreKey,
 } from "@/lib/pos-sales-period-aggregate"
+import {
+  collectPosSalesPaymentTenderGaps,
+  posSalesPeriodPaymentTenderGap,
+  type PosSalesPaymentTenderGapItem,
+} from "@/lib/pos-sales-payment-tender-gap"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
+import { addBangkokCalendarDays } from "@/lib/bangkok-time"
 import { addDaysYmd } from "@/lib/pos-business-day"
+import {
+  buildMomDayCompareRows,
+  buildYoyMonthCompareRows,
+  computeSalesForecast,
+  monthRangeYmd,
+  parseYearFromYmd,
+  parseYearMonthFromYmd,
+  prevCalendarMonth,
+  yearRangeYmd,
+  type ForecastHorizon,
+  type MomDayCompareRow,
+  type SalesForecastSummary,
+  type YoyMonthCompareRow,
+} from "@/lib/pos-sales-forecast-compare"
+import {
+  SalesForecastPanel,
+  SalesMomComparePanel,
+  SalesYoyComparePanel,
+} from "@/components/tabs/sales-forecast-report-panels"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
 import { displayPosCancelReasonKey } from "@/lib/pos-cancel-reason-key"
 import {
@@ -117,6 +142,51 @@ function periodPaymentAmount(row: PeriodPaymentRow, field: PeriodPaymentField) {
   return Number(row[field] ?? 0) || 0
 }
 
+function SalesPaymentTenderGapAlert({
+  gaps,
+  tr,
+  maxRows = 8,
+}: {
+  gaps: PosSalesPaymentTenderGapItem[]
+  tr: (key: string, fallback: string) => string
+  maxRows?: number
+}) {
+  if (gaps.length === 0) return null
+  const shown = gaps.slice(0, maxRows)
+  const rest = gaps.length - shown.length
+  return (
+    <div className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
+      <p className="font-medium">
+        {tr(
+          "salesPaymentTenderGapWarning",
+          "매출액과 결제수단 합계가 맞지 않는 기간이 있습니다. POS 영수증 관리에서 결제 미기록·서비스(컴) 주문을 확인·정정하세요."
+        )}
+      </p>
+      <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs leading-relaxed">
+        {shown.map((g) => (
+          <li key={`${g.storeCode ?? ""}\t${g.key}`}>
+            {g.storeLabel ? `${g.storeLabel} · ` : ""}
+            {g.label}: {tr("salesAmount", "매출액")} {formatSalesAmount(g.total)} −{" "}
+            {tr("salesPaymentTenderSum", "결제 합계")} {formatSalesAmount(g.tenderSum)} ={" "}
+            <span className="font-erp-numeric font-semibold">{formatSalesAmount(g.gap)}</span>
+          </li>
+        ))}
+      </ul>
+      {rest > 0 ? (
+        <p className="mt-1 text-xs">
+          {tr("salesPaymentTenderGapMore", "외 {n}건").replace("{n}", String(rest))}
+        </p>
+      ) : null}
+      <p className="mt-1.5 text-[11px] opacity-90">
+        {tr(
+          "salesPaymentTenderGapHint",
+          "진단 SQL: vercel-app/sql/pos_sales_payment_tender_gap_diagnostic.sql · API: POST /api/correctPosOrderPayment"
+        )}
+      </p>
+    </div>
+  )
+}
+
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
 
 type PeriodTrendChartRow = { axisLabel: string; sales: number }
@@ -165,13 +235,6 @@ function formatSalesAmount(n: number) {
   const v = Number(n ?? 0)
   if (!Number.isFinite(v)) return "0"
   return Math.round(v).toLocaleString()
-}
-
-function formatPeakHourRange(hour: number) {
-  const h = Number(hour)
-  if (!Number.isFinite(h) || h < 0 || h > 23) return "—"
-  const next = (h + 1) % 24
-  return `${String(h).padStart(2, "0")}:00-${String(next).padStart(2, "0")}:00`
 }
 
 /** API·캐시 행에 집계 필드가 일부 누락될 수 있음 — 본문에서 ?? 로 보정 */
@@ -285,7 +348,6 @@ function sumStoreSalesTotals(rows: StoreSalesAggregateRow[]) {
 
 type AnalyticsView =
   | "period"
-  | "realtime-revenue"
   | "delivery"
   | "channel"
   | "menu"
@@ -293,6 +355,9 @@ type AnalyticsView =
   | "store"
   | "store-category"
   | "store-period"
+  | "yoy-compare"
+  | "mom-compare"
+  | "forecast"
   | null
 
 /** 집계 기간 UI·상단 추이 차트를 공유하는 리포트 주제 (실시간 운영 제외) */
@@ -333,12 +398,6 @@ const SALES_IA: SalesSubMenuConfig[] = [
     fallbackLabel: "실적 분석",
     topics: [
       { id: "analysis-period", labelKey: "salesTopicExplorePeriod", hintKey: "salesTopicExplorePeriodHint", view: "period" },
-      {
-        id: "analysis-realtime-revenue",
-        labelKey: "salesTopicRealtimeRevenueOps",
-        hintKey: "salesTopicRealtimeRevenueOpsHint",
-        view: "realtime-revenue",
-      },
       { id: "analysis-channel", labelKey: "salesTopicExploreChannel", hintKey: "salesTopicExploreChannelHint", view: "channel" },
       { id: "analysis-payment", labelKey: "salesTopicExplorePayment", hintKey: "salesTopicExplorePaymentHint", view: "payment" },
       { id: "analysis-menu", labelKey: "salesTopicExploreMenu", hintKey: "salesTopicExploreMenuHint", view: "menu" },
@@ -365,9 +424,9 @@ const SALES_IA: SalesSubMenuConfig[] = [
     labelKey: "salesManagementTabForecast",
     fallbackLabel: "예측·리포트",
     topics: [
-      { id: "report-month-year", labelKey: "salesTopicCompareMonthYear", hintKey: "salesTopicCompareMonthYearHint", view: "period" },
-      { id: "report-month-mom", labelKey: "salesTopicCompareMonthMom", hintKey: "salesTopicCompareMonthMomHint", view: "period" },
-      { id: "report-forecast-monthly", labelKey: "salesTopicForecastMonthly", hintKey: "salesTopicForecastMonthlyHint", view: "period" },
+      { id: "report-month-year", labelKey: "salesTopicCompareMonthYear", hintKey: "salesTopicCompareMonthYearHint", view: "yoy-compare" },
+      { id: "report-month-mom", labelKey: "salesTopicCompareMonthMom", hintKey: "salesTopicCompareMonthMomHint", view: "mom-compare" },
+      { id: "report-forecast-monthly", labelKey: "salesTopicForecastMonthly", hintKey: "salesTopicForecastMonthlyHint", view: "forecast" },
       { id: "report-overview", labelKey: "salesTopicOverviewReport", hintKey: "salesTopicOverviewReportHint", view: "channel" },
     ],
   },
@@ -387,60 +446,6 @@ type SalesFilterPreset = {
 }
 
 const SALES_FILTER_PRESET_STORAGE_KEY = "cm-sales-filter-presets-v1"
-
-type RealtimeRevenueStoreRow = {
-  storeCode: string
-  completedRevenue: number
-  waitingRevenue: number
-  delayedRevenue: number
-  delayedOrders: number
-  avgCookingMinutes: number
-  revenueWeightedCookingMinutes: number
-  cancelRate: number
-  stockoutRate: number
-  peakHour: number
-  peakHourRevenue: number
-}
-
-type RealtimeRevenueDashboardData = {
-  store: RealtimeRevenueStoreRow
-  office: {
-    stores: RealtimeRevenueStoreRow[]
-  }
-  delayThresholdMin: number
-  truncated: boolean
-}
-
-async function fetchPosRealtimeRevenueDashboard(params: {
-  startStr: string
-  endStr: string
-  stores?: string[]
-  orderTypes?: PosOrderTypeValue[]
-}): Promise<RealtimeRevenueDashboardData> {
-  const q = new URLSearchParams()
-  q.set("startStr", params.startStr)
-  q.set("endStr", params.endStr)
-  if (params.stores?.length) q.set("stores", params.stores.join(","))
-  const orderTypesKey = (params.orderTypes ?? []).join(",")
-  if (orderTypesKey) q.set("orderTypes", orderTypesKey)
-  const res = await fetch(`/api/posRealtimeRevenueDashboard?${q.toString()}`, { cache: "no-store" })
-  const json = (await res.json()) as {
-    success?: boolean
-    store?: RealtimeRevenueStoreRow
-    office?: { stores?: RealtimeRevenueStoreRow[] }
-    delayThresholdMin?: number
-    truncated?: boolean
-  }
-  if (!res.ok || json?.success === false || !json?.store) {
-    throw new Error("failed to load realtime revenue dashboard")
-  }
-  return {
-    store: json.store,
-    office: { stores: Array.isArray(json.office?.stores) ? json.office.stores : [] },
-    delayThresholdMin: Number(json.delayThresholdMin ?? 15) || 15,
-    truncated: json.truncated === true,
-  }
-}
 
 export interface SalesManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
@@ -624,7 +629,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }[]
   >([])
   const [savedPresets, setSavedPresets] = React.useState<SalesFilterPreset[]>([])
-  const [realtimeRevenueData, setRealtimeRevenueData] = React.useState<RealtimeRevenueDashboardData | null>(null)
+  const [yoyCompareRows, setYoyCompareRows] = React.useState<YoyMonthCompareRow[]>([])
+  const [momCompareRows, setMomCompareRows] = React.useState<MomDayCompareRow[]>([])
+  const [forecastSummary, setForecastSummary] = React.useState<SalesForecastSummary | null>(null)
+  const [forecastHorizon, setForecastHorizon] = React.useState<ForecastHorizon>("month")
+  const [forecastLookbackRows, setForecastLookbackRows] = React.useState<PosSalesPeriodRow[]>([])
+  const [forecastActualRows, setForecastActualRows] = React.useState<PosSalesPeriodRow[]>([])
   const [summaryCards, setSummaryCards] = React.useState<{
     current: number
     prevRange: number
@@ -698,6 +708,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     () => (selectedStoresKey ? selectedStoresKey.split(",") : undefined),
     [selectedStoresKey]
   )
+
+  const compareStoreLabel = React.useMemo(() => {
+    if ((selectedStoresParam?.length ?? 0) === 1) {
+      return posStoreDisplayName(selectedStoresParam![0]!)
+    }
+    if ((selectedStoresParam?.length ?? 0) > 1) {
+      return tr("salesMultiStoreSelected", "선택 매장 합계")
+    }
+    return tr("salesSelectStoreAll", "매장(전체)")
+  }, [selectedStoresParam, posStoreDisplayName, tr])
+
   /** 본사: 매장 미선택 시 API 호출 없음. 선택·「전체 선택」만 조회 대상 */
   const salesFetchStoresParam = React.useMemo((): string[] | undefined => {
     if (selectedStoresKey) return selectedStoresParam
@@ -1058,6 +1079,42 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     salesFetchStoresParam,
   ])
 
+  const periodPaymentTenderGaps = React.useMemo(
+    () =>
+      collectPosSalesPaymentTenderGaps(
+        periodChartRows.map((r) => ({
+          label: r.axisLabel,
+          key: r.key,
+          total: r.total,
+          cashSales: r.cashSales,
+          creditSales: r.creditSales,
+          qrSales: r.qrSales,
+          otherSales: r.otherSales,
+          deliveryAppSales: r.deliveryAppSales,
+        }))
+      ),
+    [periodChartRows]
+  )
+
+  const storePeriodPaymentTenderGaps = React.useMemo(
+    () =>
+      collectPosSalesPaymentTenderGaps(
+        storeByPeriodFlatRows.map((r) => ({
+          label: r.axisLabel,
+          key: r.key,
+          total: r.total,
+          cashSales: r.cashSales,
+          creditSales: r.creditSales,
+          qrSales: r.qrSales,
+          otherSales: r.otherSales,
+          deliveryAppSales: r.deliveryAppSales,
+          storeCode: r.storeCode,
+          storeLabel: r.storeDisplay,
+        }))
+      ),
+    [storeByPeriodFlatRows]
+  )
+
   const showComparePeriodChart =
     selectedView === "period" && compareStores && !!periodSplitSeries && storesForCompareChart.length >= 2
 
@@ -1199,7 +1256,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     (selectedView === "store" ||
       selectedView === "store-category" ||
       selectedView === "payment" ||
-      selectedView === "realtime-revenue")
+      selectedView === "yoy-compare" ||
+      selectedView === "mom-compare" ||
+      selectedView === "forecast")
 
   const totalsSummary = React.useMemo(() => {
     const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
@@ -1254,6 +1313,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     )
       return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
+    if (selectedView === "forecast" && forecastSummary) return forecastSummary.expectedTotal
     return summaryCards.current
   }, [
     scopedStoreSalesTotal,
@@ -1262,6 +1322,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     storeTotalsSummary.total,
     paymentTotalsSummary.total,
     summaryCards.current,
+    forecastSummary,
   ])
 
   const summaryCardsCurrentDisplay = React.useMemo(() => {
@@ -1300,7 +1361,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       summary: [],
     })
     setStoreData([])
-    setRealtimeRevenueData(null)
+    setYoyCompareRows([])
+    setMomCompareRows([])
+    setForecastSummary(null)
+    setForecastLookbackRows([])
+    setForecastActualRows([])
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
   }, [analyticsParamKey])
@@ -1381,8 +1446,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         )
       case "store-category":
         return storeChartRows.length > 0 || channelChartRows.length > 0
-      case "realtime-revenue":
-        return (realtimeRevenueData?.office.stores.length ?? 0) > 0
+      case "yoy-compare":
+        return yoyCompareRows.length > 0
+      case "mom-compare":
+        return momCompareRows.length > 0
+      case "forecast":
+        return forecastSummary != null
       default:
         return false
     }
@@ -1400,7 +1469,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     creditPaymentChannelRows.length,
     paymentChartRows.length,
     storeChartRows.length,
-    realtimeRevenueData,
+    yoyCompareRows.length,
+    momCompareRows.length,
+    forecastSummary,
   ])
 
   const handleExportExcel = React.useCallback(async () => {
@@ -1582,22 +1653,52 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           colFormats: [salesExcelCol.text, salesExcelCol.money],
         })
       }
-    } else if (selectedView === "realtime-revenue" && realtimeRevenueData) {
+    } else if (selectedView === "yoy-compare" && yoyCompareRows.length > 0) {
       sheets.push({
-        name: tr("salesTopicRealtimeRevenueOps", "실시간 운영(매출 중심)"),
+        name: tr("salesTopicCompareMonthYear", "전년대비표"),
         headers: [
-          tr("salesStoreName", "매장명"),
-          tr("salesManagementTabSalesStatus", "실매출"),
-          tr("adminLiveStoreSalesWaitingRevenue", "대기매출"),
-          tr("adminLiveStoreSalesDelayedRevenue", "지연매출"),
+          tr("salesCompareMonthColumn", "월"),
+          tr("salesAmount", "매출액") + ` (${parseYearFromYmd(endStr) - 1})`,
+          tr("salesAmount", "매출액") + ` (${parseYearFromYmd(endStr)})`,
+          tr("salesCompareYoyPct", "전년대비(%)"),
         ],
-        rows: realtimeRevenueData.office.stores.map((r) => [
-          posStoreDisplayName(r.storeCode),
-          numCell(r.completedRevenue),
-          numCell(r.waitingRevenue),
-          numCell(r.delayedRevenue),
+        rows: yoyCompareRows.map((r) => [
+          r.month,
+          numCell(r.prevYear.total),
+          numCell(r.currYear.total),
+          r.changePct.total ?? "",
+        ]),
+        colFormats: [salesExcelCol.int, salesExcelCol.money, salesExcelCol.money, salesExcelCol.money],
+      })
+    } else if (selectedView === "mom-compare" && momCompareRows.length > 0) {
+      sheets.push({
+        name: tr("salesTopicCompareMonthMom", "전월대비표"),
+        headers: [
+          tr("salesCompareDayColumn", "일자"),
+          `${tr("salesAmount", "매출액")} (${tr("salesCompareExcelPrevMonth", "전월")})`,
+          `${tr("salesAmount", "매출액")} (${tr("salesCompareExcelCurrMonth", "당월")})`,
+          tr("salesCompareMomPct", "전월대비(%)"),
+        ],
+        rows: momCompareRows.map((r) => [
+          r.dayLabel,
+          numCell(r.prevMonth.total),
+          numCell(r.currMonth.total),
+          r.changePct.total ?? "",
         ]),
         colFormats: [salesExcelCol.text, salesExcelCol.money, salesExcelCol.money, salesExcelCol.money],
+      })
+    } else if (selectedView === "forecast" && forecastSummary) {
+      sheets.push({
+        name: tr("salesTopicForecastMonthly", "예상 매출"),
+        headers: [tr("salesCompareWeekdayColumn", "요일"), tr("salesForecastDowAvgSales", "요일 평균 매출")],
+        rows: [0, 1, 2, 3, 4, 5, 6].map((dow) => [
+          tr(
+            ["salesWeekdaySun", "salesWeekdayMon", "salesWeekdayTue", "salesWeekdayWed", "salesWeekdayThu", "salesWeekdayFri", "salesWeekdaySat"][dow]!,
+            "—"
+          ),
+          numCell(forecastSummary.dowAverages[dow] ?? 0),
+        ]),
+        colFormats: [salesExcelCol.text, salesExcelCol.money],
       })
     }
 
@@ -1619,7 +1720,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     deliveryPaymentChannelRows,
     creditPaymentChannelRows,
     storeChartRows,
-    realtimeRevenueData,
+    yoyCompareRows,
+    momCompareRows,
+    forecastSummary,
     posStoreDisplayName,
     selectedTopic?.id,
     startStr,
@@ -1968,8 +2071,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "store-category" ||
       selectedView === "store-period" ||
       (selectedView === "period" && (selectedStoresParam?.length ?? 0) > 0)
-    const needRealtimeRevenue = selectedView === "realtime-revenue"
-    const needFullSummary = selectedView === "period" || selectedView === "store-period"
+    const needYoyCompare = selectedView === "yoy-compare"
+    const needMomCompare = selectedView === "mom-compare"
+    const needForecast = selectedView === "forecast"
+    const needPeriodChart =
+      selectedView != null && PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView)
+    const needFullSummary =
+      selectedView === "period" ||
+      selectedView === "store-period" ||
+      needYoyCompare ||
+      needMomCompare ||
+      needForecast
     const needCurrentSummaryOnly =
       !needFullSummary &&
       (selectedView === "store" || selectedView === "store-category" || selectedView === "payment")
@@ -1990,39 +2102,185 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gPaymentBreakdown = guarded(setPaymentBreakdownData)
     const gStore = guarded(setStoreData)
     const gMenu = guarded(setMenuData)
-    const gRealtimeRevenue = guarded(setRealtimeRevenueData)
+    const gYoy = guarded(setYoyCompareRows)
+    const gMom = guarded(setMomCompareRows)
+    const gForecast = guarded(setForecastSummary)
+    const gForecastLookback = guarded(setForecastLookbackRows)
+    const gForecastActual = guarded(setForecastActualRows)
     const gSummary = guarded(setSummaryCards)
     const gCancelReasonSummary = guarded(setCancelReasonSummary)
     setLoading(true)
     const tasks: Array<Promise<unknown>> = []
-    tasks.push(
-      periodRun({
-        startStr,
-        endStr,
-        groupBy: periodGroup,
-        stores: salesFetchStoresParam,
-        orderTypes: orderTypesParam,
-        splitByStore: needSplit,
-      })
-        .then((res) => {
-          if (loadIdRef.current !== id) return
-          if (res.kind === "split") {
-            setPeriodSplitSeries(res.series)
-            setPeriodData(periodRowsForStoreSelection(res.series, salesFetchStoresParam))
-            setPeriodTruncated(res.truncated)
-          } else {
+    const periodRowsFromResult = (res: Awaited<ReturnType<typeof periodRun>>): PosSalesPeriodRow[] =>
+      res.kind === "split"
+        ? periodRowsForStoreSelection(res.series, salesFetchStoresParam)
+        : res.rows
+
+    if (needPeriodChart) {
+      tasks.push(
+        periodRun({
+          startStr,
+          endStr,
+          groupBy: periodGroup,
+          stores: salesFetchStoresParam,
+          orderTypes: orderTypesParam,
+          splitByStore: needSplit,
+        })
+          .then((res) => {
+            if (loadIdRef.current !== id) return
+            if (res.kind === "split") {
+              setPeriodSplitSeries(res.series)
+              setPeriodData(periodRowsForStoreSelection(res.series, salesFetchStoresParam))
+              setPeriodTruncated(res.truncated)
+            } else {
+              setPeriodSplitSeries(null)
+              setPeriodData(res.rows)
+              setPeriodTruncated(res.truncated)
+            }
+          })
+          .catch(() => {
+            if (loadIdRef.current !== id) return
             setPeriodSplitSeries(null)
-            setPeriodData(res.rows)
-            setPeriodTruncated(res.truncated)
-          }
-        })
-        .catch(() => {
-          if (loadIdRef.current !== id) return
-          setPeriodSplitSeries(null)
-          setPeriodData([])
-          setPeriodTruncated(false)
-        })
-    )
+            setPeriodData([])
+            setPeriodTruncated(false)
+          })
+      )
+    }
+
+    if (needYoyCompare) {
+      const year = parseYearFromYmd(endStr)
+      const currRange = yearRangeYmd(year)
+      const prevRange = yearRangeYmd(year - 1)
+      tasks.push(
+        Promise.all([
+          periodRun({
+            startStr: currRange.startStr,
+            endStr: currRange.endStr,
+            groupBy: "month",
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          periodRun({
+            startStr: prevRange.startStr,
+            endStr: prevRange.endStr,
+            groupBy: "month",
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([currRes, prevRes]) => {
+            if (loadIdRef.current !== id) return
+            const rows = buildYoyMonthCompareRows({
+              year,
+              prevYearRows: periodRowsFromResult(prevRes),
+              currYearRows: periodRowsFromResult(currRes),
+            })
+            gYoy(rows)
+            gSummary({
+              current: rows.reduce((a, r) => a + r.currYear.total, 0),
+              prevRange: rows.reduce((a, r) => a + r.prevYear.total, 0),
+              prevWeek: 0,
+            })
+          })
+          .catch(() => {
+            gYoy([])
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
+      )
+    }
+
+    if (needMomCompare) {
+      const { year, month } = parseYearMonthFromYmd(endStr)
+      const currRange = monthRangeYmd(year, month)
+      const prev = prevCalendarMonth(year, month)
+      const prevRange = monthRangeYmd(prev.year, prev.month)
+      tasks.push(
+        Promise.all([
+          periodRun({
+            startStr: currRange.startStr,
+            endStr: currRange.endStr,
+            groupBy: "day",
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          periodRun({
+            startStr: prevRange.startStr,
+            endStr: prevRange.endStr,
+            groupBy: "day",
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([currRes, prevRes]) => {
+            if (loadIdRef.current !== id) return
+            const rows = buildMomDayCompareRows({
+              year,
+              month,
+              prevMonthRows: periodRowsFromResult(prevRes),
+              currMonthRows: periodRowsFromResult(currRes),
+            })
+            gMom(rows)
+            gSummary({
+              current: rows.reduce((a, r) => a + r.currMonth.total, 0),
+              prevRange: rows.reduce((a, r) => a + r.prevMonth.total, 0),
+              prevWeek: 0,
+            })
+          })
+          .catch(() => {
+            gMom([])
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
+      )
+    }
+
+    if (needForecast) {
+      const anchor = endStr
+      const lookbackStart = addBangkokCalendarDays(anchor, -83)
+      const yearR = yearRangeYmd(parseYearFromYmd(anchor))
+      tasks.push(
+        Promise.all([
+          periodRun({
+            startStr: lookbackStart,
+            endStr: anchor,
+            groupBy: "day",
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          periodRun({
+            startStr: yearR.startStr,
+            endStr: anchor,
+            groupBy: "day",
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([lookbackRes, actualRes]) => {
+            if (loadIdRef.current !== id) return
+            const lbRows = periodRowsFromResult(lookbackRes)
+            const actRows = periodRowsFromResult(actualRes)
+            gForecastLookback(lbRows)
+            gForecastActual(actRows)
+            const forecast = computeSalesForecast({
+              horizon: forecastHorizon,
+              anchorYmd: anchor,
+              lookbackDailyRows: lbRows,
+              actualDailyRows: actRows,
+            })
+            gForecast(forecast)
+            gSummary({
+              current: forecast.expectedTotal,
+              prevRange: 0,
+              prevWeek: 0,
+            })
+          })
+          .catch(() => {
+            gForecast(null)
+            gForecastLookback([])
+            gForecastActual([])
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
+      )
+    }
     if (needDelivery) {
       tasks.push(
         (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
@@ -2115,29 +2373,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .catch(() => gMenu([]))
       )
     }
-    if (needRealtimeRevenue) {
-      tasks.push(
-        fetchPosRealtimeRevenueDashboard({
-          startStr,
-          endStr,
-          stores: salesFetchStoresParam,
-          orderTypes: orderTypesParam,
-        })
-          .then((res) => {
-            gRealtimeRevenue(res)
-            gSummary({
-              current: Number(res.store.completedRevenue ?? 0) || 0,
-              prevRange: 0,
-              prevWeek: 0,
-            })
-          })
-          .catch(() => {
-            gRealtimeRevenue(null)
-            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
-          })
-      )
-    }
-    if (needFullSummary) {
+    if (needFullSummary && (selectedView === "period" || selectedView === "store-period")) {
       const storeSummaryFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
       const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
         rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
@@ -2228,6 +2464,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     isHoursPanel,
     canSearchAll,
     selectedStores.length,
+    forecastHorizon,
   ])
 
   const online = useOnlineStatus()
@@ -2239,6 +2476,26 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
     prevOnlineRef.current = online
   }, [online, offlineAware, showSalesResults, loadAllAnalytics])
+
+  React.useEffect(() => {
+    if (selectedView !== "forecast" || !showSalesResults) return
+    if (forecastLookbackRows.length === 0 && forecastActualRows.length === 0) return
+    const next = computeSalesForecast({
+      horizon: forecastHorizon,
+      anchorYmd: endStr,
+      lookbackDailyRows: forecastLookbackRows,
+      actualDailyRows: forecastActualRows,
+    })
+    setForecastSummary(next)
+    setSummaryCards((prev) => ({ ...prev, current: next.expectedTotal }))
+  }, [
+    selectedView,
+    showSalesResults,
+    forecastHorizon,
+    forecastLookbackRows,
+    forecastActualRows,
+    endStr,
+  ])
 
   const setSalesAllOrderTypes = React.useCallback(() => {
     userSelectedRef.current.orderTypesKey = ""
@@ -3086,6 +3343,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       )}
                     </p>
                   ) : null}
+                  {!showComparePeriodChart ? (
+                    <SalesPaymentTenderGapAlert gaps={periodPaymentTenderGaps} tr={tr} />
+                  ) : null}
                   {canSearchAll && (selectedStoresParam?.length ?? 0) >= 2 ? (
                     <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox
@@ -3152,8 +3412,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </tr>
                     </thead>
                     <tbody>
-                      {periodChartRows.map((r) => (
-                        <tr key={r.key} className="border-b">
+                      {periodChartRows.map((r) => {
+                        const tenderGap = posSalesPeriodPaymentTenderGap(r)
+                        return (
+                        <tr
+                          key={r.key}
+                          className={`border-b ${tenderGap !== 0 ? "bg-amber-50/80 dark:bg-amber-950/20" : ""}`}
+                          title={
+                            tenderGap !== 0
+                              ? tr(
+                                  "salesPaymentTenderGapRowTitle",
+                                  "매출액과 결제수단 합계 불일치"
+                                )
+                              : undefined
+                          }
+                        >
                           <td className="py-1.5">{r.axisLabel}</td>
                           <td className="py-1.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
                           <td className="py-1.5 text-right font-erp-numeric">{r.hallGuestSum.toLocaleString()}</td>
@@ -3177,7 +3450,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             </td>
                           ))}
                         </tr>
-                      ))}
+                        )
+                      })}
                       {periodChartRows.length > 0 && (
                         <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
                           <td className="py-2">{tr("salesTotalLabel", "합계")}</td>
@@ -3251,7 +3525,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     )}{" "}
                     {tr(
                       "salesPeriodTenderFootnote",
-                      "결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다(한 주문에 여러 수단이 있으면 합계 매출과 다를 수 있음)."
+                      "결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다. 매출액과 다르면 상단 경고·노란 행으로 표시됩니다."
                     )}
                   </p>
                 </>
@@ -3276,6 +3550,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       )}
                     </p>
                   ) : null}
+                  <SalesPaymentTenderGapAlert gaps={storePeriodPaymentTenderGaps} tr={tr} />
                   {storeByPeriodFlatRows.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       {tr("salesDataNone", "데이터 없음")}
@@ -3309,8 +3584,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           </tr>
                         </thead>
                         <tbody>
-                          {storeByPeriodFlatRows.map((r) => (
-                            <tr key={`${r.storeCode}\t${r.key}`} className="border-b border-border/60">
+                          {storeByPeriodFlatRows.map((r) => {
+                            const tenderGap = posSalesPeriodPaymentTenderGap(r)
+                            return (
+                            <tr
+                              key={`${r.storeCode}\t${r.key}`}
+                              className={`border-b border-border/60 ${tenderGap !== 0 ? "bg-amber-50/80 dark:bg-amber-950/20" : ""}`}
+                              title={
+                                tenderGap !== 0
+                                  ? tr(
+                                      "salesPaymentTenderGapRowTitle",
+                                      "매출액과 결제수단 합계 불일치"
+                                    )
+                                  : undefined
+                              }
+                            >
                               <td className="px-3 py-1.5 font-medium">{r.storeDisplay}</td>
                               <td className="px-3 py-1.5">{r.axisLabel}</td>
                               <td className="px-3 py-1.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
@@ -3337,7 +3625,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                 </td>
                               ))}
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -3359,7 +3648,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     )}{" "}
                     {tr(
                       "salesPeriodTenderFootnote",
-                      "결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다(한 주문에 여러 수단이 있으면 합계 매출과 다를 수 있음)."
+                      "결제수단별 열은 POS 주문 payment_cash·payment_card·payment_qr·payment_delivery_app·payment_other 합계입니다. 매출액과 다르면 상단 경고·노란 행으로 표시됩니다."
                     )}
                   </p>
                 </>
@@ -4039,112 +4328,50 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               )
             )}
 
-            {selectedView === "realtime-revenue" && (
+            {selectedView === "yoy-compare" && (
               salesAnalyticsPlaceholder ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {salesAnalyticsPlaceholder}
-                </p>
-              ) : !realtimeRevenueData ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {tr("salesDataNone", "데이터 없음")}
-                </p>
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : yoyCompareRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
               ) : (
-                <>
-                  <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-xl border border-border/70 bg-card p-4">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("adminLiveStoreSalesWaitingRevenue", "현재 대기 주문 매출액")}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
-                        {formatSalesAmount(realtimeRevenueData.store.waitingRevenue)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-border/70 bg-card p-4">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("adminLiveStoreSalesAvgCookingMins", "평균 조리시간(분)")}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
-                        {Number(realtimeRevenueData.store.revenueWeightedCookingMinutes || 0).toFixed(1)}m
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {tr("adminLiveStoreSalesAvgCookingRaw", "단순 평균")}{" "}
-                        {Number(realtimeRevenueData.store.avgCookingMinutes || 0).toFixed(1)}m
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-border/70 bg-card p-4">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("adminLiveStoreSalesDelayedOrders", "지연 주문 카운트")}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
-                        {Math.max(0, Number(realtimeRevenueData.store.delayedOrders || 0)).toLocaleString()}
-                        {tr("posCount", "건")}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {realtimeRevenueData.delayThresholdMin}
-                        {tr("salesMinuteUnit", "분")}{" "}
-                        {tr("adminLiveStoreSalesDelayedRule", "초과 기준")}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-border/70 bg-card p-4">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("adminLiveStoreSalesDelayedRevenue", "지연 주문 매출액")}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold font-erp-numeric">
-                        {formatSalesAmount(realtimeRevenueData.store.delayedRevenue)}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {tr("salesManagementTabSalesStatus", "실매출")}{" "}
-                        {formatSalesAmount(realtimeRevenueData.store.completedRevenue)}
-                      </p>
-                    </div>
-                  </div>
+                <SalesYoyComparePanel
+                  rows={yoyCompareRows}
+                  year={parseYearFromYmd(endStr)}
+                  storeLabel={compareStoreLabel}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                />
+              )
+            )}
 
-                  {canSearchAll ? (
-                    <div className="overflow-x-auto rounded-md border">
-                      <table className="w-full min-w-[920px] text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/40 text-muted-foreground">
-                            <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
-                            <th className="px-3 py-2 text-right">{tr("salesManagementTabSalesStatus", "실매출")}</th>
-                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesWaitingRevenue", "대기매출")}</th>
-                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesDelayedRevenue", "지연매출")}</th>
-                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesPeakHour", "피크타임")}</th>
-                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesStockoutRate", "품절률(금액)")}</th>
-                            <th className="px-3 py-2 text-right">{tr("adminLiveStoreSalesCancelRate", "취소율(금액)")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {realtimeRevenueData.office.stores.map((row) => (
-                            <tr key={row.storeCode} className="border-b">
-                              <td className="px-3 py-2">{posStoreDisplayName(row.storeCode)}</td>
-                              <td className="px-3 py-2 text-right font-erp-numeric">{formatSalesAmount(row.completedRevenue)}</td>
-                              <td className="px-3 py-2 text-right font-erp-numeric">{formatSalesAmount(row.waitingRevenue)}</td>
-                              <td className="px-3 py-2 text-right font-erp-numeric">{formatSalesAmount(row.delayedRevenue)}</td>
-                              <td className="px-3 py-2 text-right font-erp-numeric">
-                                {formatPeakHourRange(row.peakHour)} ({formatSalesAmount(row.peakHourRevenue)})
-                              </td>
-                              <td className="px-3 py-2 text-right font-erp-numeric">
-                                {(Math.max(0, Number(row.stockoutRate || 0)) * 100).toFixed(1)}%
-                              </td>
-                              <td className="px-3 py-2 text-right font-erp-numeric">
-                                {(Math.max(0, Number(row.cancelRate || 0)) * 100).toFixed(1)}%
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
+            {selectedView === "mom-compare" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : momCompareRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+              ) : (
+                <SalesMomComparePanel
+                  rows={momCompareRows}
+                  year={parseYearMonthFromYmd(endStr).year}
+                  month={parseYearMonthFromYmd(endStr).month}
+                  storeLabel={compareStoreLabel}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                />
+              )
+            )}
 
-                  {realtimeRevenueData.truncated ? (
-                    <p className="mt-2 text-xs text-amber-700">
-                      {tr(
-                        "salesDataTruncatedWarning",
-                        "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요."
-                      )}
-                    </p>
-                  ) : null}
-                </>
+            {selectedView === "forecast" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : (
+                <SalesForecastPanel
+                  summary={forecastSummary}
+                  horizon={forecastHorizon}
+                  onHorizonChange={setForecastHorizon}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                />
               )
             )}
 

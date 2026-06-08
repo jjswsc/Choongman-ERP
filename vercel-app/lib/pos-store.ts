@@ -268,11 +268,20 @@ function layoutItemToTableRef(t: PosTableItem): PosDineInTableRef {
   }
 }
 
+function posOrderMergeKey(po: PosOrder): string {
+  const id = String(po.id ?? '').trim()
+  if (id) return `id:${id}`
+  const no = String(po.orderNo ?? '').trim()
+  if (no) return `no:${no}`
+  return ''
+}
+
 function layoutToTables(
   layout: PosTableItem[],
   dineInOrders: PosOrder[]
 ): Table[] {
   const layoutPeers = (layout || []).map(layoutItemToTableRef)
+  const assignedOrderKeys = new Set<string>()
   return (layout || []).map((t) => {
     const gridX = Math.round((t.x ?? 0) / GRID_SIZE)
     const gridY = Math.round((t.y ?? 0) / GRID_SIZE)
@@ -287,7 +296,20 @@ function layoutToTables(
           : 'rectangle'
     const name = String(t.name ?? '').trim() || String(t.id ?? '')
     const tableRef = layoutItemToTableRef(t)
-    const posOrder = resolveDineInOrderForLayoutTable(tableRef, dineInOrders, layoutPeers)
+    const candidates = dineInOrders.filter(
+      (o) =>
+        posDineInTableLabelsMatch(String(o.tableName ?? ''), tableRef, { layoutPeers }) &&
+        (() => {
+          const k = posOrderMergeKey(o)
+          return !k || !assignedOrderKeys.has(k)
+        })()
+    )
+    let posOrder: PosOrder | undefined
+    if (candidates.length > 0) {
+      posOrder = resolveDineInOrderForLayoutTable(tableRef, candidates, layoutPeers)
+      const k = posOrder ? posOrderMergeKey(posOrder) : ''
+      if (k) assignedOrderKeys.add(k)
+    }
     const order = posOrder ? posOrderToOrder(posOrder) : undefined
     const floor = tableRef.floor
     return {
@@ -447,7 +469,11 @@ function findPrevTableForMerge(tbl: Table, prevStore: Store): Table | undefined 
   })
 }
 
-function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): Store {
+function mergeStoreTablesWithLocalOrders(
+  nextStore: Store,
+  prevStore?: Store,
+  activeOrderKeys?: ReadonlySet<string>
+): Store {
   if (!prevStore) return nextStore
   const nextTables = nextStore.tables.map((tbl) => {
     const prevTable = findPrevTableForMerge(tbl, prevStore)
@@ -462,13 +488,14 @@ function mergeStoreTablesWithLocalOrders(nextStore: Store, prevStore?: Store): S
     }
     if (tbl.order) return tbl
     if (!prevOrder) return tbl
-    if (
-      !isLocalOfflineOrder(prevOrder) &&
-      !isPendingListSyncOrder(prevOrder) &&
-      !isActiveTerminalListOrder(prevOrder)
-    ) {
+    if (isLocalOfflineOrder(prevOrder) || isPendingListSyncOrder(prevOrder)) {
+      return { ...tbl, order: prevOrder, isOccupied: true }
+    }
+    const prevKey = orderListMergeKey(prevOrder)
+    if (prevKey && activeOrderKeys && !activeOrderKeys.has(prevKey)) {
       return tbl
     }
+    if (!isActiveTerminalListOrder(prevOrder)) return tbl
     return { ...tbl, order: prevOrder, isOccupied: true }
   })
   return { ...nextStore, tables: nextTables }
@@ -485,18 +512,41 @@ function hydrateStoreTablesFromActiveOrders(store: Store, orders: Order[]): Stor
     name: pt.name,
     floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
   }))
+  const assignedKeys = new Set<string>()
+  for (const tbl of store.tables) {
+    if (!tbl.order || !isActiveTerminalListOrder(tbl.order)) continue
+    const k = orderListMergeKey(tbl.order)
+    if (k) assignedKeys.add(k)
+  }
   return {
     ...store,
     tables: store.tables.map((tbl) => {
       if (tbl.order && isActiveTerminalListOrder(tbl.order)) return { ...tbl, isOccupied: true }
       const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
       const ref = { id: tbl.id, name: tbl.name, floor }
-      const matched = dineInActive.find((o) =>
-        posDineInTableLabelsMatch(String(o.tableName ?? ''), ref, { layoutPeers: peers })
-      )
-      return matched ? { ...tbl, order: matched, isOccupied: true } : tbl
+      const matched = dineInActive.find((o) => {
+        const k = orderListMergeKey(o)
+        if (k && assignedKeys.has(k)) return false
+        return posDineInTableLabelsMatch(String(o.tableName ?? ''), ref, { layoutPeers: peers })
+      })
+      if (matched) {
+        const k = orderListMergeKey(matched)
+        if (k) assignedKeys.add(k)
+        return { ...tbl, order: matched, isOccupied: true }
+      }
+      return tbl
     }),
   }
+}
+
+function activeOrderKeySet(orders: Order[] | undefined): Set<string> {
+  const keys = new Set<string>()
+  for (const row of orders || []) {
+    if (!isActiveTerminalListOrder(row)) continue
+    const k = orderListMergeKey(row)
+    if (k) keys.add(k)
+  }
+  return keys
 }
 
 function withPersistedTerminalOrders(
@@ -695,11 +745,12 @@ export function usePosStoreInternal() {
         ordersByStoreIdRef.current = mergedOrdersByStore
         setStores((prev) =>
           storeList.map((nextStore) => {
+            const orders = mergedOrdersByStore[nextStore.id] ?? []
             const merged = mergeStoreTablesWithLocalOrders(
               nextStore,
-              prev.find((p) => p.id === nextStore.id)
+              prev.find((p) => p.id === nextStore.id),
+              activeOrderKeySet(orders)
             )
-            const orders = mergedOrdersByStore[nextStore.id] ?? []
             return hydrateStoreTablesFromActiveOrders(merged, orders)
           })
         )
@@ -884,16 +935,24 @@ export function usePosStoreInternal() {
               .map((code) => {
                 const next = resultStoreMap.get(code)
                 if (!next) return null
+                const orders = nextOrdersByStore[code] ?? []
                 return hydrate(
-                  mergeStoreTablesWithLocalOrders(next, prev.find((p) => p.id === code))
+                  mergeStoreTablesWithLocalOrders(
+                    next,
+                    prev.find((p) => p.id === code),
+                    activeOrderKeySet(orders)
+                  )
                 )
               })
               .filter(Boolean) as Store[]
           }
           return prev.map((store) => {
             const next = resultStoreMap.get(store.id)
+            const orders = nextOrdersByStore[store.id] ?? []
             if (!next) return hydrate(store)
-            return hydrate(mergeStoreTablesWithLocalOrders(next, store))
+            return hydrate(
+              mergeStoreTablesWithLocalOrders(next, store, activeOrderKeySet(orders))
+            )
           })
         })
         setLayoutByStoreId((prev) => {

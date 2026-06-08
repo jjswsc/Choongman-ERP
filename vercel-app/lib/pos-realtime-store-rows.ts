@@ -1,9 +1,22 @@
 import { resolveStoreListKey } from '@/lib/store-list-keys'
+import { orderListMergeKey } from '@/lib/pos-terminal-active-orders-persist'
 import type { Store } from '@/lib/pos-types'
 
-/** 매장 스냅샷의 진행 중 테이블 주문 금액 합 */
+/** 매장 스냅샷의 진행 중 테이블 주문 금액 합 — 동일 주문이 여러 테이블에 매칭돼도 1회만 합산 */
 export function sumStoreTableOrders(store: Store | undefined | null): number {
-  return (store?.tables || []).reduce((acc, tbl) => acc + Number(tbl.order?.total ?? 0), 0)
+  const seen = new Set<string>()
+  let total = 0
+  for (const tbl of store?.tables || []) {
+    const order = tbl.order
+    if (!order) continue
+    const key =
+      orderListMergeKey(order) ||
+      `${String(tbl.id || tbl.name || '').trim()}:${Number(order.total ?? 0)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    total += Number(order.total ?? 0)
+  }
+  return total
 }
 
 /** 단일 매장 또는 전체 매장 선택 시 테이블 총액 */
@@ -11,11 +24,31 @@ export function computeRealtimeTableTotal(params: {
   isAllStores: boolean
   stores: ReadonlyArray<Store>
   currentStore?: Store
+  /** legacy·Grab ID 중복 스냅샷 합산 방지 — `mergeRealtimeStoreSalesRows`와 동일 canonical */
+  storeCodes?: string[]
+  legacyToCanonical?: Record<string, string>
 }): number {
-  if (params.isAllStores) {
-    return params.stores.reduce((acc, s) => acc + sumStoreTableOrders(s), 0)
+  if (!params.isAllStores && params.currentStore) {
+    return sumStoreTableOrders(params.currentStore)
   }
-  if (params.currentStore) return sumStoreTableOrders(params.currentStore)
+
+  const storeCodes = params.storeCodes?.map((s) => String(s || '').trim()).filter(Boolean) ?? []
+  const legacy = params.legacyToCanonical ?? {}
+
+  if (storeCodes.length > 0) {
+    const byCanon = new Map<string, number>()
+    for (const store of params.stores) {
+      const rawId = String(store.id || '').trim()
+      if (!rawId) continue
+      const canon = resolveStoreListKey(rawId, storeCodes, legacy)
+      const tableTotal = sumStoreTableOrders(store)
+      byCanon.set(canon, Math.max(byCanon.get(canon) ?? 0, tableTotal))
+    }
+    let sum = 0
+    for (const v of byCanon.values()) sum += v
+    return sum
+  }
+
   return params.stores.reduce((acc, s) => acc + sumStoreTableOrders(s), 0)
 }
 
@@ -106,7 +139,7 @@ export function mergeRealtimeStoreSalesRows(params: {
     const canon = resolveCanonical(rawId)
     const prev = groups.get(canon) || { paid: 0, tableTotal: 0 }
     prev.paid += Number(params.storeSalesMap[rawId]?.completedTotal ?? 0)
-    prev.tableTotal += sumStoreTableOrders(store)
+    prev.tableTotal = Math.max(prev.tableTotal, sumStoreTableOrders(store))
     groups.set(canon, prev)
   }
 

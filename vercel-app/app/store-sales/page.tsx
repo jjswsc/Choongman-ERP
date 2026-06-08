@@ -77,6 +77,16 @@ function StoreSalesBody() {
     setCurrentStoreId(effectiveStoreCode)
   }, [effectiveStoreCode, stores, setCurrentStoreId, allowed])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      realtimeRefreshRef.current?.()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
   const registerRealtimeRefresh = useCallback((fn: () => void) => {
     realtimeRefreshRef.current = fn
   }, [])

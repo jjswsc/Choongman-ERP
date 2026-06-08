@@ -104,8 +104,10 @@ export default function AdminLiveStoreSalesPage() {
         isAllStores: isAllStoresTableTotal,
         stores: operationalStoresForTableTotal,
         currentStore: isAllStoresTableTotal ? undefined : currentStore,
+        storeCodes: storeListCodes,
+        legacyToCanonical,
       }),
-    [isAllStoresTableTotal, operationalStoresForTableTotal, currentStore]
+    [isAllStoresTableTotal, operationalStoresForTableTotal, currentStore, storeListCodes, legacyToCanonical]
   )
 
   const tableTotalByStore = useMemo(() => {
@@ -127,9 +129,12 @@ export default function AdminLiveStoreSalesPage() {
   const showFranchiseAllRealtime =
     canFranchiseeAll && effectiveStoreCode === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
 
-  /** 본사 전체 매장 — 매장별·테이블 총 금액 실시간 패널(차트는 AdminSalesDashboardCharts) */
+  /** 본사 전체 매장 — 당일 합계·테이블 갱신(매장별 표는 AdminSalesDashboardCharts) */
   const showOfficeAllRealtime =
     isOfficeSelector && effectiveStoreCode === ALL_STORE_VALUE
+
+  /** 전체 매장 집계 시 매장별 표 중복 숨김 — 상단 당일 매출 차트에 이미 있음 */
+  const hideDuplicateByStoreSection = showOfficeAllRealtime || showFranchiseAllRealtime
 
   useEffect(() => {
     if (!showBranchRealtime) return
@@ -195,6 +200,7 @@ export default function AdminLiveStoreSalesPage() {
               }
               showInlineRefresh
               showHeaderBadge
+              hideByStoreSection={hideDuplicateByStoreSection}
             />
           ) : null}
         </>

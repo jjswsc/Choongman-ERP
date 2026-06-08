@@ -7,7 +7,9 @@ import {
 import { labelForStore } from '@/lib/store-list-keys'
 import {
   aggregateTodaySalesByCanonical,
+  computeRealtimeTableTotal,
   mergeRealtimeStoreSalesRows,
+  sumStoreTableOrders,
 } from '@/lib/pos-realtime-store-rows'
 import type { Store } from '@/lib/pos-types'
 
@@ -132,5 +134,77 @@ describe('mergeRealtimeStoreSalesRows', () => {
     expect(trueDigital?.storeDisplayName).toBe('CM True Digital')
     expect(silom?.paid).toBe(766)
     expect(silom?.storeDisplayName).toBe('CM Silom')
+  })
+
+  it('does not double table totals for legacy duplicate store snapshots', () => {
+    const order = { id: '99', total: 500, status: 'pending' as const, type: 'dine-in' as const, items: [], createdAt: new Date() }
+    const stores: Store[] = [
+      {
+        id: 'CM True Digital',
+        name: 'CM True Digital',
+        tables: [{ id: 't1', name: '1', order, isOccupied: true }],
+      },
+      {
+        id: '1040',
+        name: '1040',
+        tables: [{ id: 't1', name: '1', order, isOccupied: true }],
+      },
+    ]
+    const rows = mergeRealtimeStoreSalesRows({
+      operationalStores: stores,
+      storeSalesMap: {},
+      storeCodes: ['CM True Digital', '1040'],
+      legacyToCanonical: { '1040': 'CM True Digital' },
+      formatStoreLabel: (code) => code,
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.tableTotal).toBe(500)
+  })
+})
+
+describe('sumStoreTableOrders', () => {
+  it('counts the same order id only once across tables', () => {
+    const order = {
+      id: '42',
+      total: 800,
+      status: 'pending' as const,
+      type: 'dine-in' as const,
+      items: [],
+      createdAt: new Date(),
+    }
+    const store: Store = {
+      id: 'CM A',
+      name: 'CM A',
+      tables: [
+        { id: 'a', name: '1', order, isOccupied: true },
+        { id: 'b', name: '1F-1', order, isOccupied: true },
+      ],
+    }
+    expect(sumStoreTableOrders(store)).toBe(800)
+  })
+})
+
+describe('computeRealtimeTableTotal', () => {
+  it('dedupes canonical store snapshots for all-store totals', () => {
+    const order = { id: '7', total: 300, status: 'pending' as const, type: 'dine-in' as const, items: [], createdAt: new Date() }
+    const stores: Store[] = [
+      {
+        id: '1040',
+        name: '1040',
+        tables: [{ id: 't1', name: '2', order, isOccupied: true }],
+      },
+      {
+        id: 'CM True Digital',
+        name: 'CM True Digital',
+        tables: [{ id: 't1', name: '2', order, isOccupied: true }],
+      },
+    ]
+    const total = computeRealtimeTableTotal({
+      isAllStores: true,
+      stores,
+      storeCodes: ['CM True Digital', '1040'],
+      legacyToCanonical: { '1040': 'CM True Digital' },
+    })
+    expect(total).toBe(300)
   })
 })
