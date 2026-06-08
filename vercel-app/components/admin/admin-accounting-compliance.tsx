@@ -96,6 +96,7 @@ import {
   type CorporateTaxComputationData,
   getExportCorporateTaxPackageCsvUrl,
   getAccountingWorkflowStatus,
+  getSsoSubmissionHistory,
   saveAccountingWorkflowStatus,
   getIncomeExpenseClosingPreview,
   saveIncomeExpenseClosingDraft,
@@ -160,8 +161,13 @@ import {
 } from "@/lib/thai-sso-sps1-10-export"
 import {
   downloadThaiSsoEserviceBulkFromPayrollXlsx,
-  SSO_ESERVICE_BULK_COLUMN_HELP,
 } from "@/lib/thai-sso-eservice-bulk-export"
+import {
+  downloadThaiSsoOfficialUploadFromPayrollXlsx,
+  mapPayrollRowToOfficialUploadRow,
+  SSO_OFFICIAL_UPLOAD_COLUMN_HELP,
+  type SsoOfficialUploadSheet,
+} from "@/lib/thai-sso-official-upload-export"
 import { type SsoFilingWageMode } from "@/lib/payroll-utils"
 import {
   readPnd91ChecklistEntry,
@@ -489,6 +495,7 @@ type SsoPayrollPreview = {
 }
 
 type SsoSubmissionMeta = {
+  summaryLine?: string
   memo: string
   attachmentUrls: string[]
   submittedAt?: string
@@ -590,18 +597,20 @@ function parseSsoWorkflowNote(note: string | null | undefined): SsoSubmissionMet
   if (!payload) return null
   try {
     const parsed = JSON.parse(payload) as {
+      summaryLine?: unknown
       memo?: unknown
       attachmentUrls?: unknown
       submittedAt?: unknown
       submittedBy?: unknown
     }
+    const summaryLine = String(parsed.summaryLine || "").trim() || undefined
     const memo = String(parsed.memo || "").trim()
     const attachmentUrls = Array.isArray(parsed.attachmentUrls)
       ? parsed.attachmentUrls.map((x) => String(x || "").trim()).filter(Boolean)
       : []
     const submittedAt = String(parsed.submittedAt || "").trim() || undefined
     const submittedBy = String(parsed.submittedBy || "").trim() || undefined
-    return { memo, attachmentUrls, submittedAt, submittedBy }
+    return { summaryLine, memo, attachmentUrls, submittedAt, submittedBy }
   } catch {
     return null
   }
@@ -1047,6 +1056,9 @@ export function AdminAccountingCompliance({
   const [ssoSubmissionSaving, setSsoSubmissionSaving] = React.useState(false)
   const [ssoAccountingSyncing, setSsoAccountingSyncing] = React.useState(false)
   const [ssoFilingWageMode, setSsoFilingWageMode] = React.useState<SsoFilingWageMode>("contributable")
+  const [ssoSubView, setSsoSubView] = React.useState<"filing" | "history">("filing")
+  const [ssoHistoryRows, setSsoHistoryRows] = React.useState<AccountingWorkflowStatusRow[]>([])
+  const [ssoHistoryLoading, setSsoHistoryLoading] = React.useState(false)
   const [ssoWorkflowRow, setSsoWorkflowRow] = React.useState<AccountingWorkflowStatusRow | null>(null)
   const [pnd1PayerTaxId, setPnd1PayerTaxId] = React.useState("")
   const [pnd1PayerBranchNo, setPnd1PayerBranchNo] = React.useState("00000")
@@ -2225,6 +2237,65 @@ export function AdminAccountingCompliance({
     return employer
   }, [externalFiling, isManager, managerStore, ssoStoreFilter, storeTb, taxMonth])
 
+  const exportOfficialUploadFromPayroll = React.useCallback(async () => {
+    if (!canUse || !auth?.user) return
+    setSsoPayrollExporting(true)
+    try {
+      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
+      if (!rows || rows.length === 0) return
+
+      const byStore = new Map<string, Record<string, unknown>[]>()
+      for (const r of rows) {
+        const store = String(r.store || "").trim() || "_"
+        const bucket = byStore.get(store)
+        if (bucket) bucket.push(r)
+        else byStore.set(store, [r])
+      }
+
+      const employer = await resolveSsoEmployerHeader()
+      const sheets: SsoOfficialUploadSheet[] = []
+      let missingBranch = false
+
+      for (const [store, storeRows] of byStore) {
+        let branchCode = ""
+        if (store && store !== "_") {
+          try {
+            const { profile } = await getStoreTaxFilingProfile(store)
+            branchCode = String(profile?.ssoBranchCode || "").trim()
+          } catch {
+            /* optional per-store profile */
+          }
+        }
+        if (!branchCode) {
+          missingBranch = true
+          branchCode = String(employer.branchCode || "").trim()
+        }
+        sheets.push({ branchCode, rows: storeRows })
+      }
+
+      if (missingBranch) {
+        appAlert(t("accCompSsoOfficialUploadMissingBranch"))
+      }
+
+      downloadThaiSsoOfficialUploadFromPayrollXlsx({
+        yearMonth: taxMonth,
+        sheets,
+        filingWageMode: ssoFilingWageMode,
+      })
+    } finally {
+      setSsoPayrollExporting(false)
+    }
+  }, [
+    canUse,
+    auth?.user,
+    fetchSsoPayrollRows,
+    resolveSsoEmployerHeader,
+    ssoFilingWageMode,
+    ssoPayrollRows,
+    taxMonth,
+    t,
+  ])
+
   const exportEserviceBulkFromPayroll = React.useCallback(async () => {
     if (!canUse || !auth?.user) return
     setSsoPayrollExporting(true)
@@ -2300,6 +2371,38 @@ export function AdminAccountingCompliance({
       setSsoWorkflowRow(null)
     }
   }, [canUse, externalFiling, isManager, managerStore, role, ssoStoreFilter, storeTb, taxMonth])
+
+  const loadSsoSubmissionHistory = React.useCallback(async () => {
+    if (!canUse) return
+    setSsoHistoryLoading(true)
+    try {
+      const pickStore = externalFiling ? storeTb : ssoStoreFilter
+      const effectiveStore = isManager && managerStore ? managerStore : pickStore
+      const data = await getSsoSubmissionHistory({
+        storeFilter: effectiveStore && effectiveStore !== "All" ? effectiveStore : undefined,
+      })
+      setSsoHistoryRows(data.rows || [])
+    } catch {
+      setSsoHistoryRows([])
+    } finally {
+      setSsoHistoryLoading(false)
+    }
+  }, [canUse, externalFiling, isManager, managerStore, ssoStoreFilter, storeTb])
+
+  const openSsoHistoryRow = React.useCallback(
+    async (row: AccountingWorkflowStatusRow) => {
+      const ym = String(row.year_month || "").trim().slice(0, 7)
+      if (ym) setTaxMonth(ym)
+      const scope = String(row.store_scope || "").trim()
+      if (scope && scope !== "*") {
+        setSsoStoreFilter(scope)
+      }
+      setSsoSubView("filing")
+      setSsoQueried(true)
+      await Promise.all([fetchSsoPayrollRows(false), loadSsoWorkflowStatus()])
+    },
+    [fetchSsoPayrollRows, loadSsoWorkflowStatus]
+  )
 
   const runSsoSearch = React.useCallback(async () => {
     if (!canUse) return
@@ -2414,6 +2517,7 @@ export function AdminAccountingCompliance({
       })
       setWorkflowFallbackUsed(Boolean(saved.fallbackUsed))
       await loadSsoWorkflowStatus()
+      await loadSsoSubmissionHistory()
       appAlert(t("accCompSsoSubmissionRecorded"))
     } catch {
       appAlert(t("msg_save_fail"))
@@ -2427,6 +2531,7 @@ export function AdminAccountingCompliance({
     externalFiling,
     isManager,
     loadSsoWorkflowStatus,
+    loadSsoSubmissionHistory,
     managerStore,
     role,
     runSsoAccountingSync,
@@ -2471,6 +2576,10 @@ export function AdminAccountingCompliance({
     },
     [canUse, auth?.user, role, taxMonth, ssoSelectedStore]
   )
+
+  React.useEffect(() => {
+    if (canUse && tab === "sso" && ssoSubView === "history") void loadSsoSubmissionHistory()
+  }, [canUse, tab, ssoSubView, loadSsoSubmissionHistory])
 
   React.useEffect(() => {
     if (canUse) void loadPrefs()
@@ -7991,6 +8100,12 @@ export function AdminAccountingCompliance({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
+              <Tabs value={ssoSubView} onValueChange={(v) => setSsoSubView(v as "filing" | "history")}>
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                  <TabsTrigger value="filing">{t("accCompSsoSubTabFiling")}</TabsTrigger>
+                  <TabsTrigger value="history">{t("accCompSsoSubTabHistory")}</TabsTrigger>
+                </TabsList>
+                <TabsContent value="filing" className="space-y-4 mt-4">
               {!ssoQueried ? (
                 <AccountingEmptyState>{t("accCompSsoEmptySearchHint")}</AccountingEmptyState>
               ) : null}
@@ -8075,6 +8190,16 @@ export function AdminAccountingCompliance({
                 <Button
                   type="button"
                   variant="default"
+                  onClick={() => void exportOfficialUploadFromPayroll()}
+                  disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
+                  title={t("accCompSsoOfficialUploadHint")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {ssoPayrollExporting ? t("loading") : t("accCompSsoOfficialUploadFromPayroll")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
                   onClick={() => void exportEserviceBulkFromPayroll()}
                   disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
                   title={t("accCompSsoEserviceBulkHint")}
@@ -8084,7 +8209,7 @@ export function AdminAccountingCompliance({
                 </Button>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => void exportSps110FromPayroll()}
                   disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
                   title={t("accCompSsoSps110Hint")}
@@ -8140,30 +8265,33 @@ export function AdminAccountingCompliance({
                         <thead>
                           <tr className="border-b bg-muted/30">
                             <th className="text-left p-2 font-medium">{t("store")}</th>
-                            <th className="text-left p-2 font-medium">{t("accCompSsoColEmployeeName")}</th>
-                            <th className="text-left p-2 font-medium">{t("accCompSsoColCitizenId")}</th>
-                            <th className="text-left p-2 font-medium">{t("accCompSsoColMemberNo")}</th>
-                            <th className="text-right p-2 font-medium">{t("accCompSsoEmployeeContribution")}</th>
-                            <th className="text-right p-2 font-medium">{t("accCompSsoEmployerContribution")}</th>
+                            {SSO_OFFICIAL_UPLOAD_COLUMN_HELP.map((c) => (
+                              <th key={c.labelTh} className="text-left p-2 font-medium whitespace-nowrap">
+                                {c.labelTh}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
                           {ssoEmployeePreviewRows.map((row, idx) => {
                             const store = String(row.store || "").trim() || "-"
-                            const name = String(row.name || "").trim() || "-"
-                            const idNumber = String(row.idNumber || "").trim() || "-"
-                            const memberNo = String(row.ssoMemberNo || "").trim() || "-"
-                            const empSso = Math.round(asNum(row.sso))
-                            const erSso = Math.round(asNum(row.employerSso))
-                            const rowKey = `${store}-${idNumber}-${memberNo}-${idx}`
+                            const cols = mapPayrollRowToOfficialUploadRow(row, ssoFilingWageMode)
+                            const rowKey = `${store}-${String(cols[0])}-${idx}`
                             return (
                               <tr key={rowKey} className="border-b border-border/40">
                                 <td className="p-2 font-mono text-[11px]">{store}</td>
-                                <td className="p-2">{name}</td>
-                                <td className="p-2 font-mono text-[11px]">{idNumber}</td>
-                                <td className="p-2 font-mono text-[11px]">{memberNo}</td>
-                                <td className="p-2 text-right tabular-nums">{empSso.toLocaleString()}</td>
-                                <td className="p-2 text-right tabular-nums">{erSso.toLocaleString()}</td>
+                                {cols.map((cell, colIdx) => (
+                                  <td
+                                    key={`${rowKey}-${colIdx}`}
+                                    className={cn(
+                                      "p-2",
+                                      colIdx >= 4 ? "text-right tabular-nums" : "",
+                                      colIdx === 0 ? "font-mono text-[11px]" : ""
+                                    )}
+                                  >
+                                    {typeof cell === "number" ? cell.toLocaleString() : cell || "-"}
+                                  </td>
+                                ))}
                               </tr>
                             )
                           })}
@@ -8320,30 +8448,128 @@ export function AdminAccountingCompliance({
               </div>
                 </>
               ) : null}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("accCompSsoColumnGuideTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="overflow-x-auto pt-0">
-              <p className="text-[11px] text-muted-foreground mb-2">{t("accCompSsoColumnGuideNote")}</p>
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2 font-medium">ไทย</th>
-                    <th className="text-left p-2 font-medium">{t("accCompEnglish")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SSO_ESERVICE_BULK_COLUMN_HELP.map((c) => (
-                    <tr key={c.labelTh} className="border-b border-border/50">
-                      <td className="p-2">{c.labelTh}</td>
-                      <td className="p-2 text-muted-foreground">{c.labelEn}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                </TabsContent>
+                <TabsContent value="history" className="mt-4 space-y-3">
+                  <div className="flex flex-wrap items-end gap-2">
+                    {isOffice && !externalFiling ? (
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">{t("accCompSsoPayrollStore")}</div>
+                        <Select value={ssoStoreFilter} onValueChange={setSsoStoreFilter}>
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {storeOptions.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {storeOptionLabel(s)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadSsoSubmissionHistory()}
+                      disabled={ssoHistoryLoading}
+                    >
+                      {ssoHistoryLoading ? t("loading") : t("search")}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{t("accCompSsoHistoryGuide")}</p>
+                  {ssoHistoryLoading ? (
+                    <div className="text-xs text-muted-foreground">{t("loading")}</div>
+                  ) : ssoHistoryRows.length === 0 ? (
+                    <AccountingEmptyState>{t("accCompSsoHistoryEmpty")}</AccountingEmptyState>
+                  ) : (
+                    <div className="rounded border border-border/60 overflow-auto max-h-[480px]">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b bg-muted/30">
+                            <th className="text-left p-2 font-medium">{t("accCompColYearMonth")}</th>
+                            <th className="text-left p-2 font-medium">{t("store")}</th>
+                            <th className="text-left p-2 font-medium">{t("accCompSubmittedAt")}</th>
+                            <th className="text-left p-2 font-medium">{t("accCompSubmittedBy")}</th>
+                            <th className="text-left p-2 font-medium">{t("accCompSsoHistorySummary")}</th>
+                            <th className="text-left p-2 font-medium">{t("memo")}</th>
+                            <th className="text-right p-2 font-medium">{t("accCompSsoHistoryAttachments")}</th>
+                            <th className="text-right p-2 font-medium" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ssoHistoryRows.map((row) => {
+                            const meta = parseSsoWorkflowNote(String(row.note || ""))
+                            const storeLabel =
+                              String(row.store_scope || "").trim() === "*" || !String(row.store_scope || "").trim()
+                                ? t("accCompAll")
+                                : String(row.store_scope || "")
+                            const submittedAt = meta?.submittedAt || String(row.updated_at || "")
+                            const submittedBy = meta?.submittedBy || String(row.updated_by || "")
+                            const attachmentCount = meta?.attachmentUrls?.length || 0
+                            return (
+                              <tr key={String(row.id || `${row.year_month}-${row.store_scope}`)} className="border-b border-border/40">
+                                <td className="p-2 tabular-nums whitespace-nowrap">{String(row.year_month || "").slice(0, 7)}</td>
+                                <td className="p-2">{storeLabel}</td>
+                                <td className="p-2 whitespace-nowrap">{formatBangkokDateTime(submittedAt)}</td>
+                                <td className="p-2">{submittedBy || "-"}</td>
+                                <td className="p-2 text-muted-foreground">{meta?.summaryLine || "-"}</td>
+                                <td className="p-2 max-w-[200px] truncate" title={meta?.memo || ""}>
+                                  {meta?.memo || "-"}
+                                </td>
+                                <td className="p-2 text-right tabular-nums">{attachmentCount.toLocaleString()}</td>
+                                <td className="p-2 text-right">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => void openSsoHistoryRow(row)}
+                                  >
+                                    {t("accCompSsoHistoryOpenMonth")}
+                                  </Button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {ssoHistoryRows.some((row) => {
+                    const meta = parseSsoWorkflowNote(String(row.note || ""))
+                    return (meta?.attachmentUrls?.length || 0) > 0
+                  }) ? (
+                    <div className="space-y-2 pt-1">
+                      <div className="text-xs font-medium">{t("accCompSsoHistoryAttachmentLinks")}</div>
+                      {ssoHistoryRows.map((row) => {
+                        const meta = parseSsoWorkflowNote(String(row.note || ""))
+                        if (!meta?.attachmentUrls?.length) return null
+                        const ym = String(row.year_month || "").slice(0, 7)
+                        return (
+                          <div key={`att-${row.id}`} className="rounded border border-border/50 p-2 space-y-1">
+                            <div className="text-[11px] text-muted-foreground">
+                              {ym} · {String(row.store_scope || "*") === "*" ? t("accCompAll") : row.store_scope}
+                            </div>
+                            {meta.attachmentUrls.map((u) => (
+                              <a
+                                key={u}
+                                href={u}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-[11px] text-primary underline truncate"
+                                title={u}
+                              >
+                                {displayNameFromUrl(u)}
+                              </a>
+                            ))}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>

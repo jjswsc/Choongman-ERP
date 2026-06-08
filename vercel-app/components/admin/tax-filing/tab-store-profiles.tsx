@@ -20,7 +20,8 @@ export function TaxFilingStoreProfilesTab({ filingStoreFilter }: Props) {
   const officeByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
   const isOffice = isOfficeRole(role) || officeByStore
   const isManager = !isOffice && isManagerOrFranchiseeRole(role)
-  const { stores: storeList } = useStoreList()
+  /** 납세자 프로필 — 가맹 매장 + 본사(Office). `stores`는 매출 집계용이라 본사가 빠짐 */
+  const { posStores: storeList } = useStoreList()
 
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []

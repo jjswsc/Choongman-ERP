@@ -67,14 +67,26 @@ export function getThaiTaxFilingPeriodRange(input: {
 }
 
 /**
- * PostgREST `tax_month` 조건 — `in.(YYYY-MM)` 하이픈 토큰 파싱 이슈를 피하기 위해 eq / or 만 사용.
+ * PostgREST 월 조건 — `in.(YYYY-MM)` 하이픈 토큰 파싱 이슈를 피하기 위해 eq / or 만 사용.
  * appendStoreNameFilter 등과 `&`로 이어 붙일 수 있음.
  */
-export function buildTaxMonthPostgrestFilter(months: string[]): string {
+export function buildMonthColumnPostgrestFilter(months: string[], column: string): string {
+  const col = String(column || '').trim()
+  if (!col) throw new Error('INVALID_MONTH_COLUMN')
   const clean = (months || []).map((m) => String(m || '').slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (!clean.length) throw new Error('INVALID_MONTHS')
-  if (clean.length === 1) return `tax_month=eq.${encodeURIComponent(clean[0])}`
-  const inner = clean.map((m) => `tax_month.eq.${encodeURIComponent(m)}`).join(',')
+  if (clean.length === 1) return `${col}=eq.${encodeURIComponent(clean[0])}`
+  const inner = clean.map((m) => `${col}.eq.${encodeURIComponent(m)}`).join(',')
   return `or=(${inner})`
+}
+
+/** vat/wht 등 세무 원장 — `tax_month` */
+export function buildTaxMonthPostgrestFilter(months: string[]): string {
+  return buildMonthColumnPostgrestFilter(months, 'tax_month')
+}
+
+/** payroll_records — `month` (tax_month 아님) */
+export function buildPayrollMonthPostgrestFilter(months: string[]): string {
+  return buildMonthColumnPostgrestFilter(months, 'month')
 }
 

@@ -205,10 +205,11 @@ export async function POST(req: NextRequest) {
           { headers }
         )
       }
-      return NextResponse.json(
-        { success: false, message: '대기/결제완료 상태만 수정할 수 있습니다.' },
-        { headers }
-      )
+      const closedMsg =
+        status === 'cancelled' || status === 'canceled' || status === 'refunded'
+          ? '이미 취소·환불된 주문입니다. 목록을 새로고침해 주세요.'
+          : '대기/결제완료 상태만 수정할 수 있습니다.'
+      return NextResponse.json({ success: false, message: closedMsg }, { headers })
     }
 
     let subtotal = 0

@@ -868,6 +868,7 @@ export default function PosTerminalPage() {
     completedTakeoutOrders,
     refetchStores,
     clearTableOrder,
+    removeTerminalOrder,
     upsertOptimisticOrder,
     loadingTables,
   } = usePosStore()
@@ -969,6 +970,14 @@ export default function PosTerminalPage() {
   const refetchCurrentStore = useCallback(() => {
     return refetchStores({ scope: 'current', immediate: true })
   }, [refetchStores])
+
+  const dismissTerminalOrder = useCallback(
+    (order: Order) => {
+      if (!currentStoreId) return
+      removeTerminalOrder(currentStoreId, order)
+    },
+    [currentStoreId, removeTerminalOrder]
+  )
 
   /** 주문 저장 직후 — 목록에 즉시 반영 후 서버 스냅샷 동기화(구 캐시·빈 refetch로 사라지는 현상 방지) */
   const refreshStoreListAfterOrderSave = useCallback(
@@ -10884,6 +10893,7 @@ export default function PosTerminalPage() {
                     }
               }
               onCancel={refetchCurrentStore}
+              onOrderDismissed={dismissTerminalOrder}
               storeCode={currentStoreId}
               onPay={() => {
                 if (!selectedDeliveryOrder) return
@@ -11027,6 +11037,7 @@ export default function PosTerminalPage() {
                 await refetchCurrentStore()
               }}
               onCancel={refetchCurrentStore}
+              onOrderDismissed={dismissTerminalOrder}
               onClose={() => {
                 setServingTableId(null)
                 setDemoDineInOrder(null)
@@ -11055,6 +11066,7 @@ export default function PosTerminalPage() {
                     }
               }
               onCancel={refetchCurrentStore}
+              onOrderDismissed={dismissTerminalOrder}
               onAddOrder={() => {
                 if (!selectedTakeoutOrder) return
                 if (isPosOrderPaidLikeStatus(String(selectedTakeoutOrder.status ?? ''))) return

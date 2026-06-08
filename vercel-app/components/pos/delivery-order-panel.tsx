@@ -79,6 +79,8 @@ export interface DeliveryOrderPanelProps {
   onOpenTaxInvoice?: () => void
   /** 주문 취소 시 */
   onCancel?: () => void
+  /** 전체 취소 성공 직후 — 터미널 목록·sessionStorage에서 즉시 제거 */
+  onOrderDismissed?: (order: Order) => void
   /** 일부 취소 직후 홀·주방 재인쇄(터미널) */
   onAfterPartialLineRemoved?: (orderId: number, detail?: PosKitchenReprintPayload) => void | Promise<void>
   /** 전체 취소·거절 직후 주방 취소 전표 */
@@ -100,6 +102,7 @@ export function DeliveryOrderPanel({
   onPay,
   onOpenTaxInvoice,
   onCancel,
+  onOrderDismissed,
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
   onClose,
@@ -488,6 +491,7 @@ export function DeliveryOrderPanel({
           memo: order.memo,
         })
       }
+      onOrderDismissed?.(order)
       onCancel?.()
       onClose?.()
     } catch (e) {

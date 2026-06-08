@@ -8,7 +8,7 @@ import {
 } from '@/lib/supabase-server'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
+import { buildPayrollMonthPostgrestFilter, buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
@@ -975,7 +975,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
 
-  const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
+  const monthFilter = buildPayrollMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
   const payrollFilter = appendStoreNameFilter(monthFilter, storeFilter).replace(/store_name=eq\./g, 'store=eq.')
   const payrollRows = (await supabaseSelectFilterAllPages('payroll_records', payrollFilter, {

@@ -77,6 +77,8 @@ export interface TableOrderPanelProps {
   onLeaveTable?: () => void | Promise<void>
   /** 주문 취소 시 */
   onCancel?: () => void
+  /** 전체 취소 성공 직후 — 터미널 목록·sessionStorage에서 즉시 제거 */
+  onOrderDismissed?: (order: Order) => void
   /** 일부 취소(updatePosOrder) 직후 — 터미널에서 홀·주방 재인쇄 */
   onAfterPartialLineRemoved?: (orderId: number, detail?: PosKitchenReprintPayload) => void | Promise<void>
   /** 전체 취소 직후 — 터미널에서 주방 취소 전표(줄 앞 `-`) */
@@ -106,6 +108,7 @@ export function TableOrderPanel({
   onOpenTaxInvoice,
   onLeaveTable,
   onCancel,
+  onOrderDismissed,
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
   onAfterTableTransfer,
@@ -447,6 +450,7 @@ export function TableOrderPanel({
           memo: order.memo,
         })
       }
+      onOrderDismissed?.(order)
       onCancel?.()
       onClose?.()
     } catch (e) {

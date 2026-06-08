@@ -175,20 +175,6 @@ export default function AdminLiveStoreSalesPage() {
         <>
           {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
-          <AdminSalesDashboardCharts
-            effectiveStoreCode={effectiveStoreCode}
-            isOfficeSelector={isOfficeSelector}
-            salesStoreCodes={franchiseSalesStoreCodes}
-            tableTotalByStore={tableTotalByStore}
-          />
-          <PosRevenueRealtimeDashboard
-            effectiveStoreCode={effectiveStoreCode}
-            isOfficeSelector={isOfficeSelector}
-            salesStoreCodes={franchiseSalesStoreCodes}
-            tableTotal={adminTableTotal}
-            tableTotalLoading={loadingTables}
-          />
-
           {showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime ? (
             <StoreSalesRealtimeView
               effectiveStoreCode={effectiveStoreCode}
@@ -203,6 +189,20 @@ export default function AdminLiveStoreSalesPage() {
               hideByStoreSection={hideDuplicateByStoreSection}
             />
           ) : null}
+
+          <AdminSalesDashboardCharts
+            effectiveStoreCode={effectiveStoreCode}
+            isOfficeSelector={isOfficeSelector}
+            salesStoreCodes={franchiseSalesStoreCodes}
+            tableTotalByStore={tableTotalByStore}
+          />
+          <PosRevenueRealtimeDashboard
+            effectiveStoreCode={effectiveStoreCode}
+            isOfficeSelector={isOfficeSelector}
+            salesStoreCodes={franchiseSalesStoreCodes}
+            tableTotal={adminTableTotal}
+            tableTotalLoading={loadingTables}
+          />
         </>
       </div>
     </div>

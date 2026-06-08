@@ -16,7 +16,7 @@ import {
   deleteJournalEntriesBySource,
   postExpenseAccrualJournal,
 } from '@/lib/accounting-posting'
-import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
+import { buildPayrollMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   aggregateSsoRemittanceByStore,
@@ -264,7 +264,7 @@ export async function syncPayrollSsoExpenseAccruals(params: {
 
   let rows = params.payrollRows
   if (!rows) {
-    const monthFilter = buildTaxMonthPostgrestFilter([monthStr])
+    const monthFilter = buildPayrollMonthPostgrestFilter([monthStr])
     const storeFilter = String(params.storeFilter || '').trim()
     const payrollFilter = appendStoreNameFilter(monthFilter, storeFilter).replace(
       /store_name=eq\./g,

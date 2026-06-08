@@ -57,11 +57,6 @@ export function StoreTaxFilingProfilesPanel({
   const { lang } = useLang()
   const t = useT(lang)
 
-  const storeCodes = React.useMemo(() => {
-    if (!isOffice) return managerStore ? [managerStore] : []
-    return storeOptions.filter((s) => s !== "All")
-  }, [isOffice, managerStore, storeOptions])
-
   const [profilesByStore, setProfilesByStore] = React.useState<Record<string, StoreTaxFilingProfileDto>>({})
   const [vendors, setVendors] = React.useState<AdminVendor[]>([])
   const [listLoading, setListLoading] = React.useState(false)
@@ -83,6 +78,13 @@ export function StoreTaxFilingProfilesPanel({
   const [ssoPhone, setSsoPhone] = React.useState("")
   const [ssoFax, setSsoFax] = React.useState("")
   const [ssoEmail, setSsoEmail] = React.useState("")
+
+  const storeCodes = React.useMemo(() => {
+    if (!isOffice) return managerStore ? [managerStore] : []
+    const fromOptions = storeOptions.filter((s) => s !== "All")
+    const fromProfiles = Object.keys(profilesByStore)
+    return Array.from(new Set([...fromOptions, ...fromProfiles])).sort((a, b) => a.localeCompare(b))
+  }, [isOffice, managerStore, storeOptions, profilesByStore])
 
   const loadList = React.useCallback(async () => {
     setListLoading(true)

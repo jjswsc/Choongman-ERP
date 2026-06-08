@@ -34,7 +34,10 @@ import {
   persistActiveTerminalOrders,
   loadPersistedActiveTerminalOrders,
 } from '@/lib/pos-terminal-active-orders-persist'
-import { dropStaleOfflineOrdersWhenServerHasMatch } from '@/lib/pos-order-local-reconcile'
+import {
+  dropStaleOfflineOrdersWhenServerHasMatch,
+  shouldKeepPrevOrderMissingFromFetched,
+} from '@/lib/pos-order-local-reconcile'
 import { isPosOfflineOnlyOrder } from '@/lib/pos-order-server-id'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
@@ -449,7 +452,7 @@ function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
   }
   /** pollMinimal·캐시 지연 refetch가 방금 저장한 주문을 빼먹을 때 — in-memory 스냅샷 유지 */
   for (const row of prevClean) {
-    if (!isActiveTerminalListOrder(row)) continue
+    if (!shouldKeepPrevOrderMissingFromFetched(row)) continue
     const key = orderListMergeKey(row)
     if (!key || seen.has(key)) continue
     out.unshift(row)
@@ -993,18 +996,25 @@ export function usePosStoreInternal() {
     return orders
   }, [ordersByStoreId, currentStoreId, orders])
 
-  const deliveryOrders = currentStoreOrders.filter(
-    (o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed' && o.status !== 'paid'
-  )
+  const isOpenChannelOrder = (o: Order) => {
+    const st = String(o.status ?? '').trim().toLowerCase()
+    return (
+      st !== 'ready' &&
+      st !== 'completed' &&
+      st !== 'paid' &&
+      st !== 'cancelled' &&
+      st !== 'canceled' &&
+      st !== 'refunded'
+    )
+  }
+  const deliveryOrders = currentStoreOrders.filter((o) => o.type === 'delivery' && isOpenChannelOrder(o))
   const packagedDeliveryOrders = currentStoreOrders.filter(
     (o) => o.type === 'delivery' && o.status === 'ready'
   )
   const completedDeliveryOrders = currentStoreOrders.filter(
     (o) => o.type === 'delivery' && (o.status === 'completed' || o.status === 'paid')
   )
-  const takeoutOrders = currentStoreOrders.filter(
-    (o) => o.type === 'takeout' && o.status !== 'ready' && o.status !== 'completed' && o.status !== 'paid'
-  )
+  const takeoutOrders = currentStoreOrders.filter((o) => o.type === 'takeout' && isOpenChannelOrder(o))
   const packagedTakeoutOrders = currentStoreOrders.filter(
     (o) => o.type === 'takeout' && o.status === 'ready'
   )
@@ -1131,6 +1141,34 @@ export function usePosStoreInternal() {
     }
   }, [])
 
+  const removeTerminalOrder = useCallback(
+    (storeCode: string, order: Pick<Order, 'id' | 'orderNo' | 'tableName'>) => {
+      const sc = String(storeCode ?? '').trim()
+      if (!sc) return
+      const businessDate = getPosBusinessDateStr()
+      const targetId = String(order.id ?? '').trim()
+      const targetNo = String(order.orderNo ?? '').trim()
+      const matches = (row: Order) => {
+        const id = String(row.id ?? '').trim()
+        const no = String(row.orderNo ?? '').trim()
+        if (targetId && id === targetId) return true
+        if (targetNo && no === targetNo) return true
+        return false
+      }
+      setOrdersByStoreId((prev) => {
+        const list = prev[sc] ?? []
+        const nextList = list.filter((row) => !matches(row))
+        const next = { ...prev, [sc]: nextList }
+        ordersByStoreIdRef.current = next
+        persistActiveTerminalOrders(sc, businessDate, nextList)
+        return next
+      })
+      const tableName = String(order.tableName ?? '').trim()
+      if (tableName) clearTableOrder(sc, tableName)
+    },
+    [clearTableOrder]
+  )
+
   const currentLayout = (currentStoreId && layoutByStoreId[currentStoreId]) || []
 
   return {
@@ -1145,6 +1183,7 @@ export function usePosStoreInternal() {
     removeTable,
     clearTables,
     clearTableOrder,
+    removeTerminalOrder,
     orders,
     deliveryOrders,
     packagedDeliveryOrders,

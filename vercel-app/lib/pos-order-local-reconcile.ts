@@ -2,6 +2,20 @@ import type { Order } from '@/lib/pos-types'
 import { isPosOfflineOnlyOrder, posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { isActiveTerminalListOrder } from '@/lib/pos-terminal-active-orders-persist'
 
+/** refetch 스냅샷에 없는 in-memory 주문을 다시 붙일지 — 서버 id 주문은 취소·종료로 간주 */
+export function shouldKeepPrevOrderMissingFromFetched(row: Order): boolean {
+  if (!isActiveTerminalListOrder(row)) return false
+  if (posOrderHasServerId(row.id)) return false
+  if (isPosOfflineOnlyOrder(row)) return true
+  if (row.pendingListSync) return true
+  return true
+}
+
+export function isCancelledOrRefundedTerminalOrder(order: Order | undefined | null): boolean {
+  const st = String(order?.status ?? '').trim().toLowerCase()
+  return st === 'cancelled' || st === 'canceled' || st === 'refunded'
+}
+
 function orderItemQtySum(order: Order): number {
   if (!order.items?.length) return 0
   return order.items.reduce((sum, it) => sum + Math.max(0, Number(it.quantity ?? 1) || 1), 0)

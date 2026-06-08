@@ -47,6 +47,11 @@ function formatSalesAmount(n: number) {
   return Math.round(v).toLocaleString()
 }
 
+function formatSharePercent(value: number, total: number): string {
+  if (!Number.isFinite(total) || total <= 0) return "0.0%"
+  return `${((Number(value) / total) * 100).toFixed(1)}%`
+}
+
 const periodChartYAxisProps = {
   tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK },
   tickFormatter: (v: number) => `${(v / 1000).toFixed(0)}k`,
@@ -264,6 +269,11 @@ export function AdminSalesDashboardCharts({
     [channelRows, tr]
   )
 
+  const channelTotal = React.useMemo(
+    () => channelChartRows.reduce((sum, r) => sum + r.sales, 0),
+    [channelChartRows]
+  )
+
   const deliveryPlatformRows = React.useMemo(() => {
     const deliveryItem = deliveryData.items.find((x) => x.channelKey === "delivery")
     const platforms = deliveryItem?.platforms ?? []
@@ -412,7 +422,7 @@ export function AdminSalesDashboardCharts({
               {tr("salesByCategory", "분류별 (홀·포장·배달)")}
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="h-[240px]">
+              <div className="h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -420,31 +430,48 @@ export function AdminSalesDashboardCharts({
                       dataKey="sales"
                       nameKey="axisLabel"
                       cx="50%"
-                      cy="50%"
-                      outerRadius={88}
-                      label={({ name, percent }) =>
-                        `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
-                      }
+                      cy="45%"
+                      outerRadius={80}
+                      paddingAngle={1}
                     >
                       {channelChartRows.map((r, i) => (
                         <Cell key={r.channelKey} fill={COLORS[i % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
-                    <Legend />
+                    <Tooltip
+                      formatter={(v: number) => [formatSharePercent(v, channelTotal), tr("salesRatio", "비율")]}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="h-[240px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={channelChartRows} layout="vertical" margin={{ left: 56 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" {...periodChartYAxisProps} />
-                    <YAxis dataKey="axisLabel" type="category" width={56} tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                    <Bar dataKey="sales" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="overflow-hidden rounded-lg border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">{tr("salesByCategory", "분류")}</th>
+                      <th className="px-3 py-2 text-right">{tr("pL_sales", "매출")}</th>
+                      <th className="px-3 py-2 text-right">{tr("salesRatio", "비율")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {channelChartRows.map((r) => (
+                      <tr key={r.channelKey} className="border-t">
+                        <td className="px-3 py-1.5">{r.axisLabel}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{formatSalesAmount(r.sales)}</td>
+                        <td className="px-3 py-1.5 text-right text-muted-foreground">
+                          {formatSharePercent(r.sales, channelTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="border-t px-3 py-2 text-[11px] text-muted-foreground">
+                  {tr("salesTotal", "총")} {formatSalesAmount(channelTotal)}
+                </p>
               </div>
             </div>
           </div>
@@ -456,7 +483,7 @@ export function AdminSalesDashboardCharts({
               {tr("salesDeliveryPlatformBreakdown", "배달 플랫폼별")}
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="h-[240px]">
+              <div className="h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -464,17 +491,28 @@ export function AdminSalesDashboardCharts({
                       dataKey="sales"
                       nameKey="axisLabel"
                       cx="50%"
-                      cy="50%"
-                      outerRadius={88}
-                      label={({ name, percent }) =>
-                        `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
-                      }
+                      cy="45%"
+                      outerRadius={80}
+                      paddingAngle={1}
                     >
                       {deliveryPlatformRows.map((r, i) => (
                         <Cell key={r.code} fill={COLORS[(i + 2) % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
+                    <Tooltip
+                      formatter={(v: number, _name, item) => {
+                        const payload = item?.payload as { pct?: number } | undefined
+                        const pct =
+                          payload?.pct != null && Number.isFinite(payload.pct)
+                            ? `${Number(payload.pct).toFixed(1)}%`
+                            : formatSharePercent(v, deliveryData.total)
+                        return [pct, tr("salesRatio", "비율")]
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

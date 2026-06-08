@@ -3,6 +3,7 @@
  * SSO 온라인 일괄 업로드 형식은 시점·버전별로 달라질 수 있으므로,
  * 이 파일은 ERP 내부 집계·수작업 정리용 표준 열을 제공하고, 제출 전 공식 양식과 대조하도록 안내한다.
  * 서드파티 **SSO_eForm v1.5**류(Data 시트 12열)는 `thai-sso-eform-v15.ts`를 사용한다.
+ * 공식 e-Service **SampleExcel** 6열 업로드는 `thai-sso-official-upload-export.ts`를 사용한다.
  */
 import * as XLSX from "xlsx"
 import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
@@ -79,7 +80,7 @@ function instructionRows(ym: string, source: "blank" | "payroll"): string[][] {
     ["• Split ชื่อ/นามสกุล if the portal requires separate columns — ERP exports combined name + optional title."],
     [""],
     ["Suggested workflow:"],
-    ["• Prefer «e-Service upload» export from ERP (thai-sso-eservice-bulk-export.ts)."],
+    ["• Prefer «Official upload» export from ERP (thai-sso-official-upload-export.ts)."],
     ["• This legacy sheet is for internal review only if you still use it."],
     ...payrollNote.map((line) => [line]),
     [""],

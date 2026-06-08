@@ -4256,6 +4256,19 @@ export async function postIncomeExpenseClosing(params: {
   }>
 }
 
+export async function getSsoSubmissionHistory(params?: { storeFilter?: string; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline(`/api/getSsoSubmissionHistory?${q}`)
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    rows: jsonAsArray<AccountingWorkflowStatusRow>(o.rows),
+    error: o.error != null ? String(o.error) : undefined,
+  }
+}
+
 export async function getAccountingWorkflowStatus(params: {
   userRole: string
   yearMonth: string
