@@ -618,6 +618,43 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
   return fallback
 }
 
+/** Phase A — API 생략, IndexedDB 로그인 목록만 (하이브리드 cold start) */
+export async function readLoginDataFromCacheOnly(): Promise<LoginDataResult> {
+  const key = 'erp:loginData'
+  const fallback: LoginDataResult = {
+    users: {},
+    vendors: [],
+    companies: [],
+    storeCompanies: {},
+    storeLabels: {},
+    legacyToCanonical: {},
+    usedMaster: false,
+    _source: 'fallback',
+  }
+  const cached = await getFromErpCache<{
+    users: Record<string, string[]>
+    vendors: string[]
+    companies?: string[]
+    storeCompanies?: Record<string, string>
+    storeLabels?: Record<string, string>
+    legacyToCanonical?: Record<string, string>
+    usedMaster?: boolean
+  }>(key)
+  if (cached && Object.keys(cached.users || {}).length > 0) {
+    return {
+      users: cached.users,
+      vendors: cached.vendors ?? [],
+      companies: cached.companies ?? [],
+      storeCompanies: cached.storeCompanies ?? {},
+      storeLabels: cached.storeLabels ?? {},
+      legacyToCanonical: cached.legacyToCanonical ?? {},
+      usedMaster: cached.usedMaster ?? false,
+      _source: 'cache',
+    }
+  }
+  return fallback
+}
+
 /** processOrder/processUsage 등 후 appData 캐시 무효화 */
 export async function invalidateAppDataCache(): Promise<void> {
   await deleteErpCacheByPrefix('erp:appData')

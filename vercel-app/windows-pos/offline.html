@@ -31,68 +31,135 @@
         line-height: 1.5;
         color: #d1d5db;
       }
+      .actions {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
       button {
-        margin-top: 18px;
+        margin: 0;
         border: 0;
         border-radius: 8px;
-        background: #2563eb;
         color: white;
-        padding: 10px 16px;
+        padding: 12px 18px;
         font-size: 15px;
         cursor: pointer;
+        flex: 1 1 200px;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      #cacheBtn {
+        background: #059669;
+        font-weight: 600;
+      }
+      #retryBtn {
+        background: #374151;
+        flex: 1 1 140px;
+      }
+      .hint {
+        font-size: 13px;
+        color: #9ca3af;
+      }
+      .emphasis {
+        color: #6ee7b7;
+        font-weight: 600;
       }
     </style>
   </head>
   <body>
     <div class="card">
       <h1>네트워크 연결을 확인해주세요.</h1>
-      <p>서버 접속이 불안정합니다. 인터넷 연결 후 다시 시도하세요.</p>
+      <p>서버 접속이 불안정합니다. 인터넷·Wi‑Fi 연결 후 다시 시도하세요.</p>
       <p>
-        이 PC에서 POS를 한 번이라도 온라인으로 연 적이 있으면, 「캐시로 열기」로 오프라인 모드(저장된
-        로그인·주문 동기화)에 들어갈 수 있습니다.
+        이 PC에서 POS를 한 번이라도 온라인으로 연 적이 있으면,
+        <span class="emphasis">「캐시로 열기」</span>로 오프라인 모드(저장된 로그인·주문 동기화)에 들어갈 수
+        있습니다.
       </p>
       <p>오프라인 중 저장된 주문은 연결 복구 후 자동 동기화됩니다.</p>
-      <p id="retryHint" class="hint" style="display: none; font-size: 13px; color: #9ca3af">
+      <p id="offlineHint" class="hint" style="display: none">
+        Wi‑Fi/인터넷이 없을 때는 <span class="emphasis">초록 「캐시로 열기」</span>만 사용하세요. 파란 「다시
+        시도」는 연결될 때까지 기다립니다.
+      </p>
+      <p id="retryHint" class="hint" style="display: none">
         다시 시도 후에도 같으면 앱을 완전히 종료한 뒤 실행하거나, 인터넷 연결 후 POS를 한 번 열어 캐시를
         갱신해 주세요.
       </p>
-      <button id="retryBtn" type="button">다시 시도</button>
-      <button id="cacheBtn" type="button" style="margin-left: 8px; background: #059669">캐시로 열기</button>
+      <div class="actions">
+        <button id="cacheBtn" type="button">캐시로 열기 (오프라인)</button>
+        <button id="retryBtn" type="button">다시 시도 (온라인)</button>
+      </div>
     </div>
     <script>
+      var RELOAD_TIMEOUT_MS = 32000;
+
+      function resetButtons(btn, cacheBtn) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "다시 시도 (온라인)";
+        }
+        if (cacheBtn) {
+          cacheBtn.disabled = false;
+          cacheBtn.textContent = "캐시로 열기 (오프라인)";
+        }
+      }
+
       async function retryLoadPos(preferFresh) {
         var btn = document.getElementById("retryBtn");
         var cacheBtn = document.getElementById("cacheBtn");
         var hint = document.getElementById("retryHint");
         if (btn) {
           btn.disabled = true;
-          btn.textContent = preferFresh ? "연결 중…" : "캐시 불러오는 중…";
+          btn.textContent = preferFresh ? "연결 중…" : btn.textContent;
         }
-        if (cacheBtn) cacheBtn.disabled = true;
+        if (cacheBtn) {
+          cacheBtn.disabled = true;
+          if (!preferFresh) cacheBtn.textContent = "캐시 불러오는 중… (최대 30초)";
+        }
         try {
           if (window.cmPosShell && typeof window.cmPosShell.reloadPosUrl === "function") {
-            var r = await window.cmPosShell.reloadPosUrl({ preferFresh: !!preferFresh });
+            var reloadPromise = window.cmPosShell.reloadPosUrl({ preferFresh: !!preferFresh });
+            var r = await Promise.race([
+              reloadPromise,
+              new Promise(function (resolve) {
+                setTimeout(function () {
+                  resolve({ ok: false, reason: "client_timeout" });
+                }, RELOAD_TIMEOUT_MS);
+              }),
+            ]);
             if (r && r.ok) return;
             if (hint) hint.style.display = "block";
-            if (btn) {
-              btn.disabled = false;
-              btn.textContent = "다시 시도";
-            }
-            if (cacheBtn) cacheBtn.disabled = false;
+            resetButtons(btn, cacheBtn);
             return;
           }
         } catch (e) {}
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "다시 시도";
-        }
-        if (cacheBtn) cacheBtn.disabled = false;
+        resetButtons(btn, cacheBtn);
         window.location.reload();
       }
-      var rb = document.getElementById("retryBtn");
-      if (rb) rb.addEventListener("click", function () { void retryLoadPos(true); });
-      var cb = document.getElementById("cacheBtn");
-      if (cb) cb.addEventListener("click", function () { void retryLoadPos(false); });
+
+      void (async function initOfflinePage() {
+        var offlineHint = document.getElementById("offlineHint");
+        var retryBtn = document.getElementById("retryBtn");
+        var online = true;
+        try {
+          if (window.cmPosShell && typeof window.cmPosShell.isSystemOnline === "function") {
+            online = await window.cmPosShell.isSystemOnline();
+          } else if (typeof navigator !== "undefined" && navigator.onLine === false) {
+            online = false;
+          }
+        } catch (e) {
+          online = false;
+        }
+        if (!online) {
+          if (offlineHint) offlineHint.style.display = "block";
+          if (retryBtn) retryBtn.style.display = "none";
+        }
+        if (retryBtn) retryBtn.addEventListener("click", function () { void retryLoadPos(true); });
+        var cb = document.getElementById("cacheBtn");
+        if (cb) cb.addEventListener("click", function () { void retryLoadPos(false); });
+      })();
     </script>
   </body>
 </html>

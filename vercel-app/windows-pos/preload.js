@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   platform: "windows-electron",
   /** 메인 창이 offline.html 일 때 POS URL 을 다시 로드(다시 시도·캐시로 열기) */
   reloadPosUrl: (opts) => ipcRenderer.invoke("cm-pos-reload-pos-url", opts || {}),
+  /** Electron net.isOnline() — offline.html에서「다시 시도」숨김 판단 */
+  isSystemOnline: () => ipcRenderer.invoke("cm-pos-is-system-online"),
   getVersion: () => ipcRenderer.invoke("cm-pos-get-version"),
   checkForUpdates: () => ipcRenderer.invoke("cm-pos-check-updates"),
   exitKioskOrFullscreen: () => ipcRenderer.invoke("cm-pos-exit-kiosk"),

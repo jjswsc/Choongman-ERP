@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
+import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
 import { useAuth, loadOfflineResumeAuth, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
 import {
   isLangCode,
@@ -32,6 +33,10 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
+import {
+  isPosOfflineBootV2Enabled,
+  persistOfflineBootV2FromQuery,
+} from "@/lib/pos-offline-boot-v2"
 import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { labelForStore } from "@/lib/store-list-keys"
 import {
@@ -361,10 +366,45 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setOfflineResume(loadOfflineResumeAuth())
   }, [])
 
+  useEffect(() => {
+    persistOfflineBootV2FromQuery(searchParams)
+  }, [searchParams])
+
   const clearFormError = useCallback(() => {
     setError("")
     setErrorIsConnectivity(false)
     setLoginErrorFromClientFetch(false)
+  }, [])
+
+  const applyLoginDataResult = useCallback((d: LoginDataResult) => {
+    setLoginData(d.users || {})
+    setLoginStoreLabels(d.storeLabels || {})
+    const companyMap = d.storeCompanies || {}
+    setLoginStoreCompanies(companyMap)
+    const companyListRaw = Array.isArray(d.companies) ? d.companies : Object.values(companyMap)
+    const companyList = Array.from(
+      new Set(companyListRaw.map((x) => String(x || "").trim()).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b))
+    setCompanies(companyList)
+    setCompany((prev) => {
+      if (prev && companyList.includes(prev)) return prev
+      return companyList[0] || ""
+    })
+    const src = d._source ?? "fallback"
+    setLoginDataSource(src)
+    if (src === "api" || src === "cache") {
+      setBrowserOnline(true)
+      setLoginListProbeOk(true)
+    }
+    if (d._source === "fallback") {
+      setLoadError("SERVER_ERROR")
+      void runReachabilityProbe().then((probeOk) => {
+        setLoginListProbeOk(probeOk)
+        if (probeOk) setBrowserOnline(true)
+      })
+    } else {
+      setLoadError(null)
+    }
   }, [])
 
   const fetchLoginData = useCallback(() => {
@@ -376,13 +416,40 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (typeof navigator !== "undefined" && !isBrowserOnline()) {
         await runReachabilityProbe()
       }
-      const hybridOfflineBoot =
+      const bootV2 = isPosOfflineBootV2Enabled()
+      const loginSnapshot = loadOfflineResumeAuth()
+      const hybridFastBoot =
+        bootV2 &&
         typeof window !== "undefined" &&
         isCmPosHybridShell() &&
-        !isBrowserOnline() &&
-        !!loadOfflineResumeAuth()
-      /** Supabase 다구간 + 느린 망 — 짧은 타임아웃은 오탐이 잦음. 하이브리드 오프라인 cold start는 빠르게 캐시·오프라인 UI로 */
-      const timeoutMs = hybridOfflineBoot ? 3_000 : 60_000
+        loginApp === "pos" &&
+        !!loginSnapshot
+
+      let timeoutMs = 60_000
+      if (hybridFastBoot) {
+        if (!isBrowserOnline()) {
+          timeoutMs = 3_000
+        } else {
+          const probeOk = await runReachabilityProbe()
+          if (!probeOk) timeoutMs = 3_000
+        }
+        if (timeoutMs === 3_000) {
+          const cachedOnly = await readLoginDataFromCacheOnly()
+          if (cachedOnly._source === "cache") {
+            applyLoginDataResult(cachedOnly)
+            setLoading(false)
+            return
+          }
+        }
+      } else {
+        const hybridOfflineBoot =
+          typeof window !== "undefined" &&
+          isCmPosHybridShell() &&
+          !isBrowserOnline() &&
+          !!loginSnapshot
+        if (hybridOfflineBoot) timeoutMs = 3_000
+      }
+
       const fetchOnce = () =>
         Promise.race([
           getLoginData(),
@@ -391,15 +458,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           ),
         ])
       /** API 실패 시 getLoginData는 throw 대신 _source:fallback 을 줄 수 있음 → 1회 재시도 */
+      const maxAttempts = hybridFastBoot && timeoutMs === 3_000 ? 1 : 2
       const loadWithRetry = async () => {
-        let last: Awaited<ReturnType<typeof getLoginData>> | undefined
-        for (let attempt = 0; attempt < 2; attempt++) {
+        let last: LoginDataResult | undefined
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
           try {
             const d = await fetchOnce()
             last = d
             if (d._source !== "fallback") return d
           } catch (e) {
-            if (attempt === 0) continue
+            if (attempt < maxAttempts - 1) continue
             throw e
           }
         }
@@ -407,33 +475,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
       try {
         const d = await loadWithRetry()
-        setLoginData(d.users || {})
-        setLoginStoreLabels(d.storeLabels || {})
-        const companyMap = d.storeCompanies || {}
-        setLoginStoreCompanies(companyMap)
-        const companyListRaw = Array.isArray(d.companies) ? d.companies : Object.values(companyMap)
-        const companyList = Array.from(
-          new Set(companyListRaw.map((x) => String(x || "").trim()).filter(Boolean))
-        ).sort((a, b) => a.localeCompare(b))
-        setCompanies(companyList)
-        setCompany((prev) => {
-          if (prev && companyList.includes(prev)) return prev
-          return companyList[0] || ""
-        })
-        const src = d._source ?? "fallback"
-        setLoginDataSource(src)
-        if (src === "api" || src === "cache") {
-          setBrowserOnline(true)
-          setLoginListProbeOk(true)
-        }
-        if (d._source === "fallback") {
-          setLoadError("SERVER_ERROR")
-          const probeOk = await runReachabilityProbe()
-          setLoginListProbeOk(probeOk)
-          if (probeOk) setBrowserOnline(true)
-        } else {
-          setLoadError(null)
-        }
+        applyLoginDataResult(d)
         setLoading(false)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -455,7 +497,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
     }
     void run()
-  }, [])
+  }, [applyLoginDataResult, loginApp])
 
   useEffect(() => {
     if (auth) {
@@ -767,6 +809,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const showOfflineResumeBanner =
     canOfferOfflineResume && !offlineOnlyScreen
 
+  /** Phase A — 로딩 중에도 스냅샷 있으면 오프라인 진입 버튼 우선 표시 */
+  const showOfflineEntryDuringLoad =
+    isPosOfflineBootV2Enabled() && loading && offlineOnlyScreen
+
   /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 */
   const showServerUnreachableBanner =
     serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
@@ -795,6 +841,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "다시 시도",
       refresh: "새로고침",
       connectingToServer: "서버에 연결 중...",
+      connectingCanEnterOffline:
+        "서버 연결을 시도하는 동안에도 아래 버튼으로 바로 오프라인 모드에 들어갈 수 있습니다.",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "모바일",
@@ -824,6 +872,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "Retry",
       refresh: "Refresh",
       connectingToServer: "Connecting to server...",
+      connectingCanEnterOffline:
+        "You can enter offline mode below while we try to reach the server.",
       loginAppErp: "ERP (Admin)",
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
@@ -852,6 +902,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ลองอีกครั้ง",
       refresh: "รีเฟรช",
       connectingToServer: "กำลังเชื่อมต่อเซิร์ฟเวอร์...",
+      connectingCanEnterOffline:
+        "ระหว่างเชื่อมต่อเซิร์ฟเวอร์ สามารถกดปุ่มด้านล่างเพื่อเข้าโหมดออฟไลน์ได้ทันที",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "มือถือ",
@@ -880,6 +932,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ပြန်ကြိုးစားမည်",
       refresh: "ပြန်စမည်",
       connectingToServer: "ဆာဗာနှင့် ချိတ်ဆက်နေသည်...",
+      connectingCanEnterOffline:
+        "You can enter offline mode below while we try to reach the server.",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "မိုဘိုင်း",
@@ -908,6 +962,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ລອງໃໝ່",
       refresh: "ໂຫຼດໃໝ່",
       connectingToServer: "ກຳລັງເຊື່ອມຕໍ່ເຊີບເວີ...",
+      connectingCanEnterOffline:
+        "You can enter offline mode below while we try to reach the server.",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "ມືຖື",
@@ -988,13 +1044,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </div>
           ) : null}
 
-          {loading ? (
+          {loading && !showOfflineEntryDuringLoad ? (
             <div className="login-inline-loading">
               <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
               <p className="mt-4 text-center text-sm text-white/80">{t.connectingToServer}</p>
             </div>
           ) : offlineOnlyScreen ? (
             <div className="space-y-3 py-4">
+              {showOfflineEntryDuringLoad ? (
+                <p className="text-center text-xs leading-relaxed text-white/65">{t.connectingCanEnterOffline}</p>
+              ) : null}
               {effectiveOfflineResume ? (
                 <div className="rounded-lg border border-white/15 bg-white/5 px-3 py-3 text-left text-sm text-white/90">
                   <p>

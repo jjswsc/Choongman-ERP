@@ -735,12 +735,51 @@ function posUrlLoadOptions(preferFresh) {
   return {};
 }
 
+/** Phase A — 오프라인·캐시 부팅 시 로그인 화면 v2 플래그(?offlineBootV2=1) 전달 */
+function resolvePosLoadUrl(preferFresh) {
+  const useBootV2 = !preferFresh || !isSystemOnline();
+  if (!useBootV2) return POS_URL;
+  try {
+    const u = new URL(POS_URL);
+    u.searchParams.set("offlineBootV2", "1");
+    return u.toString();
+  } catch {
+    return POS_URL;
+  }
+}
+
+/** loadURL 무한 대기 방지 — offline.html「연결 중…」멈춤 완화 */
+function reloadPosUrlTimeoutMs(preferFresh) {
+  if (preferFresh && isSystemOnline()) return Math.min(POS_MAIN_LOAD_WATCHDOG_MS, 45000);
+  return Math.max(22000, Math.min(POS_MAIN_LOAD_WATCHDOG_MS, 32000));
+}
+
+function loadPosUrlWithTimeout(preferFresh) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.resolve({ ok: false, reason: "no_window" });
+  }
+  const url = resolvePosLoadUrl(preferFresh);
+  const effectivePreferFresh = preferFresh && isSystemOnline();
+  const timeoutMs = reloadPosUrlTimeoutMs(effectivePreferFresh);
+  clearPosDomBlankWatchdog();
+  schedulePosMainLoadWatchdog();
+  return Promise.race([
+    mainWindow.loadURL(url, posUrlLoadOptions(effectivePreferFresh)).then(() => ({ ok: true })),
+    new Promise((resolve) => {
+      setTimeout(() => resolve({ ok: false, reason: "load_timeout" }), timeoutMs);
+    }),
+  ]).catch((e) => ({
+    ok: false,
+    reason: String(e && e.message ? e.message : e),
+  }));
+}
+
 function loadPosMainUrl(preferFresh) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   clearPosDomBlankWatchdog();
   schedulePosMainLoadWatchdog();
   try {
-    void mainWindow.loadURL(POS_URL, posUrlLoadOptions(preferFresh));
+    void mainWindow.loadURL(resolvePosLoadUrl(preferFresh), posUrlLoadOptions(preferFresh && isSystemOnline()));
   } catch (e) {
     console.error("[cm-pos] loadURL error", e);
   }
@@ -1937,6 +1976,11 @@ if (!gotLock) {
     });
     // #endregion
 
+    ipcMain.handle("cm-pos-is-system-online", (event) => {
+      if (!senderAllowedForTrustedShell(event.sender)) return false;
+      return isSystemOnline();
+    });
+
     ipcMain.handle("cm-pos-reload-pos-url", async (event, opts) => {
       if (!senderAllowedForTrustedShell(event.sender)) {
         return { ok: false, reason: "forbidden" };
@@ -1945,16 +1989,10 @@ if (!gotLock) {
         return { ok: false, reason: "no_window" };
       }
       const preferFresh = opts && opts.preferFresh === true;
+      const effectivePreferFresh = preferFresh && isSystemOnline();
       posMainLoadFailAttempts = 0;
       clearPosMainLoadRetryTimer();
-      clearPosDomBlankWatchdog();
-      schedulePosMainLoadWatchdog();
-      try {
-        await mainWindow.loadURL(POS_URL, posUrlLoadOptions(preferFresh));
-        return { ok: true };
-      } catch (e) {
-        return { ok: false, reason: String(e && e.message ? e.message : e) };
-      }
+      return loadPosUrlWithTimeout(effectivePreferFresh);
     });
 
     ipcMain.handle("cm-pos-get-version", (event) => {
