@@ -184,10 +184,10 @@ function POSMainPageInner() {
   const storeCode = useMemo(() => {
     const list = selectableStoreCodes
     const a = (auth?.store || '').trim()
-    if (!list.length) return a || stores[0] || ''
+    if (!list.length) return a || posStores[0] || ''
     const found = list.find((s) => s === a || resolveStoreKey(s) === resolveStoreKey(a))
     return found || list[0] || a || ''
-  }, [selectableStoreCodes, auth?.store, stores, resolveStoreKey])
+  }, [selectableStoreCodes, auth?.store, posStores, resolveStoreKey])
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
 
   useEffect(() => {
