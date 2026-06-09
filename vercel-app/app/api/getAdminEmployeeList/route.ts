@@ -220,7 +220,13 @@ export async function GET(req: NextRequest) {
       if (OFFICE_STORES.some((s) => bLower.includes(s.toLowerCase()))) return 1
       return a.localeCompare(b)
     })
-    const canSeeOffice = role.includes('director') || role.includes('secretary') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)
+    const canSeeOffice =
+      isOfficeStore(userStore) ||
+      role.includes('director') ||
+      role.includes('secretary') ||
+      role.includes('ceo') ||
+      role.includes('hr') ||
+      isAccountingRole(role)
     if (!canSeeOffice) {
       allStores = allStores.filter((st) => !isOfficeStore(st))
     }

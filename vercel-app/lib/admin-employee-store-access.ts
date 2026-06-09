@@ -21,12 +21,15 @@ export function userCanAccessEmployeeStore(
   if (role.includes('director') || role.includes('secretary') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)) {
     return true
   }
+  /** 오피스(본사) 소속은 직무·role과 무관하게 전 매장 직원 조회·수정 허용 */
+  if (isOfficeStore(userStore)) {
+    return true
+  }
   if (role.includes('officer')) {
     if (opts?.forPettyTransfer && isOfficeStore(targetStore)) return true
     return !isOfficeStore(targetStore)
   }
   if (isFranchiseeRole(role) || isSupervisorRole(role)) {
-    if (isSupervisorRole(role) && isOfficeStore(targetStore)) return false
     const list = opts?.allowedStores?.map((s) => String(s || '').trim()).filter(Boolean) ?? []
     if (list.length > 0) {
       return list.some((s) => storeMatches(s, targetStore))

@@ -23,9 +23,12 @@ describe("RLS/권한 스코프 harness", () => {
     expect(canUpdateReceivableReceiveCheck("manager", "CM Rama9", "CM Ladprao")).toBe(false)
   })
 
-  it("officer는 기본적으로 Office 대상 접근 불가 (예외 옵션 없을 때)", () => {
-    expect(userCanAccessEmployeeStore("officer", "Office", "CM Rama9")).toBe(true)
-    expect(userCanAccessEmployeeStore("officer", "Office", "CM Office")).toBe(false)
+  it("오피스 소속은 직무와 무관하게 전체 매장·Office 직원 접근", () => {
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Rama9")).toBe(true)
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Silom")).toBe(true)
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "Office")).toBe(true)
+    expect(userCanAccessEmployeeStore("officer", "Office", "CM Office")).toBe(true)
+    expect(userCanAccessEmployeeStore("accounting", "본사", "CM Ladprao")).toBe(true)
   })
 
   it("franchisee는 allowedStores 목록 범위로만 접근", () => {
@@ -34,13 +37,11 @@ describe("RLS/권한 스코프 harness", () => {
     expect(userCanAccessEmployeeStore("franchisee", "CM Any", "CM Silom", opts)).toBe(false)
   })
 
-  it("supervisor는 allowedStores 범위 매장만 접근하고 Office 직원은 제외", () => {
-    const opts = { allowedStores: ["Office", "CM Rama9", "CM Ladprao"] }
-    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Rama9", opts)).toBe(true)
-    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Ladprao", opts)).toBe(true)
-    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Silom", opts)).toBe(false)
-    expect(userCanAccessEmployeeStore("supervisor", "Office", "Office", opts)).toBe(false)
-    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Office", opts)).toBe(false)
+  it("오피스 소속이 아닌 supervisor는 allowedStores 범위만", () => {
+    const opts = { allowedStores: ["CM Rama9", "CM Ladprao"] }
+    expect(userCanAccessEmployeeStore("supervisor", "CM Rama9", "CM Rama9", opts)).toBe(true)
+    expect(userCanAccessEmployeeStore("supervisor", "CM Rama9", "CM Ladprao", opts)).toBe(true)
+    expect(userCanAccessEmployeeStore("supervisor", "CM Rama9", "CM Silom", opts)).toBe(false)
   })
 
   it("한글 매장 관리자 표기도 POS 프린터 설정 권한으로 인식된다", () => {
