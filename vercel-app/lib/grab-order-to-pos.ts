@@ -17,6 +17,7 @@ import {
   resolveGrabLineUnitMinor,
   resolveGrabMerchantPosTotal,
   resolveOptionCodesToLabels,
+  grabSelectionIncludesExplicitSize,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
 import {
@@ -706,11 +707,15 @@ function inferDefaultSizeLabelForGrabLine(
   optionCodes: string[],
   optionNameByCode: Map<string, string>
 ): string {
-  if (optionCodes.length > 0) return ''
-  const hasExplicitSize = currentLabels.some((token) =>
-    /(^|[\s\-–—])(size\s*)?[SML]([\s\-–—]|$)/i.test(String(token || '').trim())
-  )
-  if (hasExplicitSize) return ''
+  if (
+    grabSelectionIncludesExplicitSize({
+      labels: currentLabels,
+      optionCodes,
+      optionNameByCode,
+    })
+  ) {
+    return ''
+  }
   const mc = String(menuCode || '').trim()
   if (!mc) return ''
   if (!hasSizeProfileForMenu(mc, optionNameByCode)) return ''

@@ -582,6 +582,50 @@ export function shouldGrabPromoComposeOptionOnly(
   return parentKey === menuKey || parentKey.includes(menuKey) || menuKey.includes(parentKey)
 }
 
+/** Grab 치킨 사이즈·파트 라벨 (사이드·음료 제외) */
+export function isGrabExplicitSizeOrPartLabel(raw: string): boolean {
+  const lab = String(raw ?? '').trim()
+  if (!lab) return false
+  return (
+    /^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(lab) ||
+    /\b(size|part|boneless|drumette|joint wing|wing|leg|순살|뼈|โดบา|ปีก)\b/i.test(lab)
+  )
+}
+
+function resolveOptionLabelFromCatalogMap(optionNameByCode: Map<string, string>, code: string): string {
+  const key = String(code || '').trim().toUpperCase()
+  if (!key) return ''
+  const exact = optionNameByCode.get(key)
+  if (exact) return String(exact).trim()
+  for (const [k, v] of optionNameByCode.entries()) {
+    if (String(k || '').trim().toUpperCase() === key) return String(v || '').trim()
+  }
+  return ''
+}
+
+/**
+ * Grab 줄에 사이즈·파트가 이미 있는지 (사이드만 선택한 경우 false — 기본 S 순살 추론 허용).
+ */
+export function grabSelectionIncludesExplicitSize(params: {
+  labels: string[]
+  optionCodes: string[]
+  optionNameByCode: Map<string, string>
+}): boolean {
+  for (const token of params.labels) {
+    const t = String(token || '').trim()
+    if (!t) continue
+    if (/(^|[\s\-–—])(size\s*)?[SML]([\s\-–—]|$)/i.test(t)) return true
+    if (isGrabExplicitSizeOrPartLabel(t)) return true
+  }
+  for (const code of params.optionCodes) {
+    const label = resolveOptionLabelFromCatalogMap(params.optionNameByCode, code)
+    if (!label) continue
+    if (/(^|[\s\-–—])(size\s*)?[SML]([\s\-–—]|$)/i.test(label)) return true
+    if (isGrabExplicitSizeOrPartLabel(label)) return true
+  }
+  return false
+}
+
 /** Grab 세트 구성품: 메뉴에 S 사이즈만 있으면 기본 Size S (캐셔·주방 공통) */
 export function inferGrabPromoDefaultSizeLabel(
   menuId: string | undefined,

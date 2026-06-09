@@ -15,7 +15,36 @@ import {
   resolveOptionCodesToLabels,
   synthesizeGrabItemOptionNote,
   resolveGrabItemPrintNote,
+  grabSelectionIncludesExplicitSize,
 } from '@/lib/grab-pos-order-enrich'
+
+describe('grabSelectionIncludesExplicitSize', () => {
+  const catalog = buildGrabPosCatalog([], [
+    { optionCode: 'C010-1', name: 'S - Boneless' },
+    { optionCode: 'C010-3', name: 'M - Boneless' },
+    { optionCode: 'C010-5', name: 'Pickled Radish 30g.' },
+  ])
+
+  it('returns false when only a side dish optc is selected (default S should still apply)', () => {
+    expect(
+      grabSelectionIncludesExplicitSize({
+        labels: ['Pickled Radish 30g.'],
+        optionCodes: ['C010-5'],
+        optionNameByCode: catalog.optionNameByCode,
+      })
+    ).toBe(false)
+  })
+
+  it('returns true when a size optc is selected', () => {
+    expect(
+      grabSelectionIncludesExplicitSize({
+        labels: [],
+        optionCodes: ['C010-1'],
+        optionNameByCode: catalog.optionNameByCode,
+      })
+    ).toBe(true)
+  })
+})
 
 describe('resolveGrabMerchantPosTotal', () => {
   it('subtracts Grab platform delivery fee from webhook total', () => {
