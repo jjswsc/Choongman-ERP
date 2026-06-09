@@ -103,7 +103,10 @@ export async function POST(req: NextRequest) {
     if (empCodeRaw) tokenPayload.employeeCode = empCodeRaw
     if (companyName) tokenPayload.company = companyName
     if (tenantId) tokenPayload.tenantId = tenantId
-    if (finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0) {
+    const attachAllowedStores =
+      allowedStores.length > 0 &&
+      ((finalRole === 'franchisee' && multiSettings.enabled) || finalRole === 'supervisor')
+    if (attachAllowedStores) {
       tokenPayload.allowedStores = allowedStores
     }
     const token = await signToken(tokenPayload)
@@ -121,9 +124,7 @@ export async function POST(req: NextRequest) {
         ...(tenantId ? { tenantId } : {}),
         ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
         ...(empCodeRaw ? { employeeCode: empCodeRaw } : {}),
-        ...(finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0
-          ? { allowedStores }
-          : {}),
+        ...(attachAllowedStores ? { allowedStores } : {}),
       },
       { headers }
     )

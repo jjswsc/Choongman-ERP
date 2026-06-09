@@ -24,6 +24,7 @@ import {
   type TodayVisitItem,
 } from "@/lib/api-client"
 import { translateVisitType } from "@/lib/visit-i18n"
+import { isOfficeRole, isOfficeStore, isSupervisorRole } from "@/lib/permissions"
 import { AttendanceQrScannerDialog } from "@/components/attendance/attendance-qr-scanner-dialog"
 import { MapPin, Building2, Target, LogIn, LogOut } from "lucide-react"
 
@@ -179,14 +180,8 @@ export function VisitTab() {
     )
   }
 
-  const role = String(auth.role || "").toLowerCase()
-  const isOfficeRole = ["director", "secretary", "officer", "ceo", "hr"].some((r) => role.includes(r))
-  const isOfficeStore =
-    auth.store?.toLowerCase() === "office" ||
-    auth.store === "본사" ||
-    auth.store === "Office" ||
-    auth.store === "CM Office"
-  const canAccessVisit = isOfficeStore || isOfficeRole
+  const canAccessVisit =
+    isOfficeStore(auth.store || "") || isOfficeRole(auth.role || "") || isSupervisorRole(auth.role || "")
 
   if (!canAccessVisit) {
     return (

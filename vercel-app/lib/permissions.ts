@@ -214,10 +214,11 @@ export function canUpdateReceivableReceiveCheck(
   return Boolean(us && sn && us === sn)
 }
 
-/** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + 회계직원 + 물류 + POS 직원) */
+/** 관리자 페이지 접근 가능 (본사 + 슈퍼바이저 + 매니저 + 가맹점주 + 회계직원 + 물류 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
   return (
     isOfficeRole(role) ||
+    isSupervisorRole(role) ||
     isManagerRole(role) ||
     isFranchiseeRole(role) ||
     isAccountingRole(role) ||
@@ -325,7 +326,7 @@ export function canOverridePosSettlementAutoPaymentBreakdown(role: string): bool
  * 가맹점주·POS·회계·일반 staff 등은 숨김.
  */
 export function canNavigateFromPosToAdmin(role: string): boolean {
-  return isOfficeRole(role) || isManagerRole(role)
+  return isOfficeRole(role) || isSupervisorRole(role) || isManagerRole(role)
 }
 
 /** POS 근태 화면에서 승인·스케줄 수정 등 편집 가능 (일반 staff / POS 전용 역할은 조회만) */

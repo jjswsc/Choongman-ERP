@@ -851,7 +851,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppMobile: "모바일",
       /** ERP 탭: 웹 관리(Admin)용 — Staff는 「모바일」 안내 */
       loginErpStaffHint:
-        "「ERP」는 매장/본사 관리 권한(매니저·가맹점주·본사·회계 등)이 있는 계정만 사용할 수 있습니다. 일반 직원은 「모바일」을 선택하세요.",
+        "「ERP」는 매장/본사 관리 권한(매니저·가맹점주·슈퍼바이저·본사·회계 등)이 있는 계정만 사용할 수 있습니다. 일반 직원은 「모바일」을 선택하세요.",
       offlineResumeStore: "매장",
       offlineResumeStaff: "담당자",
       offlineResumeSyncNote:
@@ -881,7 +881,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
       loginErpStaffHint:
-        "“ERP (Admin)” is for managers, franchisees, HQ, and other authorized accounts. Store staff should choose “Mobile”.",
+        "“ERP (Admin)” is for managers, franchisees, supervisors, HQ, and other authorized accounts. Store staff should choose “Mobile”.",
       offlineResumeStore: "Store",
       offlineResumeStaff: "Staff",
       offlineResumeSyncNote:

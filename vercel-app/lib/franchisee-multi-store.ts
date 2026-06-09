@@ -1,5 +1,5 @@
 import type { JwtPayload } from '@/lib/jwt-auth'
-import { isFranchiseeRole } from '@/lib/permissions'
+import { isFranchiseeRole, isSupervisorRole } from '@/lib/permissions'
 import { storeMatches } from '@/lib/admin-employee-store-access'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 
@@ -41,22 +41,28 @@ export function buildAllowedStoresForToken(
   roleNormalized: string
 ): string[] {
   const primary = String(primaryStore || '').trim()
+  const cap = isSupervisorRole(roleNormalized) ? 20 : settings.maxStores
+  const mergeStores = (): string[] => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const push = (s: string) => {
+      const x = String(s || '').trim()
+      if (!x || seen.has(x)) return
+      if (out.length >= cap) return
+      seen.add(x)
+      out.push(x)
+    }
+    push(primary)
+    for (const e of extraStores) push(e)
+    return out
+  }
+  if (isSupervisorRole(roleNormalized)) {
+    return mergeStores()
+  }
   if (!isFranchiseeRole(roleNormalized) || !settings.enabled) {
     return primary ? [primary] : []
   }
-  const cap = settings.maxStores
-  const out: string[] = []
-  const seen = new Set<string>()
-  const push = (s: string) => {
-    const x = String(s || '').trim()
-    if (!x || seen.has(x)) return
-    if (out.length >= cap) return
-    seen.add(x)
-    out.push(x)
-  }
-  push(primary)
-  for (const e of extraStores) push(e)
-  return out
+  return mergeStores()
 }
 
 /** JWT 페이로드에서 허용 매장 정규화 */
