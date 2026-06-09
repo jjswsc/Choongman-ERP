@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
   }
 
   const isScopedRole =
-    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    !hasOfficeStaffScope(userRole, userStore) &&
     (userRole.includes('manager') || userRole.includes('franchisee'))
   if (isScopedRole) {
     if (!storeFilter || storeFilter === 'All' || storeFilter.toLowerCase() === 'all' || storeFilter === '전체') {

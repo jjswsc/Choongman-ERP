@@ -45,6 +45,33 @@ export function resolveCameraSettingsHintKey(
   return 'attQrScanOpenSettingsHintGeneric'
 }
 
+/**
+ * Android PWA(홈 화면 CM ERP)는 앱 설정에 카메라 항목이 없음 → Chrome에서 열어 권한 요청.
+ * @returns intent 시도 여부
+ */
+export function tryOpenCurrentUrlInExternalBrowser(): boolean {
+  if (typeof window === 'undefined') return false
+  const url = window.location.href
+  try {
+    const parsed = new URL(url)
+    if (getMobileWebPlatform() === 'android') {
+      const fallback = encodeURIComponent(url)
+      const hostPath = `${parsed.host}${parsed.pathname}${parsed.search}`
+      const scheme = parsed.protocol.replace(':', '')
+      window.location.href = `intent://${hostPath}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${fallback};end`
+      return true
+    }
+  } catch {
+    // fall through
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+  return true
+}
+
+export function shouldOfferOpenInBrowserForCamera(): boolean {
+  return getMobileWebPlatform() === 'android' && isStandalonePwa()
+}
+
 /** Permissions API 지원 시 카메라 상태 조회 (PWA·모바일 Chrome/Safari) */
 export async function queryWebCameraPermission(): Promise<WebCameraPermissionState> {
   if (typeof navigator === 'undefined' || !navigator.permissions?.query) return 'unknown'

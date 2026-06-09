@@ -289,7 +289,8 @@ export const i18n = {
     attQrScanOpenSettings: '앱 설정 열기',
     attQrScanOpenSettingsHint: '설정 → 권한 → 카메라를 허용한 뒤 「다시 시도」를 눌러 주세요.',
     attQrScanOpenSettingsHintAndroidPwa:
-      '휴대폰 설정 → 앱 → CM ERP → 권한 → 카메라 허용 후 「다시 시도」를 눌러 주세요. 처음 「차단」을 눌렀다면 설정에서만 바꿀 수 있습니다.',
+      '「CM ERP」는 홈 화면에 추가한 웹앱(PWA)이라 앱 정보에 카메라 권한 메뉴가 없을 수 있습니다. ① 휴대폰 설정 → 앱 → Chrome → 권한 → 카메라 허용 ② Chrome → ⋮ → 설정 → 사이트 설정 → choongman-erp.vercel.app → 카메라 허용. 또는 아래 「Chrome에서 열기」로 접속해 QR 스캔 시 「허용」을 눌러 주세요.',
+    attQrScanOpenInBrowser: 'Chrome에서 열기',
     attQrScanOpenSettingsHintAndroidBrowser:
       'Chrome 주소창 왼쪽 🔒 → 권한 → 카메라 허용 후 「다시 시도」를 눌러 주세요.',
     attQrScanOpenSettingsHintIosPwa:
@@ -9632,7 +9633,8 @@ export const i18n = {
     attQrScanOpenSettings: 'Open app settings',
     attQrScanOpenSettingsHint: 'Allow Camera in Settings, then tap Try again.',
     attQrScanOpenSettingsHintAndroidPwa:
-      'Phone Settings → Apps → CM ERP → Permissions → Camera → Allow, then tap Try again. If you tapped Block earlier, change it in Settings.',
+      '“CM ERP” from your home screen is a web app (PWA), so Camera may not appear under CM ERP app permissions. ① Settings → Apps → Chrome → Permissions → Camera → Allow ② Chrome → Settings → Site settings → choongman-erp.vercel.app → Camera → Allow. Or tap “Open in Chrome” below and allow when prompted.',
+    attQrScanOpenInBrowser: 'Open in Chrome',
     attQrScanOpenSettingsHintAndroidBrowser:
       'Tap the lock icon in Chrome → Permissions → Camera → Allow, then tap Try again.',
     attQrScanOpenSettingsHintIosPwa:

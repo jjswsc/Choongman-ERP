@@ -20,7 +20,7 @@ import {
   resolveEmployeeDisplayNameForAttendanceGrid,
 } from '@/lib/employee-display-name'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope, isManagerOrFranchiseeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
   const pendingOnly = statusFilter === 'pending'
 
   /** 본사·회계: 쿼리(매장·직원) 필터 그대로. 매장 관리자: 허용 매장 내. 그 외(Staff 등): 본인만(로그인 session 기준) */
-  const isWideAccess = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const isWideAccess = hasOfficeStaffScope(userRole, userStore)
   const isManagerScope = !isWideAccess && isManagerOrFranchiseeRole(userRole)
   if (isManagerScope) {
     const authEmployeeIdRaw = Number((auth as { employeeId?: unknown }).employeeId)

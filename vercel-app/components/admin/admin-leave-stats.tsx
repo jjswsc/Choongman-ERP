@@ -16,6 +16,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeaveStats } from "@/lib/api-client"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -53,7 +54,7 @@ export function AdminLeaveStats() {
   const { posStores: storeKeys } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === 'director' || auth.role === 'secretary' || auth.role === 'officer' || auth.role === 'ceo' || auth.role === 'hr'
+    const isOffice = hasOfficeStaffScope(auth.role || "", auth.store)
     queueMicrotask(() => {
       if (isOffice) {
         setStores(["All", ...storeKeys.filter((s) => s !== "All")])

@@ -8,7 +8,7 @@ import {
 } from '@/lib/attendance-utils'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 
 /** submitAttendance 와 동일: employee_code / employee_id 컬럼 미배포 시 순차 제거 후 재시도 */
 async function insertAttendanceLogRow(payload: Record<string, unknown>) {
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isScopedRole =
-      !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+      !hasOfficeStaffScope(userRole, userStore) &&
       (userRole.includes('manager') || userRole.includes('franchisee'))
     if (isScopedRole) {
       const allowed = allowedStores.some((s) => storesMatchForGradeLookup(String(storeName).trim(), s))

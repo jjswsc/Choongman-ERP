@@ -16,6 +16,8 @@ import { useT, type I18nKeys } from '@/lib/i18n'
 import {
   queryWebCameraPermission,
   resolveCameraSettingsHintKey,
+  shouldOfferOpenInBrowserForCamera,
+  tryOpenCurrentUrlInExternalBrowser,
 } from '@/lib/qr-camera-client'
 import {
   canDecodeQrFromVideo,
@@ -197,6 +199,15 @@ export function AttendanceQrScannerDialog({
                 <Button type="button" className="sm:flex-1" onClick={handleOpenSettings}>
                   <Settings className="mr-1 h-4 w-4" />
                   {t('attQrScanOpenSettings')}
+                </Button>
+              ) : null}
+              {cameraBlocked && shouldOfferOpenInBrowserForCamera() ? (
+                <Button
+                  type="button"
+                  className="sm:flex-1"
+                  onClick={() => tryOpenCurrentUrlInExternalBrowser()}
+                >
+                  {t('attQrScanOpenInBrowser')}
                 </Button>
               ) : null}
               <Button type="button" variant="secondary" className="sm:flex-1" onClick={handleRetry}>

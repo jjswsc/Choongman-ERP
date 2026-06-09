@@ -16,6 +16,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { isPhysicalStoreForRepair } from "@/lib/store-repair-visibility"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 
 const tabs = [
   { id: "home", labelKey: "tabHome" as const, icon: Home },
@@ -39,18 +40,7 @@ export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
   const { auth } = useAuth()
   const t = useT(lang)
 
-  const isOfficeStore =
-    auth?.store &&
-    (auth.store.toLowerCase() === "office" ||
-      auth.store === "본사" ||
-      auth.store === "CM Office" ||
-      auth.store.toLowerCase().includes("office"))
-  const isOfficeRole =
-    auth?.role &&
-    ["director", "secretary", "officer", "ceo", "hr"].some((r) =>
-      String(auth.role || "").toLowerCase().includes(r)
-    )
-  const isOffice = isOfficeStore || isOfficeRole
+  const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
   const isAdmin =
     auth?.role &&
     ["director", "officer", "ceo", "hr", "manager"].some((r) =>

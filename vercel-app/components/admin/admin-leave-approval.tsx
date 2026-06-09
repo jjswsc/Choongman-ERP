@@ -23,6 +23,7 @@ import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-mess
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
 import { displayLabelShort } from "@/lib/utils"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
@@ -68,7 +69,7 @@ export function AdminLeaveApproval() {
   const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    const isOffice = auth.role === 'director' || auth.role === 'secretary' || auth.role === 'officer'
+    const isOffice = hasOfficeStaffScope(auth.role || "", auth.store)
     queueMicrotask(() => {
       if (isOffice) {
         setLeaveStores(["All", ...storeList.filter((s) => s !== "All")])
@@ -79,7 +80,7 @@ export function AdminLeaveApproval() {
     })
   }, [auth?.store, auth?.role, storeList])
 
-  const isOffice = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
+  const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
 
   /** 급여 수정 등에서 ?month=yyyy-MM&store&name&status=all 로 진입 시 기간·조회 자동 적용 */
   useEffect(() => {

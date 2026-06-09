@@ -12,6 +12,7 @@ import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/
 import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { normalizeEmployeeNameFields } from "@/lib/employee-display-name"
 import { cn, displayLabelShort } from "@/lib/utils"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 /** 인쇄/PDF 상단에 표시 — 방콕(Asia/Bangkok) 기준 */
@@ -286,13 +287,14 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   }, [hasSearched, schedule.length, loading])
 
   const displayStoreList = storeListProp.length > 0 ? storeListProp : storeList
-  const isOffice = displayStoreList.length > 1 && ["director", "secretary", "officer", "ceo", "hr"].includes(auth?.role || "")
+  const isOffice =
+    displayStoreList.length > 1 && hasOfficeStaffScope(auth?.role || "", auth?.store)
   const storeOptions = isOffice ? [t("scheduleStoreAll"), ...displayStoreList.filter((s) => s !== t("scheduleStoreAll") && s !== "All")] : displayStoreList
 
   const { posStores: storeListRaw } = useStoreList()
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0 && storeListRaw.length > 0) {
-      const isOffice = ["director", "secretary", "officer", "ceo", "hr"].includes(auth?.role || "")
+      const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
       if (isOffice) {
         setStoreList([t("scheduleStoreAll"), ...storeListRaw].filter(Boolean))
         setStoreFilter(t("scheduleStoreAll"))

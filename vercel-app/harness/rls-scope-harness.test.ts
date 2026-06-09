@@ -8,6 +8,8 @@ import {
   canAccessPosPrinters,
   canAccessPosTerminalSettings,
   canPickPosTerminalStore,
+  hasOfficeStaffScope,
+  canEditPosAttendanceManagement,
 } from "@/lib/permissions"
 import { attendanceStoreNamePostgrestFilter } from "@/lib/attendance-utils"
 
@@ -21,6 +23,13 @@ describe("RLS/권한 스코프 harness", () => {
   it("manager는 자기 매장 수금 확인만 가능", () => {
     expect(canUpdateReceivableReceiveCheck("manager", "CM Rama9", "CM Rama9")).toBe(true)
     expect(canUpdateReceivableReceiveCheck("manager", "CM Rama9", "CM Ladprao")).toBe(false)
+  })
+
+  it("오피스 소속 supervisor는 hasOfficeStaffScope·근태 편집 권한", () => {
+    expect(hasOfficeStaffScope("supervisor", "CM Office")).toBe(true)
+    expect(hasOfficeStaffScope("staff", "Office")).toBe(true)
+    expect(hasOfficeStaffScope("supervisor", "CM Rama9")).toBe(false)
+    expect(canEditPosAttendanceManagement("supervisor", "CM Office")).toBe(true)
   })
 
   it("오피스 소속은 직무와 무관하게 전체 매장·Office 직원 접근", () => {

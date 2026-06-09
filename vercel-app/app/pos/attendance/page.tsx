@@ -31,7 +31,7 @@ export default function PosAttendancePage() {
     )
   }
 
-  const readOnly = !canEditPosAttendanceManagement(auth.role || "")
+  const readOnly = !canEditPosAttendanceManagement(auth.role || "", auth.store)
 
   return (
     <Suspense

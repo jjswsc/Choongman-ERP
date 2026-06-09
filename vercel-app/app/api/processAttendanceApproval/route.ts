@@ -7,7 +7,7 @@ import {
   shouldRecordAdjustment,
 } from '@/lib/attendance-adjustment-utils'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export async function POST(request: NextRequest) {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         .map((s) => String(s || '').trim())
         .filter(Boolean)
         .concat(userStore)
-    const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+    const isOfficeLevel = hasOfficeStaffScope(userRole, userStore)
     const optOtMinutes = body?.optOtMinutes != null ? Number(body.optOtMinutes) : null
     const optEarlyMinutes = body && 'optEarlyMinutes' in body ? Number(body.optEarlyMinutes) : undefined
     const optLateMinutes = body && 'optLateMinutes' in body && body.optLateMinutes != null ? Number(body.optLateMinutes) : null

@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 
 export function TimesheetTab() {
   const { auth } = useAuth()
@@ -21,15 +22,7 @@ export function TimesheetTab() {
   React.useEffect(() => {
     if (!auth?.store) return
     const stores = [...storeListRaw]
-    // AppNavigation·MobileStoreSelectorBar와 동일: role 부분일치(대소문자 무시)로 본사/권한 판별
-    const roleLower = String(auth?.role || "").toLowerCase()
-    const isOffice =
-      (auth?.store &&
-        (auth.store.toLowerCase() === "office" ||
-          auth.store === "본사" ||
-          auth.store === "CM Office" ||
-          auth.store.toLowerCase().includes("office"))) ||
-      ["director", "secretary", "officer", "ceo", "hr"].some((r) => roleLower.includes(r))
+    const isOffice = hasOfficeStaffScope(auth?.role || "", auth.store)
     if (isOffice && stores.length > 0) {
       setStoreList(stores)
       setStoreFilter(stores.includes(auth.store) ? auth.store : stores[0] || auth.store)

@@ -24,6 +24,7 @@ import {
   isOfficeRole,
   isOfficeStore,
   isAccountingRole,
+  hasOfficeStaffScope,
   canAssignEmployeeOfficerRole,
   canAssignEmployeeDirectorRole,
   canonicalEmployeeFormRole,
@@ -225,7 +226,7 @@ export default function EmployeesPage() {
   )
 
   React.useEffect(() => {
-    if (!isOfficeRole(userRole) && !isAccountingRole(userRole)) {
+    if (!hasOfficeStaffScope(userRole, userStore)) {
       setFranchiseeMulti(null)
       return
     }
@@ -459,9 +460,7 @@ export default function EmployeesPage() {
         userName: auth?.user || userStore,
         // 본사/회계: 항상 전달. 서버가 system_settings·역할로 실제 반영 여부 결정.
         // franchiseeMulti 로드 전 저장 시 undefined면 서버가 []로 저장해 추가 매장이 사라지는 문제 방지.
-        ...(isOfficeRole(userRole) || isAccountingRole(userRole)
-          ? { extraStores: form.extraStores }
-          : {}),
+        ...(hasOfficeStaffScope(userRole, userStore) ? { extraStores: form.extraStores } : {}),
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("msg_saved"))
@@ -480,7 +479,7 @@ export default function EmployeesPage() {
 
   const isManager = isManagerRole(userRole)
   const isManagerOrFranchisee = isManager || isFranchiseeRole(userRole)
-  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const isOffice = hasOfficeStaffScope(userRole, userStore)
   const showEvalAnalyticsTab = isOffice || isManagerOrFranchisee
   const showEmployeeEvalTab = isOffice || isManagerOrFranchisee
   const showEmployeeInputHistoryTab = isOffice || isAccountingRole(userRole) || isManagerOrFranchisee

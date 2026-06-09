@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function normalizeNameForSchedule(name: string): string {
@@ -90,7 +90,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    const isScopedRole =
+      !hasOfficeStaffScope(userRole, userStore) &&
       (userRole.includes('manager') || userRole.includes('franchisee'))
     if (isScopedRole) {
       const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeName))

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assignLeaveRowToEmployeeForStats } from '@/lib/leave-request-utils'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function toDateStr(val: string | Date | null | undefined): string {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   if (store === 'undefined' || store === 'null') store = ''
   if (store === 'All') store = ''
 
-  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const isOfficeLevel = hasOfficeStaffScope(userRole, userStore)
   if (!isOfficeLevel) {
     if (!store) {
       store = String(allowedStores[0] || '').trim()

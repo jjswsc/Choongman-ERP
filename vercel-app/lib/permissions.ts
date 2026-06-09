@@ -155,6 +155,14 @@ export function isAccountingRole(role: string): boolean {
   return r.includes("accounting") || r.includes("회계")
 }
 
+/**
+ * 본사(오피스) 직원 권한 — role(디렉터·오피서·회계 등) 또는 store 소속(Office/본사/CM Office).
+ * 오피스 소속 슈퍼바이저·기타 직무도 전 매장·본사 데이터 접근에 동일 적용.
+ */
+export function hasOfficeStaffScope(role: string, store?: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role) || isOfficeStore(String(store || ""))
+}
+
 /** 미수금·미지급금에서 전체 매장 선택 가능 (본사 + 회계직원) */
 export function canManageReceivablePayableAllStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -162,7 +170,7 @@ export function canManageReceivablePayableAllStores(role: string): boolean {
 
 /** 매출 관리·전체 매출에서 API 전체 매장 목록·다중 매장 필터 (본사·회계·본사 소속) */
 export function canSelectAllStoresForPosSalesManagement(role: string, store: string): boolean {
-  return isOfficeRole(role) || isAccountingRole(role) || isOfficeStore(store)
+  return hasOfficeStaffScope(role, store)
 }
 
 /** 물류(창고/배송) 담당 역할인지 — 미수금 동기화·품목 발주 일시중지 등 */
@@ -330,13 +338,8 @@ export function canNavigateFromPosToAdmin(role: string): boolean {
 }
 
 /** POS 근태 화면에서 승인·스케줄 수정 등 편집 가능 (일반 staff / POS 전용 역할은 조회만) */
-export function canEditPosAttendanceManagement(role: string): boolean {
-  return (
-    isOfficeRole(role) ||
-    isManagerRole(role) ||
-    isFranchiseeRole(role) ||
-    isAccountingRole(role)
-  )
+export function canEditPosAttendanceManagement(role: string, store?: string): boolean {
+  return hasOfficeStaffScope(role, store) || isManagerRole(role) || isFranchiseeRole(role)
 }
 
 /** 출퇴근 QR 키오스크 단말 등록·해제 — Director·Supervisor·매장 Manager */

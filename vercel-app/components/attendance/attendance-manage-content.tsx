@@ -48,6 +48,7 @@ import { WeeklySchedule } from "@/components/erp/weekly-schedule"
 import { AdminScheduleEdit } from "@/components/admin/admin-schedule-edit"
 import { cn } from "@/lib/utils"
 import { isAttendanceOutApproved, todayStrBangkok } from "@/lib/attendance-utils"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 
 function todayStr() {
   return todayStrBangkok()
@@ -202,10 +203,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   /** 조정값 반영 완료한 행 — 숫자 변경 시 해제 → 회색(다시 반영) */
   const [adjustSavedKeys, setAdjustSavedKeys] = React.useState<Set<string>>(() => new Set())
 
-  const isOffice = React.useMemo(() => {
-    const r = (auth?.role || "").toLowerCase()
-    return ["director", "secretary", "officer", "ceo", "hr"].includes(r)
-  }, [auth?.role])
+  const isOffice = React.useMemo(
+    () => hasOfficeStaffScope(auth?.role || "", auth?.store),
+    [auth?.role, auth?.store]
+  )
 
   /** CM Office 등 본사 매장 포함 — `stores`(매출 집계용)와 분리 */
   const { posStores, users: usersMap, staffByStore } = useStoreList()

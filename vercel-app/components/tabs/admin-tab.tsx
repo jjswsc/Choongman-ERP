@@ -47,6 +47,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
 import { NoticeHistory } from "@/components/erp/notice-history"
 import { displayLabelShort } from "@/lib/utils"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { isAttendanceOutApproved } from "@/lib/attendance-utils"
 
@@ -169,7 +170,7 @@ export function AdminTab() {
   const [adjustSavedKeys, setAdjustSavedKeys] = useState<Set<string>>(() => new Set())
 
   const { posStores: storeList } = useStoreList()
-  const isOffice = auth?.role && ["director", "secretary", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
+  const isOffice = Boolean(auth && hasOfficeStaffScope(auth.role || "", auth.store))
 
   useEffect(() => {
     if (!auth) return

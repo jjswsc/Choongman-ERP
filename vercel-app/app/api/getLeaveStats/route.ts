@@ -11,7 +11,7 @@ import {
   assignLeaveRowToEmployeeForStats,
 } from '@/lib/leave-request-utils'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
   if (storeFilter === 'All' || storeFilter === '전체') storeFilter = ''
 
-  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const isOfficeLevel = hasOfficeStaffScope(userRole, userStore)
   if (!isOfficeLevel) {
     if (!storeFilter) {
       storeFilter = String(allowedStores[0] || '').trim()
