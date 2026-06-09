@@ -6,6 +6,8 @@ import {
   canUpdateReceivableReceiveCheck,
   canAccessPosCostAnalysis,
   canAccessPosPrinters,
+  canAccessPosTerminalSettings,
+  canPickPosTerminalStore,
 } from "@/lib/permissions"
 import { attendanceStoreNamePostgrestFilter } from "@/lib/attendance-utils"
 
@@ -50,5 +52,16 @@ describe("RLS/권한 스코프 harness", () => {
     expect(q).toContain("store_name=ilike.")
     expect(q).not.toContain("or=(")
     expect(q).not.toContain("ilike(any)")
+  })
+
+  it("supervisor는 POS 단말 설정·매장 선택 가능", () => {
+    expect(canAccessPosTerminalSettings("supervisor")).toBe(true)
+    expect(canPickPosTerminalStore("supervisor", "CM Rama9")).toBe(true)
+    expect(canPosStaffAccessPath("/admin/pos-screen-config?tab=terminal", "supervisor")).toBe(true)
+  })
+
+  it("POS 주문 전용 역할은 단말 설정 불가", () => {
+    expect(canAccessPosTerminalSettings("pos_staff")).toBe(false)
+    expect(canPosStaffAccessPath("/admin/pos-screen-config", "pos_staff")).toBe(false)
   })
 })

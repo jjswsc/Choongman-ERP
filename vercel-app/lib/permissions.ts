@@ -349,6 +349,22 @@ export function canManageAttendanceQrDevices(role: string): boolean {
   return canRegisterAttendanceQrDevice(role)
 }
 
+/** POS 설정 → 단말 (메인/주문 지정·접속 기기) — 본사·슈퍼바이저·매장 관리자 */
+export function canAccessPosTerminalSettings(role: string): boolean {
+  return (
+    isOfficeRole(role) ||
+    isSupervisorRole(role) ||
+    isManagerRole(role) ||
+    isFranchiseeRole(role)
+  )
+}
+
+/** 단말 설정 화면에서 매장 선택 (순회 SV·본사) */
+export function canPickPosTerminalStore(role: string, authStore?: string): boolean {
+  if (isOfficeRole(role) || isSupervisorRole(role)) return true
+  return canPickAttendanceQrStoreFilter(role, authStore)
+}
+
 /** 본사 화면에서 매장별 QR 단말 목록·등록 시 매장 선택 */
 export function canPickAttendanceQrStoreFilter(role: string, authStore?: string): boolean {
   if (!canRegisterAttendanceQrDevice(role)) return false
@@ -427,7 +443,7 @@ export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   if (p === "/admin/pos-menus" || p.startsWith("/admin/pos-menus"))
     return canAccessPosMenus(role)
   if (p === "/admin/pos-screen-config" || p.startsWith("/admin/pos-screen-config"))
-    return canAccessPosTables(role) || canAccessPosMenus(role)
+    return canAccessPosTerminalSettings(role) || canAccessPosTables(role) || canAccessPosMenus(role)
   if (p === "/admin/pos-cost-analysis" || p.startsWith("/admin/pos-cost-analysis"))
     return canAccessPosCostAnalysis(role)
   if (p === "/admin/pos-printers" || p.startsWith("/admin/pos-printers"))

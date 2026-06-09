@@ -37,7 +37,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList } from "@/lib/api-client"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, canPickPosTerminalStore } from "@/lib/permissions"
 
 
 export default function PosScreenConfigPage() {
@@ -53,7 +53,7 @@ export default function PosScreenConfigPage() {
     },
     [t]
   )
-  const canPickStore = isOfficeRole(auth?.role || "")
+  const canPickStore = canPickPosTerminalStore(auth?.role || "", auth?.store || "")
   const [pickedStore, setPickedStore] = React.useState("")
   const effectiveStoreForMenuAndDisplay = String(
     canPickStore && pickedStore ? pickedStore : auth?.store || ""

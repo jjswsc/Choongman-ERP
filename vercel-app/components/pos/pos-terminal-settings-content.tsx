@@ -19,7 +19,7 @@ import {
   useStoreList,
   type PosDeviceItem,
 } from '@/lib/api-client'
-import { isOfficeRole, canPickAttendanceQrStoreFilter } from '@/lib/permissions'
+import { isOfficeRole, canPickPosTerminalStore } from '@/lib/permissions'
 import { DEFAULT_POS_DEVICE_ROLE_LIMITS } from '@/lib/pos-device-role-limits'
 import { formatPosDateTimeShort } from '@/lib/pos-datetime-locale'
 import { ClipboardCopy, Monitor, Smartphone, RefreshCw, UserX } from 'lucide-react'
@@ -61,10 +61,7 @@ export function PosTerminalSettingsContent() {
   const [savingLimits, setSavingLimits] = React.useState(false)
 
   const isOffice = isOfficeRole(auth?.role || '')
-
-  const canSearchAll =
-    isOfficeRole(auth?.role || '') ||
-    canPickAttendanceQrStoreFilter(auth?.role || '', auth?.store || '')
+  const canSearchAll = canPickPosTerminalStore(auth?.role || '', auth?.store || '')
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ''
 
   const loadData = React.useCallback(() => {

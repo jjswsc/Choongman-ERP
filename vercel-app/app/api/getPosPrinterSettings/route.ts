@@ -5,7 +5,7 @@ import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parsePosDeviceRoleLimitsRow } from '@/lib/pos-device-role-limits'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
 import { requireAuth } from '@/lib/verify-auth'
-import { isOfficeRole } from '@/lib/permissions'
+import { canPickPosTerminalStore } from '@/lib/permissions'
 
 type VendorBizInfo = {
   name?: string
@@ -93,9 +93,10 @@ export async function GET(request: NextRequest) {
   }
   const requestedStoreCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
   const authStore = String(authResult.auth.store || '').trim()
-  const office = isOfficeRole(authResult.auth.role || '')
-  const storeCode = office ? requestedStoreCode : requestedStoreCode || authStore
-  if (!office && storeCode && authStore && storeCode !== authStore) {
+  const role = String(authResult.auth.role || '')
+  const canPickAnyStore = canPickPosTerminalStore(role, authStore)
+  const storeCode = canPickAnyStore ? requestedStoreCode || authStore : requestedStoreCode || authStore
+  if (!canPickAnyStore && storeCode && authStore && storeCode !== authStore) {
     return NextResponse.json({ success: false, message: '다른 매장 설정에는 접근할 수 없습니다.' }, { status: 403, headers })
   }
 
