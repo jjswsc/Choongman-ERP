@@ -1,3 +1,7 @@
+import {
+  buildGrabPortalMerchantMapDefaults,
+  buildGrabStoreMapJsonDefaults,
+} from '@/lib/grab-portal-merchant-map-defaults'
 import { normStoreKey } from '@/lib/store-list-keys'
 
 /**
@@ -7,18 +11,14 @@ import { normStoreKey } from '@/lib/store-list-keys'
  *    예: `"GFSBPOS-204-253":"1048"`
  *
  * 2) Partner Store ID → ERP `store_code`(드롭다운 value와 동일)
- *    예: `"1048":"CM Asoke"`
+ *    예: `"1048":"CM Sukhumvit 12"`
  *
- * Prod Grab Store ID(`3-C6DWPB4VCKK1GT` 등) — menu/campaign sync·주문 공통. **별도 env 권장:**
- * `GRAB_PORTAL_MERCHANT_MAP=3-C6DWPB4VCKK1GT=1040,3-C4NKAA4FCNCUGA=1042,3-C7JGN2B2DFJ1AE=1043`
- * (쉼표로 여러 매장 — Portal ID는 Grab Dashboard 그대로, 공백 없이)
- * True Digital 1040=`3-C6DWPB4VCKK1GT` · Silom 1042=`3-C4NKAA4FCNCUGA` · Ekkamai 1043=`3-C7JGN2B2DFJ1AE`
- * `GRAB_STORE_MAP_JSON`에 `"1042":"CM Silom"`, `"1043":"CM Ekkamai"` 등 ERP store_code 연결.
- * test sandbox `GFSBPOS-811-087` — Prod partner ID에 묶지 말 것.
+ * Prod Grab Store ID(`3-C6DWPB4VCKK1GT` 등) — `GRAB_PORTAL_MERCHANT_MAP`
+ * 기본 10매장 목록: `lib/grab-portal-merchant-map-defaults.ts` (env 없으면 코드 기본값 사용, env가 우선)
+ * Vercel 복사용: `GET /api/grab/debugEnvConfig`
  * GRAB_* env만 바꿀 때: Vercel Deployments에서 Redeploy 필요(빈 커밋은 ignored-build-step으로 스킵됨).
  */
-export function parseGrabPortalMerchantMap(raw?: string): Record<string, string> {
-  const s = String(raw ?? process.env.GRAB_PORTAL_MERCHANT_MAP ?? '').trim()
+function parseGrabPortalMerchantMapFromEnvString(s: string): Record<string, string> {
   if (!s) return {}
 
   if (s.startsWith('{')) {
@@ -49,12 +49,20 @@ export function parseGrabPortalMerchantMap(raw?: string): Record<string, string>
   return out
 }
 
+/** env 우선, 미설정 키는 `grab-portal-merchant-map-defaults` 로 보완 */
+export function parseGrabPortalMerchantMap(raw?: string): Record<string, string> {
+  const s = String(raw ?? process.env.GRAB_PORTAL_MERCHANT_MAP ?? '').trim()
+  const fromEnv = parseGrabPortalMerchantMapFromEnvString(s)
+  return { ...buildGrabPortalMerchantMapDefaults(), ...fromEnv }
+}
+
 function parseGrabStoreMapJsonObject(raw?: string): Record<string, string> {
   const s = String(raw ?? process.env.GRAB_STORE_MAP_JSON ?? '').trim()
-  if (!s) return {}
+  const defaults = buildGrabStoreMapJsonDefaults()
+  if (!s) return { ...defaults }
   try {
     const parsed = JSON.parse(s) as Record<string, unknown>
-    const out: Record<string, string> = {}
+    const out: Record<string, string> = { ...defaults }
     for (const [k, v] of Object.entries(parsed)) {
       const key = String(k || '').trim()
       const val = String(v || '').trim()
@@ -62,7 +70,7 @@ function parseGrabStoreMapJsonObject(raw?: string): Record<string, string> {
     }
     return out
   } catch {
-    return {}
+    return { ...defaults }
   }
 }
 

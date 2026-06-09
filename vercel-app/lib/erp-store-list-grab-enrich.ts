@@ -4,6 +4,7 @@ import {
   type ErpStoreMasterRow,
   type StoreListBuildResult,
 } from '@/lib/erp-store-master-shared'
+import { buildGrabStoreMapJsonDefaults } from '@/lib/grab-portal-merchant-map-defaults'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import { normStoreKey } from '@/lib/store-list-keys'
@@ -19,12 +20,10 @@ function isGrabPartnerNumericId(s: string): boolean {
   return /^\d{3,6}$/.test(String(s || '').trim())
 }
 
-/** Grab partner store ID → ERP store_code (env 없을 때 erp_stores에 둘 다 있으면 폴백) */
-const DEFAULT_GRAB_PARTNER_ERP_PAIRS: Record<string, string> = {
-  '1040': 'CM True Digital',
-  '1042': 'CM Silom',
-  '1043': 'CM Ekkamai',
-}
+/** Grab partner store ID → ERP store_code (`grab-portal-merchant-map-defaults` 와 동일) */
+const DEFAULT_GRAB_PARTNER_ERP_PAIRS: Record<string, string> = Object.fromEntries(
+  Object.entries(buildGrabStoreMapJsonDefaults()).filter(([k]) => /^\d{3,6}$/.test(k))
+)
 
 function activeMasterStoreCodes(masters: ErpStoreMasterRow[]): Set<string> {
   const out = new Set<string>()

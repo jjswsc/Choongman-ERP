@@ -12,28 +12,26 @@ import {
 
 describe('parseGrabPortalMerchantMap', () => {
   it('parses one-line portal=partner format', () => {
-    expect(parseGrabPortalMerchantMap('3-C6DWPB4VCKK1GT=1040')).toEqual({
-      '3-C6DWPB4VCKK1GT': '1040',
-    })
+    const map = parseGrabPortalMerchantMap('3-C6DWPB4VCKK1GT=1040')
+    expect(map['3-C6DWPB4VCKK1GT']).toBe('1040')
+    expect(map['3-C4NKAA4FCNCUGA']).toBe('1042')
   })
 
-  it('parses comma-separated pairs', () => {
-    expect(parseGrabPortalMerchantMap('3-AAA=1040,3-BBB=1048')).toEqual({
-      '3-AAA': '1040',
-      '3-BBB': '1048',
-    })
+  it('parses comma-separated pairs and merges code defaults', () => {
+    const map = parseGrabPortalMerchantMap('3-AAA=1040,3-BBB=1048')
+    expect(map['3-AAA']).toBe('1040')
+    expect(map['3-BBB']).toBe('1048')
+    expect(map['3-C4NKAA4FCNCUGA']).toBe('1042')
   })
 
   it('parses True Digital + Silom + Ekkamai portal map', () => {
-    expect(
-      parseGrabPortalMerchantMap(
-        '3-C6DWPB4VCKK1GT=1040,3-C4NKAA4FCNCUGA=1042,3-C7JGN2B2DFJ1AE=1043'
-      )
-    ).toEqual({
-      '3-C6DWPB4VCKK1GT': '1040',
-      '3-C4NKAA4FCNCUGA': '1042',
-      '3-C7JGN2B2DFJ1AE': '1043',
-    })
+    const map = parseGrabPortalMerchantMap(
+      '3-C6DWPB4VCKK1GT=1040,3-C4NKAA4FCNCUGA=1042,3-C7JGN2B2DFJ1AE=1043'
+    )
+    expect(map['3-C6DWPB4VCKK1GT']).toBe('1040')
+    expect(map['3-C4NKAA4FCNCUGA']).toBe('1042')
+    expect(map['3-C7JGN2B2DFJ1AE']).toBe('1043')
+    expect(map['3-C63UHBKTG64CLJ']).toBe('1045')
   })
 })
 
@@ -81,11 +79,15 @@ describe('parseGrabStoreMap merge', () => {
   it('lists all portal merchant IDs for multi-store promo sync', () => {
     process.env.GRAB_PORTAL_MERCHANT_MAP =
       '3-C6DWPB4VCKK1GT=1040,3-C4NKAA4FCNCUGA=1042,3-C7JGN2B2DFJ1AE=1043'
-    expect(listAllGrabPortalMerchantIdsFromEnv()).toEqual([
-      '3-C4NKAA4FCNCUGA',
-      '3-C6DWPB4VCKK1GT',
-      '3-C7JGN2B2DFJ1AE',
-    ])
+    expect(listAllGrabPortalMerchantIdsFromEnv()).toEqual(
+      expect.arrayContaining([
+        '3-C4NKAA4FCNCUGA',
+        '3-C6DWPB4VCKK1GT',
+        '3-C7JGN2B2DFJ1AE',
+        '3-C63UHBKTG64CLJ',
+      ])
+    )
+    expect(listAllGrabPortalMerchantIdsFromEnv()).toHaveLength(10)
   })
 
   it('walks map chain to ERP store_code', () => {
@@ -102,9 +104,12 @@ describe('parseGrabStoreMap merge', () => {
       '1040': 'CM True Digital',
       '1042': 'CM Silom',
     })
-    expect(listGrabPartnerStoreCodeRepairs()).toEqual([
-      { from: '1040', to: 'CM True Digital' },
-      { from: '1042', to: 'CM Silom' },
-    ])
+    expect(listGrabPartnerStoreCodeRepairs()).toEqual(
+      expect.arrayContaining([
+        { from: '1040', to: 'CM True Digital' },
+        { from: '1042', to: 'CM Silom' },
+        { from: '1045', to: 'CM Seacon Srinakarin' },
+      ])
+    )
   })
 })

@@ -4,7 +4,7 @@
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
-import { parseBanbanFlavorsFromName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
+import { parseBanbanFlavorsFromDisplayName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
 import { formatGrabOptionFragmentForPrint } from '@/lib/grab-pos-order-enrich'
 import {
   isLikelyPosMenuSkuCode,
@@ -435,7 +435,7 @@ function parseKitchenSlipBanbanFromName(rawName: string): {
   const trimmed = String(rawName ?? '').trim()
   if (!trimmed) return null
   const rest = stripLeadingPrintCodeBrackets(trimmed)
-  const parsed = parseBanbanFlavorsFromName(rest)
+  const parsed = parseBanbanFlavorsFromDisplayName(rest)
   if (!parsed) return null
   return {
     baseName: parsed.baseName,

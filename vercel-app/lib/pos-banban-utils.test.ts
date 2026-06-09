@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   enrichBanbanKitchenLineForPrint,
   expandBanbanComposeLineForPrint,
+  extractGrabBanbanFlavorSlotsFromModifiers,
   filterReceiptOptionLinesForBanban,
   getBanbanFlavorMenuList,
   isBanbanMenu,
   isBanbanFlavorWhitelistMissing,
+  parseBanbanFlavorsFromDisplayName,
   parseBanbanFlavorsFromName,
   resolveBanbanFlavorPairForKitchenPrint,
   splitBanbanSlashOptionParts,
@@ -177,6 +179,58 @@ describe('getBanbanFlavorMenuList', () => {
       '2026-05-26'
     )
     expect(list.map((menu) => menu.id)).toEqual(['1', '2'])
+  })
+})
+
+describe('parseBanbanFlavorsFromDisplayName', () => {
+  it('Grab 콤마 3항목(맛2+Kimchi)에서 맛 2개만 추출한다', () => {
+    expect(
+      parseBanbanFlavorsFromDisplayName(
+        'Banban Chicken (CHEESE TORNADO, GARLIC Bar.B.Q FRIED CHICKEN, Kimchi)'
+      )
+    ).toEqual({
+      baseName: 'Banban Chicken',
+      flavor1: 'CHEESE TORNADO',
+      flavor2: 'GARLIC Bar.B.Q FRIED CHICKEN',
+    })
+  })
+})
+
+describe('extractGrabBanbanFlavorSlotsFromModifiers', () => {
+  it('modifier id 만 있을 때 menuNameById 로 맛 이름을 복원한다', () => {
+    const menuNameById = new Map<number, string>([
+      [6, 'CHEESE TORNADO'],
+      [73, 'GARLIC Bar.B.Q FRIED CHICKEN'],
+    ])
+    expect(
+      extractGrabBanbanFlavorSlotsFromModifiers(
+        [
+          { id: 'mod-c024-1-item-75-c024-1' },
+          { id: 'item-75-c024-banban-1-f-6' },
+          { id: 'item-75-c024-banban-2-f-73' },
+        ],
+        menuNameById
+      )
+    ).toEqual({
+      flavors: ['CHEESE TORNADO', 'GARLIC Bar.B.Q FRIED CHICKEN'],
+      flavorMenuIds: ['6', '73'],
+    })
+  })
+})
+
+describe('resolveBanbanFlavorPairForKitchenPrint grab comma legacy', () => {
+  it('mods note 3항목(맛2+Kimchi)에서 맛 2개를 복원한다', () => {
+    expect(
+      resolveBanbanFlavorPairForKitchenPrint({
+        id: 'grab:item-75-c024',
+        name: 'Banban Chicken (CHEESE TORNADO, GARLIC Bar.B.Q FRIED CHICKEN, Kimchi)',
+        note: 'mods:CHEESE TORNADO,GARLIC Bar.B.Q FRIED CHICKEN,Kimchi · optc:C024-1',
+        menuId1: '75',
+      })
+    ).toEqual({
+      flavor1: 'CHEESE TORNADO',
+      flavor2: 'GARLIC Bar.B.Q FRIED CHICKEN',
+    })
   })
 })
 

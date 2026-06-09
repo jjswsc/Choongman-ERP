@@ -237,6 +237,21 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless)')
     })
 
+    it('Grab 콤마 3항목(맛2+Kimchi)도 맛별 줄로 출력한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Banban Chicken (CHEESE TORNADO, GARLIC Bar.B.Q FRIED CHICKEN, Kimchi)',
+          qty: 1,
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('Banban Chicken')
+      expect(html).toContain('- CHEESE TORNADO')
+      expect(html).toContain('- GARLIC Bar.B.Q FRIED CHICKEN')
+      expect(html).not.toContain('- Kimchi')
+    })
+
     it('option 끄더라도 flavor는 별도 키가 없으면 출력한다(반반 맛 누락 방지)', () => {
       const policy = {
         option: false,

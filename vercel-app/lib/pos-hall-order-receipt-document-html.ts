@@ -31,7 +31,7 @@ import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import {
   expandBanbanComposeLineForPrint,
-  parseBanbanFlavorsFromName,
+  parseBanbanFlavorsFromDisplayName,
 } from '@/lib/pos-banban-utils'
 import {
   buildReceiptVoidBannerHtml,
@@ -617,7 +617,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   const itemsRows = receiptItems
     .map((it, idx) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
-      const banban = parseBanbanFlavorsFromName(lineName)
+      const banban = parseBanbanFlavorsFromDisplayName(lineName)
       const lineSplit = splitPosPrintItemLine(lineName)
       const lineMain = translatePosMenuLineForReceipt(
         banban ? banban.baseName : lineSplit.mainName || lineName,

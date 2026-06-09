@@ -336,6 +336,24 @@ export function filterReceiptOptionLinesForBanban(
   })
 }
 
+/** Grab Banban 줄의 Kimchi·단무지 등 — 맛 2개가 아닌 부가 옵션 */
+export function isLikelyBanbanSideOrExtraLabel(raw: string | null | undefined): boolean {
+  const lab = String(raw ?? '').trim().toLowerCase()
+  if (!lab) return false
+  if (lab === 'kimchi' || lab.includes('pickled radish')) return true
+  if (lab.includes('단무지') || (lab.includes('radish') && lab.includes('pickled'))) return true
+  return false
+}
+
+function pickBanbanFlavorPairFromLabelList(labels: string[]): [string, string] | null {
+  const cleaned = labels.map((s) => String(s ?? '').trim()).filter(Boolean)
+  if (cleaned.length < 2) return null
+  const withoutExtras = cleaned.filter((lab) => !isLikelyBanbanSideOrExtraLabel(lab))
+  const pick = withoutExtras.length >= 2 ? withoutExtras : cleaned
+  if (pick.length < 2) return null
+  return [pick[0], pick[1]]
+}
+
 function extractBanbanFlavorsFromModsNote(note: string | null | undefined): [string, string] | null {
   const raw = String(note ?? '').trim()
   if (!raw) return null
@@ -350,9 +368,7 @@ function extractBanbanFlavorsFromModsNote(note: string | null | undefined): [str
     .map((s) => s.trim())
     .filter(Boolean)
   const human = parts.filter((p) => !/^\d+$/.test(p))
-  const pick = human.length >= 2 ? human : parts
-  if (pick.length < 2) return null
-  return [pick[0], pick[1]]
+  return pickBanbanFlavorPairFromLabelList(human.length >= 2 ? human : parts)
 }
 
 function extractBanbanFlavorsFromCommaName(name: string): [string, string] | null {
@@ -366,9 +382,69 @@ function extractBanbanFlavorsFromCommaName(name: string): [string, string] | nul
     .split(/\s*,\s*/)
     .map((s) => s.trim())
     .filter(Boolean)
-  if (parts.length !== 2) return null
+  if (parts.length < 2) return null
   if (!isBanbanMenu({ isBanban: false, name: baseName, code: '' })) return null
-  return [parts[0], parts[1]]
+  return pickBanbanFlavorPairFromLabelList(parts)
+}
+
+/** 슬래시 `(A / B)` 또는 Grab 콤마 `(A, B, Kimchi)` 표시명에서 반반 2맛 추출 */
+export function parseBanbanFlavorsFromDisplayName(rawName: string | null | undefined): {
+  baseName: string
+  flavor1: string
+  flavor2: string
+} | null {
+  const fromSlash = parseBanbanFlavorsFromName(rawName)
+  if (fromSlash) return fromSlash
+  const fromComma = extractBanbanFlavorsFromCommaName(String(rawName ?? ''))
+  if (!fromComma) return null
+  const trimmed = String(rawName ?? '').trim()
+  const m = /^(.+?)\s*\(([^()]+)\)\s*$/u.exec(trimmed)
+  const baseName = m?.[1]?.trim() || 'Banban Chicken'
+  return { baseName, flavor1: fromComma[0], flavor2: fromComma[1] }
+}
+
+/** Grab submit_order modifier id: `…-banban-1-f-6` → menu id `6` */
+export function parseGrabBanbanFlavorMenuIdFromModifierId(modId: string | null | undefined): string {
+  const m = /(?:^|-)f-(\d+)(?:-|$)/i.exec(String(modId ?? '').trim())
+  return m?.[1] ? String(m[1]).trim() : ''
+}
+
+function lookupMenuNameFromGrabIdMap(
+  menuNameById: ReadonlyMap<number, string> | null,
+  rawMenuId: string
+): string {
+  const id = Number(String(rawMenuId ?? '').trim())
+  if (!Number.isFinite(id) || id <= 0 || !menuNameById) return ''
+  return String(menuNameById.get(id) ?? '').trim()
+}
+
+/**
+ * Grab webhook modifiers[] — name 없이 id만 올 때 `banban-1-f-{menuId}` 슬롯에서 맛 복원.
+ */
+export function extractGrabBanbanFlavorSlotsFromModifiers(
+  flatModifiers: Array<Record<string, unknown>>,
+  menuNameById: ReadonlyMap<number, string> | null = null
+): { flavors: string[]; flavorMenuIds: string[] } {
+  const bySlot = new Map<number, { name: string; menuId: string }>()
+  for (const mod of flatModifiers) {
+    const modId = String(mod.id ?? mod.modifierID ?? mod.modifierId ?? '').trim()
+    const slotMatch = /banban[-_]([12])\b/i.exec(modId)
+    if (!slotMatch) continue
+    const slot = Number(slotMatch[1])
+    if (slot !== 1 && slot !== 2) continue
+    const menuId = parseGrabBanbanFlavorMenuIdFromModifierId(modId)
+    const name = menuId ? lookupMenuNameFromGrabIdMap(menuNameById, menuId) : ''
+    bySlot.set(slot, { name, menuId })
+  }
+  const flavors: string[] = []
+  const flavorMenuIds: string[] = []
+  for (const slot of [1, 2]) {
+    const hit = bySlot.get(slot)
+    if (!hit) continue
+    if (hit.menuId) flavorMenuIds.push(hit.menuId)
+    if (hit.name) flavors.push(hit.name)
+  }
+  return { flavors, flavorMenuIds }
 }
 
 /** 주방·재인쇄: 이름·note·menuId1/2·promoItems 에서 반반 2맛 라벨을 복원한다. */
@@ -377,11 +453,8 @@ export function resolveBanbanFlavorPairForKitchenPrint(
   menus: Pick<PosMenu, 'id' | 'name' | 'code' | 'isBanban'>[] = []
 ): { flavor1: string; flavor2: string } | null {
   const name = String(item.name ?? '').trim()
-  const fromSlash = parseBanbanFlavorsFromName(name)
-  if (fromSlash) return { flavor1: fromSlash.flavor1, flavor2: fromSlash.flavor2 }
-
-  const fromComma = extractBanbanFlavorsFromCommaName(name)
-  if (fromComma) return { flavor1: fromComma[0], flavor2: fromComma[1] }
+  const fromDisplay = parseBanbanFlavorsFromDisplayName(name)
+  if (fromDisplay) return { flavor1: fromDisplay.flavor1, flavor2: fromDisplay.flavor2 }
 
   const fromPersisted = parseBanbanFlavorsFromPersistedNote(String(item.note ?? ''))
   if (fromPersisted) return fromPersisted
@@ -420,11 +493,13 @@ export function isBanbanKitchenLine(item: BanbanKitchenLineLike): boolean {
   const id = String(item.id ?? '').trim()
   if (/^banban-/i.test(id)) return true
   if (isBanbanMenu({ isBanban: false, name, code: '' })) return true
-  if (parseBanbanFlavorsFromName(name)) return true
+  if (parseBanbanFlavorsFromDisplayName(name)) return true
   if (parseBanbanFlavorsFromPersistedNote(item.note)) return true
   const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
   const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
-  return Boolean(mid1 && mid2 && mid1 !== mid2)
+  if (mid1 && mid2 && mid1 !== mid2) return true
+  if (extractBanbanFlavorsFromModsNote(String(item.note ?? ''))) return true
+  return false
 }
 
 /**

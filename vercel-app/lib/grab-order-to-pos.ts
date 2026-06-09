@@ -24,7 +24,12 @@ import {
   parseGrabSetChildLineName,
   type GrabSetPosLine,
 } from '@/lib/grab-set-pos-lines'
-import { formatBanbanFlavorsNoteToken, isBanbanMenu } from '@/lib/pos-banban-utils'
+import {
+  extractGrabBanbanFlavorSlotsFromModifiers,
+  formatBanbanFlavorsNoteToken,
+  isBanbanMenu,
+  isLikelyBanbanSideOrExtraLabel,
+} from '@/lib/pos-banban-utils'
 
 type GrabOrderPersistResult =
   | {
@@ -351,40 +356,8 @@ function isGrabBanbanSizeOrPartLabel(raw: string): boolean {
   )
 }
 
-function parseGrabBanbanFlavorMenuIdFromModifierId(modId: string): string {
-  const m = /(?:^|-)f-(\d+)(?:-|$)/i.exec(String(modId ?? '').trim())
-  return m?.[1] ? String(m[1]).trim() : ''
-}
-
-/** Grab submit_order: `-banban-1-` / `-banban-2-` modifier id 에서 맛 이름·메뉴 id 추출 */
-function extractGrabBanbanFlavorSelections(
-  flatModifiers: Record<string, unknown>[],
-  extractNames: (mod: Record<string, unknown>) => string[]
-): { flavors: string[]; flavorMenuIds: string[] } {
-  const bySlot = new Map<number, { name: string; menuId: string }>()
-  for (const mod of flatModifiers) {
-    const modId = String(mod.id ?? mod.modifierID ?? mod.modifierId ?? '').trim()
-    const slotMatch = /banban[-_]([12])\b/i.exec(modId)
-    if (!slotMatch) continue
-    const slot = Number(slotMatch[1])
-    if (slot !== 1 && slot !== 2) continue
-    const names = extractNames(mod).map((n) => String(n ?? '').trim()).filter(Boolean)
-    const name =
-      names.find((n) => !isGrabBanbanSizeOrPartLabel(n) && !/^flavor\s*[12]\b/i.test(n)) ||
-      names[0] ||
-      ''
-    const menuId = parseGrabBanbanFlavorMenuIdFromModifierId(modId)
-    bySlot.set(slot, { name, menuId })
-  }
-  const flavors: string[] = []
-  const flavorMenuIds: string[] = []
-  for (const slot of [1, 2]) {
-    const hit = bySlot.get(slot)
-    if (!hit) continue
-    if (hit.name) flavors.push(hit.name)
-    if (hit.menuId) flavorMenuIds.push(hit.menuId)
-  }
-  return { flavors, flavorMenuIds }
+function isGrabBanbanNonFlavorLabel(raw: string): boolean {
+  return isGrabBanbanSizeOrPartLabel(raw) || isLikelyBanbanSideOrExtraLabel(raw)
 }
 
 function formatGrabBanbanKitchenDisplayName(baseName: string, flavorLabels: string[]): string {
@@ -958,11 +931,21 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     let grabBanbanFlavorMenuId2: string | undefined
     let grabBanbanFlavorLabels: string[] = []
     if (isBanbanGrabLine) {
-      const banbanSlots = extractGrabBanbanFlavorSelections(flatModifiers, extractReadableModifierNames)
-      const flavorLabels =
+      const banbanSlots = extractGrabBanbanFlavorSlotsFromModifiers(flatModifiers, menuNameById)
+      let flavorLabels =
         banbanSlots.flavors.length >= 2
           ? banbanSlots.flavors.slice(0, 2)
-          : modifierNamesForNote.filter((lab) => !isGrabBanbanSizeOrPartLabel(lab)).slice(0, 2)
+          : banbanSlots.flavorMenuIds.length >= 2
+            ? banbanSlots.flavorMenuIds
+                .slice(0, 2)
+                .map((id) => String(menuNameById.get(Number(id)) ?? '').trim())
+                .filter(Boolean)
+            : []
+      if (flavorLabels.length < 2) {
+        flavorLabels = modifierNamesForNote
+          .filter((lab) => !isGrabBanbanNonFlavorLabel(lab))
+          .slice(0, 2)
+      }
       if (flavorLabels.length >= 2) {
         grabBanbanFlavorLabels = flavorLabels
         if (banbanSlots.flavorMenuIds.length >= 2) {

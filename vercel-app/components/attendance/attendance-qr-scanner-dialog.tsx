@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { canDecodeQrFromVideo, canUseQrCamera, requestQrCameraStream, startQrScanLoop } from '@/lib/qr-video-scanner'
 
 type AttendanceQrScannerDialogProps = {
   open: boolean
@@ -28,15 +29,13 @@ export function AttendanceQrScannerDialog({
   const t = useT(lang)
   const videoRef = React.useRef<HTMLVideoElement | null>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
-  const rafRef = React.useRef<number | null>(null)
+  const stopScanRef = React.useRef<(() => void) | null>(null)
   const [error, setError] = React.useState('')
   const [supported, setSupported] = React.useState(true)
 
   const stopCamera = React.useCallback(() => {
-    if (rafRef.current != null) {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
-    }
+    stopScanRef.current?.()
+    stopScanRef.current = null
     if (streamRef.current) {
       for (const track of streamRef.current.getTracks()) track.stop()
       streamRef.current = null
@@ -51,31 +50,19 @@ export function AttendanceQrScannerDialog({
       return
     }
 
-    let cancelled = false
-    type BarcodeDetectorLike = {
-      detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>
-    }
-    const BarcodeDetectorCtor =
-      typeof window !== 'undefined'
-        ? (window as Window & { BarcodeDetector?: new (opts?: { formats?: string[] }) => BarcodeDetectorLike })
-            .BarcodeDetector
-        : undefined
-
-    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
+    if (!canUseQrCamera() || !canDecodeQrFromVideo()) {
       setSupported(false)
       setError(t('attQrScanUnsupported'))
       return
     }
 
+    let cancelled = false
     setSupported(true)
     setError('')
 
     ;(async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        })
+        const stream = await requestQrCameraStream()
         if (cancelled) {
           for (const track of stream.getTracks()) track.stop()
           return
@@ -86,30 +73,13 @@ export function AttendanceQrScannerDialog({
         video.srcObject = stream
         await video.play()
 
-        const detector = new BarcodeDetectorCtor({ formats: ['qr_code'] })
-        const tick = async () => {
-          if (cancelled || !videoRef.current || videoRef.current.readyState < 2) {
-            rafRef.current = requestAnimationFrame(() => {
-              void tick()
-            })
-            return
-          }
-          try {
-            const codes = await detector.detect(videoRef.current)
-            const raw = String(codes?.[0]?.rawValue ?? '').trim()
-            if (raw) {
-              onScan(raw)
-              onOpenChange(false)
-              return
-            }
-          } catch {
-            /* ignore frame errors */
-          }
-          rafRef.current = requestAnimationFrame(() => {
-            void tick()
-          })
-        }
-        void tick()
+        stopScanRef.current = startQrScanLoop({
+          video,
+          onScan: (raw) => {
+            onScan(raw)
+            onOpenChange(false)
+          },
+        })
       } catch {
         if (!cancelled) {
           setSupported(false)
