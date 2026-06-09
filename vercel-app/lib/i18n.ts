@@ -285,7 +285,7 @@ export const i18n = {
     attQrScanHint: '사무실 출퇴근 QR 키오스크 화면의 QR 코드를 카메라에 맞춰 주세요.',
     attQrScanUnsupported: '이 기기/브라우저에서 카메라 QR 스캔을 사용할 수 없습니다. Safari·Chrome 최신 버전과 HTTPS 접속을 확인해 주세요.',
     attQrScanCameraDenied: '카메라를 사용할 수 없습니다. 설정에서 카메라 권한을 허용한 뒤 다시 시도해 주세요.',
-    attQrHelp: '오피스 출퇴근 QR을 스캔해 기록합니다. (매장 직원은 GPS 사용)',
+    attQrHelp: '출근·퇴근·휴식·재개 버튼을 누른 뒤 매장 QR 키오스크를 스캔해 기록합니다.',
     attQrInvalid: 'QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
     attQrStoreMismatch: 'QR 매장과 소속 매장이 일치하지 않습니다.',
     attQrOfficePilotOnly: 'QR 출퇴근은 현재 오피스(본사) 직원 파일럿 중입니다. 매장 직원은 GPS로 출퇴근해 주세요.',
@@ -4856,6 +4856,10 @@ export const i18n = {
     posTerminalRoleLimitsLockedHint:
       '현장 POS에서 메인/주문 버튼을 끕니다. 태블릿에서 메인을 눌러도 서버에 반영되지 않습니다. 역할 변경은 아래 기기 목록(관리자)에서만 가능합니다.',
     posTerminalRoleLimitsUnlockedHint: '현장에서도 메인/주문을 바꿀 수 있습니다(권장하지 않음).',
+    posTerminalRoleLimitsAssignHint:
+      '메인 교체: 아래 「접속 기기 목록」에서 카운터 PC 행의 「메인으로 지정」을 누르세요. 슬롯이 찼으면 기존 메인을 자동 해제합니다.',
+    posTerminalMainOverLimitHint:
+      '등록된 메인({{used}}대)이 최대({{max}}대)를 초과했습니다. 「전체 메인 해제」 후 카운터 PC만 다시 지정하거나, 아래 목록에서 「메인으로 지정」으로 교체하세요.',
     posTerminalRoleLimitsMain: '메인 POS',
     posTerminalRoleLimitsOrder: '주문 단말(최근)',
     posTerminalRoleLimitsUsage: '{{used}} / {{max}}대',
@@ -4909,6 +4913,10 @@ export const i18n = {
     posTerminalStatusMainDeviceId: '등록된 기기 ID',
     posTerminalStatusOrderLabel: '주문 단말',
     posTerminalStatusOrderDesc: '별도 등록 없음. 메인으로 등록되지 않은 기기는 모두 주문 단말로 동작합니다.',
+    posTerminalStatusOrderRegisteredN: '최근 접속 · {{n}}대',
+    posTerminalStatusOrderNone: '최근 접속한 주문 단말 없음',
+    posTerminalStatusOrderListHint:
+      '별도 등록 없이 터미널을 열면 주문 단말로 동작합니다. 이름·메인 지정은 아래 「접속 기기 목록」에서 관리하세요.',
     posTerminalDeviceListTitle: '접속 기기 목록',
     posTerminalRefresh: '새로고침',
     posTerminalDeviceTabRecent: '최근 접속',
@@ -4945,6 +4953,8 @@ export const i18n = {
     posTerminalRoleOrder: '주문',
     posTerminalSetMain: '메인으로 지정',
     posTerminalSetMainConfirm: '이 기기를 메인 포스로 지정하시겠습니까?',
+    posTerminalSetMainReplaceConfirm:
+      '메인 POS는 {{n}}대까지입니다. 기존 메인을 해제하고 이 기기를 메인으로 지정할까요?',
     posTerminalRevoke: '접속 해제',
     posTerminalRevokeConfirm: '이 기기의 접속을 해제하시겠습니까? 해당 기기는 목록에서 제거되며, 다시 터미널에 접속하면 목록에 나타납니다.',
     attendanceQrDevicesTitle: '출퇴근 QR 단말',
@@ -9604,7 +9614,7 @@ export const i18n = {
     attQrScanHint: 'Point the camera at the attendance QR kiosk in the office.',
     attQrScanUnsupported: 'Camera QR scan is unavailable on this browser. Use the latest Safari/Chrome over HTTPS.',
     attQrScanCameraDenied: 'Camera access denied. Allow camera permission in settings and try again.',
-    attQrHelp: 'Scan the office attendance QR to record. (Store staff use GPS)',
+    attQrHelp: 'Tap a button, then scan your store attendance QR kiosk to record.',
     attQrInvalid: 'QR code is invalid or expired. Scan the kiosk QR again.',
     attQrStoreMismatch: 'QR store does not match your assigned store.',
     attQrOfficePilotOnly: 'QR attendance is in office pilot only. Store staff should use GPS.',
@@ -14182,6 +14192,10 @@ orderItemQty: 'Qty',
     posTerminalRoleLimitsLockedHint:
       'Staff cannot change Main/Order on POS. Tablets cannot switch to main; assigned roles stay fixed until changed in admin.',
     posTerminalRoleLimitsUnlockedHint: 'Staff can still change Main/Order on POS (not recommended).',
+    posTerminalRoleLimitsAssignHint:
+      'To change main: in Connected devices below, click Set as main on the counter PC row. If the slot is full, the current main is replaced automatically.',
+    posTerminalMainOverLimitHint:
+      'Registered mains ({{used}}) exceed the max ({{max}}). Use Clear all mains, then assign the counter PC only—or click Set as main in the list to replace.',
     posTerminalRoleLimitsMain: 'Main POS',
     posTerminalRoleLimitsOrder: 'Order terminals (recent)',
     posTerminalRoleLimitsUsage: '{{used}} / {{max}}',
@@ -14235,6 +14249,10 @@ orderItemQty: 'Qty',
     posTerminalStatusMainDeviceId: 'Device ID',
     posTerminalStatusOrderLabel: 'Order terminals',
     posTerminalStatusOrderDesc: 'No separate registration. Any device not registered as main works as an order terminal.',
+    posTerminalStatusOrderRegisteredN: 'Recent · {{n}} device(s)',
+    posTerminalStatusOrderNone: 'No order terminals with recent activity',
+    posTerminalStatusOrderListHint:
+      'Opening the terminal registers an order device automatically. Manage names and main assignment in Connected devices below.',
     posTerminalDeviceListTitle: 'Connected devices',
     posTerminalRefresh: 'Refresh',
     posTerminalDeviceTabRecent: 'Recent',
@@ -14271,6 +14289,8 @@ orderItemQty: 'Qty',
     posTerminalRoleOrder: 'Order',
     posTerminalSetMain: 'Set as main',
     posTerminalSetMainConfirm: 'Set this device as the main POS?',
+    posTerminalSetMainReplaceConfirm:
+      'Main POS is limited to {{n}} device(s). Unassign the current main and set this device as main?',
     posTerminalRevoke: 'Revoke access',
     posTerminalRevokeConfirm: 'Revoke this device? It will be removed from the list until it opens the terminal again.',
     attendanceQrDevicesTitle: 'Attendance QR kiosks',
@@ -25002,6 +25022,10 @@ orderItemQty: 'จำนวน',
       'ปิดการเปลี่ยน Main/Order บน POS แท็บเล็ตกด Main ก็ไม่บันทึก เปลี่ยนบทบาทได้จากรายการแอดมินเท่านั้น',
     posTerminalRoleLimitsUnlockedHint:
       'พนักงานหน้าร้านยังเปลี่ยน Main/Order บน POS ได้ (ไม่แนะนำ)',
+    posTerminalRoleLimitsAssignHint:
+      'เปลี่ยน Main: ในรายการเครื่องด้านล่าง กด 「กำหนดเป็น Main」 ที่แถว PC เคาน์เตอร์ ถ้าเต็มแล้วระบบจะยกเลิก Main เดิมให้อัตโนมัติ',
+    posTerminalMainOverLimitHint:
+      'Main ที่ลงทะเบียน ({{used}} เครื่อง) เกินจำกัด ({{max}}) กด 「ยกเลิก Main ทั้งหมด」 แล้วกำหนด PC เคาน์เตอร์ใหม่ หรือกด 「กำหนดเป็น Main」 ในรายการเพื่อแทนที่',
     posTerminalRoleLimitsMain: 'POS หลัก',
     posTerminalRoleLimitsOrder: 'เครื่องสั่ง (ล่าสุด)',
     posTerminalRoleLimitsUsage: '{{used}} / {{max}} เครื่อง',
@@ -25016,6 +25040,8 @@ orderItemQty: 'จำนวน',
     posTerminalRoleLimitsFranchiseReadOnly:
       'ติดต่อสำนักงานใหญ่ (OFFICE) เพื่อเปลี่ยนจำนวน ผู้จัดการร้านกำหนด/ยกเลิก POS หลักได้ในรายการด้านล่าง',
     posTerminalMainLimitReached: 'กำหนด POS หลักได้สูงสุด {{n}} เครื่อง',
+    posTerminalSetMainReplaceConfirm:
+      'POS หลักได้สูงสุด {{n}} เครื่อง ยกเลิกเครื่องหลักเดิมแล้วกำหนดเครื่องนี้เป็น Main ใช่ไหม?',
     posDeviceRoleMainLimitApi:
       'กำหนด POS หลักได้สูงสุด {{n}} เครื่อง ยกเลิกเครื่องหลักเดิมก่อน',
     posDeviceRoleOrderLimitApi:
@@ -25028,6 +25054,10 @@ orderItemQty: 'จำนวน',
       'POS หลัก: ตั้งค่า POS → เครื่อง → กำหนด PC เคาน์เตอร์เป็น Main ในรายการ เปลี่ยนบทบาทบนหน้า POS ไม่ได้',
     posTerminalHowToOthersLocked:
       'เครื่องสั่ง: เครื่องที่ไม่ได้กำหนดเป็น Main จะเป็นเครื่องสั่งอัตโนมัติ เปลี่ยน Main ได้จากรายการแอดมิน',
+    posTerminalStatusOrderRegisteredN: 'เครื่องสั่งล่าสุด · {{n}} เครื่อง',
+    posTerminalStatusOrderNone: 'ไม่มีเครื่องสั่งที่เชื่อมต่อล่าสุด',
+    posTerminalStatusOrderListHint:
+      'เปิดเทอร์มินัลแล้วเป็นเครื่องสั่งอัตโนมัติ จัดการชื่อและ Main ได้ในรายการเครื่องด้านล่าง',
     posToppingCodeExists: 'This item code is already in use. Please enter a different code.',
     posToppingCreated: 'Topping registered. Select it in menu options (additive) and it will appear in cost analysis.',
     posToppingNamePh: 'Topping name',

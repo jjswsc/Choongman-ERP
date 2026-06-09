@@ -186,6 +186,13 @@ export function PosTerminalSettingsContent() {
     }
   }
 
+  const formatDeviceStatusLine = (d: PosDeviceItem) => {
+    const label = String(d.displayLabel ?? '').trim()
+    const name = label || maskToken(d.deviceToken)
+    const idSuffix = label ? ` · ${maskToken(d.deviceToken)}` : ''
+    return `${name}${idSuffix} · ${formatLastSeen(d.lastSeenAt)}`
+  }
+
   const { recentDevices, historyDevices } = React.useMemo(() => {
     const cutoff = Date.now() - DEVICE_RECENT_LAST_SEEN_MS
     const recent: PosDeviceItem[] = []
@@ -206,16 +213,16 @@ export function PosTerminalSettingsContent() {
 
   const handleSetMain = async (deviceToken: string) => {
     if (!effectiveStore) return
-    if (mainDeviceTokens.length >= mainDeviceMaxCount && !mainDeviceTokens.includes(deviceToken)) {
-      await appAlert(
-        (t('posTerminalMainLimitReached') || '메인 POS는 최대 {{n}}대까지 지정할 수 있습니다.').replace(
+    const atLimit =
+      mainDeviceTokens.length >= mainDeviceMaxCount && !mainDeviceTokens.includes(deviceToken)
+    const confirmMsg = atLimit
+      ? t('posTerminalSetMainReplaceConfirm') ||
+        '메인 POS는 {{n}}대까지입니다. 기존 메인을 해제하고 이 기기를 메인으로 지정할까요?'.replace(
           '{{n}}',
           String(mainDeviceMaxCount)
         )
-      )
-      return
-    }
-    if (!(await appConfirm(t('posTerminalSetMainConfirm') || '이 기기를 메인 포스로 지정하시겠습니까?'))) return
+      : t('posTerminalSetMainConfirm') || '이 기기를 메인 포스로 지정하시겠습니까?'
+    if (!(await appConfirm(confirmMsg))) return
     setActionToken(deviceToken)
     setPosMainDevice({ storeCode: effectiveStore, deviceToken })
       .then(async (res) => {
@@ -288,14 +295,11 @@ export function PosTerminalSettingsContent() {
       .finally(() => setActionToken(null))
   }
 
-  const recentOrderDeviceCount = React.useMemo(() => {
-    const cutoff = Date.now() - DEVICE_RECENT_LAST_SEEN_MS
-    return recentDevices.filter((d) => {
-      if (d.isMain) return false
-      const ts = new Date(d.lastSeenAt).getTime()
-      return !Number.isNaN(ts) && ts >= cutoff
-    }).length
-  }, [recentDevices])
+  const recentOrderDevices = React.useMemo(
+    () => recentDevices.filter((d) => !d.isMain),
+    [recentDevices]
+  )
+  const recentOrderDeviceCount = recentOrderDevices.length
 
   const mainSlotsRemaining = Math.max(0, mainDeviceMaxCount - mainDeviceTokens.length)
   const orderSlotsRemaining = Math.max(0, orderDeviceMaxCount - recentOrderDeviceCount)
@@ -415,7 +419,7 @@ export function PosTerminalSettingsContent() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!!actionToken || mainSlotsRemaining <= 0}
+                disabled={!!actionToken}
                 onClick={() => handleSetMain(d.deviceToken)}
               >
                 {t('posTerminalSetMain') || '메인으로 지정'}
@@ -520,6 +524,10 @@ export function PosTerminalSettingsContent() {
             : t('posTerminalRoleLimitsUnlockedHint') ||
               '현장에서도 메인/주문을 바꿀 수 있습니다(권장하지 않음).'}
         </p>
+        <p className="text-xs font-medium text-foreground">
+          {t('posTerminalRoleLimitsAssignHint') ||
+            '메인 교체: 아래 「접속 기기 목록」에서 카운터 PC 행의 「메인으로 지정」을 누르세요. 슬롯이 찼으면 기존 메인을 자동 해제합니다.'}
+        </p>
         {!loading && (
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
@@ -611,6 +619,14 @@ export function PosTerminalSettingsContent() {
               <dd className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 {mainDeviceTokens.length > 0 ? (
                   <>
+                    {mainDeviceTokens.length > mainDeviceMaxCount ? (
+                      <p className="text-xs text-destructive font-medium">
+                        {(t('posTerminalMainOverLimitHint') ||
+                          '등록된 메인({{used}}대)이 최대({{max}}대)를 초과했습니다. 「전체 메인 해제」 후 카운터 PC만 다시 지정하거나, 아래 목록에서 「메인으로 지정」으로 교체하세요.')
+                          .replace('{{used}}', String(mainDeviceTokens.length))
+                          .replace('{{max}}', String(mainDeviceMaxCount))}
+                      </p>
+                    ) : null}
                     <span className="inline-flex items-center gap-1.5 text-foreground">
                       <Smartphone className="h-3.5 w-3.5 text-primary" />
                       {(t('posTerminalStatusMainRegisteredN') || '등록됨 · {{n}}대').replace(
@@ -640,9 +656,40 @@ export function PosTerminalSettingsContent() {
               <dt className="font-medium text-muted-foreground min-w-[6rem]">
                 {t('posTerminalStatusOrderLabel') || '주문 단말'}
               </dt>
-              <dd className="text-muted-foreground">
-                {t('posTerminalStatusOrderDescMulti') ||
-                  '메인으로 등록되지 않은 기기는 주문 단말입니다. 카운터 PC를 여러 대 쓰면 각각 메인으로 등록하면 모두 자동 인쇄를 받습니다.'}
+              <dd className="flex flex-col gap-2 text-muted-foreground">
+                {recentOrderDevices.length > 0 ? (
+                  <>
+                    <span className="text-foreground">
+                      {(t('posTerminalStatusOrderRegisteredN') || '최근 접속 · {{n}}대').replace(
+                        '{{n}}',
+                        String(recentOrderDevices.length)
+                      )}
+                      {' · '}
+                      {(t('posTerminalRoleLimitsUsage') || '{{used}} / {{max}}대')
+                        .replace('{{used}}', String(recentOrderDevices.length))
+                        .replace('{{max}}', String(orderDeviceMaxCount))}
+                    </span>
+                    <ul className="font-mono text-xs list-disc list-inside max-w-full space-y-0.5">
+                      {recentOrderDevices.map((d) => (
+                        <li key={d.deviceToken} className="break-words">
+                          {formatDeviceStatusLine(d)}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs">
+                      {t('posTerminalStatusOrderListHint') ||
+                        '별도 등록 없이 터미널을 열면 주문 단말로 동작합니다. 이름·메인 지정은 아래 「접속 기기 목록」에서 관리하세요.'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <span>{t('posTerminalStatusOrderNone') || '최근 접속한 주문 단말 없음'}</span>
+                    <p className="text-xs">
+                      {t('posTerminalStatusOrderDesc') ||
+                        '별도 등록 없음. 메인으로 등록되지 않은 기기는 모두 주문 단말로 동작합니다.'}
+                    </p>
+                  </>
+                )}
               </dd>
             </div>
           </dl>
@@ -737,8 +784,8 @@ export function PosTerminalSettingsContent() {
           {t('posTerminalMainDeviceTitle') || '메인 포스 지정'}
         </h4>
         <p className="text-xs text-muted-foreground">
-          {t('posTerminalMainDeviceHintMulti') ||
-            '카운터(프린터 연결) PC를 여러 대 쓰면 각각 메인으로 등록할 수 있습니다. 등록된 모든 메인 기기에서 주문 수신 시 자동 인쇄가 실행됩니다.'}
+          {t('posTerminalMainDeviceHint') ||
+            '매장당 메인(카운터) POS는 설정된 최대 대수까지 지정합니다. 메인에서만 주문 수신 시 주방·영수증 자동 인쇄가 됩니다.'}
         </p>
         {!loading && (
           <p className="text-sm text-muted-foreground">
@@ -764,15 +811,15 @@ export function PosTerminalSettingsContent() {
             {mainDeviceRoleLocked
               ? t('posTerminalHowToMainLocked') ||
                 '카운터(메인) 포스: POS 설정 → 단말 → 접속 기기 목록에서 카운터 PC를 「메인으로 지정」하세요. POS 화면에서는 메인/주문을 바꿀 수 없습니다.'
-              : t('posTerminalHowToMainMulti') ||
-                '카운터(메인) 포스: /pos/terminal 에서 상단 "메인"을 켭니다. 카운터를 여러 대 쓰면 각 PC에서 같은 방식으로 등록합니다. 등록된 모든 메인에서 주문 알림·자동 인쇄가 실행됩니다.'}
+              : t('posTerminalHowToMain') ||
+                '카운터(메인) 포스: 포스 터미널(/pos/terminal)에서 상단 "메인"을 켜거나, 아래 기기 목록에서 「메인으로 지정」하세요. 메인 1대(또는 설정된 최대 대수)만 자동 인쇄를 받습니다.'}
           </li>
           <li>
             {mainDeviceRoleLocked
               ? t('posTerminalHowToOthersLocked') ||
                 '주문 전용 단말: 메인으로 지정하지 않은 기기는 자동으로 주문 단말입니다. 메인을 바꾸려면 기기 목록에서 해제·재지정하세요.'
-              : t('posTerminalHowToOthersMulti') ||
-                '주문 전용 단말: 메인을 끈 상태로 터미널을 쓰면 됩니다. 특정 카운터만 빼려면 기기 목록에서 "메인 해제"를 누르세요. 전부 해제하려면 "전체 메인 해제"를 사용하세요.'}
+              : t('posTerminalHowToOthers') ||
+                '주문 전용 단말: 메인을 끈 상태로 터미널을 쓰면 됩니다. 위 「현재 등록 현황」과 아래 기기 목록에서 확인·관리하세요.'}
           </li>
         </ul>
       </div>

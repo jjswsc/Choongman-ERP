@@ -9,7 +9,7 @@ import {
   hasUnclosedClockWorkSession,
 } from '@/lib/attendance-utils'
 import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
-import { canEmployeeUseAttendanceQr } from '@/lib/attendance-qr-pilot'
+import { canEmployeeUseAttendanceQr, isAttendanceQrRequiredForAllStores } from '@/lib/attendance-qr-pilot'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 const TZ = 'Asia/Bangkok'
 
@@ -296,13 +296,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (isAttendanceQrRequiredForAllStores() && !attendanceQrToken) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '❌ 매장 출퇴근 QR을 스캔해 주세요. 매장에 설치된 QR 키오스크 화면을 스캔합니다.',
+        },
+        { headers }
+      )
+    }
+
     if (attendanceQrToken) {
       if (!canEmployeeUseAttendanceQr(storeName)) {
         return NextResponse.json(
           {
             success: false,
             message:
-              '❌ QR 출퇴근은 현재 오피스(본사) 직원 파일럿 중입니다. 매장 직원은 GPS로 출퇴근해 주세요.',
+              '❌ QR 출퇴근은 현재 오피스(본사) 직원만 사용 중입니다. 매장 직원은 GPS로 출퇴근해 주세요.',
           },
           { headers }
         )

@@ -9594,7 +9594,7 @@ export async function clearPosMainDevice(params: { storeCode: string; deviceToke
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; code?: string }>
 }
 
 export async function registerPosMainDevice(params: { storeCode: string; deviceToken: string }) {
@@ -9603,7 +9603,7 @@ export async function registerPosMainDevice(params: { storeCode: string; deviceT
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; code?: string }>
 }
 
 export interface PosDeviceItem {

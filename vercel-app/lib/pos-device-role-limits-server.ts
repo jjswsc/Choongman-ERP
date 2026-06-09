@@ -1,4 +1,4 @@
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import {
   checkCanAssignMainFromRows,
   checkCanRegisterAsOrderFromRows,
@@ -92,4 +92,34 @@ export async function assertCanRegisterAsOrder(
   const cfg = limits ?? (await getPosDeviceRoleLimits(storeCode))
   const rows = await listStoreDevices(storeCode)
   return checkCanRegisterAsOrderFromRows(rows, deviceToken, cfg)
+}
+
+/** 관리자 지정: 메인 슬롯이 찼을 때 다른 메인 기기를 주문 단말로 내림 */
+export async function demoteOtherMainDevices(
+  storeCode: string,
+  keepDeviceToken: string
+): Promise<number> {
+  const s = String(storeCode || '').trim()
+  const keep = String(keepDeviceToken || '').trim()
+  if (!s || !keep) return 0
+  const rows = await listStoreDevices(s)
+  const now = new Date().toISOString()
+  const others = rows.filter(
+    (r) =>
+      r.role === 'main' &&
+      String(r.device_token ?? '').trim() !== keep &&
+      String(r.device_token ?? '').trim().length > 0
+  )
+  if (others.length === 0) return 0
+  await supabaseUpsert(
+    'pos_connected_devices',
+    others.map((r) => ({
+      store_code: s,
+      device_token: String(r.device_token ?? '').trim(),
+      role: 'order',
+      last_seen_at: String(r.last_seen_at ?? now),
+    })),
+    'store_code,device_token'
+  )
+  return others.length
 }

@@ -4,6 +4,10 @@ import * as React from 'react'
 import { getPosPrinterSettings, registerPosMainDevice, clearPosMainDevice, registerPosDevice } from '@/lib/api-client'
 import { buildPosClientHint } from '@/lib/pos-device-client-hint'
 import { DEFAULT_POS_DEVICE_ROLE_LIMITS } from '@/lib/pos-device-role-limits'
+import { appAlert } from '@/lib/app-message'
+import { useLang } from '@/lib/lang-context'
+import { useT } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 
 const STORAGE_KEY = 'pos_main_device'
 const DEVICE_TOKEN_KEY = 'pos_device_token'
@@ -49,6 +53,8 @@ function getOrCreateDeviceToken(): string {
 export function usePosMainDevice(
   storeCode: string | null
 ): [boolean, (value: boolean) => void, PosMainDeviceMeta] {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [localIsMain, setLocalIsMain] = React.useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     return getLocalMainExplicit() === 'main'
@@ -155,6 +161,19 @@ export function usePosMainDevice(
             if (!res.success) {
               setServerMainTokens([])
               applyLocal(false)
+              const msg =
+                res.code === 'MAIN_LIMIT'
+                  ? (t('posDeviceRoleMainLimitApi') || '').replace(
+                      '{{n}}',
+                      String(mainDeviceMaxCount)
+                    )
+                  : localizeApiMessage(
+                      res.message,
+                      t,
+                      t('posDeviceRoleLockedApi'),
+                      lang
+                    )
+              if (msg) void appAlert(msg)
               return
             }
             try {
@@ -205,7 +224,7 @@ export function usePosMainDevice(
           })
       }
     },
-    [storeCode, deviceToken, roleLocked]
+    [storeCode, deviceToken, roleLocked, mainDeviceMaxCount, t, lang]
   )
 
   // 접속 기기 목록에 등록·하트비트 (last_seen_at 갱신). 잠금 ON이면 서버가 DB 역할을 고정함.
