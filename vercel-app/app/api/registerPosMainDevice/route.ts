@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
+import { assertCanSelfRegisterMain } from '@/lib/pos-device-role-limits-server'
 
 /** 포스 터미널: 이 기기를 해당 매장 메인 포스로 등록 (해당 매장 설정 행이 있을 때만 반영) */
 export async function POST(req: NextRequest) {
@@ -23,6 +24,14 @@ export async function POST(req: NextRequest) {
     const exists = Array.isArray(rows) ? rows.length > 0 : !!rows
 
     if (exists) {
+      const limitCheck = await assertCanSelfRegisterMain(storeCode, deviceToken)
+      if (!limitCheck.ok) {
+        return NextResponse.json(
+          { success: false, message: limitCheck.message, code: limitCheck.code },
+          { headers }
+        )
+      }
+
       const now = new Date().toISOString()
       await supabaseUpsert(
         'pos_connected_devices',

@@ -14,11 +14,13 @@ import {
   getPosDevices,
   revokePosDevice,
   setPosMainDevice,
+  savePosDeviceRoleLimits,
   updatePosDeviceDisplayLabel,
   useStoreList,
   type PosDeviceItem,
 } from '@/lib/api-client'
 import { isOfficeRole, canPickAttendanceQrStoreFilter } from '@/lib/permissions'
+import { DEFAULT_POS_DEVICE_ROLE_LIMITS } from '@/lib/pos-device-role-limits'
 import { formatPosDateTimeShort } from '@/lib/pos-datetime-locale'
 import { ClipboardCopy, Monitor, Smartphone, RefreshCw, UserX } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -44,6 +46,21 @@ export function PosTerminalSettingsContent() {
   const [labelDrafts, setLabelDrafts] = React.useState<Record<string, string>>({})
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [deviceListTab, setDeviceListTab] = React.useState<'recent' | 'history'>('recent')
+  const [mainDeviceMaxCount, setMainDeviceMaxCount] = React.useState(
+    DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceMaxCount
+  )
+  const [orderDeviceMaxCount, setOrderDeviceMaxCount] = React.useState(
+    DEFAULT_POS_DEVICE_ROLE_LIMITS.orderDeviceMaxCount
+  )
+  const [mainDeviceRoleLocked, setMainDeviceRoleLocked] = React.useState(
+    DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceRoleLocked
+  )
+  const [limitsDraftMain, setLimitsDraftMain] = React.useState(String(DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceMaxCount))
+  const [limitsDraftOrder, setLimitsDraftOrder] = React.useState(String(DEFAULT_POS_DEVICE_ROLE_LIMITS.orderDeviceMaxCount))
+  const [limitsDraftLocked, setLimitsDraftLocked] = React.useState(DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceRoleLocked)
+  const [savingLimits, setSavingLimits] = React.useState(false)
+
+  const isOffice = isOfficeRole(auth?.role || '')
 
   const canSearchAll =
     isOfficeRole(auth?.role || '') ||
@@ -73,6 +90,21 @@ export function PosTerminalSettingsContent() {
             : []
         setMainDeviceTokens(fromApi.length > 0 ? fromApi : legacy)
         setDevices(devRes.devices ?? [])
+        const mainMax =
+          typeof settings.mainDeviceMaxCount === 'number' && settings.mainDeviceMaxCount > 0
+            ? settings.mainDeviceMaxCount
+            : DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceMaxCount
+        const orderMax =
+          typeof settings.orderDeviceMaxCount === 'number' && settings.orderDeviceMaxCount > 0
+            ? settings.orderDeviceMaxCount
+            : DEFAULT_POS_DEVICE_ROLE_LIMITS.orderDeviceMaxCount
+        const locked = settings.mainDeviceRoleLocked === true
+        setMainDeviceMaxCount(mainMax)
+        setOrderDeviceMaxCount(orderMax)
+        setMainDeviceRoleLocked(locked)
+        setLimitsDraftMain(String(mainMax))
+        setLimitsDraftOrder(String(orderMax))
+        setLimitsDraftLocked(locked)
         if (devRes.success === false && devRes.message) {
           setLoadError(devRes.message)
         }
@@ -177,6 +209,15 @@ export function PosTerminalSettingsContent() {
 
   const handleSetMain = async (deviceToken: string) => {
     if (!effectiveStore) return
+    if (mainDeviceTokens.length >= mainDeviceMaxCount && !mainDeviceTokens.includes(deviceToken)) {
+      await appAlert(
+        (t('posTerminalMainLimitReached') || '메인 POS는 최대 {{n}}대까지 지정할 수 있습니다.').replace(
+          '{{n}}',
+          String(mainDeviceMaxCount)
+        )
+      )
+      return
+    }
     if (!(await appConfirm(t('posTerminalSetMainConfirm') || '이 기기를 메인 포스로 지정하시겠습니까?'))) return
     setActionToken(deviceToken)
     setPosMainDevice({ storeCode: effectiveStore, deviceToken })
@@ -185,7 +226,19 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
           loadData()
         } else {
-          await appAlert(localizeApiMessage((res as { message?: string }).message, t, t('posTerminalAssignMainFailed'), lang))
+          const msg =
+            res.code === 'MAIN_LIMIT'
+              ? (t('posDeviceRoleMainLimitApi') || t('posTerminalMainLimitReached')).replace(
+                  '{{n}}',
+                  String(mainDeviceMaxCount)
+                )
+              : localizeApiMessage(
+                  (res as { message?: string }).message,
+                  t,
+                  t('posTerminalAssignMainFailed'),
+                  lang
+                )
+          await appAlert(msg)
         }
       })
       .finally(() => setActionToken(null))
@@ -236,6 +289,48 @@ export function PosTerminalSettingsContent() {
         }
       })
       .finally(() => setActionToken(null))
+  }
+
+  const recentOrderDeviceCount = React.useMemo(() => {
+    const cutoff = Date.now() - DEVICE_RECENT_LAST_SEEN_MS
+    return recentDevices.filter((d) => {
+      if (d.isMain) return false
+      const ts = new Date(d.lastSeenAt).getTime()
+      return !Number.isNaN(ts) && ts >= cutoff
+    }).length
+  }, [recentDevices])
+
+  const mainSlotsRemaining = Math.max(0, mainDeviceMaxCount - mainDeviceTokens.length)
+  const orderSlotsRemaining = Math.max(0, orderDeviceMaxCount - recentOrderDeviceCount)
+
+  const handleSaveRoleLimits = async () => {
+    if (!effectiveStore || !isOffice) return
+    const mainN = Math.min(5, Math.max(1, Math.trunc(Number(limitsDraftMain) || 1)))
+    const orderN = Math.min(30, Math.max(1, Math.trunc(Number(limitsDraftOrder) || 1)))
+    setSavingLimits(true)
+    try {
+      const res = await savePosDeviceRoleLimits({
+        storeCode: effectiveStore,
+        mainDeviceMaxCount: mainN,
+        orderDeviceMaxCount: orderN,
+        mainDeviceRoleLocked: limitsDraftLocked,
+      })
+      if (res.success) {
+        setMainDeviceMaxCount(mainN)
+        setOrderDeviceMaxCount(orderN)
+        setMainDeviceRoleLocked(limitsDraftLocked)
+        setLimitsDraftMain(String(mainN))
+        setLimitsDraftOrder(String(orderN))
+        await appAlert(t('posTerminalRoleLimitsSaved') || '단말 대수 설정을 저장했습니다.')
+        loadData()
+      } else {
+        await appAlert(localizeApiMessage(res.message, t, t('posTerminalRoleLimitsSaveFail') || '저장에 실패했습니다.', lang))
+      }
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setSavingLimits(false)
+    }
   }
 
   function renderDeviceRows(list: PosDeviceItem[]) {
@@ -323,7 +418,7 @@ export function PosTerminalSettingsContent() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!!actionToken}
+                disabled={!!actionToken || mainSlotsRemaining <= 0}
                 onClick={() => handleSetMain(d.deviceToken)}
               >
                 {t('posTerminalSetMain') || '메인으로 지정'}
@@ -416,6 +511,92 @@ export function PosTerminalSettingsContent() {
           <p className="mt-2 text-xs text-muted-foreground">{t('posTerminalDbTableHint')}</p>
         </div>
       )}
+
+      <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+        <h4 className="text-sm font-semibold">
+          {t('posTerminalRoleLimitsTitle') || '단말 대수·잠금'}
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          {mainDeviceRoleLocked
+            ? t('posTerminalRoleLimitsLockedHint') ||
+              '현장 POS에서 메인/주문 버튼을 끕니다. 아래 기기 목록에서만 메인을 지정하세요.'
+            : t('posTerminalRoleLimitsUnlockedHint') ||
+              '현장에서도 메인/주문을 바꿀 수 있습니다(권장하지 않음).'}
+        </p>
+        {!loading && (
+          <dl className="grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">{t('posTerminalRoleLimitsMain') || '메인 POS'}</dt>
+              <dd className="font-medium">
+                {(t('posTerminalRoleLimitsUsage') || '{{used}} / {{max}}대').replace('{{used}}', String(mainDeviceTokens.length)).replace('{{max}}', String(mainDeviceMaxCount))}
+                {mainSlotsRemaining > 0
+                  ? ` · ${(t('posTerminalRoleLimitsRemain') || '잔여 {{n}}').replace('{{n}}', String(mainSlotsRemaining))}`
+                  : ''}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">{t('posTerminalRoleLimitsOrder') || '주문 단말(최근)'}</dt>
+              <dd className="font-medium">
+                {(t('posTerminalRoleLimitsUsage') || '{{used}} / {{max}}대').replace('{{used}}', String(recentOrderDeviceCount)).replace('{{max}}', String(orderDeviceMaxCount))}
+                {orderSlotsRemaining > 0
+                  ? ` · ${(t('posTerminalRoleLimitsRemain') || '잔여 {{n}}').replace('{{n}}', String(orderSlotsRemaining))}`
+                  : ''}
+              </dd>
+            </div>
+          </dl>
+        )}
+        {isOffice ? (
+          <div className="space-y-3 rounded-md border border-primary/20 bg-background p-3">
+            <p className="text-xs font-medium text-primary">
+              {t('posTerminalRoleLimitsOfficeOnly') || '본사(OFFICE) 전용 — 대수·잠금 조정'}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">{t('posTerminalRoleLimitsMainMax') || '메인 최대 대수'}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={5}
+                  className="h-9"
+                  value={limitsDraftMain}
+                  onChange={(e) => setLimitsDraftMain(e.target.value)}
+                  disabled={savingLimits}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">{t('posTerminalRoleLimitsOrderMax') || '주문 최대 대수'}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  className="h-9"
+                  value={limitsDraftOrder}
+                  onChange={(e) => setLimitsDraftOrder(e.target.value)}
+                  disabled={savingLimits}
+                />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border"
+                checked={limitsDraftLocked}
+                onChange={(e) => setLimitsDraftLocked(e.target.checked)}
+                disabled={savingLimits}
+              />
+              <span>{t('posTerminalRoleLimitsLockToggle') || '현장에서 메인/주문 변경 금지(관리자 지정만)'}</span>
+            </label>
+            <Button type="button" size="sm" disabled={!effectiveStore || savingLimits} onClick={handleSaveRoleLimits}>
+              {savingLimits ? '…' : t('posTerminalRoleLimitsSave') || '대수 설정 저장'}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t('posTerminalRoleLimitsFranchiseReadOnly') ||
+              '대수 변경은 본사(OFFICE)에 요청하세요. 매장 관리자는 아래 목록에서 메인 지정·해제만 할 수 있습니다.'}
+          </p>
+        )}
+      </div>
 
       {/* 현재 등록 현황: 메인 / 주문 단말 */}
       <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
@@ -569,7 +750,10 @@ export function PosTerminalSettingsContent() {
                   '{{n}}',
                   String(mainDeviceTokens.length)
                 )
-              : (t('posTerminalMainDeviceNone') || '등록된 메인 포스 없음. 포스 터미널 화면에서 "메인" 버튼으로 지정할 수 있습니다.')}
+              : mainDeviceRoleLocked
+                ? t('posTerminalMainDeviceNoneLocked') ||
+                  '등록된 메인 포스 없음. 위 기기 목록에서 카운터 PC를 「메인으로 지정」하세요.'
+                : (t('posTerminalMainDeviceNone') || '등록된 메인 포스 없음. 포스 터미널 화면에서 "메인" 버튼으로 지정할 수 있습니다.')}
           </p>
         )}
       </div>
@@ -580,12 +764,18 @@ export function PosTerminalSettingsContent() {
         </h4>
         <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
           <li>
-            {t('posTerminalHowToMainMulti') ||
-              '카운터(메인) 포스: /pos/terminal 에서 상단 "메인"을 켭니다. 카운터를 여러 대 쓰면 각 PC에서 같은 방식으로 등록합니다. 등록된 모든 메인에서 주문 알림·자동 인쇄가 실행됩니다.'}
+            {mainDeviceRoleLocked
+              ? t('posTerminalHowToMainLocked') ||
+                '카운터(메인) 포스: POS 설정 → 단말 → 접속 기기 목록에서 카운터 PC를 「메인으로 지정」하세요. POS 화면에서는 메인/주문을 바꿀 수 없습니다.'
+              : t('posTerminalHowToMainMulti') ||
+                '카운터(메인) 포스: /pos/terminal 에서 상단 "메인"을 켭니다. 카운터를 여러 대 쓰면 각 PC에서 같은 방식으로 등록합니다. 등록된 모든 메인에서 주문 알림·자동 인쇄가 실행됩니다.'}
           </li>
           <li>
-            {t('posTerminalHowToOthersMulti') ||
-              '주문 전용 단말: 메인을 끈 상태로 터미널을 쓰면 됩니다. 특정 카운터만 빼려면 기기 목록에서 "메인 해제"를 누르세요. 전부 해제하려면 "전체 메인 해제"를 사용하세요.'}
+            {mainDeviceRoleLocked
+              ? t('posTerminalHowToOthersLocked') ||
+                '주문 전용 단말: 메인으로 지정하지 않은 기기는 자동으로 주문 단말입니다. 메인을 바꾸려면 기기 목록에서 해제·재지정하세요.'
+              : t('posTerminalHowToOthersMulti') ||
+                '주문 전용 단말: 메인을 끈 상태로 터미널을 쓰면 됩니다. 특정 카운터만 빼려면 기기 목록에서 "메인 해제"를 누르세요. 전부 해제하려면 "전체 메인 해제"를 사용하세요.'}
           </li>
         </ul>
       </div>

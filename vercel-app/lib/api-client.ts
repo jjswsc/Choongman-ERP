@@ -9358,6 +9358,12 @@ export interface PosPrinterSettings {
    */
   mainDeviceToken?: string | null
   mainDeviceTokens?: string[]
+  /** 매장당 메인 POS 최대 대수 (본사 설정) */
+  mainDeviceMaxCount?: number
+  /** 매장당 주문 단말 최대 대수 (본사 설정) */
+  orderDeviceMaxCount?: number
+  /** true면 POS에서 메인/주문 토글 불가 */
+  mainDeviceRoleLocked?: boolean
   dualMonitorEnabled?: boolean
   customerDisplayAutoOpen?: boolean
   customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
@@ -9749,7 +9755,27 @@ export async function setPosMainDevice(params: { storeCode: string; deviceToken:
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; code?: string }>
+}
+
+export async function savePosDeviceRoleLimits(params: {
+  storeCode: string
+  mainDeviceMaxCount: number
+  orderDeviceMaxCount: number
+  mainDeviceRoleLocked: boolean
+}) {
+  const res = await apiFetch('/api/savePosDeviceRoleLimits', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    mainDeviceMaxCount?: number
+    orderDeviceMaxCount?: number
+    mainDeviceRoleLocked?: boolean
+  }>
 }
 
 export async function savePosTableLayout(params: {

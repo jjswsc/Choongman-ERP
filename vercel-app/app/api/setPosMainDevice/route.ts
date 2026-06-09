@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
+import { assertCanAssignMain } from '@/lib/pos-device-role-limits-server'
 
 /** 관리자: 해당 기기를 해당 매장 메인 포스로 지정 */
 export async function POST(req: NextRequest) {
@@ -27,6 +28,14 @@ export async function POST(req: NextRequest) {
     if (!exists) {
       return NextResponse.json(
         { success: false, message: '해당 매장 POS 설정이 없습니다.' },
+        { headers }
+      )
+    }
+
+    const limitCheck = await assertCanAssignMain(storeCode, deviceToken)
+    if (!limitCheck.ok) {
+      return NextResponse.json(
+        { success: false, message: limitCheck.message, code: limitCheck.code },
         { headers }
       )
     }

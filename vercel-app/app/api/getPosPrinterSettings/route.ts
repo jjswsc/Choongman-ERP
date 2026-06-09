@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { normalizeKitchenOptionGroupKey } from '@/lib/pos-kitchen-slip-option-group-choices'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
+import { parsePosDeviceRoleLimitsRow } from '@/lib/pos-device-role-limits'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
 import { requireAuth } from '@/lib/verify-auth'
 import { isOfficeRole } from '@/lib/permissions'
@@ -179,6 +180,9 @@ export async function GET(request: NextRequest) {
     kitchenSlipPrintLang: '' as string,
     mainDeviceToken: null as string | null,
     mainDeviceTokens: [] as string[],
+    mainDeviceMaxCount: 1,
+    orderDeviceMaxCount: 8,
+    mainDeviceRoleLocked: false,
     kitchenRouteByMenu: {} as Record<string, 0 | 1 | 2 | 3>,
     kitchenRouteByCategory: {} as Record<string, 0 | 1 | 2 | 3>,
     kitchenRouteByCategoryMain: {} as Record<string, 0 | 1 | 2 | 3>,
@@ -286,6 +290,9 @@ export async function GET(request: NextRequest) {
       other_rate?: number
       other_mode?: string
       main_device_token?: string | null
+      main_device_max_count?: unknown
+      order_device_max_count?: unknown
+      main_device_role_locked?: unknown
       kitchen3_categories?: unknown
       kitchen_route_by_menu?: unknown
       kitchen_route_by_category?: unknown
@@ -330,6 +337,7 @@ export async function GET(request: NextRequest) {
     const mainDeviceTokens =
       fromConnected.length > 0 ? fromConnected : legacy ? [legacy] : []
     const mainDeviceTokenResolved = mainDeviceTokens[0] ?? null
+    const deviceRoleLimits = parsePosDeviceRoleLimitsRow(raw)
 
     return NextResponse.json({
       storeCode,
@@ -458,6 +466,9 @@ export async function GET(request: NextRequest) {
       otherMode: String(raw?.other_mode || 'separate') === 'included' ? 'included' : 'separate',
       mainDeviceTokens,
       mainDeviceToken: mainDeviceTokenResolved,
+      mainDeviceMaxCount: deviceRoleLimits.mainDeviceMaxCount,
+      orderDeviceMaxCount: deviceRoleLimits.orderDeviceMaxCount,
+      mainDeviceRoleLocked: deviceRoleLimits.mainDeviceRoleLocked,
       kitchenRouteByMenu: parseKitchenRouteMapDb(raw?.kitchen_route_by_menu),
       kitchenRouteByCategory: alignKitchenCategoryRouteKeyMap(
         parseKitchenRouteMapDb(raw?.kitchen_route_by_category)

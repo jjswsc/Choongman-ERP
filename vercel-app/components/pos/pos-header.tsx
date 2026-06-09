@@ -49,6 +49,8 @@ interface PosHeaderProps {
   /** 메인 포스 모드 (프린터 연결, 태블릿 주문 수신 인쇄) */
   isMainPosDevice?: boolean
   onMainPosDeviceChange?: (value: boolean) => void
+  /** true면 POS에서 메인/주문 토글 숨김(관리자 지정만) */
+  mainDeviceRoleLocked?: boolean
 }
 
 export function POSHeader({
@@ -72,6 +74,7 @@ export function POSHeader({
   dataTour,
   isMainPosDevice,
   onMainPosDeviceChange,
+  mainDeviceRoleLocked = false,
 }: PosHeaderProps) {
   const router = useRouter()
   const { lang, setLang } = useLang()
@@ -190,22 +193,60 @@ export function POSHeader({
           </div>
         )}
 
-        {typeof isMainPosDevice === "boolean" && onMainPosDeviceChange && (
-          <Button
-            type="button"
-            variant={isMainPosDevice ? "default" : "outline"}
-            size="sm"
-            className="h-8 shrink-0 gap-1 sm:gap-1.5"
-            data-tour={dataTour ? 'pos-tour-main-device-toggle' : undefined}
-            onClick={() => onMainPosDeviceChange(!isMainPosDevice)}
-            title={isMainPosDevice ? (t('posMainDeviceOn') || '메인 포스 (프린터 연결)') : (t('posMainDeviceOff') || '주문 단말')}
-          >
-            {isMainPosDevice ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-            <span className="hidden text-xs sm:inline">
-              {isMainPosDevice ? (t('posMainDevice') || '메인') : (t('posOrderTerminal') || '주문')}
+        {typeof isMainPosDevice === 'boolean' &&
+          (mainDeviceRoleLocked ? (
+            <span
+              className={cn(
+                'inline-flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs sm:gap-1.5 sm:px-3',
+                isMainPosDevice
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border bg-muted/40 text-muted-foreground'
+              )}
+              title={
+                isMainPosDevice
+                  ? t('posMainDeviceOn') || '메인 포스 (프린터 연결)'
+                  : t('posOrderTerminal') || '주문 단말'
+              }
+            >
+              {isMainPosDevice ? (
+                <Monitor className="h-3.5 w-3.5" />
+              ) : (
+                <Smartphone className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {isMainPosDevice
+                  ? t('posMainDevice') || '메인'
+                  : t('posOrderTerminal') || '주문'}
+              </span>
             </span>
-          </Button>
-        )}
+          ) : (
+            onMainPosDeviceChange && (
+              <Button
+                type="button"
+                variant={isMainPosDevice ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 shrink-0 gap-1 sm:gap-1.5"
+                data-tour={dataTour ? 'pos-tour-main-device-toggle' : undefined}
+                onClick={() => onMainPosDeviceChange(!isMainPosDevice)}
+                title={
+                  isMainPosDevice
+                    ? t('posMainDeviceOn') || '메인 포스 (프린터 연결)'
+                    : t('posMainDeviceOff') || '주문 단말'
+                }
+              >
+                {isMainPosDevice ? (
+                  <Monitor className="h-3.5 w-3.5" />
+                ) : (
+                  <Smartphone className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden text-xs sm:inline">
+                  {isMainPosDevice
+                    ? t('posMainDevice') || '메인'
+                    : t('posOrderTerminal') || '주문'}
+                </span>
+              </Button>
+            )
+          ))}
 
         {/* 매장 선택기가 없을 때(단일 매장 등)에도 테이블·주문 데이터 새로고침 가능 */}
         {!showStoreSelect && (

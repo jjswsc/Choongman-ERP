@@ -3,9 +3,16 @@
 import * as React from 'react'
 import { getPosPrinterSettings, registerPosMainDevice, clearPosMainDevice, registerPosDevice } from '@/lib/api-client'
 import { buildPosClientHint } from '@/lib/pos-device-client-hint'
+import { DEFAULT_POS_DEVICE_ROLE_LIMITS } from '@/lib/pos-device-role-limits'
 
 const STORAGE_KEY = 'pos_main_device'
 const DEVICE_TOKEN_KEY = 'pos_device_token'
+
+export type PosMainDeviceMeta = {
+  roleLocked: boolean
+  mainDeviceMaxCount: number
+  orderDeviceMaxCount: number
+}
 
 /** localStorage 미설정: 서버 목록과 병합. '0'/'false': 사용자가 주문 단말로 명시 → 서버에 토큰이 남아 있어도 메인 UI로 두지 않음 */
 function getLocalMainExplicit(): 'main' | 'order' | 'unset' {
@@ -39,12 +46,21 @@ function getOrCreateDeviceToken(): string {
   }
 }
 
-export function usePosMainDevice(storeCode: string | null): [boolean, (value: boolean) => void] {
+export function usePosMainDevice(
+  storeCode: string | null
+): [boolean, (value: boolean) => void, PosMainDeviceMeta] {
   const [localIsMain, setLocalIsMain] = React.useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     return getLocalMainExplicit() === 'main'
   })
   const [serverMainTokens, setServerMainTokens] = React.useState<string[]>([])
+  const [roleLocked, setRoleLocked] = React.useState(DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceRoleLocked)
+  const [mainDeviceMaxCount, setMainDeviceMaxCount] = React.useState(
+    DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceMaxCount
+  )
+  const [orderDeviceMaxCount, setOrderDeviceMaxCount] = React.useState(
+    DEFAULT_POS_DEVICE_ROLE_LIMITS.orderDeviceMaxCount
+  )
   const [deviceToken] = React.useState(() => getOrCreateDeviceToken())
   /** 늦게 도착한 getPosPrinterSettings / 사용자 토글이 겹치면 낙관적 상태를 덮어쓰지 않도록 함 */
   const settingsFetchSeqRef = React.useRef(0)
@@ -67,6 +83,26 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
           : []
         const merged = list.length > 0 ? list : legacy
         setServerMainTokens(sanitizeMainTokensForExplicitOrder(merged, deviceToken))
+        const locked = s?.mainDeviceRoleLocked === true
+        setRoleLocked(locked)
+        if (locked) {
+          try {
+            localStorage.removeItem(STORAGE_KEY)
+          } catch {
+            /* ignore */
+          }
+          setLocalIsMain(false)
+        }
+        setMainDeviceMaxCount(
+          typeof s?.mainDeviceMaxCount === 'number' && s.mainDeviceMaxCount > 0
+            ? s.mainDeviceMaxCount
+            : DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceMaxCount
+        )
+        setOrderDeviceMaxCount(
+          typeof s?.orderDeviceMaxCount === 'number' && s.orderDeviceMaxCount > 0
+            ? s.orderDeviceMaxCount
+            : DEFAULT_POS_DEVICE_ROLE_LIMITS.orderDeviceMaxCount
+        )
       })
       .catch(() => {
         if (!cancelled && seq === settingsFetchSeqRef.current) setServerMainTokens([])
@@ -77,18 +113,20 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
   }, [storeCode, deviceToken])
 
   /**
-   * 명시적 주문 단말('0')이면 서버 목록에 토큰이 남아 있어도 메인으로 보이지 않음(늦게 도착한 getPosPrinterSettings 대응).
-   * 미설정(unset)이면 서버에 본인 토큰이 있으면 메인으로 표시.
+   * 잠금 ON: 서버에 지정된 메인 토큰만 메인.
+   * 잠금 OFF: 기존 localStorage + 서버 병합.
    */
   const isMain = React.useMemo(() => {
+    if (roleLocked) return serverMainTokens.includes(deviceToken)
     const mode = getLocalMainExplicit()
     if (mode === 'order') return false
     if (mode === 'main') return true
     return serverMainTokens.includes(deviceToken)
-  }, [serverMainTokens, deviceToken, localIsMain])
+  }, [serverMainTokens, deviceToken, localIsMain, roleLocked])
 
   const setValue = React.useCallback(
     (value: boolean) => {
+      if (roleLocked) return
       const applyLocal = (v: boolean) => {
         setLocalIsMain(v)
         try {
@@ -167,10 +205,10 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
           })
       }
     },
-    [storeCode, deviceToken]
+    [storeCode, deviceToken, roleLocked]
   )
 
-  // 접속 기기 목록에 등록·하트비트 (last_seen_at 갱신)
+  // 접속 기기 목록에 등록·하트비트 (last_seen_at 갱신). 잠금 ON이면 서버가 DB 역할을 고정함.
   React.useEffect(() => {
     if (!storeCode || !deviceToken) return
     const ping = () =>
@@ -185,5 +223,10 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
     return () => clearInterval(interval)
   }, [storeCode, deviceToken, isMain])
 
-  return [isMain, setValue]
+  const meta = React.useMemo(
+    () => ({ roleLocked, mainDeviceMaxCount, orderDeviceMaxCount }),
+    [roleLocked, mainDeviceMaxCount, orderDeviceMaxCount]
+  )
+
+  return [isMain, setValue, meta]
 }

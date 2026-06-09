@@ -2412,7 +2412,7 @@ export default function PosTerminalPage() {
       (activeTab === 'tables' && Boolean(servingTable?.order))
     )
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
-  const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
+  const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
   const posSessionStartedAtRef = useRef<number>(Date.now())
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
@@ -10302,6 +10302,7 @@ export default function PosTerminalPage() {
           setTourMainDeviceTouched(true)
           setIsMainPosDevice(v)
         }}
+        mainDeviceRoleLocked={mainDeviceMeta.roleLocked}
       />
       <OfflineBanner onSyncComplete={refetchCurrentStore} queueScope="pos_runtime_critical" />
       <div

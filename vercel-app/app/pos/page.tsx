@@ -188,7 +188,7 @@ function POSMainPageInner() {
     const found = list.find((s) => s === a || resolveStoreKey(s) === resolveStoreKey(a))
     return found || list[0] || a || ''
   }, [selectableStoreCodes, auth?.store, posStores, resolveStoreKey])
-  const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
+  const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(storeCode || null)
 
   useEffect(() => {
     const preferred = preferredStoreFromQuery
@@ -557,6 +557,7 @@ function POSMainPageInner() {
           totalAmount={totalAmount}
           isMainPosDevice={isMainPosDevice}
           onMainPosDeviceChange={setIsMainPosDevice}
+          mainDeviceRoleLocked={mainDeviceMeta.roleLocked}
         />
 
         <POSMainGrid tiles={visibleTiles} onTileClick={handleTileClick} isKorean={lang === 'ko'} />
