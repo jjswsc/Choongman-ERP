@@ -720,6 +720,8 @@ export async function submitAttendance(params: {
   employeeId?: number
   /** 선택; 서버는 employees에서 코드를 다시 확인해 스냅샷 저장 */
   employeeCode?: string
+  /** phase 2: 키오스크 QR payload — 오피스 파일럿 시 GPS 대신 사용 */
+  attendanceQrToken?: string
 }) {
   const res = await apiFetchWithOffline('/api/submitAttendance', {
     method: 'POST',

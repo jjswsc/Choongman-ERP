@@ -196,7 +196,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
 
-  const { stores: storeListFromHook } = useStoreList()
+  const { posStores: storeListFromHook } = useStoreList()
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0 && storeListFromHook.length > 0) {
       setStoreFilter(auth.store)

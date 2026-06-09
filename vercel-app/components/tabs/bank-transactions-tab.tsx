@@ -220,7 +220,7 @@ export function BankTransactionsTab() {
     return v
   }, [t])
   const asDisplayName = (a: AccountSubjectItem) => (lang === 'ko' ? a.name : (a.nameEn || a.name))
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
   const [accounts, setAccounts] = React.useState<{

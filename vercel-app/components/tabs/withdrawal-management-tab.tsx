@@ -166,7 +166,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     return v
   }, [t])
   const { auth } = useAuth()
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
 
   const [paymentMethod, setPaymentMethod] = React.useState<"bank" | "petty" | "card">("bank")
   const [transferToCardAccountId, setTransferToCardAccountId] = React.useState<string>("")

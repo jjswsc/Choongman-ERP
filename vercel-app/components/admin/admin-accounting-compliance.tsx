@@ -758,7 +758,7 @@ export function AdminAccountingCompliance({
   const canWriteCompliance = canWriteAccountingCompliance(role)
   const canApproveCompliance = canApproveAccountingCompliance(role)
   const canApproveUnlock = canApproveAccountingPeriodUnlock(role)
-  const { stores: storeList, resolveStoreKey, storeLabels, legacyToCanonical, formatStoreLabel } = useStoreList()
+  const { stores: franchiseStoreList, posStores, resolveStoreKey, storeLabels, legacyToCanonical, formatStoreLabel } = useStoreList()
   const managerStore = (auth?.store || "").trim()
   const hqUserByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
   /** 본사·회계만 전 매장; 매장 매니저·가맹은 소속 매장만(본사 store 문자열이어도 역할이 매장이면 전체 조회 불가) */
@@ -824,10 +824,10 @@ export function AdminAccountingCompliance({
 
   const franchiseStoreCodes = React.useMemo(
     () =>
-      (storeList || [])
+      (franchiseStoreList || [])
         .map((s) => String(s).trim())
         .filter((s) => s && s !== "All" && !isHeadOfficeLikeStoreName(s) && !isOfficeStore(s)),
-    [storeList]
+    [franchiseStoreList]
   )
 
   const needsTaxLinkMeta = tab === "summary" || tab === "cit"
@@ -1170,10 +1170,10 @@ export function AdminAccountingCompliance({
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager ? scopedStoreChoices : []
     const uniq = Array.from(
-      new Set((storeList || []).map((s) => String(s).trim()).filter(Boolean))
+      new Set((posStores || []).map((s) => String(s).trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
     return ["All", ...uniq]
-  }, [isOffice, isManager, scopedStoreChoices, storeList])
+  }, [isOffice, isManager, scopedStoreChoices, posStores])
 
   React.useEffect(() => {
     if (externalFiling) return

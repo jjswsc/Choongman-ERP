@@ -207,9 +207,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     return ["director", "secretary", "officer", "ceo", "hr"].includes(r)
   }, [auth?.role])
 
-  const { stores: storeList, users: usersMap, staffByStore } = useStoreList()
+  /** CM Office 등 본사 매장 포함 — `stores`(매출 집계용)와 분리 */
+  const { posStores, users: usersMap, staffByStore } = useStoreList()
   React.useEffect(() => {
-    const st = (storeList || []).filter((s) => s && String(s).trim())
+    const st = (posStores || []).filter((s) => s && String(s).trim())
     setStores(isOffice ? ["All", ...st.filter((s) => s !== "All")] : ["All", auth?.store || ""].filter(Boolean))
     if (!isOffice && auth?.store) {
       setStoreFilter(auth.store)
@@ -220,7 +221,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       setTodayStore(firstStore)
       setScheduleStore(firstStore)
     }
-  }, [auth?.store, isOffice, storeList])
+  }, [auth?.store, isOffice, posStores])
 
   React.useEffect(() => {
     if (storeFilter === "All" || !storeFilter) {

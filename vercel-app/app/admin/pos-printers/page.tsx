@@ -4,7 +4,8 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy, Monitor, Search } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -84,7 +85,6 @@ import {
   RECEIPT_TRAILING_BOTTOM_MM,
 } from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
-import { PosDualMonitorSettingsContent } from "@/components/pos/pos-dual-monitor-settings-content"
 import { PosScreenConfigStoreSelect } from "@/components/pos/pos-screen-config-store-select"
 import {
   printPosHtmlDocument,
@@ -322,6 +322,8 @@ function KitchenRouteSelectRow({
 }
 
 export default function PosPrintersPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -387,7 +389,6 @@ export default function PosPrintersPage() {
   const [copyTabReceiptDesign, setCopyTabReceiptDesign] = React.useState(true)
   const [copyTabBusiness, setCopyTabBusiness] = React.useState(true)
   const [copyTabDrawer, setCopyTabDrawer] = React.useState(true)
-  const [copyTabDualMonitor, setCopyTabDualMonitor] = React.useState(true)
   const [copySaveImmediately, setCopySaveImmediately] = React.useState(false)
   const [copyWorking, setCopyWorking] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
@@ -403,6 +404,12 @@ export default function PosPrintersPage() {
   const [previewKind, setPreviewKind] = React.useState<PreviewKind>("receipt")
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState("printer")
+
+  React.useEffect(() => {
+    if (searchParams.get("tab") === "dual-monitor") {
+      router.replace("/admin/pos-screen-config?tab=dual-monitor")
+    }
+  }, [router, searchParams])
 
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
   const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(true)
@@ -1016,7 +1023,6 @@ export default function PosPrintersPage() {
     setCopyTabReceiptDesign(true)
     setCopyTabBusiness(true)
     setCopyTabDrawer(true)
-    setCopyTabDualMonitor(true)
     setCopySaveImmediately(false)
     setCopyDialogOpen(true)
   }
@@ -1035,7 +1041,7 @@ export default function PosPrintersPage() {
       await appAlert(t("posPrinterCopySameStore") || "같은 매장은 선택할 수 없습니다.")
       return
     }
-    if (!copyTabPrinter && !copyTabReceipt && !copyTabReceiptDesign && !copyTabBusiness && !copyTabDrawer && !copyTabDualMonitor) {
+    if (!copyTabPrinter && !copyTabReceipt && !copyTabReceiptDesign && !copyTabBusiness && !copyTabDrawer) {
       await appAlert(tr("posPrinterCopyPickAtLeastOneTab", "복사할 탭을 하나 이상 선택하세요."))
       return
     }
@@ -1128,24 +1134,6 @@ export default function PosPrintersPage() {
       }
       if (copyTabDrawer) {
         copyKeys(["drawerOpenOption", "linkposSkipTerminalForCard"])
-      }
-      if (copyTabDualMonitor) {
-        copyKeys([
-          "dualMonitorEnabled",
-          "customerDisplayAutoOpen",
-          "customerDisplayMonitorPreference",
-          "customerDisplayLangMode",
-          "customerDisplayLangOverride",
-          "customerDisplayTheme",
-          "customerDisplayDefaultState",
-          "customerDisplayIdleMessage",
-          "customerDisplayIdleMediaType",
-          "customerDisplayIdleMediaUrl",
-          "customerDisplayPaymentMessage",
-          "customerDisplayQrPayload",
-          "customerDisplayShowOrderSummary",
-          "customerDisplayShowOrderTotal",
-        ])
       }
       applyFromPosSettings(merged)
       if (copySaveImmediately) {
@@ -1701,10 +1689,6 @@ export default function PosPrintersPage() {
                   <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
                     <Wallet className={adminTabsIconCn} aria-hidden />
                     {tr("posDrawerTab", "돈통")}
-                  </TabsTrigger>
-                  <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
-                    <Monitor className={adminTabsIconCn} aria-hidden />
-                    {tr("posDualMonitorTab", "듀얼 모니터")}
                   </TabsTrigger>
                 </TabsList>
           </AdminTabsBarWithHelp>
@@ -2373,13 +2357,6 @@ export default function PosPrintersPage() {
                 </div>
               </div>
             </TabsContent>
-
-            <TabsContent value="dual-monitor" className={cn(adminTabsContentCn, "space-y-4")}>
-              <p className="text-sm text-muted-foreground">
-                {tr("posDualMonitorDeviceTabDesc", "Windows POS 듀얼 모니터 감지/자동 배치 및 고객창 제어를 설정합니다.")}
-              </p>
-              <PosDualMonitorSettingsContent storeCode={effectiveStore} />
-            </TabsContent>
           </Tabs>
             <div className="border-t border-border px-4 py-4 sm:px-6">
               <Button
@@ -2447,10 +2424,12 @@ export default function PosPrintersPage() {
                 <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabDrawer} onChange={(e) => setCopyTabDrawer(e.target.checked)} />
                 <span>{tr("posDrawerTab", "돈통")}</span>
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabDualMonitor} onChange={(e) => setCopyTabDualMonitor(e.target.checked)} />
-                <span>{tr("posDualMonitorTab", "듀얼 모니터")}</span>
-              </label>
+              <p className="text-[11px] text-muted-foreground">
+                {tr(
+                  "posPrinterCopyDualMonitorMovedNote",
+                  "듀얼 모니터·고객 화면은 POS 설정 → 듀얼 모니터 탭에서 복사·저장하세요."
+                )}
+              </p>
               <p className="text-[11px] text-muted-foreground">
                 {tr("posPrinterCopyTabsHint", "선택한 탭만 현재 매장 설정에 덮어씁니다. 선택하지 않은 탭은 유지됩니다.")}
               </p>

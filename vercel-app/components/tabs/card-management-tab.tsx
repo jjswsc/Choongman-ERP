@@ -44,7 +44,7 @@ export function CardManagementTab() {
     if (!v || v === key) return fallback
     return v
   }, [t])
-  const { stores: rawStores, loading: storesLoading } = useStoreList()
+  const { posStores: rawStores, loading: storesLoading } = useStoreList()
   const stores = React.useMemo(
     () =>
       [...(rawStores || [])]

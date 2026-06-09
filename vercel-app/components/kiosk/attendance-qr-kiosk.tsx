@@ -11,7 +11,7 @@ import {
   getAttendanceQrDisplay,
   registerAttendanceQrDevice,
 } from "@/lib/api-client"
-import { canRegisterAttendanceQrDevice, isOfficeRole } from "@/lib/permissions"
+import { canRegisterAttendanceQrDevice, canPickAttendanceQrStoreFilter } from "@/lib/permissions"
 import {
   buildAttendanceQrClientHint,
   getOrCreateAttendanceQrDeviceToken,
@@ -30,7 +30,6 @@ import {
 } from "@/components/ui/select"
 import { appAlert } from "@/lib/app-message"
 import { localizeApiMessage } from "@/lib/translate-api-message"
-import { formatPosDateTimeShort } from "@/lib/pos-datetime-locale"
 import Link from "next/link"
 
 type KioskMode = "loading" | "register" | "display"
@@ -38,7 +37,9 @@ type KioskMode = "loading" | "register" | "display"
 export function AttendanceQrKiosk() {
   const { auth, initialized } = useAuth()
   const { lang } = useLang()
-  const t = useT(lang)
+  /** 미로그인 키오스크(태국 현장) — 등록·안내 화면은 영어 고정, 로그인 후에는 사용자 언어 */
+  const kioskLang = auth?.user ? lang : "en"
+  const t = useT(kioskLang)
   const { posStores, formatStoreLabel } = useStoreList()
 
   const [mode, setMode] = React.useState<KioskMode>("loading")
@@ -47,12 +48,11 @@ export function AttendanceQrKiosk() {
   const [displayLabel, setDisplayLabel] = React.useState("")
   const [registering, setRegistering] = React.useState(false)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
-  const [expiresAt, setExpiresAt] = React.useState("")
   const [statusLine, setStatusLine] = React.useState("")
   const [registeredLabel, setRegisteredLabel] = React.useState<string | null>(null)
 
   const canRegister = canRegisterAttendanceQrDevice(auth?.role || "")
-  const canPickStore = isOfficeRole(auth?.role || "")
+  const canPickStore = canPickAttendanceQrStoreFilter(auth?.role || "", auth?.store || "")
 
   React.useEffect(() => {
     if (!initialized) return
@@ -71,7 +71,7 @@ export function AttendanceQrKiosk() {
     const res = await getAttendanceQrDisplay({ storeCode: store, deviceToken: token })
     if (!res.success || !res.qrPayload) {
       setStatusLine(
-        localizeApiMessage(res.message, t, t("attendanceQrDisplayFail"), lang)
+        localizeApiMessage(res.message, t, t("attendanceQrDisplayFail"), kioskLang)
       )
       return false
     }
@@ -81,11 +81,10 @@ export function AttendanceQrKiosk() {
       errorCorrectionLevel: "M",
     })
     setQrDataUrl(url)
-    setExpiresAt(res.expiresAt || "")
     setRegisteredLabel(res.displayLabel ?? null)
     setStatusLine("")
     return true
-  }, [deviceToken, storeCode, t, lang])
+  }, [deviceToken, storeCode, t, kioskLang])
 
   React.useEffect(() => {
     if (!initialized || !deviceToken) return
@@ -139,7 +138,7 @@ export function AttendanceQrKiosk() {
     if (!canRegister) {
       await appAlert(
         t("attendanceQrRegisterLoginHint") ||
-          "매니저 또는 본사(Office) 직원이 로그인한 뒤 등록해 주세요."
+          "Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."
       )
       return
     }
@@ -153,7 +152,7 @@ export function AttendanceQrKiosk() {
       })
       if (!res.success) {
         await appAlert(
-          localizeApiMessage(res.message, t, t("attendanceQrRegisterFail"), lang)
+          localizeApiMessage(res.message, t, t("attendanceQrRegisterFail"), kioskLang)
         )
         return
       }
@@ -236,7 +235,7 @@ export function AttendanceQrKiosk() {
             <div className="space-y-3 text-sm text-amber-200">
               <p>
                 {t("attendanceQrRegisterLoginHint") ||
-                  "매니저 또는 본사(Office) 직원이 로그인한 뒤 등록해 주세요."}
+                  "Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."}
               </p>
               <Button asChild variant="secondary" className="w-full">
                 <Link href="/pos/login">{t("qrFooterPosLogin") || "POS 로그인"}</Link>
@@ -261,7 +260,6 @@ export function AttendanceQrKiosk() {
       </div>
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         {qrDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={qrDataUrl} alt="Attendance QR" className="h-[min(72vw,480px)] w-[min(72vw,480px)]" />
         ) : (
           <div className="flex h-[min(72vw,480px)] w-[min(72vw,480px)] items-center justify-center text-sm text-slate-500">
@@ -269,15 +267,10 @@ export function AttendanceQrKiosk() {
           </div>
         )}
       </div>
-      <p className="mt-4 text-center text-xs text-slate-500">
-        {expiresAt
-          ? `${t("attendanceQrValidUntil") || "유효 until"} ${formatPosDateTimeShort(new Date(expiresAt), lang)}`
-          : ""}
-      </p>
-      {statusLine ? <p className="mt-2 text-center text-sm text-red-600">{statusLine}</p> : null}
+      {statusLine ? <p className="mt-4 text-center text-sm text-red-600">{statusLine}</p> : null}
       <p className="mt-6 max-w-sm text-center text-xs text-slate-400">
         {t("attendanceQrKioskFootnote") ||
-          "2시간마다 자동 갱신됩니다. 이 화면을 매장에 고정해 두세요."}
+          "QR 코드는 랜덤하게 변경됩니다. 이 화면을 매장에 고정해 두세요."}
       </p>
     </div>
   )

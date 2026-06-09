@@ -196,7 +196,7 @@ export function AdminPayrollCalc() {
   const [explainStore, setExplainStore] = useState("")
   const [explainEmployee, setExplainEmployee] = useState("")
 
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     setStores(["All", ...storeList.filter((s) => s !== "All")])

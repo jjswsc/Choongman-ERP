@@ -121,7 +121,7 @@ export function ReceivablePayableTab() {
     return v
   }, [t])
   const { auth } = useAuth()
-  const { stores: storeList, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const { posStores: storeList, formatStoreLabel, resolveStoreKey } = useStoreList()
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
 
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")

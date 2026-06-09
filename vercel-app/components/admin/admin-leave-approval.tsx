@@ -65,7 +65,7 @@ export function AdminLeaveApproval() {
   const [rejectReason, setRejectReason] = useState("")
   const [leaveNameFilter, setLeaveNameFilter] = useState("")
 
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'secretary' || auth.role === 'officer'

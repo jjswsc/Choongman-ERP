@@ -47,7 +47,23 @@ function ToggleRow({
   )
 }
 
-export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string | null | undefined }) {
+export type PosDualMonitorSettingsSaveOptions = {
+  skipSuccessAlert?: boolean
+}
+
+export type PosDualMonitorSettingsContentHandle = {
+  save: (options?: PosDualMonitorSettingsSaveOptions) => Promise<boolean>
+  reload: () => Promise<void>
+}
+
+export const PosDualMonitorSettingsContent = React.forwardRef<
+  PosDualMonitorSettingsContentHandle,
+  {
+    storeCode: string | null | undefined
+    toolbarMode?: "default" | "embedded"
+    onLoadingChange?: (loading: boolean) => void
+  }
+>(function PosDualMonitorSettingsContent({ storeCode, toolbarMode = "default", onLoadingChange }, ref) {
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => {
@@ -56,6 +72,7 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
   }, [t])
   const yesLabel = tr("yes", "예")
   const noLabel = tr("no", "아니오")
+  const embedded = toolbarMode === "embedded"
 
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -69,6 +86,7 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
     const sc = String(storeCode || "").trim()
     if (!sc) return
     setLoading(true)
+    onLoadingChange?.(true)
     try {
       const s = await getPosPrinterSettings({ storeCode: sc })
       setEnabled(Boolean(s.dualMonitorEnabled))
@@ -84,52 +102,74 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
       setDisplayLangOverride(normalizedDisplayLangOverride)
     } finally {
       setLoading(false)
+      onLoadingChange?.(false)
     }
-  }, [lang, storeCode])
+  }, [lang, onLoadingChange, storeCode])
 
   React.useEffect(() => {
     void load()
   }, [load])
 
-  const handleSave = React.useCallback(async () => {
-    const sc = String(storeCode || "").trim()
-    if (!sc) {
-      await appAlert(tr("store", "매장") + " " + tr("required", "필수"))
-      return
-    }
-    setSaving(true)
-    try {
-      const latest = await getPosPrinterSettings({ storeCode: sc })
-      const merged: PosPrinterSettings = {
-        ...latest,
-        storeCode: sc,
-        dualMonitorEnabled: enabled,
-        customerDisplayAutoOpen: autoOpen,
-        customerDisplayMonitorPreference: monitorPreference,
-        customerDisplayLangMode: displayLangMode,
-        customerDisplayLangOverride: displayLangMode === "custom" ? displayLangOverride : "",
+  const handleSave = React.useCallback(
+    async (options?: PosDualMonitorSettingsSaveOptions): Promise<boolean> => {
+      const sc = String(storeCode || "").trim()
+      if (!sc) {
+        await appAlert(tr("store", "매장") + " " + tr("required", "필수"))
+        return false
       }
-      const res = await savePosPrinterSettings(
-        posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
-      )
-      if (!res.success) {
-        await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
-        return
+      setSaving(true)
+      try {
+        const latest = await getPosPrinterSettings({ storeCode: sc })
+        const merged: PosPrinterSettings = {
+          ...latest,
+          storeCode: sc,
+          dualMonitorEnabled: enabled,
+          customerDisplayAutoOpen: autoOpen,
+          customerDisplayMonitorPreference: monitorPreference,
+          customerDisplayLangMode: displayLangMode,
+          customerDisplayLangOverride: displayLangMode === "custom" ? displayLangOverride : "",
+        }
+        const res = await savePosPrinterSettings(
+          posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
+        )
+        if (!res.success) {
+          await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
+          return false
+        }
+        const shell = window.cmPosShell
+        if (typeof shell?.configureCustomerDisplay === "function") {
+          await shell.configureCustomerDisplay({
+            enabled,
+            autoOpen,
+            monitorPreference,
+          })
+        }
+        if (!options?.skipSuccessAlert) {
+          await appAlert(tr("itemsAlertSaved", "저장되었습니다."))
+        }
+        void load()
+        return true
+      } catch (e) {
+        await appAlert(
+          tr("msg_save_fail_detail", "저장에 실패했습니다.") +
+            (e instanceof Error ? `: ${e.message}` : "")
+        )
+        return false
+      } finally {
+        setSaving(false)
       }
-      const shell = window.cmPosShell
-      if (typeof shell?.configureCustomerDisplay === "function") {
-        await shell.configureCustomerDisplay({
-          enabled,
-          autoOpen,
-          monitorPreference,
-        })
-      }
-      await appAlert(tr("itemsAlertSaved", "저장되었습니다."))
-      void load()
-    } finally {
-      setSaving(false)
-    }
-  }, [autoOpen, displayLangMode, displayLangOverride, enabled, load, monitorPreference, storeCode, tr])
+    },
+    [autoOpen, displayLangMode, displayLangOverride, enabled, lang, load, monitorPreference, storeCode, t, tr]
+  )
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      save: (options) => handleSave(options),
+      reload: () => load(),
+    }),
+    [handleSave, load]
+  )
 
   const openNow = React.useCallback(async () => {
     const shell = window.cmPosShell
@@ -169,20 +209,33 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
-          <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          {tr("posRefresh", "새로고침")}
-        </Button>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void openNow()}>
-          <MonitorPlay className="h-4 w-4" />
-          {tr("posDualMonitorOpenNow", "고객 화면 열기")}
-        </Button>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void closeNow()}>
-          <MonitorX className="h-4 w-4" />
-          {tr("posDualMonitorCloseNow", "고객 화면 닫기")}
-        </Button>
-      </div>
+      {!embedded ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
+            <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            {tr("posRefresh", "새로고침")}
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void openNow()}>
+            <MonitorPlay className="h-4 w-4" />
+            {tr("posDualMonitorOpenNow", "고객 화면 열기")}
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void closeNow()}>
+            <MonitorX className="h-4 w-4" />
+            {tr("posDualMonitorCloseNow", "고객 화면 닫기")}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void openNow()}>
+            <MonitorPlay className="h-4 w-4" />
+            {tr("posDualMonitorOpenNow", "고객 화면 열기")}
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void closeNow()}>
+            <MonitorX className="h-4 w-4" />
+            {tr("posDualMonitorCloseNow", "고객 화면 닫기")}
+          </Button>
+        </div>
+      )}
       <ToggleRow
         label={tr("posDualMonitorEnabled", "듀얼 모니터 고객화면 사용")}
         value={enabled}
@@ -257,10 +310,14 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
       <p className="text-xs text-muted-foreground">
         {tr("posDualMonitorHint", "자동 감지는 Windows POS(Electron)에서만 동작합니다. 웹 브라우저 환경에서는 수동 창 열기만 가능합니다.")}
       </p>
-      <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving || loading}>
-        <Save className="mr-2 h-4 w-4" />
-        {saving ? tr("posPrinterSaving", "저장 중...") : tr("itemsBtnSave", "저장")}
-      </Button>
+      {!embedded ? (
+        <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving || loading}>
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? tr("posPrinterSaving", "저장 중...") : tr("itemsBtnSave", "저장")}
+        </Button>
+      ) : null}
     </div>
   )
-}
+})
+
+PosDualMonitorSettingsContent.displayName = "PosDualMonitorSettingsContent"

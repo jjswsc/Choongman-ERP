@@ -11,6 +11,7 @@ import {
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
   grabCampaignNeedsFixPriceRoundingMigration,
+  grabCampaignShouldRefreshUpcomingStart,
   isGrabPromoConsumerListPriceAsSaleEnabled,
   resolveGrabCampaignScheduleMs,
   resolveGrabMenuSalePriceMajor,
@@ -323,6 +324,28 @@ describe('buildPutBodyForExistingGrabCampaign', () => {
     expect(cond.startTime).toBeUndefined()
     expect(cond.endTime).toBeUndefined()
     expect((out.discount as { type?: string }).type).toBe('percentage')
+  })
+})
+
+describe('grabCampaignShouldRefreshUpcomingStart', () => {
+  it('returns true when upcoming start is still in the future', () => {
+    const nowMs = new Date('2026-06-05T10:00:00.000Z').getTime()
+    expect(
+      grabCampaignShouldRefreshUpcomingStart(
+        { conditions: { startTime: '2026-06-09T03:45:39.000Z' } },
+        'upcoming',
+        nowMs
+      )
+    ).toBe(true)
+  })
+
+  it('returns false for ongoing campaigns', () => {
+    expect(
+      grabCampaignShouldRefreshUpcomingStart(
+        { conditions: { startTime: '2026-06-09T03:45:39.000Z' } },
+        'ongoing'
+      )
+    ).toBe(false)
   })
 })
 

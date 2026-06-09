@@ -137,7 +137,7 @@ export function AdminPayrollRecords() {
   const [queried, setQueried] = useState(false)
   const [sendingNotice, setSendingNotice] = useState(false)
 
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     setStores(["All", ...storeList.filter((s) => s !== "All")])

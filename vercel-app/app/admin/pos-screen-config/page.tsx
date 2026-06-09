@@ -26,8 +26,13 @@ import {
   PosCustomerDisplayContentSettings,
   type PosCustomerDisplayContentSettingsHandle,
 } from "@/components/pos/pos-customer-display-content-settings"
+import {
+  PosDualMonitorSettingsContent,
+  type PosDualMonitorSettingsContentHandle,
+} from "@/components/pos/pos-dual-monitor-settings-content"
 import { PosScreenConfigStoreAndCopyRow } from "@/components/pos/pos-screen-config-store-and-copy-row"
 import { PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
+import { appAlert } from "@/lib/app-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -70,8 +75,10 @@ export default function PosScreenConfigPage() {
   const [menuScreenOrderType, setMenuScreenOrderType] = React.useState<"dine-in" | "delivery" | "takeout">("dine-in")
   const [menuConfigReloadNonce, setMenuConfigReloadNonce] = React.useState(0)
   const customerDisplayRef = React.useRef<PosCustomerDisplayContentSettingsHandle>(null)
+  const dualMonitorRef = React.useRef<PosDualMonitorSettingsContentHandle>(null)
   const [customerToolbarSaving, setCustomerToolbarSaving] = React.useState(false)
   const [customerDisplayLoading, setCustomerDisplayLoading] = React.useState(false)
+  const [dualMonitorLoading, setDualMonitorLoading] = React.useState(false)
   /** 듀얼 모니터 탭: 본사는 [조회] 전까지 불러오지 않음. 가맹은 자기 매장만 자동. */
   const [customerDisplayStore, setCustomerDisplayStore] = React.useState("")
   const effectiveCustomerDisplayStore = String(
@@ -293,7 +300,8 @@ export default function PosScreenConfigPage() {
             <div className="rounded-xl border bg-card p-6">
               <h3 className="mb-2 text-sm font-bold">{t("posDualMonitorTab") || "듀얼 모니터"}</h3>
               <p className="mb-4 text-sm text-muted-foreground">
-                {t("posDualMonitorTabDesc") || "고객용 화면의 평상시/주문중/결제중/QR 표시 콘텐츠를 설정합니다."}
+                {t("posDualMonitorTabDesc") ||
+                  "Windows POS 고객 모니터(ON/OFF·배치)와 평상시/주문/결제/QR 화면 콘텐츠를 설정합니다."}
               </p>
               <div className="space-y-4">
                 <PosScreenConfigStoreAndCopyRow
@@ -309,16 +317,30 @@ export default function PosScreenConfigPage() {
                   copyVariant="display"
                   tr={tr}
                   loadOnQuery
-                  onRefresh={() => void customerDisplayRef.current?.reload()}
-                  refreshLoading={customerDisplayLoading}
+                  onRefresh={() => {
+                    void dualMonitorRef.current?.reload()
+                    void customerDisplayRef.current?.reload()
+                  }}
+                  refreshLoading={customerDisplayLoading || dualMonitorLoading}
                   rightSlot={
                     <PosScreenConfigEmeraldSaveButton
-                      disabled={!effectiveCustomerDisplayStore || customerToolbarSaving}
+                      disabled={
+                        !effectiveCustomerDisplayStore ||
+                        customerToolbarSaving ||
+                        customerDisplayLoading ||
+                        dualMonitorLoading
+                      }
                       onClick={() => {
                         void (async () => {
                           setCustomerToolbarSaving(true)
                           try {
-                            await customerDisplayRef.current?.save()
+                            const deviceOk =
+                              (await dualMonitorRef.current?.save({ skipSuccessAlert: true })) === true
+                            if (!deviceOk) return
+                            const contentOk =
+                              (await customerDisplayRef.current?.save({ skipSuccessAlert: true })) === true
+                            if (!contentOk) return
+                            await appAlert(tr("itemsAlertSaved", "저장되었습니다."))
                           } finally {
                             setCustomerToolbarSaving(false)
                           }
@@ -330,12 +352,35 @@ export default function PosScreenConfigPage() {
                     </PosScreenConfigEmeraldSaveButton>
                   }
                 />
-                <PosCustomerDisplayContentSettings
-                  ref={customerDisplayRef}
-                  toolbarMode="embedded"
-                  storeCode={effectiveCustomerDisplayStore || null}
-                  onLoadingChange={setCustomerDisplayLoading}
-                />
+                <div className="space-y-3 rounded-lg border p-4">
+                  <h4 className="text-sm font-semibold">
+                    {tr("posDualMonitorDeviceSection", "기기 · Windows POS")}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    {tr(
+                      "posDualMonitorDeviceTabDesc",
+                      "Windows POS 듀얼 모니터 감지/자동 배치 및 고객창 제어를 설정합니다."
+                    )}
+                  </p>
+                  <PosDualMonitorSettingsContent
+                    ref={dualMonitorRef}
+                    toolbarMode="embedded"
+                    storeCode={effectiveCustomerDisplayStore || null}
+                    onLoadingChange={setDualMonitorLoading}
+                  />
+                </div>
+                <div className="space-y-3 rounded-lg border p-4">
+                  <h4 className="text-sm font-semibold">
+                    {tr("posDualMonitorContentSection", "고객 화면 콘텐츠")}
+                  </h4>
+                  <PosCustomerDisplayContentSettings
+                    ref={customerDisplayRef}
+                    toolbarMode="embedded"
+                    hideDeviceFields
+                    storeCode={effectiveCustomerDisplayStore || null}
+                    onLoadingChange={setCustomerDisplayLoading}
+                  />
+                </div>
               </div>
             </div>
           </TabsContent>

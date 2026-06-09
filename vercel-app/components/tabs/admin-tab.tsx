@@ -168,7 +168,7 @@ export function AdminTab() {
   const [, setOtMinutesByRow] = useState<Record<number | string, string>>({})
   const [adjustSavedKeys, setAdjustSavedKeys] = useState<Set<string>>(() => new Set())
 
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
   const isOffice = auth?.role && ["director", "secretary", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
 
   useEffect(() => {

@@ -54,8 +54,12 @@ function ToggleRow({
   )
 }
 
+export type PosCustomerDisplayContentSaveOptions = {
+  skipSuccessAlert?: boolean
+}
+
 export type PosCustomerDisplayContentSettingsHandle = {
-  save: () => Promise<void>
+  save: (options?: PosCustomerDisplayContentSaveOptions) => Promise<boolean>
   reload: () => Promise<void>
 }
 
@@ -65,9 +69,14 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     storeCode: string | null | undefined
     /** 상단 공통 툴바에 저장·새로고침을 둘 때 본문의 해당 버튼 숨김 */
     toolbarMode?: "default" | "embedded"
+    /** 기기(ON/OFF·언어)는 PosDualMonitorSettingsContent에서 편집할 때 */
+    hideDeviceFields?: boolean
     onLoadingChange?: (loading: boolean) => void
   }
->(function PosCustomerDisplayContentSettings({ storeCode, toolbarMode = "default", onLoadingChange }, ref) {
+>(function PosCustomerDisplayContentSettings(
+  { storeCode, toolbarMode = "default", hideDeviceFields = false, onLoadingChange },
+  ref
+) {
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => {
@@ -129,11 +138,11 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     void load()
   }, [load])
 
-  const handleSave = React.useCallback(async () => {
+  const handleSave = React.useCallback(async (options?: PosCustomerDisplayContentSaveOptions): Promise<boolean> => {
     const sc = String(storeCode || "").trim()
     if (!sc) {
       await appAlert(tr("store", "매장") + " " + tr("required", "필수"))
-      return
+      return false
     }
     setSaving(true)
     try {
@@ -141,9 +150,13 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
       const merged: PosPrinterSettings = {
         ...latest,
         storeCode: sc,
-        dualMonitorEnabled: enabled,
-        customerDisplayLangMode: displayLangMode,
-        customerDisplayLangOverride: displayLangMode === "custom" ? displayLangOverride : "",
+        ...(hideDeviceFields
+          ? {}
+          : {
+              dualMonitorEnabled: enabled,
+              customerDisplayLangMode: displayLangMode,
+              customerDisplayLangOverride: displayLangMode === "custom" ? displayLangOverride : "",
+            }),
         customerDisplayTheme: theme,
         customerDisplayDefaultState: defaultState,
         customerDisplayIdleMessage: idleMessage.trim(),
@@ -159,10 +172,19 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
       )
       if (!res.success) {
         await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
-        return
+        return false
       }
-      await appAlert(tr("itemsAlertSaved", "저장되었습니다."))
+      if (!options?.skipSuccessAlert) {
+        await appAlert(tr("itemsAlertSaved", "저장되었습니다."))
+      }
       void load()
+      return true
+    } catch (e) {
+      await appAlert(
+        tr("msg_save_fail_detail", "저장에 실패했습니다.") +
+          (e instanceof Error ? `: ${e.message}` : "")
+      )
+      return false
     } finally {
       setSaving(false)
     }
@@ -171,6 +193,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     displayLangMode,
     displayLangOverride,
     enabled,
+    hideDeviceFields,
     idleMediaType,
     idleMediaUrl,
     idleMessage,
@@ -187,7 +210,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
   React.useImperativeHandle(
     ref,
     () => ({
-      save: () => handleSave(),
+      save: (options) => handleSave(options),
       reload: () => load(),
     }),
     [handleSave, load]
@@ -239,55 +262,59 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
           "주문·결제·QR 화면 상단 로고는 POS 프린터 설정 → 영수증 디자인 탭의 로고 이미지와 동일하게 표시됩니다."
         )}
       </p>
-      <ToggleRow
-        label={tr("posDualMonitorEnabled", "듀얼 모니터 고객화면 사용")}
-        value={enabled}
-        onChange={setEnabled}
-        yesLabel={yesLabel}
-        noLabel={noLabel}
-      />
-      <div>
-        <label className="text-sm font-medium">{tr("posCustomerDisplayLanguage", "고객화면 언어")}</label>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {tr(
-            "posCustomerDisplayLanguageHint",
-            "기본은 POS 직원 화면의 언어를 따라가고, 필요하면 고객화면만 다른 언어로 고정할 수 있습니다."
-          )}
-        </p>
-        <Select
-          value={displayLangMode}
-          onValueChange={(v) => setDisplayLangMode(v === "custom" ? "custom" : "follow-pos")}
-        >
-          <SelectTrigger className="mt-2 h-10 w-full max-w-md">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="follow-pos">
-              {tr("posCustomerDisplayLanguageFollowPos", "POS 직원 화면 언어 따라감")}
-            </SelectItem>
-            <SelectItem value="custom">
-              {tr("posCustomerDisplayLanguageCustom", "고객화면만 별도 언어 고정")}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        {displayLangMode === "custom" ? (
-          <div className="mt-3">
-            <label className="text-xs font-medium text-muted-foreground">{tr("posLanguage", "언어")}</label>
-            <Select value={displayLangOverride} onValueChange={(v) => isLangCode(v) && setDisplayLangOverride(v)}>
-              <SelectTrigger className="mt-1 h-10 w-full max-w-xs">
+      {!hideDeviceFields ? (
+        <>
+          <ToggleRow
+            label={tr("posDualMonitorEnabled", "듀얼 모니터 고객화면 사용")}
+            value={enabled}
+            onChange={setEnabled}
+            yesLabel={yesLabel}
+            noLabel={noLabel}
+          />
+          <div>
+            <label className="text-sm font-medium">{tr("posCustomerDisplayLanguage", "고객화면 언어")}</label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {tr(
+                "posCustomerDisplayLanguageHint",
+                "기본은 POS 직원 화면의 언어를 따라가고, 필요하면 고객화면만 다른 언어로 고정할 수 있습니다."
+              )}
+            </p>
+            <Select
+              value={displayLangMode}
+              onValueChange={(v) => setDisplayLangMode(v === "custom" ? "custom" : "follow-pos")}
+            >
+              <SelectTrigger className="mt-2 h-10 w-full max-w-md">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ADMIN_UI_LANG_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value="follow-pos">
+                  {tr("posCustomerDisplayLanguageFollowPos", "POS 직원 화면 언어 따라감")}
+                </SelectItem>
+                <SelectItem value="custom">
+                  {tr("posCustomerDisplayLanguageCustom", "고객화면만 별도 언어 고정")}
+                </SelectItem>
               </SelectContent>
             </Select>
+            {displayLangMode === "custom" ? (
+              <div className="mt-3">
+                <label className="text-xs font-medium text-muted-foreground">{tr("posLanguage", "언어")}</label>
+                <Select value={displayLangOverride} onValueChange={(v) => isLangCode(v) && setDisplayLangOverride(v)}>
+                  <SelectTrigger className="mt-1 h-10 w-full max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ADMIN_UI_LANG_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
+        </>
+      ) : null}
       <div>
         <label className="text-sm font-medium">{tr("posCustomerDisplayTheme", "고객화면 테마")}</label>
         <Select value={theme} onValueChange={(v) => setTheme(v as "dark" | "light" | "brand")}>

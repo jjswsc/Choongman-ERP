@@ -71,7 +71,7 @@ export function AdminPayrollSalaryHistory() {
   const [error, setError] = useState<string | null>(null)
   const [queried, setQueried] = useState(false)
 
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     setStores(["All", ...storeList.filter((s) => s !== "All")])

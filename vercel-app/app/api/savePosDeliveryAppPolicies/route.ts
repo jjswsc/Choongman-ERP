@@ -5,7 +5,7 @@ import {
   type PosDeliveryCategoryOrder,
   type PosDeliveryMenuPolicy,
 } from '@/lib/pos-delivery-policy'
-import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
+import { triggerGrabMenuNotificationPerStoreCodes } from '@/lib/grab-menu-sync-trigger'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,9 +37,12 @@ export async function POST(req: NextRequest) {
       categoryOrders: Array.isArray(body.categoryOrders) ? body.categoryOrders : undefined,
     })
     if (appCode === 'grab') {
-      void triggerGrabMenuNotification({
+      void triggerGrabMenuNotificationPerStoreCodes({
         reason: 'delivery_policy_updated',
+        storeCodes: [storeCode],
         partnerMerchantID: storeCode,
+        /** 카테고리·노출 변경만으로 메뉴가 갱신되면 fixPrice 캠페인이 끊겨 정가만 보임 → 함께 sync */
+        syncPromoTargetPriceCampaigns: true,
       })
     }
     return NextResponse.json({ success: true }, { headers })

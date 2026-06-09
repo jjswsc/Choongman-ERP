@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { AttendanceQrKiosk } from "@/components/kiosk/attendance-qr-kiosk"
 
 export const metadata: Metadata = {
-  title: "출퇴근 QR",
-  description: "매장 출퇴근 QR 표시 키오스크",
+  title: "Attendance QR",
+  description: "Store attendance QR display kiosk",
 }
 
 export const viewport: Viewport = {

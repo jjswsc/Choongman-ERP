@@ -59,6 +59,12 @@ export function isEmployeeAuthRoleDirector(formRole: string): boolean {
   return String(formRole || "").trim().toLowerCase() === "director"
 }
 
+/** Supervisor(슈퍼바이저) — 출퇴근 QR 단말 등록 등 제한된 본사 권한 */
+export function isSupervisorRole(role: string): boolean {
+  const r = String(role || "").trim().toLowerCase()
+  return r === "supervisor" || /supervisor|슈퍼바이저/i.test(String(role || ""))
+}
+
 /** 직원 등록 폼의 role 값이 Officer / Director(로그인 권한 등급)인지 */
 export function isEmployeeAuthRoleOfficerOrDirector(formRole: string): boolean {
   return isEmployeeAuthRoleOfficer(formRole) || isEmployeeAuthRoleDirector(formRole)
@@ -289,7 +295,8 @@ export function canAccessPosOrder(role: string): boolean {
     isPosSettlementOnlyRole(role) ||
     isManagerRole(role) ||
     isFranchiseeRole(role) ||
-    isOfficeRole(role)
+    isOfficeRole(role) ||
+    isSupervisorRole(role)
   )
 }
 
@@ -331,14 +338,20 @@ export function canEditPosAttendanceManagement(role: string): boolean {
   )
 }
 
-/** 출퇴근 QR 키오스크 단말 등록·해제 — 매니저·본사(Office)만 */
+/** 출퇴근 QR 키오스크 단말 등록·해제 — Director·Supervisor·매장 Manager */
 export function canRegisterAttendanceQrDevice(role: string): boolean {
-  return isManagerRole(role) || isOfficeRole(role)
+  return isEmployeeAuthRoleDirector(role) || isSupervisorRole(role) || isManagerRole(role)
 }
 
 /** 출퇴근 QR 단말 목록 조회·revoke (프린터 설정 화면) */
 export function canManageAttendanceQrDevices(role: string): boolean {
   return canRegisterAttendanceQrDevice(role)
+}
+
+/** 본사 화면에서 매장별 QR 단말 목록·등록 시 매장 선택 */
+export function canPickAttendanceQrStoreFilter(role: string, authStore?: string): boolean {
+  if (!canRegisterAttendanceQrDevice(role)) return false
+  return isOfficeStore(String(authStore || ""))
 }
 
 /** POS 주문 내역 가능 (관리자) */

@@ -54,7 +54,7 @@ export default function StockPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const { stores: rawStores } = useStoreList()
+  const { posStores: rawStores } = useStoreList()
   const stores = React.useMemo(() => normalizeStoreList(rawStores || []), [rawStores])
   const [list, setList] = React.useState<StockStatusItem[]>([])
   const [loading, setLoading] = React.useState(false)

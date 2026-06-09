@@ -338,7 +338,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            '매장 프린터 기본 설정이 없습니다. 관리자 화면(/admin/pos-printers)에서 한 번 저장한 뒤 듀얼 모니터를 설정할 수 있습니다.',
+            '매장 프린터 기본 설정이 없습니다. 관리자 화면(/admin/pos-printers)에서 한 번 저장한 뒤 POS 설정 → 듀얼 모니터에서 고객 화면을 설정할 수 있습니다.',
         },
         { status: 403, headers }
       )

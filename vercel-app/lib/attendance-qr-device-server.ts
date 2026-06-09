@@ -1,6 +1,6 @@
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import { isManagerRole, isOfficeRole } from '@/lib/permissions'
+import { isEmployeeAuthRoleDirector, isSupervisorRole, isManagerRole, isOfficeStore } from '@/lib/permissions'
 
 export type AttendanceQrDeviceRow = {
   store_code: string
@@ -59,10 +59,12 @@ export function canAuthManageAttendanceQrStore(params: {
   const target = String(params.targetStore || '').trim()
   if (!target) return false
   const role = String(params.authRole || '')
-  if (isOfficeRole(role)) return true
-  if (!isManagerRole(role)) return false
-  const authStore = String(params.authStore || '').trim()
-  if (storesMatchForGradeLookup(authStore, target)) return true
-  const allowed = Array.isArray(params.allowedStores) ? params.allowedStores : []
-  return allowed.some((s) => storesMatchForGradeLookup(String(s || '').trim(), target))
+  if (isEmployeeAuthRoleDirector(role) || isSupervisorRole(role)) {
+    if (isOfficeStore(String(params.authStore || ''))) return true
+    return storesMatchForGradeLookup(String(params.authStore || '').trim(), target)
+  }
+  if (isManagerRole(role)) {
+    return storesMatchForGradeLookup(String(params.authStore || '').trim(), target)
+  }
+  return false
 }

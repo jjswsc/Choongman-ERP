@@ -507,6 +507,18 @@ export function grabCampaignNeedsFixPriceRoundingMigration(
   return existingType === 'percentage' && expected.type === 'fixPrice'
 }
 
+/** upcoming 이고 시작이 아직 멀면 손님 앱에 할인 미노출 — 할인액이 같아도 skip 하면 안 됨 */
+export function grabCampaignShouldRefreshUpcomingStart(
+  row: GrabCampaignListRow | undefined,
+  section: 'ongoing' | 'upcoming' | undefined,
+  nowMs = Date.now()
+): boolean {
+  if (section !== 'upcoming' || !row?.conditions?.startTime) return false
+  const startMs = new Date(String(row.conditions.startTime)).getTime()
+  if (!Number.isFinite(startMs)) return false
+  return startMs > nowMs + 10 * 60_000
+}
+
 function indexManagedCampaigns(payload: unknown): Map<string, IndexedGrabCampaign> {
   const out = new Map<string, IndexedGrabCampaign>()
   if (!payload || typeof payload !== 'object') return out
@@ -1360,7 +1372,7 @@ export async function syncGrabPromoTargetPriceCampaigns(params: {
         discountType,
       })
 
-    if (matches) {
+    if (matches && !grabCampaignShouldRefreshUpcomingStart(hit, indexed?.section)) {
       skipped += 1
       continue
     }

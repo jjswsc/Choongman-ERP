@@ -132,7 +132,7 @@ export function useStoreList() {
     /** 운영(가맹) 매장만 — 매출·회계·대부분 ERP 선택 */
     stores,
     allStores,
-    /** POS 홈·터미널·설정 — CM Office 포함, test/HQ 제외 */
+    /** POS·인사·본사 창고·미수미지급·세무(SSO) 등 — CM Office 포함, test/HQ 제외 */
     posStores,
     posStoreOptions,
     users,

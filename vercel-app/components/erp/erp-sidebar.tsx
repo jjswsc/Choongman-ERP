@@ -70,6 +70,7 @@ import {
   canAccessPosCostAnalysis,
   canAccessPosPrinters,
   canAccessPosCoupons,
+  canManageAttendanceQrDevices,
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
   canAccessAiCenter,
@@ -279,7 +280,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-cash": canAccessPosSettlement,
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
-  "/admin/pos-screen-config": canAccessPosTables, // 테이블/메뉴 통합
+  "/admin/pos-screen-config": (role) => canAccessPosTables(role) || canManageAttendanceQrDevices(role),
   "/admin/pos-cost-analysis": canAccessPosCostAnalysis,
   "/admin/pos-printers": canAccessPosPrinters,
   "/admin/pos-coupons": canAccessPosCoupons,

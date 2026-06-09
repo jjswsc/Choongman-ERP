@@ -211,7 +211,7 @@ export function TaxFilingShell() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
   const role = auth?.role || ""
   const managerStore = (auth?.store || "").trim()
   const officeByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)

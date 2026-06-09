@@ -89,6 +89,8 @@ export const submitAttendanceSchema = z.object({
   type: z.string().trim().min(1, '유형(출근/퇴근/휴식시작/휴식종료)이 필요합니다.'),
   lat: z.union([z.string(), z.number()]).optional(),
   lng: z.union([z.string(), z.number()]).optional(),
+  /** phase 2: 키오스크 QR payload (오피스 파일럿) */
+  attendanceQrToken: z.string().trim().min(1).optional(),
   employeeId: z
     .any()
     .optional()

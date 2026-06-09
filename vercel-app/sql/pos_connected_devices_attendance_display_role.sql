@@ -9,3 +9,4 @@ alter table public.pos_connected_devices
 
 comment on column public.pos_connected_devices.role is
   'main: 메인 POS, order: 주문 단말, attendance_display: 출퇴근 QR 표시 전용';
+

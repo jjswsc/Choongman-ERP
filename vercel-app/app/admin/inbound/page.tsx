@@ -163,7 +163,7 @@ export default function InboundPage() {
   const [taxInvoicePreviewData, setTaxInvoicePreviewData] = React.useState<InvoiceData | null>(null)
 
   const searchParams = useSearchParams()
-  const { stores: storeList } = useStoreList()
+  const { posStores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
     const store = (auth?.store || "").trim()

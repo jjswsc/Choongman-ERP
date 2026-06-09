@@ -50,7 +50,7 @@ export function AdminLeaveStats() {
   >([])
   const [loading, setLoading] = useState(false)
 
-  const { stores: storeKeys } = useStoreList()
+  const { posStores: storeKeys } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'secretary' || auth.role === 'officer' || auth.role === 'ceo' || auth.role === 'hr'

@@ -8,6 +8,9 @@ import {
   getOpenBreakStartMs,
   hasUnclosedClockWorkSession,
 } from '@/lib/attendance-utils'
+import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
+import { canEmployeeUseAttendanceQr } from '@/lib/attendance-qr-pilot'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 const TZ = 'Asia/Bangkok'
 
 function todayStr() {
@@ -89,9 +92,14 @@ export async function POST(request: NextRequest) {
     const bodyForValidation = { ...raw, storeName: raw.storeName || raw.store || '' }
     const validated = parseOr400(submitAttendanceSchema, bodyForValidation, headers)
     if (validated.errorResponse) return validated.errorResponse
-    const { storeName, name: empNameRaw, type: logType, employeeId } = validated.parsed
+    const { storeName, name: empNameRaw, type: logType, employeeId, attendanceQrToken: attendanceQrTokenRaw } =
+      validated.parsed
     const dataLat = validated.parsed.lat ?? raw.lat
     const dataLng = validated.parsed.lng ?? raw.lng
+    const attendanceQrToken = String(attendanceQrTokenRaw ?? raw.attendanceQrToken ?? '').trim()
+    let verifiedByAttendanceQr = false
+    let recordLat: string | number = dataLat ?? ''
+    let recordLng: string | number = dataLng ?? ''
     let empName = String(empNameRaw || '').trim()
     let empId = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
     let empCodeNorm = ''
@@ -288,6 +296,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (attendanceQrToken) {
+      if (!canEmployeeUseAttendanceQr(storeName)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              '❌ QR 출퇴근은 현재 오피스(본사) 직원 파일럿 중입니다. 매장 직원은 GPS로 출퇴근해 주세요.',
+          },
+          { headers }
+        )
+      }
+      const qrVerified = verifyAttendanceQrPayload(attendanceQrToken)
+      if (!qrVerified.ok || !qrVerified.storeCode) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: '❌ QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
+          },
+          { headers }
+        )
+      }
+      if (!storesMatchForGradeLookup(qrVerified.storeCode, storeName)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: '❌ QR 매장과 소속 매장이 일치하지 않습니다.',
+          },
+          { headers }
+        )
+      }
+      verifiedByAttendanceQr = true
+      recordLat = 'QR'
+      recordLng = 'QR'
+    }
+
+    if (!verifiedByAttendanceQr) {
     let targetLat = 0,
       targetLng = 0
     const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
@@ -393,6 +437,8 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
+    }
+
     // GPS 미확인 시에도 승인 대기 없음 (매장 폰/태블릿 활용 정책)
     const needManagerApproval = false
 
@@ -548,8 +594,8 @@ export async function POST(request: NextRequest) {
       store_name: storeName,
       name: empName,
       log_type: logType,
-      lat: String(dataLat != null ? dataLat : '').trim(),
-      lng: String(dataLng != null ? dataLng : '').trim(),
+      lat: String(recordLat != null ? recordLat : '').trim(),
+      lng: String(recordLng != null ? recordLng : '').trim(),
       planned_time: planTime.trim(),
       late_min: lateMin,
       early_min: earlyMin,

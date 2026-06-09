@@ -24,6 +24,8 @@ import {
 import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ } from "@/lib/attendance-utils"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { cn, compressImageForUpload } from "@/lib/utils"
+import { canEmployeeUseAttendanceQr } from "@/lib/attendance-qr-pilot"
+import { AttendanceQrScannerDialog } from "@/components/attendance/attendance-qr-scanner-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
@@ -99,7 +101,11 @@ export function HrTab() {
   const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
   const leaveCertInputRef = useRef<HTMLInputElement>(null)
   const pendingCertIdRef = useRef<number | null>(null)
+  const pendingAttTypeRef = useRef<string | null>(null)
+  const [qrScanOpen, setQrScanOpen] = useState(false)
   const [now, setNow] = useState(() => new Date())
+
+  const useAttendanceQr = Boolean(auth?.store && canEmployeeUseAttendanceQr(auth.store))
 
   // 내 급여 명세서
   const [payrollMonth, setPayrollMonth] = useState(() => {
@@ -218,65 +224,91 @@ export function HrTab() {
     fetchPayroll()
   }, [auth?.store, auth?.user, fetchPayroll])
 
+  const submitAttendanceRequest = useCallback(
+    async (type: string, lat: string | number, lng: string | number, attendanceQrToken?: string) => {
+      if (!auth?.store || !auth?.user) return
+      setSubmitting(type)
+      try {
+        const res = await submitAttendance({
+          storeName: auth.store,
+          name: auth.user,
+          type,
+          lat,
+          lng,
+          ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+          ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
+          ...(attendanceQrToken ? { attendanceQrToken } : {}),
+        })
+        const isGpsPending = res.code === "ATT_GPS_PENDING"
+        const isQueued = (res as { queued?: boolean }).queued === true
+        const isDuplicate =
+          typeof res.message === "string" &&
+          res.message.includes("오늘 이미") &&
+          res.message.includes("기록이 있습니다")
+
+        if (isDuplicate) {
+          await appAlert(t("attDuplicateOnce"))
+          loadButtonState()
+          return
+        }
+        if (!res.success) {
+          await appAlert(translateApiMessage(res.message, t) || t("orderFail"))
+          return
+        }
+        if (
+          !isGpsPending &&
+          res.message &&
+          (res.message.includes("지각") || res.message.includes("조퇴") || res.message.includes("연장"))
+        ) {
+          const reason = await appPrompt(t("attReasonPrompt"))
+          if (reason) {
+            // updateLastReason would need an API - skip for now
+          }
+        }
+        if (isGpsPending) await appAlert(t("attGpsPendingSaved"))
+        else await appAlert(translateApiMessage(res.message, t) || t("msg_done"))
+
+        if ((res.message && res.message.includes("✅")) || isGpsPending || isQueued) {
+          loadButtonState()
+          loadTodayLog()
+        }
+      } catch (e) {
+        await appAlert((e instanceof Error ? e.message : String(e)) + "\n" + t("orderFail"))
+      } finally {
+        setSubmitting(null)
+      }
+    },
+    [auth?.store, auth?.user, auth?.employeeId, auth?.employeeCode, loadButtonState, loadTodayLog, t]
+  )
+
   const sendAttendance = async (type: string) => {
     if (!auth?.store || !auth?.user) return
     const confirmKey = ATT_TYPE_TO_CONFIRM_KEY[type] || "attConfirmIn"
     const msg = t(confirmKey as "attConfirmIn" | "attConfirmOut" | "attConfirmBreak" | "attConfirmResume")
     if (!(await appConfirm(msg))) return
 
-    const options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-    const gpsFailMsg = t("attGpsFailConfirm")
-    const doSend = (lat: string | number, lng: string | number) => {
-      setSubmitting(type)
-      submitAttendance({
-        storeName: auth.store,
-        name: auth.user!,
-        type,
-        lat,
-        lng,
-        ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
-        ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
-      })
-        .then(async (res) => {
-          const isGpsPending = res.code === "ATT_GPS_PENDING"
-          const isQueued = (res as { queued?: boolean }).queued === true
-          const isDuplicate =
-            typeof res.message === "string" &&
-            res.message.includes("오늘 이미") &&
-            res.message.includes("기록이 있습니다")
-
-          if (isDuplicate) {
-            await appAlert(t("attDuplicateOnce"))
-            loadButtonState()
-            return
-          }
-          if (!isGpsPending && res.message && (res.message.includes("지각") || res.message.includes("조퇴") || res.message.includes("연장"))) {
-            const reason = await appPrompt(t("attReasonPrompt"))
-            if (reason) {
-              // updateLastReason would need an API - skip for now
-            }
-          }
-          if (isGpsPending) await appAlert(t("attGpsPendingSaved"))
-          else await appAlert(translateApiMessage(res.message, t) || t("msg_done"))
-
-          if ((res.message && res.message.includes("✅")) || isGpsPending || isQueued) {
-            loadButtonState()
-            loadTodayLog()
-          }
-        })
-        .catch(async (e) => {
-          await appAlert((e instanceof Error ? e.message : String(e)) + "\n" + t("orderFail"))
-        })
-        .finally(() => setSubmitting(null))
+    if (useAttendanceQr) {
+      pendingAttTypeRef.current = type
+      setQrScanOpen(true)
+      return
     }
 
+    const options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    const gpsFailMsg = t("attGpsFailConfirm")
     navigator.geolocation.getCurrentPosition(
-      (p) => doSend(p.coords.latitude, p.coords.longitude),
+      (p) => void submitAttendanceRequest(type, p.coords.latitude, p.coords.longitude),
       async () => {
-        if (await appConfirm(gpsFailMsg)) doSend("Unknown", "Unknown")
+        if (await appConfirm(gpsFailMsg)) void submitAttendanceRequest(type, "Unknown", "Unknown")
       },
       options
     )
+  }
+
+  const handleAttendanceQrScan = (raw: string) => {
+    const type = pendingAttTypeRef.current
+    pendingAttTypeRef.current = null
+    if (!type) return
+    void submitAttendanceRequest(type, "QR", "QR", raw)
   }
 
   const handleRequestLeave = async () => {
@@ -509,7 +541,9 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
               {t("attResume")}
             </Button>
           </div>
-          <p className="text-center text-xs text-muted-foreground">{t("attHelp")}</p>
+          <p className="text-center text-xs text-muted-foreground">
+            {useAttendanceQr ? t("attQrHelp") : t("attHelp")}
+          </p>
 
           {loading ? (
             <div className="py-4 text-center text-sm text-muted-foreground">{t("loading")}</div>
@@ -874,6 +908,15 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           )}
         </DialogContent>
       </Dialog>
+
+      <AttendanceQrScannerDialog
+        open={qrScanOpen}
+        onOpenChange={(open) => {
+          setQrScanOpen(open)
+          if (!open) pendingAttTypeRef.current = null
+        }}
+        onScan={handleAttendanceQrScan}
+      />
     </div>
   )
 }

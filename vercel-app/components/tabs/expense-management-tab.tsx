@@ -66,7 +66,7 @@ export function ExpenseManagementTab() {
     return v
   }, [t])
   const { auth } = useAuth()
-  const { stores } = useStoreList()
+  const { posStores: stores } = useStoreList()
   const router = useRouter()
   const searchParams = useSearchParams()
 

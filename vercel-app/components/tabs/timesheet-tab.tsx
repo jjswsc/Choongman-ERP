@@ -14,7 +14,7 @@ export function TimesheetTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores: storeListRaw } = useStoreList()
+  const { posStores: storeListRaw } = useStoreList()
   const [storeList, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
 
