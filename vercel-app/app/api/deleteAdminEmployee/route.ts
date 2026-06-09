@@ -4,8 +4,8 @@ import { isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import {
+  employeeScopeAllowedStoresFromJwt,
   franchiseeQueryStoreAllowed,
-  normalizedAllowedStoresFromJwt,
 } from '@/lib/franchisee-multi-store'
 import {
   actorFromJwt,
@@ -34,8 +34,7 @@ export async function POST(req: NextRequest) {
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const jwt = auth
     const effectiveRole = String(jwt?.role || userRole).toLowerCase()
-    const franchiseeJwtList =
-      jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
+    const scopeAllowedList = employeeScopeAllowedStoresFromJwt(jwt)
 
     if (!r) {
       return NextResponse.json({ success: false, message: '❌ 잘못된 행' }, { headers })
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
       }
       if (
         !userCanAccessEmployeeStore(effectiveRole, userStore, rowStore, {
-          allowedStores: franchiseeJwtList && franchiseeJwtList.length > 0 ? franchiseeJwtList : undefined,
+          allowedStores: scopeAllowedList,
         })
       ) {
         return NextResponse.json({ success: false, message: '❌ 해당 매장 직원만 삭제할 수 있습니다.' }, { headers })

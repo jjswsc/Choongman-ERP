@@ -34,6 +34,15 @@ describe("RLS/권한 스코프 harness", () => {
     expect(userCanAccessEmployeeStore("franchisee", "CM Any", "CM Silom", opts)).toBe(false)
   })
 
+  it("supervisor는 allowedStores 범위 매장만 접근하고 Office 직원은 제외", () => {
+    const opts = { allowedStores: ["Office", "CM Rama9", "CM Ladprao"] }
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Rama9", opts)).toBe(true)
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Ladprao", opts)).toBe(true)
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Silom", opts)).toBe(false)
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "Office", opts)).toBe(false)
+    expect(userCanAccessEmployeeStore("supervisor", "Office", "CM Office", opts)).toBe(false)
+  })
+
   it("한글 매장 관리자 표기도 POS 프린터 설정 권한으로 인식된다", () => {
     expect(canAccessPosPrinters("매니저")).toBe(true)
     expect(canAccessPosPrinters("점장")).toBe(true)

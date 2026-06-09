@@ -5355,6 +5355,9 @@ export default function PosTerminalPage() {
           const sid = buildDineInQtySnapshot(parsedTableMove.items)
           if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
         }
+        const oldTableName = String(oldRow.table_name ?? '').trim()
+        if (oldTableName) clearTableOrder(currentStoreId, oldTableName)
+        refetchCurrentStore()
         logPosPrintDebug('realtime_update_skip_table_name_only', { orderId })
         return
       }
@@ -10989,6 +10992,9 @@ export default function PosTerminalPage() {
                         Date.now() + 15_000
                       )
                     }
+              }
+              onTableMovedFrom={
+                isPosDemo ? undefined : (sourceTableName) => clearTableOrder(currentStoreId, sourceTableName)
               }
               onAddOrder={() => {
                 if (!servingTableId) return

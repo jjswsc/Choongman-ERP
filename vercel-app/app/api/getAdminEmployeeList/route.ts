@@ -3,7 +3,10 @@ import { supabaseSelect, supabaseSelectPageCap } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import { requireAuth } from '@/lib/verify-auth'
-import { franchiseeQueryStoreAllowed, normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
+import {
+  employeeScopeAllowedStoresFromJwt,
+  franchiseeQueryStoreAllowed,
+} from '@/lib/franchisee-multi-store'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 import {
@@ -82,8 +85,7 @@ export async function GET(req: NextRequest) {
         { status: 403, headers }
       )
     }
-    const franchiseeAllowedList =
-      jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
+    const scopeAllowedList = employeeScopeAllowedStoresFromJwt(jwt)
 
     const empSelectFull =
       'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code,employment_status,deleted_at'
@@ -136,8 +138,7 @@ export async function GET(req: NextRequest) {
       if (
         !userCanAccessEmployeeStore(role, userStore, empStore, {
           forPettyTransfer,
-          allowedStores:
-            franchiseeAllowedList && franchiseeAllowedList.length > 0 ? franchiseeAllowedList : undefined,
+          allowedStores: scopeAllowedList,
         })
       )
         continue

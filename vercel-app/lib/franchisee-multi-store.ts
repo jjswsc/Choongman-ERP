@@ -65,6 +65,15 @@ export function buildAllowedStoresForToken(
   return mergeStores()
 }
 
+/** JWT allowedStores — 가맹점주·슈퍼바이저 직원 조회/수정 범위 */
+export function employeeScopeAllowedStoresFromJwt(jwt: JwtPayload | null): string[] | undefined {
+  if (!jwt) return undefined
+  const role = String(jwt.role || '')
+  if (!isFranchiseeRole(role) && !isSupervisorRole(role)) return undefined
+  const list = normalizedAllowedStoresFromJwt(jwt)
+  return list.length > 0 ? list : undefined
+}
+
 /** JWT 페이로드에서 허용 매장 정규화 */
 export function normalizedAllowedStoresFromJwt(jwt: JwtPayload | null): string[] {
   if (!jwt) return []

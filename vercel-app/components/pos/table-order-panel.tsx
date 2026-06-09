@@ -89,6 +89,8 @@ export interface TableOrderPanelProps {
   onBeforeTableMerge?: (keepOrderId: number) => void
   /** 테이블 이동 API 호출 직전 — Realtime 추가주문 인쇄와 중복 방지 */
   onBeforeTableMove?: (orderId: number) => void
+  /** 테이블 이동 성공 직후 — 구 테이블 점유 UI 즉시 해제 */
+  onTableMovedFrom?: (sourceTableName: string) => void
   onClose?: () => void
   t?: (key: string) => string
   storeCode?: string
@@ -114,6 +116,7 @@ export function TableOrderPanel({
   onAfterTableTransfer,
   onBeforeTableMerge,
   onBeforeTableMove,
+  onTableMovedFrom,
   onClose,
   t: tProp,
   storeCode = '',
@@ -518,6 +521,7 @@ export function TableOrderPanel({
         return
       }
       setMoveOpen(false)
+      onTableMovedFrom?.(tableName)
       await onAfterTableTransfer?.(Number(order.id))
       onServed?.()
       onClose?.()

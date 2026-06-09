@@ -12,3 +12,4 @@ COMMENT ON COLUMN public.pos_printer_settings.order_device_max_count IS
   '매장당 주문 단말 최대 대수(최근 접속 기준).';
 COMMENT ON COLUMN public.pos_printer_settings.main_device_role_locked IS
   'true면 POS·태블릿에서 메인/주문 역할 변경 불가. DB에 저장된 역할 고정(관리자만 변경).';
+ 

@@ -9,6 +9,7 @@ import {
   isAccountingRole,
   isManagerOrFranchiseeRole,
   isOfficeRole,
+  isSupervisorRole,
 } from '@/lib/permissions'
 
 /** API Route의 Request/NextRequest에서 Bearer JWT만 검증 (선택) */
@@ -119,7 +120,13 @@ export async function requireAuth(
       ),
     }
   }
-  if (requiredLevel === 'manager' && !isManager && !isOffice && !isAccountingRole(r)) {
+  if (
+    requiredLevel === 'manager' &&
+    !isManager &&
+    !isOffice &&
+    !isAccountingRole(r) &&
+    !isSupervisorRole(roleRaw)
+  ) {
     return {
       auth: null,
       errorResponse: NextResponse.json(

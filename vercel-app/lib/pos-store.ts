@@ -475,9 +475,15 @@ function findPrevTableForMerge(tbl: Table, prevStore: Store): Table | undefined 
 function mergeStoreTablesWithLocalOrders(
   nextStore: Store,
   prevStore?: Store,
-  activeOrderKeys?: ReadonlySet<string>
+  activeOrders?: Order[]
 ): Store {
   if (!prevStore) return nextStore
+  const activeOrderKeys = activeOrderKeySet(activeOrders)
+  const layoutPeers: PosDineInTableRef[] = nextStore.tables.map((pt) => ({
+    id: pt.id,
+    name: pt.name,
+    floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+  }))
   const nextTables = nextStore.tables.map((tbl) => {
     const prevTable = findPrevTableForMerge(tbl, prevStore)
     const prevOrder = prevTable?.order
@@ -495,8 +501,19 @@ function mergeStoreTablesWithLocalOrders(
       return { ...tbl, order: prevOrder, isOccupied: true }
     }
     const prevKey = orderListMergeKey(prevOrder)
-    if (prevKey && activeOrderKeys && !activeOrderKeys.has(prevKey)) {
+    if (prevKey && activeOrderKeys.size > 0 && !activeOrderKeys.has(prevKey)) {
       return tbl
+    }
+    /** 테이블 이동: 서버는 새 테이블에만 붙였는데 prev 스냅샷이 구 테이블에 남는 경우 */
+    if (prevKey && activeOrders?.length) {
+      const fetched = activeOrders.find((o) => orderListMergeKey(o) === prevKey)
+      if (fetched?.type === 'dine-in' && String(fetched.tableName ?? '').trim()) {
+        const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+        const ref = { id: tbl.id, name: tbl.name, floor }
+        if (!posDineInTableLabelsMatch(String(fetched.tableName ?? ''), ref, { layoutPeers })) {
+          return tbl
+        }
+      }
     }
     if (!isActiveTerminalListOrder(prevOrder)) return tbl
     return { ...tbl, order: prevOrder, isOccupied: true }
@@ -752,7 +769,7 @@ export function usePosStoreInternal() {
             const merged = mergeStoreTablesWithLocalOrders(
               nextStore,
               prev.find((p) => p.id === nextStore.id),
-              activeOrderKeySet(orders)
+              orders
             )
             return hydrateStoreTablesFromActiveOrders(merged, orders)
           })
@@ -943,7 +960,7 @@ export function usePosStoreInternal() {
                   mergeStoreTablesWithLocalOrders(
                     next,
                     prev.find((p) => p.id === code),
-                    activeOrderKeySet(orders)
+                    orders
                   )
                 )
               })
@@ -954,7 +971,7 @@ export function usePosStoreInternal() {
             const orders = nextOrdersByStore[store.id] ?? []
             if (!next) return hydrate(store)
             return hydrate(
-              mergeStoreTablesWithLocalOrders(next, store, activeOrderKeySet(orders))
+              mergeStoreTablesWithLocalOrders(next, store, orders)
             )
           })
         })

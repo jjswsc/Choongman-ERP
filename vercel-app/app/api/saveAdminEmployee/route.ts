@@ -12,8 +12,8 @@ import {
 import { requireAuth } from '@/lib/verify-auth'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import {
+  employeeScopeAllowedStoresFromJwt,
   franchiseeQueryStoreAllowed,
-  normalizedAllowedStoresFromJwt,
   rowRoleLooksFranchisee,
   normalizeFranchiseeExtraStores,
 } from '@/lib/franchisee-multi-store'
@@ -221,8 +221,7 @@ export async function POST(req: NextRequest) {
 
     const isTop =
       ['director', 'secretary', 'officer', 'ceo', 'hr'].some((r) => effectiveRole.includes(r)) || isAccountingRole(effectiveRole)
-    const franchiseeJwtList =
-      jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
+    const scopeAllowedList = employeeScopeAllowedStoresFromJwt(jwt)
 
     if (!isTop) {
       if (jwt && isFranchiseeRole(effectiveRole) && !franchiseeQueryStoreAllowed(jwt, userStore)) {
@@ -234,7 +233,7 @@ export async function POST(req: NextRequest) {
       const targetStore = String(d.store || '').trim()
       if (
         !userCanAccessEmployeeStore(effectiveRole, userStore, targetStore, {
-          allowedStores: franchiseeJwtList && franchiseeJwtList.length > 0 ? franchiseeJwtList : undefined,
+          allowedStores: scopeAllowedList,
         })
       ) {
         return NextResponse.json(
