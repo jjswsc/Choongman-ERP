@@ -19,7 +19,8 @@ export type PosBusinessDaySettingsContext = {
 }
 
 let cache: { at: number; ctx: PosBusinessDaySettingsContext } | null = null
-const TTL_MS = 60_000
+/** 영업일 설정은 자주 바뀌지 않음. 저장 시 invalidatePosBusinessDayServerCache()로 즉시 반영 */
+const TTL_MS = 300_000
 
 export function invalidatePosBusinessDayServerCache(): void {
   cache = null

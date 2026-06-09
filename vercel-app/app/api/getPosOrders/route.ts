@@ -141,8 +141,32 @@ function inferOrderTypeForResponse(row: {
   return 'dine_in' as const
 }
 
-/**
- * 세트/프로모 구성품 promoItems 에 서버 pos_menus 조인으로 menuName·menuCode 를 채운다.
+/** 응답 rows 에 promoItems menuName/menuCode 보강이 필요한 menuId 가 하나라도 있으면 true */
+function rowsNeedPromoComponentMenuLookup(rows: Array<{ items_json?: string }> | null): boolean {
+  for (const r of rows || []) {
+    try {
+      const arr = JSON.parse(String(r.items_json || '[]'))
+      if (!Array.isArray(arr)) continue
+      for (const it of arr) {
+        const pis = (it as { promoItems?: Array<{ menuId?: unknown; menuName?: unknown; menuCode?: unknown }> })
+          .promoItems
+        if (!Array.isArray(pis)) continue
+        for (const p of pis) {
+          const mid = String((p as { menuId?: unknown }).menuId ?? '').trim()
+          if (!mid) continue
+          const hasName = String((p as { menuName?: unknown }).menuName ?? '').trim().length > 0
+          const hasCode = String((p as { menuCode?: unknown }).menuCode ?? '').trim().length > 0
+          if (!hasName || !hasCode) return true
+        }
+      }
+    } catch {
+      continue
+    }
+  }
+  return false
+}
+
+/** 세트/프로모 구성품 promoItems 에 서버 pos_menus 조인으로 menuName·menuCode 를 채운다.
  * 클라이언트 메뉴/프로모 캐시가 낡아도 주방 슬립이 #ID(번호) 대신 이름을 찍도록 보장.
  * (자동인쇄·재인쇄 등 서버 주문 데이터를 쓰는 모든 경로에 공통 적용)
  */
@@ -542,9 +566,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const promoComponentMenuMap = await loadPromoComponentMenuMap(
-      rows as Array<{ items_json?: string }> | null
-    )
+    const promoComponentMenuMap = rowsNeedPromoComponentMenuLookup(rows)
+      ? await loadPromoComponentMenuMap(rows as Array<{ items_json?: string }> | null)
+      : new Map<string, { name: string; code: string }>()
 
     const list = (rows || [])
       .filter((r) => {

@@ -11,19 +11,23 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, type I18nKeys } from '@/lib/i18n'
 import { canDecodeQrFromVideo, canUseQrCamera, requestQrCameraStream, startQrScanLoop } from '@/lib/qr-video-scanner'
 
 type AttendanceQrScannerDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onScan: (raw: string) => void
+  titleKey?: I18nKeys
+  hintKey?: I18nKeys
 }
 
 export function AttendanceQrScannerDialog({
   open,
   onOpenChange,
   onScan,
+  titleKey = 'attQrScanTitle',
+  hintKey = 'attQrScanHint',
 }: AttendanceQrScannerDialogProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -100,9 +104,9 @@ export function AttendanceQrScannerDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="h-4 w-4" />
-            {t('attQrScanTitle')}
+            {t(titleKey)}
           </DialogTitle>
-          <DialogDescription>{t('attQrScanHint')}</DialogDescription>
+          <DialogDescription>{t(hintKey)}</DialogDescription>
         </DialogHeader>
         <div className="relative overflow-hidden rounded-xl border bg-black">
           <video ref={videoRef} className="aspect-square w-full object-cover" playsInline muted />

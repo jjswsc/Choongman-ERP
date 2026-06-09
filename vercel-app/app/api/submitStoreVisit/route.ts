@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
+import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
 
@@ -28,9 +30,15 @@ export async function POST(request: NextRequest) {
       lat?: string | number
       lng?: string | number
       clientTimestamp?: number
+      attendanceQrToken?: string
     }
     const storeNameTrim = String(data.storeName || '').trim()
     const visitType = String(data.type || '').trim()
+    const attendanceQrToken = String(data.attendanceQrToken ?? '').trim()
+    let recordLat = String(data.lat ?? '')
+    let recordLng = String(data.lng ?? '')
+    const isForce = visitType.includes('강제')
+    const isStart = visitType === '방문시작' || visitType === '강제 방문시작'
 
     if (!storeNameTrim || !data.userName) {
       return NextResponse.json(
@@ -51,10 +59,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (
-      visitType === '방문시작' ||
-      visitType === '강제 방문시작'
-    ) {
+    if (attendanceQrToken) {
+      const qrVerified = verifyAttendanceQrPayload(attendanceQrToken)
+      if (!qrVerified.ok || !qrVerified.storeCode) {
+        return NextResponse.json(
+          {
+            success: false,
+            msg: '❌ QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
+          },
+          { headers }
+        )
+      }
+      if (!storesMatchForGradeLookup(qrVerified.storeCode, storeNameTrim)) {
+        return NextResponse.json(
+          {
+            success: false,
+            msg: '❌ QR 매장과 방문 매장이 일치하지 않습니다.',
+          },
+          { headers }
+        )
+      }
+      recordLat = 'QR'
+      recordLng = 'QR'
+    } else if (isForce && isStart) {
       const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
         id?: number
         code?: string
@@ -144,6 +171,11 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+    } else if (!isForce) {
+      return NextResponse.json(
+        { success: false, msg: '❌ 매장 출퇴근 QR을 스캔해 주세요.' },
+        { headers }
+      )
     }
 
     // 클라이언트가 보낸 시각 사용 (실제 방문 시점). ±10분 이내만 허용
@@ -202,8 +234,8 @@ export async function POST(request: NextRequest) {
       visit_type: visitType,
       purpose: data.purpose || '',
       visit_time: timeStr,
-      lat: String(data.lat ?? ''),
-      lng: String(data.lng ?? ''),
+      lat: recordLat,
+      lng: recordLng,
       duration_min: durationMin !== null ? durationMin : 0,
       memo: '',
     }

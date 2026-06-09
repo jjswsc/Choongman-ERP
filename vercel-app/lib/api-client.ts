@@ -1816,6 +1816,8 @@ export async function submitStoreVisit(params: {
   lat?: string | number
   lng?: string | number
   clientTimestamp?: number
+  /** 매장 키오스크 QR payload */
+  attendanceQrToken?: string
 }) {
   const res = await apiFetchWithOffline('/api/submitStoreVisit', {
     method: 'POST',

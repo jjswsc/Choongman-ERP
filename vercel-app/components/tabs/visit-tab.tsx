@@ -1,7 +1,7 @@
 "use client"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert } from "@/lib/app-message"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,7 @@ import {
   type TodayVisitItem,
 } from "@/lib/api-client"
 import { translateVisitType } from "@/lib/visit-i18n"
+import { AttendanceQrScannerDialog } from "@/components/attendance/attendance-qr-scanner-dialog"
 import { MapPin, Building2, Target, LogIn, LogOut } from "lucide-react"
 
 const VISIT_PURPOSES = [
@@ -47,6 +48,8 @@ export function VisitTab() {
   const [visitLog, setVisitLog] = useState<TodayVisitItem[]>([])
   const [loading] = useState(false)
   const [submitting, setSubmitting] = useState<string | null>(null)
+  const pendingVisitTypeRef = useRef<"방문시작" | "방문종료" | null>(null)
+  const [qrScanOpen, setQrScanOpen] = useState(false)
 
   const { stores: storeListRaw } = useStoreList()
   useEffect(() => {
@@ -93,6 +96,59 @@ export function VisitTab() {
     if (auth?.user) loadStatusAndLog()
   }, [auth?.user, loadStatusAndLog])
 
+  const submitVisitRequest = useCallback(
+    async (type: "방문시작" | "방문종료", attendanceQrToken: string) => {
+      if (!auth?.user) return
+      const store = type === "방문시작" ? selectedStore : activeVisit?.storeName || selectedStore
+      if (!store) return
+
+      setSubmitting(type)
+      try {
+        const purposeToSend =
+          purpose === "기타" && purposeEtcReason.trim()
+            ? `기타: ${purposeEtcReason.trim()}`
+            : purpose || ""
+        const result = await submitStoreVisit({
+          userName: auth.user,
+          storeName: store,
+          type,
+          purpose: purposeToSend,
+          lat: "QR",
+          lng: "QR",
+          attendanceQrToken,
+          clientTimestamp: Date.now(),
+        })
+
+        if (result.success) {
+          if (type === "방문시작") {
+            setActiveVisit({ storeName: store, purpose: purposeToSend })
+          } else {
+            setActiveVisit(null)
+          }
+          loadStatusAndLog()
+          if (result.msg) {
+            await appAlert(translateApiMessage(result.msg, t) || result.msg)
+          }
+        } else {
+          await appAlert(translateApiMessage(result.msg, t) || t("msg_save_fail"))
+        }
+      } catch (e) {
+        await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setSubmitting(null)
+      }
+    },
+    [
+      activeVisit?.storeName,
+      auth?.user,
+      loadStatusAndLog,
+      purpose,
+      purposeEtcReason,
+      selectedStore,
+      t,
+    ]
+  )
+
   const handleVisit = async (type: "방문시작" | "방문종료") => {
     if (!auth?.user) return
     if (type === "방문시작" && !selectedStore) {
@@ -103,67 +159,15 @@ export function VisitTab() {
     const store = type === "방문시작" ? selectedStore : activeVisit?.storeName || selectedStore
     if (!store) return
 
-    setSubmitting(type)
-    try {
-      let lat = ""
-      let lng = ""
-      if (navigator.geolocation) {
-        try {
-          const pos = await new Promise<GeolocationPosition>((res, rej) => {
-            navigator.geolocation.getCurrentPosition(res, rej, {
-              enableHighAccuracy: true,
-              timeout: 15000,
-              maximumAge: 0,
-            })
-          })
-          lat = String(pos.coords.latitude)
-          lng = String(pos.coords.longitude)
-        } catch {
-          lat = "Unknown"
-          lng = "Unknown"
-        }
-      } else {
-        lat = "Unknown"
-        lng = "Unknown"
-      }
+    pendingVisitTypeRef.current = type
+    setQrScanOpen(true)
+  }
 
-      const forceType = type === "방문시작" ? "강제 방문시작" : "강제 방문종료"
-      const useForce =
-        lat === "Unknown" || lng === "Unknown"
-          ? await appConfirm(t("attGpsFailConfirm"))
-          : false
-
-      const visitType = useForce ? forceType : type
-      const purposeToSend = purpose === "기타" && purposeEtcReason.trim()
-        ? `기타: ${purposeEtcReason.trim()}`
-        : (purpose || "")
-      // 사용자 기기 시간 전송 (서버 지역·지연 대신 실제 방문 시각 기록)
-      const clientTimestamp = Date.now()
-      const result = await submitStoreVisit({
-        userName: auth.user,
-        storeName: store,
-        type: visitType,
-        purpose: purposeToSend,
-        lat,
-        lng,
-        clientTimestamp,
-      })
-
-      if (result.success) {
-        if (visitType === "방문시작" || visitType === "강제 방문시작") {
-          setActiveVisit({ storeName: store, purpose: purposeToSend })
-        } else {
-          setActiveVisit(null)
-        }
-        loadStatusAndLog()
-      } else {
-        await appAlert(translateApiMessage(result.msg, t) || t("msg_save_fail"))
-      }
-    } catch (e) {
-      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setSubmitting(null)
-    }
+  const handleVisitQrScan = (raw: string) => {
+    const type = pendingVisitTypeRef.current
+    pendingVisitTypeRef.current = null
+    if (!type) return
+    void submitVisitRequest(type, raw)
   }
 
   if (!auth?.store) {
@@ -206,7 +210,7 @@ export function VisitTab() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="text-xs text-muted-foreground">
-            {t("visitSub") || "Record field support and training activities."}
+            {t("visitQrHelp") || t("visitSub")}
           </p>
 
           <div className="flex flex-col gap-2">
@@ -341,6 +345,17 @@ export function VisitTab() {
           )}
         </CardContent>
       </Card>
+
+      <AttendanceQrScannerDialog
+        open={qrScanOpen}
+        onOpenChange={(open) => {
+          setQrScanOpen(open)
+          if (!open) pendingVisitTypeRef.current = null
+        }}
+        onScan={handleVisitQrScan}
+        titleKey="visitQrScanTitle"
+        hintKey="visitQrScanHint"
+      />
     </div>
   )
 }

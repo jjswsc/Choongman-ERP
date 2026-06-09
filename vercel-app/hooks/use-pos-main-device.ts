@@ -181,7 +181,7 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
         clientHint: buildPosClientHint(),
       }).catch(() => {})
     ping()
-    const interval = setInterval(ping, 120_000)
+    const interval = setInterval(ping, 180_000)
     return () => clearInterval(interval)
   }, [storeCode, deviceToken, isMain])
 

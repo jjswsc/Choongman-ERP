@@ -116,6 +116,8 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "❌ QR 출퇴근은 현재 오피스(본사) 직원 파일럿 중입니다. 매장 직원은 GPS로 출퇴근해 주세요.": "attQrOfficePilotOnly",
   "❌ QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.": "attQrInvalid",
   "❌ QR 매장과 소속 매장이 일치하지 않습니다.": "attQrStoreMismatch",
+  "❌ QR 매장과 방문 매장이 일치하지 않습니다.": "visitQrStoreMismatch",
+  "❌ 매장 출퇴근 QR을 스캔해 주세요.": "visitQrRequired",
   "직원 정보를 확인할 수 없습니다. 다시 로그인 후 시도해 주세요.": "attErrEmployeeNotFound",
   "미종료 근무가 있습니다. 먼저 퇴근을 기록한 뒤 새 출근을 진행해 주세요.": "attErrUnfinishedShift",
   "출근을 먼저 기록해 주세요. 오늘 출근 기록이 없으면 휴식·재개·퇴근을 기록할 수 없습니다.": "attErrClockInFirst",
