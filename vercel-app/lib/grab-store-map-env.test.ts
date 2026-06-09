@@ -87,7 +87,7 @@ describe('parseGrabStoreMap merge', () => {
         '3-C63UHBKTG64CLJ',
       ])
     )
-    expect(listAllGrabPortalMerchantIdsFromEnv()).toHaveLength(10)
+    expect(listAllGrabPortalMerchantIdsFromEnv()).toHaveLength(11)
   })
 
   it('walks map chain to ERP store_code', () => {

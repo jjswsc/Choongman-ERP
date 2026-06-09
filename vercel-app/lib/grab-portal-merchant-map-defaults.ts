@@ -52,6 +52,12 @@ export const GRAB_PORTAL_MERCHANT_ENTRIES: GrabPortalMerchantEntry[] = [
     labelEn: 'Seacon Square Srinagarindra',
   },
   {
+    grabMerchantId: '3-C72GUGC1VGJDSE',
+    partnerMerchantId: '1046',
+    erpStoreCode: 'CM Huamak',
+    labelEn: 'Huamark (Hua Mak)',
+  },
+  {
     grabMerchantId: '3-C4NJC62TEU6UA2',
     partnerMerchantId: '1047',
     erpStoreCode: 'CM Union Mall',
@@ -60,7 +66,7 @@ export const GRAB_PORTAL_MERCHANT_ENTRIES: GrabPortalMerchantEntry[] = [
   {
     grabMerchantId: '3-C6DAVNDVSE61VT',
     partnerMerchantId: '1048',
-    erpStoreCode: 'CM Sukhumvit 12',
+    erpStoreCode: 'CM Asoke',
     labelEn: 'Sukhumvit 12',
   },
   {

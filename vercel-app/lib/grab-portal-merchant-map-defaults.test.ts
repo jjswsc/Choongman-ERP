@@ -8,8 +8,9 @@ import { parseGrabPortalMerchantMap } from '@/lib/grab-store-map-env'
 import { resolveGrabMenuNotificationMerchantIDs } from '@/lib/grab-resolve-menu-notification-merchants'
 
 describe('grab-portal-merchant-map-defaults', () => {
-  it('includes 10 prod portal stores', () => {
-    expect(GRAB_PORTAL_MERCHANT_ENTRIES).toHaveLength(10)
+  it('includes 11 prod portal stores', () => {
+    expect(GRAB_PORTAL_MERCHANT_ENTRIES).toHaveLength(11)
+    expect(buildGrabPortalMerchantMapDefaults()['3-C72GUGC1VGJDSE']).toBe('1046')
     expect(buildGrabPortalMerchantMapDefaults()['3-C63UHBKTG64CLJ']).toBe('1045')
     expect(buildGrabPortalMerchantMapDefaults()['3-C6DAVNDVSE61VT']).toBe('1048')
   })
