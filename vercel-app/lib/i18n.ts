@@ -285,6 +285,20 @@ export const i18n = {
     attQrScanHint: '사무실 출퇴근 QR 키오스크 화면의 QR 코드를 카메라에 맞춰 주세요.',
     attQrScanUnsupported: '이 기기/브라우저에서 카메라 QR 스캔을 사용할 수 없습니다. Safari·Chrome 최신 버전과 HTTPS 접속을 확인해 주세요.',
     attQrScanCameraDenied: '카메라를 사용할 수 없습니다. 설정에서 카메라 권한을 허용한 뒤 다시 시도해 주세요.',
+    attQrScanCameraUnavailable: '카메라를 찾을 수 없거나 다른 앱에서 사용 중입니다.',
+    attQrScanOpenSettings: '앱 설정 열기',
+    attQrScanOpenSettingsHint: '설정 → 권한 → 카메라를 허용한 뒤 「다시 시도」를 눌러 주세요.',
+    attQrScanOpenSettingsHintAndroidPwa:
+      '휴대폰 설정 → 앱 → CM ERP → 권한 → 카메라 허용 후 「다시 시도」를 눌러 주세요. 처음 「차단」을 눌렀다면 설정에서만 바꿀 수 있습니다.',
+    attQrScanOpenSettingsHintAndroidBrowser:
+      'Chrome 주소창 왼쪽 🔒 → 권한 → 카메라 허용 후 「다시 시도」를 눌러 주세요.',
+    attQrScanOpenSettingsHintIosPwa:
+      'iPhone 설정 → CM ERP → 카메라 허용 후 「다시 시도」를 눌러 주세요.',
+    attQrScanOpenSettingsHintIosBrowser:
+      'iPhone 설정 → Safari → 카메라 → 허용 후 「다시 시도」를 눌러 주세요.',
+    attQrScanOpenSettingsHintGeneric:
+      '브라우저·기기 설정에서 이 사이트의 카메라 권한을 허용한 뒤 「다시 시도」를 눌러 주세요.',
+    attQrScanRetry: '다시 시도',
     attQrHelp: '출근·퇴근·휴식·재개 버튼을 누른 뒤 매장 QR 키오스크를 스캔해 기록합니다.',
     attQrInvalid: 'QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
     attQrStoreMismatch: 'QR 매장과 소속 매장이 일치하지 않습니다.',
@@ -9614,6 +9628,20 @@ export const i18n = {
     attQrScanHint: 'Point the camera at the attendance QR kiosk in the office.',
     attQrScanUnsupported: 'Camera QR scan is unavailable on this browser. Use the latest Safari/Chrome over HTTPS.',
     attQrScanCameraDenied: 'Camera access denied. Allow camera permission in settings and try again.',
+    attQrScanCameraUnavailable: 'Camera not found or in use by another app.',
+    attQrScanOpenSettings: 'Open app settings',
+    attQrScanOpenSettingsHint: 'Allow Camera in Settings, then tap Try again.',
+    attQrScanOpenSettingsHintAndroidPwa:
+      'Phone Settings → Apps → CM ERP → Permissions → Camera → Allow, then tap Try again. If you tapped Block earlier, change it in Settings.',
+    attQrScanOpenSettingsHintAndroidBrowser:
+      'Tap the lock icon in Chrome → Permissions → Camera → Allow, then tap Try again.',
+    attQrScanOpenSettingsHintIosPwa:
+      'iPhone Settings → CM ERP → Camera → Allow, then tap Try again.',
+    attQrScanOpenSettingsHintIosBrowser:
+      'iPhone Settings → Safari → Camera → Allow, then tap Try again.',
+    attQrScanOpenSettingsHintGeneric:
+      'Allow camera for this site in your browser or device settings, then tap Try again.',
+    attQrScanRetry: 'Try again',
     attQrHelp: 'Tap a button, then scan your store attendance QR kiosk to record.',
     attQrInvalid: 'QR code is invalid or expired. Scan the kiosk QR again.',
     attQrStoreMismatch: 'QR store does not match your assigned store.',
@@ -18921,6 +18949,24 @@ orderItemQty: 'Qty',
     attInComplete: 'เข้างานเสร็จ', attOutComplete: 'ออกงานเสร็จ', attBreakComplete: 'เริ่มพักเสร็จ', attResumeComplete: 'สิ้นสุดพักเสร็จ',
     statusNormal: 'ปกติ', statusLate: 'สาย', statusEarly: 'กลับก่อน', statusOvertime: 'ล่วงเวลา',
     attGpsFailConfirm: 'ไม่สามารถใช้ GPS ได้ บันทึกต่อหรือไม่?',
+    attQrScanTitle: 'สแกน QR ลงเวลา',
+    attQrScanHint: 'ชี้กล้องไปที่ QR คiosk ลงเวลาในร้าน',
+    attQrScanUnsupported: 'เบราว์เซอร์นี้สแกน QR ด้วยกล้องไม่ได้ ใช้ Chrome/Safari เวอร์ชันล่าสุดผ่าน HTTPS',
+    attQrScanCameraDenied: 'ไม่อนุญาตใช้กล้อง กรุณาอนุญาตกล้องใน Settings แล้วลองอีกครั้ง',
+    attQrScanCameraUnavailable: 'ไม่พบกล้อง หรือกล้องถูกใช้งานโดยแอปอื่น',
+    attQrScanOpenSettings: 'เปิด Settings',
+    attQrScanOpenSettingsHintAndroidPwa:
+      'Settings → Apps → CM ERP → Permissions → กล้อง → อนุญาต แล้วกด "ลองอีกครั้ง" (ถ้ากด Block ครั้งแรก ต้องเปลี่ยนใน Settings)',
+    attQrScanOpenSettingsHintAndroidBrowser:
+      'แตะไอคอน 🔒 ที่แถบที่อยู่ → Permissions → กล้อง → อนุญาต แล้วกด "ลองอีกครั้ง"',
+    attQrScanOpenSettingsHintIosPwa:
+      'Settings → CM ERP → กล้อง → อนุญาต แล้วกด "ลองอีกครั้ง"',
+    attQrScanOpenSettingsHintIosBrowser:
+      'Settings → Safari → กล้อง → อนุญาต แล้วกด "ลองอีกครั้ง"',
+    attQrScanOpenSettingsHintGeneric:
+      'อนุญาตกล้องสำหรับเว็บไซต์นี้ใน Settings แล้วกด "ลองอีกครั้ง"',
+    attQrScanRetry: 'ลองอีกครั้ง',
+    attQrHelp: 'กดปุ่ม แล้วสแกน QR คiosk ลงเวลาในร้านเพื่อบันทึก',
     attGpsPendingSaved: 'รอการอนุมัติตำแหน่ง',
     attLocationTooFar: 'ตำแหน่งไม่เหมาะสม! ห่างจากสาขาเกิน 999ม. (ระยะทาง: {m}ม.)',
     attStoreGpsNotRegistered:

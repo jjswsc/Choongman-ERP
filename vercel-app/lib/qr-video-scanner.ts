@@ -8,11 +8,36 @@ export function canUseQrCamera(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function'
 }
 
+export type QrCameraErrorReason = 'denied' | 'unavailable' | 'unknown'
+
+export class QrCameraAccessError extends Error {
+  readonly reason: QrCameraErrorReason
+
+  constructor(reason: QrCameraErrorReason) {
+    super(reason)
+    this.name = 'QrCameraAccessError'
+    this.reason = reason
+  }
+}
+
+function classifyQrCameraError(error: unknown): QrCameraErrorReason {
+  const name = error instanceof DOMException ? error.name : ''
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return 'denied'
+  if (name === 'NotFoundError' || name === 'NotReadableError' || name === 'OverconstrainedError') {
+    return 'unavailable'
+  }
+  return 'unknown'
+}
+
 export async function requestQrCameraStream(): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: 'environment' } },
-    audio: false,
-  })
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false,
+    })
+  } catch (error) {
+    throw new QrCameraAccessError(classifyQrCameraError(error))
+  }
 }
 
 /** 디코더 없으면 no-op cleanup 반환 */
