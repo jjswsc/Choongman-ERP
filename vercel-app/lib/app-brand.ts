@@ -18,6 +18,7 @@ export interface AppBrandConfig {
   metadataDescription: string
   memberContactFacebookUrl: string
   memberContactInstagramUrl: string
+  memberContactLineOfficialUrl: string
 }
 
 export function normalizeBrandKey(raw: string): AppBrandKey {
@@ -56,10 +57,20 @@ function resolveMemberContactInstagramUrl(key: AppBrandKey): string {
   )
 }
 
+function resolveMemberContactLineOfficialUrl(key: AppBrandKey): string {
+  const common = String(process.env.NEXT_PUBLIC_MEMBER_CONTACT_LINE_OFFICIAL_URL || '').trim()
+  if (common) return common
+  if (key === 'omnifoodtech') {
+    return String(process.env.NEXT_PUBLIC_OMNI_MEMBER_CONTACT_LINE_OFFICIAL_URL || '').trim()
+  }
+  return String(process.env.NEXT_PUBLIC_CHOONGMAN_MEMBER_CONTACT_LINE_OFFICIAL_URL || '').trim()
+}
+
 export function getAppBrandConfigForKey(key: AppBrandKey): AppBrandConfig {
   const domain = normalizeDomain(process.env.NEXT_PUBLIC_APP_DOMAIN || process.env.APP_DOMAIN || "", key)
   const memberContactFacebookUrl = resolveMemberContactFacebookUrl(key)
   const memberContactInstagramUrl = resolveMemberContactInstagramUrl(key)
+  const memberContactLineOfficialUrl = resolveMemberContactLineOfficialUrl(key)
   if (key === "omnifoodtech") {
     return {
       key,
@@ -78,6 +89,7 @@ export function getAppBrandConfigForKey(key: AppBrandKey): AppBrandConfig {
         "OmniFoodTech AI ERP / POS — store operations, orders, and compliance in one platform.",
       memberContactFacebookUrl,
       memberContactInstagramUrl,
+      memberContactLineOfficialUrl,
     }
   }
   return {
@@ -96,6 +108,7 @@ export function getAppBrandConfigForKey(key: AppBrandKey): AppBrandConfig {
     metadataDescription: "충만치킨 CM ERP — 출고·매장·근태 등 내부 운영 관리 시스템",
     memberContactFacebookUrl,
     memberContactInstagramUrl,
+    memberContactLineOfficialUrl,
   }
 }
 

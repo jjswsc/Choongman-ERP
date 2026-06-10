@@ -26,7 +26,7 @@ export function MemberPortalAmbienceBackground({
   className?: string
 }) {
   return (
-    <div className={`relative min-h-[100dvh] overflow-x-hidden bg-[#050506] pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-white ${className}`}>
+    <div className={`relative overflow-x-hidden bg-[#050506] text-white ${className}`}>
       <MemberPortalLoungeBackdrop
         className="fixed"
         customFullBackgroundUrl={imageUrl}
@@ -44,7 +44,7 @@ export function MemberPortalShell({
   children: React.ReactNode
 }) {
   return (
-    <div className={`relative mx-auto w-full ${MP_MAX_WIDTH} px-4 pb-6 pt-[max(1rem,env(safe-area-inset-top))]`}>
+    <div className={`relative mx-auto w-full ${MP_MAX_WIDTH} px-4 pb-2 pt-[max(1rem,env(safe-area-inset-top))]`}>
       {children}
     </div>
   )
@@ -332,9 +332,9 @@ export function PremiumBottomNav({
   items: Array<{ id: PortalTab; label: string; icon: LucideIcon }>
 }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2">
+    <nav className="sticky bottom-0 z-40 mt-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2">
       <div
-        className={`mx-auto ${MP_MAX_WIDTH} rounded-[1.35rem] border border-white/10 bg-[rgba(8,8,10,0.82)] px-1 py-1.5 shadow-[0_-4px_40px_rgba(0,0,0,0.45)] backdrop-blur-2xl`}
+        className="rounded-[1.35rem] border border-white/10 bg-[rgba(8,8,10,0.88)] px-1 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
       >
         <div className="grid grid-cols-5">
           {items.map(({ id, label, icon: Icon }) => {

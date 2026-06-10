@@ -169,7 +169,7 @@ export function MemberPortalApp() {
   }>({
     facebookUrl: brand.memberContactFacebookUrl,
     instagramUrl: brand.memberContactInstagramUrl,
-    lineOfficialUrl: "",
+    lineOfficialUrl: brand.memberContactLineOfficialUrl,
   })
   const [designBackgrounds, setDesignBackgrounds] = React.useState<{
     loginBackgroundUrl: string
@@ -315,7 +315,7 @@ export function MemberPortalApp() {
           setContactUrls({
             facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
             instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
-            lineOfficialUrl: String(r.lineOfficialUrl || "").trim(),
+            lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
           })
           setDesignBackgrounds({
             loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
@@ -329,7 +329,7 @@ export function MemberPortalApp() {
         setContactUrls({
           facebookUrl: brand.memberContactFacebookUrl,
           instagramUrl: brand.memberContactInstagramUrl,
-          lineOfficialUrl: "",
+          lineOfficialUrl: brand.memberContactLineOfficialUrl,
         })
         setDesignBackgrounds({
           loginBackgroundUrl: "",
@@ -337,7 +337,7 @@ export function MemberPortalApp() {
           heroFoodImageUrl: "",
         })
       })
-  }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, loadSession])
+  }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, brand.memberContactLineOfficialUrl, loadSession])
 
   React.useEffect(() => {
     setFavoriteStoreCodes(readFavoriteStoreCodesFromLocalStorage())
@@ -1317,9 +1317,9 @@ export function MemberPortalApp() {
             </GlassCard>
           </div>
         )}
-      </MemberPortalShell>
 
-      <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
+        <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
+      </MemberPortalShell>
 
       <MemberPortalContentSheet
         open={homePromoOpen}
