@@ -27,6 +27,22 @@ const SLOT_I18N_KEYS: Record<string, string> = {
   sauce: 'posPromoChoiceSlotSauce',
 }
 
+/** Grab·배달앱 손님 UI — 태국 매장 기준 (i18n th 블록과 동일) */
+const SLOT_LABEL_MAP_GRAB_TH: Record<string, string> = {
+  main: 'เมนหลัก',
+  side: 'เมนูเสริม',
+  drink: 'เครื่องดื่ม',
+  sauce: 'ซอส',
+}
+
+/** Grab modifierGroups 그룹명 — 표준 슬롯은 태국어, 커스텀 키는 그대로 */
+export function getPromoChoiceSlotLabelForGrabDelivery(key: string): string {
+  const normalized = String(key || '').trim().toLowerCase()
+  const th = SLOT_LABEL_MAP_GRAB_TH[normalized]
+  if (th) return th
+  return String(key || '').trim()
+}
+
 /** 번들 슬롯 키(main/side/drink/sauce) 표시 — `t`가 있으면 i18n, 없으면 한글 폴백 후 raw key */
 export function getPromoChoiceSlotLabel(key: string, t?: (k: string) => string): string {
   const normalized = String(key || '').trim().toLowerCase()

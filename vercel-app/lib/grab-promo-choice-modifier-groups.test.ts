@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGrabPromoChoiceModifierGroups,
   buildPromoChoiceModifierId,
+  promoChoiceGroupDisplayName,
   promoChoiceModifierDisplayName,
   resolvePromoItemsForGrabOrder,
 } from '@/lib/grab-promo-choice-modifier-groups'
@@ -48,6 +49,8 @@ describe('grab-promo-choice-modifier-groups', () => {
     expect(groups[0].selectionRangeMax).toBe(1)
     expect(groups[0].modifiers).toHaveLength(2)
     expect(groups[0].modifiers[0].price).toBe(0)
+    expect(groups[0].name).toBe('เมนูเสริม')
+    expect(promoChoiceGroupDisplayName('side')).toBe('เมนูเสริม')
     expect(promoChoiceModifierDisplayName(sideItems[0])).toBe('Free Kimchi')
   })
 

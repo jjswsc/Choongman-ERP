@@ -1,4 +1,8 @@
-import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceLine } from '@/lib/pos-promo-choice'
+import {
+  getPromoChoiceSlotLabelForGrabDelivery,
+  splitPromoChoiceGroups,
+  type PromoChoiceLine,
+} from '@/lib/pos-promo-choice'
 
 export type GrabPromoChoiceCatalogRow = PromoChoiceLine & {
   menuName?: string
@@ -69,9 +73,8 @@ export function promoChoiceModifierDisplayName(line: GrabPromoChoiceCatalogRow):
 
 export function promoChoiceGroupDisplayName(choiceGroup: string): string {
   const key = String(choiceGroup ?? '').trim()
-  if (!key) return 'Options'
-  const slot = getPromoChoiceSlotLabel(key)
-  return slot && slot !== key ? slot : key
+  if (!key) return 'ตัวเลือก'
+  return getPromoChoiceSlotLabelForGrabDelivery(key) || key
 }
 
 /** 프로모 choice_group → Grab modifierGroups (POS 세트 탭 선택 그룹과 동일) */
