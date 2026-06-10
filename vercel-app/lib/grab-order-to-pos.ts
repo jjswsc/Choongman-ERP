@@ -21,6 +21,12 @@ import {
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
 import {
+  loadGrabPromoChoiceCatalogByPromoId,
+  promoCatalogHasChoiceGroups,
+  resolvePromoItemsForGrabOrder,
+  type GrabPromoChoiceCatalogRow,
+} from '@/lib/grab-promo-choice-modifier-groups'
+import {
   mergeGrabSetChildLinesIntoPromoParents,
   parseGrabSetChildLineName,
   type GrabSetPosLine,
@@ -500,7 +506,7 @@ async function loadPosMenuNameById(): Promise<Map<number, string>> {
 async function loadGrabPosCatalog(): Promise<GrabPosCatalog> {
   try {
     const { loadPosOptionRowsForCodeMap } = await import('@/lib/pos-menu-options-code-catalog-server')
-    const [menus, optionCatalogRows, promos] = await Promise.all([
+    const [menus, optionCatalogRows, promos, promoChoiceCatalog] = await Promise.all([
       supabaseSelectFilter('pos_menus', 'id=gt.0', {
         limit: 20000,
         select: 'id,name,code',
@@ -512,44 +518,30 @@ async function loadGrabPosCatalog(): Promise<GrabPosCatalog> {
         select: 'id,name,code',
         order: 'id.asc',
       }) as Promise<{ id?: string | number; name?: string; code?: string }[] | null>,
+      loadGrabPromoChoiceCatalogByPromoId().catch(() => ({
+        byPromoId: new Map<number, GrabPromoChoiceCatalogRow[]>(),
+        menuPromoIdByMenuId: new Map<number, string>(),
+      })),
     ])
-    const promoIds = (promos || [])
-      .map((p) => String(p.id ?? '').trim())
-      .filter(Boolean)
-    const promoItemsByPromoId = new Map<string, NonNullable<PosItem['promoItems']>>()
-    if (promoIds.length > 0) {
-      const itemRows = (await supabaseSelectFilter('pos_promo_items', 'promo_id=not.is.null', {
-        limit: 50000,
-        select: 'promo_id,menu_id,option_id,option_code,quantity',
-        order: 'promo_id.asc',
-      })) as {
-        promo_id?: string | number
-        menu_id?: string | number
-        option_id?: string | number | null
-        option_code?: string | null
-        quantity?: number
-      }[] | null
-      for (const row of itemRows || []) {
-        const pid = String(row.promo_id ?? '').trim()
-        const menuId = String(row.menu_id ?? '').trim()
-        if (!pid || !menuId) continue
-        const list = promoItemsByPromoId.get(pid) || []
-        list.push({
-          menuId,
-          optionId: row.option_id != null && String(row.option_id).trim() ? String(row.option_id).trim() : null,
-          ...(row.option_code ? { optionCode: String(row.option_code).trim() } : {}),
-          quantity: Math.max(1, Number(row.quantity) || 1),
-        })
-        promoItemsByPromoId.set(pid, list)
-      }
-    }
     const promosWithItems = (promos || []).map((p) => {
       const id = String(p.id ?? '').trim()
+      const promoIdNum = Number(id)
+      const items =
+        promoIdNum > 0 ? promoChoiceCatalog.byPromoId.get(promoIdNum) || [] : []
       return {
         id,
         name: String(p.name ?? '').trim(),
         code: String(p.code ?? '').trim(),
-        items: id ? promoItemsByPromoId.get(id) || [] : [],
+        items: items.map((it) => ({
+          menuId: String(it.menuId ?? '').trim(),
+          optionId: it.optionId != null && String(it.optionId).trim() ? String(it.optionId).trim() : null,
+          ...(it.optionCode ? { optionCode: String(it.optionCode).trim() } : {}),
+          quantity: Math.max(1, Number(it.quantity) || 1),
+          ...(it.menuName ? { menuName: String(it.menuName).trim() } : {}),
+          ...(it.optionName ? { optionName: String(it.optionName).trim() } : {}),
+          ...(it.choiceGroup ? { choiceGroup: String(it.choiceGroup).trim() } : {}),
+          ...(it.choicePickCount != null ? { choicePickCount: it.choicePickCount } : {}),
+        })),
       }
     })
     return buildGrabPosCatalog(
@@ -558,10 +550,11 @@ async function loadGrabPosCatalog(): Promise<GrabPosCatalog> {
         name: o.name,
         optionCode: o.optionCode,
       })),
-      promosWithItems
+      promosWithItems,
+      promoChoiceCatalog.menuPromoIdByMenuId
     )
   } catch {
-    return buildGrabPosCatalog([], [], [])
+    return buildGrabPosCatalog([], [], [], new Map())
   }
 }
 
@@ -916,6 +909,50 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     if (inferredDefaultSize && !modifierNamesForNote.includes(inferredDefaultSize)) {
       modifierNamesForNote.unshift(inferredDefaultSize)
     }
+
+    let promoId = resolved.promoId
+    let promoCode = resolved.promoCode
+    if (!promoId && resolved.menuId) {
+      promoId = catalog.menuPromoIdByMenuId.get(Number(resolved.menuId))
+    }
+    const promoRow = promoId ? catalog.promoById.get(String(promoId)) : undefined
+    if (!promoCode && promoRow?.code) promoCode = String(promoRow.code).trim() || undefined
+
+    const allPromoCatalogItems = (promoRow?.items?.length
+      ? promoRow.items
+      : resolved.promoItems || []) as GrabPromoChoiceCatalogRow[]
+    let promoItemsSnapshot: NonNullable<PosItem['promoItems']> | undefined
+    if (allPromoCatalogItems.length > 0) {
+      promoItemsSnapshot = promoCatalogHasChoiceGroups(allPromoCatalogItems)
+        ? resolvePromoItemsForGrabOrder({
+            allItems: allPromoCatalogItems,
+            itemId: itemBaseId,
+            flatModifiers,
+          })
+        : allPromoCatalogItems.map((it) => ({
+            menuId: String(it.menuId ?? '').trim(),
+            optionId: it.optionId != null && String(it.optionId).trim() ? String(it.optionId).trim() : null,
+            ...(it.optionCode ? { optionCode: String(it.optionCode).trim() } : {}),
+            ...(it.menuName ? { menuName: String(it.menuName).trim() } : {}),
+            ...(it.optionName ? { optionName: String(it.optionName).trim() } : {}),
+            quantity: Math.max(1, Number(it.quantity) || 1),
+          }))
+      if (promoCatalogHasChoiceGroups(allPromoCatalogItems)) {
+        const choiceNameKeys = new Set(
+          allPromoCatalogItems
+            .filter((it) => String(it.choiceGroup ?? '').trim())
+            .map((it) => String(it.menuName || it.optionName || '').trim().toLowerCase())
+            .filter(Boolean)
+        )
+        if (choiceNameKeys.size > 0) {
+          for (let mi = modifierNamesForNote.length - 1; mi >= 0; mi--) {
+            const lab = String(modifierNamesForNote[mi] ?? '').trim().toLowerCase()
+            if (choiceNameKeys.has(lab)) modifierNamesForNote.splice(mi, 1)
+          }
+        }
+      }
+    }
+
     const resolvedMenuRow = resolved.menuId
       ? catalog.menuById.get(Number(resolved.menuId))
       : undefined
@@ -1006,9 +1043,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
               optionCode1: optionCodes[0],
             }
           : {}),
-        ...(resolved.promoId ? { promoId: resolved.promoId } : {}),
-        ...(resolved.promoCode ? { promoCode: resolved.promoCode } : {}),
-        ...(resolved.promoItems && resolved.promoItems.length > 0 ? { promoItems: resolved.promoItems } : {}),
+        ...(promoId ? { promoId } : {}),
+        ...(promoCode ? { promoCode } : {}),
+        ...(promoItemsSnapshot && promoItemsSnapshot.length > 0 ? { promoItems: promoItemsSnapshot } : {}),
         note: itemNote,
         deliveryAppCode: 'grab',
       })

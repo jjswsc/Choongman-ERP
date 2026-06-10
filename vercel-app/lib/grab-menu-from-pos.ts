@@ -40,6 +40,10 @@ import {
   normalizePromotionCategoryMain,
   PROMOTION_MAIN_CATEGORY,
 } from '@/lib/pos-promo-constants'
+import {
+  buildGrabPromoChoiceModifierGroups,
+  loadGrabPromoChoiceCatalogByPromoId,
+} from '@/lib/grab-promo-choice-modifier-groups'
 
 export { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 
@@ -770,10 +774,14 @@ export async function buildGrabMenuFromPos(params: {
   merchantID: string
   partnerMerchantID: string
 }): Promise<unknown> {
-  const [loadedMenus, banbanFlavorLinkRows, promoCutByPromoId] = await Promise.all([
+  const [loadedMenus, banbanFlavorLinkRows, promoCutByPromoId, promoChoiceCatalog] = await Promise.all([
     loadMenus(),
     loadBanbanFlavorLinkRows(),
     loadGrabPromoCutPriceByPromoId().catch(() => new Map()),
+    loadGrabPromoChoiceCatalogByPromoId().catch(() => ({
+      byPromoId: new Map(),
+      menuPromoIdByMenuId: new Map(),
+    })),
   ])
   const menus = mergeBanbanFlavorMenuIdsIntoMenus(loadedMenus, banbanFlavorLinkRows)
   if (!menus.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
@@ -1057,6 +1065,16 @@ export async function buildGrabMenuFromPos(params: {
             }))
           : []
 
+      const promoIdForChoices = Number(menu.promo_id ?? 0)
+      const promoChoiceModifierGroups =
+        promoIdForChoices > 0
+          ? buildGrabPromoChoiceModifierGroups({
+              itemId,
+              items: promoChoiceCatalog.byPromoId.get(promoIdForChoices) || [],
+              sequenceStart: modifierGroups.length + banbanModifierGroups.length,
+            })
+          : []
+
       const soldOut = isSoldOutDate(menu.sold_out_date)
       const active = menu.is_active !== false
       const available = active && !soldOut && isMenuAvailableByDeliveryPolicy(policy)
@@ -1120,7 +1138,7 @@ export async function buildGrabMenuFromPos(params: {
         campaignInfo: null,
         description: menuDesc,
         photos: photoUrl ? [photoUrl] : [],
-        modifierGroups: [...modifierGroups, ...banbanModifierGroups],
+        modifierGroups: [...modifierGroups, ...banbanModifierGroups, ...promoChoiceModifierGroups],
       }
     })
 

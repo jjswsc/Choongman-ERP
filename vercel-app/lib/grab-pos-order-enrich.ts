@@ -9,6 +9,9 @@ export type GrabPosCatalog = {
   optionNameByCode: Map<string, string>
   promoByCode: Map<string, GrabPosPromoCatalogRow>
   promoByNameKey: Map<string, GrabPosPromoCatalogRow>
+  promoById: Map<string, GrabPosPromoCatalogRow>
+  /** 프로모 미러 메뉴 id → promo_id */
+  menuPromoIdByMenuId: Map<number, string>
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -92,7 +95,8 @@ function extractPromoCodeCandidatesFromText(raw: string): string[] {
 export function buildGrabPosCatalog(
   menus: Array<{ id?: unknown; name?: unknown; code?: unknown }>,
   options: Array<{ optionCode?: unknown; option_code?: unknown; name?: unknown }>,
-  promos: GrabPosPromoCatalogRow[] = []
+  promos: GrabPosPromoCatalogRow[] = [],
+  menuPromoIdByMenuId: Map<number, string> = new Map()
 ): GrabPosCatalog {
   const menuById = new Map<number, { id: string; name: string; code: string }>()
   const menuByCode = new Map<string, { id: string; name: string; code: string }>()
@@ -114,13 +118,24 @@ export function buildGrabPosCatalog(
   }
   const promoByCode = new Map<string, GrabPosPromoCatalogRow>()
   const promoByNameKey = new Map<string, GrabPosPromoCatalogRow>()
+  const promoById = new Map<string, GrabPosPromoCatalogRow>()
   for (const p of promos) {
+    const id = String(p.id ?? '').trim()
     const code = normalizePromoCode(String(p.code ?? '').trim())
     const nameKey = normalizePromoLookupText(p.name)
+    if (id) promoById.set(id, p)
     if (code) promoByCode.set(code, p)
     if (nameKey) promoByNameKey.set(nameKey, p)
   }
-  return { menuById, menuByCode, optionNameByCode, promoByCode, promoByNameKey }
+  return {
+    menuById,
+    menuByCode,
+    optionNameByCode,
+    promoByCode,
+    promoByNameKey,
+    promoById,
+    menuPromoIdByMenuId,
+  }
 }
 
 function pickCustomerReadableText(...values: unknown[]): string {
