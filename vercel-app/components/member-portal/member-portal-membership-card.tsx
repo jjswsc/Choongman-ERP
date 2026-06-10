@@ -12,6 +12,49 @@ import {
 } from "@/components/member-portal/portal-ui"
 import { MEMBERSHIP_CARD_GOLDEN_RATIO, mpGoldText } from "@/lib/member-portal-design"
 
+type MembershipCardTierProgress = {
+  subtitle: string
+  progressPercent: number
+  pointRateLabel: string
+  actionLabel?: string
+  onAction?: () => void
+}
+
+function MembershipCardTierProgressSection({
+  subtitle,
+  progressPercent,
+  pointRateLabel,
+  actionLabel,
+  onAction,
+}: MembershipCardTierProgress) {
+  const { t } = useMemberPortalLang()
+
+  return (
+    <div className="relative shrink-0 border-t border-white/10 pt-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">{t("tierNext")}</p>
+      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/65">{subtitle}</p>
+      <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-white/8">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-[#f5e6b8] shadow-[0_0_10px_rgba(251,191,36,0.4)] transition-all duration-700"
+          style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-[10px] font-medium tracking-wide text-white/40">{pointRateLabel}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-100 transition hover:bg-amber-400/15"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function MembershipCardHeader({
   displayName,
   tier,
@@ -77,12 +120,14 @@ export function MemberPortalMembershipCard({
   qrDataUrl,
   showQr,
   onToggleQr,
+  tierProgress,
 }: {
   member: MemberSummary
   dashboard: PortalDashboard
   qrDataUrl: string
   showQr: boolean
   onToggleQr: () => void
+  tierProgress?: MembershipCardTierProgress
 }) {
   const { t } = useMemberPortalLang()
   const tier = tierVisual(dashboard.tierProgress.currentTierCode)
@@ -96,7 +141,7 @@ export function MemberPortalMembershipCard({
       <div
         className="relative w-full transition-transform duration-700 ease-[cubic-bezier(0.4,0.2,0.2,1)]"
         style={{
-          aspectRatio: MEMBERSHIP_CARD_GOLDEN_RATIO,
+          aspectRatio: tierProgress ? 1.38 : MEMBERSHIP_CARD_GOLDEN_RATIO,
           transformStyle: "preserve-3d",
           transform: showQr ? "rotateY(180deg)" : "rotateY(0deg)",
         }}
@@ -118,18 +163,18 @@ export function MemberPortalMembershipCard({
               onToggleQr={onToggleQr}
             />
 
-            <div className="relative mt-2.5 grid min-h-0 flex-1 grid-cols-2 content-center gap-2.5">
-              <div className="rounded-2xl border border-white/10 bg-black/25 px-3.5 py-3 backdrop-blur-md">
+            <div className="relative mt-2 grid min-h-0 flex-1 grid-cols-2 content-center gap-2">
+              <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 backdrop-blur-md">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">{t("points")}</p>
-                <p className="mt-1 text-xl font-bold tracking-tight text-white">{formatPoints(member.pointBalance || 0)}</p>
+                <p className="mt-0.5 text-lg font-bold tracking-tight text-white">{formatPoints(member.pointBalance || 0)}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/25 px-3.5 py-3 backdrop-blur-md">
+              <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 backdrop-blur-md">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">{t("memberNoShort")}</p>
-                <p className="mt-1 text-base font-bold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
+                <p className="mt-0.5 text-sm font-bold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
               </div>
             </div>
 
-            <p className="relative shrink-0 pt-2 text-[10px] tracking-wide text-white/50">{t("scanAtCounter")}</p>
+            {tierProgress ? <MembershipCardTierProgressSection {...tierProgress} /> : null}
           </div>
         </div>
 

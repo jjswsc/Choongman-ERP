@@ -34,7 +34,7 @@ import {
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
-import { MemberPortalHomeMonthlyPromos, MemberPortalHomeNewMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
+import { MemberPortalHomePromosAndMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -56,7 +56,6 @@ import {
   PremiumAppHeader,
   PremiumBottomNav,
   SectionTitle,
-  TierProgressCard,
 } from "@/components/member-portal/member-portal-premium-ui"
 import {
   buildFallbackDashboard,
@@ -74,7 +73,7 @@ import {
 } from "@/components/member-portal/portal-ui"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
-import { memberPortalGreetingKey, mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
+import { mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
 import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type MemberPortalStoreRow = MemberPortalStoreDto
@@ -871,7 +870,6 @@ export function MemberPortalApp() {
 
   const activeDashboard = dashboard ?? buildFallbackDashboard(member)
   const tier = tierVisual(activeDashboard.tierProgress.currentTierCode)
-  const greetingKey = memberPortalGreetingKey()
   const navItems = [
     { id: "home" as const, label: t("tabHome"), icon: Home },
     { id: "order" as const, label: t("tabOrder"), icon: ShoppingCart },
@@ -936,33 +934,33 @@ export function MemberPortalApp() {
 
         {tab === "home" && (
           <div className="space-y-4">
-            <div className="px-0.5">
-              <p className="text-sm font-medium text-amber-200/80">{t(greetingKey)}</p>
-              <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-white">
-                {member.fullName || member.name}
-              </h1>
-              <p className="mt-1 text-sm text-white/50">{t("homeWelcomeSub")}</p>
-            </div>
-
             <MemberPortalMembershipCard
               member={member}
               dashboard={activeDashboard}
               qrDataUrl={qrDataUrl}
               showQr={showQr}
               onToggleQr={() => setShowQr((v) => !v)}
-            />
-
-            <MemberPortalHomeMonthlyPromos
-              contentItems={contentItems}
-              lang={lang}
-              t={t}
-              onSelectPromo={(item) => {
-                setSelectedHomePromo(item)
-                setHomePromoOpen(true)
+              tierProgress={{
+                subtitle:
+                  activeDashboard.tierProgress.nextTierName
+                    ? activeDashboard.tierProgress.upgradeBasis === "points"
+                      ? t("tierProgressPoints", {
+                          amount: formatPoints(activeDashboard.tierProgress.amountToNext),
+                          tier: activeDashboard.tierProgress.nextTierName,
+                        })
+                      : t("tierProgress", {
+                          amount: formatBaht(activeDashboard.tierProgress.amountToNext),
+                          tier: activeDashboard.tierProgress.nextTierName,
+                        })
+                    : t("tierMax"),
+                progressPercent: activeDashboard.tierProgress.progressPercent,
+                pointRateLabel: `${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · ${activeDashboard.tierProgress.progressPercent}%`,
+                actionLabel: portalTiers.length > 0 ? t("tierGuideViewBtn") : undefined,
+                onAction: portalTiers.length > 0 ? () => setTierGuideOpen(true) : undefined,
               }}
             />
 
-            <MemberPortalHomeNewMenus
+            <MemberPortalHomePromosAndMenus
               contentItems={contentItems}
               lang={lang}
               t={t}
@@ -970,28 +968,6 @@ export function MemberPortalApp() {
                 setSelectedHomePromo(item)
                 setHomePromoOpen(true)
               }}
-            />
-
-            <TierProgressCard
-              title={t("tierNext")}
-              subtitle={
-                activeDashboard.tierProgress.nextTierName
-                  ? activeDashboard.tierProgress.upgradeBasis === "points"
-                    ? t("tierProgressPoints", {
-                        amount: formatPoints(activeDashboard.tierProgress.amountToNext),
-                        tier: activeDashboard.tierProgress.nextTierName,
-                      })
-                    : t("tierProgress", {
-                        amount: formatBaht(activeDashboard.tierProgress.amountToNext),
-                        tier: activeDashboard.tierProgress.nextTierName,
-                      })
-                  : t("tierMax")
-              }
-              progressPercent={activeDashboard.tierProgress.progressPercent}
-              pointRateLabel={`${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · ${activeDashboard.tierProgress.progressPercent}%`}
-              accentClass={tier.accent}
-              actionLabel={portalTiers.length > 0 ? t("tierGuideViewBtn") : undefined}
-              onAction={portalTiers.length > 0 ? () => setTierGuideOpen(true) : undefined}
             />
 
             {homePopup ? (
