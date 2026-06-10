@@ -1351,6 +1351,7 @@ export function BankTransactionsTab() {
     list,
     filterTransType,
     filterCategory,
+    filterVendorCode,
     filterAccountSubjectId,
     filterAccountSubjectEmpty,
     filterInvoiceNotReceived,
@@ -2127,7 +2128,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     </SelectTrigger>
                                     <SelectContent>
                                       <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
-                                        <Input placeholder={t("search") || "검색"} value={queryVendorSearch} onChange={(e) => setQueryVendorSearch(e.target.value)} className="h-7 text-xs" />
+                                        <Input
+                                          placeholder={t("search") || "검색"}
+                                          value={queryVendorSearch}
+                                          onChange={(e) => setQueryVendorSearch(e.target.value)}
+                                          onKeyDown={(e) => e.stopPropagation()}
+                                          className="h-7 text-xs"
+                                        />
                                       </div>
                                       <SelectItem value="__none__">—</SelectItem>
                                       {vendorOptions
@@ -2156,7 +2163,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     </SelectTrigger>
                                     <SelectContent>
                                       <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
-                                        <Input placeholder={t("search") || "검색"} value={queryStoreSearch} onChange={(e) => setQueryStoreSearch(e.target.value)} className="h-7 text-xs" />
+                                        <Input
+                                          placeholder={t("search") || "검색"}
+                                          value={queryStoreSearch}
+                                          onChange={(e) => setQueryStoreSearch(e.target.value)}
+                                          onKeyDown={(e) => e.stopPropagation()}
+                                          className="h-7 text-xs"
+                                        />
                                       </div>
                                       <SelectItem value="__none__">—</SelectItem>
                                       {receivableOptions
@@ -2655,6 +2668,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     placeholder={t("search") || "검색"}
                                     value={importVendorSearch}
                                     onChange={(e) => setImportVendorSearch(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     className="h-7 text-xs"
                                   />
                                 </div>
@@ -2704,6 +2718,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     placeholder={t("search") || "검색"}
                                     value={importStoreSearch}
                                     onChange={(e) => setImportStoreSearch(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     className="h-7 text-xs"
                                   />
                                 </div>
