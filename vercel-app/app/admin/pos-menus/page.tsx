@@ -83,6 +83,7 @@ import {
   type PosPromo,
 } from "@/lib/api-client"
 import { preparePosMenuImageFileForUpload } from "@/lib/pos-menu-image-compress"
+import { formatPosMenuImageUploadSpecHint } from "@/lib/pos-menu-image-upload-spec"
 import { getAutoBanbanFlavorMenuList } from "@/lib/pos-banban-utils"
 import {
   adminTabsBarCn,
@@ -6983,6 +6984,9 @@ export default function PosMenusPage() {
                   <p className="text-[11px] text-muted-foreground leading-snug">
                     {t("posDeliveryOpsBulkSellHint") ||
                       "하루 판매 가능 시간(HH:mm)입니다. 공란이면 Grab에 종일 판매(OpenAllDay)로 전송됩니다. 저장 시 Grab 메뉴(serviceHours)에 반영됩니다. 프로모 기간·컷프라이스(취소선)는 POS 프로모·Grab 캠페인과 별도입니다."}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {formatPosMenuImageUploadSpecHint(t)}
                   </p>
                 </div>
                 <div className="max-h-[420px] overflow-auto border rounded">

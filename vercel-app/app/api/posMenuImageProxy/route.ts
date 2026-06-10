@@ -7,13 +7,13 @@ const BROWSER_CACHE_CONTROL = 'public, max-age=86400, stale-while-revalidate=604
 const CDN_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=604800'
 
 /**
- * POS 메뉴 타일 표시 크기(높이 88~92px, 가로 ~180px)에 맞춘 다운스케일 기본값.
- * 레티나(2x)까지 고려해 가로 400px이면 화면상 차이 없이 전송량만 크게 줄인다.
- * (Vercel Fast Data Transfer 절감) — `w`/`q` 쿼리로 상한 내 조정 가능.
+ * POS 메뉴 타일 — 운영 원본(750×750 등)을 과도하게 줄이지 않도록 기본 폭을 맞춤.
+ * 타일 표시는 ~180×90px이나 레티나·확대 시 선명도를 위해 750px까지 서빙.
+ * `w`/`q` 쿼리로 상한(MAX_RENDER_WIDTH) 내 조정 가능.
  */
-const DEFAULT_RENDER_WIDTH = 400
-const MAX_RENDER_WIDTH = 1000
-const DEFAULT_RENDER_QUALITY = 70
+const DEFAULT_RENDER_WIDTH = 750
+const MAX_RENDER_WIDTH = 1200
+const DEFAULT_RENDER_QUALITY = 80
 
 function clampInt(raw: string | null, fallback: number, min: number, max: number): number {
   const n = Number(raw)

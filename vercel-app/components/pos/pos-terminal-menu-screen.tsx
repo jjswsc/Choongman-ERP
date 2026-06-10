@@ -57,6 +57,7 @@ import { buildPromoRegularPriceById } from '@/lib/pos-promo-cut-price'
 import { PosPromoCutPriceLabel } from '@/components/pos/pos-promo-cut-price-label'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
+import { formatPosMenuImageUploadSpecHint } from '@/lib/pos-menu-image-upload-spec'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
 import { resolvePromoTileImageSrc } from '@/lib/pos-menu-display-image'
 import { loadPosDeliveryMenuImageByMenuId } from '@/lib/load-pos-delivery-menu-images'
@@ -1878,6 +1879,9 @@ export function PosTerminalMenuScreen({
                           <Input className="h-9 text-xs" placeholder={t('posMenuImageUrlPlaceholder') || '또는 이미지 URL 입력'} value={menuEditForm.imageUrl} onChange={(e) => setMenuEditForm((p) => ({ ...p, imageUrl: e.target.value }))} />
                           <p className="text-[11px] text-muted-foreground">
                             {t('posMenuImageUploadHint') || '다른 메뉴에서 업로드한 URL은 저장이 거부될 수 있습니다. 이 메뉴에서 다시 업로드해 주세요.'}
+                          </p>
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            {formatPosMenuImageUploadSpecHint(t)}
                           </p>
                         </div>
                       </div>
