@@ -59,6 +59,15 @@ describe("RLS/권한 스코프 harness", () => {
     expect(canAccessPosPrinters("가맹점주")).toBe(true)
   })
 
+  it("오피스 소속·회계·슈퍼바이저도 POS 프린터 설정 접근 가능", () => {
+    expect(canAccessPosPrinters("staff", "CM Office")).toBe(true)
+    expect(canAccessPosPrinters("accounting", "CM Office")).toBe(true)
+    expect(canAccessPosPrinters("supervisor", "CM Office")).toBe(true)
+    expect(canAccessPosPrinters("supervisor", "CM Rama9")).toBe(true)
+    expect(canAccessPosPrinters("staff", "CM Rama9")).toBe(false)
+    expect(canPickPosTerminalStore("accounting", "CM Office")).toBe(true)
+  })
+
   it("POS 주문전용 역할은 원가분석 경로 접근이 차단된다", () => {
     expect(canPosStaffAccessPath("/pos", "pos_staff")).toBe(true)
     expect(canPosStaffAccessPath("/admin/pos-cost-analysis", "pos_staff")).toBe(false)

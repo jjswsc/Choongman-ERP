@@ -274,7 +274,7 @@ function buildCollapsedSections(): Record<string, boolean> {
 const MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
 
 /** POS 메뉴별 href → 권한 체크 함수 */
-const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
+const POS_MENU_ACCESS: Record<string, (role: string, store?: string) => boolean> = {
   "/pos": canAccessPosOrder,
   "/admin/pos-orders": canAccessPosOrders,
   "/admin/pos-settlement": canAccessPosSettlement,
@@ -283,7 +283,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-menus": canAccessPosMenus,
   "/admin/pos-screen-config": (role) => canAccessPosTerminalSettings(role),
   "/admin/pos-cost-analysis": canAccessPosCostAnalysis,
-  "/admin/pos-printers": canAccessPosPrinters,
+  "/admin/pos-printers": (role, store) => canAccessPosPrinters(role, store),
   "/admin/pos-coupons": canAccessPosCoupons,
   "/admin/pos-tax-invoice-recipients": canAccessPosOrders,
 }
@@ -495,7 +495,7 @@ export function ErpSidebar() {
                           if (!isPosStaff) return true
                           if (section.titleKey !== "adminSectionPos") return false
                           const check = POS_MENU_ACCESS[item.href]
-                          return check ? check(auth?.role || "") : false
+                          return check ? check(auth?.role || "", auth?.store || "") : false
                         })
                         .map((item) => {
                         const interiorExtra =

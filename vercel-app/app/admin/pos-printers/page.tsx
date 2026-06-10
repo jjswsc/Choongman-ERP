@@ -46,7 +46,7 @@ import {
   type PosPrinterSettings,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
+import { canPickPosTerminalStore, canAccessPosPrinters } from "@/lib/permissions"
 import { escapeHtmlReceiptEmphasizeChannelTokenAfterHash } from "@/lib/pos-delivery-platform"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
@@ -461,7 +461,7 @@ export default function PosPrintersPage() {
     React.useState<KitchenSlipOptionGroupPrintState>({})
   const [optionGroups, setOptionGroups] = React.useState<PosOptionGroup[]>([])
 
-  const canSearchAll = isOfficeRole(auth?.role || "")
+  const canSearchAll = canPickPosTerminalStore(auth?.role || "", auth?.store || "")
   const effectiveStore = String(canSearchAll && storeCode ? storeCode : auth?.store || "").trim()
 
   const menusFilteredForRoute = React.useMemo(() => {
@@ -1555,7 +1555,7 @@ export default function PosPrintersPage() {
 
   const receiptPreviewIsTaxInvoice = false
 
-  if (!canAccessPosPrinters(auth?.role || "")) {
+  if (!canAccessPosPrinters(auth?.role || "", auth?.store || "")) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <p className="text-muted-foreground">{tr("noPermission", "접근 권한이 없습니다.")}</p>

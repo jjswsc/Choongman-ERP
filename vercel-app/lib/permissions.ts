@@ -362,9 +362,9 @@ export function canAccessPosTerminalSettings(role: string): boolean {
   )
 }
 
-/** 단말 설정 화면에서 매장 선택 (순회 SV·본사) */
+/** 단말 설정 화면에서 매장 선택 (순회 SV·본사·오피스 소속) */
 export function canPickPosTerminalStore(role: string, authStore?: string): boolean {
-  if (isOfficeRole(role) || isSupervisorRole(role)) return true
+  if (hasOfficeStaffScope(role, authStore) || isSupervisorRole(role)) return true
   return canPickAttendanceQrStoreFilter(role, authStore)
 }
 
@@ -389,17 +389,22 @@ export function canAccessPosMenus(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
-/** POS 프린터 설정 가능 (관리자) */
-export function canAccessPosPrinters(role: string): boolean {
-  return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
+/** POS 프린터 설정 가능 (매장 관리자·가맹점주·본사·순회 SV·오피스 소속) */
+export function canAccessPosPrinters(role: string, store?: string): boolean {
+  return (
+    isManagerRole(role) ||
+    isFranchiseeRole(role) ||
+    hasOfficeStaffScope(role, store) ||
+    isSupervisorRole(role)
+  )
 }
 
 /**
  * POS 프린터 설정 조회 — 터미널·듀얼 모니터에서 로드용.
  * (프린터 전체 편집은 `canAccessPosPrinters`, 주문/결산 직원은 조회만)
  */
-export function canReadPosPrinterSettings(role: string): boolean {
-  return canAccessPosPrinters(role) || canAccessPosOrder(role) || canAccessPosSettlement(role)
+export function canReadPosPrinterSettings(role: string, store?: string): boolean {
+  return canAccessPosPrinters(role, store) || canAccessPosOrder(role) || canAccessPosSettlement(role)
 }
 
 /**

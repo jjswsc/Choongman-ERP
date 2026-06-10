@@ -10,7 +10,7 @@ import {
 import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { requireAuth } from '@/lib/verify-auth'
-import { canAccessPosPrinters, canSavePosCustomerDisplayFields, isOfficeRole } from '@/lib/permissions'
+import { canAccessPosPrinters, canSavePosCustomerDisplayFields, hasOfficeStaffScope } from '@/lib/permissions'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -165,15 +165,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '인증이 필요합니다.' }, { status: 401, headers })
     }
     const actorRole = String(authResult.auth.role || '')
-    const allowFullPrinterSave = canAccessPosPrinters(actorRole)
+    const authStore = String(authResult.auth.store || '').trim()
+    const allowFullPrinterSave = canAccessPosPrinters(actorRole, authStore)
     const allowCustomerDisplayOnly = !allowFullPrinterSave && canSavePosCustomerDisplayFields(actorRole)
     if (!allowFullPrinterSave && !allowCustomerDisplayOnly) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
     }
     const body = await req.json()
     const requestedStoreCode = String(body?.storeCode ?? '').trim()
-    const authStore = String(authResult.auth.store || '').trim()
-    const office = isOfficeRole(authResult.auth.role || '')
+    const office = hasOfficeStaffScope(actorRole, authStore)
     const storeCode = office ? requestedStoreCode : requestedStoreCode || authStore
     const kitchenMode = Math.min(3, Math.max(1, Number(body?.kitchenMode) || 1))
     const kitchen1Categories = Array.isArray(body?.kitchen1Categories)

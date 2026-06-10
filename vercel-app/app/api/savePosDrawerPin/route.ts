@@ -5,8 +5,8 @@ import { isValidPosDrawerPin } from '@/lib/pos-drawer-pin'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, canAccessPosSettlement } from '@/lib/permissions'
 
-function canManagePosDrawerPin(role: string): boolean {
-  return canAccessPosPrinters(role) || canAccessPosSettlement(role)
+function canManagePosDrawerPin(role: string, store?: string): boolean {
+  return canAccessPosPrinters(role, store) || canAccessPosSettlement(role)
 }
 
 /** 금전 서랍 6자리 PIN 등록·변경 — 매장 매니저/본사 */
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const auth = await getVerifiedAuth(req)
-    if (!auth || !canManagePosDrawerPin(auth.role || '')) {
+    if (!auth || !canManagePosDrawerPin(auth.role || '', auth.store || '')) {
       return NextResponse.json({ success: false, message: '권한 없음' }, { headers, status: 403 })
     }
 

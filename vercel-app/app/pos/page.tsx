@@ -129,7 +129,7 @@ function POSMainPageInner() {
   const businessNavDrawerWarnedRef = useRef(false)
   const [drawerPinSettingsOpen, setDrawerPinSettingsOpen] = useState(false)
   const { openPosCashDrawerSecure, invalidateDrawerPinCache } = usePosCashDrawerOpen()
-  const canManageDrawerPin = canAccessPosPrinters(auth?.role || '') || canAccessPosSettlement(auth?.role || '')
+  const canManageDrawerPin = canAccessPosPrinters(auth?.role || '', auth?.store || '') || canAccessPosSettlement(auth?.role || '')
   const navigateWatchdogRef = useRef<number | null>(null)
   useEffect(
     () => () => {
