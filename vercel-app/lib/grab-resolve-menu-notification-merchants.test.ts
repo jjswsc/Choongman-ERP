@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import {
+  collectGrabMapLookupSeedsForStore,
+  collectGrabMenuSyncMerchantIDsForStoreLookup,
   isGrabFoodMerchantMapKey,
   resolveGrabMenuNotificationMerchantIDs,
 } from '@/lib/grab-resolve-menu-notification-merchants'
@@ -52,6 +54,34 @@ describe('resolveGrabMenuNotificationMerchantIDs', () => {
     expect(resolveGrabMenuNotificationMerchantIDs('1040')).toEqual(['GFSBPOS-PROD-999'])
     if (prevApi === undefined) delete process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP
     else process.env.GRAB_PARTNER_API_MENU_MERCHANT_MAP = prevApi
+  })
+
+  it('resolves CM The street via map alias to portal merchant 1050', () => {
+    const prevPortal = process.env.GRAB_PORTAL_MERCHANT_MAP
+    const prevMap = process.env.GRAB_STORE_MAP_JSON
+    delete process.env.GRAB_PORTAL_MERCHANT_MAP
+    process.env.GRAB_STORE_MAP_JSON = JSON.stringify({
+      '3-C7KJGBUEJND1VX': '1050',
+      '1050': 'CM The Street Ratchada',
+      'CM The street': '1050',
+    })
+    const seeds = collectGrabMapLookupSeedsForStore('CM The street', [
+      {
+        store_code: 'CM The street',
+        display_name: 'CM The street',
+        aliases: ['CM The Street Ratchada', '1050'],
+      },
+    ])
+    expect(seeds).toContain('CM The Street Ratchada')
+    const ids = new Set<string>()
+    for (const seed of seeds) {
+      for (const id of collectGrabMenuSyncMerchantIDsForStoreLookup(seed)) ids.add(id)
+    }
+    expect(Array.from(ids)).toEqual(['3-C7KJGBUEJND1VX'])
+    if (prevPortal === undefined) delete process.env.GRAB_PORTAL_MERCHANT_MAP
+    else process.env.GRAB_PORTAL_MERCHANT_MAP = prevPortal
+    if (prevMap === undefined) delete process.env.GRAB_STORE_MAP_JSON
+    else process.env.GRAB_STORE_MAP_JSON = prevMap
   })
 
   it('uses GFSBPOS when portal map is absent (sandbox-only)', () => {

@@ -1,3 +1,4 @@
+import { fetchErpStoresMaster, type ErpStoreMasterRow } from '@/lib/erp-store-master'
 import {
   expandGrabStoreMapLinkedCodes,
   parseGrabPartnerApiMenuMerchantMap,
@@ -146,6 +147,35 @@ export async function resolveGrabMenuNotificationMerchantIDsWithDbFallback(
   return Array.from(out).sort()
 }
 
+/**
+ * ERP `erp_stores` canonical·별칭을 Grab 맵 조회 seed로 펼침.
+ * 예: POS `CM The street` + alias `CM The Street Ratchada` → `1050` 맵 연결.
+ */
+export function collectGrabMapLookupSeedsForStore(
+  storeCode: string,
+  masters: ErpStoreMasterRow[] = []
+): string[] {
+  const raw = String(storeCode || '').trim()
+  const seeds = new Set<string>()
+  if (raw) seeds.add(raw)
+  const gk = normStoreKey(raw)
+  if (!gk) return Array.from(seeds)
+  for (const row of masters) {
+    const sc = String(row.store_code || '').trim()
+    const keys = [
+      sc,
+      String(row.display_name || '').trim(),
+      ...((row.aliases || []).map((a) => String(a || '').trim())),
+    ]
+    if (!keys.some((k) => normStoreKey(k) === gk)) continue
+    for (const k of keys) {
+      if (k) seeds.add(k)
+    }
+    if (sc) seeds.add(sc)
+  }
+  return Array.from(seeds).filter(Boolean)
+}
+
 /** ERP 매장코드·표시명 → Grab menu sync merchantID (맵 BFS + 값 일치 + partner 숫자) */
 export function collectGrabMenuSyncMerchantIDsForStoreLookup(storeCode: string): string[] {
   const raw = String(storeCode || '').trim()
@@ -174,8 +204,13 @@ export function collectGrabMenuSyncMerchantIDsForStoreLookup(storeCode: string):
 export async function resolveGrabMenuNotificationMerchantIDsForStore(
   storeCode: string
 ): Promise<string[]> {
-  const fromMap = collectGrabMenuSyncMerchantIDsForStoreLookup(storeCode)
-  if (fromMap.length > 0) return fromMap
+  const masters = await fetchErpStoresMaster().catch(() => [])
+  const lookupSeeds = collectGrabMapLookupSeedsForStore(storeCode, masters)
+  const fromMap = new Set<string>()
+  for (const seed of lookupSeeds) {
+    for (const id of collectGrabMenuSyncMerchantIDsForStoreLookup(seed)) fromMap.add(id)
+  }
+  if (fromMap.size > 0) return Array.from(fromMap).sort()
 
   const raw = String(storeCode || '').trim()
   if (!raw) return []

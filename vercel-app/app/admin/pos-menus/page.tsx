@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { PosScreenConfigStoreSelect } from "@/components/pos/pos-screen-config-store-select"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -524,7 +525,7 @@ function newPackagingChecklistRow(sortOrder: number): PackagingChecklistDraftRow
 
 export default function PosMenusPage() {
   const { auth } = useAuth()
-  const { posStores: stores } = useStoreList()
+  const { posStores: stores, storeLabels, formatStoreLabel } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
   /** 옵션 부위명 — 영수증과 동일하게 한글 부위 표기를 Boneless/Wing/Drumette 로 통일 */
@@ -804,6 +805,8 @@ export default function PosMenusPage() {
   const [setTabSchemaDismissed, setSetTabSchemaDismissed] = React.useState(false)
   const [setTabFocusPromoId, setSetTabFocusPromoId] = React.useState<string | null>(null)
   const [deliveryOpsStoreCode, setDeliveryOpsStoreCode] = React.useState("")
+  /** 드롭다운 선택값 — [조회] 전까지 화면 데이터(deliveryOpsStoreCode)와 분리 */
+  const [deliveryOpsStoreDraft, setDeliveryOpsStoreDraft] = React.useState("")
   const [deliveryOpsAppCode, setDeliveryOpsAppCode] = React.useState<DeliveryAppCode>("grab")
   const [deliveryOpsLoading, setDeliveryOpsLoading] = React.useState(false)
   const [deliveryOpsSaving, setDeliveryOpsSaving] = React.useState(false)
@@ -896,10 +899,16 @@ export default function PosMenusPage() {
   React.useEffect(() => {
     if (canSearchAllStores && stores.length && !deliveryOpsStoreCode) {
       setDeliveryOpsStoreCode(stores[0])
+      setDeliveryOpsStoreDraft(stores[0])
     } else if (!canSearchAllStores && auth?.store) {
       setDeliveryOpsStoreCode(auth.store)
+      setDeliveryOpsStoreDraft(auth.store)
     }
   }, [canSearchAllStores, stores, auth?.store, deliveryOpsStoreCode])
+
+  React.useEffect(() => {
+    setDeliveryOpsStoreDraft(deliveryOpsStoreCode)
+  }, [deliveryOpsStoreCode])
 
   /** 신규 등록 시에만 기본 노출 매장 — 편집 중(editingId)에는 handleEdit·서버 목록과 동기화 */
   React.useEffect(() => {
@@ -3804,6 +3813,19 @@ export default function PosMenusPage() {
       setDeliveryOpsLoading(false)
     }
   }, [deliveryOpsStoreCode, deliveryOpsAppCode, t])
+
+  const handleQueryDeliveryOps = React.useCallback(() => {
+    const next = String(deliveryOpsStoreDraft || "").trim()
+    if (!next) return
+    if (next !== String(deliveryOpsStoreCode || "").trim()) {
+      setDeliveryOpsStoreCode(next)
+      return
+    }
+    void loadDeliveryOpsPolicy()
+  }, [deliveryOpsStoreDraft, deliveryOpsStoreCode, loadDeliveryOpsPolicy])
+
+  const deliveryOpsStoreDraftPending =
+    String(deliveryOpsStoreDraft || "").trim() !== String(deliveryOpsStoreCode || "").trim()
 
   const buildDeliveryOpsSavePayload = React.useCallback((storeCode: string) => {
     const menuPolicies: PosDeliveryMenuPolicy[] = menus.map((m) => {
@@ -6833,18 +6855,51 @@ export default function PosMenusPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
-                <div>
+                <div className="md:col-span-2">
                   <label className="text-xs font-semibold">{t("store") || "매장"}</label>
-                  <Select value={deliveryOpsStoreCode} onValueChange={setDeliveryOpsStoreCode}>
-                    <SelectTrigger className="mt-1 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(canSearchAllStores ? stores : [auth?.store || ""]).filter(Boolean).map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <PosScreenConfigStoreSelect
+                      value={deliveryOpsStoreDraft || undefined}
+                      onValueChange={setDeliveryOpsStoreDraft}
+                      stores={(canSearchAllStores ? stores : [auth?.store || ""]).filter(Boolean)}
+                      storeLabels={storeLabels}
+                      disabled={!canSearchAllStores && !auth?.store}
+                      className="h-9 min-w-[10rem] flex-1 max-w-md"
+                      searchPlaceholder={t("outStoreSearchPh") || "매장 검색"}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 gap-1.5 shrink-0"
+                      onClick={handleQueryDeliveryOps}
+                      disabled={deliveryOpsLoading || !String(deliveryOpsStoreDraft || "").trim()}
+                    >
+                      <Search className="h-4 w-4" />
+                      {t("search") || t("btn_query") || "조회"}
+                    </Button>
+                    {deliveryOpsStoreCode ? (
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md border px-2 py-1 text-[11px] font-medium",
+                          deliveryOpsStoreDraftPending
+                            ? "border-amber-300 bg-amber-50 text-amber-900"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-900"
+                        )}
+                      >
+                        {(t("posDeliveryOpsLoadedStore") || "현재 조회").replace(
+                          "{{store}}",
+                          formatStoreLabel(deliveryOpsStoreCode) || deliveryOpsStoreCode
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
+                    {deliveryOpsStoreDraftPending
+                      ? t("posDeliveryOpsStorePendingQuery") ||
+                        "매장을 바꾸었습니다. [조회]를 눌러 해당 매장 설정을 불러오세요."
+                      : t("posScreenConfigStoreQueryHint") ||
+                        "매장명·코드로 검색한 뒤 [조회]를 눌러 해당 매장 설정을 불러오세요."}
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold">{t("posDeliveryOpsApp") || "앱"}</label>

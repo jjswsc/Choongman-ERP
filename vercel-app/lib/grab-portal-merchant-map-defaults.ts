@@ -102,6 +102,8 @@ export function buildGrabStoreMapJsonDefaults(): Record<string, string> {
   for (const row of GRAB_PORTAL_MERCHANT_ENTRIES) {
     out[row.partnerMerchantId] = row.erpStoreCode
   }
+  /** POS·주문 `store_code` 별칭 — The Street Ratchada(Grab 맵) ↔ CM The street(erp_stores) */
+  out['CM The street'] = '1050'
   return out
 }
 
