@@ -5,7 +5,7 @@
 import { useMemo } from "react"
 import { isLangCode } from "./lang-context"
 import { I18N_HELP_LONG_EN, I18N_HELP_LONG_KO } from "./i18n-admin-help-long"
-import { I18N_MP_ADMIN_EN, I18N_MP_ADMIN_KO } from "./i18n-member-portal-admin"
+import { I18N_MP_ADMIN_EN, I18N_MP_ADMIN_KO, I18N_MP_ADMIN_TH } from "./i18n-member-portal-admin"
 
 export const i18n = {
   ko: {
@@ -22265,6 +22265,13 @@ orderItemQty: 'จำนวน',
     adminPosPrinters: 'ตั้งค่าเครื่องพิมพ์',
     adminPosCoupons: 'คูปอง',
     adminSectionSales: 'ยอดขาย',
+    adminSectionCustomerCrm: 'CRM ลูกค้า',
+    adminSectionCrm: 'จัดการ CRM',
+    adminCrmDashboard: 'แดชบอร์ด CRM',
+    adminCrmSegments: 'กลุ่มลูกค้า',
+    adminCrmRfm: 'คะแนน RFM',
+    memberAppContent: 'หน้าสมาชิก',
+    ...I18N_MP_ADMIN_TH,
     adminSectionMarketing: 'การตลาด',
     adminMarketingCampaigns: 'แคมเปญ',
     marketingCampaignFinderLabel: 'ค้นหาแคมเปญ',
