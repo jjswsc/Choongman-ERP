@@ -19,6 +19,7 @@ import {
   resolveOptionCodesToLabels,
   enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   grabSelectionIncludesExplicitSize,
+  resolveGrabEcoCutleryNoteTokenFromOrder,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
 import {
@@ -425,44 +426,6 @@ function lookupGrabStoreMapSeed(map: Record<string, string>, key: string): strin
   return ''
 }
 
-function resolveEcoCutlerySummary(order: Record<string, unknown>): string | null {
-  const visited = new Set<unknown>()
-  const queue: Array<{ value: unknown; depth: number }> = [{ value: order, depth: 0 }]
-  let found: boolean | null = null
-  while (queue.length > 0) {
-    const node = queue.shift()
-    if (!node) break
-    const { value, depth } = node
-    if (depth > 4 || value == null) continue
-    if (typeof value !== 'object') continue
-    if (visited.has(value)) continue
-    visited.add(value)
-    const rec = asRecord(value)
-    for (const [kRaw, v] of Object.entries(rec)) {
-      const k = String(kRaw || '').trim().toLowerCase()
-      if (!k) continue
-      const isCutleryKey =
-        (k.includes('plastic') && (k.includes('cutlery') || k.includes('utensil'))) ||
-        k.includes('cutleryrequested') ||
-        k.includes('utensilrequested')
-      if (isCutleryKey) {
-        if (typeof v === 'boolean') found = v
-        else if (typeof v === 'string') {
-          const s = v.trim().toLowerCase()
-          if (s === 'true' || s === 'yes' || s === '1') found = true
-          else if (s === 'false' || s === 'no' || s === '0') found = false
-        } else {
-          const n = Number(v)
-          if (Number.isFinite(n)) found = n > 0
-        }
-      }
-      if (v && typeof v === 'object') queue.push({ value: v, depth: depth + 1 })
-    }
-  }
-  if (found == null) return null
-  return found ? 'eco:plastic cutlery requested' : 'eco:no plastic cutlery requested'
-}
-
 async function loadPosMenuNameById(): Promise<Map<number, string>> {
   try {
     const rows = (await supabaseSelectFilter('pos_menus', 'id=gt.0', {
@@ -786,7 +749,7 @@ function resolveMenuCodeForGrabLine(params: {
 async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]> {
   const exponent = currencyExponent(order)
   const rawItems = Array.isArray(order.items) ? order.items : []
-  const ecoSummary = resolveEcoCutlerySummary(order)
+  const ecoSummary = resolveGrabEcoCutleryNoteTokenFromOrder(order)
   const [menuNameById, catalog] = await Promise.all([loadPosMenuNameById(), loadGrabPosCatalog()])
   const out: PosItem[] = []
   let idx = 0

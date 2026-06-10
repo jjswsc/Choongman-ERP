@@ -5,7 +5,10 @@
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { parseBanbanFlavorsFromDisplayName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
-import { formatGrabOptionFragmentForPrint } from '@/lib/grab-pos-order-enrich'
+import {
+  formatGrabOptionFragmentForPrint,
+  resolveGrabEcoCutleryChecklistLabelFromItems,
+} from '@/lib/grab-pos-order-enrich'
 import {
   isLikelyPosMenuSkuCode,
   normalizePosPrintOptionLabel,
@@ -653,6 +656,23 @@ export function buildKitchenSlipMemoBlockHtml(
   return '<div class="k-memo">' + escapeHtml(trimmed) + c('div')
 }
 
+/** Grab 수저·포크 체크리스트 — 주문당 1줄 (옵션 `- Size S` 와 동일 형식) */
+export function buildKitchenSlipCutleryChecklistHtml(
+  items: Array<{ note?: string | null | undefined }>,
+  escapeHtml: (s: string) => string,
+  t?: (key: string) => string
+): string {
+  const label = resolveGrabEcoCutleryChecklistLabelFromItems(items, t)
+  if (!label) return ''
+  const c = (tag: string) => '\u003c/' + tag + '>'
+  return (
+    '<div class="k-line-note" style="margin-top:6px;border-top:1px dashed #999;padding-top:6px;">' +
+    '- ' +
+    escapeHtml(label) +
+    c('div')
+  )
+}
+
 /**
  * 단일 슬립 전체 HTML (인쇄 창에 document.write)
  * itemsHtml / memoHtml 은 이미 안전한 HTML 조각
@@ -774,6 +794,8 @@ export function buildKitchenSlipDocumentHtml(params: {
   guestCount?: number
   guestCountLabel?: string
   optionNameByCode?: Map<string, string> | Record<string, string>
+  /** 주방 슬립 수저·포크 체크리스트 번역 */
+  t?: (key: string) => string
 }): string {
   const {
     label,
@@ -792,14 +814,16 @@ export function buildKitchenSlipDocumentHtml(params: {
     guestCount,
     guestCountLabel,
     optionNameByCode,
+    t,
   } = params
-  const itemsHtml = buildKitchenSlipItemsHtml(
-    items,
-    escapeHtml,
-    design,
-    prependItemsHtml ?? '',
-    optionNameByCode
-  )
+  const itemsHtml =
+    buildKitchenSlipItemsHtml(
+      items,
+      escapeHtml,
+      design,
+      prependItemsHtml ?? '',
+      optionNameByCode
+    ) + buildKitchenSlipCutleryChecklistHtml(items, escapeHtml, t)
   const memoHtml = buildKitchenSlipMemoBlockHtml(String(memoLine ?? ''), escapeHtml, design)
   return buildKitchenSlipHtml({
     label,

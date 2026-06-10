@@ -105,6 +105,11 @@ function mapWithdrawalCategoryToBankCategory(withdrawalCategory: string): string
   return 'expense'
 }
 
+function resolveAccrualAccountSubjectId(source: ExpenseAccrualRow): number | null {
+  const sid = source.account_subject_id != null ? Number(source.account_subject_id) : NaN
+  return Number.isFinite(sid) && sid > 0 ? sid : null
+}
+
 function invoiceFieldsFromAccrual(source: ExpenseAccrualRow): Record<string, unknown> {
   const vat = Math.max(0, Math.abs(Number(source.vat_amount ?? 0) || 0))
   const payeeCode = String(source.payee_code || '').split('::wm::')[0]?.trim()
@@ -210,6 +215,7 @@ export async function POST(request: NextRequest) {
     const note = `expense_accrual_id:${expenseAccrualId};withdrawal_category:${withdrawalCategory}`
     const vendorCode = payeeCode && !payeeCode.startsWith('auto_') ? payeeCode : null
     const paymentMemo = memo || `지출 지급(${source.payee_name || payeeCode})`
+    const accrualAccountSubjectId = resolveAccrualAccountSubjectId(source)
 
     if (paymentMethod === 'bank') {
       const existingBankId = bankTransactionId != null ? Number(bankTransactionId) : null
@@ -265,6 +271,7 @@ export async function POST(request: NextRequest) {
           vendor_code: vendorCode,
           expense_date: transDate,
           store: store || source.store_name || null,
+          account_subject_id: accrualAccountSubjectId,
           user_employee_id: userEmployeeId,
           user_employee_code: userEmployeeCode,
           ...invoiceFieldsFromAccrual(source),
@@ -301,6 +308,7 @@ export async function POST(request: NextRequest) {
           category: bankCategory,
           vendor_code: vendorCode,
           expense_date: transDate,
+          account_subject_id: accrualAccountSubjectId,
           ...invoiceFieldsFromAccrual(source),
         })) as { id?: number }[]
         bankId = Number(inserted?.[0]?.id || 0) || null
@@ -332,6 +340,7 @@ export async function POST(request: NextRequest) {
         user_name: userName || null,
         user_employee_id: userEmployeeId,
         user_employee_code: userEmployeeCode,
+        account_subject_id: accrualAccountSubjectId,
         ...invoiceFieldsFromAccrual(source),
       })) as { id?: number }[]
       pettyId = Number(inserted?.[0]?.id || 0) || null
@@ -362,6 +371,7 @@ export async function POST(request: NextRequest) {
       petty_cash_transaction_id: pettyId,
       expense_date: source.expense_date || transDate,
       due_date: source.due_date || null,
+      account_subject_id: accrualAccountSubjectId,
     })
 
     const nextRemaining = Math.max(0, remaining - amount)

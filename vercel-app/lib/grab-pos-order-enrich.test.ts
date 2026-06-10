@@ -10,6 +10,9 @@ import {
   formatGrabPromoComposeLinesForPrint,
   resolveGrabDeliveryLineNote,
   resolveGrabPrintNoteRequest,
+  resolveGrabPrintNoteRequestWithoutEco,
+  resolveGrabEcoCutleryNoteTokenFromOrder,
+  resolveGrabEcoCutleryChecklistLabelFromItems,
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
   resolveOptionCodesToLabels,
@@ -284,6 +287,28 @@ describe('grab-pos-order-enrich', () => {
         (k) => (k === 'posGrabEcoCutleryRequested' ? '1회용 수저·포크 필요' : k)
       )
     ).toBe('less spicy · 1회용 수저·포크 필요')
+  })
+
+  it('resolveGrabEcoCutleryNoteTokenFromOrder reads Grab Order.cutlery boolean', () => {
+    expect(resolveGrabEcoCutleryNoteTokenFromOrder({ cutlery: true })).toBe(
+      'eco:plastic cutlery requested'
+    )
+    expect(resolveGrabEcoCutleryNoteTokenFromOrder({ cutlery: false })).toBe(
+      'eco:no plastic cutlery requested'
+    )
+    expect(
+      resolveGrabEcoCutleryNoteTokenFromOrder({
+        orderInfo: { cutlery: true },
+      })
+    ).toBe('eco:plastic cutlery requested')
+  })
+
+  it('resolveGrabEcoCutleryChecklistLabelFromItems returns translated checklist line', () => {
+    const items = [{ note: 'mods:S Boneless · eco:plastic cutlery requested' }]
+    const t = (key: string) =>
+      key === 'posGrabEcoCutleryRequested' ? 'ต้องการช้อนส้อมพลาสติก' : key
+    expect(resolveGrabEcoCutleryChecklistLabelFromItems(items, t)).toBe('ต้องการช้อนส้อมพลาสติก')
+    expect(resolveGrabPrintNoteRequestWithoutEco(items[0].note, undefined, t)).toBe('')
   })
 
   it('formatGrabLineNoteForKitchenPrint omits eco cutlery', () => {

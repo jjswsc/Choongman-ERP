@@ -36,7 +36,8 @@ import {
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
-  resolveGrabPrintNoteRequest,
+  resolveGrabEcoCutleryChecklistLabelFromItems,
+  resolveGrabPrintNoteRequestWithoutEco,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import {
@@ -670,7 +671,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           ? filterReceiptOptionLinesForBanban(baseOptionLine, banban)
           : baseOptionLine
         const lineNote = grabInbound
-          ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, t)
+          ? resolveGrabPrintNoteRequestWithoutEco(grabPrintNote, optionNameByCode, t)
           : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
         const detailLines = [...receiptOptionLines, ...banbanFlavorLines, ...promoComposeLinesExpanded]
         const detailRows = detailLines
@@ -685,6 +686,15 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         return main + lineDiscountRow + detailRows + noteRow
       })
       .join('')
+    const grabCutleryChecklistRow =
+      grabInbound && mergedItems.length > 0
+        ? (() => {
+            const label = resolveGrabEcoCutleryChecklistLabelFromItems(mergedItems, t)
+            return label
+              ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(label)}</td></tr>`
+              : ''
+          })()
+        : ''
     const summaryRows = [
       `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(subtotalPrint)}</td></tr>`,
       receiptData.discountAmt > 0
@@ -740,7 +750,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${taxInvoice ? buildPosTaxInvoiceThermalHtml({ taxInvoice, esc, tr }) : ''}
         ${voidBannerHtml}
         <div class="simple-divider"></div>
-        <table class="simple-table">${itemRows}</table>
+        <table class="simple-table">${itemRows}${grabCutleryChecklistRow}</table>
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
@@ -871,15 +881,16 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             deliveryAppCode: receiptData.deliveryAppCode,
             items: receiptData.items,
           })
-          return mergeSetChildrenForReceipt(
+          const mergedLegacyItems = mergeSetChildrenForReceipt(
             receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0],
             { grabInbound, optionNameByCode }
           )
+          const itemsHtml = mergedLegacyItems
             .map((it, idx) => {
             const baseLineSplit = splitPosPrintItemLine(it.name)
             const grabPrintNote = grabInbound ? resolveGrabItemPrintNote(it) : String(it.note ?? '')
             const lineNote = grabInbound
-              ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, t)
+              ? resolveGrabPrintNoteRequestWithoutEco(grabPrintNote, optionNameByCode, t)
               : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
@@ -993,6 +1004,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             )}${lineDiscountHtml}${banbanComposeHtml}${promoComposeHtml}${noteHtml}${barcodeHtml}`
           })
             .join('')
+          const cutleryLabel = grabInbound
+            ? resolveGrabEcoCutleryChecklistLabelFromItems(mergedLegacyItems, t)
+            : ''
+          const cutleryHtml = cutleryLabel
+            ? `<div class="receipt-line-note">- ${esc(cutleryLabel)}</div>`
+            : ''
+          return itemsHtml + cutleryHtml
         })()}
         <div class="receipt-divider"></div>
         ${paymentRowHtml(`<span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span>`, formatBahtNum(subtotalPrint))}

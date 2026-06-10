@@ -787,6 +787,25 @@ export function ReceivablePayableTab() {
     return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
   }
 
+  const listSearchTotals = React.useMemo(() => {
+    const isRecTab = tab === "receivable"
+    let accrualSum = 0
+    let settlementSum = 0
+    let balanceSum = 0
+    let count = 0
+    for (const item of listData) {
+      const allItems = item.items ?? []
+      const displayItems = filterItemsByUnpaid(item.items, isRecTab)
+      const tableItems = displayItems.length > 0 ? displayItems : allItems
+      if (tableItems.length === 0) continue
+      accrualSum += allItems.reduce((s, r) => s + Math.max(0, Number(r.amount ?? 0)), 0)
+      settlementSum += allItems.reduce((s, r) => s + Math.max(0, -Number(r.amount ?? 0)), 0)
+      balanceSum += item.balance ?? 0
+      count += 1
+    }
+    return { accrualSum, settlementSum, balanceSum, count }
+  }, [listData, tab, filterUnpaidOnly])
+
   const transactionLineRowKey = (
     mode: "pay" | "rec",
     row: { id?: number; ref_type?: string; ref_id?: number }
@@ -1175,6 +1194,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
+                    {hasSearchedList && !loading && listSearchTotals.count > 0 ? (
+                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0">
+                        <span className="text-sm font-bold text-primary tabular-nums">
+                          {tt("recSearchTotalRemaining", "조회 합계 (남은 미수액)")}: ฿
+                          {listSearchTotals.balanceSum.toLocaleString()}
+                        </span>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {(t("recColSalesAmount") || "매출금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
+                          {(t("recColReceiveAmount") || "수령금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                   {canSelectStores ? (
                     <p className="text-xs text-amber-900 dark:text-amber-100/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-md px-3 py-2 mb-3 leading-snug">
@@ -1612,6 +1643,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           )
                         })}
                       </Accordion>
+                      {listSearchTotals.count > 0 ? (
+                        <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-3 border-t bg-muted/40 font-semibold text-sm items-center">
+                          <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
+                          <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
+                          <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
+                          <div className="text-center tabular-nums font-bold text-primary">
+                            ฿{listSearchTotals.balanceSum.toLocaleString()}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   )}
               </div>
@@ -1691,6 +1732,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
+                    {hasSearchedList && !loading && listSearchTotals.count > 0 ? (
+                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0">
+                        <span className="text-sm font-bold text-primary tabular-nums">
+                          {tt("paySearchTotalRemaining", "조회 합계 (남은 미지급액)")}: ฿
+                          {listSearchTotals.balanceSum.toLocaleString()}
+                        </span>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {(t("payColPurchaseAmount") || "매입금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
+                          {(t("payColPaymentAmount") || "지급금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
@@ -1890,6 +1943,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           )
                         })}
                       </Accordion>
+                      {listSearchTotals.count > 0 ? (
+                        <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-3 border-t bg-muted/40 font-semibold text-sm items-center">
+                          <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
+                          <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
+                          <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
+                          <div className="text-center tabular-nums font-bold text-primary">
+                            ฿{listSearchTotals.balanceSum.toLocaleString()}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   )}
             </CardContent>

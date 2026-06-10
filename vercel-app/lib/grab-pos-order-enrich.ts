@@ -478,9 +478,102 @@ export function collectGrabPrintOptionLines(input: {
   return out
 }
 
-/** Grab 1회용 수저·포크 선택 — 주방 슬립에는 표시하지 않음 */
+/** Grab 1회용 수저·포크 선택 — `eco:` note 청크 */
 export function isGrabEcoCutleryNoteChunk(chunk: string): boolean {
   return /^eco:/i.test(String(chunk ?? '').trim())
+}
+
+function readGrabEcoCutleryBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase()
+    if (s === 'true' || s === 'yes' || s === '1') return true
+    if (s === 'false' || s === 'no' || s === '0') return false
+  }
+  const n = Number(value)
+  if (Number.isFinite(n)) return n > 0
+  return null
+}
+
+function isGrabOrderCutleryPayloadKey(key: string): boolean {
+  const k = String(key || '').trim().toLowerCase()
+  if (!k) return false
+  return (
+    k === 'cutlery' ||
+    k.endsWith('_cutlery') ||
+    k.includes('cutleryrequested') ||
+    k.includes('utensilrequested') ||
+    (k.includes('plastic') && (k.includes('cutlery') || k.includes('utensil')))
+  )
+}
+
+function grabEcoCutleryNoteTokenFromBoolean(requested: boolean): string {
+  return requested ? 'eco:plastic cutlery requested' : 'eco:no plastic cutlery requested'
+}
+
+/**
+ * Grab submit_order `cutlery` 등 주문 본문에서 1회용 수저·포크 선택을 읽는다.
+ * Grab Partner API Order.cutlery (boolean) 포함.
+ */
+export function resolveGrabEcoCutleryNoteTokenFromOrder(order: Record<string, unknown>): string | null {
+  const direct = readGrabEcoCutleryBoolean(order.cutlery)
+  if (direct != null) return grabEcoCutleryNoteTokenFromBoolean(direct)
+
+  const visited = new Set<unknown>()
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: order, depth: 0 }]
+  let found: boolean | null = null
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (!node) break
+    const { value, depth } = node
+    if (depth > 4 || value == null) continue
+    if (typeof value !== 'object') continue
+    if (visited.has(value)) continue
+    visited.add(value)
+    const rec = asRecord(value)
+    for (const [kRaw, v] of Object.entries(rec)) {
+      if (isGrabOrderCutleryPayloadKey(String(kRaw || ''))) {
+        const parsed = readGrabEcoCutleryBoolean(v)
+        if (parsed != null) found = parsed
+      }
+      if (v && typeof v === 'object') queue.push({ value: v, depth: depth + 1 })
+    }
+  }
+  if (found == null) return null
+  return grabEcoCutleryNoteTokenFromBoolean(found)
+}
+
+/** items_json note 에서 첫 `eco:` 청크 */
+export function findGrabEcoCutleryNoteTokenInItems(
+  items: Array<{ note?: string | null | undefined }>
+): string | null {
+  for (const it of items) {
+    const note = String(it.note ?? '').trim()
+    if (!note) continue
+    for (const chunk of note.split('·').map((s) => s.trim()).filter(Boolean)) {
+      if (isGrabEcoCutleryNoteChunk(chunk)) return chunk
+    }
+  }
+  return null
+}
+
+/** 영수증·주방 체크리스트 한 줄 (번역) */
+export function resolveGrabEcoCutleryChecklistLabel(
+  ecoToken: string | null | undefined,
+  t?: (key: string) => string
+): string {
+  const token = String(ecoToken ?? '').trim()
+  if (!token || !isGrabEcoCutleryNoteChunk(token)) return ''
+  if (t) return translateGrabEcoCutleryChunk(token, t)
+  const kind = parseGrabEcoCutleryKind(token)
+  return kind ? GRAB_ECO_CUTLERY_FALLBACK_EN[kind] : token
+}
+
+export function resolveGrabEcoCutleryChecklistLabelFromItems(
+  items: Array<{ note?: string | null | undefined }>,
+  t?: (key: string) => string
+): string {
+  return resolveGrabEcoCutleryChecklistLabel(findGrabEcoCutleryNoteTokenInItems(items), t)
 }
 
 export type GrabEcoCutleryKind = 'requested' | 'not_requested'
@@ -517,9 +610,10 @@ export function translateGrabEcoCutleryChunk(
   t?: (key: string) => string
 ): string {
   const raw = String(chunk ?? '').trim()
-  if (!raw || !t) return raw
+  if (!raw) return ''
   const kind = parseGrabEcoCutleryKind(raw)
   if (!kind) return raw
+  if (!t) return GRAB_ECO_CUTLERY_FALLBACK_EN[kind]
   const key = GRAB_ECO_CUTLERY_I18N_KEY[kind]
   const value = t(key)
   return value && value !== key ? value : GRAB_ECO_CUTLERY_FALLBACK_EN[kind]
@@ -557,6 +651,19 @@ export function resolveGrabPrintNoteRequest(
 ): string {
   const map = toOptionNameByCodeMap(optionNameByCode)
   const summary = String(resolveGrabDeliveryLineNote(rawNote, map).requestSummary ?? '').trim()
+  return translateGrabRequestSummaryChunks(summary, t)
+}
+
+/** 영수증 메모: 수저·포크 체크리스트는 별도 줄 — eco 제외 */
+export function resolveGrabPrintNoteRequestWithoutEco(
+  rawNote: string | null | undefined,
+  optionNameByCode?: Map<string, string> | Record<string, string>,
+  t?: (key: string) => string
+): string {
+  const map = toOptionNameByCodeMap(optionNameByCode)
+  const summary = omitGrabEcoFromJoinedNote(
+    String(resolveGrabDeliveryLineNote(rawNote, map).requestSummary ?? '').trim()
+  )
   return translateGrabRequestSummaryChunks(summary, t)
 }
 

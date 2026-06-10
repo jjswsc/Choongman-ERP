@@ -353,7 +353,13 @@ export function BankTransactionsTab() {
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const importRestoreKey = "bank_import_pending_restore"
   const importDraftStorageKey = "bank_import_input_draft_v1"
-  const queryDraftStorageKey = "bank_query_input_draft_v1"
+  const queryDraftStorageKey = React.useMemo(() => {
+    const uid = String(auth?.user || "anon")
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 64)
+    return `bank_query_input_draft_v1:${uid}`
+  }, [auth?.user])
   const restoreQueryListRef = React.useRef(false)
   const hasBankInputDraft = Boolean(
     importPreview?.rows?.length ||
