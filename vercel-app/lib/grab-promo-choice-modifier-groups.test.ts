@@ -49,8 +49,9 @@ describe('grab-promo-choice-modifier-groups', () => {
     expect(groups[0].selectionRangeMax).toBe(1)
     expect(groups[0].modifiers).toHaveLength(2)
     expect(groups[0].modifiers[0].price).toBe(0)
-    expect(groups[0].name).toBe('เมนูเสริม')
-    expect(promoChoiceGroupDisplayName('side')).toBe('เมนูเสริม')
+    expect(groups[0].name).toBe('side')
+    expect(promoChoiceGroupDisplayName('side')).toBe('side')
+    expect(promoChoiceGroupDisplayName('เมนูเสริม')).toBe('เมนูเสริม')
     expect(promoChoiceModifierDisplayName(sideItems[0])).toBe('Free Kimchi')
   })
 

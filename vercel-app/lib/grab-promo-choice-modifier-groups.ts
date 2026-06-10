@@ -1,8 +1,4 @@
-import {
-  getPromoChoiceSlotLabelForGrabDelivery,
-  splitPromoChoiceGroups,
-  type PromoChoiceLine,
-} from '@/lib/pos-promo-choice'
+import { splitPromoChoiceGroups, type PromoChoiceLine } from '@/lib/pos-promo-choice'
 
 export type GrabPromoChoiceCatalogRow = PromoChoiceLine & {
   menuName?: string
@@ -71,10 +67,10 @@ export function promoChoiceModifierDisplayName(line: GrabPromoChoiceCatalogRow):
   return menu || 'Option'
 }
 
+/** Grab 그룹명 = ERP `choice_group` 키 그대로 (번역·한글 폴백 없음) */
 export function promoChoiceGroupDisplayName(choiceGroup: string): string {
   const key = String(choiceGroup ?? '').trim()
-  if (!key) return 'ตัวเลือก'
-  return getPromoChoiceSlotLabelForGrabDelivery(key) || key
+  return key || 'Options'
 }
 
 /** 프로모 choice_group → Grab modifierGroups (POS 세트 탭 선택 그룹과 동일) */
