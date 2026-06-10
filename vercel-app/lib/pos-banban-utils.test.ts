@@ -3,6 +3,7 @@ import {
   enrichBanbanKitchenLineForPrint,
   expandBanbanComposeLineForPrint,
   extractGrabBanbanFlavorSlotsFromModifiers,
+  resolveGrabBanbanPosIngestSnapshot,
   filterReceiptOptionLinesForBanban,
   getBanbanFlavorMenuList,
   isBanbanMenu,
@@ -193,6 +194,57 @@ describe('parseBanbanFlavorsFromDisplayName', () => {
       flavor1: 'CHEESE TORNADO',
       flavor2: 'GARLIC Bar.B.Q FRIED CHICKEN',
     })
+  })
+})
+
+describe('resolveGrabBanbanPosIngestSnapshot', () => {
+  it('GF-570 pattern: slot ids + mods → slash name, banbanFlavors, flavor menuId1/2', () => {
+    const menuNameById = new Map<number, string>([
+      [6, 'CHEESE TORNADO'],
+      [73, 'GARLIC Bar.B.Q FRIED CHICKEN'],
+      [75, 'Banban Chicken'],
+    ])
+    const ingest = resolveGrabBanbanPosIngestSnapshot({
+      baseItemName: 'Banban Chicken',
+      flatModifiers: [
+        { id: 'mod-c024-1-item-75-c024-1' },
+        { id: 'item-75-c024-banban-1-f-6' },
+        { id: 'item-75-c024-banban-2-f-73' },
+      ],
+      modifierLabels: ['CHEESE TORNADO', 'GARLIC Bar.B.Q FRIED CHICKEN', 'Kimchi', 'S - Boneless'],
+      menuNameById,
+      isBanbanMenuLine: true,
+    })
+    expect(ingest).not.toBeNull()
+    expect(ingest?.displayName).toBe(
+      'Banban Chicken (CHEESE TORNADO / GARLIC Bar.B.Q FRIED CHICKEN)'
+    )
+    expect(ingest?.banbanFlavorsNoteToken).toBe(
+      'banbanFlavors:CHEESE TORNADO,GARLIC Bar.B.Q FRIED CHICKEN'
+    )
+    expect(ingest?.flavorMenuId1).toBe('6')
+    expect(ingest?.flavorMenuId2).toBe('73')
+    expect(ingest?.remainderModifierLabels).toEqual(['Kimchi', 'S - Boneless'])
+  })
+
+  it('detects banban from slot ids even when modifier names are empty', () => {
+    const menuNameById = new Map<number, string>([
+      [11, 'SNOW ONION'],
+      [28, 'SPICY YANGNYEOM'],
+    ])
+    const ingest = resolveGrabBanbanPosIngestSnapshot({
+      baseItemName: 'Banban Chicken',
+      flatModifiers: [
+        { id: 'item-75-c024-banban-1-f-11' },
+        { id: 'item-75-c024-banban-2-f-28' },
+      ],
+      modifierLabels: [],
+      menuNameById,
+      isBanbanMenuLine: false,
+    })
+    expect(ingest?.flavorMenuId1).toBe('11')
+    expect(ingest?.flavorMenuId2).toBe('28')
+    expect(ingest?.displayName).toBe('Banban Chicken (SNOW ONION / SPICY YANGNYEOM)')
   })
 })
 

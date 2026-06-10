@@ -34,9 +34,8 @@ import {
 } from '@/lib/grab-set-pos-lines'
 import {
   extractGrabBanbanFlavorSlotsFromModifiers,
-  formatBanbanFlavorsNoteToken,
   isBanbanMenu,
-  isLikelyBanbanSideOrExtraLabel,
+  resolveGrabBanbanPosIngestSnapshot,
 } from '@/lib/pos-banban-utils'
 
 type GrabOrderPersistResult =
@@ -352,27 +351,6 @@ function formatGrabKitchenDisplayName(baseName: string, modifierLabels: string[]
   const tail = grouped.slice(1).join(', ')
   if (/^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(head) && tail) return `${name} (${head} - ${tail})`
   return `${name} (${grouped.join(', ')})`
-}
-
-function isGrabBanbanSizeOrPartLabel(raw: string): boolean {
-  const lab = String(raw ?? '').trim()
-  if (!lab) return false
-  return (
-    /^(?:size\s*)?(?:xxl|xl|l|m|s)\b/i.test(lab) ||
-    /\b(size|part|boneless|drumette|joint wing|wing|leg|순살|뼈|โดบา|ปีก)\b/i.test(lab) ||
-    /^flavor\s*[12]\b/i.test(lab)
-  )
-}
-
-function isGrabBanbanNonFlavorLabel(raw: string): boolean {
-  return isGrabBanbanSizeOrPartLabel(raw) || isLikelyBanbanSideOrExtraLabel(raw)
-}
-
-function formatGrabBanbanKitchenDisplayName(baseName: string, flavorLabels: string[]): string {
-  const base = String(baseName ?? '').trim()
-  const flavors = (flavorLabels || []).map((x) => String(x ?? '').trim()).filter(Boolean)
-  if (!base || flavors.length < 2) return base
-  return `${base} (${flavors[0]} / ${flavors[1]})`
 }
 
 function readLineMinorTotal(item: Record<string, unknown>): number {
@@ -960,6 +938,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     const resolvedMenuRow = resolved.menuId
       ? catalog.menuById.get(Number(resolved.menuId))
       : undefined
+    const banbanSlotsProbe = extractGrabBanbanFlavorSlotsFromModifiers(flatModifiers, menuNameById)
     const isBanbanGrabLine =
       isBanbanMenu({
         isBanban: false,
@@ -972,46 +951,33 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
             name: resolvedMenuRow.name,
             code: resolvedMenuRow.code,
           })
-        : false)
+        : false) ||
+      banbanSlotsProbe.flavorMenuIds.length >= 2
     let grabBanbanFlavorMenuId1: string | undefined
     let grabBanbanFlavorMenuId2: string | undefined
-    let grabBanbanFlavorLabels: string[] = []
+    let banbanFlavorsToken = ''
     if (isBanbanGrabLine) {
-      const banbanSlots = extractGrabBanbanFlavorSlotsFromModifiers(flatModifiers, menuNameById)
-      let flavorLabels =
-        banbanSlots.flavors.length >= 2
-          ? banbanSlots.flavors.slice(0, 2)
-          : banbanSlots.flavorMenuIds.length >= 2
-            ? banbanSlots.flavorMenuIds
-                .slice(0, 2)
-                .map((id) => String(menuNameById.get(Number(id)) ?? '').trim())
-                .filter(Boolean)
-            : []
-      if (flavorLabels.length < 2) {
-        flavorLabels = modifierNamesForNote
-          .filter((lab) => !isGrabBanbanNonFlavorLabel(lab))
-          .slice(0, 2)
-      }
-      if (flavorLabels.length >= 2) {
-        grabBanbanFlavorLabels = flavorLabels
-        if (banbanSlots.flavorMenuIds.length >= 2) {
-          grabBanbanFlavorMenuId1 = banbanSlots.flavorMenuIds[0]
-          grabBanbanFlavorMenuId2 = banbanSlots.flavorMenuIds[1]
-        }
-        const baseBanbanName = String(resolvedMenuRow?.name ?? itemName).trim() || itemName
-        itemName = formatGrabBanbanKitchenDisplayName(baseBanbanName, flavorLabels)
-        const remainder = modifierNamesForNote.filter(
-          (lab) => !flavorLabels.some((f) => f.toLowerCase() === lab.toLowerCase())
-        )
+      const banbanIngest = resolveGrabBanbanPosIngestSnapshot({
+        baseItemName: String(resolvedMenuRow?.name ?? itemName).trim() || itemName,
+        flatModifiers,
+        modifierLabels: modifierNamesForNote,
+        menuNameById,
+        isBanbanMenuLine: true,
+      })
+      if (banbanIngest) {
+        itemName = banbanIngest.displayName
         modifierNamesForNote.length = 0
-        modifierNamesForNote.push(...remainder)
+        modifierNamesForNote.push(...banbanIngest.remainderModifierLabels)
+        if (banbanIngest.flavorMenuId1 && banbanIngest.flavorMenuId2) {
+          grabBanbanFlavorMenuId1 = banbanIngest.flavorMenuId1
+          grabBanbanFlavorMenuId2 = banbanIngest.flavorMenuId2
+        }
+        banbanFlavorsToken = banbanIngest.banbanFlavorsNoteToken
       }
     }
-    itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
-    const banbanFlavorsToken =
-      grabBanbanFlavorLabels.length >= 2
-        ? formatBanbanFlavorsNoteToken(grabBanbanFlavorLabels[0], grabBanbanFlavorLabels[1])
-        : ''
+    if (!banbanFlavorsToken) {
+      itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
+    }
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,

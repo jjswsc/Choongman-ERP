@@ -281,6 +281,95 @@ function stripTrailingParenOption(rawName: string): string {
     .trim()
 }
 
+/** 주방·items_json: `Banban Chicken (맛1 / 맛2)` */
+export function formatBanbanKitchenSlashDisplayName(
+  baseName: string,
+  flavor1: string,
+  flavor2: string
+): string {
+  const base = String(baseName ?? '').trim()
+  const f1 = String(flavor1 ?? '').trim()
+  const f2 = String(flavor2 ?? '').trim()
+  if (!base || !f1 || !f2) return base
+  return `${base} (${f1} / ${f2})`
+}
+
+export type GrabBanbanPosIngestSnapshot = {
+  flavorMenuId1: string
+  flavorMenuId2: string
+  flavorLabel1: string
+  flavorLabel2: string
+  displayName: string
+  banbanFlavorsNoteToken: string
+  remainderModifierLabels: string[]
+}
+
+/**
+ * Grab submit_order → POS items_json: banban-1-f-* 슬롯·mods 에서
+ * 주방 인쇄용 `banbanFlavors:` + menuId1/2(맛 메뉴) + 슬래시 표시명을 만든다.
+ */
+export function resolveGrabBanbanPosIngestSnapshot(params: {
+  baseItemName: string
+  flatModifiers: Array<Record<string, unknown>>
+  modifierLabels: string[]
+  menuNameById: ReadonlyMap<number, string>
+  isBanbanMenuLine: boolean
+}): GrabBanbanPosIngestSnapshot | null {
+  const slots = extractGrabBanbanFlavorSlotsFromModifiers(
+    params.flatModifiers,
+    params.menuNameById
+  )
+  const hasSlotIds = slots.flavorMenuIds.length >= 2
+  if (!params.isBanbanMenuLine && !hasSlotIds) return null
+
+  const mid1 = String(slots.flavorMenuIds[0] ?? '').trim()
+  const mid2 = String(slots.flavorMenuIds[1] ?? '').trim()
+
+  let flavor1 = String(slots.flavors[0] ?? '').trim()
+  let flavor2 = String(slots.flavors[1] ?? '').trim()
+
+  if (!flavor1 || !flavor2) {
+    const pair = pickBanbanFlavorPairFromLabelList(
+      params.modifierLabels.map((s) => String(s ?? '').trim()).filter(Boolean)
+    )
+    if (pair) {
+      if (!flavor1) flavor1 = pair[0]
+      if (!flavor2) flavor2 = pair[1]
+    }
+  }
+
+  if ((!flavor1 || !flavor2) && mid1 && mid2) {
+    if (!flavor1) flavor1 = lookupMenuNameFromGrabIdMap(params.menuNameById, mid1)
+    if (!flavor2) flavor2 = lookupMenuNameFromGrabIdMap(params.menuNameById, mid2)
+  }
+
+  if (!flavor1 || !flavor2) return null
+
+  const baseName = (() => {
+    const stripped = stripTrailingParenOption(params.baseItemName)
+    if (stripped && isBanbanMenu({ isBanban: false, name: stripped, code: '' })) return stripped
+    return stripped || String(params.baseItemName ?? '').trim() || 'Banban Chicken'
+  })()
+
+  const flavorKeys = new Set([flavor1, flavor2].map((f) => f.toLowerCase()))
+  const remainderModifierLabels = params.modifierLabels
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+    .filter((lab) => !flavorKeys.has(lab.toLowerCase()))
+
+  const banbanFlavorsNoteToken = formatBanbanFlavorsNoteToken(flavor1, flavor2)
+
+  return {
+    flavorMenuId1: mid1,
+    flavorMenuId2: mid2,
+    flavorLabel1: flavor1,
+    flavorLabel2: flavor2,
+    displayName: formatBanbanKitchenSlashDisplayName(baseName, flavor1, flavor2),
+    banbanFlavorsNoteToken,
+    remainderModifierLabels,
+  }
+}
+
 /** Grab BanBan 주문 note에 저장하는 맛 스냅샷 — 주방 재인쇄 복원용(영수증 옵션에서 제외) */
 export function formatBanbanFlavorsNoteToken(flavor1: string, flavor2: string): string {
   const f1 = String(flavor1 ?? '').trim()
