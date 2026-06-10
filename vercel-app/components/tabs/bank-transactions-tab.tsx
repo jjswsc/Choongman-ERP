@@ -634,10 +634,8 @@ export function BankTransactionsTab() {
       Boolean(data.actualBalance?.trim()) ||
       Boolean(data.filterTransType) ||
       Boolean(data.filterCategory) ||
-      Boolean(data.filterVendorCode) ||
       Boolean(data.filterAccountSubjectId) ||
       Boolean(data.filterAccountSubjectEmpty) ||
-      Boolean(data.filterPlExpenseOnly) ||
       Boolean(data.filterInvoiceNotReceived) ||
       Object.keys(data.queryRowEdits || {}).length > 0
     if (!hasDraft) return false
@@ -647,11 +645,10 @@ export function BankTransactionsTab() {
     if (typeof data.actualBalance === "string") setActualBalance(data.actualBalance)
     if (typeof data.filterTransType === "string") setFilterTransType(data.filterTransType)
     if (typeof data.filterCategory === "string") setFilterCategory(data.filterCategory)
-    if (typeof data.filterVendorCode === "string") setFilterVendorCode(data.filterVendorCode)
     if (typeof data.filterAccountSubjectId === "string") setFilterAccountSubjectId(data.filterAccountSubjectId)
     setFilterAccountSubjectEmpty(Boolean(data.filterAccountSubjectEmpty))
-    setFilterPlExpenseOnly(Boolean(data.filterPlExpenseOnly))
     setFilterInvoiceNotReceived(Boolean(data.filterInvoiceNotReceived))
+    // filterVendorCode · filterPlExpenseOnly — 손익/매입 드릴다운 전용(URL). 세션 복원 시 입금이 숨겨져 혼란을 줌.
     setQueryRowEdits((data.queryRowEdits || {}) as Record<number, QueryRowEdit>)
     setActiveBankTab("query")
     restoreQueryListRef.current = true
@@ -700,6 +697,21 @@ export function BankTransactionsTab() {
     if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) setStartStr(start)
     if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) setEndStr(end)
   }, [searchParams])
+
+  React.useEffect(() => {
+    if (parsePurchaseDrillNav(searchParams).fromPlDrill) return
+    setFilterPlExpenseOnly(false)
+    setFilterVendorCode("")
+    try {
+      const raw = sessionStorage.getItem(queryDraftStorageKey)
+      if (!raw) return
+      const data = JSON.parse(raw) as BankQueryDraft
+      if (!data.filterPlExpenseOnly && !data.filterVendorCode) return
+      delete data.filterPlExpenseOnly
+      delete data.filterVendorCode
+      sessionStorage.setItem(queryDraftStorageKey, JSON.stringify(data))
+    } catch {}
+  }, [searchParams, queryDraftStorageKey])
 
   React.useEffect(() => {
     try {
@@ -775,10 +787,8 @@ export function BankTransactionsTab() {
         activeBankTab,
         filterTransType,
         filterCategory,
-        filterVendorCode,
         filterAccountSubjectId,
         filterAccountSubjectEmpty,
-        filterPlExpenseOnly,
         filterInvoiceNotReceived,
         queryRowEdits,
       }
@@ -793,9 +803,7 @@ export function BankTransactionsTab() {
     filterAccountSubjectId,
     filterCategory,
     filterInvoiceNotReceived,
-    filterPlExpenseOnly,
     filterTransType,
-    filterVendorCode,
     hasBankQueryDraft,
     queryDraftStorageKey,
     queryRowEdits,
@@ -1329,13 +1337,11 @@ export function BankTransactionsTab() {
       if (filterAccountSubjectEmpty) {
         if (r.accountSubjectId != null && r.accountSubjectId !== 0) return false
       }
-      if (filterInvoiceNotReceived) {
-        if (r.transType !== "withdraw") return false
+      if (filterInvoiceNotReceived && r.transType === "withdraw") {
         const hasInvoice = r.invoiceReceived === true || (r.invoiceNo && String(r.invoiceNo).trim() !== "") || (r.invoicePhotoUrl && String(r.invoicePhotoUrl).trim() !== "")
         if (hasInvoice) return false
       }
-      if (filterPlExpenseOnly) {
-        if (r.transType !== "withdraw") return false
+      if (filterPlExpenseOnly && r.transType === "withdraw") {
         const cat = String(r.category || "expense").toLowerCase()
         if (
           ["transfer", "correction", "loan", "advance", "unclassified", "purchase_payment"].includes(
@@ -1357,6 +1363,54 @@ export function BankTransactionsTab() {
     filterInvoiceNotReceived,
     filterPlExpenseOnly,
   ])
+
+  const listFilterActive = Boolean(
+    filterTransType ||
+      filterCategory ||
+      filterVendorCode ||
+      filterAccountSubjectId ||
+      filterAccountSubjectEmpty ||
+      filterInvoiceNotReceived ||
+      filterPlExpenseOnly
+  )
+
+  const clearListFilters = React.useCallback(() => {
+    setFilterTransType("")
+    setFilterCategory("")
+    setFilterVendorCode("")
+    setFilterAccountSubjectId("")
+    setFilterAccountSubjectEmpty(false)
+    setFilterInvoiceNotReceived(false)
+    setFilterPlExpenseOnly(false)
+  }, [])
+
+  const displayPeriodDeposits = React.useMemo(() => {
+    if (!listFilterActive) return summary?.periodDeposits ?? 0
+    return filteredList.filter((r) => r.transType === "deposit").reduce((s, r) => s + (r.amount ?? 0), 0)
+  }, [filteredList, listFilterActive, summary?.periodDeposits])
+
+  const displayPeriodWithdrawals = React.useMemo(() => {
+    if (!listFilterActive) return summary?.periodWithdrawals ?? 0
+    return filteredList
+      .filter((r) => r.transType === "withdraw")
+      .reduce((s, r) => s + Math.abs(r.amount ?? 0), 0)
+  }, [filteredList, listFilterActive, summary?.periodWithdrawals])
+
+  const listTypeCounts = React.useMemo(() => {
+    const countType = (rows: typeof list, type: "deposit" | "withdraw") =>
+      rows.filter((r) => r.transType === type).length
+    return {
+      total: list.length,
+      deposits: countType(list, "deposit"),
+      withdraws: countType(list, "withdraw"),
+      shownTotal: filteredList.length,
+      shownDeposits: countType(filteredList, "deposit"),
+      shownWithdraws: countType(filteredList, "withdraw"),
+    }
+  }, [filteredList, list])
+
+  const depositsHiddenByFilter =
+    listTypeCounts.deposits > 0 && listTypeCounts.shownDeposits === 0 && listTypeCounts.shownTotal > 0
 
   const listForCategoryOptions = React.useMemo(() => {
     if (!filterTransType) return list
@@ -1413,6 +1467,41 @@ export function BankTransactionsTab() {
     }
     return transType === "deposit" ? (depositMap[cat] ?? cat) : (withdrawMap[cat] ?? cat)
   }
+
+  const activeFilterChips = React.useMemo(() => {
+    const chips: string[] = []
+    if (filterTransType === "deposit") chips.push(t("bankDeposit") || "입금")
+    else if (filterTransType === "withdraw") chips.push(t("bankWithdraw") || "출금")
+    if (filterCategory) chips.push(getCategoryLabel(filterCategory, filterTransType || "withdraw"))
+    if (filterVendorCode) {
+      const vendor = vendorOptions.find((v) => v.code === filterVendorCode)
+      chips.push(`${t("vendor") || "거래처"}: ${vendor?.name || filterVendorCode}`)
+    }
+    if (filterAccountSubjectId) {
+      const sub = [...accountSubjectOptions, ...revenueAccountOptions].find(
+        (a) => String(a.id) === filterAccountSubjectId
+      )
+      chips.push(sub ? `${sub.code} ${asDisplayName(sub)}` : filterAccountSubjectId)
+    }
+    if (filterAccountSubjectEmpty) chips.push(t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만")
+    if (filterInvoiceNotReceived) chips.push(t("poInvoiceNotReceived") || "인보이스 미수령만")
+    if (filterPlExpenseOnly) chips.push(tt("bankFilterPlExpenseActive", "손익 비용(출금)만"))
+    return chips
+  }, [
+    accountSubjectOptions,
+    asDisplayName,
+    filterAccountSubjectEmpty,
+    filterAccountSubjectId,
+    filterCategory,
+    filterInvoiceNotReceived,
+    filterPlExpenseOnly,
+    filterTransType,
+    filterVendorCode,
+    revenueAccountOptions,
+    t,
+    tt,
+    vendorOptions,
+  ])
 
   const exportBankTransactionsExcel = React.useCallback(async () => {
     if (filteredList.length === 0) {
@@ -1882,8 +1971,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   {summary && (
                     <div className="rounded-lg border bg-muted/30 px-4 py-2 mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                       <span className="text-muted-foreground">{t("bankOpeningBalance")}: <span className="font-mono font-medium">{fmt(summary.openingBalance)}</span></span>
-                      <span className="text-muted-foreground">+ {t("bankDeposit")}: <span className="font-mono text-green-600">{fmt(summary.periodDeposits)}</span></span>
-                      <span className="text-muted-foreground">- {t("bankWithdraw")}: <span className="font-mono text-destructive">{fmt(summary.periodWithdrawals)}</span></span>
+                      <span className="text-muted-foreground">+ {t("bankDeposit")}: <span className="font-mono text-green-600">{fmt(displayPeriodDeposits)}</span></span>
+                      <span className="text-muted-foreground">- {t("bankWithdraw")}: <span className="font-mono text-destructive">{fmt(displayPeriodWithdrawals)}</span></span>
+                      {listFilterActive ? (
+                        <span className="text-xs text-muted-foreground">
+                          {tt("bankSummaryFilteredHint", "입·출금 합계는 아래 목록 필터 기준")}
+                        </span>
+                      ) : null}
                       <span className="font-medium">{t("bankCalculatedBalance")}: <span className="font-mono font-bold">{fmt(summary.calculatedBalance)}</span></span>
                       <div className="flex-1" />
                       <div className="flex flex-wrap items-center gap-2">
@@ -1906,6 +2000,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
 
                   <div className="flex flex-wrap items-center gap-2 mb-3 p-3 rounded-lg bg-muted/20 border">
                     <span className="text-sm font-medium text-muted-foreground mr-1">{t("bankFilterLabel") || "필터"}:</span>
+                    {activeFilterChips.map((chip) => (
+                      <span
+                        key={chip}
+                        className="text-xs rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-foreground"
+                      >
+                        {chip}
+                      </span>
+                    ))}
                     <Select
                       value={filterTransType || "__all__"}
                       onValueChange={(v) => {
@@ -1974,22 +2076,45 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         checked={filterInvoiceNotReceived}
                         onChange={(e) => setFilterInvoiceNotReceived(e.target.checked)}
                         className="rounded"
+                        title={tt(
+                          "bankFilterInvoiceNotReceivedHint",
+                          "출금 중 인보이스 미수령만 목록에서 줄입니다. 입금은 그대로 표시됩니다."
+                        )}
                       />
                       <span className="text-sm whitespace-nowrap">{t("poInvoiceNotReceived") || "인보이스 미수령만"}</span>
                     </label>
-                    {(filterTransType || filterCategory || filterAccountSubjectId || filterAccountSubjectEmpty || filterInvoiceNotReceived) && (
-                      <Button size="sm" variant="ghost" onClick={() => { setFilterTransType(""); setFilterCategory(""); setFilterAccountSubjectId(""); setFilterAccountSubjectEmpty(false); setFilterInvoiceNotReceived(false) }}>
-                        {t("btn_reset") || "초기화"}
-                      </Button>
-                    )}
+                    <Button size="sm" variant="ghost" onClick={clearListFilters}>
+                      {t("btn_reset") || "초기화"}
+                    </Button>
                     <span className="text-sm text-muted-foreground">
-                      {filteredList.length} {t("receivPayCount")}
+                      {tt(
+                        "bankListCountBreakdown",
+                        "조회 {total}건 (입금 {deposits} · 출금 {withdraws}) → 표시 {shown}건"
+                      )
+                        .replace("{total}", String(listTypeCounts.total))
+                        .replace("{deposits}", String(listTypeCounts.deposits))
+                        .replace("{withdraws}", String(listTypeCounts.withdraws))
+                        .replace("{shown}", String(listTypeCounts.shownTotal))}
                     </span>
                     <Button size="sm" variant="outline" onClick={exportBankTransactionsExcel} disabled={filteredList.length === 0} title={t("excelBtn") || "엑셀"}>
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn") || "엑셀"}
                     </Button>
                   </div>
+
+                  {!loading && depositsHiddenByFilter ? (
+                    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                      <span>
+                        {tt(
+                          "bankDepositsHiddenWarning",
+                          "입금 {n}건이 조회됐지만 목록 필터 때문에 숨겨져 있습니다. 「초기화」를 누르세요."
+                        ).replace("{n}", String(listTypeCounts.deposits))}
+                      </span>
+                      <Button size="sm" variant="outline" className="h-7" onClick={clearListFilters}>
+                        {t("btn_reset") || "초기화"}
+                      </Button>
+                    </div>
+                  ) : null}
 
                   {!loading && accountId && accounts.length > 0 && (
                     <BankQuickMemoChipBar
