@@ -6769,6 +6769,8 @@ export const i18n = {
       'EDC QR 표시 실패 — 캐셔·고객 화면 QR을 이용하세요. (LinkPOS 브리지·단말 지원 확인)',
     posKbankStatusPaid: '결제완료',
     posKbankStatusCancelled: '취소됨',
+    posKbankAlreadyPaidNoVoid:
+      '이미 결제 승인된 건입니다. Void/Cancel 불가 — 주문 마감·영수증을 확인하세요. 새 결제는 「닫기」 후 다시 진행하세요.',
     posKbankVoidFailedAlert:
       'Void 결제에 실패했습니다. 아래 KBank 패널의 응답을 확인하거나 Inquiry 후 다시 시도해 주세요.',
     posKbankSettlement: '정산 (Settlement)',
@@ -16116,6 +16118,8 @@ orderItemQty: 'Qty',
       'EDC QR not shown — use cashier or customer display QR. (Check LinkPOS bridge and terminal support)',
     posKbankStatusPaid: 'PAID',
     posKbankStatusCancelled: 'CANCELLED',
+    posKbankAlreadyPaidNoVoid:
+      'This transaction is already paid. Void/Cancel is not available — check order close and receipt. Tap Close on the panel before a new payment.',
     posKbankVoidFailedAlert:
       'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankSettlement: 'Settlement',

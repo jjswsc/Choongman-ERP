@@ -6277,10 +6277,17 @@ export default function PosTerminalPage() {
 
   const noteKbankRateLimitResponse = useCallback((message: unknown): boolean => {
     if (!isKbankRateLimitError(message)) return false
+    // 이미 pause 중이면 만료 시각을 뒤로 미루지 않음 (Void/Inquiry 연타로 3분 타이머 리셋 방지).
+    if (Date.now() < kbankApiPausedUntilRef.current) return true
     const until = Date.now() + KBANK_RATE_LIMIT_BACKOFF_MS
     kbankApiPausedUntilRef.current = until
     setKbankApiPausedUntilMs(until)
     return true
+  }, [])
+
+  const clearKbankApiPause = useCallback(() => {
+    kbankApiPausedUntilRef.current = 0
+    setKbankApiPausedUntilMs(0)
   }, [])
 
   const isKbankApiPaused = useCallback(
@@ -6435,6 +6442,7 @@ export default function PosTerminalPage() {
       }
       kbankCallbackNotifiedTxRef.current = refId
       setKbankCallbackState('received')
+      clearKbankApiPause()
       setCustomerDisplayPaymentMessage('')
       if (alreadyNotified) return
       openKbankOutcomeModal(
@@ -6463,6 +6471,7 @@ export default function PosTerminalPage() {
       lang,
       tryRunKbankPendingFinalize,
       clearKbankQrFromLinkpos,
+      clearKbankApiPause,
     ]
   )
 
@@ -6540,6 +6549,34 @@ export default function PosTerminalPage() {
         String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase() === 'CREDIT_CARD'
           ? 'CREDIT_CARD'
           : 'THAI_QR'
+
+      const existingQrPayload = String(liveKbankQrPayload || '').trim()
+      const existingPartnerTxnId = String(kbankOpsTxnUid || '').trim()
+      const canReuseLiveQr =
+        Boolean(existingQrPayload && existingPartnerTxnId) &&
+        kbankCallbackState === 'waiting' &&
+        !kbankManualCancelPendingRef.current &&
+        Math.abs(liveKbankQrAmount - qrAmount) < 0.001 &&
+        liveKbankQrType === requestedQrType
+
+      if (canReuseLiveQr) {
+        setCustomerDisplayPaymentMessage(
+          (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+        )
+        return {
+          ok: false as const,
+          qrPending: true as const,
+          message: 'kbank_qr_pending',
+          partnerTransactionId: existingPartnerTxnId,
+          qrAmount,
+          qrType: requestedQrType,
+        }
+      }
+
+      if (!(await alertIfKbankApiPaused('Generate QR'))) {
+        return { ok: false as const, message: 'kbank_rate_limit_paused' }
+      }
+
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
       const terminalId = String(kbankOpsTerminalId || '').trim()
@@ -6582,6 +6619,9 @@ export default function PosTerminalPage() {
         setKbankOpsTxnNo('')
         setCustomerDisplayPaymentMessage('')
         const rateLimited = isKbankRateLimitError(generate.message || generate.statusMessage)
+        if (rateLimited) {
+          noteKbankRateLimitResponse(generate.message || generate.statusMessage)
+        }
         const msg =
           rateLimited
             ? 'KBank rate limit exceeded. Wait 2–5 minutes, then try Generate QR again (do not tap repeatedly).'
@@ -6836,6 +6876,12 @@ export default function PosTerminalPage() {
       pushKbankQrToLinkposDisplay,
       isKbankApiPaused,
       noteKbankRateLimitResponse,
+      alertIfKbankApiPaused,
+      liveKbankQrPayload,
+      liveKbankQrAmount,
+      liveKbankQrType,
+      kbankCallbackState,
+      kbankOpsTxnUid,
       lang,
     ]
   )
@@ -6854,6 +6900,17 @@ export default function PosTerminalPage() {
       const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
       const terminalId = String(kbankOpsTerminalId || '').trim()
       const txnNoRaw = String(kbankOpsTxnNo || '').trim()
+      const txnAlreadyPaid =
+        kbankCallbackState === 'received' ||
+        kbankCallbackNotifiedTxRef.current === partnerTxnUid ||
+        kbankCallbackNotifiedTxRef.current === origPartnerTxnUid
+      if (txnAlreadyPaid && (action === 'void' || action === 'cancel' || action === 'inquiry')) {
+        await appAlert(
+          t('posKbankAlreadyPaidNoVoid') ||
+            'This transaction is already paid. Void/Cancel/Inquiry is not needed — check order close and receipt.'
+        )
+        return
+      }
       const inquiryTxnNo = resolveKbankInquiryTxnNoForRequest(txnNoRaw, {
         qrType: liveKbankQrType,
       })
@@ -7063,6 +7120,7 @@ export default function PosTerminalPage() {
       kbankOpsTerminalId,
       kbankOpsTxnNo,
       liveKbankQrType,
+      kbankCallbackState,
       t,
       enforceKbankCooldown,
       liveKbankQrAmount,
@@ -11483,7 +11541,7 @@ export default function PosTerminalPage() {
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={kbankOpsBusy}
+                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
                   onClick={() => void runKbankFollowupAction('inquiry')}
                 >
                   {t('posKbankInquiry') || 'Inquiry'}
@@ -11493,7 +11551,7 @@ export default function PosTerminalPage() {
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={kbankOpsBusy}
+                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
                   onClick={() => void runKbankFollowupAction('settlement')}
                 >
                   {t('posKbankSettlement') || 'Settlement'}
@@ -11503,7 +11561,7 @@ export default function PosTerminalPage() {
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={kbankOpsBusy}
+                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
                   onClick={() => void runKbankFollowupAction('cancel')}
                 >
                   {t('posKbankCancel') || 'Cancel'}
@@ -11513,7 +11571,7 @@ export default function PosTerminalPage() {
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={kbankOpsBusy}
+                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
                   title={
                     !String(kbankOpsTxnNo || '').trim()
                       ? t('posKbankVoidNeedsTxnNo') ||
