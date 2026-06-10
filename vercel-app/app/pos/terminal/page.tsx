@@ -31,6 +31,10 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { useStoreList } from '@/lib/use-store-list'
+import {
+  buildPosStoreCodeMatchVariants,
+  posStoreCodeMatchesVariants,
+} from '@/lib/pos-store-code-match-variants'
 import { LayoutGrid, Bike, Package, Search, QrCode as QrCodeIcon } from 'lucide-react'
 import {
   getMembers,
@@ -872,7 +876,7 @@ export default function PosTerminalPage() {
     upsertOptimisticOrder,
     loadingTables,
   } = usePosStore()
-  const { formatStoreLabel, resolveStoreKey, legacyToCanonical, storeLabels } = useStoreList()
+  const { formatStoreLabel, resolveStoreKey, legacyToCanonical, storeLabels, posStores } = useStoreList()
 
   const businessOpenGate = usePosBusinessOpenGate(currentStoreId, { skip: isPosDemo })
   const businessOpenBlocked = !businessOpenGate.allowed
@@ -1543,6 +1547,7 @@ export default function PosTerminalPage() {
           for (const part of payload.split(',')) addCode(part)
         }
       }
+      let needsGrabPromoSizeInference = false
       for (const row of rows) {
         addCode((row as { optionCode?: unknown }).optionCode)
         addCode((row as { optionCode1?: unknown }).optionCode1)
@@ -1550,12 +1555,21 @@ export default function PosTerminalPage() {
         const optionCodes = (row as { optionCodes?: unknown[] }).optionCodes
         if (Array.isArray(optionCodes)) optionCodes.forEach((c) => addCode(c))
         addCodesFromNote((row as { note?: unknown }).note)
-        const promoItems = (row as { promoItems?: Array<{ optionCode?: unknown }> }).promoItems
+        const promoItems = (row as {
+          promoItems?: Array<{ menuId?: unknown; optionCode?: unknown; optionName?: unknown }>
+        }).promoItems
         if (Array.isArray(promoItems)) {
-          for (const p of promoItems) addCode((p as { optionCode?: unknown }).optionCode)
+          for (const p of promoItems) {
+            addCode((p as { optionCode?: unknown }).optionCode)
+            const mid = String((p as { menuId?: unknown }).menuId ?? '').trim()
+            const hasOpt =
+              String((p as { optionName?: unknown }).optionName ?? '').trim() ||
+              String((p as { optionCode?: unknown }).optionCode ?? '').trim()
+            if (mid && !hasOpt) needsGrabPromoSizeInference = true
+          }
         }
       }
-      if (requiredOptionCodes.size === 0) return optionNameByCode
+      if (requiredOptionCodes.size === 0 && !needsGrabPromoSizeInference) return optionNameByCode
 
       const hasCodeInCurrentMap = (codeUpper: string): boolean => {
         if (optionNameByCode.has(codeUpper)) return true
@@ -2784,13 +2798,11 @@ export default function PosTerminalPage() {
       let list = await getPosOrders({
         orderId,
         storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
-        strictStore: true,
       })
       if (!list.length) {
         list = await getPosOrders({
           orderId,
           storeCode: String(currentStoreId || '').trim() || undefined,
-          strictStore: true,
         })
       }
       const order = list[0]
@@ -3071,13 +3083,11 @@ export default function PosTerminalPage() {
             let list = await getPosOrders({
               orderId,
               storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
-              strictStore: true,
             })
             if (!list.length) {
               list = await getPosOrders({
                 orderId,
                 storeCode: String(currentStoreId || '').trim() || undefined,
-                strictStore: true,
               })
             }
             const order = list[0]
@@ -3512,29 +3522,16 @@ export default function PosTerminalPage() {
   const currentStoreCodeVariants = useMemo(() => {
     const base = String(currentStoreId || '').trim()
     if (!base) return [] as string[]
-    const variants = [
-      base,
-      base.startsWith('CM ') ? base.slice(3).trim() : `CM ${base}`.trim(),
-      base.replace(/^CM\s+/i, '').trim(),
-    ].filter(Boolean)
-    const out: string[] = []
-    for (const raw of variants) {
-      const v = String(raw).trim()
-      if (!v) continue
-      if (out.some((e) => e.toLowerCase() === v.toLowerCase())) continue
-      out.push(v)
-    }
-    return out
-  }, [currentStoreId])
+    return buildPosStoreCodeMatchVariants({
+      storeCode: base,
+      catalogStoreCodes: posStores,
+      legacyToCanonical,
+      storeLabels,
+    })
+  }, [currentStoreId, posStores, legacyToCanonical, storeLabels])
 
   const isCurrentStoreOrder = useCallback(
-    (rawStoreCode: unknown) => {
-      const rowStore = String(rawStoreCode ?? '').trim()
-      if (!rowStore || currentStoreCodeVariants.length === 0) return false
-      return currentStoreCodeVariants.some(
-        (v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase())
-      )
-    },
+    (rawStoreCode: unknown) => posStoreCodeMatchesVariants(rawStoreCode, currentStoreCodeVariants),
     [currentStoreCodeVariants]
   )
 
@@ -4267,7 +4264,6 @@ export default function PosTerminalPage() {
           const fallbackRows = await getPosOrders({
             orderId,
             storeCode: String(data.storeCode || currentStoreId || '').trim() || undefined,
-            strictStore: true,
             limit: 1,
           })
           const fallbackOrder = fallbackRows?.[0] as PosOrder | undefined
@@ -4456,7 +4452,7 @@ export default function PosTerminalPage() {
     if (posDemoRef.current) return
     if (!isMainPosDevice) return
     try {
-      const list = await getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+      const list = await getPosOrders({ orderId, storeCode: currentStoreId })
       const po = list?.[0] as PosOrder | undefined
       if (!po?.items?.length) return
 
@@ -4591,7 +4587,7 @@ export default function PosTerminalPage() {
   ) {
     if (posDemoRef.current) return
     if (!isMainPosDevice) return
-    const list = await getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+    const list = await getPosOrders({ orderId, storeCode: currentStoreId })
     const po = list?.[0] as PosOrder | undefined
     if (!po?.items?.length) return
 
@@ -4775,7 +4771,7 @@ export default function PosTerminalPage() {
   async function runAfterTableTransferHallReprint(keepOrderId: number) {
     await runAfterPartialLineCancelPrints(keepOrderId, 'dine_in', undefined, { skipKitchen: true })
     try {
-      const list = await getPosOrders({ orderId: keepOrderId, storeCode: currentStoreId, strictStore: true })
+      const list = await getPosOrders({ orderId: keepOrderId, storeCode: currentStoreId })
       const po = list?.[0] as PosOrder | undefined
       if (!po?.items?.length) return
       const snapItems = (po.items || []).map(
@@ -4835,14 +4831,12 @@ export default function PosTerminalPage() {
         })
         return
       }
-      const rowStore = String(row.store_code ?? '').trim()
-      const variants = currentStoreCodeVariants
-      if (!rowStore) {
-        logPosPrintDebug('realtime_insert_skip_no_store', { orderId })
-        return
-      }
-      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) {
-        logPosPrintDebug('realtime_insert_skip_store_mismatch', { orderId, rowStore, variants })
+      if (!isCurrentStoreOrder(row.store_code)) {
+        logPosPrintDebug('realtime_insert_skip_store_mismatch', {
+          orderId,
+          rowStore: String(row.store_code ?? ''),
+          variants: currentStoreCodeVariants,
+        })
         return
       }
       if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
@@ -5018,7 +5012,7 @@ export default function PosTerminalPage() {
         const st = String(row.status ?? '').toLowerCase()
         const paySum = posOrderRowPaymentSum(row)
         if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
-          void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+          void getPosOrders({ orderId, storeCode: currentStoreId })
             .then((list) => {
               const order = list[0] as PosOrder | undefined
               if (!order?.items?.length) {
@@ -5054,25 +5048,25 @@ export default function PosTerminalPage() {
 
     realtimeChannelStateRef.current.clear()
     realtimeChannelHealthyRef.current = false
-    /** store_code 별칭(CM MBK/MBK)마다 INSERT 구독하면 동일 행이 2회 올 수 있음 → canonical 1개만 */
-    const realtimeStoreCode = String(currentStoreId || '').trim()
-    const channels = (() => {
-      if (!realtimeStoreCode) return []
-      const insertKey = `insert:${realtimeStoreCode}`
-      const updateKey = `insert-items:${realtimeStoreCode}`
+    /** legacy·Grab ID(1042↔CM Silom) 별칭마다 INSERT 구독 — seenOrderIds로 중복 처리 방지 */
+    const channels = currentStoreCodeVariants.flatMap((storeCode) => {
+      const code = String(storeCode || '').trim()
+      if (!code) return []
+      const insertKey = `insert:${code}`
+      const updateKey = `insert-items:${code}`
       const list = []
       const chInsert = subscribePosOrdersInsert(onInsert, {
-        store: realtimeStoreCode,
+        store: code,
         onStatus: makeRealtimeStatusHandler(insertKey),
       })
       if (chInsert) list.push(chInsert)
       const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
-        store: realtimeStoreCode,
+        store: code,
         onStatus: makeRealtimeStatusHandler(updateKey),
       })
       if (chUpdate) list.push(chUpdate)
       return list
-    })()
+    })
     return () => {
       channels.forEach((channel) => channel?.unsubscribe())
       if (realtimeResubscribeTimerRef.current) {
@@ -5112,10 +5106,7 @@ export default function PosTerminalPage() {
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
       if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) return
-      const rowStore = String(row.store_code ?? '').trim()
-      const variants = currentStoreCodeVariants
-      if (!rowStore) return
-      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (!isCurrentStoreOrder(row.store_code)) return
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(orderId)
@@ -5248,10 +5239,8 @@ export default function PosTerminalPage() {
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
       lastRealtimeOrderEventAtRef.current = Date.now()
-      const rowStore = String(row.store_code ?? '').trim()
-      const variants = currentStoreCodeVariants
-      if (!rowStore) return
-      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (!isCurrentStoreOrder(row.store_code)) return
+      const rowStore = String(row.store_code ?? currentStoreId ?? '').trim()
 
       if (
         autoPrintReceiptOnOrder &&
@@ -5317,7 +5306,7 @@ export default function PosTerminalPage() {
         posOrderRowPaymentSum(row) > 0 &&
         !printedPaymentReceiptIdsRef.current.has(orderId)
       ) {
-        void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true })
+        void getPosOrders({ orderId, storeCode: currentStoreId })
           .then((list) => {
             const order = list[0] as PosOrder | undefined
             if (!order?.items?.length) {
@@ -5572,7 +5561,6 @@ export default function PosTerminalPage() {
               endStr: today,
               posBizDayScope: true,
               storeCode: currentStoreId,
-              strictStore: true,
               statusPaidLike: true,
               limit: 800,
               orderBy: 'id.desc',
@@ -5609,7 +5597,6 @@ export default function PosTerminalPage() {
                     const fullRows = await getPosOrders({
                       orderId: oid,
                       storeCode: currentStoreId,
-                      strictStore: true,
                     })
                     const full = fullRows[0]
                     if (!full) return
@@ -5635,7 +5622,6 @@ export default function PosTerminalPage() {
           endStr: today,
           posBizDayScope: true,
           storeCode: currentStoreId,
-          strictStore: true,
           pollMinimal: true,
           ...(sinceId != null ? { sinceId } : {}),
         })
@@ -5912,7 +5898,6 @@ export default function PosTerminalPage() {
               endStr: today,
               posBizDayScope: true,
               storeCode: currentStoreId,
-              strictStore: true,
               limit: 800,
               orderBy: 'id.desc',
               pollMinimal: true,
@@ -9177,7 +9162,6 @@ export default function PosTerminalPage() {
                     void getPosOrders({
                       orderId: savedOrderId,
                       storeCode: currentStoreId,
-                      strictStore: true,
                       limit: 1,
                     })
                       .then((rows) => rows?.[0])
@@ -9620,7 +9604,6 @@ export default function PosTerminalPage() {
                   const rows = await getPosOrders({
                     orderId: existingTakeoutId,
                     storeCode: currentStoreId,
-                    strictStore: true,
                     limit: 1,
                   })
                   const hit = Array.isArray(rows) ? rows[0] : null

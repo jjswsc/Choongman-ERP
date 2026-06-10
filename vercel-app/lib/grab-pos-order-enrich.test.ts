@@ -15,8 +15,33 @@ import {
   resolveOptionCodesToLabels,
   synthesizeGrabItemOptionNote,
   resolveGrabItemPrintNote,
+  enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   grabSelectionIncludesExplicitSize,
 } from '@/lib/grab-pos-order-enrich'
+
+describe('enrichGrabPromoItemsWithDefaultSizeFromCatalog', () => {
+  it('adds default S to promo row matching GF-980 items_json (menuId 7, no optionName)', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'C022' },
+        { id: 7, name: 'RED HOT CHICKEN', code: 'C007' },
+      ],
+      [
+        { optionCode: 'C007-1', name: 'S - Boneless' },
+        { optionCode: 'C007-3', name: 'M - Boneless' },
+      ]
+    )
+    const enriched = enrichGrabPromoItemsWithDefaultSizeFromCatalog(
+      [
+        { menuId: '22', menuName: 'Rice', quantity: 1 },
+        { menuId: '7', menuName: 'RED HOT CHICKEN', quantity: 1 },
+      ],
+      catalog
+    )
+    expect(enriched?.[0]?.optionName).toBeUndefined()
+    expect(enriched?.[1]?.optionName).toMatch(/s/i)
+  })
+})
 
 describe('grabSelectionIncludesExplicitSize', () => {
   const catalog = buildGrabPosCatalog([], [

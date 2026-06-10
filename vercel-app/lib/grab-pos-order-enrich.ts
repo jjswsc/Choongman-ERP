@@ -677,6 +677,29 @@ export type GrabPromoPrintRow = {
   quantity: number
 }
 
+/** GrabPosCatalog → 주방·영수증 보강용 menuId→code 맵 */
+export function buildMenuCodeByMenuIdFromGrabCatalog(catalog: GrabPosCatalog): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const entry of catalog.menuById.values()) {
+    const id = String(entry.id ?? '').trim()
+    const code = String(entry.code ?? '').trim()
+    if (id && code) out[id] = code
+  }
+  return out
+}
+
+/** Grab 주문 수신·인쇄: promoItems 스냅샷에 기본 S 순살 등 사이즈 보강 */
+export function enrichGrabPromoItemsWithDefaultSizeFromCatalog<T extends GrabPromoPrintRow>(
+  items: T[] | undefined,
+  catalog: GrabPosCatalog
+): T[] | undefined {
+  if (!items?.length) return items
+  return enrichGrabPromoItemsForPrint(items, {
+    optionNameByCode: catalog.optionNameByCode,
+    menuCodeByMenuId: buildMenuCodeByMenuIdFromGrabCatalog(catalog),
+  })
+}
+
 /** Grab 영수증·주방: promoItems 에 사이즈·옵션명 보강 */
 export function enrichGrabPromoItemsForPrint<T extends GrabPromoPrintRow>(
   items: T[],

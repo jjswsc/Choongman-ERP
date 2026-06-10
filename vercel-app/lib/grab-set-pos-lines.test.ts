@@ -54,6 +54,42 @@ describe('mergeGrabSetChildLinesIntoPromoParents', () => {
     expect(items[2].grabSetChild).toBe(true)
   })
 
+  it('infers default S size on set chicken child without optc (GF-980 pattern)', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'C022' },
+        { id: 7, name: 'RED HOT CHICKEN', code: 'C007' },
+      ],
+      [
+        { name: 'S - Boneless', optionCode: 'C007-1' },
+        { name: 'M - Boneless', optionCode: 'C007-3' },
+        { name: 'L - Boneless', optionCode: 'C007-5' },
+      ],
+      [{ id: '3', name: '[April] Set 3', code: 'SET3', items: [] }]
+    )
+    const items = mergeGrabSetChildLinesIntoPromoParents(
+      [
+        {
+          id: 'p1',
+          name: '[April] Set 3',
+          price: 111,
+          qty: 1,
+          promoId: '3',
+          promoItems: [
+            { menuId: '22', menuName: 'Rice', optionId: null, quantity: 1 },
+            { menuId: '7', menuName: 'RED HOT CHICKEN', optionId: null, quantity: 1 },
+          ],
+        },
+        { id: 'c1', name: '[[April] Set 3] Rice', price: 0, qty: 1, menuId1: '22' },
+        { id: 'c2', name: '[[April] Set 3] RED HOT CHICKEN', price: 0, qty: 1, menuId1: '7' },
+      ],
+      catalog
+    )
+    const chicken = items[0].promoItems?.find((p) => p.menuName === 'RED HOT CHICKEN')
+    expect(chicken?.optionName).toMatch(/s/i)
+    expect(chicken?.optionName).toMatch(/boneless/i)
+  })
+
   it('does not mark child row as hidden when parent line does not exist', () => {
     const catalog = buildGrabPosCatalog(
       [{ id: 10, name: 'Rice', code: 'C100' }],

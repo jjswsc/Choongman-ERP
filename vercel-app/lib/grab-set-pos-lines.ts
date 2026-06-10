@@ -1,6 +1,9 @@
 import { normalizePromoLookupText } from '@/lib/pos-payment-receipt-from-order'
 import type { GrabPosCatalog } from '@/lib/grab-pos-order-enrich'
-import { resolveGrabDeliveryLineNote } from '@/lib/grab-pos-order-enrich'
+import {
+  enrichGrabPromoItemsWithDefaultSizeFromCatalog,
+  resolveGrabDeliveryLineNote,
+} from '@/lib/grab-pos-order-enrich'
 
 export type GrabSetPosLine = {
   id: string
@@ -174,7 +177,7 @@ export function mergeGrabSetChildLinesIntoPromoParents(
     const optionName =
       promoOptionSummaryFromChildNote(row.note, catalog.optionNameByCode) ||
       (optionCode ? findOptionLabelByCode(catalog.optionNameByCode, optionCode) : '')
-    const promoLine = {
+    const promoLineRaw = {
       menuId: menuId || '',
       optionId: null as string | null,
       ...(optionCode ? { optionCode } : {}),
@@ -182,12 +185,15 @@ export function mergeGrabSetChildLinesIntoPromoParents(
       menuName: child.childName,
       quantity: Math.max(1, Number(row.qty) || 1),
     }
+    const promoLine =
+      enrichGrabPromoItemsWithDefaultSizeFromCatalog([promoLineRaw], catalog)?.[0] ?? promoLineRaw
 
     if (parentIdx >= 0 && parentIdx !== child.index) {
       const parent = out[parentIdx]
       const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
       list.push(promoLine)
-      out[parentIdx] = { ...parent, promoItems: list }
+      const enrichedList = enrichGrabPromoItemsWithDefaultSizeFromCatalog(list, catalog) ?? list
+      out[parentIdx] = { ...parent, promoItems: enrichedList }
       out[child.index] = { ...row, grabSetChild: true }
       continue
     }

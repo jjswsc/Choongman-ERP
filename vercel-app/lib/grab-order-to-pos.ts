@@ -17,6 +17,7 @@ import {
   resolveGrabLineUnitMinor,
   resolveGrabMerchantPosTotal,
   resolveOptionCodesToLabels,
+  enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   grabSelectionIncludesExplicitSize,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
@@ -937,6 +938,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
             ...(it.optionName ? { optionName: String(it.optionName).trim() } : {}),
             quantity: Math.max(1, Number(it.quantity) || 1),
           }))
+      if (promoItemsSnapshot?.length) {
+        promoItemsSnapshot = enrichGrabPromoItemsWithDefaultSizeFromCatalog(promoItemsSnapshot, catalog)
+      }
       if (promoCatalogHasChoiceGroups(allPromoCatalogItems)) {
         const choiceNameKeys = new Set(
           allPromoCatalogItems
@@ -1068,7 +1072,13 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     idx += 1
   }
 
-  return mergeGrabSetChildLinesIntoPromoParents(out as GrabSetPosLine[], catalog)
+  const merged = mergeGrabSetChildLinesIntoPromoParents(out as GrabSetPosLine[], catalog)
+  return merged.map((line) => {
+    const pi = line.promoItems
+    if (!Array.isArray(pi) || pi.length === 0) return line
+    const enriched = enrichGrabPromoItemsWithDefaultSizeFromCatalog(pi, catalog)
+    return enriched ? { ...line, promoItems: enriched } : line
+  })
 }
 
 export async function buildGrabPosOrderSnapshot(

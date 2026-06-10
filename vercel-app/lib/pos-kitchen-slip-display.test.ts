@@ -320,6 +320,46 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[1].note).toBe('M - Drumette')
   })
 
+  it('grab set compose infers default S when promoItems have menuId but no optionName', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 7, name: 'RED HOT CHICKEN', code: 'C007' }],
+      [
+        { optionCode: 'C007-1', name: 'S - Boneless' },
+        { optionCode: 'C007-3', name: 'M - Boneless' },
+      ]
+    )
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'grab:set-3',
+        name: '[April] Set 3',
+        qty: 1,
+        promoItems: [
+          { menuId: '22', menuName: 'Rice', optionId: null, quantity: 1 },
+          { menuId: '7', menuName: 'RED HOT CHICKEN', optionId: null, quantity: 1 },
+        ],
+      },
+    ]
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'grab:set-3-k1',
+        name: '[[April] Set 3] RED HOT CHICKEN',
+        qty: 1,
+        kitchenRouteMenuId: '7',
+        kitchenPromoGroupId: 'grab:set-3',
+        kitchenPromoParentName: '[April] Set 3',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems,
+      grabInbound: true,
+      menuNameByMenuId: { '7': 'RED HOT CHICKEN', '22': 'Rice' },
+      menuCodeByMenuId: { '7': 'C007', '22': 'C022' },
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(lines[0].promoComposeLines).toEqual(['RED HOT CHICKEN (S - Boneless) x1'])
+  })
+
   it('grab line resolves optionCode when note is empty', () => {
     const catalog = buildGrabPosCatalog(
       [],
