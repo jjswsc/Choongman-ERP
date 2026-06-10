@@ -160,11 +160,9 @@ import {
   type Sps110EmployerInfo,
 } from "@/lib/thai-sso-sps1-10-export"
 import {
-  downloadThaiSsoEserviceBulkFromPayrollXlsx,
-} from "@/lib/thai-sso-eservice-bulk-export"
-import {
   downloadThaiSsoOfficialUploadFromPayrollXlsx,
   mapPayrollRowToOfficialUploadRow,
+  resolveSsoOfficialUploadColumnLabel,
   SSO_OFFICIAL_UPLOAD_COLUMN_HELP,
   type SsoOfficialUploadSheet,
 } from "@/lib/thai-sso-official-upload-export"
@@ -2294,32 +2292,6 @@ export function AdminAccountingCompliance({
     ssoPayrollRows,
     taxMonth,
     t,
-  ])
-
-  const exportEserviceBulkFromPayroll = React.useCallback(async () => {
-    if (!canUse || !auth?.user) return
-    setSsoPayrollExporting(true)
-    try {
-      const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
-      if (!rows || rows.length === 0) return
-      const employer = await resolveSsoEmployerHeader()
-      downloadThaiSsoEserviceBulkFromPayrollXlsx({
-        yearMonth: taxMonth,
-        payrollRows: rows,
-        employer,
-        filingWageMode: ssoFilingWageMode,
-      })
-    } finally {
-      setSsoPayrollExporting(false)
-    }
-  }, [
-    canUse,
-    auth?.user,
-    fetchSsoPayrollRows,
-    resolveSsoEmployerHeader,
-    ssoFilingWageMode,
-    ssoPayrollRows,
-    taxMonth,
   ])
 
   const exportSps110FromPayroll = React.useCallback(async () => {
@@ -8199,16 +8171,6 @@ export function AdminAccountingCompliance({
                 </Button>
                 <Button
                   type="button"
-                  variant="secondary"
-                  onClick={() => void exportEserviceBulkFromPayroll()}
-                  disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
-                  title={t("accCompSsoEserviceBulkHint")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {ssoPayrollExporting ? t("loading") : t("accCompSsoEserviceBulkFromPayroll")}
-                </Button>
-                <Button
-                  type="button"
                   variant="outline"
                   onClick={() => void exportSps110FromPayroll()}
                   disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
@@ -8267,7 +8229,7 @@ export function AdminAccountingCompliance({
                             <th className="text-left p-2 font-medium">{t("store")}</th>
                             {SSO_OFFICIAL_UPLOAD_COLUMN_HELP.map((c) => (
                               <th key={c.labelTh} className="text-left p-2 font-medium whitespace-nowrap">
-                                {c.labelTh}
+                                {resolveSsoOfficialUploadColumnLabel(c, lang)}
                               </th>
                             ))}
                           </tr>
@@ -8348,7 +8310,7 @@ export function AdminAccountingCompliance({
                     rows={3}
                     value={ssoAttachmentInput}
                     onChange={(e) => setSsoAttachmentInput(e.target.value)}
-                    placeholder="https://.../receipt1.png"
+                    placeholder={t("accCompEvidenceAttachmentUrlsPh")}
                   />
                 </div>
                 {ssoAttachmentUrls.length ? (

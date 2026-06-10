@@ -14,6 +14,8 @@ import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores
 import type { MemberPortalContentAdminItem } from "@/lib/member-portal-content-admin"
 import { countContentForAdminTab } from "@/lib/member-portal-content-admin"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { canEditMemberPortalAdmin } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
@@ -21,10 +23,13 @@ import {
   MEMBER_PORTAL_CONTENT_IMAGE_RULES,
   readMemberPortalImageSize,
   validateMemberPortalImageByRule,
+  memberPortalImageUploadCatchMessage,
 } from "@/lib/member-portal-content-image-rules"
 
 export default function CrmMemberAppContentPage() {
   const { auth } = useAuth()
+  const { lang } = useLang()
+  const t = useT(lang)
   const canEdit = canEditMemberPortalAdmin(auth?.role || "", auth?.store)
   const [activeTab, setActiveTab] = React.useState<
     "all" | "design" | "popup" | "promo" | "new_menu" | "info" | "stores" | "contact" | "delivery"
@@ -61,20 +66,20 @@ export default function CrmMemberAppContentPage() {
       }
       if (!res.ok || !data.success) {
         setItems([])
-        setError(data.message || "회원앱 콘텐츠를 불러오지 못했습니다.")
+        setError(data.message || t("mpAdmin_errLoadContent"))
         return
       }
       setItems(data.items || [])
       if (data.needsSetup) {
-        setError(data.message || "DB 테이블 설정이 필요합니다.")
+        setError(data.message || t("mpAdmin_errNeedsSetup"))
       }
     } catch {
-      setError("회원앱 콘텐츠를 불러오지 못했습니다.")
+      setError(t("mpAdmin_errLoadContent"))
       setItems([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   const loadContactSettings = React.useCallback(async () => {
     try {
@@ -163,17 +168,17 @@ export default function CrmMemberAppContentPage() {
       })
       const data = (await res.json()) as { success: boolean; message?: string }
       if (!res.ok || !data.success) {
-        setError(data.message || "문의 채널 설정 저장에 실패했습니다.")
+        setError(data.message || t("mpAdmin_errContactSave"))
         return
       }
-      setNotice("문의 채널 설정을 저장했습니다.")
+      setNotice(t("mpAdmin_noticeContactSaved"))
       await loadContactSettings()
     } catch {
-      setError("문의 채널 설정 저장 중 오류가 발생했습니다.")
+      setError(t("mpAdmin_errContactSaveGeneric"))
     } finally {
       setContactSaving(false)
     }
-  }, [contactFacebookUrl, contactInstagramUrl, contactLineOfficialUrl, loadContactSettings])
+  }, [contactFacebookUrl, contactInstagramUrl, contactLineOfficialUrl, loadContactSettings, t])
 
   const saveSignupBenefitsSettings = React.useCallback(async () => {
     setSignupBenefitsSaving(true)
@@ -187,17 +192,17 @@ export default function CrmMemberAppContentPage() {
       })
       const data = (await res.json()) as { success: boolean; message?: string }
       if (!res.ok || !data.success) {
-        setError(data.message || "가입 혜택 설정 저장에 실패했습니다.")
+        setError(data.message || t("mpAdmin_errSignupBenefitsSave"))
         return
       }
-      setNotice("가입 혜택 설정을 저장했습니다.")
+      setNotice(t("mpAdmin_noticeSignupBenefitsSaved"))
       await loadSignupBenefitsSettings()
     } catch {
-      setError("가입 혜택 설정 저장 중 오류가 발생했습니다.")
+      setError(t("mpAdmin_errSignupBenefitsSaveGeneric"))
     } finally {
       setSignupBenefitsSaving(false)
     }
-  }, [loadSignupBenefitsSettings, signupWelcomeCouponCode])
+  }, [loadSignupBenefitsSettings, signupWelcomeCouponCode, t])
 
   const saveDeliverySettings = React.useCallback(async () => {
     setDeliverySaving(true)
@@ -215,17 +220,17 @@ export default function CrmMemberAppContentPage() {
       })
       const data = (await res.json()) as { success: boolean; message?: string }
       if (!res.ok || !data.success) {
-        setError(data.message || "배달 앱 링크 저장에 실패했습니다.")
+        setError(data.message || t("mpAdmin_errDeliverySave"))
         return
       }
-      setNotice("배달 앱 링크를 저장했습니다.")
+      setNotice(t("mpAdmin_noticeDeliverySaved"))
       await loadDeliverySettings()
     } catch {
-      setError("배달 앱 링크 저장 중 오류가 발생했습니다.")
+      setError(t("mpAdmin_errDeliverySaveGeneric"))
     } finally {
       setDeliverySaving(false)
     }
-  }, [deliveryGrabUrl, deliveryLinemanUrl, deliveryShopeeUrl, loadDeliverySettings])
+  }, [deliveryGrabUrl, deliveryLinemanUrl, deliveryShopeeUrl, loadDeliverySettings, t])
 
   const saveDesignSettings = React.useCallback(async () => {
     setDesignSaving(true)
@@ -239,25 +244,26 @@ export default function CrmMemberAppContentPage() {
       })
       const data = (await res.json()) as { success: boolean; message?: string }
       if (!res.ok || !data.success) {
-        setError(data.message || "디자인 설정 저장에 실패했습니다.")
+        setError(data.message || t("mpAdmin_errDesignSave"))
         return
       }
-      setNotice("디자인 설정을 저장했습니다.")
+      setNotice(t("mpAdmin_noticeDesignSaved"))
       await loadDesignSettings()
     } catch {
-      setError("디자인 설정 저장 중 오류가 발생했습니다.")
+      setError(t("mpAdmin_errDesignSaveGeneric"))
     } finally {
       setDesignSaving(false)
     }
-  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl])
+  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl, t])
 
   const uploadDesignImage = React.useCallback(async (file: File, target: "login" | "app") => {
     setUploading(true)
     setError("")
     try {
       const size = await readMemberPortalImageSize(file)
+      const ruleKey = target === "login" ? "login" : "app"
       const rule = target === "login" ? MEMBER_PORTAL_CONTENT_IMAGE_RULES.login : MEMBER_PORTAL_CONTENT_IMAGE_RULES.app
-      const v = validateMemberPortalImageByRule(size.width, size.height, rule)
+      const v = validateMemberPortalImageByRule(size.width, size.height, rule, t, ruleKey)
       if (!v.ok) {
         setError(v.message)
         return
@@ -279,23 +285,23 @@ export default function CrmMemberAppContentPage() {
         publicUrl?: string
       }
       if (!presignRes.ok || !presign.success || !presign.signedUrl || !presign.publicUrl) {
-        setError(presign.message || "이미지 업로드 준비에 실패했습니다.")
+        setError(presign.message || t("mpAdmin_errImagePresign"))
         return
       }
       const putRes = await putFileToSupabaseSignedUploadUrl(presign.signedUrl, file, { timeoutMs: 180000 })
       if (!putRes.ok) {
-        setError("이미지 업로드에 실패했습니다.")
+        setError(t("mpAdmin_errImageUpload"))
         return
       }
       if (target === "login") setLoginBackgroundUrl(presign.publicUrl || "")
       if (target === "app") setAppBackgroundUrl(presign.publicUrl || "")
-      setNotice("이미지를 업로드했습니다. 저장 버튼을 눌러 반영하세요.")
-    } catch {
-      setError("이미지 업로드 중 오류가 발생했습니다.")
+      setNotice(t("mpAdmin_noticeImageUploadedSave"))
+    } catch (e) {
+      setError(memberPortalImageUploadCatchMessage(t, e))
     } finally {
       setUploading(false)
     }
-  }, [])
+  }, [t])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -304,20 +310,18 @@ export default function CrmMemberAppContentPage() {
 
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold">회원앱 운영</h1>
-            <p className="text-sm text-muted-foreground">
-              월별 프로모션·신메뉴·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널을 함께 관리합니다.
-            </p>
+            <h1 className="text-xl font-bold">{t("mpAdmin_pageTitle")}</h1>
+            <p className="text-sm text-muted-foreground">{t("mpAdmin_pageDesc")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline">
               <Link href="/qr?target=member">
                 <QrCode className="mr-1.5 h-4 w-4" />
-                회원앱 QR
+                {t("mpAdmin_qrBtn")}
               </Link>
             </Button>
             <Button variant="outline" onClick={() => refresh()} disabled={loading}>
-              {loading ? "불러오는 중..." : "새로고침"}
+              {loading ? t("loading") : t("adminOpsCenterReload")}
             </Button>
           </div>
         </div>
@@ -328,14 +332,14 @@ export default function CrmMemberAppContentPage() {
         {!!error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         {!canEdit ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            이 화면은 조회만 가능합니다. 편집은 본사·회계·매장 관리자 계정으로 로그인해 주세요.
+            {t("mpAdmin_readOnlyNotice")}
           </div>
         ) : null}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-9">
             <TabsTrigger value="all">
-              전체 목록
+              {t("mpAdmin_tabAll")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                   {countContentForAdminTab(items, "all")}
@@ -343,7 +347,7 @@ export default function CrmMemberAppContentPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="promo">
-              월별 프로모션
+              {t("mpAdmin_tabPromo")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                   {countContentForAdminTab(items, "promo")}
@@ -351,7 +355,7 @@ export default function CrmMemberAppContentPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="new_menu">
-              신메뉴
+              {t("mpAdmin_tabNewMenu")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                   {countContentForAdminTab(items, "new_menu")}
@@ -359,7 +363,7 @@ export default function CrmMemberAppContentPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="popup">
-              팝업
+              {t("mpAdmin_tabPopup")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                   {countContentForAdminTab(items, "popup")}
@@ -367,32 +371,30 @@ export default function CrmMemberAppContentPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="info">
-              정보·공지
+              {t("mpAdmin_tabInfo")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                   {countContentForAdminTab(items, "info")}
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="stores">매장</TabsTrigger>
-            <TabsTrigger value="design">디자인</TabsTrigger>
-            <TabsTrigger value="contact">문의</TabsTrigger>
-            <TabsTrigger value="delivery">배달</TabsTrigger>
+            <TabsTrigger value="stores">{t("mpAdmin_tabStores")}</TabsTrigger>
+            <TabsTrigger value="design">{t("mpAdmin_tabDesign")}</TabsTrigger>
+            <TabsTrigger value="contact">{t("mpAdmin_tabContact")}</TabsTrigger>
+            <TabsTrigger value="delivery">{t("mpAdmin_tabDelivery")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="design" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>배경화면 디자인 관리</CardTitle>
+                <CardTitle>{t("mpAdmin_designTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  로그인 화면 / 접속 후 메인 화면 배경을 업로드합니다. 권장 포맷: JPG/PNG, 1080x1920(px) 세로형.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_designDesc")}</p>
                 <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2 rounded-lg border p-3">
-                    <Label>로그인 배경 URL</Label>
+                    <Label>{t("mpAdmin_loginBgUrl")}</Label>
                     <Input
                       value={loginBackgroundUrl}
                       onChange={(e) => setLoginBackgroundUrl(e.target.value)}
@@ -407,11 +409,11 @@ export default function CrmMemberAppContentPage() {
                       }}
                     />
                     {loginBackgroundUrl ? (
-                      <img src={loginBackgroundUrl} alt="login bg" className="h-28 w-full rounded object-cover" />
+                      <img src={loginBackgroundUrl} alt={t("mpAdmin_loginBgAlt")} className="h-28 w-full rounded object-cover" />
                     ) : null}
                   </div>
                   <div className="space-y-2 rounded-lg border p-3">
-                    <Label>접속 후 배경 URL</Label>
+                    <Label>{t("mpAdmin_appBgUrl")}</Label>
                     <Input
                       value={appBackgroundUrl}
                       onChange={(e) => setAppBackgroundUrl(e.target.value)}
@@ -426,16 +428,16 @@ export default function CrmMemberAppContentPage() {
                       }}
                     />
                     {appBackgroundUrl ? (
-                      <img src={appBackgroundUrl} alt="app bg" className="h-28 w-full rounded object-cover" />
+                      <img src={appBackgroundUrl} alt={t("mpAdmin_appBgAlt")} className="h-28 w-full rounded object-cover" />
                     ) : null}
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => saveDesignSettings()} disabled={designSaving || uploading || !canEdit}>
-                    {designSaving ? "저장 중..." : "디자인 저장"}
+                    {designSaving ? t("mpAdmin_saving") : t("mpAdmin_designSave")}
                   </Button>
                   <Button variant="outline" onClick={() => loadDesignSettings().catch(() => {})}>
-                    다시 불러오기
+                    {t("mpAdmin_reload")}
                   </Button>
                 </div>
                 </fieldset>
@@ -446,12 +448,10 @@ export default function CrmMemberAppContentPage() {
           <TabsContent value="contact" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>문의 채널 설정</CardTitle>
+                <CardTitle>{t("mpAdmin_contactTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  회원앱 로그인 「문의하기」와 「내 정보」 탭에 표시되는 Facebook · Instagram · LINE 공식 링크를 관리합니다.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_contactDesc")}</p>
                 <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1.5">
@@ -471,7 +471,7 @@ export default function CrmMemberAppContentPage() {
                     />
                   </div>
                   <div className="space-y-1.5 md:col-span-2">
-                    <Label>LINE 공식 URL</Label>
+                    <Label>{t("mpAdmin_lineOfficialUrl")}</Label>
                     <Input
                       value={contactLineOfficialUrl}
                       onChange={(e) => setContactLineOfficialUrl(e.target.value)}
@@ -481,10 +481,10 @@ export default function CrmMemberAppContentPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => saveContactSettings()} disabled={contactSaving || !canEdit}>
-                    {contactSaving ? "저장 중..." : "문의 채널 저장"}
+                    {contactSaving ? t("mpAdmin_saving") : t("mpAdmin_contactSave")}
                   </Button>
                   <Button variant="outline" onClick={() => loadContactSettings().catch(() => {})}>
-                    다시 불러오기
+                    {t("mpAdmin_reload")}
                   </Button>
                 </div>
                 </fieldset>
@@ -492,15 +492,13 @@ export default function CrmMemberAppContentPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>회원가입 웰컴 쿠폰</CardTitle>
+                <CardTitle>{t("mpAdmin_welcomeCouponTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  회원앱 가입 화면에서 마케팅 수신 동의(기본 체크) 시 자동 지급할 POS 쿠폰 코드입니다. CRM 쿠폰 정의에 있는 코드를 입력하세요. 비워 두면 쿠폰 안내 문구가 숨겨집니다.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_welcomeCouponDesc")}</p>
                 <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                   <div className="space-y-1.5">
-                    <Label>웰컴 쿠폰 코드</Label>
+                    <Label>{t("mpAdmin_welcomeCouponCode")}</Label>
                     <Input
                       value={signupWelcomeCouponCode}
                       onChange={(e) => setSignupWelcomeCouponCode(e.target.value.toUpperCase())}
@@ -509,10 +507,10 @@ export default function CrmMemberAppContentPage() {
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={() => saveSignupBenefitsSettings()} disabled={signupBenefitsSaving || !canEdit}>
-                      {signupBenefitsSaving ? "저장 중..." : "가입 혜택 저장"}
+                      {signupBenefitsSaving ? t("mpAdmin_saving") : t("mpAdmin_signupBenefitsSave")}
                     </Button>
                     <Button variant="outline" onClick={() => loadSignupBenefitsSettings().catch(() => {})}>
-                      다시 불러오기
+                      {t("mpAdmin_reload")}
                     </Button>
                   </div>
                 </fieldset>
@@ -523,12 +521,10 @@ export default function CrmMemberAppContentPage() {
           <TabsContent value="delivery" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>배달 앱 링크</CardTitle>
+                <CardTitle>{t("mpAdmin_deliveryTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  회원앱 주문 탭에서 배달 선택 시 열리는 GrabFood / LINE MAN / ShopeeFood 링크입니다. 비워 두면 기본 URL을 사용합니다.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_deliveryDesc")}</p>
                 <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                 <div className="grid gap-3">
                   <div className="space-y-1.5">
@@ -558,10 +554,10 @@ export default function CrmMemberAppContentPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => saveDeliverySettings()} disabled={deliverySaving || !canEdit}>
-                    {deliverySaving ? "저장 중..." : "배달 링크 저장"}
+                    {deliverySaving ? t("mpAdmin_saving") : t("mpAdmin_deliverySave")}
                   </Button>
                   <Button variant="outline" onClick={() => loadDeliverySettings().catch(() => {})}>
-                    다시 불러오기
+                    {t("mpAdmin_reload")}
                   </Button>
                 </div>
                 </fieldset>

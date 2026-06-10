@@ -15,9 +15,12 @@ import {
   type MemberPortalContentAdminItem,
   type MemberPortalContentAdminTab,
 } from "@/lib/member-portal-content-admin"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 import {
   formatMemberPortalContentImageHint,
+  memberPortalImageUploadCatchMessage,
   readMemberPortalImageSize,
   resolveMemberPortalContentImageRule,
   validateMemberPortalImageByRule,
@@ -39,60 +42,70 @@ type FormState = {
   endsAt: string
 }
 
-const VARIANT_META: Record<
+const VARIANT_META_KEYS: Record<
   Exclude<MemberPortalContentAdminTab, "all">,
   {
-    title: string
-    description: string
-    empty: string
-    newLabel: string
+    titleKey: string
+    descKey: string
+    emptyKey: string
+    newKey: string
     defaultTargetTab: string
     contentType: ContentType
   }
 > = {
   popup: {
-    title: "팝업",
-    description: "로그인 후 홈에 뜨는 팝업 배너입니다. 목록에서 노출 상태·기간·미리보기를 확인하고 바로 편집할 수 있습니다.",
-    empty: "등록된 팝업이 없습니다. 「새 팝업」으로 추가하세요.",
-    newLabel: "새 팝업",
+    titleKey: "mpAdmin_popupTitle",
+    descKey: "mpAdmin_popupDesc",
+    emptyKey: "mpAdmin_popupEmpty",
+    newKey: "mpAdmin_popupNew",
     defaultTargetTab: "home",
     contentType: "popup",
   },
   promo: {
-    title: "월별 프로모션",
-    description:
-      "회원앱 홈 「이달의 프로모션」 가로 목록에 노출됩니다. 시작·종료일(방콕)로 월별 필터가 적용됩니다.",
-    empty: "등록된 월별 프로모션이 없습니다.",
-    newLabel: "새 프로모션",
+    titleKey: "mpAdmin_promoTitle",
+    descKey: "mpAdmin_promoDesc",
+    emptyKey: "mpAdmin_promoEmpty",
+    newKey: "mpAdmin_promoNew",
     defaultTargetTab: "home_promo",
     contentType: "info",
   },
   new_menu: {
-    title: "신메뉴",
-    description:
-      "회원앱 홈 「신메뉴」 가로 목록에 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.",
-    empty: "등록된 신메뉴 콘텐츠가 없습니다.",
-    newLabel: "새 신메뉴",
+    titleKey: "mpAdmin_newMenuTitle",
+    descKey: "mpAdmin_newMenuDesc",
+    emptyKey: "mpAdmin_newMenuEmpty",
+    newKey: "mpAdmin_newMenuNew",
     defaultTargetTab: "home_feature",
     contentType: "info",
   },
   info: {
-    title: "정보·공지",
-    description: "홈 하단 공지 등 텍스트 안내를 관리합니다.",
-    empty: "등록된 정보 콘텐츠가 없습니다.",
-    newLabel: "새 공지",
+    titleKey: "mpAdmin_infoTitle",
+    descKey: "mpAdmin_infoDesc",
+    emptyKey: "mpAdmin_infoEmpty",
+    newKey: "mpAdmin_infoNew",
     defaultTargetTab: "home",
     contentType: "info",
   },
 }
 
-const INFO_TARGET_OPTIONS = [
-  { value: "home", label: "홈 · 공지" },
-  { value: "location", label: "매장 탭" },
+function variantMetaFor(t: (k: string) => string, variant: Exclude<MemberPortalContentAdminTab, "all">) {
+  const keys = VARIANT_META_KEYS[variant]
+  return {
+    title: t(keys.titleKey),
+    description: t(keys.descKey),
+    empty: t(keys.emptyKey),
+    newLabel: t(keys.newKey),
+    defaultTargetTab: keys.defaultTargetTab,
+    contentType: keys.contentType,
+  }
+}
+
+const INFO_TARGET_OPTION_KEYS = [
+  { value: "home", labelKey: "mpAdmin_targetHomeNotice" },
+  { value: "location", labelKey: "mpAdmin_targetLocation" },
 ] as const
 
-function emptyForm(variant: Exclude<MemberPortalContentAdminTab, "all">): FormState {
-  const meta = VARIANT_META[variant]
+function emptyForm(variant: Exclude<MemberPortalContentAdminTab, "all">, t: (k: string) => string): FormState {
+  const meta = variantMetaFor(t, variant)
   return {
     contentKey: "",
     contentType: meta.contentType,
@@ -162,30 +175,32 @@ export function MemberPortalContentAdminPanel({
   onNotice,
   onError,
 }: MemberPortalContentAdminPanelProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const panelVariant = variant === "all" ? "promo" : variant
-  const meta = VARIANT_META[panelVariant]
+  const meta = variantMetaFor(t, panelVariant)
   const filtered = React.useMemo(() => filterContentForAdminTab(items, variant), [items, variant])
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [formVariant, setFormVariant] = React.useState<Exclude<MemberPortalContentAdminTab, "all">>(panelVariant)
-  const [form, setForm] = React.useState<FormState>(() => emptyForm(panelVariant))
+  const [form, setForm] = React.useState<FormState>(() => emptyForm(panelVariant, t))
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [togglingKey, setTogglingKey] = React.useState<string | null>(null)
   const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
 
-  const formMeta = VARIANT_META[formVariant]
+  const formMeta = variantMetaFor(t, formVariant)
   const imageRule = React.useMemo(() => resolveMemberPortalContentImageRule(formVariant), [formVariant])
-  const imageHint = formatMemberPortalContentImageHint(imageRule)
+  const imageHint = formatMemberPortalContentImageHint(imageRule, t)
 
   const openNew = React.useCallback(
     (targetVariant?: Exclude<MemberPortalContentAdminTab, "all">) => {
       const nextVariant = targetVariant || panelVariant
       setFormVariant(nextVariant)
-      setForm(emptyForm(nextVariant))
+      setForm(emptyForm(nextVariant, t))
       setSheetOpen(true)
     },
-    [panelVariant]
+    [panelVariant, t]
   )
 
   const openEdit = React.useCallback(
@@ -220,24 +235,24 @@ export function MemberPortalContentAdminPanel({
     })
     const data = (await res.json()) as { success: boolean; message?: string }
     if (!res.ok || !data.success) {
-      throw new Error(data.message || "저장에 실패했습니다.")
+      throw new Error(data.message || t("mpAdmin_errSave"))
     }
-  }, [])
+  }, [t])
 
   const onSave = React.useCallback(async () => {
     setSaving(true)
     onError("")
     try {
       await persist(form)
-      onNotice("저장되었습니다.")
+      onNotice(t("mpAdmin_noticeSaved"))
       setSheetOpen(false)
       await onSaved()
     } catch (e) {
-      onError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.")
+      onError(e instanceof Error ? e.message : t("mpAdmin_errSaveGeneric"))
     } finally {
       setSaving(false)
     }
-  }, [form, onError, onNotice, onSaved, persist])
+  }, [form, onError, onNotice, onSaved, persist, t])
 
   const onToggleActive = React.useCallback(
     async (contentKey: string) => {
@@ -247,26 +262,29 @@ export function MemberPortalContentAdminPanel({
       onError("")
       try {
         await persist({ ...itemToForm(item), isActive: !item.isActive })
-        onNotice(item.isActive ? "노출을 중지했습니다." : "사용 중으로 전환했습니다.")
+        onNotice(item.isActive ? t("mpAdmin_noticePaused") : t("mpAdmin_noticeActivated"))
         await onSaved()
       } catch (e) {
-        onError(e instanceof Error ? e.message : "상태 변경에 실패했습니다.")
+        onError(e instanceof Error ? e.message : t("mpAdmin_errToggle"))
       } finally {
         setTogglingKey(null)
       }
     },
-    [filtered, onError, onNotice, onSaved, persist]
+    [filtered, onError, onNotice, onSaved, persist, t]
   )
 
   const onDelete = React.useCallback(
     async (contentKey: string) => {
       const item = filtered.find((x) => x.contentKey === contentKey)
       if (!item) return
-      const ok = await appConfirm(`「${item.title || contentKey}」 항목을 삭제할까요?`, {
-        title: "콘텐츠 삭제",
-        confirmLabel: "삭제",
-        cancelLabel: "취소",
-      })
+      const ok = await appConfirm(
+        tr(t, "mpAdmin_confirmDeleteBody", { title: item.title || contentKey }),
+        {
+          title: t("mpAdmin_confirmDeleteTitle"),
+          confirmLabel: t("delete"),
+          cancelLabel: t("cancel"),
+        }
+      )
       if (!ok) return
       setDeletingKey(contentKey)
       onError("")
@@ -277,17 +295,17 @@ export function MemberPortalContentAdminPanel({
         )
         const data = (await res.json()) as { success: boolean; message?: string }
         if (!res.ok || !data.success) {
-          throw new Error(data.message || "삭제에 실패했습니다.")
+          throw new Error(data.message || t("mpAdmin_errDelete"))
         }
-        onNotice("삭제되었습니다.")
+        onNotice(t("mpAdmin_noticeDeleted"))
         await onSaved()
       } catch (e) {
-        onError(e instanceof Error ? e.message : "삭제 중 오류가 발생했습니다.")
+        onError(e instanceof Error ? e.message : t("mpAdmin_errDeleteGeneric"))
       } finally {
         setDeletingKey(null)
       }
     },
-    [filtered, onError, onNotice, onSaved]
+    [filtered, onError, onNotice, onSaved, t]
   )
 
   const onUploadImage = React.useCallback(
@@ -297,7 +315,7 @@ export function MemberPortalContentAdminPanel({
       try {
         const rule = resolveMemberPortalContentImageRule(formVariant)
         const size = await readMemberPortalImageSize(file)
-        const validation = validateMemberPortalImageByRule(size.width, size.height, rule)
+        const validation = validateMemberPortalImageByRule(size.width, size.height, rule, t, formVariant)
         if (!validation.ok) {
           onError(validation.message)
           return
@@ -319,35 +337,28 @@ export function MemberPortalContentAdminPanel({
           publicUrl?: string
         }
         if (!presignRes.ok || !presign.success || !presign.signedUrl || !presign.publicUrl) {
-          onError(presign.message || "이미지 업로드 준비에 실패했습니다.")
+          onError(presign.message || t("mpAdmin_errImagePresign"))
           return
         }
         const putRes = await putFileToSupabaseSignedUploadUrl(presign.signedUrl, file, { timeoutMs: 180000 })
         if (!putRes.ok) {
-          onError("이미지 업로드에 실패했습니다.")
+          onError(t("mpAdmin_errImageUpload"))
           return
         }
         setForm((prev) => ({ ...prev, imageUrl: presign.publicUrl || "" }))
-        onNotice("이미지가 업로드되었습니다.")
-      } catch {
-        onError("이미지 업로드 중 오류가 발생했습니다.")
+        onNotice(t("mpAdmin_noticeImageUploaded"))
+      } catch (e) {
+        onError(memberPortalImageUploadCatchMessage(t, e))
       } finally {
         setUploading(false)
       }
     },
-    [formVariant, onError, onNotice]
+    [formVariant, onError, onNotice, t]
   )
 
-  const headerTitle =
-    variant === "all" ? "전체 콘텐츠 목록" : meta.title
-  const headerDescription =
-    variant === "all"
-      ? "월별 프로모션·팝업·정보·공지를 한 화면에서 검색·필터·미리보기할 수 있습니다."
-      : meta.description
-  const emptyMessage =
-    variant === "all"
-      ? "등록된 콘텐츠가 없습니다. 아래 탭에서 새 항목을 추가하세요."
-      : meta.empty
+  const headerTitle = variant === "all" ? t("mpAdmin_allListTitle") : meta.title
+  const headerDescription = variant === "all" ? t("mpAdmin_allListDesc") : meta.description
+  const emptyMessage = variant === "all" ? t("mpAdmin_allListEmpty") : meta.empty
 
   return (
     <div className="space-y-4">
@@ -362,15 +373,15 @@ export function MemberPortalContentAdminPanel({
               <>
                 <Button type="button" variant="outline" onClick={() => openNew("promo")}>
                   <Plus className="mr-1.5 h-4 w-4" />
-                  프로모션
+                  {t("mpAdmin_btnPromo")}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => openNew("popup")}>
                   <Plus className="mr-1.5 h-4 w-4" />
-                  팝업
+                  {t("mpAdmin_btnPopup")}
                 </Button>
                 <Button type="button" onClick={() => openNew("info")} className="bg-[#06c755] hover:bg-[#05b34c]">
                   <Plus className="mr-1.5 h-4 w-4" />
-                  공지
+                  {t("mpAdmin_btnNotice")}
                 </Button>
               </>
             ) : (
@@ -384,7 +395,7 @@ export function MemberPortalContentAdminPanel({
       </div>
 
       {loading ? (
-        <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">불러오는 중...</div>
+        <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
       ) : (
         <MemberPortalContentAdminList
           variant={variant}
@@ -403,28 +414,30 @@ export function MemberPortalContentAdminPanel({
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
           <SheetHeader className="shrink-0 border-b px-6 py-5 pr-14">
-            <SheetTitle>{form.contentKey ? `${formMeta.title} 편집` : formMeta.newLabel}</SheetTitle>
+            <SheetTitle>
+              {form.contentKey ? `${formMeta.title} ${t("mpAdmin_editSuffix")}` : formMeta.newLabel}
+            </SheetTitle>
           </SheetHeader>
 
           <div className="flex-1 space-y-6 px-6 py-6 pb-10">
             {form.contentKey ? (
               <div className="rounded-md border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
-                콘텐츠 키: <span className="font-mono text-foreground">{form.contentKey}</span>
+                {t("mpAdmin_contentKey")}: <span className="font-mono text-foreground">{form.contentKey}</span>
               </div>
             ) : null}
 
             <div className="space-y-2">
-              <Label htmlFor="mp-content-title">제목</Label>
+              <Label htmlFor="mp-content-title">{t("mpAdmin_fieldTitle")}</Label>
               <Input
                 id="mp-content-title"
                 value={form.title}
                 onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                placeholder="회원에게 보이는 제목"
+                placeholder={t("mpAdmin_fieldTitlePh")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mp-content-image-url">이미지</Label>
+              <Label htmlFor="mp-content-image-url">{t("mpAdmin_fieldImage")}</Label>
               <p className="text-xs leading-relaxed text-muted-foreground">{imageHint}</p>
               <Input
                 id="mp-content-image-url"
@@ -434,7 +447,7 @@ export function MemberPortalContentAdminPanel({
               />
               <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-center transition hover:bg-muted/35">
                 <span className="text-sm font-medium text-foreground">
-                  {uploading ? "업로드 중..." : "이미지 파일 선택"}
+                  {uploading ? t("mpAdmin_uploading") : t("mpAdmin_selectImage")}
                 </span>
                 <span className="text-xs text-muted-foreground">{imageHint}</span>
                 <input
@@ -455,26 +468,24 @@ export function MemberPortalContentAdminPanel({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mp-content-body">본문</Label>
+              <Label htmlFor="mp-content-body">{t("mpAdmin_fieldBody")}</Label>
               <Textarea
                 id="mp-content-body"
                 value={form.body}
                 onChange={(e) => setForm((p) => ({ ...p, body: e.target.value }))}
                 rows={5}
-                placeholder="상세 설명 (탭 시 시트에 표시)"
+                placeholder={t("mpAdmin_fieldBodyPh")}
               />
             </div>
 
             {formVariant !== "popup" ? (
               <div className="space-y-2">
-                <Label htmlFor="mp-content-target-tab">노출 탭</Label>
+                <Label htmlFor="mp-content-target-tab">{t("mpAdmin_fieldTargetTab")}</Label>
                 {formVariant === "promo" || formVariant === "new_menu" ? (
                   <>
                     <Input id="mp-content-target-tab" value={form.targetTab} readOnly />
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      {formVariant === "promo"
-                        ? "월별 프로모션은 home_promo로 고정됩니다."
-                        : "신메뉴는 home_feature로 고정됩니다."}
+                      {formVariant === "promo" ? t("mpAdmin_promoTargetFixed") : t("mpAdmin_newMenuTargetFixed")}
                     </p>
                   </>
                 ) : (
@@ -485,15 +496,13 @@ export function MemberPortalContentAdminPanel({
                       onChange={(e) => setForm((p) => ({ ...p, targetTab: e.target.value }))}
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                     >
-                      {INFO_TARGET_OPTIONS.map((opt) => (
+                      {INFO_TARGET_OPTION_KEYS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
-                          {opt.label}
+                          {t(opt.labelKey)}
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      home = 홈 하단 공지 / location = 매장 탭
-                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{t("mpAdmin_targetTabHint")}</p>
                   </>
                 )}
               </div>
@@ -501,7 +510,7 @@ export function MemberPortalContentAdminPanel({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="mp-content-starts">시작 (방콕)</Label>
+                <Label htmlFor="mp-content-starts">{t("mpAdmin_startsBangkok")}</Label>
                 <Input
                   id="mp-content-starts"
                   type="datetime-local"
@@ -510,7 +519,7 @@ export function MemberPortalContentAdminPanel({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mp-content-ends">종료 (방콕)</Label>
+                <Label htmlFor="mp-content-ends">{t("mpAdmin_endsBangkok")}</Label>
                 <Input
                   id="mp-content-ends"
                   type="datetime-local"
@@ -522,7 +531,7 @@ export function MemberPortalContentAdminPanel({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="mp-content-sort">정렬순서</Label>
+                <Label htmlFor="mp-content-sort">{t("sortOrder")}</Label>
                 <Input
                   id="mp-content-sort"
                   type="number"
@@ -531,7 +540,7 @@ export function MemberPortalContentAdminPanel({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mp-content-store">매장 코드 (선택)</Label>
+                <Label htmlFor="mp-content-store">{t("mpAdmin_storeCodeOptional")}</Label>
                 <Input
                   id="mp-content-store"
                   value={form.storeCode}
@@ -549,16 +558,16 @@ export function MemberPortalContentAdminPanel({
                 onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
               />
               <label htmlFor={`active-${variant}-${formVariant}`} className="text-sm">
-                사용 중 (회원앱 노출)
+                {t("mpAdmin_isActive")}
               </label>
             </div>
 
             <div className="flex gap-3 border-t pt-6">
               <Button type="button" onClick={() => void onSave()} disabled={saving || uploading} className="flex-1">
-                {saving ? "저장 중..." : "저장"}
+                {saving ? t("mpAdmin_saving") : t("save")}
               </Button>
               <Button type="button" variant="outline" onClick={() => setSheetOpen(false)}>
-                닫기
+                {t("close")}
               </Button>
             </div>
           </div>

@@ -75,8 +75,8 @@ describe('content admin helpers', () => {
       item({ contentKey: 'a', title: 'Snow Chicken' }),
       item({ contentKey: 'b', body: 'VIP coupon' }),
     ]
-    expect(searchContentAdminItems(rows, 'snow').map((x) => x.contentKey)).toEqual(['a'])
-    expect(searchContentAdminItems(rows, 'coupon').map((x) => x.contentKey)).toEqual(['b'])
+    expect(searchContentAdminItems(rows, 'snow', (k) => k).map((x) => x.contentKey)).toEqual(['a'])
+    expect(searchContentAdminItems(rows, 'coupon', (k) => k).map((x) => x.contentKey)).toEqual(['b'])
   })
 
   it('sorts and summarizes', () => {

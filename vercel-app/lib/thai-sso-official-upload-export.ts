@@ -17,14 +17,50 @@ export const SSO_OFFICIAL_UPLOAD_HEADERS_TH = [
   "จำนวนเงินสมทบ",
 ] as const
 
-export const SSO_OFFICIAL_UPLOAD_COLUMN_HELP: { labelTh: string; labelEn: string }[] = [
-  { labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[0], labelEn: "National ID (13 digits)" },
-  { labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[1], labelEn: "Title (นาย/นาง/นางสาว)" },
-  { labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[2], labelEn: "Insured first name" },
-  { labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[3], labelEn: "Insured last name" },
-  { labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[4], labelEn: "Wage (THB)" },
-  { labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[5], labelEn: "Employee contribution (THB)" },
+export type SsoOfficialUploadColumnHelp = {
+  labelTh: string
+  labelEn: string
+  labelKo: string
+}
+
+export const SSO_OFFICIAL_UPLOAD_COLUMN_HELP: SsoOfficialUploadColumnHelp[] = [
+  {
+    labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[0],
+    labelEn: "National ID (13 digits)",
+    labelKo: "주민번호 (13자리)",
+  },
+  {
+    labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[1],
+    labelEn: "Title (นาย/นาง/นางสาว)",
+    labelKo: "호칭 (นาย/นาง/นางสาว)",
+  },
+  {
+    labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[2],
+    labelEn: "Insured first name",
+    labelKo: "피부양자 이름",
+  },
+  {
+    labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[3],
+    labelEn: "Insured last name",
+    labelKo: "피부양자 성",
+  },
+  {
+    labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[4],
+    labelEn: "Wage (THB)",
+    labelKo: "임금 (THB)",
+  },
+  {
+    labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[5],
+    labelEn: "Employee contribution (THB)",
+    labelKo: "근로자 부담금 (THB)",
+  },
 ]
+
+export function resolveSsoOfficialUploadColumnLabel(col: SsoOfficialUploadColumnHelp, lang: string): string {
+  if (lang === "th") return col.labelTh
+  if (lang === "ko") return col.labelKo
+  return col.labelEn
+}
 
 export type SsoOfficialUploadSheet = {
   /** ลำดับที่สาขา — Excel 시트 탭 이름(6자리) */

@@ -1,3 +1,6 @@
+import { MP_ADMIN_IMAGE_RULE_LABEL_KEYS } from '@/lib/i18n-member-portal-admin'
+import type { MemberPortalContentTranslator } from '@/lib/member-portal-content-admin'
+
 export type MemberPortalContentImageRule = {
   label: string
   minWidth: number
@@ -72,8 +75,34 @@ export function resolveMemberPortalContentImageRule(
   return MEMBER_PORTAL_CONTENT_IMAGE_RULES.info
 }
 
-export function formatMemberPortalContentImageHint(rule: MemberPortalContentImageRule): string {
-  return `권장 ${rule.minWidth}×${rule.minHeight}px (${rule.aspectW}:${rule.aspectH}) · JPG/PNG/WebP/GIF · 5MB 이하`
+export function formatMemberPortalContentImageHint(
+  rule: MemberPortalContentImageRule,
+  t: MemberPortalContentTranslator
+): string {
+  let s = t('mpAdmin_imageHint')
+  s = s.split('{minW}').join(String(rule.minWidth))
+  s = s.split('{minH}').join(String(rule.minHeight))
+  s = s.split('{aspectW}').join(String(rule.aspectW))
+  s = s.split('{aspectH}').join(String(rule.aspectH))
+  return s
+}
+
+export function memberPortalImageRuleLabel(
+  ruleKey: MemberPortalContentImageRuleKey,
+  t: MemberPortalContentTranslator
+): string {
+  const key = MP_ADMIN_IMAGE_RULE_LABEL_KEYS[ruleKey]
+  return key ? t(key) : ruleKey
+}
+
+export function memberPortalImageUploadCatchMessage(
+  t: MemberPortalContentTranslator,
+  e: unknown
+): string {
+  if (e instanceof Error && e.message === 'IMAGE_SIZE_READ_FAIL') {
+    return t('mpAdmin_imageReadSizeFail')
+  }
+  return t('mpAdmin_errImageUploadGeneric')
 }
 
 export async function readMemberPortalImageSize(file: File): Promise<{ width: number; height: number }> {
@@ -82,7 +111,7 @@ export async function readMemberPortalImageSize(file: File): Promise<{ width: nu
     return await new Promise((resolve, reject) => {
       const img = new window.Image()
       img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      img.onerror = () => reject(new Error('이미지 크기를 읽을 수 없습니다.'))
+      img.onerror = () => reject(new Error('IMAGE_SIZE_READ_FAIL'))
       img.src = url
     })
   } finally {
@@ -93,22 +122,31 @@ export async function readMemberPortalImageSize(file: File): Promise<{ width: nu
 export function validateMemberPortalImageByRule(
   width: number,
   height: number,
-  rule: MemberPortalContentImageRule
+  rule: MemberPortalContentImageRule,
+  t: MemberPortalContentTranslator,
+  ruleKey: MemberPortalContentImageRuleKey
 ): { ok: true } | { ok: false; message: string } {
+  const label = memberPortalImageRuleLabel(ruleKey, t)
   if (width < rule.minWidth || height < rule.minHeight) {
-    return {
-      ok: false,
-      message: `${rule.label} 이미지는 최소 ${rule.minWidth}×${rule.minHeight}px 이상이어야 합니다. (현재 ${width}×${height}px)`,
-    }
+    let msg = t('mpAdmin_imageTooSmall')
+    msg = msg.split('{label}').join(label)
+    msg = msg.split('{minW}').join(String(rule.minWidth))
+    msg = msg.split('{minH}').join(String(rule.minHeight))
+    msg = msg.split('{width}').join(String(width))
+    msg = msg.split('{height}').join(String(height))
+    return { ok: false, message: msg }
   }
   const actual = width / height
   const expected = rule.aspectW / rule.aspectH
   const ratioDiff = Math.abs(actual - expected)
   if (ratioDiff > expected * 0.02) {
-    return {
-      ok: false,
-      message: `${rule.label} 비율은 ${rule.aspectW}:${rule.aspectH} 이어야 합니다. (현재 ${width}×${height}px)`,
-    }
+    let msg = t('mpAdmin_imageBadRatio')
+    msg = msg.split('{label}').join(label)
+    msg = msg.split('{aspectW}').join(String(rule.aspectW))
+    msg = msg.split('{aspectH}').join(String(rule.aspectH))
+    msg = msg.split('{width}').join(String(width))
+    msg = msg.split('{height}').join(String(height))
+    return { ok: false, message: msg }
   }
   return { ok: true }
 }

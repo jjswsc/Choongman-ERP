@@ -3,6 +3,8 @@
 import * as React from "react"
 import { ImageIcon, Loader2, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export type MemberPortalLineListRow = {
@@ -32,6 +34,9 @@ export function MemberPortalLineList({
   onEdit,
   canEdit = true,
 }: MemberPortalLineListProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
+
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/20 px-6 py-14 text-center text-sm text-muted-foreground">
@@ -43,11 +48,11 @@ export function MemberPortalLineList({
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
       <div className="hidden border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_8rem_11rem_4rem_7rem] md:gap-3">
-        <span>콘텐츠</span>
-        <span>노출 위치</span>
-        <span>기간</span>
-        <span className="text-center">정렬</span>
-        <span className="text-right">상태</span>
+        <span>{t("mpAdmin_colContent")}</span>
+        <span>{t("mpAdmin_colPlacement")}</span>
+        <span>{t("mpAdmin_colPeriodShort")}</span>
+        <span className="text-center">{t("mpAdmin_colSort")}</span>
+        <span className="text-right">{t("status")}</span>
       </div>
       <ul className="divide-y">
         {rows.map((row) => (
@@ -75,7 +80,7 @@ export function MemberPortalLineList({
                     canEdit ? "text-[#06c755] hover:underline" : "cursor-default text-foreground"
                   )}
                 >
-                  {row.title || "(제목 없음)"}
+                  {row.title || t("mpAdmin_noTitle")}
                 </button>
                 {row.subtitle ? (
                   <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{row.subtitle}</p>
@@ -96,7 +101,7 @@ export function MemberPortalLineList({
                   variant="ghost"
                   className="shrink-0 md:hidden"
                   onClick={() => onEdit(row.id)}
-                  aria-label="편집"
+                  aria-label={t("mpAdmin_edit")}
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -117,7 +122,7 @@ export function MemberPortalLineList({
                   onClick={() => onEdit(row.id)}
                 >
                   <Pencil className="mr-1 h-3.5 w-3.5" />
-                  편집
+                  {t("mpAdmin_edit")}
                 </Button>
               ) : null}
               {canEdit ? (
@@ -135,9 +140,9 @@ export function MemberPortalLineList({
                   {row.toggling ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : row.isActive ? (
-                    "사용 중"
+                    t("mpAdmin_active")
                   ) : (
-                    "중지"
+                    t("mpAdmin_statusPaused")
                   )}
                 </button>
               ) : (
@@ -149,7 +154,7 @@ export function MemberPortalLineList({
                       : "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
                   )}
                 >
-                  {row.isActive ? "사용 중" : "중지"}
+                  {row.isActive ? t("mpAdmin_active") : t("mpAdmin_statusPaused")}
                 </span>
               )}
             </div>

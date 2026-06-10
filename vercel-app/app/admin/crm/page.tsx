@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 
 import { apiFetch } from "@/lib/api/fetch"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 type Summary = {
   totalMembers: number
@@ -39,6 +41,8 @@ async function loadSummary(): Promise<Summary> {
 }
 
 export default function CrmDashboardPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [summary, setSummary] = React.useState<Summary>({
     totalMembers: 0,
     recentActiveMembers: 0,
@@ -82,7 +86,7 @@ export default function CrmDashboardPage() {
             <Button asChild variant="outline"><Link href="/admin/members/visits?tab=rfm">RFM 점수</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/crm/coupons">쿠폰 관리</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/crm/campaigns">쿠폰 캠페인</Link></Button>
-            <Button asChild variant="outline"><Link href="/admin/crm/member-app">회원앱 운영</Link></Button>
+            <Button asChild variant="outline"><Link href="/admin/crm/member-app">{t("mpAdmin_pageTitle")}</Link></Button>
             <Button asChild variant="outline"><Link href="/admin/marketing/integrations">LINE 연동</Link></Button>
           </CardContent>
         </Card>

@@ -429,10 +429,10 @@ export function StoreTaxFilingProfilesPanel({
                   <Tabs defaultValue="pp30" className="w-full">
                     <TabsList className="h-9">
                       <TabsTrigger value="pp30" className="text-xs">
-                        PP30 · e-Filing
+                        {t("taxFilingStoreProfilesTabPp30")}
                       </TabsTrigger>
                       <TabsTrigger value="sso" className="text-xs">
-                        SSO (สปส.)
+                        {t("taxFilingStoreProfilesTabSso")}
                       </TabsTrigger>
                     </TabsList>
                     <TabsContent value="pp30" className="mt-3 space-y-3">

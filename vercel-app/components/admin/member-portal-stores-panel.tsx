@@ -7,7 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiFetch } from "@/lib/api/fetch"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
+import { memberPortalImageUploadCatchMessage } from "@/lib/member-portal-content-image-rules"
 
 type StoreRow = {
   storeCode: string
@@ -56,7 +59,7 @@ async function readImageSize(file: File): Promise<{ width: number; height: numbe
     return await new Promise((resolve, reject) => {
       const img = new window.Image()
       img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      img.onerror = () => reject(new Error("이미지 크기를 읽을 수 없습니다."))
+      img.onerror = () => reject(new Error("IMAGE_SIZE_READ_FAIL"))
       img.src = url
     })
   } finally {
@@ -71,6 +74,8 @@ type MemberPortalStoresPanelProps = {
 }
 
 export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: MemberPortalStoresPanelProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [stores, setStores] = React.useState<StoreRow[]>([])
   const [form, setForm] = React.useState<StoreForm>(emptyForm())
   const [loading, setLoading] = React.useState(false)
@@ -87,17 +92,17 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
       const data = (await res.json()) as { success: boolean; message?: string; stores?: StoreRow[] }
       if (!res.ok || !data.success) {
         setStores([])
-        onError(data.message || "매장 목록을 불러오지 못했습니다.")
+        onError(data.message || t("mpAdmin_errLoadStores"))
         return
       }
       setStores(data.stores || [])
     } catch {
       setStores([])
-      onError("매장 목록을 불러오지 못했습니다.")
+      onError(t("mpAdmin_errLoadStores"))
     } finally {
       setLoading(false)
     }
-  }, [onError])
+  }, [onError, t])
 
   React.useEffect(() => {
     void refresh()
@@ -123,19 +128,19 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
       })
       const data = (await res.json()) as { success: boolean; message?: string }
       if (!res.ok || !data.success) {
-        onError(data.message || "저장에 실패했습니다.")
+        onError(data.message || t("mpAdmin_errSave"))
         return
       }
-      onNotice("매장 정보를 저장했습니다.")
+      onNotice(t("mpAdmin_noticeStoreSaved"))
       setForm(emptyForm())
       setEditMode(false)
       await refresh()
     } catch {
-      onError("저장 중 오류가 발생했습니다.")
+      onError(t("mpAdmin_errSaveGeneric"))
     } finally {
       setSaving(false)
     }
-  }, [form, onError, onNotice, refresh])
+  }, [form, onError, onNotice, refresh, t])
 
   const onUploadPhoto = React.useCallback(
     async (file: File) => {
@@ -145,7 +150,10 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
         const size = await readImageSize(file)
         if (size.width < STORE_PHOTO_RULE.minWidth || size.height < STORE_PHOTO_RULE.minHeight) {
           onError(
-            `매장 사진은 최소 ${STORE_PHOTO_RULE.minWidth}x${STORE_PHOTO_RULE.minHeight}px 이상이어야 합니다.`
+            tr(t, "mpAdmin_storePhotoTooSmall", {
+              minW: String(STORE_PHOTO_RULE.minWidth),
+              minH: String(STORE_PHOTO_RULE.minHeight),
+            })
           )
           return
         }
@@ -165,23 +173,23 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
           publicUrl?: string
         }
         if (!presignRes.ok || !presign.success || !presign.signedUrl || !presign.publicUrl) {
-          onError(presign.message || "이미지 업로드 준비에 실패했습니다.")
+          onError(presign.message || t("mpAdmin_errImagePresign"))
           return
         }
         const putRes = await putFileToSupabaseSignedUploadUrl(presign.signedUrl, file, { timeoutMs: 180000 })
         if (!putRes.ok) {
-          onError("이미지 업로드에 실패했습니다.")
+          onError(t("mpAdmin_errImageUpload"))
           return
         }
         setForm((p) => ({ ...p, photoUrl: presign.publicUrl || "" }))
-        onNotice("사진을 업로드했습니다. 저장 버튼을 눌러 반영하세요.")
-      } catch {
-        onError("이미지 업로드 중 오류가 발생했습니다.")
+        onNotice(t("mpAdmin_noticeStorePhotoUploaded"))
+      } catch (e) {
+        onError(memberPortalImageUploadCatchMessage(t, e))
       } finally {
         setUploading(false)
       }
     },
-    [onError, onNotice]
+    [onError, onNotice, t]
   )
 
   const persistStore = React.useCallback(async (payload: StoreForm & { storeCode: string }) => {
@@ -201,9 +209,9 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
     })
     const data = (await res.json()) as { success: boolean; message?: string }
     if (!res.ok || !data.success) {
-      throw new Error(data.message || "저장에 실패했습니다.")
+      throw new Error(data.message || t("mpAdmin_errSave"))
     }
-  }, [])
+  }, [t])
 
   const onToggleStoreActive = React.useCallback(
     async (storeCode: string) => {
@@ -222,15 +230,15 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
           isActive: !row.isActive,
           aliases: "",
         })
-        onNotice(row.isActive ? "매장 노출을 중지했습니다." : "매장을 사용 중으로 전환했습니다.")
+        onNotice(row.isActive ? t("mpAdmin_noticeStorePaused") : t("mpAdmin_noticeStoreActivated"))
         await refresh()
       } catch (e) {
-        onError(e instanceof Error ? e.message : "상태 변경에 실패했습니다.")
+        onError(e instanceof Error ? e.message : t("mpAdmin_errToggle"))
       } finally {
         setTogglingCode(null)
       }
     },
-    [onError, onNotice, persistStore, refresh, stores]
+    [onError, onNotice, persistStore, refresh, stores, t]
   )
 
   const loadStoreToForm = React.useCallback((s: StoreRow) => {
@@ -261,8 +269,8 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
     imageUrl: s.photoUrl,
     title: s.displayName,
     subtitle: s.address || s.storeCode,
-    placement: "회원앱 · 매장 위치",
-    periodLabel: s.mapQuery ? `지도: ${s.mapQuery}` : undefined,
+    placement: t("mpAdmin_storePlacement"),
+    periodLabel: s.mapQuery ? tr(t, "mpAdmin_mapLabel", { query: s.mapQuery }) : undefined,
     sortOrder: s.sortOrder,
     isActive: s.isActive,
     toggling: togglingCode === s.storeCode,
@@ -272,19 +280,17 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">매장 목록</h2>
-          <p className="text-sm text-muted-foreground">
-            LINE OA 목록처럼 썸네일·사용 중지로 회원앱 매장 탭을 관리합니다. 사진·주소는 아래 폼에서 편집하세요.
-          </p>
+          <h2 className="text-lg font-semibold">{t("mpAdmin_storesTitle")}</h2>
+          <p className="text-sm text-muted-foreground">{t("mpAdmin_storesDesc")}</p>
         </div>
       </div>
 
       {loading ? (
-        <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">불러오는 중...</div>
+        <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
       ) : (
         <MemberPortalLineList
           rows={storeListRows}
-          emptyMessage="등록된 매장이 없습니다. 아래 폼에서 추가하세요."
+          emptyMessage={t("mpAdmin_storesEmpty")}
           onToggleActive={onToggleStoreActive}
           onEdit={(storeCode) => {
             const s = stores.find((x) => x.storeCode === storeCode)
@@ -296,20 +302,17 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
 
       <Card>
         <CardHeader>
-          <CardTitle>{editMode ? "매장 편집" : "매장 추가"}</CardTitle>
+          <CardTitle>{editMode ? t("mpAdmin_storeEdit") : t("mpAdmin_storeAdd")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              회원앱 <strong>매장</strong> 탭·픽업 주문 매장 선택에 노출되는 목록입니다. 매장 코드는 POS·직원
-              매장(<code className="rounded bg-muted px-1">store_code</code>)과 동일하게 맞추세요.
-            </p>
-            <p>권장 사진: 1200×800px, 3:2. 위치는 Google Maps 검색어 또는 주소를 입력합니다.</p>
+            <p>{t("mpAdmin_storesFormDesc1")}</p>
+            <p>{t("mpAdmin_storesFormDesc2")}</p>
           </div>
           <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>매장 코드 *</Label>
+              <Label>{t("mpAdmin_storeCode")}</Label>
               <Input
                 value={form.storeCode}
                 onChange={(e) => setForm((p) => ({ ...p, storeCode: e.target.value }))}
@@ -319,7 +322,7 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
               />
             </div>
             <div className="space-y-1.5">
-              <Label>매장명 *</Label>
+              <Label>{t("mpAdmin_storeName")}</Label>
               <Input
                 value={form.displayName}
                 onChange={(e) => setForm((p) => ({ ...p, displayName: e.target.value }))}
@@ -327,23 +330,23 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <Label>주소 / 위치 설명</Label>
+              <Label>{t("mpAdmin_storeAddress")}</Label>
               <Input
                 value={form.address}
                 onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
-                placeholder="회원앱에 표시할 주소"
+                placeholder={t("mpAdmin_storeAddressPh")}
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <Label>지도 검색어 (Google Maps)</Label>
+              <Label>{t("mpAdmin_storeMapQuery")}</Label>
               <Input
                 value={form.mapQuery}
                 onChange={(e) => setForm((p) => ({ ...p, mapQuery: e.target.value }))}
-                placeholder="비우면 Choongman Chicken + 매장명"
+                placeholder={t("mpAdmin_storeMapQueryPh")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>정렬순서</Label>
+              <Label>{t("sortOrder")}</Label>
               <Input
                 type="number"
                 value={form.sortOrder}
@@ -351,7 +354,7 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
               />
             </div>
             <div className="space-y-1.5">
-              <Label>별칭 (쉼표 구분, 선택)</Label>
+              <Label>{t("mpAdmin_storeAliases")}</Label>
               <Input
                 value={form.aliases}
                 onChange={(e) => setForm((p) => ({ ...p, aliases: e.target.value }))}
@@ -359,7 +362,7 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <Label>매장 사진 URL</Label>
+              <Label>{t("mpAdmin_storePhotoUrl")}</Label>
               <Input
                 value={form.photoUrl}
                 onChange={(e) => setForm((p) => ({ ...p, photoUrl: e.target.value }))}
@@ -374,7 +377,7 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
                     if (file) void onUploadPhoto(file)
                   }}
                 />
-                {uploading ? <span className="text-xs text-muted-foreground">업로드 중...</span> : null}
+                {uploading ? <span className="text-xs text-muted-foreground">{t("mpAdmin_uploading")}</span> : null}
               </div>
               {form.photoUrl ? (
                 <img src={form.photoUrl} alt="store" className="mt-2 h-28 w-full max-w-md rounded object-cover" />
@@ -388,13 +391,13 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
                 onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
               />
               <label htmlFor="storeIsActive" className="ml-2 text-sm">
-                회원앱에 노출 (활성)
+                {t("mpAdmin_storeActive")}
               </label>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void onSave()} disabled={saving || uploading}>
-              {saving ? "저장 중..." : "저장"}
+              {saving ? t("mpAdmin_saving") : t("save")}
             </Button>
             <Button
               variant="outline"
@@ -403,10 +406,10 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
                 setEditMode(false)
               }}
             >
-              새로 작성
+              {t("mpAdmin_storeNewForm")}
             </Button>
             <Button variant="outline" onClick={() => void refresh()} disabled={loading}>
-              {loading ? "불러오는 중..." : "목록 새로고침"}
+              {loading ? t("loading") : t("mpAdmin_refreshList")}
             </Button>
           </div>
           </fieldset>

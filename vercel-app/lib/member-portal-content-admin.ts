@@ -1,8 +1,11 @@
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import type { LangCode } from '@/lib/lang-context'
 import {
   MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB,
   MEMBER_PORTAL_HOME_PROMO_TARGET_TAB,
 } from '@/lib/member-portal-content'
+
+export type MemberPortalContentTranslator = (key: string) => string
 
 export type MemberPortalContentAdminItem = {
   id: number
@@ -39,36 +42,83 @@ export type ContentAdminSummary = {
   paused: number
 }
 
-export function memberPortalContentPlacementLabel(targetTab: string, contentType: string): string {
-  const tab = String(targetTab || '').trim()
-  if (tab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB) return '홈 · 월별 프로모션'
-  if (tab === MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB) return '홈 · 신메뉴'
-  if (tab === 'home') return '홈 · 공지'
-  if (tab === 'location') return '매장 탭'
-  if (contentType === 'popup') return '팝업'
-  if (contentType === 'store_photo') return '매장 사진'
-  if (tab) return tab
-  return '일반'
+function intlLocaleForLang(lang: LangCode): string {
+  switch (lang) {
+    case 'ko':
+      return 'ko-KR'
+    case 'en':
+      return 'en-US'
+    case 'th':
+      return 'th-TH-u-ca-gregory'
+    case 'mm':
+      return 'my-MM'
+    case 'la':
+      return 'lo-LA'
+    case 'kh':
+      return 'km-KH'
+    case 'vi':
+      return 'vi-VN'
+    case 'ms':
+      return 'ms-MY'
+    default:
+      return 'en-US'
+  }
 }
 
-export function formatMemberPortalAdminPeriod(startsAt: string, endsAt: string): string {
-  const start = formatAdminDateTime(startsAt)
-  const end = formatAdminDateTime(endsAt)
+export function memberPortalContentPlacementLabel(
+  targetTab: string,
+  contentType: string,
+  t: MemberPortalContentTranslator
+): string {
+  const tab = String(targetTab || '').trim()
+  if (tab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB) return t('mpAdmin_placementHomePromo')
+  if (tab === MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB) return t('mpAdmin_placementHomeNewMenu')
+  if (tab === 'home') return t('mpAdmin_placementHomeNotice')
+  if (tab === 'location') return t('mpAdmin_placementLocation')
+  if (contentType === 'popup') return t('mpAdmin_placementPopup')
+  if (contentType === 'store_photo') return t('mpAdmin_placementStorePhoto')
+  if (tab) return tab
+  return t('mpAdmin_placementGeneral')
+}
+
+export function formatMemberPortalAdminPeriod(
+  startsAt: string,
+  endsAt: string,
+  t: MemberPortalContentTranslator,
+  lang: LangCode = 'ko'
+): string {
+  const start = formatAdminDateTime(startsAt, lang)
+  const end = formatAdminDateTime(endsAt, lang)
   if (start && end) return `${start} – ${end}`
   if (start) return `${start} ~`
   if (end) return `~ ${end}`
-  return '기간 미설정'
+  return t('mpAdmin_periodUnset')
 }
 
-function formatAdminDateTime(raw: string): string {
+function formatAdminDateTime(raw: string, lang: LangCode = 'ko'): string {
   const v = String(raw || '').trim()
   if (!v) return ''
   const normalized = v.includes('T') ? v : v.replace(' ', 'T')
   const d = new Date(normalized.length <= 16 ? `${normalized}:00+07:00` : normalized)
   if (Number.isNaN(d.getTime())) return v.slice(0, 16)
-  return new Intl.DateTimeFormat('ko-KR', {
+  return new Intl.DateTimeFormat(intlLocaleForLang(lang), {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
+export function formatMemberPortalAdminUpdatedAt(raw: string, lang: LangCode = 'ko'): string {
+  const v = String(raw || '').trim()
+  if (!v) return '—'
+  const normalized = v.includes('T') ? v : v.replace(' ', 'T')
+  const d = new Date(normalized.length <= 16 ? `${normalized}:00+07:00` : normalized)
+  if (Number.isNaN(d.getTime())) return v.slice(0, 16)
+  return new Intl.DateTimeFormat(intlLocaleForLang(lang), {
+    timeZone: 'Asia/Bangkok',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -100,12 +150,16 @@ export function memberPortalContentAdminCategory(item: MemberPortalContentAdminI
   return 'other'
 }
 
-export function memberPortalContentAdminCategoryLabel(category: MemberPortalContentAdminCategory): string {
-  if (category === 'promo') return '월별 프로모션'
-  if (category === 'new_menu') return '신메뉴'
-  if (category === 'popup') return '팝업'
-  if (category === 'info') return '정보·공지'
-  return '기타'
+export function memberPortalContentAdminCategoryLabel(
+  category: MemberPortalContentAdminCategory,
+  t: MemberPortalContentTranslator,
+  short = false
+): string {
+  if (category === 'promo') return short ? t('mpAdmin_catPromoShort') : t('mpAdmin_catPromo')
+  if (category === 'new_menu') return t('mpAdmin_catNewMenu')
+  if (category === 'popup') return t('mpAdmin_catPopup')
+  if (category === 'info') return t('mpAdmin_catInfo')
+  return t('mpAdmin_catOther')
 }
 
 export function resolveMemberPortalContentDisplayStatus(
@@ -118,11 +172,14 @@ export function resolveMemberPortalContentDisplayStatus(
   return 'live'
 }
 
-export function memberPortalContentDisplayStatusLabel(status: MemberPortalContentDisplayStatus): string {
-  if (status === 'live') return '노출 중'
-  if (status === 'scheduled') return '예정'
-  if (status === 'expired') return '종료'
-  return '중지'
+export function memberPortalContentDisplayStatusLabel(
+  status: MemberPortalContentDisplayStatus,
+  t: MemberPortalContentTranslator
+): string {
+  if (status === 'live') return t('mpAdmin_statusLive')
+  if (status === 'scheduled') return t('mpAdmin_statusScheduled')
+  if (status === 'expired') return t('mpAdmin_statusExpired')
+  return t('mpAdmin_statusPaused')
 }
 
 export function filterContentForAdminTab(
@@ -140,7 +197,8 @@ export function filterContentForAdminTab(
 
 export function searchContentAdminItems(
   items: MemberPortalContentAdminItem[],
-  query: string
+  query: string,
+  t: MemberPortalContentTranslator
 ): MemberPortalContentAdminItem[] {
   const q = String(query || '').trim().toLowerCase()
   if (!q) return items
@@ -151,8 +209,8 @@ export function searchContentAdminItems(
       item.body,
       item.storeCode,
       item.targetTab,
-      memberPortalContentPlacementLabel(item.targetTab, item.contentType),
-      memberPortalContentAdminCategoryLabel(memberPortalContentAdminCategory(item)),
+      memberPortalContentPlacementLabel(item.targetTab, item.contentType, t),
+      memberPortalContentAdminCategoryLabel(memberPortalContentAdminCategory(item), t),
     ]
       .join(' ')
       .toLowerCase()
