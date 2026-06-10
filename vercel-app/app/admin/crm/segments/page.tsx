@@ -5,6 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { apiFetch } from "@/lib/api/fetch"
+import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 
 type SegmentKey = "recent30" | "dormant90" | "new30" | "vip" | "atRisk"
 
@@ -17,15 +20,11 @@ type SegmentRow = {
   lifetimeAmount: number
 }
 
-const SEGMENTS: Array<{ key: SegmentKey; label: string }> = [
-  { key: "recent30", label: "최근 30일 방문 고객" },
-  { key: "dormant90", label: "휴면 고객(90일)" },
-  { key: "new30", label: "신규 고객(30일)" },
-  { key: "vip", label: "VIP 고객" },
-  { key: "atRisk", label: "이탈 위험 고객" },
-]
+const SEGMENT_KEYS: SegmentKey[] = ["recent30", "dormant90", "new30", "vip", "atRisk"]
 
 export default function CrmSegmentsPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [segment, setSegment] = React.useState<SegmentKey>("recent30")
   const [rows, setRows] = React.useState<SegmentRow[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -54,38 +53,44 @@ export default function CrmSegmentsPage() {
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
         <CrmSubnav />
         <Card>
-          <CardHeader><CardTitle>고객 세그먼트</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>{t("adminCrmSegments")}</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              {SEGMENTS.map((s) => (
+              {SEGMENT_KEYS.map((key) => (
                 <Button
-                  key={s.key}
-                  variant={segment === s.key ? "default" : "outline"}
-                  onClick={() => setSegment(s.key)}
+                  key={key}
+                  variant={segment === key ? "default" : "outline"}
+                  onClick={() => setSegment(key)}
                 >
-                  {s.label}
+                  {t(CRM_SEGMENT_LABEL_KEYS[key])}
                 </Button>
               ))}
               <Button variant="outline" onClick={() => load()} disabled={loading}>
-                {loading ? "조회 중..." : "새로고침"}
+                {loading ? t("crmSeg_querying") : t("adminOpsCenterReload")}
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground">대상 {rows.length.toLocaleString()}명</p>
+            <p className="text-sm text-muted-foreground">
+              {tr(t, "crmSeg_targetCount", { count: rows.length.toLocaleString() })}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">세그먼트 결과</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">{t("crmSeg_resultsTitle")}</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="overflow-auto rounded border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40">
                   <tr>
-                    <th className="p-2 text-left">이름</th>
-                    <th className="p-2 text-left">전화번호</th>
-                    <th className="p-2 text-left">등급</th>
-                    <th className="p-2 text-left">포인트</th>
-                    <th className="p-2 text-left">누적매출</th>
+                    <th className="p-2 text-left">{t("crmSeg_colName")}</th>
+                    <th className="p-2 text-left">{t("crmSeg_colPhone")}</th>
+                    <th className="p-2 text-left">{t("crmSeg_colTier")}</th>
+                    <th className="p-2 text-left">{t("crmSeg_colPoints")}</th>
+                    <th className="p-2 text-left">{t("crmSeg_colLifetime")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -107,4 +112,3 @@ export default function CrmSegmentsPage() {
     </div>
   )
 }
-

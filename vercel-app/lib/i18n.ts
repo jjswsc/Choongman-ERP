@@ -6,6 +6,7 @@ import { useMemo } from "react"
 import { isLangCode } from "./lang-context"
 import { I18N_HELP_LONG_EN, I18N_HELP_LONG_KO } from "./i18n-admin-help-long"
 import { I18N_MP_ADMIN_EN, I18N_MP_ADMIN_KO, I18N_MP_ADMIN_TH } from "./i18n-member-portal-admin"
+import { I18N_CRM_SEGMENTS_EN, I18N_CRM_SEGMENTS_KO, I18N_CRM_SEGMENTS_TH } from "./i18n-crm-segments"
 
 export const i18n = {
   ko: {
@@ -7090,6 +7091,7 @@ export const i18n = {
     adminCrmDashboard: 'CRM 대시보드',
     adminCrmSegments: '고객 세그먼트',
     adminCrmRfm: 'RFM 점수',
+    ...I18N_CRM_SEGMENTS_KO,
     memberAppContent: '회원 페이지',
     ...I18N_MP_ADMIN_KO,
     adminMarketingCampaigns: '캠페인',
@@ -16436,6 +16438,7 @@ orderItemQty: 'Qty',
     adminCrmDashboard: 'CRM Dashboard',
     adminCrmSegments: 'Customer Segments',
     adminCrmRfm: 'RFM Scores',
+    ...I18N_CRM_SEGMENTS_EN,
     memberAppContent: 'Member Page',
     ...I18N_MP_ADMIN_EN,
     adminMarketingCampaigns: 'Campaigns',
@@ -22270,6 +22273,7 @@ orderItemQty: 'จำนวน',
     adminCrmDashboard: 'แดชบอร์ด CRM',
     adminCrmSegments: 'กลุ่มลูกค้า',
     adminCrmRfm: 'คะแนน RFM',
+    ...I18N_CRM_SEGMENTS_TH,
     memberAppContent: 'หน้าสมาชิก',
     ...I18N_MP_ADMIN_TH,
     adminSectionMarketing: 'การตลาด',
