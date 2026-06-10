@@ -109,6 +109,8 @@ import {
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
+import { mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
+import { isBanbanKitchenLine } from '@/lib/pos-banban-utils'
 import {
   buildOptionNameByCodeFromMenus,
   formatGrabLineNoteForKitchenPrint,
@@ -1374,7 +1376,9 @@ export default function PosTerminalPage() {
           menu_id1?: string
           kitchenRouteMenuId?: string
         }
-        const menuId = String(line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.kitchenRouteMenuId ?? '').trim()
+        const menuId = isBanbanKitchenLine(line)
+          ? String(line.menuId ?? '').trim()
+          : String(line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.kitchenRouteMenuId ?? '').trim()
         const enrichedPromo =
           Array.isArray(list) && list.length > 0
             ? enrichPromoItemsWithOptionName(list).map((p) => {
@@ -1690,89 +1694,13 @@ export default function PosTerminalPage() {
             ? (order.items as unknown as Array<Record<string, unknown>>)
             : []
       if (!rawItems.length) throw new Error('empty_order_items')
-      const items = rawItems.map((it) => {
-        const note = String(it.note ?? '').trim()
-        const parentMenuId = String((it as { menuId?: string; menu_id?: string }).menuId ?? (it as { menu_id?: string }).menu_id ?? '').trim()
-        const flavorMenuId1 = String(
-          (it as { menuId1?: string; menu_id1?: string }).menuId1 ??
-            (it as { menu_id1?: string }).menu_id1 ??
-            ''
-        ).trim()
-        const flavorMenuId2 = String(
-          (it as { menuId2?: string; menu_id2?: string }).menuId2 ??
-            (it as { menu_id2?: string }).menu_id2 ??
-            ''
-        ).trim()
-        const hasDistinctFlavorIds =
-          Boolean(flavorMenuId1 && flavorMenuId2 && flavorMenuId1 !== flavorMenuId2)
-        const menuId = parentMenuId || (hasDistinctFlavorIds ? '' : flavorMenuId1)
-        const pit = it as {
-          optionCode?: string
-          optionCode1?: string
-          optionCode2?: string
-          optionCodes?: string[]
-          promoId?: string
-          promo_id?: string
-          promoCode?: string
-          promo_code?: string
-        }
-        const optionCodes = Array.isArray(pit.optionCodes)
-          ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
-          : []
-        const optionCode1 = String(
-          pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
-        ).trim()
-        const optionCode2 = String(pit.optionCode2 ?? '').trim()
-        const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
-        const displayName = resolvePosOrderItemMenuDisplayName(
-          {
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            menuId,
-          },
-          menus
-        )
-        const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
-        const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
-        const grabLine =
-          /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
-        const mergedNote = resolveGrabItemPrintNote({
-          note: note || null,
-          optionCode: optionCode1 || null,
-          optionCode1: optionCode1 || null,
-          optionCode2: optionCode2 || null,
-          optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
+      const items = rawItems.map((it) =>
+        mapPosOrderRowForKitchenPrint(it, {
+          menus,
+          deliveryAppCode: order.deliveryAppCode,
+          enrichPromoItems: enrichPromoItemsWithOptionName,
         })
-        return {
-          id: String(it.id ?? ''),
-          name: grabLine ? String(it.name ?? displayName) : displayName,
-          price: Number(it.price ?? 0),
-          qty: Number(it.qty ?? it.quantity ?? 1),
-          ...(parentMenuId ? { menuId: parentMenuId } : menuId ? { menuId } : {}),
-          ...(flavorMenuId1 ? { menuId1: flavorMenuId1 } : {}),
-          ...(flavorMenuId2 ? { menuId2: flavorMenuId2 } : {}),
-          ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
-          ...(optionCode2 ? { optionCode2 } : {}),
-          ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
-          ...(mergedNote ? { note: mergedNote } : {}),
-          ...(String(order.deliveryAppCode ?? '').trim()
-            ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
-            : {}),
-          ...(promoId ? { promoId } : {}),
-          ...(promoCode ? { promoCode } : {}),
-          ...(Array.isArray(
-            (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
-          )
-            ? {
-                promoItems: enrichPromoItemsWithOptionName(
-                  (it as {
-                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
-                  }).promoItems
-                ),
-              }
-            : {}),
-        }
-      })
+      )
       const settings = await getPrinterSettingsForStore(effectiveStoreCode)
       const menusForPrint = await resolveMenusForKitchenPrint(items as Array<Record<string, unknown>>, effectiveStoreCode)
       const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
@@ -2810,108 +2738,13 @@ export default function PosTerminalPage() {
         logPosPrintDebug('accept_flow_skip_empty_items', { orderId })
         return
       }
-      const items = (order.items || []).map((it) => {
-        const note = String(it.note ?? '').trim()
-        const menuId = String(
-          (
-            it as {
-              menuId?: string
-              menuId1?: string
-              menu_id1?: string
-              menuId2?: string
-            }
-          ).menuId1 ??
-            (
-              it as {
-                menuId?: string
-                menuId1?: string
-                menu_id1?: string
-                menuId2?: string
-              }
-            ).menuId ??
-            (
-              it as {
-                menuId?: string
-                menuId1?: string
-                menu_id1?: string
-                menuId2?: string
-              }
-            ).menu_id1 ??
-            (
-              it as {
-                menuId?: string
-                menuId1?: string
-                menu_id1?: string
-                menuId2?: string
-              }
-            ).menuId2 ??
-            ''
-        ).trim()
-        const pit = it as {
-          optionCode?: string
-          optionCode1?: string
-          optionCode2?: string
-          optionCodes?: string[]
-          promoId?: string
-          promo_id?: string
-          promoCode?: string
-          promo_code?: string
-        }
-        const optionCodes = Array.isArray(pit.optionCodes)
-          ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
-          : []
-        const optionCode1 = String(
-          pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
-        ).trim()
-        const optionCode2 = String(pit.optionCode2 ?? '').trim()
-        const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
-        const displayName = resolvePosOrderItemMenuDisplayName(
-          {
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            menuId,
-          },
-          menus
-        )
-        const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
-        const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
-        const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
-        const mergedNote = resolveGrabItemPrintNote({
-          note: note || null,
-          optionCode: optionCode1 || null,
-          optionCode1: optionCode1 || null,
-          optionCode2: optionCode2 || null,
-          optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
+      const items = (order.items || []).map((it) =>
+        mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
+          menus,
+          deliveryAppCode: order.deliveryAppCode,
+          enrichPromoItems: enrichPromoItemsWithOptionName,
         })
-        return {
-          id: String(it.id ?? ''),
-          name: grabLine ? String(it.name ?? displayName) : displayName,
-          price: Number(it.price ?? 0),
-          qty: Number(it.qty ?? 1),
-          ...(menuId ? { menuId } : {}),
-          ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
-          ...(optionCode2 ? { optionCode2 } : {}),
-          ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
-          ...(mergedNote ? { note: mergedNote } : {}),
-          ...(String(order.deliveryAppCode ?? '').trim()
-            ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
-            : {}),
-          ...(promoId ? { promoId } : {}),
-          ...(promoCode ? { promoCode } : {}),
-          ...(Array.isArray(
-            (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] })
-              .promoItems
-          )
-            ? {
-                promoItems: enrichPromoItemsWithOptionName(
-                  (it as {
-                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
-                  }).promoItems
-                ),
-              }
-            : {}),
-        }
-      })
+      )
       const runKitchenForAcceptedOrder = () => {
         if (!autoPrintKitchenSlipOnOrder) return
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
@@ -3092,102 +2925,13 @@ export default function PosTerminalPage() {
             }
             const order = list[0]
             if (order?.items?.length) {
-              const items = (order.items || []).map((it) => {
-                const note = String(it.note ?? '').trim()
-                const menuId = String(
-                  (
-                    it as {
-                      menuId?: string
-                      menuId1?: string
-                      menu_id1?: string
-                      menuId2?: string
-                    }
-                  ).menuId1 ??
-                    (
-                      it as {
-                        menuId?: string
-                        menuId1?: string
-                        menu_id1?: string
-                        menuId2?: string
-                      }
-                    ).menuId ??
-                    (
-                      it as {
-                        menuId?: string
-                        menuId1?: string
-                        menu_id1?: string
-                        menuId2?: string
-                      }
-                    ).menu_id1 ??
-                    (
-                      it as {
-                        menuId?: string
-                        menuId1?: string
-                        menu_id1?: string
-                        menuId2?: string
-                      }
-                    ).menuId2 ??
-                    ''
-                ).trim()
-                const pit = it as {
-                  optionCode?: string
-                  optionCode1?: string
-                  optionCode2?: string
-                  optionCodes?: string[]
-                  promoId?: string
-                  promo_id?: string
-                  promoCode?: string
-                  promo_code?: string
-                }
-                const optionCodes = Array.isArray(pit.optionCodes)
-                  ? pit.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
-                  : []
-                const optionCode1 = String(
-                  pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
-                ).trim()
-                const optionCode2 = String(pit.optionCode2 ?? '').trim()
-                const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
-                const displayName = resolvePosOrderItemMenuDisplayName({
-                  id: String(it.id ?? ''),
-                  name: String(it.name ?? ''),
-                  menuId,
-                }, menus)
-                const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
-                const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
-                const grabLine = /^grab:/i.test(String(it.id ?? '')) || String(order.deliveryAppCode ?? '').toLowerCase() === 'grab'
-                const mergedNote = resolveGrabItemPrintNote({
-                  note: note || null,
-                  optionCode: optionCode1 || null,
-                  optionCode1: optionCode1 || null,
-                  optionCode2: optionCode2 || null,
-                  optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
+              const items = (order.items || []).map((it) =>
+                mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
+                  menus,
+                  deliveryAppCode: order.deliveryAppCode,
+                  enrichPromoItems: enrichPromoItemsWithOptionName,
                 })
-                return {
-                  id: String(it.id ?? ''),
-                  name: grabLine ? String(it.name ?? displayName) : displayName,
-                  price: Number(it.price ?? 0),
-                  qty: Number(it.qty ?? 1),
-                  ...(menuId ? { menuId } : {}),
-                  ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
-                  ...(optionCode2 ? { optionCode2 } : {}),
-                  ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
-                  ...(mergedNote ? { note: mergedNote } : {}),
-                  ...(String(order.deliveryAppCode ?? '').trim()
-                    ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
-                    : {}),
-                  ...(promoId ? { promoId } : {}),
-                  ...(promoCode ? { promoCode } : {}),
-                  ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
-                    ? {
-                        promoItems: enrichPromoItemsWithOptionName(
-                          (it as {
-                            promoItems: { menuId: string; optionId: string | null; quantity: number }[]
-                          }).promoItems
-                        ),
-                      }
-                    : {}),
-                }
-              })
+              )
               const runKitchenForAcceptedOrder = () => {
                 if (!autoPrintKitchenSlipOnOrder) return
                 if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
@@ -5678,62 +5422,14 @@ export default function PosTerminalPage() {
             logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
             continue
           }
-          const items = (order.items || []).map(
-            (it: {
-              id?: string
-              name?: string
-              price?: number
-              qty?: number
-              quantity?: number
-              note?: string
-              menuId1?: string
-              menu_id1?: string
-              menuId?: string
-              optionCode?: string
-              optionCode1?: string
-              optionCode2?: string
-              optionCodes?: string[]
-              promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-              deliveryAppCode?: string
-            }) => {
-              const note = String(it.note ?? '').trim()
-              const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
-              const optionCodes = Array.isArray(it.optionCodes)
-                ? it.optionCodes.map((c) => String(c ?? '').trim()).filter(Boolean)
-                : []
-              const optionCode1 = String(
-                it.optionCode1 ?? it.optionCode2 ?? it.optionCode ?? optionCodes[0] ?? ''
-              ).trim()
-              const optionCode2 = String(it.optionCode2 ?? '').trim()
-              const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
-              const mergedNote = resolveGrabItemPrintNote({
-                note: note || null,
-                optionCode: optionCode1 || null,
-                optionCode1: optionCode1 || null,
-                optionCode2: optionCode2 || null,
-                optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
-              })
-              const displayName = resolveOrderItemDisplayName({
-                id: String(it.id ?? ''),
-                name: String(it.name ?? ''),
-                menuId,
-              })
-              return {
-                id: String(it.id ?? ''),
-                name: displayName,
-                price: Number(it.price ?? 0),
-                qty: Number(it.qty ?? it.quantity ?? 1),
-                ...(menuId ? { menuId } : {}),
-                ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
-                ...(optionCode2 ? { optionCode2 } : {}),
-                ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
-                ...(mergedNote ? { note: mergedNote } : {}),
-                ...(String(it.deliveryAppCode ?? '').trim()
-                  ? { deliveryAppCode: String(it.deliveryAppCode).trim().toLowerCase() }
-                  : {}),
-                ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
-              }
-            }
+          const items = (order.items || []).map((it) =>
+            mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
+              menus,
+              deliveryAppCode:
+                (order as { deliveryAppCode?: string }).deliveryAppCode ??
+                (order.items || []).find((row) => String(row.deliveryAppCode ?? '').trim())?.deliveryAppCode,
+              enrichPromoItems: enrichPromoItemsWithOptionName,
+            })
           )
           /* 품목이 아직 비어 있으면 seen/워터마크에 넣지 않음 → 다음 폴링에서 다시 조회 */
           if (items.length === 0) {
