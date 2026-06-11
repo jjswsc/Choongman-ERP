@@ -1,8 +1,8 @@
 /**
  * 손익 VAT 환산 — 품목 tax_type(과세/면세/영세) 반영.
  * 발주·PP30과 동일: 과세 공급가 합에만 7% VAT (태국 반올림).
+ * DB 조회는 income-statement-item-vat-server.ts (server-only).
  */
-import { supabaseSelect } from '@/lib/supabase-server'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 
 export type ItemTaxType = 'taxable' | 'exempt' | 'zero'
@@ -29,35 +29,6 @@ export function normalizeItemTaxType(raw: string | null | undefined): ItemTaxTyp
 
 export function isItemVatExempt(taxType: ItemTaxType): boolean {
   return taxType === 'exempt' || taxType === 'zero'
-}
-
-/** items.tax_type — 없으면 taxable */
-export async function loadItemTaxTypeMap(): Promise<Map<string, ItemTaxType>> {
-  const out = new Map<string, ItemTaxType>()
-  let rows: { code?: string; tax_type?: string }[] | null = null
-  try {
-    rows = (await supabaseSelect('items', {
-      order: 'id.asc',
-      limit: 12000,
-      select: 'code,tax_type',
-    })) as { code?: string; tax_type?: string }[] | null
-  } catch {
-    try {
-      rows = (await supabaseSelect('items', {
-        order: 'id.asc',
-        limit: 12000,
-        select: 'code',
-      })) as { code?: string }[] | null
-    } catch {
-      return out
-    }
-  }
-  for (const r of rows || []) {
-    const code = String(r.code || '').trim()
-    if (!code) continue
-    out.set(code, normalizeItemTaxType((r as { tax_type?: string }).tax_type))
-  }
-  return out
 }
 
 export function resolveItemTaxType(

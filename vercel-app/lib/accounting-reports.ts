@@ -54,12 +54,12 @@ import {
   accumulateNetByItemTax,
   emptyNetVatBuckets,
   grossFromNetVatBuckets,
-  loadItemTaxTypeMap,
   mergeNetVatBuckets,
   netTotalFromBuckets,
   type ItemTaxType,
   type NetVatBuckets,
 } from '@/lib/income-statement-item-vat'
+import { loadItemTaxTypeMap } from '@/lib/income-statement-item-vat-server'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 
 export {

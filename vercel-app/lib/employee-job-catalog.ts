@@ -1,7 +1,7 @@
 /**
  * 직원 직무 선택 목록 — system_settings `employee_job_catalog` (문자열 배열)
+ * DB load/save → employee-job-catalog-server.ts (server-only)
  */
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 
 export const EMPLOYEE_JOB_CATALOG_KEY = 'employee_job_catalog'
 
@@ -86,34 +86,6 @@ export function sanitizeEmployeeJobCatalogForSave(input: unknown): string[] | { 
   }
   if (out.length === 0) return { error: '직무를 1개 이상 남겨 주세요.' }
   return out
-}
-
-export async function loadEmployeeJobCatalog(): Promise<string[]> {
-  try {
-    const rows = (await supabaseSelectFilter(
-      'system_settings',
-      `key=eq.${encodeURIComponent(EMPLOYEE_JOB_CATALOG_KEY)}`,
-      { limit: 1 }
-    )) as { value_json?: unknown }[] | null
-    const raw = rows?.[0]?.value_json
-    return mergeMissingCoreEmployeeJobs(normalizeEmployeeJobCatalog(raw))
-  } catch {
-    return mergeMissingCoreEmployeeJobs([...DEFAULT_EMPLOYEE_JOB_CATALOG])
-  }
-}
-
-export async function saveEmployeeJobCatalog(jobs: string[]): Promise<void> {
-  await supabaseUpsert(
-    'system_settings',
-    [
-      {
-        key: EMPLOYEE_JOB_CATALOG_KEY,
-        value_json: jobs,
-        updated_at: new Date().toISOString(),
-      },
-    ],
-    'key'
-  )
 }
 
 /** 직원 목록 API용: 등록 직무 + 실제 사용 중인 직무 문자열 합집합 */

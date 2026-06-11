@@ -11,9 +11,9 @@ import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 import {
   DEFAULT_EMPLOYEE_JOB_CATALOG,
-  loadEmployeeJobCatalog,
   mergeJobOptionsFromCatalogAndEmployees,
 } from '@/lib/employee-job-catalog'
+import { loadEmployeeJobCatalog } from '@/lib/employee-job-catalog-server'
 
 export const dynamic = 'force-dynamic'
 
