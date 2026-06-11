@@ -4,11 +4,7 @@ import { expandStoreVariantsForGrade, escapeForIlikeExact, storesMatchForGradeLo
 import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purchase-synthetic'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole } from '@/lib/permissions'
-import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
-
-function normalizeVendorCode(v: string): string {
-  return String(v || '').trim().toLowerCase()
-}
+import { createVendorNameResolver, resolveVendorFilterAliases } from '@/lib/vendor-name-normalizer'
 
 /** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) + 통장 매입 지급 행 */
 export async function GET(request: NextRequest) {
@@ -108,26 +104,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const vendorFilterCode = normalizeVendorCode(vendorFilter)
-    let exactVendorAliases = new Set<string>()
-    if (vendorFilterCode && vendorFilterCode !== 'all') {
-      const vendorRows = (await supabaseSelectFilterAllPages(
-        'vendors',
-        `code=eq.${encodeURIComponent(vendorFilterCode)}`,
-        { select: 'name,gps_name,sales_outlet', pageSize: 1, maxRows: 1 }
-      )) as { name?: string; gps_name?: string; sales_outlet?: string }[] | null
-      const v = vendorRows?.[0]
-      if (v) {
-        const aliases = [
-          resolveVendorName(String(v.name || '').trim()),
-          resolveVendorName(String(v.gps_name || '').trim()),
-          resolveVendorName(String(v.sales_outlet || '').trim()),
-        ].filter(Boolean)
-        exactVendorAliases = new Set(aliases)
-      } else {
-        exactVendorAliases = new Set(['__no_match__'])
-      }
-    }
+    const exactVendorAliases = vendorFilter.trim()
+      ? await resolveVendorFilterAliases(vendorFilter, resolveVendorName)
+      : new Set<string>()
 
     const locVariants = [...new Set(expandStoreVariantsForGrade(storeName).filter(Boolean))]
     const orLoc =

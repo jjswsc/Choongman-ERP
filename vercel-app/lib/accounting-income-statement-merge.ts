@@ -4,6 +4,7 @@ import type {
   IncomeStatementReport,
   UnpostedBankTransaction,
 } from '@/lib/accounting-reports'
+import { emptyNetVatBuckets, mergeNetVatBuckets } from '@/lib/income-statement-item-vat'
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -132,6 +133,40 @@ export function mergeIncomeStatementReports(
     reports.map((r) => r.expenseByAccountSubject || [])
   )
 
+  const salesStockVatBuckets = reports.reduce((acc, r) => {
+    const b = r.displayAmounts?.salesStockVatBuckets
+    return b ? mergeNetVatBuckets(acc, b) : acc
+  }, emptyNetVatBuckets())
+  const purchasesStockVatBuckets = reports.reduce((acc, r) => {
+    const b = r.displayAmounts?.purchasesStockVatBuckets
+    return b ? mergeNetVatBuckets(acc, b) : acc
+  }, emptyNetVatBuckets())
+
+  const displayAmounts = {
+    salesGross: sum((r) => r.displayAmounts?.salesGross ?? r.sales),
+    salesNet: sum((r) => r.displayAmounts?.salesNet ?? r.sales),
+    purchasesGross: sum((r) => r.displayAmounts?.purchasesGross ?? r.purchases),
+    purchasesNet: sum((r) => r.displayAmounts?.purchasesNet ?? r.purchases),
+    beginningInventoryGross: sum(
+      (r) => r.displayAmounts?.beginningInventoryGross ?? r.beginningInventory
+    ),
+    beginningInventoryNet: sum((r) => r.displayAmounts?.beginningInventoryNet ?? r.beginningInventory),
+    endingInventoryGross: sum((r) => r.displayAmounts?.endingInventoryGross ?? r.endingInventory),
+    endingInventoryNet: sum((r) => r.displayAmounts?.endingInventoryNet ?? r.endingInventory),
+    ...(salesStockVatBuckets.taxableNet > 0 || salesStockVatBuckets.exemptNet > 0
+      ? { salesStockVatBuckets }
+      : {}),
+    ...(purchasesStockVatBuckets.taxableNet > 0 || purchasesStockVatBuckets.exemptNet > 0
+      ? { purchasesStockVatBuckets }
+      : {}),
+  }
+
+  const ebitdaBridge = {
+    depreciation: sum((r) => r.ebitdaBridge?.depreciation ?? 0),
+    interest: sum((r) => r.ebitdaBridge?.interest ?? 0),
+    incomeTax: sum((r) => r.ebitdaBridge?.incomeTax ?? 0),
+  }
+
   const outboundTotal = sum((r) => r.diagnostics?.purchaseHqOutboundBasis?.outboundTotal ?? 0)
   const approvedOrdersTotal = sum(
     (r) => r.diagnostics?.purchaseHqOutboundBasis?.approvedOrdersTotal ?? 0
@@ -156,6 +191,8 @@ export function mergeIncomeStatementReports(
     purchaseByVendor,
     salesByCustomer,
     salesByDay,
+    displayAmounts,
+    ebitdaBridge,
     diagnostics: {
       warnings: [...warnings],
       limits,

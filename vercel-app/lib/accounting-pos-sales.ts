@@ -9,10 +9,19 @@ import {
 import { isPosSalesBusinessYmdInInclusiveRange } from '@/lib/pos-sales-business-day-range'
 import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 
-export type PosSalesDayLine = { key: string; amount: number; label?: string }
+export type PosSalesDayLine = {
+  key: string
+  /** POS 결제 total (VAT 포함·별도 반영된 고객 매출액) */
+  amount: number
+  /** total − vat 근사 (공급가 환산) */
+  amountNet: number
+  label?: string
+}
 
 export type PosSalesSumResult = {
   total: number
+  totalNet: number
+  totalVat: number
   completedCount: number
   truncated: boolean
   source: 'posSalesByStore'
@@ -43,16 +52,25 @@ export async function sumCompletedPosSalesTotal(params: {
 
   const salesByDay: PosSalesDayLine[] = []
   let total = 0
+  let totalNet = 0
+  let totalVat = 0
   let completedCount = 0
   for (const d of byDay) {
     if (!isPosSalesBusinessYmdInInclusiveRange(d.key, params.startStr, params.endStr)) continue
-    total += d.total
+    const dayVat = Math.max(0, Number(d.vat) || 0)
+    const dayGross = Math.max(0, Number(d.total) || 0)
+    const dayNet = Math.max(0, dayGross - dayVat)
+    total += dayGross
+    totalNet += dayNet
+    totalVat += dayVat
     completedCount += d.count
-    salesByDay.push({ key: d.key, amount: d.total, label: d.key })
+    salesByDay.push({ key: d.key, amount: dayGross, amountNet: dayNet, label: d.key })
   }
 
   return {
     total,
+    totalNet,
+    totalVat,
     completedCount,
     truncated,
     source: 'posSalesByStore',

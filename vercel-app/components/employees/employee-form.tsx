@@ -25,6 +25,7 @@ import { useT } from "@/lib/i18n"
 import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 import { EMPLOYEE_NAME_TITLE_CANONICAL } from "@/lib/employee-display-name"
 import { labelForStore } from "@/lib/store-list-keys"
+import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
 
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
@@ -156,7 +157,7 @@ interface EmployeeFormProps {
   franchiseeMultiMaxStores?: number
 }
 
-const DEFAULT_JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director", "Logistic"]
+const DEFAULT_JOB_OPTIONS = ["Service", "Kitchen", "Franchise", "Officer", "Director", "Logistic"]
 
 export function EmployeeForm({
   form,
@@ -373,7 +374,7 @@ export function EmployeeForm({
             </SelectTrigger>
             <SelectContent>
               {jobOptions.map((j) => (
-                <SelectItem key={j} value={j}>{j}</SelectItem>
+                <SelectItem key={j} value={j}>{getEmployeeJobOptionLabel(j, t)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

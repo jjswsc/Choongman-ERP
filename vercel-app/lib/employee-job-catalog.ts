@@ -5,7 +5,43 @@ import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 
 export const EMPLOYEE_JOB_CATALOG_KEY = 'employee_job_catalog'
 
-export const DEFAULT_EMPLOYEE_JOB_CATALOG = ['Service', 'Kitchen', 'Officer', 'Director', 'Logistic'] as const
+export const DEFAULT_EMPLOYEE_JOB_CATALOG = [
+  'Service',
+  'Kitchen',
+  'Franchise',
+  'Officer',
+  'Director',
+  'Logistic',
+] as const
+
+/** DB에 저장된 목록에 없어도 로드 시 보강 (신규 기본 직무) */
+const CORE_JOBS_MERGED_ON_LOAD = ['Franchise'] as const
+
+export function mergeMissingCoreEmployeeJobs(catalog: string[]): string[] {
+  const out = [...catalog]
+  const seen = new Set(catalog.map((j) => j.toLowerCase()))
+  for (const j of CORE_JOBS_MERGED_ON_LOAD) {
+    if (seen.has(j.toLowerCase())) continue
+    out.push(j)
+    seen.add(j.toLowerCase())
+  }
+  return out
+}
+
+/** 직무 드롭다운·필터 표시명 (value는 영문 Franchise 등 그대로 저장) */
+export function getEmployeeJobOptionLabel(job: string, t: (key: string) => string): string {
+  const raw = String(job || '').trim()
+  if (!raw) return raw
+  const key = raw.toLowerCase()
+  if (key === 'service') return t('empJobService')
+  if (key === 'kitchen') return t('empJobKitchen')
+  if (key === 'franchise') return t('empJobFranchise')
+  if (key === 'officer') return t('empJobOfficer')
+  if (key === 'director') return t('empJobDirector')
+  if (key === 'logistic') return t('empJobLogistic')
+  if (raw === '기타' || key === 'other') return t('workLogOther')
+  return raw
+}
 
 const RESERVED_JOB_NOISE = new Set(
   ['매장명', 'Store', '직급', 'Job', '부서'].map((s) => s.toLowerCase())
@@ -60,9 +96,9 @@ export async function loadEmployeeJobCatalog(): Promise<string[]> {
       { limit: 1 }
     )) as { value_json?: unknown }[] | null
     const raw = rows?.[0]?.value_json
-    return normalizeEmployeeJobCatalog(raw)
+    return mergeMissingCoreEmployeeJobs(normalizeEmployeeJobCatalog(raw))
   } catch {
-    return [...DEFAULT_EMPLOYEE_JOB_CATALOG]
+    return mergeMissingCoreEmployeeJobs([...DEFAULT_EMPLOYEE_JOB_CATALOG])
   }
 }
 

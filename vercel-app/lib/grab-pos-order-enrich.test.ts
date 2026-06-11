@@ -13,6 +13,8 @@ import {
   resolveGrabPrintNoteRequestWithoutEco,
   resolveGrabEcoCutleryNoteTokenFromOrder,
   resolveGrabEcoCutleryChecklistLabelFromItems,
+  resolveGrabEcoCutleryReceiptPrintLabelFromItems,
+  buildGrabEcoCutleryReceiptPrintHtml,
   resolveGrabItemNameAndMeta,
   resolveGrabLineUnitMinor,
   resolveOptionCodesToLabels,
@@ -309,6 +311,34 @@ describe('grab-pos-order-enrich', () => {
       key === 'posGrabEcoCutleryRequested' ? 'ต้องการช้อนส้อมพลาสติก' : key
     expect(resolveGrabEcoCutleryChecklistLabelFromItems(items, t)).toBe('ต้องการช้อนส้อมพลาสติก')
     expect(resolveGrabPrintNoteRequestWithoutEco(items[0].note, undefined, t)).toBe('')
+  })
+
+  it('resolveGrabEcoCutleryReceiptPrintLabelFromItems uses simple English for receipts', () => {
+    expect(
+      resolveGrabEcoCutleryReceiptPrintLabelFromItems([
+        { note: 'mods:S Boneless · eco:plastic cutlery requested' },
+      ])
+    ).toBe('CUTLERY: YES')
+    expect(
+      resolveGrabEcoCutleryReceiptPrintLabelFromItems([
+        { note: 'banbanFlavors:A,B · eco:no plastic cutlery requested' },
+      ])
+    ).toBe('CUTLERY: NO')
+  })
+
+  it('buildGrabEcoCutleryReceiptPrintHtml renders bordered bold block', () => {
+    const html = buildGrabEcoCutleryReceiptPrintHtml('CUTLERY: NO', (s) => s)
+    expect(html).toContain('receipt-eco-cutlery')
+    expect(html).toContain('CUTLERY: NO')
+    expect(html).not.toContain('- ')
+  })
+
+  it('collectGrabPrintOptionLines includes banbanFlavors token as two lines', () => {
+    expect(
+      collectGrabPrintOptionLines({
+        note: 'banbanFlavors:SNOW ONION,GUCHUJANG Bar.B.Q FRIED CHICKEN',
+      })
+    ).toEqual(['SNOW ONION', 'GUCHUJANG Bar.B.Q FRIED CHICKEN'])
   })
 
   it('formatGrabLineNoteForKitchenPrint omits eco cutlery', () => {

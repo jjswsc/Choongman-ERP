@@ -11,6 +11,8 @@ import {
   getPosSalesByDeliveryApp,
   getPosSalesByChannel,
   getPosSalesByMenu,
+  getPosSalesByPromo,
+  type PosSalesByPromoResult,
   getPosSalesByPayment,
   getPosSalesByPaymentBreakdown,
   type PosSalesPaymentBreakdown,
@@ -187,6 +189,50 @@ export async function getPosSalesByMenuWithCache(params: {
     { name: string; qty: number; sales: number }[]
   >('pos_sales_cache', key)
   return cached ?? []
+}
+
+export async function getPosSalesByPromoWithCache(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  search?: string
+  searchMode?: 'or' | 'and'
+  orderTypes?: string[]
+}): Promise<PosSalesByPromoResult> {
+  const empty: PosSalesByPromoResult = {
+    rows: [],
+    totals: {
+      qty: 0,
+      saleAmount: 0,
+      regularAmount: 0,
+      bundleDiscount: 0,
+      paymentDiscount: 0,
+      totalDiscount: 0,
+      estimatedLineQty: 0,
+      unresolvedLineQty: 0,
+    },
+    truncated: false,
+  }
+  const key = cacheKeyAnalytics('promoBundle', {
+    ...params,
+    search: params.search ?? '',
+    searchMode: params.searchMode ?? 'or',
+    stores: (params.stores ?? []).slice().sort().join(','),
+    orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
+  })
+  if (isOnline()) {
+    try {
+      const data = await getPosSalesByPromo(params)
+      await setCache('pos_sales_cache', key, data)
+      return data
+    } catch {
+      const cached = await getFromCache<PosSalesByPromoResult>('pos_sales_cache', key)
+      return cached ?? empty
+    }
+  }
+  const cached = await getFromCache<PosSalesByPromoResult>('pos_sales_cache', key)
+  return cached ?? empty
 }
 
 export async function getPosSalesByPaymentWithCache(params: {

@@ -35,7 +35,6 @@ import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/
 import {
   aggregateIncomeStatementByYear,
   FINANCIAL_COMPARE_MAX_MONTHS,
-  incomeStatementCogs,
 } from "@/lib/financial-statements-compare"
 import { isMaterialHqOutboundOrderDiff } from "@/lib/income-statement-hq-diff"
 import { useAuth } from "@/lib/auth-context"
@@ -96,6 +95,22 @@ import {
   expenseDrillNavContextFromDrill,
   purchaseDrillNavContextFromDrill,
 } from "@/lib/income-statement-purchase-drill-nav"
+import {
+  buildIncomeStatementViewNumbers,
+  convertLineAmount,
+  readIncomeStatementDisplayPrefs,
+  writeIncomeStatementDisplayPrefs,
+  type IncomeStatementAmountBasisKind,
+  type IncomeStatementVatDisplayMode,
+} from "@/lib/income-statement-display"
+
+function lineDisplayAmount(
+  row: { amount: number; amountBasis?: IncomeStatementAmountBasisKind },
+  vatMode: IncomeStatementVatDisplayMode,
+  stockVatBuckets?: { taxableNet: number; exemptNet: number } | null
+): number {
+  return convertLineAmount(row.amount, row.amountBasis ?? "stock_net", vatMode, stockVatBuckets)
+}
 
 function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
   if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사 창고 출고(매입)'
@@ -815,11 +830,14 @@ function IncomeExpenseDrillDialog({
 
 type IncomeStatementViewModel = {
   sales: number
+  purchases: number
   grossProfit: number
   netProfit: number
+  ebitda: number | null
   pct: (n: number) => string
   cogs: number
   beginningInventory: number
+  endingInventory: number
   expenses: number
   useManualSales: boolean
   systemSales: number
@@ -831,6 +849,8 @@ function IncomePlDetailTableContent({
   data,
   view,
   periodLine,
+  vatMode,
+  showEbitda,
   showExpenseDetails,
   expandSales,
   onToggleSales,
@@ -846,6 +866,8 @@ function IncomePlDetailTableContent({
   data: IncomeStatementData
   view: IncomeStatementViewModel
   periodLine: string
+  vatMode: IncomeStatementVatDisplayMode
+  showEbitda: boolean
   showExpenseDetails: boolean
   expandSales: boolean
   onToggleSales: () => void
@@ -921,6 +943,9 @@ function IncomePlDetailTableContent({
       <div className="mb-5 space-y-2 border-b border-border/50 pb-4">
         <div className={titleClassName}>{t("incomeStatementTitle")}</div>
         <AccountingPeriodChip>{periodLine}</AccountingPeriodChip>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {vatMode === "included" ? t("pL_vatDisplayIncludedNote") : t("pL_vatDisplayExcludedNote")}
+        </p>
       </div>
       {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
         <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -1025,9 +1050,27 @@ function IncomePlDetailTableContent({
                       {salesBreakdownRowLabel(row, t, salesBreakdownIsDaily(data))}
                     </td>
                     <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
-                      {formatBath(row.amount)}
+                      {formatBath(
+                        lineDisplayAmount(
+                          row,
+                          vatMode,
+                          salesBreakdownIsHqOutbound(data)
+                            ? data.displayAmounts?.salesStockVatBuckets
+                            : null
+                        )
+                      )}
                     </td>
-                    <td className={`${accountingPlTdPctCn} text-xs`}>{view.pct(row.amount)}</td>
+                    <td className={`${accountingPlTdPctCn} text-xs`}>
+                      {view.pct(
+                        lineDisplayAmount(
+                          row,
+                          vatMode,
+                          salesBreakdownIsHqOutbound(data)
+                            ? data.displayAmounts?.salesStockVatBuckets
+                            : null
+                        )
+                      )}
+                    </td>
                   </tr>
                 ))}
             </>
@@ -1060,8 +1103,8 @@ function IncomePlDetailTableContent({
                 + {t("pL_purchases")}
               </span>
             </td>
-            <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>{formatBath(data.purchases)}</td>
-            <td className={accountingPlTdPctCn}>{view.pct(data.purchases)}</td>
+            <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>{formatBath(view.purchases)}</td>
+            <td className={accountingPlTdPctCn}>{view.pct(view.purchases)}</td>
           </tr>
           {expandPurchases &&
             (data.purchaseByVendor?.length || 0) > 0 &&
@@ -1080,9 +1123,15 @@ function IncomePlDetailTableContent({
               >
                 <td className={accountingPlSubTdLabelCn}>{purchaseVendorRowLabel(row, t)}</td>
                 <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
-                  {formatBath(row.amount)}
+                  {formatBath(
+                    lineDisplayAmount(row, vatMode, data.displayAmounts?.purchasesStockVatBuckets)
+                  )}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>{view.pct(row.amount)}</td>
+                <td className={`${accountingPlTdPctCn} text-xs`}>
+                  {view.pct(
+                    lineDisplayAmount(row, vatMode, data.displayAmounts?.purchasesStockVatBuckets)
+                  )}
+                </td>
               </tr>
             ))}
           {expandPurchases && !(data.purchaseByVendor?.length || 0) && (
@@ -1095,9 +1144,9 @@ function IncomePlDetailTableContent({
           <tr className={accountingPlInventoryRowCn}>
             <td className={`${accountingPlTdLabelCn} pl-10 text-muted-foreground`}>- {t("pL_endingInv")}</td>
             <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
-              {formatBath(data.endingInventory ?? 0)}
+              {formatBath(view.endingInventory)}
             </td>
-            <td className={accountingPlTdPctCn}>{view.pct(-(data.endingInventory ?? 0))}</td>
+            <td className={accountingPlTdPctCn}>{view.pct(-view.endingInventory)}</td>
           </tr>
           <tr className={accountingPlCogsRowCn}>
             <td className={`${accountingPlTdLabelCn} font-medium text-muted-foreground`}>= {t("pL_cogs")}</td>
@@ -1235,6 +1284,65 @@ function IncomePlDetailTableContent({
               {view.pct(view.netProfit)}
             </td>
           </tr>
+          {showEbitda && view.ebitda != null && (
+            <>
+              {(data.ebitdaBridge?.depreciation ?? 0) > 0 && (
+                <tr className={accountingPlSubRowCn}>
+                  <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaDepreciation")}</td>
+                  <td className={`${accountingPlTdAmountCn} text-xs`}>
+                    {formatBath(data.ebitdaBridge!.depreciation)}
+                  </td>
+                  <td className={`${accountingPlTdPctCn} text-xs`}>
+                    {view.pct(data.ebitdaBridge!.depreciation)}
+                  </td>
+                </tr>
+              )}
+              {(data.ebitdaBridge?.interest ?? 0) > 0 && (
+                <tr className={accountingPlSubRowCn}>
+                  <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaInterest")}</td>
+                  <td className={`${accountingPlTdAmountCn} text-xs`}>
+                    {formatBath(data.ebitdaBridge!.interest)}
+                  </td>
+                  <td className={`${accountingPlTdPctCn} text-xs`}>
+                    {view.pct(data.ebitdaBridge!.interest)}
+                  </td>
+                </tr>
+              )}
+              {(data.ebitdaBridge?.incomeTax ?? 0) > 0 && (
+                <tr className={accountingPlSubRowCn}>
+                  <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaIncomeTax")}</td>
+                  <td className={`${accountingPlTdAmountCn} text-xs`}>
+                    {formatBath(data.ebitdaBridge!.incomeTax)}
+                  </td>
+                  <td className={`${accountingPlTdPctCn} text-xs`}>
+                    {view.pct(data.ebitdaBridge!.incomeTax)}
+                  </td>
+                </tr>
+              )}
+              <tr className={accountingPlGrossProfitRowCn}>
+                <td className={`${accountingPlTdLabelCn} font-semibold`}>= {t("pL_ebitda")}</td>
+                <td
+                  className={`${accountingPlTdAmountCn} font-semibold ${
+                    view.ebitda >= 0 ? "text-primary" : "text-destructive"
+                  }`}
+                >
+                  {formatBath(view.ebitda)}
+                </td>
+                <td
+                  className={`${accountingPlTdPctCn} font-semibold ${
+                    view.ebitda >= 0 ? "text-primary" : "text-destructive"
+                  }`}
+                >
+                  {view.pct(view.ebitda)}
+                </td>
+              </tr>
+              <tr>
+                <td colSpan={3} className="px-3 pb-3 text-[11px] text-muted-foreground leading-relaxed">
+                  {t("pL_ebitdaNote")}
+                </td>
+              </tr>
+            </>
+          )}
         </tbody>
       </table>
       </div>
@@ -1290,21 +1398,21 @@ function formatOverrideSavedClockBangkok(ms: number, lang: string): string {
   })
 }
 
-function incomeMetricsForCompare(d: IncomeStatementData | undefined) {
+function incomeMetricsForCompare(
+  d: IncomeStatementData | undefined,
+  vatMode: IncomeStatementVatDisplayMode
+) {
   if (!isIncomeStatementData(d) || d.error) return null
-  const sales = Number(d.sales) || 0
-  const purchases = Number(d.purchases) || 0
-  const expenses = Number(d.expenses) || 0
-  const cogs = incomeStatementCogs(d)
-  const grossProfit =
-    d.grossProfit != null && Number.isFinite(Number(d.grossProfit))
-      ? Number(d.grossProfit)
-      : sales - cogs
-  const netProfit =
-    d.netProfit != null && Number.isFinite(Number(d.netProfit))
-      ? Number(d.netProfit)
-      : grossProfit - expenses
-  return { sales, purchases, cogs, grossProfit, expenses, netProfit }
+  const v = buildIncomeStatementViewNumbers({ data: d, vatMode })
+  return {
+    sales: v.sales,
+    purchases: v.purchases,
+    cogs: v.cogs,
+    grossProfit: v.grossProfit,
+    expenses: v.expenses,
+    netProfit: v.netProfit,
+    ebitda: v.ebitda,
+  }
 }
 
 type IncomeStatementTabProps = {
@@ -1362,6 +1470,9 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [data, setData] = React.useState<IncomeStatementData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [showExpenseDetails, setShowExpenseDetails] = React.useState(false)
+  const [displayPrefs, setDisplayPrefs] = React.useState(() => readIncomeStatementDisplayPrefs())
+  const vatDisplayMode = displayPrefs.vatMode
+  const showEbitda = displayPrefs.showEbitda
   const [expandSales, setExpandSales] = React.useState(false)
   const [expandPurchases, setExpandPurchases] = React.useState(false)
   const [expandExpenseAccounts, setExpandExpenseAccounts] = React.useState(false)
@@ -1732,8 +1843,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       { key: "gross", label: t("pL_grossProfit"), pick: (m: IncomeCompareMetrics) => m.grossProfit },
       { key: "expenses", label: t("pL_expenses"), pick: (m: IncomeCompareMetrics) => m.expenses },
       { key: "net", label: t("pL_netProfit"), pick: (m: IncomeCompareMetrics) => m.netProfit },
+      ...(showEbitda
+        ? [{ key: "ebitda", label: t("pL_ebitda"), pick: (m: IncomeCompareMetrics) => m.ebitda ?? 0 }]
+        : []),
     ],
-    [t]
+    [t, showEbitda]
   )
 
   const incomeCompareCols = React.useMemo(() => {
@@ -1741,22 +1855,46 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       return compareIncomeRows.map(({ ym, data }) => ({
         key: ym,
         label: ym,
-        metrics: incomeMetricsForCompare(data),
+        metrics: incomeMetricsForCompare(data, vatDisplayMode),
       }))
     }
-    return incomeYearCompare.map((y) => ({
-      key: y.year,
-      label: y.year,
-      metrics: {
-        sales: y.sales,
-        purchases: y.purchases,
-        cogs: y.cogs,
-        grossProfit: y.grossProfit,
-        expenses: y.expenses,
-        netProfit: y.netProfit,
-      } satisfies IncomeCompareMetrics,
-    }))
-  }, [compareGranularity, compareIncomeRows, incomeYearCompare])
+    const years = [...new Set(compareIncomeRows.map((r) => r.ym.slice(0, 4)))].sort()
+    return years.map((year) => {
+      const rows = compareIncomeRows.filter((r) => r.ym.startsWith(year))
+      const agg = {
+        sales: 0,
+        purchases: 0,
+        cogs: 0,
+        grossProfit: 0,
+        expenses: 0,
+        netProfit: 0,
+        ebitda: 0,
+      }
+      let hasEbitda = false
+      for (const { data: rowData } of rows) {
+        const m = incomeMetricsForCompare(rowData, vatDisplayMode)
+        if (!m) continue
+        agg.sales += m.sales
+        agg.purchases += m.purchases
+        agg.cogs += m.cogs
+        agg.grossProfit += m.grossProfit
+        agg.expenses += m.expenses
+        agg.netProfit += m.netProfit
+        if (m.ebitda != null) {
+          hasEbitda = true
+          agg.ebitda += m.ebitda
+        }
+      }
+      return {
+        key: year,
+        label: year,
+        metrics: {
+          ...agg,
+          ebitda: hasEbitda ? agg.ebitda : null,
+        } satisfies IncomeCompareMetrics,
+      }
+    })
+  }, [compareGranularity, compareIncomeRows, vatDisplayMode])
 
   const compareMergedPurchaseVendors = React.useMemo(
     () => mergePurchaseVendorKeysForCompare(compareIncomeRows),
@@ -1859,38 +1997,36 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   const view = React.useMemo(() => {
     if (!isIncomeStatementData(data) || data.error) return null
-    const expenses = data.expenses
-    const purchases = data.purchases
-    const endingInv = data.endingInventory ?? 0
-    const sysBeg = data.beginningInventory ?? 0
-
     const parsedSales = parseSalesOverrideInput(manualAmountStr)
     const useManualSales = manualEnabled && parsedSales != null
-    const sales = useManualSales ? parsedSales : data.sales
-
     const parsedBeg = parseSalesOverrideInput(begInvAmountStr)
     const useManualBegInv = begInvManualEnabled && parsedBeg != null
-    const beginningInventory = useManualBegInv ? parsedBeg : sysBeg
+    const sysBeg = data.beginningInventory ?? 0
 
-    const cogs = beginningInventory + purchases - endingInv
-    const grossProfit = sales - cogs
-    const netProfit = grossProfit - expenses
-    const pctBase = sales > 0 ? sales : 0
+    const nums = buildIncomeStatementViewNumbers({
+      data,
+      vatMode: vatDisplayMode,
+      manualSales: useManualSales ? parsedSales : null,
+      manualBeginningInventory: useManualBegInv ? parsedBeg : null,
+    })
+    const pctBase = nums.sales > 0 ? nums.sales : 0
     const pct = (n: number) => (pctBase > 0 ? `${((n / pctBase) * 100).toFixed(1)}%` : "—")
     return {
-      sales,
-      grossProfit,
-      netProfit,
+      ...nums,
       pct,
-      cogs,
-      beginningInventory,
       useManualSales,
       systemSales: data.sales,
       useManualBegInv,
       systemBeginningInventory: sysBeg,
-      expenses,
     }
-  }, [data, manualEnabled, manualAmountStr, begInvManualEnabled, begInvAmountStr])
+  }, [
+    data,
+    manualEnabled,
+    manualAmountStr,
+    begInvManualEnabled,
+    begInvAmountStr,
+    vatDisplayMode,
+  ])
 
   const storeLabel = resolveFinancialStatementStoreLabel(storeFilter, storeLabels, t, {
     franchiseAggregateAll: canFranchiseeMultiStore && storeFilter === "All",
@@ -1906,8 +2042,20 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       for (const row of incomeStatementSalesBreakdown(data)) {
         rows.push({
           label: `      ${salesBreakdownRowLabel(row, t, daily)}`,
-          amount: q(row.amount),
-          pct: view.pct(row.amount),
+          amount: q(
+            lineDisplayAmount(
+              row,
+              vatDisplayMode,
+              salesBreakdownIsHqOutbound(data) ? data.displayAmounts?.salesStockVatBuckets : null
+            )
+          ),
+          pct: view.pct(
+            lineDisplayAmount(
+              row,
+              vatDisplayMode,
+              salesBreakdownIsHqOutbound(data) ? data.displayAmounts?.salesStockVatBuckets : null
+            )
+          ),
         })
       }
     }
@@ -1918,22 +2066,26 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     })
     rows.push({
       label: `  + ${t("pL_purchases")}`,
-      amount: q(data.purchases),
-      pct: view.pct(data.purchases),
+      amount: q(view.purchases),
+      pct: view.pct(view.purchases),
     })
     if ((data.purchaseByVendor?.length || 0) > 0) {
       for (const row of data.purchaseByVendor!) {
         rows.push({
           label: `      ${purchaseVendorRowLabel(row, t)}`,
-          amount: q(row.amount),
-          pct: view.pct(row.amount),
+          amount: q(
+            lineDisplayAmount(row, vatDisplayMode, data.displayAmounts?.purchasesStockVatBuckets)
+          ),
+          pct: view.pct(
+            lineDisplayAmount(row, vatDisplayMode, data.displayAmounts?.purchasesStockVatBuckets)
+          ),
         })
       }
     }
     rows.push({
       label: `  - ${t("pL_endingInv")}`,
-      amount: q(data.endingInventory ?? 0),
-      pct: view.pct(-(data.endingInventory ?? 0)),
+      amount: q(view.endingInventory),
+      pct: view.pct(-view.endingInventory),
     })
     rows.push({
       label: `= ${t("pL_cogs")}`,
@@ -1998,8 +2150,36 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       amount: q(view.netProfit),
       pct: view.pct(view.netProfit),
     })
+    if (showEbitda && view.ebitda != null) {
+      if ((data.ebitdaBridge?.depreciation ?? 0) > 0) {
+        rows.push({
+          label: `  + ${t("pL_ebitdaDepreciation")}`,
+          amount: q(data.ebitdaBridge!.depreciation),
+          pct: view.pct(data.ebitdaBridge!.depreciation),
+        })
+      }
+      if ((data.ebitdaBridge?.interest ?? 0) > 0) {
+        rows.push({
+          label: `  + ${t("pL_ebitdaInterest")}`,
+          amount: q(data.ebitdaBridge!.interest),
+          pct: view.pct(data.ebitdaBridge!.interest),
+        })
+      }
+      if ((data.ebitdaBridge?.incomeTax ?? 0) > 0) {
+        rows.push({
+          label: `  + ${t("pL_ebitdaIncomeTax")}`,
+          amount: q(data.ebitdaBridge!.incomeTax),
+          pct: view.pct(data.ebitdaBridge!.incomeTax),
+        })
+      }
+      rows.push({
+        label: `= ${t("pL_ebitda")}`,
+        amount: q(view.ebitda),
+        pct: view.pct(view.ebitda),
+      })
+    }
     return rows
-  }, [data, view, lang, t])
+  }, [data, view, lang, t, vatDisplayMode, showEbitda])
 
   const handleDownloadXlsx = React.useCallback(() => {
     if (!data || !view) return
@@ -2251,6 +2431,33 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
               onClick={() => setShowExpenseDetails((v) => !v)}
             >
               {showExpenseDetails ? t("pL_expenseDetailOn") : t("pL_expenseDetailOff")}
+            </Button>
+            <Select
+              value={vatDisplayMode}
+              onValueChange={(v: IncomeStatementVatDisplayMode) => {
+                const next = { ...displayPrefs, vatMode: v }
+                setDisplayPrefs(next)
+                writeIncomeStatementDisplayPrefs(next)
+              }}
+            >
+              <SelectTrigger className="w-[168px] h-9" title={t("pL_vatDisplayMode")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="included">{t("pL_vatDisplayIncluded")}</SelectItem>
+                <SelectItem value="excluded">{t("pL_vatDisplayExcluded")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant={showEbitda ? "default" : "outline"}
+              onClick={() => {
+                const next = { ...displayPrefs, showEbitda: !showEbitda }
+                setDisplayPrefs(next)
+                writeIncomeStatementDisplayPrefs(next)
+              }}
+            >
+              {showEbitda ? t("pL_showEbitdaOn") : t("pL_showEbitdaOff")}
             </Button>
             <Button
               size="sm"
@@ -2818,7 +3025,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         key={ym}
                                         className="p-2 text-right font-mono whitespace-nowrap"
                                       >
-                                        {rowData.error ? "—" : formatBath(Number(rowData.sales) || 0)}
+                                        {rowData.error
+                                          ? "—"
+                                          : formatBath(
+                                              incomeMetricsForCompare(rowData, vatDisplayMode)?.sales ?? 0
+                                            )}
                                       </td>
                                     ))}
                                   </tr>
@@ -2832,7 +3043,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         key={ym}
                                         className="p-2 text-right font-mono whitespace-nowrap"
                                       >
-                                        {rowData.error ? "—" : formatBath(Number(rowData.sales) || 0)}
+                                        {rowData.error
+                                          ? "—"
+                                          : formatBath(
+                                              incomeMetricsForCompare(rowData, vatDisplayMode)?.sales ?? 0
+                                            )}
                                       </td>
                                     ))}
                                   </tr>
@@ -2965,7 +3180,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       key={ym}
                                       className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
                                     >
-                                      {rowData.error ? "—" : formatBath(incomeStatementCogs(rowData))}
+                                      {rowData.error
+                                        ? "—"
+                                        : formatBath(
+                                            incomeMetricsForCompare(rowData, vatDisplayMode)?.cogs ?? 0
+                                          )}
                                     </td>
                                   ))}
                                 </tr>
@@ -2974,7 +3193,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                     {t("pL_grossProfit")}
                                   </td>
                                   {compareIncomeRows.map(({ ym, data: rowData }) => {
-                                    const m = incomeMetricsForCompare(rowData)
+                                    const m = incomeMetricsForCompare(rowData, vatDisplayMode)
                                     const v = m?.grossProfit ?? null
                                     return (
                                       <td
@@ -3125,7 +3344,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                     {t("pL_netProfit")}
                                   </td>
                                   {compareIncomeRows.map(({ ym, data: rowData }) => {
-                                    const m = incomeMetricsForCompare(rowData)
+                                    const m = incomeMetricsForCompare(rowData, vatDisplayMode)
                                     const v = m?.netProfit ?? null
                                     return (
                                       <td
@@ -3325,6 +3544,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                   <IncomePlDetailTableContent
                     data={data}
                     view={view}
+                    vatMode={vatDisplayMode}
+                    showEbitda={showEbitda}
                     periodLine={
                       data.startStr && data.endStr
                         ? `${data.yearMonth} · ${storeLabel} · ${data.startStr}~${data.endStr} (방콕)`

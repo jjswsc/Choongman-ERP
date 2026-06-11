@@ -3,6 +3,7 @@
 import { Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
 
 interface EmployeeFilterBarProps {
   stores: string[]
@@ -23,16 +24,7 @@ interface EmployeeFilterBarProps {
 const GRADES = ["All", "S", "A", "B", "C", "F"]
 
 function getJobOptionLabel(job: string, t: (k: string) => string): string {
-  const raw = String(job || "").trim()
-  if (!raw) return raw
-  const key = raw.toLowerCase()
-  if (key === "service") return t("empJobService")
-  if (key === "kitchen") return t("empJobKitchen")
-  if (key === "officer") return t("empJobOfficer")
-  if (key === "director") return t("empJobDirector")
-  if (key === "logistic") return t("empJobLogistic")
-  if (raw === "기타" || key === "other") return t("workLogOther")
-  return raw
+  return getEmployeeJobOptionLabel(job, t)
 }
 
 export function EmployeeFilterBar({

@@ -38,6 +38,23 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('- CHEESE TORNADO')
     })
 
+    it('banbanFlavors note 토큰만 있어도 주방에 맛 2줄을 보여준다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'Banban Chicken',
+          qty: 1,
+          note: 'banbanFlavors:GUCHUJANG Bar.B.Q FRIED CHICKEN,SNOW ONION · eco:no plastic cutlery requested',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('Banban Chicken')
+      expect(html).toContain('- GUCHUJANG Bar.B.Q FRIED CHICKEN')
+      expect(html).toContain('- SNOW ONION')
+      expect(html).not.toContain('disposable cutlery')
+      expect(html).not.toContain('plastic')
+    })
+
     it('주방 코드 접두 [C024]는 표시하지 않고 맛만 분리한다', () => {
       const html = formatKitchenSlipItemRowHtml(
         { name: '[C024] Banban Chicken (Flavor 1 / Flavor 2)', qty: 1 },

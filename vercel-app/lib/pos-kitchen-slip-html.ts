@@ -4,10 +4,16 @@
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
-import { parseBanbanFlavorsFromDisplayName, expandBanbanComposeLineForPrint } from '@/lib/pos-banban-utils'
+import {
+  expandBanbanComposeLineForPrint,
+  isBanbanMenu,
+  parseBanbanFlavorsFromDisplayName,
+  parseBanbanFlavorsFromPersistedNote,
+} from '@/lib/pos-banban-utils'
 import {
   formatGrabOptionFragmentForPrint,
-  resolveGrabEcoCutleryChecklistLabelFromItems,
+  isGrabEcoCutleryNoteChunk,
+  omitGrabEcoFromJoinedNote,
 } from '@/lib/grab-pos-order-enrich'
 import {
   isLikelyPosMenuSkuCode,
@@ -447,6 +453,39 @@ function parseKitchenSlipBanbanFromName(rawName: string): {
   }
 }
 
+/** 이름·note(`banbanFlavors:`)에서 반반 2맛 복원 — Grab 주방 인쇄용 */
+function resolveKitchenSlipBanbanForRow(
+  rawName: string,
+  rawNote?: string | null | undefined
+): { baseName: string; flavor1: string; flavor2: string } | null {
+  const fromName = parseKitchenSlipBanbanFromName(stripLeadingPrintCodeBrackets(String(rawName ?? '')))
+  if (fromName) return fromName
+  const fromToken = parseBanbanFlavorsFromPersistedNote(rawNote)
+  if (!fromToken) return null
+  const split = splitPosPrintItemLine(String(rawName ?? ''))
+  let baseName = stripLeadingPrintCodeBrackets(split.mainName || String(rawName ?? ''))
+  if (!baseName || !isBanbanMenu({ isBanban: false, name: baseName, code: '' })) {
+    baseName = 'Banban Chicken'
+  }
+  return { baseName, flavor1: fromToken.flavor1, flavor2: fromToken.flavor2 }
+}
+
+/** Grab 주방 줄 메모 — 고객 요청·eco 제외(옵션·반반 맛만) */
+function sanitizeGrabKitchenSlipLineNote(rawNote: string): string {
+  return String(rawNote ?? '')
+    .split(/\r?\n/)
+    .map((line) => omitGrabEcoFromJoinedNote(String(line ?? '').trim()))
+    .map((line) =>
+      line
+        .split('·')
+        .map((chunk) => chunk.trim())
+        .filter((chunk) => chunk && !isGrabEcoCutleryNoteChunk(chunk))
+        .join(' · ')
+    )
+    .filter(Boolean)
+    .join('\n')
+}
+
 /** 주방전표 한 줄: 수량 × 메뉴명 + (선택) 줄 메모. `cancelled`면 수량 앞에 `-`로 취소 표기 */
 export function formatKitchenSlipItemRowHtml(
   it: {
@@ -470,7 +509,9 @@ export function formatKitchenSlipItemRowHtml(
   const simplify = (text: string) => text.replace(/[\s\-_:()]+/g, '').toLowerCase()
   const rowDisplay = resolveKitchenSlipRowMainDisplay({ name: String(it.name ?? ''), note: it.note })
   const rawNormalizedNote = showLineNotes
-    ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+    ? sanitizeGrabKitchenSlipLineNote(
+        normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+      )
     : ''
   const groupedFilteredNote = filterKitchenLineNoteByGroupPolicy(
     rawNormalizedNote,
@@ -478,7 +519,7 @@ export function formatKitchenSlipItemRowHtml(
   )
   let note = showLineNotes ? localizeKitchenSlipLineNote(groupedFilteredNote) : ''
   const banban =
-    parseKitchenSlipBanbanFromName(stripLeadingPrintCodeBrackets(String(it.name ?? ''))) ||
+    resolveKitchenSlipBanbanForRow(String(it.name ?? ''), it.note) ||
     (rowDisplay.optionLine
       ? parseKitchenSlipBanbanFromName(`${rowDisplay.mainName} (${rowDisplay.optionLine})`)
       : null)
@@ -656,23 +697,6 @@ export function buildKitchenSlipMemoBlockHtml(
   return '<div class="k-memo">' + escapeHtml(trimmed) + c('div')
 }
 
-/** Grab 수저·포크 체크리스트 — 주문당 1줄 (옵션 `- Size S` 와 동일 형식) */
-export function buildKitchenSlipCutleryChecklistHtml(
-  items: Array<{ note?: string | null | undefined }>,
-  escapeHtml: (s: string) => string,
-  t?: (key: string) => string
-): string {
-  const label = resolveGrabEcoCutleryChecklistLabelFromItems(items, t)
-  if (!label) return ''
-  const c = (tag: string) => '\u003c/' + tag + '>'
-  return (
-    '<div class="k-line-note" style="margin-top:6px;border-top:1px dashed #999;padding-top:6px;">' +
-    '- ' +
-    escapeHtml(label) +
-    c('div')
-  )
-}
-
 /**
  * 단일 슬립 전체 HTML (인쇄 창에 document.write)
  * itemsHtml / memoHtml 은 이미 안전한 HTML 조각
@@ -814,16 +838,15 @@ export function buildKitchenSlipDocumentHtml(params: {
     guestCount,
     guestCountLabel,
     optionNameByCode,
-    t,
+    t: _t,
   } = params
-  const itemsHtml =
-    buildKitchenSlipItemsHtml(
-      items,
-      escapeHtml,
-      design,
-      prependItemsHtml ?? '',
-      optionNameByCode
-    ) + buildKitchenSlipCutleryChecklistHtml(items, escapeHtml, t)
+  const itemsHtml = buildKitchenSlipItemsHtml(
+    items,
+    escapeHtml,
+    design,
+    prependItemsHtml ?? '',
+    optionNameByCode
+  )
   const memoHtml = buildKitchenSlipMemoBlockHtml(String(memoLine ?? ''), escapeHtml, design)
   return buildKitchenSlipHtml({
     label,

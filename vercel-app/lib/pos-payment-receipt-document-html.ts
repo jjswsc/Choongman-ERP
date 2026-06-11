@@ -36,7 +36,11 @@ import {
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
-  resolveGrabEcoCutleryChecklistLabelFromItems,
+  GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS,
+  GRAB_ECO_CUTLERY_RECEIPT_SIMPLE_CSS,
+  buildGrabEcoCutleryReceiptPrintHtml,
+  buildGrabEcoCutleryReceiptPrintSimpleRowHtml,
+  resolveGrabEcoCutleryReceiptPrintLabelFromItems,
   resolveGrabPrintNoteRequestWithoutEco,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
@@ -457,6 +461,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const showCouponDiscountRows =
     printerSettings?.discountSeparatePrint !== false && (receiptData.appliedCoupons?.length ?? 0) > 0
   const nonCouponDiscountAmt = Math.max(0, Number(receiptData.discountAmt ?? 0) - couponDiscountTotal)
+  const grabInboundReceipt = isGrabInboundPosOrder({
+    memo: receiptData.memo,
+    deliveryAppCode: receiptData.deliveryAppCode,
+    items: receiptData.items,
+  })
   const tableForPrint = receiptData.tableName
     ? translateReceiptTableDisplayName(receiptData.tableName, t)
     : ''
@@ -592,7 +601,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         const main = `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(displayName)}</td><td class="simple-item-amt">${amt}</td></tr>`
         const lineDiscount = Math.max(0, Number(lineDiscountAllocSimple[idx] ?? 0) || 0)
         const lineDiscountRow =
-          lineDiscount > 0.0001
+          !grabInbound && lineDiscount > 0.0001
             ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(lineDiscount)}</td></tr>`
             : ''
         const promoRows =
@@ -686,14 +695,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         return main + lineDiscountRow + detailRows + noteRow
       })
       .join('')
+    const grabDiscountPrintAmt = showCouponDiscountRows
+      ? nonCouponDiscountAmt
+      : Math.max(0, Number(receiptData.discountAmt ?? 0) || 0)
+    const grabBundleDiscountSimple =
+      grabInbound && grabDiscountPrintAmt > 0.0001
+        ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(grabDiscountPrintAmt)}</td></tr>`
+        : ''
     const grabCutleryChecklistRow =
       grabInbound && mergedItems.length > 0
-        ? (() => {
-            const label = resolveGrabEcoCutleryChecklistLabelFromItems(mergedItems, t)
-            return label
-              ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(label)}</td></tr>`
-              : ''
-          })()
+        ? buildGrabEcoCutleryReceiptPrintSimpleRowHtml(
+            resolveGrabEcoCutleryReceiptPrintLabelFromItems(mergedItems),
+            esc
+          )
         : ''
     const summaryRows = [
       `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(subtotalPrint)}</td></tr>`,
@@ -705,6 +719,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 )
               : ''
           }${
+            !grabInbound &&
             (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0
               ? `<tr><td class="simple-k">${esc(discountReceiptLabel)}</td><td class="simple-v">-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}</td></tr>`
               : ''
@@ -750,7 +765,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${taxInvoice ? buildPosTaxInvoiceThermalHtml({ taxInvoice, esc, tr }) : ''}
         ${voidBannerHtml}
         <div class="simple-divider"></div>
-        <table class="simple-table">${itemRows}${grabCutleryChecklistRow}</table>
+        <table class="simple-table">${grabBundleDiscountSimple}${itemRows}${grabCutleryChecklistRow}</table>
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
@@ -799,6 +814,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-item-name { width: 72%; word-break: break-word; }
         .simple-item-amt { width: 28%; text-align: right; white-space: nowrap; }
         .simple-item-sub { font-weight: 700; color: #000; }
+        ${GRAB_ECO_CUTLERY_RECEIPT_SIMPLE_CSS}
+        ${GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS}
         .simple-k { width: 72%; }
         .simple-v { width: 28%; text-align: right; white-space: nowrap; }
         .simple-total { font-size: 12px; font-weight: 800; margin-top: 4px; color: #000; }
@@ -980,7 +997,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 : ''
             const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
             const lineDiscountHtml =
-              lineDiscount > 0.0001
+              !grabInbound && lineDiscount > 0.0001
                 ? `<div class="receipt-line-note">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(lineDiscount)}</div>`
                 : ''
             const promoComposeHtml =
@@ -1004,18 +1021,28 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             )}${lineDiscountHtml}${banbanComposeHtml}${promoComposeHtml}${noteHtml}${barcodeHtml}`
           })
             .join('')
-          const cutleryLabel = grabInbound
-            ? resolveGrabEcoCutleryChecklistLabelFromItems(mergedLegacyItems, t)
+          const cutleryHtml = grabInbound
+            ? buildGrabEcoCutleryReceiptPrintHtml(
+                resolveGrabEcoCutleryReceiptPrintLabelFromItems(mergedLegacyItems),
+                esc
+              )
             : ''
-          const cutleryHtml = cutleryLabel
-            ? `<div class="receipt-line-note">- ${esc(cutleryLabel)}</div>`
-            : ''
-          return itemsHtml + cutleryHtml
+          const grabDiscountLegacyAmt = showCouponDiscountRows
+            ? nonCouponDiscountAmt
+            : Math.max(0, Number(receiptData.discountAmt ?? 0) || 0)
+          const grabBundleDiscountLegacy =
+            grabInbound && grabDiscountLegacyAmt > 0.0001
+              ? paymentRowHtml(
+                  esc(tr('posDiscount', '할인')),
+                  `-${formatBahtNum(grabDiscountLegacyAmt)}`
+                )
+              : ''
+          return grabBundleDiscountLegacy + itemsHtml + cutleryHtml
         })()}
         <div class="receipt-divider"></div>
         ${paymentRowHtml(`<span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span>`, formatBahtNum(subtotalPrint))}
         ${showCouponDiscountRows ? buildAppliedCouponDiscountRowsHtml(receiptData, tr, paymentRowHtml) : ''}
-        ${(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}`) : ''}
+        ${!grabInboundReceipt && (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}`) : ''}
         ${(receiptData.deliveryFee ?? 0) > 0 ? paymentRowHtml(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`) : ''}
         ${(receiptData.packagingFee ?? 0) > 0 ? paymentRowHtml(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`) : ''}
         ${showVatRow ? paymentRowHtml(vatPrintLabelEscaped, formatBahtNum(vatPrint)) : ''}
@@ -1088,6 +1115,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           margin: -2px 0 4px 0;
           line-height: 1.35;
         }
+        ${GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS}
         .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; font-weight: 700; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
         .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }

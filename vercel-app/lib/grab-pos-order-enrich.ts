@@ -1,4 +1,5 @@
 import type { PosMenu, PosMenuOption, PosPromoWithItems } from '@/lib/api-client'
+import { parseBanbanFlavorsFromPersistedNote } from '@/lib/pos-banban-utils'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 
 export type GrabPosPromoCatalogRow = Pick<PosPromoWithItems, 'id' | 'name' | 'code' | 'items'>
@@ -475,6 +476,11 @@ export function collectGrabPrintOptionLines(input: {
   }
   const noteMeta = resolveGrabDeliveryLineNote(input.note, map)
   for (const chip of noteMeta.optionChips) push(chip)
+  const banbanPair = parseBanbanFlavorsFromPersistedNote(input.note)
+  if (banbanPair) {
+    push(banbanPair.flavor1)
+    push(banbanPair.flavor2)
+  }
   return out
 }
 
@@ -584,9 +590,54 @@ const GRAB_ECO_CUTLERY_I18N_KEY: Record<GrabEcoCutleryKind, string> = {
 }
 
 const GRAB_ECO_CUTLERY_FALLBACK_EN: Record<GrabEcoCutleryKind, string> = {
-  requested: 'Disposable cutlery needed',
-  not_requested: 'No disposable cutlery',
+  requested: 'CUTLERY: YES',
+  not_requested: 'CUTLERY: NO',
 }
+
+/** Grab 홀·손님 영수증 — 영어 고정(열전사 가독성) */
+export const GRAB_ECO_CUTLERY_RECEIPT_PRINT_EN: Record<GrabEcoCutleryKind, string> = {
+  requested: 'CUTLERY: YES',
+  not_requested: 'CUTLERY: NO',
+}
+
+export function resolveGrabEcoCutleryReceiptPrintLabel(
+  ecoToken: string | null | undefined
+): string {
+  const token = String(ecoToken ?? '').trim()
+  if (!token) return ''
+  const kind = parseGrabEcoCutleryKind(token)
+  return kind ? GRAB_ECO_CUTLERY_RECEIPT_PRINT_EN[kind] : ''
+}
+
+export function resolveGrabEcoCutleryReceiptPrintLabelFromItems(
+  items: Array<{ note?: string | null | undefined }>
+): string {
+  return resolveGrabEcoCutleryReceiptPrintLabel(findGrabEcoCutleryNoteTokenInItems(items))
+}
+
+export const GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS =
+  '.receipt-eco-cutlery{margin:3mm 0 2mm;padding:2.5mm 1.5mm;border:2px solid #000;text-align:center;font-weight:800;font-size:14px;line-height:1.25;letter-spacing:.06em}'
+
+export function buildGrabEcoCutleryReceiptPrintHtml(
+  label: string,
+  esc: (s: string) => string
+): string {
+  const text = String(label ?? '').trim()
+  if (!text) return ''
+  return `<div class="receipt-eco-cutlery">${esc(text)}</div>`
+}
+
+export function buildGrabEcoCutleryReceiptPrintSimpleRowHtml(
+  label: string,
+  esc: (s: string) => string
+): string {
+  const text = String(label ?? '').trim()
+  if (!text) return ''
+  return `<tr><td class="simple-eco-cutlery" colspan="2">${esc(text)}</td></tr>`
+}
+
+export const GRAB_ECO_CUTLERY_RECEIPT_SIMPLE_CSS =
+  '.simple-eco-cutlery{margin:2mm 0;padding:2.5mm 1mm;border:2px solid #000;text-align:center;font-weight:800;font-size:14px;line-height:1.25;letter-spacing:.06em}'
 
 /** `eco:plastic cutlery requested` 등 저장 청크 → requested / not_requested */
 export function parseGrabEcoCutleryKind(chunk: string): GrabEcoCutleryKind | null {

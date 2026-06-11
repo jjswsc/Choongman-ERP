@@ -1,4 +1,5 @@
 import { isChannelRevenueAccountCode } from '@/lib/bank-import-deposit-category'
+import { expandStoreVariantsForGrade } from '@/lib/grade-store-key-variants'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const POS_REVENUE_DEPOSIT_CATEGORIES = new Set([
@@ -66,6 +67,21 @@ export async function assertBankDepositAllowedForChannelSettlement(
   }
 }
 
+/** POS 완료 주문이 있는 매장인지 (store_code 별칭 CM 접두 포함) */
+export async function storeHasPosCompletedOrders(storeName: string): Promise<boolean> {
+  const variants = expandStoreVariantsForGrade(String(storeName || '').trim())
+  for (const code of variants) {
+    if (!code) continue
+    const orders = (await supabaseSelectFilter(
+      'pos_orders',
+      `store_code=eq.${encodeURIComponent(code)}&status=in.(completed,paid,ready)`,
+      { select: 'id', limit: 1 }
+    )) as { id?: number }[] | null
+    if (orders?.length) return true
+  }
+  return false
+}
+
 /** POS 매출 이중 위험: 해당 매장에 완료 POS 주문이 있으면 revenue_* 입금 분류 차단 (채널 세부 GL은 허용) */
 export async function assertPosRevenueDepositCategorySafe(params: {
   storeName: string
@@ -87,12 +103,7 @@ export async function assertPosRevenueDepositCategorySafe(params: {
     if (isChannelRevenueAccountCode(code)) return
   }
 
-  const orders = (await supabaseSelectFilter(
-    'pos_orders',
-    `store_code=eq.${encodeURIComponent(store)}&status=in.(completed,paid,ready)`,
-    { select: 'id', limit: 1 }
-  )) as { id?: number }[] | null
-  if (orders?.length) {
+  if (await storeHasPosCompletedOrders(store)) {
     throw new BankSettlementGuardError(
       `매장「${store}」에 POS 완료 주문이 있어 입금 분류「${cat}」은 매출(4110) 이중 인식 위험이 있습니다. 카드·배달 입금은 채널 정산을, 가맹 수금은 매출 수령(receivable_receive)을 사용하세요.`,
       'POS_REVENUE_DEPOSIT_DOUBLE_RISK'

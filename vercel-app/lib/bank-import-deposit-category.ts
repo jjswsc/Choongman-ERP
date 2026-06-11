@@ -6,6 +6,18 @@ export const POS_REVENUE_DEPOSIT_CATEGORIES = [
   'revenue_cash',
 ] as const
 
+/**
+ * POS 카드·배달·QR 정산 입금 적요 — 1130 소거용(receivable_receive 분개)이며
+ * 본사 B2B 미수금(보조원장 Receive)과는 별개.
+ * @see docs/ACCOUNTING_LEDGER_SOP.md §2–3
+ */
+export const POS_CHANNEL_SETTLEMENT_MEMO_RE =
+  /\b(grab|grabtaxi|line\s*pay|linepay|line\s*man|lineman|shopee|shopeepay|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney|판매대금|qr결제)\b/i
+
+export function isPosChannelSettlementMemo(memo: string | undefined | null): boolean {
+  return POS_CHANNEL_SETTLEMENT_MEMO_RE.test(String(memo || '').trim())
+}
+
 /** suggest-deposit-from-memo·적요 규칙과 동일 — 통장 UI·가드에서 채널별 매출 계정 */
 export const CHANNEL_REVENUE_GL_CODES = new Set([
   '4111',

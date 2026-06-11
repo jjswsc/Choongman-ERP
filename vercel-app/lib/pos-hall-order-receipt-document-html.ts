@@ -14,7 +14,10 @@ import {
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
-  resolveGrabPrintNoteRequest,
+  GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS,
+  buildGrabEcoCutleryReceiptPrintHtml,
+  resolveGrabEcoCutleryReceiptPrintLabelFromItems,
+  resolveGrabPrintNoteRequestWithoutEco,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
@@ -650,7 +653,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           ? grabOptionLines
           : splitReceiptOptionTokens(lineOption)
       const lineNote = grabInbound
-        ? resolveGrabPrintNoteRequest(grabPrintNote, optionNameByCode, (k) => t(k))
+        ? resolveGrabPrintNoteRequestWithoutEco(grabPrintNote, optionNameByCode, (k) => t(k))
         : formatGrabOrderLineNoteForPrint(String(it.note ?? ''), optionNameByCode, (k) => t(k)) ||
           normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
@@ -719,7 +722,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           : ''
       const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
       const lineDiscountHtml =
-        lineDiscount > 0.0001
+        !grabInbound && lineDiscount > 0.0001
           ? '<div class="receipt-line-note">' +
             esc(tr('posDiscount', '할인')) +
             ': -' +
@@ -747,6 +750,23 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       )
     })
     .join('')
+  const grabCutleryChecklistRow =
+    grabInbound && receiptItems.length > 0
+      ? buildGrabEcoCutleryReceiptPrintHtml(
+          resolveGrabEcoCutleryReceiptPrintLabelFromItems(receiptItems),
+          esc
+        )
+      : ''
+  const grabBundleDiscountRow =
+    grabInbound && discountForLineAlloc > 0.0001
+      ? '<div class="receipt-row discount"><span>' +
+        esc(tr('posDiscount', '할인')) +
+        c('span') +
+        '<span>-' +
+        formatBahtNum(discountForLineAlloc) +
+        c('span') +
+        c('div')
+      : ''
   const memoRow = parsedMemo.plainMemo
     ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + c('div')
     : ''
@@ -755,7 +775,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     : ''
   const effectiveDiscountAmt = resolveHallOrderReceiptDiscountAmt(payload)
   const discountRow =
-    effectiveDiscountAmt > 0.0001
+    !grabInbound && effectiveDiscountAmt > 0.0001
       ? '<div class="receipt-row discount"><span>' +
         esc(resolveHallOrderDiscountLabel(t, payload.discountReason)) +
         c('span') +
@@ -809,7 +829,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     esc(tr('amount', '금액')) +
     c('span') +
     c('div') +
+    grabBundleDiscountRow +
     itemsRows +
+    grabCutleryChecklistRow +
     memoRow +
     '<div class="receipt-divider">' +
     c('div') +
@@ -848,6 +870,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       'px;vertical-align:top}.receipt-order-simple .receipt-row>span:last-child,.receipt-order-simple .receipt-item-head>span:last-child{display:table-cell;width:' +
       String(RECEIPT_AMOUNT_COL_MM) +
       'mm;text-align:right;vertical-align:top;white-space:normal}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}' +
+      GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS +
       (voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''),
   })
 }

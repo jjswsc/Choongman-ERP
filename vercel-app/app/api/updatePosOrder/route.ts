@@ -16,6 +16,7 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobUpdateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
     const id = Number(body?.id)
     const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
-    const items = await enrichOrderItemsWithOptionCode(itemsRaw)
+    const itemsWithOption = await enrichOrderItemsWithOptionCode(itemsRaw)
+    let items = itemsWithOption
     const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()
     const serviceAmt = Math.max(0, Number(body?.serviceAmt ?? body?.service_amt ?? 0))
@@ -211,6 +213,11 @@ export async function POST(req: NextRequest) {
           : '대기/결제완료 상태만 수정할 수 있습니다.'
       return NextResponse.json({ success: false, message: closedMsg }, { headers })
     }
+
+    items = await enrichOrderItemsWithPromoRegularPrice(
+      itemsWithOption,
+      current?.order_type ?? body?.orderType ?? body?.order_type
+    )
 
     let subtotal = 0
     for (const it of items) {

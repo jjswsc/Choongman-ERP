@@ -9,6 +9,8 @@ import {
   supabaseUpdate,
   supabaseDeleteByFilter,
 } from './supabase-server'
+import { isPosChannelSettlementMemo } from './bank-import-deposit-category'
+import { storeHasPosCompletedOrders } from './bank-settlement-guards'
 import { formatReceivableInvoiceNo } from './receivable-invoice-format'
 import {
   isAccountingPurchaseOrderByCartJson,
@@ -372,6 +374,37 @@ export async function upsertPayableFromBankPurchasePayment(params: {
 }
 
 /**
+ * 통장 `receivable_receive` 저장 시 본사 B2B 미수금 보조원장(Receive) 생성 여부.
+ * POS 매장의 카드·배달·QR 정산 입금은 1130 분개만 하고 보조원장에는 넣지 않는다.
+ * @see docs/ACCOUNTING_LEDGER_SOP.md §2–3
+ */
+export async function shouldUpsertFranchiseReceivableSubledger(params: {
+  storeName: string
+  memo?: string | null
+  bankTransactionId?: number
+}): Promise<boolean> {
+  const store = String(params.storeName || '').trim()
+  if (!store) return false
+
+  const bankTransactionId = Number(params.bankTransactionId || 0)
+  if (bankTransactionId > 0) {
+    const linked = (await supabaseSelectFilter(
+      'pos_channel_settlements',
+      `bank_transaction_id=eq.${bankTransactionId}`,
+      { select: 'id', limit: 1 }
+    )) as { id?: number }[] | null
+    if (linked?.length) return false
+  }
+
+  const memo = String(params.memo || '').trim()
+  if ((await storeHasPosCompletedOrders(store)) && isPosChannelSettlementMemo(memo)) {
+    return false
+  }
+
+  return true
+}
+
+/**
  * 통장 연동 매출 수령(ref Receive) — bank_transaction_id당 1행 유지 (미수금 중복 방지).
  */
 export async function upsertReceivableFromBankReceive(params: {
@@ -383,6 +416,10 @@ export async function upsertReceivableFromBankReceive(params: {
 }): Promise<void> {
   const { bankTransactionId, storeName, amountAbs, transDate, memo } = params
   if (!bankTransactionId || !storeName || !amountAbs) return
+  if (!(await shouldUpsertFranchiseReceivableSubledger({ storeName, memo, bankTransactionId }))) {
+    await deleteReceivableFromBankReceive({ bankTransactionId, storeName, amountAbs, transDate, memo })
+    return
+  }
   const filter = `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive`
   const rows = (await supabaseSelectFilter('receivable_transactions', filter, {
     order: 'id.asc',

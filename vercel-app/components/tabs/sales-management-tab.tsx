@@ -46,6 +46,8 @@ import {
   getPosSalesByDeliveryApp,
   getPosSalesByChannel,
   getPosSalesByMenu,
+  getPosSalesByPromo,
+  type PosSalesByPromoResult,
   getPosSalesByPaymentBreakdown,
   type PosSalesPaymentBreakdown,
   getPosSalesByStore,
@@ -95,6 +97,7 @@ import {
   getPosSalesByDeliveryAppWithCache,
   getPosSalesByChannelWithCache,
   getPosSalesByMenuWithCache,
+  getPosSalesByPromoWithCache,
   getPosSalesByPaymentBreakdownWithCache,
   getPosSalesByStoreWithCache,
 } from "@/lib/offline/sales-analytics-offline"
@@ -351,6 +354,7 @@ type AnalyticsView =
   | "delivery"
   | "channel"
   | "menu"
+  | "promo-bundle"
   | "payment"
   | "store"
   | "store-category"
@@ -417,6 +421,19 @@ const SALES_IA: SalesSubMenuConfig[] = [
         view: "store-period",
       },
       { id: "compare-store-category", labelKey: "salesTopicPivotStoreCategory", hintKey: "salesTopicPivotStoreCategoryHint", view: "store-category" },
+    ],
+  },
+  {
+    id: "sales-discount",
+    labelKey: "salesManagementTabDiscount",
+    fallbackLabel: "할인·프로모",
+    topics: [
+      {
+        id: "report-promo-bundle",
+        labelKey: "salesTopicPromoBundleReport",
+        hintKey: "salesTopicPromoBundleReportHint",
+        view: "promo-bundle",
+      },
     ],
   },
   {
@@ -602,6 +619,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }>({ items: [], total: 0 })
   const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
   const [menuData, setMenuData] = React.useState<{ name: string; qty: number; sales: number }[]>([])
+  const [promoBundleData, setPromoBundleData] = React.useState<PosSalesByPromoResult>({
+    rows: [],
+    totals: {
+      qty: 0,
+      saleAmount: 0,
+      regularAmount: 0,
+      bundleDiscount: 0,
+      paymentDiscount: 0,
+      totalDiscount: 0,
+      estimatedLineQty: 0,
+      unresolvedLineQty: 0,
+    },
+    truncated: false,
+  })
   const [paymentData, setPaymentData] = React.useState<{ paymentKey: string; sales: number }[]>([])
   const [paymentBreakdownData, setPaymentBreakdownData] = React.useState<PosSalesPaymentBreakdown>({
     deliveryByChannel: [],
@@ -1256,6 +1287,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     (selectedView === "store" ||
       selectedView === "store-category" ||
       selectedView === "payment" ||
+      selectedView === "promo-bundle" ||
       selectedView === "yoy-compare" ||
       selectedView === "mom-compare" ||
       selectedView === "forecast")
@@ -1313,6 +1345,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     )
       return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
+    if (selectedView === "promo-bundle") return promoBundleData.totals.saleAmount
     if (selectedView === "forecast" && forecastSummary) return forecastSummary.expectedTotal
     return summaryCards.current
   }, [
@@ -1323,6 +1356,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     paymentTotalsSummary.total,
     summaryCards.current,
     forecastSummary,
+    promoBundleData.totals.saleAmount,
   ])
 
   const summaryCardsCurrentDisplay = React.useMemo(() => {
@@ -1352,6 +1386,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setDeliveryAppData({ items: [], total: 0 })
     setChannelData([])
     setMenuData([])
+    setPromoBundleData({
+      rows: [],
+      totals: {
+        qty: 0,
+        saleAmount: 0,
+        regularAmount: 0,
+        bundleDiscount: 0,
+        paymentDiscount: 0,
+        totalDiscount: 0,
+        estimatedLineQty: 0,
+        unresolvedLineQty: 0,
+      },
+      truncated: false,
+    })
     setPaymentData([])
     setPaymentBreakdownData({
       deliveryByChannel: [],
@@ -1436,6 +1484,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         return channelChartRows.length > 0
       case "menu":
         return menuData.length > 0
+      case "promo-bundle":
+        return promoBundleData.rows.length > 0
       case "delivery":
         return deliveryPieRows.length > 0
       case "payment":
@@ -1464,6 +1514,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     scopedStoreData.length,
     channelChartRows.length,
     menuData.length,
+    promoBundleData.rows.length,
     deliveryPieRows.length,
     deliveryPaymentChannelRows.length,
     creditPaymentChannelRows.length,
@@ -1612,6 +1663,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         rows: menuData.map((r) => [r.name, r.qty, numCell(r.sales)]),
         colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
       })
+    } else if (selectedView === "promo-bundle" && promoBundleData.rows.length > 0) {
+      sheets.push({
+        name: tr("salesTopicPromoBundleReport", "세트·프로모 할인"),
+        headers: [
+          tr("salesMenu", "메뉴"),
+          tr("salesPromoCode", "프로모 코드"),
+          tr("salesQuantity", "수량"),
+          tr("salesPromoRegularAmount", "정가 합계"),
+          tr("salesPromoSaleAmount", "판매액"),
+          tr("salesPromoBundleDiscount", "세트 내재 할인"),
+          tr("salesPromoDiscountPct", "할인율"),
+        ],
+        rows: promoBundleData.rows.map((r) => [
+          r.name,
+          r.promoCode || r.promoId,
+          r.qty,
+          numCell(r.regularAmount),
+          numCell(r.saleAmount),
+          numCell(r.bundleDiscount),
+          r.discountPct / 100,
+        ]),
+        colFormats: [
+          salesExcelCol.text,
+          salesExcelCol.text,
+          salesExcelCol.int,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.pct,
+        ],
+      })
     } else if (selectedView === "delivery" && deliveryPieRows.length > 0) {
       sheets.push({
         name: tr("salesDeliveryChannel", "배달앱/채널"),
@@ -1716,6 +1798,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     scopedStoreData,
     channelChartRows,
     menuData,
+    promoBundleData,
     deliveryPieRows,
     deliveryPaymentChannelRows,
     creditPaymentChannelRows,
@@ -2061,10 +2144,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "store-period"
     const periodRun = offlineAware ? getPosSalesByPeriodWithCache : getPosSalesByPeriod
     const menuFetcher = offlineAware ? getPosSalesByMenuWithCache : getPosSalesByMenu
+    const promoBundleFetcher = offlineAware ? getPosSalesByPromoWithCache : getPosSalesByPromo
     const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
     const needDelivery = selectedView === "delivery"
     const needChannel = selectedView === "channel"
     const needMenu = selectedView === "menu"
+    const needPromoBundle = selectedView === "promo-bundle"
     const needPayment = selectedView === "payment"
     const needStore =
       selectedView === "store" ||
@@ -2102,6 +2187,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gPaymentBreakdown = guarded(setPaymentBreakdownData)
     const gStore = guarded(setStoreData)
     const gMenu = guarded(setMenuData)
+    const gPromoBundle = guarded(setPromoBundleData)
     const gYoy = guarded(setYoyCompareRows)
     const gMom = guarded(setMomCompareRows)
     const gForecast = guarded(setForecastSummary)
@@ -2371,6 +2457,35 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         })
           .then(gMenu)
           .catch(() => gMenu([]))
+      )
+    }
+    if (needPromoBundle) {
+      tasks.push(
+        promoBundleFetcher({
+          startStr,
+          endStr,
+          stores: salesFetchStoresParam,
+          search: menuSearch || undefined,
+          searchMode: menuSearchAnd ? "and" : "or",
+          orderTypes: orderTypesParam,
+        })
+          .then(gPromoBundle)
+          .catch(() =>
+            gPromoBundle({
+              rows: [],
+              totals: {
+                qty: 0,
+                saleAmount: 0,
+                regularAmount: 0,
+                bundleDiscount: 0,
+                paymentDiscount: 0,
+                totalDiscount: 0,
+                estimatedLineQty: 0,
+                unresolvedLineQty: 0,
+              },
+              truncated: false,
+            })
+          )
       )
     }
     if (needFullSummary && (selectedView === "period" || selectedView === "store-period")) {
@@ -3901,6 +4016,177 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {tr("salesTop100Only", "상위 100개만 표시")}
                     </p>
                   )}
+                </>
+              )
+            )}
+
+            {selectedView === "promo-bundle" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {salesAnalyticsPlaceholder}
+                </p>
+              ) : (
+                <>
+                  {promoBundleData.truncated ? (
+                    <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
+                      {tr(
+                        "salesDataTruncatedWarning",
+                        "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요."
+                      )}
+                    </p>
+                  ) : null}
+                  <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-lg border bg-card p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("salesPromoSaleAmount", "판매액")}
+                      </p>
+                      <p className="mt-1 text-base font-semibold font-erp-numeric">
+                        {formatSalesAmount(promoBundleData.totals.saleAmount)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("salesPromoRegularAmount", "정가 합계")}
+                      </p>
+                      <p className="mt-1 text-base font-semibold font-erp-numeric">
+                        {formatSalesAmount(promoBundleData.totals.regularAmount)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("salesPromoBundleDiscount", "세트 내재 할인")}
+                      </p>
+                      <p className="mt-1 text-base font-semibold font-erp-numeric text-rose-700 dark:text-rose-300">
+                        -{formatSalesAmount(promoBundleData.totals.bundleDiscount)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {tr("salesPromoPaymentDiscount", "결제 할인(기간)")}
+                      </p>
+                      <p className="mt-1 text-base font-semibold font-erp-numeric text-rose-700 dark:text-rose-300">
+                        -{formatSalesAmount(promoBundleData.totals.paymentDiscount)}
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
+                        {tr("salesDiscountAmount", "할인 금액")} · 수동·협업·쿠폰
+                      </p>
+                    </div>
+                    <div className="rounded-lg border-2 border-rose-200 bg-rose-50/50 p-3 dark:border-rose-900 dark:bg-rose-950/20">
+                      <p className="text-xs font-medium text-rose-800 dark:text-rose-200">
+                        {tr("salesPromoTotalDiscount", "할인 합계")}
+                      </p>
+                      <p className="mt-1 text-lg font-bold font-erp-numeric text-rose-800 dark:text-rose-100">
+                        -{formatSalesAmount(promoBundleData.totals.totalDiscount)}
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
+                        {tr("salesPromoTotalDiscountHint", "세트 내재 + 결제 할인")}
+                      </p>
+                    </div>
+                  </div>
+                  {(promoBundleData.totals.estimatedLineQty > 0 ||
+                    promoBundleData.totals.unresolvedLineQty > 0) && (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      {promoBundleData.totals.estimatedLineQty > 0
+                        ? `${tr("salesPromoEstimatedQty", "추정 정가 줄")}: ${promoBundleData.totals.estimatedLineQty.toLocaleString()} · `
+                        : ""}
+                      {promoBundleData.totals.unresolvedLineQty > 0
+                        ? `${tr("salesPromoUnresolvedQty", "정가 미산출")}: ${promoBundleData.totals.unresolvedLineQty.toLocaleString()}`
+                        : ""}
+                    </p>
+                  )}
+                  <div className="mb-4 flex flex-wrap items-center gap-3">
+                    <Input
+                      placeholder={tr("salesMenuSearch", "메뉴·프로모 검색")}
+                      value={menuSearch}
+                      onChange={(e) => setMenuSearch(e.target.value)}
+                      className="w-48 min-w-[12rem]"
+                    />
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={menuSearchAnd}
+                        onCheckedChange={(c) => setMenuSearchAnd(c === true)}
+                      />
+                      <span>{tr("salesMenuSearchAndMode", "검색어 모두 포함 (AND)")}</span>
+                    </label>
+                  </div>
+                  {promoBundleData.rows.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full min-w-[880px] text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/40 text-muted-foreground">
+                            <th className="px-3 py-2 text-left">{tr("salesMenu", "메뉴")}</th>
+                            <th className="px-3 py-2 text-left">{tr("salesPromoCode", "프로모 코드")}</th>
+                            <th className="px-3 py-2 text-right">{tr("salesQuantity", "수량")}</th>
+                            <th className="px-3 py-2 text-right">
+                              {tr("salesPromoRegularAmount", "정가 합계")}
+                            </th>
+                            <th className="px-3 py-2 text-right">
+                              {tr("salesPromoSaleAmount", "판매액")}
+                            </th>
+                            <th className="px-3 py-2 text-right">
+                              {tr("salesPromoBundleDiscount", "세트 내재 할인")}
+                            </th>
+                            <th className="px-3 py-2 text-right">
+                              {tr("salesPromoDiscountPct", "할인율")}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {promoBundleData.rows.map((r) => (
+                            <tr key={r.key} className="border-b border-border/60">
+                              <td className="px-3 py-1.5">{r.name}</td>
+                              <td className="px-3 py-1.5 font-mono text-xs">{r.promoCode || r.promoId || "—"}</td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
+                                {r.qty.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
+                                {formatSalesAmount(r.regularAmount)}
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
+                                {formatSalesAmount(r.saleAmount)}
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
+                                {formatSalesAmount(r.bundleDiscount)}
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-erp-numeric">
+                                {r.regularAmount > 0 ? `${r.discountPct.toFixed(1)}%` : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t bg-muted/20 font-medium">
+                            <td className="px-3 py-2" colSpan={2}>
+                              {tr("salesTotal", "합계")}
+                            </td>
+                            <td className="px-3 py-2 text-right font-erp-numeric">
+                              {promoBundleData.totals.qty.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-2 text-right font-erp-numeric">
+                              {formatSalesAmount(promoBundleData.totals.regularAmount)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-erp-numeric">
+                              {formatSalesAmount(promoBundleData.totals.saleAmount)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-erp-numeric">
+                              {formatSalesAmount(promoBundleData.totals.bundleDiscount)}
+                            </td>
+                            <td className="px-3 py-2" />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                    {tr(
+                      "salesPromoBundleFootnote",
+                      "정가는 주문 promoItems(없으면 DB 세트 구성)와 현재 메뉴·옵션 가격으로 역산합니다. 가격 변경 후 과거 주문은 당시와 다를 수 있습니다. 구성이 없는 줄은 정가 미산출로 표시됩니다."
+                    )}
+                  </p>
                 </>
               )
             )}

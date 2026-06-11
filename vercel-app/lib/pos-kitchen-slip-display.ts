@@ -731,7 +731,7 @@ export function mapKitchenSlipGroupItemsForPrint(
           promoComposeLines: row.promoComposeLines.map((line) => opts.translateName(line)),
         }
       : {}),
-    ...(row.note ? { note: formatNote(row.note) ?? row.note } : {}),
+    ...(row.note ? { note: formatNote(row.note) } : {}),
     ...((opts.cancelled ?? row.cancelled) ? { cancelled: true } : {}),
   }))
 }

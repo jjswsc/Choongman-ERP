@@ -528,7 +528,7 @@ export function EmployeeHeadcountTab({
       setEmpList(empRes.list || [])
       setStores(empRes.stores || [])
       setJobOptions(
-        empRes.jobOptions?.length ? empRes.jobOptions : ["Service", "Kitchen", "Officer", "Director", "Logistic"]
+        empRes.jobOptions?.length ? empRes.jobOptions : ["Service", "Kitchen", "Franchise", "Officer", "Director", "Logistic"]
       )
       setHeadList(hcRes.list || [])
       if (hcRes._note === "table_missing") setTableMissing(true)

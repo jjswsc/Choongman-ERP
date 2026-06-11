@@ -588,7 +588,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                 </Button>
               </div>
             )}
-            <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
+            <div className="min-h-[160px] max-h-[min(32rem,55vh)] overflow-y-auto p-4 space-y-2">
               {localContinue.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("workLogNoContinue")}</p>
               ) : (
@@ -605,8 +605,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         value={it.content}
                         onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value)}
                         placeholder={t("workLogTaskPlaceholder")}
-                        className="min-h-[36px] text-xs flex-1 resize-y"
-                        rows={1}
+                        className="min-h-[4.5rem] text-xs flex-1 resize-y"
+                        rows={3}
                       />
                       <Select
                         value={it.priority || ""}
@@ -656,7 +656,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                 </span>
               )}
             </div>
-            <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
+            <div className="min-h-[160px] max-h-[min(32rem,55vh)] overflow-y-auto p-4 space-y-2">
               {localToday.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("workLogNoToday")}</p>
               ) : (
@@ -667,8 +667,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         value={it.content}
                         onChange={(e) => updateContent(setLocalToday, idx, e.target.value)}
                         placeholder={t("workLogTaskPlaceholder")}
-                        className="min-h-[36px] text-xs flex-1 resize-y"
-                        rows={1}
+                        className="min-h-[4.5rem] text-xs flex-1 resize-y"
+                        rows={3}
                       />
                       <Select
                         value={it.priority || ""}

@@ -112,6 +112,36 @@ export function canonicalEmployeeFormRole(r: string): string {
   return hit || (String(r || "").trim() || "Staff")
 }
 
+/**
+ * employees.role 컬럼만으로 로그인 권한 등급 결정.
+ * Staff 등 미지정이면 null → loginCheck에서 role+job 합산 폴백(예: Staff + job Officer).
+ * 권한이 Franchisee인데 직무가 Director여도 director로 올라가지 않게 한다.
+ */
+export function resolveAuthRoleFromEmployeeRoleColumn(roleRaw: string): string | null {
+  const canonical = canonicalEmployeeFormRole(roleRaw)
+  const lo = canonical.toLowerCase()
+  if (lo === "director") return "director"
+  if (lo === "officer") return "officer"
+  if (lo === "manager") return "manager"
+  if (lo === "franchisee") return "franchisee"
+  if (lo !== "staff") return null
+
+  const r = String(roleRaw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+  if (r.includes("director") || r.includes("ceo") || r.includes("대표")) return "director"
+  if (r === "hr" || r.includes("인사") || /\bhr\b/.test(r)) return "hr"
+  if (r.includes("secretary") || r.includes("비서")) return "secretary"
+  if (r.includes("supervisor") || r.includes("슈퍼바이저")) return "supervisor"
+  if (r.includes("officer") || r.includes("총괄") || r.includes("오피스")) return "officer"
+  if (r.includes("manager") || r.includes("점장") || r.includes("매니저")) return "manager"
+  if (r.includes("franchisee") || r.includes("가맹") || r.includes("점주")) return "franchisee"
+  if (r.includes("accounting") || r.includes("회계")) return "accounting"
+  return null
+}
+
 /** JWT·직원 role에 한글/현지 표기가 섞여도 매장 관리자로 인식 */
 function roleTextMatchesManager(role: string): boolean {
   const raw = String(role || "").trim()

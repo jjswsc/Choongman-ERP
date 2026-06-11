@@ -21,7 +21,6 @@ import { useAuth } from "@/lib/auth-context"
 import {
   isManagerRole,
   isFranchiseeRole,
-  isOfficeRole,
   isOfficeStore,
   isAccountingRole,
   hasOfficeStaffScope,
@@ -70,6 +69,7 @@ const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 const JOB_STYLE: Record<string, { bg: string; label: string }> = {
   Service: { bg: "bg-amber-50/90 dark:bg-amber-950/20", label: "empJobService" },
   Kitchen: { bg: "bg-emerald-50/90 dark:bg-emerald-950/20", label: "empJobKitchen" },
+  Franchise: { bg: "bg-orange-50/90 dark:bg-orange-950/20", label: "empJobFranchise" },
   Officer: { bg: "bg-sky-50/90 dark:bg-sky-950/20", label: "empJobOfficer" },
   Director: { bg: "bg-violet-50/90 dark:bg-violet-950/20", label: "empJobDirector" },
   Logistic: { bg: "bg-teal-50/90 dark:bg-teal-950/20", label: "empJobLogistic" },
@@ -83,7 +83,7 @@ function JobCountSummary({
   rows: { job?: string }[]
   t: (k: string) => string
 }) {
-  const counts: Record<string, number> = { Service: 0, Kitchen: 0, Officer: 0, Director: 0, Logistic: 0, 기타: 0 }
+  const counts: Record<string, number> = { Service: 0, Kitchen: 0, Franchise: 0, Officer: 0, Director: 0, Logistic: 0, 기타: 0 }
   for (const r of rows) {
     const j = String(r.job || "").trim()
     if (j && counts[j] !== undefined) counts[j]++

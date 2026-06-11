@@ -2451,11 +2451,45 @@ export interface IncomeStatementData {
     nameTh: string | null
     amount: number
   }[]
-  purchaseByVendor?: { key: string; amount: number; label?: string }[]
+  purchaseByVendor?: {
+    key: string
+    amount: number
+    label?: string
+    amountBasis?: 'stock_net' | 'pos_gross' | 'cash_gross'
+  }[]
   /** 본사 손익: 출고 발주 store_name(매출처)별 매출 */
-  salesByCustomer?: { key: string; amount: number; label?: string }[]
+  salesByCustomer?: {
+    key: string
+    amount: number
+    label?: string
+    amountBasis?: 'stock_net' | 'pos_gross' | 'cash_gross'
+  }[]
   /** 매장 손익: POS 영업일별 매출 */
-  salesByDay?: { key: string; amount: number; label?: string }[]
+  salesByDay?: {
+    key: string
+    amount: number
+    label?: string
+    amountBasis?: 'stock_net' | 'pos_gross' | 'cash_gross'
+  }[]
+  /** 손익 화면 VAT 토글용 (원천 집계 불변) */
+  displayAmounts?: {
+    salesGross: number
+    salesNet: number
+    purchasesGross: number
+    purchasesNet: number
+    beginningInventoryGross: number
+    beginningInventoryNet: number
+    endingInventoryGross: number
+    endingInventoryNet: number
+    salesStockVatBuckets?: { taxableNet: number; exemptNet: number }
+    purchasesStockVatBuckets?: { taxableNet: number; exemptNet: number }
+  }
+  /** 손익 EBITDA 토글 — 순이익 가산 */
+  ebitdaBridge?: {
+    depreciation: number
+    interest: number
+    incomeTax: number
+  }
   grossProfit: number
   netProfit: number
   error?: string
@@ -5194,6 +5228,72 @@ export async function getPosSalesByMenu(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
   return jsonAsArray<{ name: string; qty: number; sales: number }>(await res.json())
+}
+
+export type PosSalesPromoRow = {
+  key: string
+  promoId: string
+  promoCode: string
+  name: string
+  qty: number
+  saleAmount: number
+  regularAmount: number
+  bundleDiscount: number
+  discountPct: number
+  estimatedLineQty: number
+  unresolvedLineQty: number
+}
+
+export type PosSalesPromoAggregateTotals = {
+  qty: number
+  saleAmount: number
+  regularAmount: number
+  bundleDiscount: number
+  paymentDiscount: number
+  totalDiscount: number
+  estimatedLineQty: number
+  unresolvedLineQty: number
+}
+
+export type PosSalesByPromoResult = {
+  rows: PosSalesPromoRow[]
+  totals: PosSalesPromoAggregateTotals
+  truncated?: boolean
+}
+
+export async function getPosSalesByPromo(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  search?: string
+  searchMode?: 'or' | 'and'
+  orderTypes?: string[]
+}): Promise<PosSalesByPromoResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.search) q.set('search', params.search)
+  if (params.searchMode === 'and') q.set('searchMode', 'and')
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  const res = await apiFetchWithOffline(`/api/posSalesByPromo?${q}`)
+  const truncated = res.headers.get('X-Sales-Truncated') === '1'
+  const json = (await res.json()) as Partial<PosSalesByPromoResult>
+  const emptyTotals: PosSalesPromoAggregateTotals = {
+    qty: 0,
+    saleAmount: 0,
+    regularAmount: 0,
+    bundleDiscount: 0,
+    paymentDiscount: 0,
+    totalDiscount: 0,
+    estimatedLineQty: 0,
+    unresolvedLineQty: 0,
+  }
+  return {
+    rows: Array.isArray(json.rows) ? json.rows : [],
+    totals: json.totals ?? emptyTotals,
+    truncated: truncated || !!json.truncated,
+  }
 }
 
 export type PosSalesHierarchyLevel = 'main' | 'category' | 'menu' | 'option'

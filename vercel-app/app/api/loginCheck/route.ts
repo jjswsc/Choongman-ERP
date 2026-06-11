@@ -3,7 +3,7 @@ import { supabaseSelectFilterEmployeesByNameForLogin } from '@/lib/employees-com
 import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
-import { isOfficeStore } from '@/lib/permissions'
+import { isOfficeStore, resolveAuthRoleFromEmployeeRoleColumn } from '@/lib/permissions'
 import { deriveTenantIdFromCompany, normalizeCompanyName } from '@/lib/tenant-context'
 import { buildAllowedStoresForToken } from '@/lib/franchisee-multi-store'
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
@@ -67,22 +67,25 @@ export async function POST(req: NextRequest) {
 
     const storeName = String(row.store || '').trim()
     const empIsOfficeStore = isOfficeStore(storeName)
-    /** 권한(role)과 직무(job)를 함께 본다. 예: role=Staff·job=Officer(Logistics) 처럼 role만 보면 officer를 놓침 */
-    const rawRole = `${String(row.role || '').trim()} ${String(row.job || '').trim()}`
-      .toLowerCase()
-      .replace(/\./g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    let finalRole = 'staff'
-    if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
-    else if (rawRole === 'hr' || rawRole.includes('인사') || /\bhr\b/.test(rawRole)) finalRole = 'hr'
-    else if (rawRole.includes('secretary') || rawRole.includes('비서')) finalRole = 'secretary'
-    else if (rawRole.includes('supervisor') || rawRole.includes('슈퍼바이저')) finalRole = 'supervisor'
-    else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'
-    else if (rawRole.includes('manager') || rawRole.includes('점장') || rawRole.includes('매니저')) finalRole = 'manager'
-    else if (rawRole.includes('franchisee') || rawRole.includes('가맹') || rawRole.includes('점주')) finalRole = 'franchisee'
-    else if (rawRole.includes('accounting') || rawRole.includes('회계')) finalRole = 'accounting'
-    else if (empIsOfficeStore) finalRole = 'officer' // store=Office → Officer로 인식
+    /** 권한(role) 우선 — 직무(job)는 Staff 등 미지정일 때만 합산. role=Franchisee·job=Director 오설정 방지 */
+    const fromRoleColumn = resolveAuthRoleFromEmployeeRoleColumn(String(row.role || ''))
+    let finalRole = fromRoleColumn || 'staff'
+    if (!fromRoleColumn) {
+      const rawRole = `${String(row.role || '').trim()} ${String(row.job || '').trim()}`
+        .toLowerCase()
+        .replace(/\./g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
+      else if (rawRole === 'hr' || rawRole.includes('인사') || /\bhr\b/.test(rawRole)) finalRole = 'hr'
+      else if (rawRole.includes('secretary') || rawRole.includes('비서')) finalRole = 'secretary'
+      else if (rawRole.includes('supervisor') || rawRole.includes('슈퍼바이저')) finalRole = 'supervisor'
+      else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'
+      else if (rawRole.includes('manager') || rawRole.includes('점장') || rawRole.includes('매니저')) finalRole = 'manager'
+      else if (rawRole.includes('franchisee') || rawRole.includes('가맹') || rawRole.includes('점주')) finalRole = 'franchisee'
+      else if (rawRole.includes('accounting') || rawRole.includes('회계')) finalRole = 'accounting'
+      else if (empIsOfficeStore) finalRole = 'officer' // store=Office → Officer로 인식
+    }
 
     // 관리자 페이지: 본사·매장 관리·회계 등 허용 역할만. 일반 직원(staff)은 차단
     const adminAllowed = new Set(['director', 'secretary', 'officer', 'ceo', 'hr', 'manager', 'franchisee', 'accounting', 'supervisor'])

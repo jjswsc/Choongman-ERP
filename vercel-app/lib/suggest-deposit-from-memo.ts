@@ -2,6 +2,7 @@
  * 은행 적요(memo)로 입금 용도/계정과목 자동 추천
  * 배달앱, 카드, QR/이체, 현금입금 등
  */
+import { POS_CHANNEL_SETTLEMENT_MEMO_RE } from './bank-import-deposit-category'
 
 export type DepositCategory =
   | 'revenue_delivery'
@@ -26,10 +27,7 @@ export function suggestDepositFromMemo(
   const preferAr = options?.preferReceivableClearing !== false
   const byCode = Object.fromEntries((revenueSubjects || []).map((s) => [s.code, s.id]).filter(([, id]) => id != null))
 
-  const channelSettlement =
-    /\b(grab|line\s*man|lineman|shopee|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney)\b/i.test(
-      m
-    )
+  const channelSettlement = POS_CHANNEL_SETTLEMENT_MEMO_RE.test(m)
 
   if (preferAr && channelSettlement) {
     return { category: 'receivable_receive' }

@@ -19,6 +19,7 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
@@ -228,7 +229,8 @@ export async function POST(req: NextRequest) {
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body.pointEarned ?? 0)))
     const guestCountReq = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
     const itemsRaw = Array.isArray(body.items) ? body.items : []
-    const items = await enrichOrderItemsWithOptionCode(itemsRaw)
+    const itemsWithOption = await enrichOrderItemsWithOptionCode(itemsRaw)
+    const items = await enrichOrderItemsWithPromoRegularPrice(itemsWithOption, orderType)
     const pricingAdjustments = body.pricingAdjustments || {}
     const createdBy = String(body.createdBy ?? body.created_by ?? '').trim()
     const linkposPayment =
