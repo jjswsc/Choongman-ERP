@@ -78,7 +78,7 @@ export const GRAB_PORTAL_MERCHANT_ENTRIES: GrabPortalMerchantEntry[] = [
   {
     grabMerchantId: '3-C7KJGBUEJND1VX',
     partnerMerchantId: '1050',
-    erpStoreCode: 'CM The Street Ratchada',
+    erpStoreCode: 'CM The street',
     labelEn: 'The Street Ratchada',
   },
 ]

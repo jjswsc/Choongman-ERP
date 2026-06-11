@@ -7,6 +7,7 @@ import {
   grabOrderMemoPostgrestIlikeFilter,
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
+import { resolveCanonicalErpStoreCode } from '@/lib/erp-store-identity'
 import { parseGrabStoreMap, resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
 import { normStoreKey } from '@/lib/store-list-keys'
 import {
@@ -1128,7 +1129,8 @@ export async function persistGrabOrderToPos(
   const orderID = String(order.orderID ?? '').trim()
   if (!orderID) return { ok: false, message: 'missing orderID' }
 
-  const storeCode = resolveGrabStoreCode(order)
+  const storeCodeResolved = resolveGrabStoreCode(order)
+  const storeCode = storeCodeResolved ? await resolveCanonicalErpStoreCode(storeCodeResolved) : ''
   if (!storeCode) {
     return {
       ok: false,
@@ -1293,7 +1295,8 @@ async function findPosOrderRowForGrabStateSync(orderID: string): Promise<PosOrde
   const shortOrderNumber = String(submitPayload.shortOrderNumber ?? '').trim()
   if (!shortOrderNumber) return null
 
-  const storeCode = resolveGrabStoreCode(submitPayload)
+  const storeCodeResolved = resolveGrabStoreCode(submitPayload)
+  const storeCode = storeCodeResolved ? await resolveCanonicalErpStoreCode(storeCodeResolved) : ''
   const tableFilter = `table_name=ilike.${encodeURIComponent(`%Grab #${shortOrderNumber}%`)}`
   const filter = storeCode
     ? `store_code=eq.${encodeURIComponent(storeCode)}&${tableFilter}`

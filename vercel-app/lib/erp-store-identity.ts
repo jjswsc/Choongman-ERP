@@ -96,6 +96,17 @@ export async function resolveErpStoreIdentity(rawKey: string): Promise<ErpStoreI
   return resolveErpStoreIdentitySync(rawKey, index.masters, index.legacyToCanonical)
 }
 
+/**
+ * Grab webhook·배달 정책·주문 저장 — `CM The Street` 등 별칭/대소문자 변형을
+ * erp_stores.store_code(예: `CM The street`)로 통일. 매칭 없으면 원문 유지.
+ */
+export async function resolveCanonicalErpStoreCode(rawKey: string): Promise<string> {
+  const raw = String(rawKey ?? '').trim()
+  if (!raw) return ''
+  const id = await resolveErpStoreIdentity(raw)
+  return String(id.storeCode || '').trim() || raw
+}
+
 function isOfficePair(a: string, b: string): boolean {
   const aa = String(a || '').trim()
   const bb = String(b || '').trim()

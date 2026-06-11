@@ -1,4 +1,5 @@
 import { normalizeDeliveryAppFeePercent } from '@/lib/cost-data'
+import { resolveCanonicalErpStoreCode } from '@/lib/erp-store-identity'
 import {
   supabaseDeleteByFilter,
   supabaseSelect,
@@ -109,10 +110,11 @@ export async function getPosDeliveryPolicyBundle(params: {
   storeCode: string
   appCode: DeliveryAppCode
 }): Promise<PosDeliveryPolicyBundle> {
-  const storeCode = String(params.storeCode ?? '').trim()
+  const storeCodeRaw = String(params.storeCode ?? '').trim()
+  const storeCode = storeCodeRaw ? await resolveCanonicalErpStoreCode(storeCodeRaw) : ''
   const appCode = normalizeAppCode(params.appCode)
   const defaultPolicy: PosDeliveryAppPolicy = {
-    storeCode,
+    storeCode: storeCode || storeCodeRaw,
     appCode,
     enabled: true,
     orderAcceptanceMode: 'manual',
