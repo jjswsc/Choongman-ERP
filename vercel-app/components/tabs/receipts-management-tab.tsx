@@ -70,6 +70,11 @@ import {
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
+import {
+  PosTaxInvoiceFieldLabel,
+  PosTaxInvoiceRequiredLegend,
+  PosTaxInvoiceValidationAlert,
+} from '@/components/pos/pos-tax-invoice-form-ui'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
 import { addDaysYmd, getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
@@ -2006,9 +2011,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               </div>
             )}
             {taxSearchMessage && <p className="text-xs text-muted-foreground">{taxSearchMessage}</p>}
+            <PosTaxInvoiceRequiredLegend t={(key) => t(key)} />
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs">{t('posTaxCustomerTypeLabel') || '구분'}</Label>
+                <PosTaxInvoiceFieldLabel>{t('posTaxCustomerTypeLabel') || '구분'}</PosTaxInvoiceFieldLabel>
                 <Select
                   value={tiCustomerType}
                   onValueChange={(v) => setTiCustomerType(v === 'company' ? 'company' : 'person')}
@@ -2023,17 +2029,19 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">{t('member_no') || '회원번호'}</Label>
+                <PosTaxInvoiceFieldLabel optional optionalText={t('posOptional')}>
+                  {t('member_no') || '회원번호'}
+                </PosTaxInvoiceFieldLabel>
                 <Input className="h-9" value={tiMemberNo} onChange={(e) => setTiMemberNo(e.target.value)} />
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{t('posName') || '이름'}</Label>
+              <PosTaxInvoiceFieldLabel required>{t('posName') || '이름'}</PosTaxInvoiceFieldLabel>
               <Input className="h-9" value={tiName} onChange={(e) => setTiName(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs">{t('posTaxIdLabel') || 'Tax ID'}</Label>
+                <PosTaxInvoiceFieldLabel required>{t('posTaxIdLabel') || 'Tax ID'}</PosTaxInvoiceFieldLabel>
                 <Input
                   className="h-9"
                   inputMode="numeric"
@@ -2042,7 +2050,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">{t('posBranchLabel') || '지점'}</Label>
+                <PosTaxInvoiceFieldLabel required={taxBranchRequired}>
+                  {t('posBranchLabel') || '지점'}
+                </PosTaxInvoiceFieldLabel>
                 <Input
                   className="h-9"
                   inputMode="numeric"
@@ -2054,7 +2064,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs">{t('posPhone') || '전화번호'}</Label>
+                <PosTaxInvoiceFieldLabel required>{t('posPhone') || '전화번호'}</PosTaxInvoiceFieldLabel>
                 <Input
                   className="h-9"
                   inputMode="tel"
@@ -2063,19 +2073,17 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">{t('posTaxEmailLabel') || 'E-mail'}</Label>
+                <PosTaxInvoiceFieldLabel optional optionalText={t('posOptional')}>
+                  {t('posTaxEmailLabel') || 'E-mail'}
+                </PosTaxInvoiceFieldLabel>
                 <Input className="h-9" value={tiEmail} onChange={(e) => setTiEmail(e.target.value)} />
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{t('settings_address') || '주소'}</Label>
+              <PosTaxInvoiceFieldLabel required>{t('settings_address') || '주소'}</PosTaxInvoiceFieldLabel>
               <Textarea value={tiAddress} onChange={(e) => setTiAddress(e.target.value)} rows={3} />
             </div>
-            {taxFormErrors.length > 0 && (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-                {t('posTaxInvoiceInvalid') || '세금계산서 정보를 확인해 주세요.'}
-              </div>
-            )}
+            <PosTaxInvoiceValidationAlert errors={taxFormErrors} t={(key) => t(key)} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setTaxInvoiceOrder(null)} disabled={taxInvoiceSaving}>

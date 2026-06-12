@@ -1317,9 +1317,9 @@ export function MemberPortalApp() {
             </GlassCard>
           </div>
         )}
-
-        <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
       </MemberPortalShell>
+
+      <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
 
       <MemberPortalContentSheet
         open={homePromoOpen}

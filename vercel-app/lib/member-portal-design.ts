@@ -17,6 +17,10 @@ export const MEMBER_PORTAL_BG_STYLE = {
 
 export const MP_MAX_WIDTH = 'max-w-[430px]'
 
+/** 하단 탭 네비 고정 시 본문·플로팅 버튼 여백 (safe-area 포함) */
+export const MP_BOTTOM_NAV_CLEARANCE =
+  'calc(5.25rem + env(safe-area-inset-bottom, 0px))'
+
 /** 멤버십 카드 가로:세로 — 황금비 φ (신용카드형) */
 export const MEMBERSHIP_CARD_GOLDEN_RATIO = 1.618033988749895
 

@@ -334,6 +334,11 @@ export default function PosOrdersPage() {
   const [grabLoading, setGrabLoading] = React.useState(false)
   const [grabStatusFilter, setGrabStatusFilter] = React.useState("all")
   const [grabPartnerMerchantFilter, setGrabPartnerMerchantFilter] = React.useState("")
+  const [hasSearchedOrders, setHasSearchedOrders] = React.useState(false)
+  const [hasSearchedAttempts, setHasSearchedAttempts] = React.useState(false)
+  const [hasSearchedGrab, setHasSearchedGrab] = React.useState(false)
+  const [hasSearchedAudit, setHasSearchedAudit] = React.useState(false)
+  const urlDrilldownSearchedRef = React.useRef(false)
 
   React.useEffect(() => {
     const qStart = String(searchParams.get("start") || "").trim()
@@ -1022,11 +1027,40 @@ export default function PosOrdersPage() {
       .finally(() => setAuditLoading(false))
   }, [auditStartStr, auditEndStr, auditEmployeeFilter, auditOrderNoFilter, orderListStoreCode])
 
+  const handleSearchClick = React.useCallback(() => {
+    if (activeTab === "linkposFailed") {
+      setHasSearchedAttempts(true)
+      loadAttempts()
+      loadTenderRules()
+      return
+    }
+    if (activeTab === "grabIntegration") {
+      setHasSearchedGrab(true)
+      loadGrabIntegrations()
+      return
+    }
+    if (activeTab === "auditTrail") {
+      setHasSearchedAudit(true)
+      loadAuditTrail()
+      return
+    }
+    setHasSearchedOrders(true)
+    loadOrders()
+  }, [
+    activeTab,
+    loadAttempts,
+    loadAuditTrail,
+    loadGrabIntegrations,
+    loadOrders,
+    loadTenderRules,
+  ])
+
   const handleAuditFilterKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>, clearField: () => void) => {
       const now = Date.now()
       if (e.key === "Enter") {
         e.preventDefault()
+        setHasSearchedAudit(true)
         loadAuditTrail()
         return
       }
@@ -1265,7 +1299,10 @@ export default function PosOrdersPage() {
           )
         }
         loadAttempts()
-        if (attempt.orderId) loadOrders()
+        if (attempt.orderId) {
+          setHasSearchedOrders(true)
+          loadOrders()
+        }
       } catch (e) {
         await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
       } finally {
@@ -1276,28 +1313,30 @@ export default function PosOrdersPage() {
   )
 
   React.useEffect(() => {
-    loadOrders()
-  }, [loadOrders])
-
-  React.useEffect(() => {
-    if (activeTab !== "linkposFailed") return
-    loadAttempts()
-    loadTenderRules()
-  }, [activeTab, loadAttempts, loadTenderRules])
-
-  React.useEffect(() => {
-    if (activeTab !== "grabIntegration") return
-    loadGrabIntegrations()
-  }, [activeTab, loadGrabIntegrations])
-
-  React.useEffect(() => {
-    if (activeTab !== "auditTrail") return
-    loadAuditTrail()
-  }, [activeTab, loadAuditTrail])
+    if (urlDrilldownSearchedRef.current) return
+    const qCancelReason = String(searchParams.get("cancelReason") || "").trim()
+    const qStart = String(searchParams.get("start") || "").trim()
+    const qEnd = String(searchParams.get("end") || "").trim()
+    const qStatus = String(searchParams.get("status") || "").trim().toLowerCase()
+    if (!qCancelReason || !/^\d{4}-\d{2}-\d{2}$/.test(qStart) || !/^\d{4}-\d{2}-\d{2}$/.test(qEnd)) return
+    urlDrilldownSearchedRef.current = true
+    setHasSearchedOrders(true)
+    setLoading(true)
+    getPosOrders({
+      startStr: qStart,
+      endStr: qEnd,
+      storeCode: orderListStoreCode,
+      status: qStatus && qStatus !== "all" ? qStatus : undefined,
+    })
+      .then(setOrders)
+      .catch(() => setOrders([]))
+      .finally(() => setLoading(false))
+  }, [searchParams, orderListStoreCode])
 
   React.useEffect(() => {
     if (activeTab !== "auditTrail") return
     if (auditQuickSearchTick <= 0) return
+    setHasSearchedAudit(true)
     const timer = window.setTimeout(() => {
       loadAuditTrail()
     }, 0)
@@ -1642,15 +1681,7 @@ export default function PosOrdersPage() {
           <Button
             size="sm"
             className="h-9 gap-1.5 px-4"
-            onClick={
-              activeTab === "linkposFailed"
-                ? loadAttempts
-                : activeTab === "grabIntegration"
-                  ? loadGrabIntegrations
-                  : activeTab === "auditTrail"
-                    ? loadAuditTrail
-                  : loadOrders
-            }
+            onClick={handleSearchClick}
           >
             <Search className="h-4 w-4" />
             {t("itemsBtnSearch") || "조회"}
@@ -1716,7 +1747,7 @@ export default function PosOrdersPage() {
           </div>
         )}
 
-        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && todaySummary && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && hasSearchedOrders && todaySummary && (
           <div className="mb-4 flex gap-4 rounded-lg border bg-card p-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
@@ -1754,7 +1785,7 @@ export default function PosOrdersPage() {
             )}
           </div>
         )}
-        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && cancelledLineReasonSummary.length > 0 && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && hasSearchedOrders && cancelledLineReasonSummary.length > 0 && (
           <div className="mb-3 rounded-lg border border-rose-200/70 bg-rose-50/30 p-3">
             <div className="mb-2 text-xs font-semibold text-rose-700">
               {t("posCancelReasonLineSummaryTitle") || "품목 취소 사유 집계"}
@@ -1769,7 +1800,7 @@ export default function PosOrdersPage() {
             </div>
           </div>
         )}
-        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && cancelledOrderReasonSummary.length > 0 && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && hasSearchedOrders && cancelledOrderReasonSummary.length > 0 && (
           <div className="mb-4 rounded-lg border border-rose-200/70 bg-rose-50/30 p-3">
             <div className="mb-2 text-xs font-semibold text-rose-700">
               {t("posCancelReasonOrderSummaryTitle") || "주문 전체 취소 사유 집계"}
@@ -1844,7 +1875,16 @@ export default function PosOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrders.length === 0 ? (
+                    {!hasSearchedOrders ? (
+                      <tr>
+                        <td
+                          colSpan={9}
+                          className="px-5 py-12 text-center text-muted-foreground"
+                        >
+                          {t("posOrderListSearchHint") || "기간·매장·상태를 선택한 뒤 [조회] 버튼을 눌러 주세요."}
+                        </td>
+                      </tr>
+                    ) : filteredOrders.length === 0 ? (
                       <tr>
                         <td
                           colSpan={9}
@@ -2261,6 +2301,12 @@ export default function PosOrdersPage() {
           </TabsContent>
 
           <TabsContent value="cookTime" className={adminTabsContentFlushCn}>
+            {!hasSearchedOrders ? (
+              <div className="rounded-xl border bg-card px-5 py-12 text-center text-sm text-muted-foreground">
+                {t("posOrderListSearchHint") || "기간·매장·상태를 선택한 뒤 [조회] 버튼을 눌러 주세요."}
+              </div>
+            ) : (
+            <>
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded bg-muted px-2 py-1">
                 {t("posCookTimeStatCompletedLines")}: {cookingRows.length}
@@ -2361,6 +2407,8 @@ export default function PosOrdersPage() {
                 </table>
               </div>
             </div>
+            </>
+            )}
           </TabsContent>
           <TabsContent value="linkposFailed" className={adminTabsContentFlushCn}>
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
@@ -2543,7 +2591,13 @@ export default function PosOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAttempts.length === 0 ? (
+                    {!hasSearchedAttempts ? (
+                      <tr>
+                        <td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">
+                          {t("itemsSearchHint") || "검색 버튼을 눌러 주세요."}
+                        </td>
+                      </tr>
+                    ) : filteredAttempts.length === 0 ? (
                       <tr>
                         <td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">
                           {t("posLinkposNoAttempts")}
@@ -2647,7 +2701,13 @@ export default function PosOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {auditRows.length === 0 ? (
+                    {!hasSearchedAudit ? (
+                      <tr>
+                        <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
+                          {t("itemsSearchHint") || "검색 버튼을 눌러 주세요."}
+                        </td>
+                      </tr>
+                    ) : auditRows.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
                           {t("itemsNoResults") || "조회된 내역이 없습니다."}
@@ -2761,7 +2821,13 @@ export default function PosOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {grabIntegrations.length === 0 ? (
+                    {!hasSearchedGrab ? (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                          {t("itemsSearchHint") || "검색 버튼을 눌러 주세요."}
+                        </td>
+                      </tr>
+                    ) : grabIntegrations.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
                           {t("adminGrabNoRows")}

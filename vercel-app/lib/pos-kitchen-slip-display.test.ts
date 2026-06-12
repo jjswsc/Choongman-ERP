@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildKitchenHallStyleSlipLines,
+  mapKitchenSlipGroupItemsForPrint,
   parseKitchenSplitPromoLineName,
 } from './pos-kitchen-slip-display'
+import { formatKitchenSlipItemRowHtml } from './pos-kitchen-slip-html'
 import { buildGrabPosCatalog } from './grab-pos-order-enrich'
 import type { KitchenSlipRoutingItem } from './pos-kitchen-slip-routing'
 
@@ -358,6 +360,38 @@ describe('pos-kitchen-slip-display', () => {
       optionNameByCode: catalog.optionNameByCode,
     })
     expect(lines[0].promoComposeLines).toEqual(['RED HOT CHICKEN (S - Boneless) x1'])
+  })
+
+  it('mapKitchenSlipGroupItemsForPrint keeps Size S on standalone grab chicken (GF-897)', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 8, name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN', code: 'C008' }],
+      [
+        { optionCode: 'C008-1', name: 'Size S' },
+        { optionCode: 'C008-5', name: 'Pickled Radish' },
+      ]
+    )
+    const rows = mapKitchenSlipGroupItemsForPrint(
+      [
+        {
+          id: 'grab:gfc',
+          name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN',
+          qty: 1,
+          note: 'mods:Size S,Pickled Radish · optc:C008-1',
+          optionCode1: 'C008-1',
+        },
+      ],
+      {
+        grabInbound: true,
+        optionNameByCode: catalog.optionNameByCode,
+        translateName: (n) => n,
+      }
+    )
+    expect(rows[0].note).toContain('Size S')
+    expect(rows[0].note).toContain('Pickled Radish')
+    const html = formatKitchenSlipItemRowHtml(rows[0], (s) => s, (tag) => `</${tag}>`)
+    expect(html).toContain('GUCHUJANG Bar.B.Q FRIED CHICKEN')
+    expect(html).toContain('Size S')
+    expect(html).toContain('Pickled Radish')
   })
 
   it('grab line resolves optionCode when note is empty', () => {

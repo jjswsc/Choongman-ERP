@@ -219,6 +219,33 @@ export async function getPosSalesByPromoWithCache(params: {
       unresolvedLineQty: 0,
     },
     byKind: [],
+    payment: {
+      rows: [],
+      totals: {
+        discountAmount: 0,
+        orderCountWithDiscount: 0,
+        periodGrossSales: 0,
+        periodOrderCount: 0,
+        discountPctOfGross: 0,
+      },
+      byKind: [],
+    },
+    combined: {
+      totals: {
+        periodGrossSales: 0,
+        periodOrderCount: 0,
+        bundleDiscount: 0,
+        paymentDiscount: 0,
+        totalDiscount: 0,
+        bundleDiscountPctOfGross: 0,
+        paymentDiscountPctOfGross: 0,
+        totalDiscountPctOfGross: 0,
+        promoLineSaleSharePct: 0,
+        promoLineSaleAmount: 0,
+        paymentOrderSharePct: 0,
+      },
+      byKind: [],
+    },
     truncated: false,
   }
   const key = cacheKeyAnalytics('promoBundle', {

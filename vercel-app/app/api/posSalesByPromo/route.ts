@@ -1,5 +1,5 @@
 /**
- * 세트·프로모 매출 — items_json promoId 줄의 정가(카탈로그 역산) vs 판매가.
+ * 세트·프로모 + 결제 할인 통합 분석
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
@@ -7,13 +7,18 @@ import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import {
   fetchPosSalesOrdersForBusinessRange,
-  POS_SALES_MENU_ROW_SELECT,
+  POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import {
   aggregatePosSalesPromoBundleDiscount,
   filterPromoSalesRows,
 } from '@/lib/pos-sales-promo-discount-aggregate'
+import {
+  aggregatePosSalesPaymentDiscount,
+  filterPaymentDiscountRows,
+} from '@/lib/pos-sales-payment-discount-aggregate'
+import { buildPosSalesCombinedDiscount } from '@/lib/pos-sales-combined-discount-aggregate'
 import { loadPosSalesPromoPricingCatalog } from '@/lib/pos-sales-promo-pricing-catalog-server'
 
 function parseSearchTokens(raw: string | null): string[] {
@@ -51,7 +56,7 @@ export async function GET(request: NextRequest) {
         startStr,
         endStr,
         storeCodes: stores.length > 0 ? stores : undefined,
-        select: POS_SALES_MENU_ROW_SELECT,
+        select: POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT,
         queryLabel: 'posSalesByPromo',
       }),
       loadPosSalesPromoPricingCatalog(),
@@ -61,17 +66,39 @@ export async function GET(request: NextRequest) {
     headers.set('X-Pos-Sales-Source', 'posSalesFetchRows')
 
     const completed = filterCompletedPosSalesRows(rows, orderTypesAllowed)
-    const aggregated = aggregatePosSalesPromoBundleDiscount({
+    const bundle = aggregatePosSalesPromoBundleDiscount({
       orderRows: completed,
       catalog,
     })
-    const rowsOut = filterPromoSalesRows(aggregated.rows, searchTokens, searchAnd).slice(0, 500)
+    const payment = aggregatePosSalesPaymentDiscount({ orderRows: completed })
+    const combined = buildPosSalesCombinedDiscount({
+      periodGrossSales: bundle.totals.periodGrossSales,
+      periodOrderCount: bundle.totals.periodOrderCount,
+      bundleDiscount: bundle.totals.bundleDiscount,
+      paymentDiscount: payment.totals.discountAmount,
+      promoLineSaleAmount: bundle.totals.saleAmount,
+      paymentOrderCountWithDiscount: payment.totals.orderCountWithDiscount,
+      bundleByKind: bundle.byKind,
+      paymentByKind: payment.byKind,
+    })
+
+    const rowsOut = filterPromoSalesRows(bundle.rows, searchTokens, searchAnd).slice(0, 500)
+    const paymentRowsOut = filterPaymentDiscountRows(payment.rows, searchTokens, searchAnd).slice(
+      0,
+      500
+    )
 
     return NextResponse.json(
       {
         rows: rowsOut,
-        totals: aggregated.totals,
-        byKind: aggregated.byKind,
+        totals: bundle.totals,
+        byKind: bundle.byKind,
+        payment: {
+          rows: paymentRowsOut,
+          totals: payment.totals,
+          byKind: payment.byKind,
+        },
+        combined,
         truncated,
       },
       { headers }
@@ -98,6 +125,33 @@ export async function GET(request: NextRequest) {
           unresolvedLineQty: 0,
         },
         byKind: [],
+        payment: {
+          rows: [],
+          totals: {
+            discountAmount: 0,
+            orderCountWithDiscount: 0,
+            periodGrossSales: 0,
+            periodOrderCount: 0,
+            discountPctOfGross: 0,
+          },
+          byKind: [],
+        },
+        combined: {
+          totals: {
+            periodGrossSales: 0,
+            periodOrderCount: 0,
+            bundleDiscount: 0,
+            paymentDiscount: 0,
+            totalDiscount: 0,
+            bundleDiscountPctOfGross: 0,
+            paymentDiscountPctOfGross: 0,
+            totalDiscountPctOfGross: 0,
+            promoLineSaleSharePct: 0,
+            promoLineSaleAmount: 0,
+            paymentOrderSharePct: 0,
+          },
+          byKind: [],
+        },
         truncated: false,
       },
       { headers }

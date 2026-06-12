@@ -31,6 +31,10 @@ export const POS_SALES_ORDER_ROW_SELECT =
 
 export const POS_SALES_MENU_ROW_SELECT = `${POS_SALES_ORDER_ROW_SELECT},items_json`
 
+/** 세트·결제 할인 분석 — promo 줄 + 결제 할인 사유·쿠폰 */
+export const POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT =
+  `${POS_SALES_ORDER_ROW_SELECT},items_json,discount_reason,applied_coupons,coupon_code`
+
 export const POS_SALES_DELIVERY_ROW_SELECT =
   `${POS_SALES_ORDER_ROW_SELECT},delivery_app_code,items_json`
 

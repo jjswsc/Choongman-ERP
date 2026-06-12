@@ -5277,10 +5277,73 @@ export type PosSalesPromoKindTotals = {
   bundleDiscountSharePct: number
 }
 
+export type PosSalesPaymentDiscountRow = {
+  key: string
+  kind: 'manual' | 'collab' | 'coupon' | 'platform' | 'other'
+  label: string
+  code: string
+  orderCount: number
+  discountAmount: number
+  discountPctOfGross: number
+  discountSharePct: number
+}
+
+export type PosSalesPaymentDiscountTotals = {
+  discountAmount: number
+  orderCountWithDiscount: number
+  periodGrossSales: number
+  periodOrderCount: number
+  discountPctOfGross: number
+}
+
+export type PosSalesPaymentKindTotals = {
+  kind: 'manual' | 'collab' | 'coupon' | 'platform' | 'other'
+  orderCount: number
+  discountAmount: number
+  discountPctOfGross: number
+  discountSharePct: number
+}
+
+export type PosSalesPaymentDiscountResult = {
+  rows: PosSalesPaymentDiscountRow[]
+  totals: PosSalesPaymentDiscountTotals
+  byKind: PosSalesPaymentKindTotals[]
+}
+
+export type PosSalesCombinedKindTotals = {
+  layer: 'bundle' | 'payment'
+  kind: string
+  label: string
+  discountAmount: number
+  discountPctOfGross: number
+  discountSharePct: number
+}
+
+export type PosSalesCombinedDiscountTotals = {
+  periodGrossSales: number
+  periodOrderCount: number
+  bundleDiscount: number
+  paymentDiscount: number
+  totalDiscount: number
+  bundleDiscountPctOfGross: number
+  paymentDiscountPctOfGross: number
+  totalDiscountPctOfGross: number
+  promoLineSaleSharePct: number
+  promoLineSaleAmount: number
+  paymentOrderSharePct: number
+}
+
+export type PosSalesCombinedDiscountResult = {
+  totals: PosSalesCombinedDiscountTotals
+  byKind: PosSalesCombinedKindTotals[]
+}
+
 export type PosSalesByPromoResult = {
   rows: PosSalesPromoRow[]
   totals: PosSalesPromoAggregateTotals
   byKind?: PosSalesPromoKindTotals[]
+  payment?: PosSalesPaymentDiscountResult
+  combined?: PosSalesCombinedDiscountResult
   truncated?: boolean
 }
 
@@ -5318,10 +5381,39 @@ export async function getPosSalesByPromo(params: {
     estimatedLineQty: 0,
     unresolvedLineQty: 0,
   }
+  const emptyPayment: PosSalesPaymentDiscountResult = {
+    rows: [],
+    totals: {
+      discountAmount: 0,
+      orderCountWithDiscount: 0,
+      periodGrossSales: 0,
+      periodOrderCount: 0,
+      discountPctOfGross: 0,
+    },
+    byKind: [],
+  }
+  const emptyCombined: PosSalesCombinedDiscountResult = {
+    totals: {
+      periodGrossSales: 0,
+      periodOrderCount: 0,
+      bundleDiscount: 0,
+      paymentDiscount: 0,
+      totalDiscount: 0,
+      bundleDiscountPctOfGross: 0,
+      paymentDiscountPctOfGross: 0,
+      totalDiscountPctOfGross: 0,
+      promoLineSaleSharePct: 0,
+      promoLineSaleAmount: 0,
+      paymentOrderSharePct: 0,
+    },
+    byKind: [],
+  }
   return {
     rows: Array.isArray(json.rows) ? json.rows : [],
     totals: json.totals ?? emptyTotals,
     byKind: Array.isArray(json.byKind) ? json.byKind : [],
+    payment: json.payment ?? emptyPayment,
+    combined: json.combined ?? emptyCombined,
     truncated: truncated || !!json.truncated,
   }
 }

@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react"
 import { ChevronRight, Gift, History, Ticket } from "lucide-react"
 import {
   DEFAULT_MEMBER_APP_BG,
+  MP_BOTTOM_NAV_CLEARANCE,
   MP_MAX_WIDTH,
   mpGlassCard,
   mpGlassCardSoft,
@@ -44,7 +45,10 @@ export function MemberPortalShell({
   children: React.ReactNode
 }) {
   return (
-    <div className={`relative mx-auto w-full ${MP_MAX_WIDTH} px-4 pb-2 pt-[max(1rem,env(safe-area-inset-top))]`}>
+    <div
+      className={`relative mx-auto w-full ${MP_MAX_WIDTH} px-4 pt-[max(1rem,env(safe-area-inset-top))]`}
+      style={{ paddingBottom: MP_BOTTOM_NAV_CLEARANCE }}
+    >
       {children}
     </div>
   )
@@ -332,30 +336,33 @@ export function PremiumBottomNav({
   items: Array<{ id: PortalTab; label: string; icon: LucideIcon }>
 }) {
   return (
-    <nav className="sticky bottom-0 z-40 mt-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2">
-      <div
-        className="rounded-[1.35rem] border border-white/10 bg-[rgba(8,8,10,0.88)] px-1 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
-      >
-        <div className="grid grid-cols-5">
-          {items.map(({ id, label, icon: Icon }) => {
-            const active = tab === id
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onChange(id)}
-                className={`relative flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition ${
-                  active ? "text-amber-200" : "text-white/40 hover:text-white/65"
-                }`}
-              >
-                {active ? (
-                  <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-400/15 to-transparent" />
-                ) : null}
-                <Icon className={`relative h-5 w-5 ${active ? "text-amber-300" : ""}`} />
-                <span className="relative max-w-full truncate">{label}</span>
-              </button>
-            )
-          })}
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2"
+      aria-label="Member portal navigation"
+    >
+      <div className={`mx-auto w-full ${MP_MAX_WIDTH} px-4`}>
+        <div className="rounded-[1.35rem] border border-white/10 bg-[rgba(8,8,10,0.88)] px-1 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+          <div className="grid grid-cols-5">
+            {items.map(({ id, label, icon: Icon }) => {
+              const active = tab === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onChange(id)}
+                  className={`relative flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition ${
+                    active ? "text-amber-200" : "text-white/40 hover:text-white/65"
+                  }`}
+                >
+                  {active ? (
+                    <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-400/15 to-transparent" />
+                  ) : null}
+                  <Icon className={`relative h-5 w-5 ${active ? "text-amber-300" : ""}`} />
+                  <span className="relative max-w-full truncate">{label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
     </nav>

@@ -709,11 +709,20 @@ export function mapKitchenSlipGroupItemsForPrint(
     opts.formatNote ??
     (grabInbound
       ? (note?: string) => {
+          const raw = String(note ?? '').trim()
+          if (!raw) return undefined
           const lines = collectGrabPrintOptionLines({
-            note,
+            note: raw,
             optionNameByCode: opts.optionNameByCode,
           })
-          return lines.length > 0 ? lines.join('\n') : undefined
+          if (lines.length > 0) return lines.join('\n')
+          // buildKitchenHallStyleSlipLines 가 mods:/optc: 를 이미 사람이 읽는 줄로 바꾼 뒤
+          // 여기서 다시 collect 하면 Size S 등이 request 로 분류되어 사라진다 (GF-897).
+          if (!/(?:^|[\s·])(?:mods?:|optc:|banbanFlavors:)/i.test(raw)) {
+            const humanLines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+            if (humanLines.length > 0) return humanLines.join('\n')
+          }
+          return undefined
         }
       : (note?: string) => formatGrabLineNoteForKitchenPrint(note, opts.optionNameByCode) || undefined)
   const hallLines = buildKitchenHallStyleSlipLines(slipItems, {
@@ -731,7 +740,12 @@ export function mapKitchenSlipGroupItemsForPrint(
           promoComposeLines: row.promoComposeLines.map((line) => opts.translateName(line)),
         }
       : {}),
-    ...(row.note ? { note: formatNote(row.note) } : {}),
+    ...(row.note
+      ? (() => {
+          const formatted = formatNote(row.note)
+          return formatted ? { note: formatted } : {}
+        })()
+      : {}),
     ...((opts.cancelled ?? row.cancelled) ? { cancelled: true } : {}),
   }))
 }

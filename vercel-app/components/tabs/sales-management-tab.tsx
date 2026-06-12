@@ -27,6 +27,13 @@ import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
 import { useT, i18n, tOr } from "@/lib/i18n"
 import {
+  combinedKindLabel,
+  combinedLayerLabel,
+  paymentDiscountRowLabel,
+  paymentKindLabel,
+  promoKindLabel,
+} from "@/lib/sales-discount-analytics-labels"
+import {
   downloadSalesManagementXlsx,
   salesExcelCol,
   type SalesExcelSheet,
@@ -56,6 +63,12 @@ import {
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
+import {
+  SalesCombinedDiscountPanel,
+  SalesDiscountAnalyticsShell,
+  SalesPaymentDiscountPanel,
+  SalesPromoBundleDiscountPanel,
+} from "@/components/tabs/sales-discount-analytics-panel"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 import {
   periodRowsForStoreSelection,
@@ -247,15 +260,6 @@ function formatSalesPct(n: number) {
   return `${v.toFixed(1)}%`
 }
 
-function promoKindLabel(
-  kind: string,
-  tr: (key: string, fallback: string) => string
-): string {
-  if (kind === "set") return tr("salesPromoKindSet", "메뉴 세트")
-  if (kind === "campaign") return tr("salesPromoKindCampaign", "캠페인 프로모")
-  return tr("salesPromoKindOther", "기타")
-}
-
 const EMPTY_POS_SALES_PROMO_TOTALS: PosSalesPromoAggregateTotals = {
   qty: 0,
   saleAmount: 0,
@@ -277,6 +281,33 @@ const EMPTY_POS_SALES_BY_PROMO: PosSalesByPromoResult = {
   rows: [],
   totals: EMPTY_POS_SALES_PROMO_TOTALS,
   byKind: [],
+  payment: {
+    rows: [],
+    totals: {
+      discountAmount: 0,
+      orderCountWithDiscount: 0,
+      periodGrossSales: 0,
+      periodOrderCount: 0,
+      discountPctOfGross: 0,
+    },
+    byKind: [],
+  },
+  combined: {
+    totals: {
+      periodGrossSales: 0,
+      periodOrderCount: 0,
+      bundleDiscount: 0,
+      paymentDiscount: 0,
+      totalDiscount: 0,
+      bundleDiscountPctOfGross: 0,
+      paymentDiscountPctOfGross: 0,
+      totalDiscountPctOfGross: 0,
+      promoLineSaleSharePct: 0,
+      promoLineSaleAmount: 0,
+      paymentOrderSharePct: 0,
+    },
+    byKind: [],
+  },
   truncated: false,
 }
 
@@ -395,6 +426,8 @@ type AnalyticsView =
   | "channel"
   | "menu"
   | "promo-bundle"
+  | "payment-discount"
+  | "discount-all"
   | "payment"
   | "store"
   | "store-category"
@@ -473,6 +506,18 @@ const SALES_IA: SalesSubMenuConfig[] = [
         labelKey: "salesTopicPromoBundleReport",
         hintKey: "salesTopicPromoBundleReportHint",
         view: "promo-bundle",
+      },
+      {
+        id: "report-payment-discount",
+        labelKey: "salesTopicPaymentDiscountReport",
+        hintKey: "salesTopicPaymentDiscountReportHint",
+        view: "payment-discount",
+      },
+      {
+        id: "report-discount-all",
+        labelKey: "salesTopicCombinedDiscountReport",
+        hintKey: "salesTopicCombinedDiscountReportHint",
+        view: "discount-all",
       },
     ],
   },
@@ -1315,6 +1360,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "store-category" ||
       selectedView === "payment" ||
       selectedView === "promo-bundle" ||
+      selectedView === "payment-discount" ||
+      selectedView === "discount-all" ||
       selectedView === "yoy-compare" ||
       selectedView === "mom-compare" ||
       selectedView === "forecast")
@@ -1373,6 +1420,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
     if (selectedView === "promo-bundle") return promoBundleData.totals.saleAmount
+    if (selectedView === "payment-discount") return promoBundleData.payment?.totals.discountAmount ?? 0
+    if (selectedView === "discount-all") return promoBundleData.combined?.totals.totalDiscount ?? 0
     if (selectedView === "forecast" && forecastSummary) return forecastSummary.expectedTotal
     return summaryCards.current
   }, [
@@ -1500,6 +1549,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         return menuData.length > 0
       case "promo-bundle":
         return promoBundleData.rows.length > 0
+      case "payment-discount":
+        return (promoBundleData.payment?.rows.length ?? 0) > 0
+      case "discount-all":
+        return (promoBundleData.combined?.byKind.length ?? 0) > 0
       case "delivery":
         return deliveryPieRows.length > 0
       case "payment":
@@ -1677,91 +1730,173 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         rows: menuData.map((r) => [r.name, r.qty, numCell(r.sales)]),
         colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
       })
-    } else if (selectedView === "promo-bundle" && promoBundleData.rows.length > 0) {
-      const t = promoBundleData.totals
-      sheets.push({
-        name: tr("salesPromoAnalyticsTitle", "할인 영향 분석"),
-        headers: [tr("salesMenu", "메뉴"), tr("pL_sales", "매출")],
-        rows: [
-          [tr("salesPromoPeriodGrossSales", "기간 총매출"), numCell(t.periodGrossSales)],
-          [tr("salesPromoLineSaleShare", "세트·프로모 판매 비중"), t.promoLineSaleSharePct / 100],
-          [tr("salesPromoBundleDiscount", "세트 내재 할인"), numCell(t.bundleDiscount)],
-          [tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"), t.bundleDiscountPctOfGross / 100],
-          [tr("salesPromoPaymentDiscount", "결제 할인(기간)"), numCell(t.paymentDiscount)],
-          [`${tr("salesPromoPaymentDiscount", "결제 할인(기간)")} %`, t.paymentDiscountPctOfGross / 100],
-          [tr("salesPromoTotalDiscount", "할인 합계"), numCell(t.totalDiscount)],
-          [`${tr("salesPromoTotalDiscount", "할인 합계")} %`, t.totalDiscountPctOfGross / 100],
-        ],
-        colFormats: [salesExcelCol.text, salesExcelCol.money],
-      })
-      if ((promoBundleData.byKind ?? []).length > 0) {
+    } else if (
+      (selectedView === "promo-bundle" ||
+        selectedView === "payment-discount" ||
+        selectedView === "discount-all") &&
+      (promoBundleData.rows.length > 0 ||
+        (promoBundleData.payment?.rows.length ?? 0) > 0 ||
+        (promoBundleData.combined?.byKind.length ?? 0) > 0)
+    ) {
+      if (selectedView === "promo-bundle") {
+        const t = promoBundleData.totals
         sheets.push({
-          name: tr("salesPromoKindBreakdown", "유형별 분석"),
+          name: tr("salesPromoAnalyticsTitle", "할인 영향 분석"),
+          headers: [tr("salesMenu", "메뉴"), tr("pL_sales", "매출")],
+          rows: [
+            [tr("salesPromoPeriodGrossSales", "기간 총매출"), numCell(t.periodGrossSales)],
+            [tr("salesPromoLineSaleShare", "세트·프로모 판매 비중"), t.promoLineSaleSharePct / 100],
+            [tr("salesPromoBundleDiscount", "세트 내재 할인"), numCell(t.bundleDiscount)],
+            [tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"), t.bundleDiscountPctOfGross / 100],
+            [tr("salesPromoPaymentDiscount", "결제 할인(기간)"), numCell(t.paymentDiscount)],
+            [`${tr("salesPromoPaymentDiscount", "결제 할인(기간)")} %`, t.paymentDiscountPctOfGross / 100],
+            [tr("salesPromoTotalDiscount", "할인 합계"), numCell(t.totalDiscount)],
+            [`${tr("salesPromoTotalDiscount", "할인 합계")} %`, t.totalDiscountPctOfGross / 100],
+          ],
+          colFormats: [salesExcelCol.text, salesExcelCol.money],
+        })
+        if ((promoBundleData.byKind ?? []).length > 0) {
+          sheets.push({
+            name: tr("salesPromoKindBreakdown", "유형별 분석"),
+            headers: [
+              tr("salesPromoKindBreakdown", "유형별 분석"),
+              tr("salesQuantity", "수량"),
+              tr("salesPromoSaleAmount", "판매액"),
+              tr("salesPromoBundleDiscount", "세트 내재 할인"),
+              tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"),
+              tr("salesPromoBundleDiscountShare", "내재 할인 비중"),
+            ],
+            rows: (promoBundleData.byKind ?? []).map((k) => [
+              promoKindLabel(k.kind, tr),
+              k.qty,
+              numCell(k.saleAmount),
+              numCell(k.bundleDiscount),
+              k.bundleDiscountPctOfGross / 100,
+              k.bundleDiscountSharePct / 100,
+            ]),
+            colFormats: [
+              salesExcelCol.text,
+              salesExcelCol.int,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.pct,
+              salesExcelCol.pct,
+            ],
+          })
+        }
+      }
+      if (selectedView === "promo-bundle" && promoBundleData.rows.length > 0) {
+        sheets.push({
+          name: tr("salesTopicPromoBundleReport", "세트·프로모 할인"),
           headers: [
-            tr("salesChannel", "채널"),
+            tr("salesMenu", "메뉴"),
+            tr("salesPromoCode", "프로모 코드"),
+            tr("salesDiscountKindColumn", "유형"),
             tr("salesQuantity", "수량"),
+            tr("salesPromoRegularAmount", "정가 합계"),
             tr("salesPromoSaleAmount", "판매액"),
             tr("salesPromoBundleDiscount", "세트 내재 할인"),
+            tr("salesPromoDiscountPct", "할인율"),
             tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"),
-            tr("salesPromoBundleDiscountShare", "내재 할인 비중"),
+            tr("salesPromoLineSaleShare", "세트·프로모 판매 비중"),
           ],
-          rows: (promoBundleData.byKind ?? []).map((k) => [
-            promoKindLabel(k.kind, tr),
-            k.qty,
-            numCell(k.saleAmount),
-            numCell(k.bundleDiscount),
-            k.bundleDiscountPctOfGross / 100,
-            k.bundleDiscountSharePct / 100,
+          rows: promoBundleData.rows.map((r) => [
+            r.name,
+            r.promoCode || r.promoId,
+            promoKindLabel(r.kind, tr),
+            r.qty,
+            numCell(r.regularAmount),
+            numCell(r.saleAmount),
+            numCell(r.bundleDiscount),
+            r.discountPct / 100,
+            r.discountPctOfGross / 100,
+            r.saleSharePctOfGross / 100,
           ]),
           colFormats: [
+            salesExcelCol.text,
+            salesExcelCol.text,
             salesExcelCol.text,
             salesExcelCol.int,
             salesExcelCol.money,
             salesExcelCol.money,
+            salesExcelCol.money,
+            salesExcelCol.pct,
             salesExcelCol.pct,
             salesExcelCol.pct,
           ],
         })
       }
-      sheets.push({
-        name: tr("salesTopicPromoBundleReport", "세트·프로모 할인"),
-        headers: [
-          tr("salesMenu", "메뉴"),
-          tr("salesPromoCode", "프로모 코드"),
-          tr("salesChannel", "채널"),
-          tr("salesQuantity", "수량"),
-          tr("salesPromoRegularAmount", "정가 합계"),
-          tr("salesPromoSaleAmount", "판매액"),
-          tr("salesPromoBundleDiscount", "세트 내재 할인"),
-          tr("salesPromoDiscountPct", "할인율"),
-          tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"),
-          tr("salesPromoLineSaleShare", "세트·프로모 판매 비중"),
-        ],
-        rows: promoBundleData.rows.map((r) => [
-          r.name,
-          r.promoCode || r.promoId,
-          promoKindLabel(r.kind, tr),
-          r.qty,
-          numCell(r.regularAmount),
-          numCell(r.saleAmount),
-          numCell(r.bundleDiscount),
-          r.discountPct / 100,
-          r.discountPctOfGross / 100,
-          r.saleSharePctOfGross / 100,
-        ]),
-        colFormats: [
-          salesExcelCol.text,
-          salesExcelCol.text,
-          salesExcelCol.text,
-          salesExcelCol.int,
-          salesExcelCol.money,
-          salesExcelCol.money,
-          salesExcelCol.money,
-          salesExcelCol.pct,
-          salesExcelCol.pct,
-          salesExcelCol.pct,
-        ],
-      })
+      if (selectedView === "payment-discount" && (promoBundleData.payment?.rows.length ?? 0) > 0) {
+        const pt = promoBundleData.payment!.totals
+        sheets.push({
+          name: tr("salesPaymentDiscountAnalyticsTitle", "결제 할인 영향 분석"),
+          headers: [tr("salesMenu", "메뉴"), tr("pL_sales", "매출")],
+          rows: [
+            [tr("salesPromoPeriodGrossSales", "기간 총매출"), numCell(pt.periodGrossSales)],
+            [tr("salesPromoPaymentDiscount", "결제 할인(기간)"), numCell(pt.discountAmount)],
+            [tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"), pt.discountPctOfGross / 100],
+          ],
+          colFormats: [salesExcelCol.text, salesExcelCol.money],
+        })
+        sheets.push({
+          name: tr("salesTopicPaymentDiscountReport", "결제 할인"),
+          headers: [
+            tr("salesPaymentDiscountReason", "할인 사유"),
+            tr("salesPromoCode", "프로모 코드"),
+            tr("salesDiscountKindColumn", "유형"),
+            tr("salesOccupancy", "주문건수"),
+            tr("salesPromoPaymentDiscount", "결제 할인(기간)"),
+            tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"),
+          ],
+          rows: (promoBundleData.payment?.rows ?? []).map((r) => [
+            paymentDiscountRowLabel(r, tr),
+            r.code,
+            paymentKindLabel(r.kind, tr),
+            r.orderCount,
+            numCell(r.discountAmount),
+            r.discountPctOfGross / 100,
+          ]),
+          colFormats: [
+            salesExcelCol.text,
+            salesExcelCol.text,
+            salesExcelCol.text,
+            salesExcelCol.int,
+            salesExcelCol.money,
+            salesExcelCol.pct,
+          ],
+        })
+      }
+      if (selectedView === "discount-all" && (promoBundleData.combined?.byKind.length ?? 0) > 0) {
+        const ct = promoBundleData.combined!.totals
+        sheets.push({
+          name: tr("salesCombinedDiscountAnalyticsTitle", "통합 할인 영향 분석"),
+          headers: [tr("salesMenu", "메뉴"), tr("pL_sales", "매출")],
+          rows: [
+            [tr("salesPromoPeriodGrossSales", "기간 총매출"), numCell(ct.periodGrossSales)],
+            [tr("salesPromoBundleDiscount", "세트 내재 할인"), numCell(ct.bundleDiscount)],
+            [tr("salesPromoPaymentDiscount", "결제 할인(기간)"), numCell(ct.paymentDiscount)],
+            [tr("salesPromoTotalDiscount", "할인 합계"), numCell(ct.totalDiscount)],
+            [tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"), ct.totalDiscountPctOfGross / 100],
+          ],
+          colFormats: [salesExcelCol.text, salesExcelCol.money],
+        })
+        sheets.push({
+          name: tr("salesTopicCombinedDiscountReport", "통합 할인"),
+          headers: [
+            tr("salesCombinedDiscountLayer", "할인 층"),
+            tr("salesPromoKindBreakdown", "유형별 분석"),
+            tr("salesPromoTotalDiscount", "할인 합계"),
+            tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"),
+          ],
+          rows: (promoBundleData.combined?.byKind ?? []).map((k) => [
+            combinedLayerLabel(k.layer, tr),
+            combinedKindLabel(k, tr),
+            numCell(k.discountAmount),
+            k.discountPctOfGross / 100,
+          ]),
+          colFormats: [salesExcelCol.text, salesExcelCol.text, salesExcelCol.money, salesExcelCol.pct],
+        })
+      }
     } else if (selectedView === "delivery" && deliveryPieRows.length > 0) {
       sheets.push({
         name: tr("salesDeliveryChannel", "배달앱/채널"),
@@ -2217,7 +2352,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needDelivery = selectedView === "delivery"
     const needChannel = selectedView === "channel"
     const needMenu = selectedView === "menu"
-    const needPromoBundle = selectedView === "promo-bundle"
+    const needDiscountAnalytics =
+      selectedView === "promo-bundle" ||
+      selectedView === "payment-discount" ||
+      selectedView === "discount-all"
     const needPayment = selectedView === "payment"
     const needStore =
       selectedView === "store" ||
@@ -2527,7 +2665,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .catch(() => gMenu([]))
       )
     }
-    if (needPromoBundle) {
+    if (needDiscountAnalytics) {
       tasks.push(
         promoBundleFetcher({
           startStr,
@@ -4073,319 +4211,40 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               )
             )}
 
-            {selectedView === "promo-bundle" && (
-              salesAnalyticsPlaceholder ? (
+            {(selectedView === "promo-bundle" ||
+              selectedView === "payment-discount" ||
+              selectedView === "discount-all") &&
+              (salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   {salesAnalyticsPlaceholder}
                 </p>
               ) : (
-                <>
-                  {promoBundleData.truncated ? (
-                    <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
-                      {tr(
-                        "salesDataTruncatedWarning",
-                        "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요."
-                      )}
-                    </p>
-                  ) : null}
-                  <div className="mb-4 rounded-lg border bg-muted/20 p-4">
-                    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="text-sm font-semibold">
-                        {tr("salesPromoAnalyticsTitle", "할인 영향 분석")}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {tr("salesPromoOrderCount", "완료 주문")}:{" "}
-                        {promoBundleData.totals.periodOrderCount.toLocaleString()}
-                      </p>
-                    </div>
-                    <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-                      {tr(
-                        "salesPromoAnalyticsHint",
-                        "총매출은 동일 기간·매장·주문유형의 완료 주문 합계입니다. 세트 내재 할인은 정가 대비 판매가 차이이며, 결제 할인과는 별도 층입니다."
-                      )}
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="rounded-lg border bg-card p-3">
-                        <p className="text-xs text-muted-foreground">
-                          {tr("salesPromoPeriodGrossSales", "기간 총매출")}
-                        </p>
-                        <p className="mt-1 text-lg font-bold font-erp-numeric">
-                          {formatSalesAmount(promoBundleData.totals.periodGrossSales)}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border bg-card p-3">
-                        <p className="text-xs text-muted-foreground">
-                          {tr("salesPromoLineSaleShare", "세트·프로모 판매 비중")}
-                        </p>
-                        <p className="mt-1 text-lg font-bold font-erp-numeric">
-                          {formatSalesPct(promoBundleData.totals.promoLineSaleSharePct)}
-                        </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground font-erp-numeric">
-                          {formatSalesAmount(promoBundleData.totals.saleAmount)}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border bg-card p-3">
-                        <p className="text-xs text-muted-foreground">
-                          {tr("salesPromoBundleDiscount", "세트 내재 할인")}
-                        </p>
-                        <p className="mt-1 text-lg font-bold font-erp-numeric text-rose-700 dark:text-rose-300">
-                          -{formatSalesAmount(promoBundleData.totals.bundleDiscount)}
-                        </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}:{" "}
-                          {formatSalesPct(promoBundleData.totals.bundleDiscountPctOfGross)}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border-2 border-rose-200 bg-rose-50/50 p-3 dark:border-rose-900 dark:bg-rose-950/20">
-                        <p className="text-xs font-medium text-rose-800 dark:text-rose-200">
-                          {tr("salesPromoTotalDiscount", "할인 합계")}
-                        </p>
-                        <p className="mt-1 text-lg font-bold font-erp-numeric text-rose-800 dark:text-rose-100">
-                          -{formatSalesAmount(promoBundleData.totals.totalDiscount)}
-                        </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {formatSalesPct(promoBundleData.totals.totalDiscountPctOfGross)}{" "}
-                          {tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}
-                        </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
-                          {tr("salesPromoPaymentDiscount", "결제 할인(기간)")}{" "}
-                          -{formatSalesAmount(promoBundleData.totals.paymentDiscount)} (
-                          {formatSalesPct(promoBundleData.totals.paymentDiscountPctOfGross)})
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  {(promoBundleData.byKind ?? []).length > 0 ? (
-                    <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full min-w-[520px] text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/40 text-muted-foreground">
-                              <th className="px-3 py-2 text-left">
-                                {tr("salesPromoKindBreakdown", "유형별 분석")}
-                              </th>
-                              <th className="px-3 py-2 text-right">{tr("salesPromoSaleAmount", "판매액")}</th>
-                              <th className="px-3 py-2 text-right">
-                                {tr("salesPromoBundleDiscount", "세트 내재 할인")}
-                              </th>
-                              <th className="px-3 py-2 text-right">
-                                {tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}
-                              </th>
-                              <th className="px-3 py-2 text-right">
-                                {tr("salesPromoBundleDiscountShare", "내재 할인 비중")}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(promoBundleData.byKind ?? []).map((k) => (
-                              <tr key={k.kind} className="border-b border-border/60">
-                                <td className="px-3 py-1.5 font-medium">{promoKindLabel(k.kind, tr)}</td>
-                                <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                  {formatSalesAmount(k.saleAmount)}
-                                  <span className="ml-1 text-[10px] text-muted-foreground">
-                                    ({formatSalesPct(k.saleSharePctOfGross)})
-                                  </span>
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-erp-numeric text-rose-700 dark:text-rose-300">
-                                  -{formatSalesAmount(k.bundleDiscount)}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                  {formatSalesPct(k.bundleDiscountPctOfGross)}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                  {formatSalesPct(k.bundleDiscountSharePct)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="h-[220px] rounded-md border p-2">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={(promoBundleData.byKind ?? []).map((k) => ({
-                              axisLabel: promoKindLabel(k.kind, tr),
-                              bundleDiscount: k.bundleDiscount,
-                            }))}
-                            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
-                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatSalesAmount(v)} />
-                            <Tooltip
-                              formatter={(v: number) => [
-                                formatSalesAmount(v),
-                                tr("salesPromoBundleDiscount", "세트 내재 할인"),
-                              ]}
-                            />
-                            <Bar dataKey="bundleDiscount" fill="#e11d48" radius={[4, 4, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="rounded-lg border bg-card p-3">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("salesPromoRegularAmount", "정가 합계")}
-                      </p>
-                      <p className="mt-1 text-base font-semibold font-erp-numeric">
-                        {formatSalesAmount(promoBundleData.totals.regularAmount)}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-card p-3">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("salesPromoSaleAmount", "판매액")}
-                      </p>
-                      <p className="mt-1 text-base font-semibold font-erp-numeric">
-                        {formatSalesAmount(promoBundleData.totals.saleAmount)}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-card p-3">
-                      <p className="text-xs text-muted-foreground">
-                        {tr("salesPromoDiscountPct", "할인율")}
-                      </p>
-                      <p className="mt-1 text-base font-semibold font-erp-numeric">
-                        {promoBundleData.totals.regularAmount > 0
-                          ? formatSalesPct(
-                              (promoBundleData.totals.bundleDiscount /
-                                promoBundleData.totals.regularAmount) *
-                                100
-                            )
-                          : "—"}
-                      </p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">
-                        {tr("salesPromoBundleDiscount", "세트 내재 할인")} /{" "}
-                        {tr("salesPromoRegularAmount", "정가 합계")}
-                      </p>
-                    </div>
-                  </div>
-                  {(promoBundleData.totals.estimatedLineQty > 0 ||
-                    promoBundleData.totals.unresolvedLineQty > 0) && (
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      {promoBundleData.totals.estimatedLineQty > 0
-                        ? `${tr("salesPromoEstimatedQty", "추정 정가 줄")}: ${promoBundleData.totals.estimatedLineQty.toLocaleString()} · `
-                        : ""}
-                      {promoBundleData.totals.unresolvedLineQty > 0
-                        ? `${tr("salesPromoUnresolvedQty", "정가 미산출")}: ${promoBundleData.totals.unresolvedLineQty.toLocaleString()}`
-                        : ""}
-                    </p>
-                  )}
-                  <div className="mb-4 flex flex-wrap items-center gap-3">
-                    <Input
-                      placeholder={tr("salesMenuSearch", "메뉴·프로모 검색")}
-                      value={menuSearch}
-                      onChange={(e) => setMenuSearch(e.target.value)}
-                      className="w-48 min-w-[12rem]"
+                <SalesDiscountAnalyticsShell truncated={promoBundleData.truncated} tr={tr}>
+                  {selectedView === "promo-bundle" ? (
+                    <SalesPromoBundleDiscountPanel
+                      data={promoBundleData}
+                      menuSearch={menuSearch}
+                      setMenuSearch={setMenuSearch}
+                      menuSearchAnd={menuSearchAnd}
+                      setMenuSearchAnd={setMenuSearchAnd}
+                      tr={tr}
                     />
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={menuSearchAnd}
-                        onCheckedChange={(c) => setMenuSearchAnd(c === true)}
-                      />
-                      <span>{tr("salesMenuSearchAndMode", "검색어 모두 포함 (AND)")}</span>
-                    </label>
-                  </div>
-                  {promoBundleData.rows.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-md border">
-                      <table className="w-full min-w-[1040px] text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/40 text-muted-foreground">
-                            <th className="px-3 py-2 text-left">{tr("salesMenu", "메뉴")}</th>
-                            <th className="px-3 py-2 text-left">{tr("salesPromoCode", "프로모 코드")}</th>
-                            <th className="px-3 py-2 text-left">{tr("salesChannel", "채널")}</th>
-                            <th className="px-3 py-2 text-right">{tr("salesQuantity", "수량")}</th>
-                            <th className="px-3 py-2 text-right">
-                              {tr("salesPromoRegularAmount", "정가 합계")}
-                            </th>
-                            <th className="px-3 py-2 text-right">
-                              {tr("salesPromoSaleAmount", "판매액")}
-                            </th>
-                            <th className="px-3 py-2 text-right">
-                              {tr("salesPromoBundleDiscount", "세트 내재 할인")}
-                            </th>
-                            <th className="px-3 py-2 text-right">
-                              {tr("salesPromoDiscountPct", "할인율")}
-                            </th>
-                            <th className="px-3 py-2 text-right">
-                              {tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {promoBundleData.rows.map((r) => (
-                            <tr key={r.key} className="border-b border-border/60">
-                              <td className="px-3 py-1.5">{r.name}</td>
-                              <td className="px-3 py-1.5 font-mono text-xs">{r.promoCode || r.promoId || "—"}</td>
-                              <td className="px-3 py-1.5 text-xs">{promoKindLabel(r.kind, tr)}</td>
-                              <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                {r.qty.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                {formatSalesAmount(r.regularAmount)}
-                              </td>
-                              <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                {formatSalesAmount(r.saleAmount)}
-                              </td>
-                              <td className="px-3 py-1.5 text-right font-erp-numeric text-rose-700 dark:text-rose-300">
-                                {formatSalesAmount(r.bundleDiscount)}
-                              </td>
-                              <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                {r.regularAmount > 0 ? `${r.discountPct.toFixed(1)}%` : "—"}
-                              </td>
-                              <td className="px-3 py-1.5 text-right font-erp-numeric">
-                                {formatSalesPct(r.discountPctOfGross)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t bg-muted/20 font-medium">
-                            <td className="px-3 py-2" colSpan={3}>
-                              {tr("salesTotal", "합계")}
-                            </td>
-                            <td className="px-3 py-2 text-right font-erp-numeric">
-                              {promoBundleData.totals.qty.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-2 text-right font-erp-numeric">
-                              {formatSalesAmount(promoBundleData.totals.regularAmount)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-erp-numeric">
-                              {formatSalesAmount(promoBundleData.totals.saleAmount)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-erp-numeric">
-                              {formatSalesAmount(promoBundleData.totals.bundleDiscount)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-erp-numeric">
-                              {promoBundleData.totals.regularAmount > 0
-                                ? formatSalesPct(
-                                    (promoBundleData.totals.bundleDiscount /
-                                      promoBundleData.totals.regularAmount) *
-                                      100
-                                  )
-                                : "—"}
-                            </td>
-                            <td className="px-3 py-2 text-right font-erp-numeric">
-                              {formatSalesPct(promoBundleData.totals.bundleDiscountPctOfGross)}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                    {tr(
-                      "salesPromoBundleFootnote",
-                      "정가는 주문 promoItems(없으면 DB 세트 구성)와 현재 메뉴·옵션 가격으로 역산합니다. 가격 변경 후 과거 주문은 당시와 다를 수 있습니다. 구성이 없는 줄은 정가 미산출로 표시됩니다."
-                    )}
-                  </p>
-                </>
-              )
-            )}
+                  ) : null}
+                  {selectedView === "payment-discount" ? (
+                    <SalesPaymentDiscountPanel
+                      data={promoBundleData}
+                      menuSearch={menuSearch}
+                      setMenuSearch={setMenuSearch}
+                      menuSearchAnd={menuSearchAnd}
+                      setMenuSearchAnd={setMenuSearchAnd}
+                      tr={tr}
+                    />
+                  ) : null}
+                  {selectedView === "discount-all" ? (
+                    <SalesCombinedDiscountPanel data={promoBundleData} tr={tr} />
+                  ) : null}
+                </SalesDiscountAnalyticsShell>
+              ))}
 
             {selectedView === "store" && (
               salesAnalyticsPlaceholder ? (
