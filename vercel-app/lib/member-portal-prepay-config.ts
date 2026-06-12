@@ -1,13 +1,9 @@
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
-import { isMemberPortalPublicStore } from '@/lib/member-portal-stores'
+import { isMemberPortalPublicStore } from '@/lib/member-portal-stores-shared'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 
-/** PromptPay QR 최소 금액 (KBank generate-qr amount > 0) */
-export const MEMBER_PORTAL_PREPAY_MIN_QR_BAHT = 1
-
-/** QR 결제 대기 만료 (방콕 기준 운영 — ms) */
-export const MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS = 5 * 60 * 1000
+export { MEMBER_PORTAL_PREPAY_MIN_QR_BAHT, MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from '@/lib/member-portal-prepay-constants'
 
 const KEY_ENABLED = 'member_portal_prepay_enabled'
 const KEY_STORE_CODES = 'member_portal_prepay_store_codes'

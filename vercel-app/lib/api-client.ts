@@ -2541,6 +2541,117 @@ export async function getIncomeStatement(params: {
   return payload
 }
 
+export type ManagementMarginBridgeData = {
+  yearMonthStart: string
+  yearMonthEnd: string
+  startStr: string
+  endStr: string
+  storeFilter: string
+  timezone: 'Asia/Bangkok'
+  posAvailable: boolean
+  posTruncated: boolean
+  pos: {
+    grossSalesBeforeDiscount: number
+    netSales: number
+    bundleDiscount: number
+    paymentDiscount: number
+    totalDiscount: number
+    periodOrderCount: number
+    combined: PosSalesCombinedDiscountResult
+    byChannel: {
+      channel: 'dine_in' | 'takeout' | 'delivery' | 'other'
+      orderCount: number
+      netSales: number
+      bundleDiscount: number
+      paymentDiscount: number
+      totalDiscount: number
+      foodCost: number
+      packagingCost: number
+      totalCost: number
+      contributionMargin: number
+      costPctOfNet: number
+    }[]
+  } | null
+  theoreticalCost: {
+    foodCost: number
+    packagingCost: number
+    totalCost: number
+    matchedLineQty: number
+    unmatchedLineQty: number
+    costPctOfGross: number
+    costPctOfNet: number
+    miseRatePercent: number
+  } | null
+  accounting: {
+    sales: number
+    purchases: number
+    purchasesFood: number
+    purchasesPackaging: number
+    cogs: number
+    grossProfit: number
+    expenses: number
+    netProfit: number
+  } | null
+  bridge: {
+    contributionMargin: number | null
+    contributionMarginPct: number | null
+    theoreticalVsActualCogsDiff: number | null
+    theoreticalVsActualCogsDiffPct: number | null
+  }
+  priorPeriod: {
+    yearMonthStart: string
+    yearMonthEnd: string
+    startStr: string
+    endStr: string
+  } | null
+  momCompare: {
+    label: string
+    current: number
+    prior: number
+    diff: number
+    diffPct: number | null
+  }[] | null
+  dataQuality: {
+    level: 'good' | 'caution' | 'review'
+    reasons: string[]
+  }
+  storeRanking: {
+    storeCode: string
+    orderCount: number
+    netSales: number
+    totalDiscount: number
+    discountPctOfGross: number
+    totalCost: number
+    costPctOfNet: number
+    contributionMargin: number
+    contributionPct: number
+  }[] | null
+  storeRankingHighlights: { highDiscount: string[]; highCost: string[] } | null
+  warnings: string[]
+  error?: string
+}
+
+export async function getManagementMarginBridge(params: {
+  yearMonthStart: string
+  yearMonthEnd: string
+  storeFilter?: string
+  userStore?: string
+  userRole?: string
+}): Promise<ManagementMarginBridgeData> {
+  const q = new URLSearchParams()
+  q.set('yearMonthStart', params.yearMonthStart)
+  q.set('yearMonthEnd', params.yearMonthEnd)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetchWithOffline(`/api/getManagementMarginBridge?${q}`)
+  const data = (await res.json()) as ManagementMarginBridgeData
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`)
+  }
+  return data
+}
+
 /** 손익 매입 거래처 행 상세 (직접입고 / 통장 매입지급 / 본사승인 발주) */
 export type IncomeStatementPurchaseDrillInboundRow = {
   kind: 'inbound'

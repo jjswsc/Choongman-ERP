@@ -596,7 +596,7 @@ type AccountSubjectMetaRow = {
   statementType: string | null
 }
 
-async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaRow>> {
+export async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaRow>> {
   const out = new Map<number, AccountSubjectMetaRow>()
   try {
     const rows = (await supabaseSelect('account_subjects', {
@@ -641,7 +641,7 @@ async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaR
   return out
 }
 
-async function loadItemAccountSubjectMap(): Promise<Map<string, number>> {
+export async function loadItemAccountSubjectMap(): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   try {
     const rows = (await supabaseSelectAllPages('items', {

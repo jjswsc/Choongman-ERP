@@ -1,27 +1,15 @@
 import type { MemberSummary } from '@/lib/members-server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import type { MemberPortalOrderListRow } from '@/lib/member-portal-orders-list-shared'
 
-export type MemberPortalOrderListRow = {
-  orderId: number
-  orderNo: string
-  storeCode: string
-  status: string
-  total: number
-  pointUsed: number
-  paymentQr: number
-  pickupHint: string
-  createdAt: string
-  paidAt: string | null
-  awaitingPayment: boolean
-  paymentExpired: boolean
-  paymentExpiresAt: string | null
-}
+export type { MemberPortalOrderListRow } from '@/lib/member-portal-orders-list-shared'
+export { memberPortalOrderStatusLabelKey } from '@/lib/member-portal-orders-list-shared'
 
 import {
   MEMBER_PORTAL_PAYMENT_EXPIRED_TAG,
   MEMBER_PORTAL_PAYMENT_PENDING_TAG,
 } from '@/lib/member-portal-payment-pending'
-import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from '@/lib/member-portal-prepay-config'
+import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from '@/lib/member-portal-prepay-constants'
 
 function parsePickupHint(memo: string): string {
   const m = /픽업희망:([^·]+)/u.exec(String(memo || ''))
@@ -96,26 +84,4 @@ export async function listMemberPortalOrders(
       }
     })
     .filter((r) => r.orderId > 0)
-}
-
-export function memberPortalOrderStatusLabelKey(
-  row: Pick<MemberPortalOrderListRow, 'status' | 'awaitingPayment' | 'paymentExpired'>
-):
-  | 'orderStatusAwaitingPayment'
-  | 'orderStatusPaid'
-  | 'orderStatusCooking'
-  | 'orderStatusReady'
-  | 'orderStatusPending'
-  | 'orderStatusCompleted'
-  | 'orderStatusCancelled'
-  | 'orderStatusExpired' {
-  if (row.awaitingPayment) return 'orderStatusAwaitingPayment'
-  if (row.paymentExpired) return 'orderStatusExpired'
-  const s = String(row.status || '').toLowerCase()
-  if (s === 'completed') return 'orderStatusCompleted'
-  if (s === 'ready') return 'orderStatusReady'
-  if (s === 'cooking' || s === 'preparing') return 'orderStatusCooking'
-  if (s === 'paid') return 'orderStatusPaid'
-  if (s === 'cancelled' || s === 'canceled') return 'orderStatusCancelled'
-  return 'orderStatusPending'
 }

@@ -29,7 +29,7 @@ import { formatBangkokDateTimeLocalInput } from "@/lib/member-portal-pickup-time
 import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { formatBaht, formatDateTime } from "@/components/member-portal/portal-ui"
-import { memberPortalOrderStatusLabelKey } from "@/lib/member-portal-orders-list-server"
+import { memberPortalOrderStatusLabelKey } from "@/lib/member-portal-orders-list-shared"
 import { mpGlassCard, mpGlassCardSoft } from "@/lib/member-portal-design"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"

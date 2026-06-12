@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { memberPortalStoresForSession } from '@/lib/member-portal-stores'
+import { memberPortalStoresForSession } from '@/lib/member-portal-stores-server'
 import { requireMemberSession } from '@/lib/member-portal-session'
 
 export async function GET(req: NextRequest) {

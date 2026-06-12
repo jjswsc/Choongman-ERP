@@ -17,8 +17,13 @@ export type FeatureFlags = {
   sso: boolean
 }
 
+import type { PosDeviceBillingBasis } from "./saas-tenant-pos-licensed"
+
 export type TenantPolicy = {
   salesStage: SalesStage
+  pricingMode: "stage" | "module"
+  /** POS 단말 과금 수량: erp_admin=ERP단말설정 합, saas_limit=SaaS한도, usage=실등록 대수 */
+  posDeviceBillingBasis: PosDeviceBillingBasis
   autoSuspendOnOverdue: boolean
   allowOverage: boolean
   require2faAdmin: boolean
@@ -45,6 +50,8 @@ export type TenantUsage = {
   staffAccounts: number
   tablets: number
   posDevices: number
+  /** ERP 관리자 단말 설정(main+order) 매장 합계 — Omni 과금용 */
+  licensedPosDevices?: number
   monthlyOrders: number
 }
 
@@ -53,9 +60,19 @@ export type StagePrice = {
   yearly: number
 }
 
+export type ModulePriceSnapshot = {
+  monthly: number
+  yearly: number
+  isEnabled: boolean
+  isPerUnit?: boolean
+  isCustomQuote?: boolean
+}
+
 export type TenantPricing = {
   currency: string
+  pricingMode: "stage" | "module"
   stagePrices: Record<SalesStage, StagePrice>
+  modulePrices: Record<string, ModulePriceSnapshot>
   currentChargeAmount: number
 }
 
@@ -159,6 +176,8 @@ export const DEFAULT_LIMITS_BY_TIER: Record<PlanTier, TenantLimits> = {
 
 export const DEFAULT_POLICY: TenantPolicy = {
   salesStage: "basic",
+  pricingMode: "stage",
+  posDeviceBillingBasis: "usage",
   autoSuspendOnOverdue: true,
   allowOverage: false,
   require2faAdmin: false,
@@ -224,6 +243,8 @@ export const FALLBACK_TENANTS: TenantItem[] = [
     limits: DEFAULT_LIMITS_BY_TIER.growth,
     policy: {
       salesStage: "erp1",
+      pricingMode: "stage",
+      posDeviceBillingBasis: "usage",
       autoSuspendOnOverdue: true,
       allowOverage: false,
       require2faAdmin: true,
@@ -243,7 +264,9 @@ export const FALLBACK_TENANTS: TenantItem[] = [
     },
     pricing: {
       currency: "THB",
+      pricingMode: "stage",
       stagePrices: { ...DEFAULT_STAGE_PRICES },
+      modulePrices: {},
       currentChargeAmount: resolveCurrentChargeAmount("erp1", "monthly", DEFAULT_STAGE_PRICES),
     },
     billingHistory: [],

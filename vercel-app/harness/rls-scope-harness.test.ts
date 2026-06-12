@@ -8,6 +8,8 @@ import {
   canAccessPosPrinters,
   canAccessPosTerminalSettings,
   canPickPosTerminalStore,
+  canEditPosDeviceRoleLimits,
+  canEditPosDeviceRoleLimitsForStore,
   hasOfficeStaffScope,
   canEditPosAttendanceManagement,
 } from "@/lib/permissions"
@@ -90,6 +92,16 @@ describe("RLS/권한 스코프 harness", () => {
 
   it("POS 주문 전용 역할은 단말 설정 불가", () => {
     expect(canAccessPosTerminalSettings("pos_staff")).toBe(false)
+    expect(canEditPosDeviceRoleLimits("pos_staff")).toBe(false)
     expect(canPosStaffAccessPath("/admin/pos-screen-config", "pos_staff")).toBe(false)
+  })
+
+  it("POS 단말 대수 변경 — 매장 관리자는 자기 매장만, SV·본사는 매장 선택 후", () => {
+    expect(canEditPosDeviceRoleLimits("manager")).toBe(true)
+    expect(canEditPosDeviceRoleLimitsForStore("manager", "CM Rama9", "CM Rama9")).toBe(true)
+    expect(canEditPosDeviceRoleLimitsForStore("manager", "CM Rama9", "CM Ladprao")).toBe(false)
+    expect(canEditPosDeviceRoleLimitsForStore("supervisor", "CM Rama9", "CM Ladprao")).toBe(true)
+    expect(canEditPosDeviceRoleLimitsForStore("officer", "Office", "CM Rama9")).toBe(true)
+    expect(canEditPosDeviceRoleLimitsForStore("staff", "CM Rama9", "CM Rama9")).toBe(false)
   })
 })

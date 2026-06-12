@@ -22,6 +22,7 @@ import {
 } from "@/lib/sales-discount-analytics-labels"
 import type {
   PosSalesByPromoResult,
+  PosSalesCombinedDiscountResult,
   PosSalesCombinedKindTotals,
   PosSalesPaymentDiscountRow,
   PosSalesPromoRow,
@@ -636,7 +637,7 @@ function PaymentDetailTable({
   )
 }
 
-function CombinedKindSection({
+export function CombinedKindSection({
   byKind,
   tr,
 }: {
@@ -682,6 +683,24 @@ function CombinedKindSection({
       />
     </div>
   )
+}
+
+/** 경영 손익 분석 등 — 통합 할인 byKind 테이블·차트만 embed */
+export function SalesCombinedDiscountEmbed({
+  combined,
+  tr,
+}: {
+  combined: PosSalesCombinedDiscountResult
+  tr: TrFn
+}) {
+  if (!combined.byKind.length) {
+    return (
+      <p className="py-4 text-center text-sm text-muted-foreground">
+        {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
+      </p>
+    )
+  }
+  return <CombinedKindSection byKind={combined.byKind} tr={tr} />
 }
 
 export function SalesDiscountAnalyticsShell({

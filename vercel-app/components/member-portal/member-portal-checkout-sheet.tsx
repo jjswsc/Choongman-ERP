@@ -13,7 +13,7 @@ import {
   clearMemberPortalCheckoutDraft,
   saveMemberPortalCheckoutDraft,
 } from "@/lib/member-portal-checkout-draft-storage"
-import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from "@/lib/member-portal-prepay-config"
+import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from "@/lib/member-portal-prepay-constants"
 
 type CartLine = {
   menuId: string

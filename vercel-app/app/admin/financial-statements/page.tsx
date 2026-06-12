@@ -33,6 +33,8 @@ import {
 import { IncomeStatementTab } from "@/components/tabs/income-statement-tab"
 import { BalanceSheetTab } from "@/components/tabs/balance-sheet-tab"
 import { LedgerReconciliationTab } from "@/components/tabs/ledger-reconciliation-tab"
+import { ManagementMarginTab } from "@/components/tabs/management-margin-tab"
+import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 export default function FinancialStatementsPage() {
@@ -72,8 +74,30 @@ export default function FinancialStatementsPage() {
         ? scopedStoreChoices[0]
         : "All"
   )
-  const [tab, setTab] = React.useState<"income" | "balance" | "reconcile">("income")
+  const [tab, setTab] = React.useState<"income" | "balance" | "reconcile" | "margin">("income")
   const [queryToken, setQueryToken] = React.useState(0)
+  const searchParams = useSearchParams()
+  const urlAppliedRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (urlAppliedRef.current) return
+    urlAppliedRef.current = true
+    const tabParam = searchParams.get("tab")
+    const ymStart = searchParams.get("ymStart")
+    const ymEnd = searchParams.get("ymEnd")
+    const store = searchParams.get("store")
+    if (
+      tabParam === "income" ||
+      tabParam === "balance" ||
+      tabParam === "reconcile" ||
+      tabParam === "margin"
+    ) {
+      setTab(tabParam)
+    }
+    if (ymStart && /^\d{4}-\d{2}$/.test(ymStart)) setYearMonthStart(ymStart)
+    if (ymEnd && /^\d{4}-\d{2}$/.test(ymEnd)) setYearMonthEnd(ymEnd)
+    if (store) setStoreFilter(store)
+  }, [searchParams])
 
   React.useEffect(() => {
     if (!canFranchiseeMultiStore) {
@@ -201,7 +225,7 @@ export default function FinancialStatementsPage() {
 
         <Tabs
           value={tab}
-          onValueChange={(v) => setTab(v as "income" | "balance" | "reconcile")}
+          onValueChange={(v) => setTab(v as "income" | "balance" | "reconcile" | "margin")}
           className={adminTabsRootCn}
         >
           <AdminTabsBarWithHelp>
@@ -214,6 +238,9 @@ export default function FinancialStatementsPage() {
               </TabsTrigger>
               <TabsTrigger value="reconcile" className={adminTabsTriggerCn}>
                 {t("adminLedgerReconciliation")}
+              </TabsTrigger>
+              <TabsTrigger value="margin" className={adminTabsTriggerCn}>
+                {t("adminManagementMargin")}
               </TabsTrigger>
             </TabsList>
           </AdminTabsBarWithHelp>
@@ -243,6 +270,14 @@ export default function FinancialStatementsPage() {
               yearMonth={yearMonthEnd}
               storeFilter={storeFilter}
               hideControls
+              queryToken={queryToken}
+            />
+          </TabsContent>
+          <TabsContent value="margin" className={cn(adminTabsContentCn, "space-y-3")}>
+            <ManagementMarginTab
+              yearMonthStart={yearMonthStart}
+              yearMonthEnd={yearMonthEnd}
+              storeFilter={storeFilter}
               queryToken={queryToken}
             />
           </TabsContent>

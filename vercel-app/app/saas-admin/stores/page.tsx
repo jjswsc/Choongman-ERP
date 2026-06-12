@@ -263,10 +263,14 @@ export default function SaasStoresPage() {
         <h1 className="text-2xl font-semibold">{t("saasAdminStore_pageTitle")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{t("saasAdminStore_pageIntro")}</p>
         <p className="mt-2 text-sm">
+          <Link href="/saas-admin/onboarding" className="text-primary underline underline-offset-4">
+            {t("saasAdminNavOnboarding")}
+          </Link>
+          {t("saasAdminStore_pageLinkHint")}
           <Link href="/saas-admin/customers" className="text-primary underline underline-offset-4">
             {t("saasAdmin_linkCustomers")}
           </Link>
-          {t("saasAdminStore_pageLinkHint")}
+          {t("saasAdminStore_pageLinkHintCustomers")}
         </p>
       </div>
 

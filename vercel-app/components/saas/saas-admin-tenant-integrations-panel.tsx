@@ -65,8 +65,12 @@ function readStr(obj: Record<string, unknown>, key: string): string {
   return String(obj[key] ?? "").trim()
 }
 
-export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; companyName: string }) {
-  const { tenantId, companyName } = props
+export function SaasAdminTenantIntegrationsPanel(props: {
+  tenantId: string
+  companyName: string
+  onIntegrationEnabledChange?: (provider: IntegrationProvider, enabled: boolean) => void
+}) {
+  const { tenantId, companyName, onIntegrationEnabledChange } = props
   const t = useT(useLang().lang)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -207,6 +211,9 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
       const json = (await res.json()) as { success?: boolean; message?: string }
       if (!res.ok || json.success !== true) throw new Error(json.message || t("saasAdminInt_errSave"))
       await appAlert(tr(t, "saasAdminInt_savedTenant", { provider: provider.toUpperCase() }))
+      if (provider === "kbank" ? kbankTenant.isEnabled : grabTenant.isEnabled) {
+        onIntegrationEnabledChange?.(provider, true)
+      }
       await load()
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))

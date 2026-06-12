@@ -206,3 +206,34 @@ export function expandBangkokYearMonthsInclusive(startYm: string, endYm: string)
   }
   return out
 }
+
+/** `ym`에서 `deltaMonths`만큼 이동한 `YYYY-MM` (음수=과거) */
+export function shiftBangkokYearMonth(ym: string, deltaMonths: number): string | null {
+  const p = parseBangkokYearMonth(ym)
+  if (!p) return null
+  let y = p.y
+  let m = p.m + deltaMonths
+  while (m < 1) {
+    m += 12
+    y -= 1
+  }
+  while (m > 12) {
+    m -= 12
+    y += 1
+  }
+  return `${y}-${String(m).padStart(2, '0')}`
+}
+
+/** 동일 개월 수의 직전 기간 (전월·전분기 MoM/MoQ용) */
+export function priorBangkokPeriodMonths(
+  startYm: string,
+  endYm: string
+): { startYm: string; endYm: string; monthCount: number } | null {
+  const months = expandBangkokYearMonthsInclusive(startYm, endYm)
+  if (months.length === 0) return null
+  const priorEnd = shiftBangkokYearMonth(months[0], -1)
+  if (!priorEnd) return null
+  const priorStart = shiftBangkokYearMonth(months[0], -months.length)
+  if (!priorStart) return null
+  return { startYm: priorStart, endYm: priorEnd, monthCount: months.length }
+}

@@ -23,6 +23,20 @@ import {
   getBangkokMonthStartYmd,
   toBangkokStartIso,
 } from "@/lib/saas-admin-control-plane"
+import {
+  defaultModuleCatalogRows,
+  mergeTenantModulePricing,
+  modulePricesFromCatalog,
+  SAAS_MODULE_KEYS,
+  type SaasModuleCatalogRow,
+  type SaasModuleKey,
+} from "@/lib/saas-module-pricing"
+import {
+  moduleBillingLimitsFromTenant,
+  resolveEffectiveChargeWithLimits,
+} from "@/lib/saas-module-billing"
+import { loadLicensedPosByTenant } from "@/lib/saas-tenant-pos-licensed-server"
+import { normalizePosDeviceBillingBasis, resolvePosDeviceBillingBasis } from "@/lib/saas-tenant-pos-licensed"
 
 type TenantRow = {
   id: string
@@ -73,6 +87,8 @@ type TenantLimitRow = {
 type TenantPolicyRow = {
   tenant_id: string
   sales_stage?: SalesStage | null
+  pricing_mode?: "stage" | "module" | null
+  pos_device_billing_basis?: string | null
   support_tier?: "standard" | "priority" | "dedicated" | null
   require_2fa_admin?: boolean | null
   require_ip_allowlist?: boolean | null
@@ -112,6 +128,48 @@ type AuditLogRow = {
   changed_at?: string | null
   summary?: string | null
   payload_json?: unknown
+}
+
+type ModulePriceRow = {
+  tenant_id: string
+  module_key: string
+  monthly_price?: number | null
+  yearly_price?: number | null
+  is_enabled?: boolean | null
+  is_per_unit?: boolean | null
+  is_custom_quote?: boolean | null
+}
+
+type CatalogDbRow = {
+  module_key: string
+  monthly_price?: number | null
+  yearly_price?: number | null
+  is_per_unit?: boolean | null
+  is_custom_quote?: boolean | null
+  sort_order?: number | null
+}
+
+function catalogRowsFromDb(raw: CatalogDbRow[]): SaasModuleCatalogRow[] {
+  const defaults = defaultModuleCatalogRows()
+  const byKey = new Map(defaults.map((r) => [r.moduleKey, r]))
+  for (const row of raw) {
+    const key = String(row.module_key || "").trim() as SaasModuleKey
+    if (!SAAS_MODULE_KEYS.includes(key)) continue
+    const base = byKey.get(key)!
+    byKey.set(key, {
+      moduleKey: key,
+      monthly: Math.max(0, Number(row.monthly_price ?? base.monthly)),
+      yearly: Math.max(0, Number(row.yearly_price ?? base.yearly)),
+      isPerUnit: row.is_per_unit === true || base.isPerUnit,
+      isCustomQuote: row.is_custom_quote === true || base.isCustomQuote,
+      sortOrder: Number(row.sort_order ?? base.sortOrder),
+    })
+  }
+  return [...byKey.values()].sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+function asPricingMode(raw: unknown): "stage" | "module" {
+  return String(raw || "").trim().toLowerCase() === "module" ? "module" : "stage"
 }
 
 type StagePriceOverrideRow = {
@@ -249,7 +307,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, tenants: [] }, { headers })
     }
 
-    const [subs, plans, planLimits, tenantLimits, tenantPolicies, planFeatures, tenantFeatures, billingRows, auditRows, stagePriceRows] =
+    const [subs, plans, planLimits, tenantLimits, tenantPolicies, planFeatures, tenantFeatures, billingRows, auditRows, stagePriceRows, modulePriceRows, catalogDbRows] =
       (await Promise.all([
         supabaseSelect("tenant_subscriptions", { limit: 400 }),
         supabaseSelect("saas_plans", { limit: 100 }),
@@ -261,6 +319,8 @@ export async function GET(req: NextRequest) {
         selectSafe("saas_billing_events", { order: "happened_at.desc", limit: 500 }),
         selectSafe("saas_audit_logs", { order: "changed_at.desc", limit: 500 }),
         selectSafe("tenant_stage_price_overrides", { limit: 5000 }),
+        selectSafe("tenant_module_pricing", { limit: 10000 }),
+        selectSafe("saas_module_price_catalog", { order: "sort_order.asc", limit: 100 }),
       ])) as [
         SubRow[],
         PlanRow[],
@@ -272,7 +332,15 @@ export async function GET(req: NextRequest) {
         BillingEventRow[],
         AuditLogRow[],
         StagePriceOverrideRow[],
+        ModulePriceRow[],
+        CatalogDbRow[],
       ]
+
+    const catalogRows =
+      Array.isArray(catalogDbRows) && catalogDbRows.length > 0
+        ? catalogRowsFromDb(catalogDbRows)
+        : defaultModuleCatalogRows()
+    const catalogModulePrices = modulePricesFromCatalog(catalogRows)
 
     const subMap = new Map((subs || []).map((x) => [x.tenant_id, x]))
     const planMap = new Map((plans || []).map((x) => [x.id, x]))
@@ -354,6 +422,7 @@ export async function GET(req: NextRequest) {
     }
 
     const rows: TenantItem[] = []
+    const licensedPosMap = await loadLicensedPosByTenant()
     for (const tenant of tenants) {
       const sub = subMap.get(tenant.id)
       const plan = sub?.plan_id ? planMap.get(sub.plan_id) : undefined
@@ -398,10 +467,52 @@ export async function GET(req: NextRequest) {
         autoSuspendOnOverdue: sub?.auto_suspend_on_overdue ?? DEFAULT_POLICY.autoSuspendOnOverdue,
         lastPaymentStatus: sub?.last_payment_status || null,
       })
-      const usage = await buildUsage(tenant.id)
+      const usageRaw = await buildUsage(tenant.id)
+      const licensedPosDevices = licensedPosMap.get(tenant.id) ?? 0
+      const usage = { ...usageRaw, licensedPosDevices }
       const stagePrices = stagePriceMap.get(tenant.id) || { ...DEFAULT_STAGE_PRICES }
       const currency = currencyMap.get(tenant.id) || "THB"
-      const currentChargeAmount = resolveCurrentChargeAmount(salesStage, cycle, stagePrices)
+      const pricingMode = asPricingMode(policyRow?.pricing_mode)
+      const posDeviceBillingBasis = resolvePosDeviceBillingBasis(
+        tenant.id,
+        pricingMode,
+        normalizePosDeviceBillingBasis(policyRow?.pos_device_billing_basis, pricingMode)
+      )
+      if (posDeviceBillingBasis === "erp_admin" && licensedPosDevices > 0) {
+        mergedPlanLimit.maxPosDevices = licensedPosDevices
+      }
+      const modulePrices = mergeTenantModulePricing({
+        catalog: catalogModulePrices,
+        tenantRows: modulePriceRows || [],
+        tenantId: tenant.id,
+      })
+      const stageAmount = resolveCurrentChargeAmount(salesStage, cycle, stagePrices)
+      const policyForLimits = {
+        salesStage,
+        pricingMode,
+        posDeviceBillingBasis,
+        autoSuspendOnOverdue: sub?.auto_suspend_on_overdue ?? DEFAULT_POLICY.autoSuspendOnOverdue,
+        allowOverage: policyLimit?.allow_overage ?? DEFAULT_POLICY.allowOverage,
+        require2faAdmin: policyRow?.require_2fa_admin ?? DEFAULT_POLICY.require2faAdmin,
+        requireIpAllowlist: policyRow?.require_ip_allowlist ?? DEFAULT_POLICY.requireIpAllowlist,
+        forceWeeklyBackup: policyRow?.force_weekly_backup ?? DEFAULT_POLICY.forceWeeklyBackup,
+        dataRetentionDays: policyRow?.data_retention_days ?? DEFAULT_POLICY.dataRetentionDays,
+        overdueGraceDays: sub?.overdue_grace_days ?? DEFAULT_POLICY.overdueGraceDays,
+        supportTier: policyRow?.support_tier ?? DEFAULT_POLICY.supportTier,
+      }
+      const currentChargeAmount = resolveEffectiveChargeWithLimits({
+        pricingMode,
+        billingCycle: cycle,
+        stageAmount,
+        modulePrices,
+        usage,
+        limits: moduleBillingLimitsFromTenant({
+          id: tenant.id,
+          limits: mergedPlanLimit,
+          policy: policyForLimits,
+          usage,
+        }),
+      })
 
       rows.push({
         id: tenant.id,
@@ -416,21 +527,13 @@ export async function GET(req: NextRequest) {
         timezone: "Asia/Bangkok",
         features: stagedFeatures,
         limits: mergedPlanLimit,
-        policy: {
-          salesStage,
-          autoSuspendOnOverdue: sub?.auto_suspend_on_overdue ?? DEFAULT_POLICY.autoSuspendOnOverdue,
-          allowOverage: policyLimit?.allow_overage ?? DEFAULT_POLICY.allowOverage,
-          require2faAdmin: policyRow?.require_2fa_admin ?? DEFAULT_POLICY.require2faAdmin,
-          requireIpAllowlist: policyRow?.require_ip_allowlist ?? DEFAULT_POLICY.requireIpAllowlist,
-          forceWeeklyBackup: policyRow?.force_weekly_backup ?? DEFAULT_POLICY.forceWeeklyBackup,
-          dataRetentionDays: policyRow?.data_retention_days ?? DEFAULT_POLICY.dataRetentionDays,
-          overdueGraceDays: sub?.overdue_grace_days ?? DEFAULT_POLICY.overdueGraceDays,
-          supportTier: policyRow?.support_tier ?? DEFAULT_POLICY.supportTier,
-        },
+        policy: policyForLimits,
         usage,
         pricing: {
           currency,
+          pricingMode,
           stagePrices,
+          modulePrices,
           currentChargeAmount,
         },
         billingHistory: billingMap.get(tenant.id) || [],

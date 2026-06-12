@@ -19,7 +19,7 @@ import {
   useStoreList,
   type PosDeviceItem,
 } from '@/lib/api-client'
-import { isOfficeRole, canPickPosTerminalStore } from '@/lib/permissions'
+import { canEditPosDeviceRoleLimitsForStore, canPickPosTerminalStore } from '@/lib/permissions'
 import { DEFAULT_POS_DEVICE_ROLE_LIMITS } from '@/lib/pos-device-role-limits'
 import { formatPosDateTimeShort } from '@/lib/pos-datetime-locale'
 import { ClipboardCopy, Monitor, Smartphone, RefreshCw, UserX } from 'lucide-react'
@@ -60,9 +60,13 @@ export function PosTerminalSettingsContent() {
   const [limitsDraftLocked, setLimitsDraftLocked] = React.useState(DEFAULT_POS_DEVICE_ROLE_LIMITS.mainDeviceRoleLocked)
   const [savingLimits, setSavingLimits] = React.useState(false)
 
-  const isOffice = isOfficeRole(auth?.role || '')
   const canSearchAll = canPickPosTerminalStore(auth?.role || '', auth?.store || '')
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ''
+  const canEditRoleLimits = canEditPosDeviceRoleLimitsForStore(
+    auth?.role || '',
+    auth?.store || '',
+    effectiveStore
+  )
 
   const loadData = React.useCallback(() => {
     if (!effectiveStore) {
@@ -305,7 +309,7 @@ export function PosTerminalSettingsContent() {
   const orderSlotsRemaining = Math.max(0, orderDeviceMaxCount - recentOrderDeviceCount)
 
   const handleSaveRoleLimits = async () => {
-    if (!effectiveStore || !isOffice) return
+    if (!effectiveStore || !canEditRoleLimits) return
     const mainN = Math.min(5, Math.max(1, Math.trunc(Number(limitsDraftMain) || 1)))
     const orderN = Math.min(30, Math.max(1, Math.trunc(Number(limitsDraftOrder) || 1)))
     setSavingLimits(true)
@@ -550,10 +554,10 @@ export function PosTerminalSettingsContent() {
             </div>
           </dl>
         )}
-        {isOffice ? (
+        {canEditRoleLimits ? (
           <div className="space-y-3 rounded-md border border-primary/20 bg-background p-3">
             <p className="text-xs font-medium text-primary">
-              {t('posTerminalRoleLimitsOfficeOnly') || '본사(OFFICE) 전용 — 대수·잠금 조정'}
+              {t('posTerminalRoleLimitsAdminOnly') || 'POS 관리자 — 대수·잠금 조정'}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">
@@ -597,8 +601,8 @@ export function PosTerminalSettingsContent() {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {t('posTerminalRoleLimitsFranchiseReadOnly') ||
-              '대수 변경은 본사(OFFICE)에 요청하세요. 매장 관리자는 아래 목록에서 메인 지정·해제만 할 수 있습니다.'}
+            {t('posTerminalRoleLimitsReadOnly') ||
+              '단말 대수 변경은 POS 관리자만 할 수 있습니다. 아래 목록에서 메인 지정·해제는 가능합니다.'}
           </p>
         )}
       </div>

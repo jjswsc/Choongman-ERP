@@ -6,9 +6,10 @@ import {
   parseMainDeviceRoleLocked,
 } from '@/lib/pos-device-role-limits'
 import { requireAuth } from '@/lib/verify-auth'
-import { isOfficeRole } from '@/lib/permissions'
+import { canEditPosDeviceRoleLimitsForStore } from '@/lib/permissions'
+import { syncTenantMaxPosFromErpAdmin } from '@/lib/saas-tenant-pos-licensed-server'
 
-/** 본사(OFFICE) 전용: 매장별 메인/주문 단말 대수·잠금 설정 */
+/** POS 관리자 전용: 매장별 메인/주문 단말 대수·잠금 설정 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -18,17 +19,18 @@ export async function POST(req: NextRequest) {
     if (!authResult.auth) {
       return NextResponse.json({ success: false, message: '인증이 필요합니다.' }, { status: 401, headers })
     }
-    if (!isOfficeRole(authResult.auth.role || '')) {
-      return NextResponse.json(
-        { success: false, message: '단말 대수 설정은 본사(OFFICE) 직원만 변경할 수 있습니다.' },
-        { status: 403, headers }
-      )
-    }
 
     const body = await req.json().catch(() => ({}))
     const storeCode = String(body?.storeCode ?? '').trim()
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
+    }
+
+    if (!canEditPosDeviceRoleLimitsForStore(authResult.auth.role || '', authResult.auth.store || '', storeCode)) {
+      return NextResponse.json(
+        { success: false, message: '단말 대수 설정은 POS 관리자만 변경할 수 있습니다.' },
+        { status: 403, headers }
+      )
     }
 
     const rows = (await supabaseSelectFilter(
@@ -57,6 +59,12 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
       }
     )
+
+    try {
+      await syncTenantMaxPosFromErpAdmin(storeCode)
+    } catch (syncErr) {
+      console.warn('savePosDeviceRoleLimits: SaaS sync skipped', syncErr)
+    }
 
     return NextResponse.json(
       {

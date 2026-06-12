@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
 import { Badge } from "@/components/ui/badge"
@@ -15,8 +16,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   applySalesStageFeatures,
-  DEFAULT_FEATURE_FLAGS,
-  DEFAULT_LIMITS_BY_TIER,
   DEFAULT_POLICY,
   DEFAULT_STAGE_PRICES,
   FALLBACK_TENANTS,
@@ -29,6 +28,7 @@ import {
 } from "@/lib/saas-admin-control-plane"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
+import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import {
@@ -38,6 +38,22 @@ import {
   saasAdminStageLabel,
   saasAdminStatusLabel,
 } from "@/lib/i18n-saas-admin"
+import {
+  applyIntegrationFlagsToModules,
+  cloneDefaultModulePrices,
+  normalizeModulePrices,
+  SAAS_MODULE_LABEL_KEY,
+  syncFeaturesFromModules,
+  syncModuleEnabledFromFeatures,
+} from "@/lib/saas-module-pricing"
+import {
+  buildModuleInvoiceCsv,
+  buildModuleInvoiceHtml,
+  moduleBillingLimitsFromTenant,
+  resolveEffectiveChargeWithLimits,
+} from "@/lib/saas-module-billing"
+import { createNewTenantDraft } from "@/lib/saas-tenant-draft"
+import { fetchGlobalModulePrices } from "@/lib/saas-module-catalog-client"
 
 const PLAN_TIER_NAME: Record<PlanTier, string> = {
   starter: "Starter",
@@ -51,6 +67,23 @@ const STATUS_VARIANT = {
   grace: "outline",
   suspended: "destructive",
 } as const
+
+const CUSTOMER_DETAIL_TABS = [
+  "plan",
+  "bootstrap",
+  "limits",
+  "policy",
+  "usage",
+  "billing",
+  "audit",
+  "integrations",
+] as const
+
+type CustomerDetailTab = (typeof CUSTOMER_DETAIL_TABS)[number]
+
+function isCustomerDetailTab(value: string | null): value is CustomerDetailTab {
+  return CUSTOMER_DETAIL_TABS.includes(value as CustomerDetailTab)
+}
 
 function limitProgress(current: number, max: number): number {
   if (max <= 0) return 0
@@ -133,15 +166,45 @@ function matchesAuditPeriod(changedAt: string, period: AuditPeriodFilter): boole
 }
 
 function normalizeTenantRows(rows: TenantItem[]): TenantItem[] {
-  return rows.map((row) => ({
-    ...row,
-    policy: {
-      ...row.policy,
-      salesStage: row.policy?.salesStage || "basic",
-    },
-    billingHistory: Array.isArray(row.billingHistory) ? row.billingHistory : [],
-    auditTrail: Array.isArray(row.auditTrail) ? row.auditTrail : [],
-  }))
+  return rows.map((row) => {
+    const pricingMode = row.policy?.pricingMode ?? row.pricing?.pricingMode ?? "stage"
+    const modulePrices = normalizeModulePrices(row.pricing?.modulePrices)
+    const stageAmount = resolveCurrentChargeAmount(
+      row.policy?.salesStage || "basic",
+      row.billingCycle || "monthly",
+      row.pricing?.stagePrices || DEFAULT_STAGE_PRICES
+    )
+    return {
+      ...row,
+      policy: {
+        ...DEFAULT_POLICY,
+        ...row.policy,
+        salesStage: row.policy?.salesStage || "basic",
+        pricingMode,
+      },
+      pricing: {
+        currency: row.pricing?.currency || "THB",
+        pricingMode,
+        stagePrices: row.pricing?.stagePrices || { ...DEFAULT_STAGE_PRICES },
+        modulePrices,
+        currentChargeAmount: resolveEffectiveChargeWithLimits({
+          pricingMode,
+          billingCycle: row.billingCycle || "monthly",
+          stageAmount,
+          modulePrices,
+          usage: row.usage,
+          limits: moduleBillingLimitsFromTenant({
+            id: row.id,
+            limits: row.limits,
+            policy: { ...DEFAULT_POLICY, ...row.policy, pricingMode },
+            usage: row.usage,
+          }),
+        }),
+      },
+      billingHistory: Array.isArray(row.billingHistory) ? row.billingHistory : [],
+      auditTrail: Array.isArray(row.auditTrail) ? row.auditTrail : [],
+    }
+  })
 }
 
 function getExpiryInfo(
@@ -164,18 +227,46 @@ function escapeCsv(value: unknown): string {
   return `"${s.replace(/"/g, '""')}"`
 }
 
+function recalcTenantPricing(tenant: TenantItem, pricingPatch: Partial<TenantItem["pricing"]>): TenantItem["pricing"] {
+  const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
+  const stagePrices = pricingPatch.stagePrices ?? tenant.pricing.stagePrices
+  const modulePrices = normalizeModulePrices(pricingPatch.modulePrices ?? tenant.pricing.modulePrices)
+  const stageAmount = resolveCurrentChargeAmount(tenant.policy.salesStage, tenant.billingCycle, stagePrices)
+  return {
+    ...tenant.pricing,
+    ...pricingPatch,
+    stagePrices,
+    modulePrices,
+    pricingMode,
+    currentChargeAmount: resolveEffectiveChargeWithLimits({
+      pricingMode,
+      billingCycle: tenant.billingCycle,
+      stageAmount,
+      modulePrices,
+      usage: tenant.usage,
+      limits: moduleBillingLimitsFromTenant(tenant),
+    }),
+  }
+}
+
 export default function SaasCustomersPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const dateLocale = saasAdminDateLocale(lang)
   const fallbackTenant = FALLBACK_TENANTS[0]!
-  const [tenants, setTenants] = useState<TenantItem[]>(FALLBACK_TENANTS)
-  const [selectedTenantId, setSelectedTenantId] = useState<string>(fallbackTenant.id)
-  const [loading, setLoading] = useState(false)
+  const [tenants, setTenants] = useState<TenantItem[]>([])
+  const [selectedTenantId, setSelectedTenantId] = useState("")
+  const [loading, setLoading] = useState(true)
   const [loadNotice, setLoadNotice] = useState("")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | TenantItem["status"]>("all")
   const [openCreate, setOpenCreate] = useState(false)
+  const [invoiceEmailOpen, setInvoiceEmailOpen] = useState(false)
+  const [invoiceEmail, setInvoiceEmail] = useState("")
+  const [invoiceNote, setInvoiceNote] = useState("")
+  const [invoiceSending, setInvoiceSending] = useState(false)
   const [newTenantId, setNewTenantId] = useState("")
   const [newTenantName, setNewTenantName] = useState("")
   const [newOwnerName, setNewOwnerName] = useState("")
@@ -194,6 +285,8 @@ export default function SaasCustomersPage() {
   const [auditFilter, setAuditFilter] = useState<"all" | "employee_only">("all")
   const [auditActorQuery, setAuditActorQuery] = useState("")
   const [auditPeriod, setAuditPeriod] = useState<AuditPeriodFilter>("all")
+  const [detailTab, setDetailTab] = useState<CustomerDetailTab>("plan")
+  const [bootstrapHint, setBootstrapHint] = useState(false)
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) ?? tenants[0] ?? fallbackTenant,
@@ -287,6 +380,35 @@ export default function SaasCustomersPage() {
   }, [loadTenants])
 
   useEffect(() => {
+    const tenant = searchParams.get("tenant")?.trim()
+    const tab = searchParams.get("tab")
+    if (tenant) setSelectedTenantId(tenant)
+    if (isCustomerDetailTab(tab)) setDetailTab(tab)
+    if (searchParams.get("created") === "1") setBootstrapHint(true)
+  }, [searchParams])
+
+  const syncCustomersUrl = useCallback(
+    (patch: { tenantId?: string; tab?: CustomerDetailTab; created?: boolean }) => {
+      const p = new URLSearchParams(searchParams.toString())
+      const tenantId = patch.tenantId ?? selectedTenantId
+      const tab = patch.tab ?? detailTab
+      if (tenantId) p.set("tenant", tenantId)
+      else p.delete("tenant")
+      p.set("tab", tab)
+      if (patch.created) p.set("created", "1")
+      else p.delete("created")
+      router.replace(`/saas-admin/customers?${p.toString()}`, { scroll: false })
+    },
+    [detailTab, router, searchParams, selectedTenantId]
+  )
+
+  const onDetailTabChange = (value: string) => {
+    if (!isCustomerDetailTab(value)) return
+    setDetailTab(value)
+    syncCustomersUrl({ tab: value })
+  }
+
+  useEffect(() => {
     if (filteredTenants.some((x) => x.id === selectedTenantId)) return
     if (filteredTenants.length > 0) {
       setSelectedTenantId(filteredTenants[0]!.id)
@@ -344,40 +466,14 @@ export default function SaasCustomersPage() {
       await appAlert(t("saasAdminCust_errIdExists"))
       return
     }
-    const draft: TenantItem = {
+    const catalog = (await fetchGlobalModulePrices()) ?? cloneDefaultModulePrices()
+    const draft = createNewTenantDraft({
       id,
       companyName: name,
-      ownerName: newOwnerName.trim() || "-",
-      phone: newPhone.trim() || "-",
-      planTier: "starter",
-      billingCycle: "monthly",
-      status: "trial",
-      nextBillingDate: "",
-      trialEndsAt: "",
-      timezone: "Asia/Bangkok",
-      features: { ...DEFAULT_FEATURE_FLAGS },
-      limits: { ...DEFAULT_LIMITS_BY_TIER.starter },
-      policy: { ...DEFAULT_POLICY },
-      usage: {
-        stores: 0,
-        managerAccounts: 0,
-        staffAccounts: 0,
-        tablets: 0,
-        posDevices: 0,
-        monthlyOrders: 0,
-      },
-      pricing: {
-        currency: "THB",
-        stagePrices: { ...DEFAULT_STAGE_PRICES },
-        currentChargeAmount: resolveCurrentChargeAmount(
-          DEFAULT_POLICY.salesStage,
-          "monthly",
-          DEFAULT_STAGE_PRICES
-        ),
-      },
-      billingHistory: [],
-      auditTrail: [],
-    }
+      ownerName: newOwnerName,
+      phone: newPhone,
+      catalog,
+    })
 
     setLoading(true)
     try {
@@ -390,6 +486,9 @@ export default function SaasCustomersPage() {
       setNewPhone("")
       await loadTenants()
       setSelectedTenantId(id)
+      setDetailTab("bootstrap")
+      setBootstrapHint(true)
+      syncCustomersUrl({ tenantId: id, tab: "bootstrap", created: true })
     } catch (error) {
       await appAlert(tr(t, "saasAdminCust_createFailed", { msg: String(error) }))
     } finally {
@@ -571,6 +670,67 @@ export default function SaasCustomersPage() {
     URL.revokeObjectURL(url)
   }
 
+  const moduleInvoiceLabels = (): Record<string, string> =>
+    Object.fromEntries(Object.values(SAAS_MODULE_LABEL_KEY).map((key) => [key, t(key)]))
+
+  const exportModuleInvoiceCsv = () => {
+    const csv = buildModuleInvoiceCsv(selectedTenant, moduleInvoiceLabels())
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `saas_invoice_${selectedTenant.id}_${bangkokYmd()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const printModuleInvoice = () => {
+    const html = buildModuleInvoiceHtml(selectedTenant, moduleInvoiceLabels())
+    const w = window.open("", "_blank", "noopener,noreferrer")
+    if (!w) return
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    w.print()
+  }
+
+  const sendModuleInvoiceEmail = async () => {
+    const email = invoiceEmail.trim()
+    if (!email) {
+      await appAlert(t("saasAdminCust_invoiceEmailRequired"))
+      return
+    }
+    setInvoiceSending(true)
+    try {
+      const res = await apiFetch("/api/saasAdminModuleInvoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant: selectedTenant,
+          tenantId: selectedTenant.id,
+          email,
+          note: invoiceNote.trim() || undefined,
+          lang,
+        }),
+      })
+      const json = (await res.json()) as { success?: boolean; message?: string }
+      if (!res.ok || json.success !== true) {
+        await appAlert(json.message || t("saasAdminCust_invoiceEmailFailed"))
+        return
+      }
+      await appAlert(t("saasAdminCust_invoiceEmailSent"))
+      setInvoiceEmailOpen(false)
+      setInvoiceEmail("")
+      setInvoiceNote("")
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setInvoiceSending(false)
+    }
+  }
+
   const exportAuditCsv = () => {
     const headers = [
       "tenant_id",
@@ -651,37 +811,37 @@ export default function SaasCustomersPage() {
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statTotal")}</p>
-            <p className="text-2xl font-semibold">{tenants.length}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : tenants.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statActiveTrial")}</p>
-            <p className="text-2xl font-semibold">{stats.active + stats.trial}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : stats.active + stats.trial}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statGrace")}</p>
-            <p className="text-2xl font-semibold">{stats.grace}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : stats.grace}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statSuspended")}</p>
-            <p className="text-2xl font-semibold">{stats.suspended}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : stats.suspended}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statHighRisk")}</p>
-            <p className="text-2xl font-semibold">{stats.highRisk}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : stats.highRisk}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statMonthlyOrders")}</p>
-            <p className="text-2xl font-semibold">{stats.totalOrders.toLocaleString()}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : stats.totalOrders.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
@@ -747,7 +907,15 @@ export default function SaasCustomersPage() {
         </Button>
       </div>
 
-      {tenants.length === 0 ? (
+      {loading && tenants.length === 0 ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-sm text-muted-foreground">{t("saasAdmin_loading")}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && tenants.length === 0 ? (
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">{t("saasAdminCust_noTenants")}</p>
@@ -861,16 +1029,16 @@ export default function SaasCustomersPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="plan" className="w-full">
+            <Tabs value={detailTab} onValueChange={onDetailTabChange} className="w-full">
               <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                 <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
+                <TabsTrigger value="bootstrap">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
                 <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
                 <TabsTrigger value="policy">{t("saasAdminCust_tabPolicy")}</TabsTrigger>
                 <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
                 <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
                 <TabsTrigger value="audit">{t("saasAdminCust_tabAudit")}</TabsTrigger>
                 <TabsTrigger value="integrations">{t("saasAdminCust_tabIntegrations")}</TabsTrigger>
-                <TabsTrigger value="bootstrap">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="plan" className="space-y-4 pt-2">
@@ -898,7 +1066,14 @@ export default function SaasCustomersPage() {
                     <Select
                       value={selectedTenant.billingCycle}
                       onValueChange={(value) =>
-                        updateTenant((tenant) => ({ ...tenant, billingCycle: value as BillingCycle }))
+                        updateTenant((tenant) => {
+                          const billingCycle = value as BillingCycle
+                          const next = { ...tenant, billingCycle }
+                          return {
+                            ...next,
+                            pricing: recalcTenantPricing(next, {}),
+                          }
+                        })
                       }
                     >
                       <SelectTrigger>
@@ -942,10 +1117,22 @@ export default function SaasCustomersPage() {
                       <Checkbox
                         checked={selectedTenant.features[featureKey]}
                         onCheckedChange={(checked) =>
-                          updateTenant((tenant) => ({
-                            ...tenant,
-                            features: { ...tenant.features, [featureKey]: Boolean(checked) },
-                          }))
+                          updateTenant((tenant) => {
+                            const features = { ...tenant.features, [featureKey]: Boolean(checked) }
+                            const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
+                            if (pricingMode !== "module") {
+                              return { ...tenant, features }
+                            }
+                            const modulePrices = syncModuleEnabledFromFeatures(
+                              normalizeModulePrices(tenant.pricing.modulePrices),
+                              features
+                            )
+                            return {
+                              ...tenant,
+                              features,
+                              pricing: recalcTenantPricing(tenant, { modulePrices }),
+                            }
+                          })
                         }
                       />
                       <div className="space-y-0.5">
@@ -1022,6 +1209,7 @@ export default function SaasCustomersPage() {
                       type="number"
                       min={1}
                       value={selectedTenant.limits.maxPosDevices}
+                      disabled={selectedTenant.policy.posDeviceBillingBasis === "erp_admin"}
                       onChange={(event) =>
                         updateTenant((tenant) => ({
                           ...tenant,
@@ -1029,6 +1217,14 @@ export default function SaasCustomersPage() {
                         }))
                       }
                     />
+                    {selectedTenant.policy.posDeviceBillingBasis === "erp_admin" ? (
+                      <p className="text-xs text-muted-foreground">
+                        {tr(t, "saasAdminCust_maxPosErpHint", {
+                          licensed: String(selectedTenant.usage.licensedPosDevices ?? selectedTenant.limits.maxPosDevices),
+                          inUse: String(selectedTenant.usage.posDevices),
+                        })}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label>{t("saasAdminCust_maxApiKeys")}</Label>
@@ -1071,7 +1267,14 @@ export default function SaasCustomersPage() {
                     <Select
                       value={selectedTenant.policy.salesStage}
                       onValueChange={(value) =>
-                        updateTenant((tenant) => ({ ...tenant, policy: { ...tenant.policy, salesStage: value as SalesStage } }))
+                        updateTenant((tenant) => {
+                          const salesStage = value as SalesStage
+                          const next = { ...tenant, policy: { ...tenant.policy, salesStage } }
+                          return {
+                            ...next,
+                            pricing: recalcTenantPricing(next, {}),
+                          }
+                        })
                       }
                     >
                       <SelectTrigger>
@@ -1090,15 +1293,55 @@ export default function SaasCustomersPage() {
                     type="button"
                     variant="outline"
                     onClick={() =>
-                      updateTenant((tenant) => ({
-                        ...tenant,
-                        features: applySalesStageFeatures(tenant.features, tenant.policy.salesStage),
-                      }))
+                      updateTenant((tenant) => {
+                        const features = applySalesStageFeatures(tenant.features, tenant.policy.salesStage)
+                        const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
+                        if (pricingMode !== "module") {
+                          return { ...tenant, features }
+                        }
+                        const modulePrices = syncModuleEnabledFromFeatures(
+                          normalizeModulePrices(tenant.pricing.modulePrices),
+                          features
+                        )
+                        return {
+                          ...tenant,
+                          features,
+                          pricing: recalcTenantPricing(tenant, { modulePrices }),
+                        }
+                      })
                     }
                   >
                     {t("saasAdminCust_applyStageFeatures")}
                   </Button>
                 </div>
+
+                <div className="grid gap-3 rounded-md border p-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t("saasAdminCust_posBillingBasis")}</Label>
+                    <Select
+                      value={selectedTenant.policy.posDeviceBillingBasis ?? "usage"}
+                      onValueChange={(value) =>
+                        updateTenant((tenant) => {
+                          const posDeviceBillingBasis = value as TenantItem["policy"]["posDeviceBillingBasis"]
+                          const next = { ...tenant, policy: { ...tenant.policy, posDeviceBillingBasis } }
+                          return { ...next, pricing: recalcTenantPricing(next, {}) }
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="erp_admin">{t("saasAdminCust_posBillingErpAdmin")}</SelectItem>
+                        <SelectItem value="saas_limit">{t("saasAdminCust_posBillingSaasLimit")}</SelectItem>
+                        <SelectItem value="usage">{t("saasAdminCust_posBillingUsage")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t("saasAdminCust_posBillingBasisDesc")}</p>
+                  </div>
+                </div>
+
+                <SaasModulePricingPanel tenant={selectedTenant} onChange={updateTenant} />
 
                 <div className="grid gap-3 rounded-md border p-3">
                   <div className="flex items-center justify-between">
@@ -1139,15 +1382,7 @@ export default function SaasCustomersPage() {
                                   }
                                   return {
                                     ...tenant,
-                                    pricing: {
-                                      ...tenant.pricing,
-                                      stagePrices,
-                                      currentChargeAmount: resolveCurrentChargeAmount(
-                                        tenant.policy.salesStage,
-                                        tenant.billingCycle,
-                                        stagePrices
-                                      ),
-                                    },
+                                    pricing: recalcTenantPricing(tenant, { stagePrices }),
                                   }
                                 })
                               }
@@ -1170,15 +1405,7 @@ export default function SaasCustomersPage() {
                                   }
                                   return {
                                     ...tenant,
-                                    pricing: {
-                                      ...tenant.pricing,
-                                      stagePrices,
-                                      currentChargeAmount: resolveCurrentChargeAmount(
-                                        tenant.policy.salesStage,
-                                        tenant.billingCycle,
-                                        stagePrices
-                                      ),
-                                    },
+                                    pricing: recalcTenantPricing(tenant, { stagePrices }),
                                   }
                                 })
                               }
@@ -1310,10 +1537,33 @@ export default function SaasCustomersPage() {
                 <SaasAdminTenantIntegrationsPanel
                   tenantId={selectedTenant.id}
                   companyName={selectedTenant.companyName}
+                  onIntegrationEnabledChange={(provider, enabled) => {
+                    if (!enabled) return
+                    updateTenant((tenant) => {
+                      const modulePrices = applyIntegrationFlagsToModules(
+                        normalizeModulePrices(tenant.pricing.modulePrices),
+                        provider === "kbank" ? { kbank: true } : { grab: true }
+                      )
+                      const features = syncFeaturesFromModules(tenant.features, modulePrices)
+                      return {
+                        ...tenant,
+                        features,
+                        pricing: recalcTenantPricing(tenant, { modulePrices }),
+                      }
+                    })
+                  }}
                 />
               </TabsContent>
 
               <TabsContent value="bootstrap" className="space-y-4 pt-2">
+                {bootstrapHint ? (
+                  <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+                    <p>{t("saasAdminCust_bootstrapBanner")}</p>
+                    <Button asChild size="sm" variant="secondary" className="mt-2">
+                      <Link href="/saas-admin/onboarding">{t("saasAdminNavOnboarding")}</Link>
+                    </Button>
+                  </div>
+                ) : null}
                 <p className="text-sm text-muted-foreground">{t("saasAdminCust_bootstrapIntro")}</p>
                 <div className="rounded-md border border-dashed p-4 space-y-3">
                   <p className="text-sm font-medium">
@@ -1419,6 +1669,15 @@ export default function SaasCustomersPage() {
                     </CardHeader>
                     <CardContent>
                       <UsageBar current={selectedTenant.usage.posDevices} max={selectedTenant.limits.maxPosDevices} />
+                      {selectedTenant.policy.posDeviceBillingBasis === "erp_admin" &&
+                      (selectedTenant.usage.licensedPosDevices ?? 0) > 0 ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {tr(t, "saasAdminCust_maxPosErpHint", {
+                            licensed: String(selectedTenant.usage.licensedPosDevices),
+                            inUse: String(selectedTenant.usage.posDevices),
+                          })}
+                        </p>
+                      ) : null}
                     </CardContent>
                   </Card>
                   <Card>
@@ -1436,7 +1695,20 @@ export default function SaasCustomersPage() {
               </TabsContent>
 
               <TabsContent value="billing" className="space-y-3 pt-2">
-                <p className="text-sm text-muted-foreground">{t("saasAdminCust_billingIntro")}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">{t("saasAdminCust_billingIntro")}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={exportModuleInvoiceCsv}>
+                      {t("saasAdminCust_invoiceExportCsv")}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={printModuleInvoice}>
+                      {t("saasAdminCust_invoicePrint")}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setInvoiceEmailOpen(true)}>
+                      {t("saasAdminCust_invoiceEmail")}
+                    </Button>
+                  </div>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1644,6 +1916,38 @@ export default function SaasCustomersPage() {
             </Button>
             <Button type="button" onClick={createTenant} disabled={loading}>
               {t("saasAdminCust_createSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={invoiceEmailOpen} onOpenChange={setInvoiceEmailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("saasAdminCust_invoiceEmailTitle")}</DialogTitle>
+            <DialogDescription>{t("saasAdminCust_invoiceEmailDesc")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="space-y-1">
+              <Label>{t("saasAdminCust_invoiceEmailTo")}</Label>
+              <Input
+                type="email"
+                value={invoiceEmail}
+                onChange={(e) => setInvoiceEmail(e.target.value)}
+                placeholder="billing@example.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("saasAdminCust_invoiceEmailNote")}</Label>
+              <Input value={invoiceNote} onChange={(e) => setInvoiceNote(e.target.value)} placeholder={t("saasAdminCust_optionalInput")} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setInvoiceEmailOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button type="button" onClick={() => void sendModuleInvoiceEmail()} disabled={invoiceSending}>
+              {t("saasAdminCust_invoiceEmailSend")}
             </Button>
           </DialogFooter>
         </DialogContent>
