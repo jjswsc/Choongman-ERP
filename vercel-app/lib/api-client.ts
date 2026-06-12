@@ -2188,6 +2188,9 @@ export interface ReceivablePayableItem {
     invoice_no?: string
     invoice_received?: boolean
     receive_checked?: boolean
+    bank_transaction_id?: number | null
+    expense_accrual_id?: number | null
+    petty_cash_transaction_id?: number | null
     /** 미지급: 입고·발주·지출·통장·패티에서 해석한 귀속 매장 */
     attributed_store?: string
   }[]
@@ -4475,6 +4478,35 @@ export async function addBalanceTransaction(params: {
   userRole?: string
 }) {
   const res = await apiFetchWithOffline('/api/addBalanceTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateManualBalanceTransaction(params: {
+  type: 'payable' | 'receivable'
+  id: number
+  amount: number
+  transDate: string
+  memo?: string
+  storeName?: string
+  vendorCode?: string
+}) {
+  const res = await apiFetchWithOffline('/api/updateManualBalanceTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteManualBalanceTransaction(params: {
+  type: 'payable' | 'receivable'
+  id: number
+}) {
+  const res = await apiFetchWithOffline('/api/deleteManualBalanceTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

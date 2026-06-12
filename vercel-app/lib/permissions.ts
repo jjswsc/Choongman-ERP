@@ -11,6 +11,8 @@
  * store=Office → Officer로 인식 (employees.store가 본사/Office/오피스/본점이면)
  */
 
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
 /** employees.store가 본사/Office인지 (→ Officer 권한 적용) */
 export function isOfficeStore(store: string): boolean {
   const x = String(store || "").trim()
@@ -233,6 +235,28 @@ export function canBulkReconcileOrderReceivables(role: string): boolean {
 /** 출고(주문/강제) 소프트 삭제 */
 export function canDeleteOutbound(role: string): boolean {
   return isOfficeRole(role)
+}
+
+/** 미수금 화면에서 수동 수령·기초이월(receivable_transactions Receive/Opening) 수정·삭제 */
+export function canMutateManualReceivableBalance(
+  role: string,
+  userStore: string,
+  rowStoreName: string
+): boolean {
+  if (canManageReceivablePayableAllStores(role)) return true
+  const r = String(role || "").toLowerCase().trim()
+  const storeScoped =
+    (r.includes(MANAGER_ROLE) || r.includes(FRANCHISEE_ROLE)) &&
+    !canManageReceivablePayableAllStores(role)
+  if (!storeScoped) return false
+  const us = String(userStore || "").trim()
+  const sn = String(rowStoreName || "").trim()
+  return Boolean(us && sn && storesMatchForGradeLookup(us, sn))
+}
+
+/** 미지급금 화면에서 수동 지급·기초이월(payable_transactions Payment/Opening) 수정·삭제 — 본사·회계만 */
+export function canMutateManualPayableBalance(role: string): boolean {
+  return canManageReceivablePayableAllStores(role)
 }
 
 /** 미수금 목록에서 주문·강제출고 건 수금 확인(receive_checked) 수정 가능 */

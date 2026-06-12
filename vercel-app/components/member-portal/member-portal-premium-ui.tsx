@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import Image from "next/image"
 import type { LucideIcon } from "lucide-react"
 import { ChevronRight, Gift, History, Ticket } from "lucide-react"
@@ -27,14 +28,14 @@ export function MemberPortalAmbienceBackground({
   className?: string
 }) {
   return (
-    <div className={`relative overflow-x-hidden bg-[#050506] text-white ${className}`}>
+    <div className={`relative min-h-[100dvh] bg-[#050506] text-white ${className}`}>
       <MemberPortalLoungeBackdrop
         className="fixed"
         customFullBackgroundUrl={imageUrl}
         heroFoodImageUrl={heroFoodImageUrl}
         variant="app"
       />
-      <div className="relative z-10">{children}</div>
+      <div className="relative z-10 min-h-[100dvh]">{children}</div>
     </div>
   )
 }
@@ -335,13 +336,16 @@ export function PremiumBottomNav({
   onChange: (tab: PortalTab) => void
   items: Array<{ id: PortalTab; label: string; icon: LucideIcon }>
 }) {
-  return (
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+
+  const nav = (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2"
+      className="fixed inset-x-0 bottom-0 z-[70] isolate pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2"
       aria-label="Member portal navigation"
     >
       <div className={`mx-auto w-full ${MP_MAX_WIDTH} px-4`}>
-        <div className="rounded-[1.35rem] border border-white/10 bg-[rgba(8,8,10,0.88)] px-1 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+        <div className="rounded-[1.35rem] border border-white/12 bg-[#121214] px-1 py-1.5 shadow-[0_-6px_28px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.06] supports-[backdrop-filter]:bg-[rgba(10,10,12,0.97)] supports-[backdrop-filter]:backdrop-blur-xl">
           <div className="grid grid-cols-5">
             {items.map(({ id, label, icon: Icon }) => {
               const active = tab === id
@@ -351,13 +355,13 @@ export function PremiumBottomNav({
                   type="button"
                   onClick={() => onChange(id)}
                   className={`relative flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition ${
-                    active ? "text-amber-200" : "text-white/40 hover:text-white/65"
+                    active ? "text-amber-200" : "text-white/55 hover:text-white/75"
                   }`}
                 >
                   {active ? (
-                    <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-400/15 to-transparent" />
+                    <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-400/20 to-transparent" />
                   ) : null}
-                  <Icon className={`relative h-5 w-5 ${active ? "text-amber-300" : ""}`} />
+                  <Icon className={`relative h-5 w-5 ${active ? "text-amber-300" : "text-white/70"}`} />
                   <span className="relative max-w-full truncate">{label}</span>
                 </button>
               )
@@ -367,6 +371,9 @@ export function PremiumBottomNav({
       </div>
     </nav>
   )
+
+  if (!mounted || typeof document === "undefined") return nav
+  return createPortal(nav, document.body)
 }
 
 export function TierProgressCard({

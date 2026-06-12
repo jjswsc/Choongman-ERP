@@ -8,37 +8,26 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
-import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-
-type PayableListRow = {
-  id?: number
-  vendor_code?: string
-  amount?: number
-  ref_type?: string
-  ref_id?: number
-  trans_date?: string
-  memo?: string
-  created_at?: string
-  bank_transaction_id?: number | null
-  expense_accrual_id?: number | null
-  petty_cash_transaction_id?: number | null
-}
+import {
+  buildPayableAttributionMaps,
+  filterPayableRowsByStore,
+  isPayableStoreFilterActive,
+  resolvePayableAttributedStore,
+  type PayableTransactionRow,
+} from '@/lib/payable-attributed-store'
+import {
+  normalizeReceivableStoreKey,
+  pickReceivableDisplayStoreName,
+  receivableStoreGroupKey,
+} from '@/lib/receivable-store-key'
 
 type ReceivableVendorEntry = { code: string; name: string }
 type ReceivableVendorMaps = {
   storeToVendor: Map<string, ReceivableVendorEntry>
   vendorCodeToStores: Map<string, Set<string>>
-}
-
-function normalizeReceivableStoreKey(v: string): string {
-  const raw = String(v || '').trim().toLowerCase()
-  if (!raw) return ''
-  const noSpace = raw.replace(/\s+/g, ' ')
-  const noCmPrefix = noSpace.startsWith('cm ') ? noSpace.slice(3).trim() : noSpace
-  return noCmPrefix
 }
 
 function isAllFilterToken(v: string): boolean {
@@ -85,24 +74,6 @@ function matchesReceivableStoreByVendorLink(
   const aliasesByCode = maps.vendorCodeToStores.get(vendorCode)
   if (!aliasesByCode || aliasesByCode.size === 0) return false
   return aliasesByCode.has(storeNorm)
-}
-
-function matchesPayableStoreNorm(resolved: string | null | undefined, storeFilter: string): boolean {
-  const f = storeFilter.trim().toLowerCase()
-  if (!f || f === 'all') return true
-  const r = String(resolved || '').trim().toLowerCase()
-  if (!r) return false
-  return r === f || r.includes(f) || f.includes(r)
-}
-
-function poAttributedStore(po: { location_name?: string; cart_json?: string }): string | null {
-  const { meta, items } = parsePurchaseOrderCart(po.cart_json)
-  const rel = String(meta?.relatedStore || '').trim()
-  if (rel) return rel
-  const lineStore = items.map((i) => String(i.store || '').trim()).find(Boolean)
-  if (lineStore) return lineStore
-  const loc = String(po.location_name || '').trim()
-  return loc || null
 }
 
 async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
@@ -189,123 +160,12 @@ export async function GET(request: NextRequest) {
         'payable_transactions',
         filter,
         { order: 'trans_date.desc', limit: 20000 }
-      )) as PayableListRow[]
+      )) as PayableTransactionRow[]
 
-      const inboundIdsAll = [
-        ...new Set((rawRows || []).filter((r) => r.ref_type === 'Inbound' && r.ref_id != null).map((r) => Number(r.ref_id))),
-      ]
-      const locationByInboundId = new Map<number, string>()
-      if (inboundIdsAll.length > 0) {
-        const batches = (await supabaseSelectFilter(
-          'inbound_batches',
-          `id=in.(${inboundIdsAll.join(',')})`,
-          { select: 'id,location', limit: 10000 }
-        )) as { id?: number; location?: string }[] | null
-        for (const b of batches || []) {
-          if (b.id != null) locationByInboundId.set(Number(b.id), String(b.location || '').trim())
-        }
-      }
-
-      const poIdsAll = [
-        ...new Set((rawRows || []).filter((r) => r.ref_type === 'PO' && r.ref_id != null).map((r) => Number(r.ref_id))),
-      ]
-      const storeByPoId = new Map<number, string>()
-      if (poIdsAll.length > 0) {
-        const pos = (await supabaseSelectFilter('purchase_orders', `id=in.(${poIdsAll.join(',')})`, {
-          select: 'id,location_name,cart_json',
-          limit: 5000,
-        })) as { id?: number; location_name?: string; cart_json?: string }[] | null
-        for (const p of pos || []) {
-          if (p.id == null) continue
-          const s = poAttributedStore(p)
-          if (s) storeByPoId.set(Number(p.id), s)
-        }
-      }
-
-      const eids = [
-        ...new Set(
-          (rawRows || [])
-            .filter((r) => r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0)
-            .map((r) => Number(r.expense_accrual_id))
-        ),
-      ]
-      const storeByAccrualId = new Map<number, string>()
-      if (eids.length > 0) {
-        const accr = (await supabaseSelectFilter('expense_accruals', `id=in.(${eids.join(',')})`, {
-          select: 'id,store_name',
-          limit: 10000,
-        })) as { id?: number; store_name?: string | null }[] | null
-        for (const a of accr || []) {
-          if (a.id == null) continue
-          const sn = String(a.store_name || '').trim()
-          if (sn) storeByAccrualId.set(Number(a.id), sn)
-        }
-      }
-
-      const pettyIds = [
-        ...new Set(
-          (rawRows || [])
-            .filter((r) => r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0)
-            .map((r) => Number(r.petty_cash_transaction_id))
-        ),
-      ]
-      const storeByPettyId = new Map<number, string>()
-      if (pettyIds.length > 0) {
-        const petty = (await supabaseSelectFilter('petty_cash_transactions', `id=in.(${pettyIds.join(',')})`, {
-          select: 'id,store',
-          limit: 10000,
-        })) as { id?: number; store?: string | null }[] | null
-        for (const p of petty || []) {
-          if (p.id == null) continue
-          const st = String(p.store || '').trim()
-          if (st) storeByPettyId.set(Number(p.id), st)
-        }
-      }
-
-      const bankIdsAll = [
-        ...new Set(
-          (rawRows || [])
-            .filter((r) => r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0)
-            .map((r) => Number(r.bank_transaction_id))
-        ),
-      ]
-      const storeByBankId = new Map<number, string>()
-      if (bankIdsAll.length > 0) {
-        const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIdsAll.join(',')})`, {
-          select: 'id,store',
-          limit: 5000,
-        })) as { id?: number; store?: string | null }[] | null
-        for (const bt of banks || []) {
-          if (bt.id == null) continue
-          const st = String(bt.store || '').trim()
-          if (st) storeByBankId.set(Number(bt.id), st)
-        }
-      }
-
-      function resolvePayableAttributedStore(r: PayableListRow): string | null {
-        if (r.ref_type === 'Inbound' && r.ref_id != null) {
-          return locationByInboundId.get(Number(r.ref_id)) || null
-        }
-        if (r.ref_type === 'PO' && r.ref_id != null) {
-          return storeByPoId.get(Number(r.ref_id)) || null
-        }
-        if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) {
-          return storeByAccrualId.get(Number(r.expense_accrual_id)) || null
-        }
-        if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
-          return storeByBankId.get(Number(r.bank_transaction_id)) || null
-        }
-        if (r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0) {
-          return storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
-        }
-        return null
-      }
-
-      let rows: PayableListRow[] = rawRows || []
-      const storeFilterActive =
-        Boolean(storeFilter?.trim()) && storeFilter.trim().toLowerCase() !== 'all'
-      if (storeFilterActive) {
-        rows = rows.filter((r) => matchesPayableStoreNorm(resolvePayableAttributedStore(r), storeFilter))
+      const attributionMaps = await buildPayableAttributionMaps(rawRows || [])
+      let rows: PayableTransactionRow[] = rawRows || []
+      if (isPayableStoreFilterActive(storeFilter)) {
+        rows = filterPayableRowsByStore(rows, storeFilter, attributionMaps)
       }
 
       // 인보이스 여부: Inbound→inbound_batches, PO→purchase_orders, bank_transaction_id→bank_transactions (마이그레이션 미적용 시 스킵)
@@ -347,7 +207,7 @@ export async function GET(request: NextRequest) {
       }
 
       const rowsWithInvoice = (rows || []).map((r) => {
-        const attributed_store = resolvePayableAttributedStore(r) || undefined
+        const attributed_store = resolvePayableAttributedStore(r, attributionMaps) || undefined
         const base = { ...r, attributed_store }
         if (r.ref_type === 'Inbound' && r.ref_id) {
           const inv = invoiceByInbound[Number(r.ref_id)]
@@ -421,16 +281,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const byStore: Record<string, { total: number; items: typeof rows }> = {}
+    const byStore: Record<string, { displayName: string; total: number; items: typeof rows }> = {}
     for (const r of rows || []) {
       const sn = String(r.store_name || '').trim()
       if (!sn) continue
-      if (!byStore[sn]) byStore[sn] = { total: 0, items: [] }
-      byStore[sn].items.push(r)
-      byStore[sn].total += Number(r.amount ?? 0)
+      const groupKey = receivableStoreGroupKey(sn)
+      if (!byStore[groupKey]) byStore[groupKey] = { displayName: sn, total: 0, items: [] }
+      byStore[groupKey].displayName = pickReceivableDisplayStoreName(byStore[groupKey].displayName, sn)
+      byStore[groupKey].items.push(r)
+      byStore[groupKey].total += Number(r.amount ?? 0)
     }
 
-    const list = Object.entries(byStore).map(([storeName, v]) => {
+    const list = Object.entries(byStore).map(([, v]) => {
+      const storeName = v.displayName
       const vendor = receivableVendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
       return {
         storeName,

@@ -29,7 +29,15 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft, FileText } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft, FileText, PencilLine, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -42,7 +50,13 @@ import {
   canSyncOrderReceivable,
   canBulkReconcileOrderReceivables,
   canUpdateReceivableReceiveCheck,
+  canMutateManualReceivableBalance,
+  canMutateManualPayableBalance,
 } from "@/lib/permissions"
+import {
+  isManualPayableBalanceRow,
+  isManualReceivableBalanceRow,
+} from "@/lib/manual-balance-transaction"
 import { cn } from "@/lib/utils"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
@@ -53,6 +67,8 @@ import {
   getInvoiceOrderBillToCandidates,
   getInvoiceSettings,
   addBalanceTransaction,
+  updateManualBalanceTransaction,
+  deleteManualBalanceTransaction,
   updateReceivableReceiveCheck,
   syncOrderReceivable,
   syncOrderReceivableFromOutbound,
@@ -72,6 +88,7 @@ import type { InvoiceDataClient } from "@/lib/api-client"
 
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
+import { receivableStoreGroupKey } from "@/lib/receivable-store-key"
 
 /** 방콕 달력 날짜 (YYYY-MM-DD). 로컬 PC 타임존/UTC와 어긋나면 종료일 필터로 행이 잘릴 수 있음. */
 function bangkokTodayStr() {
@@ -99,6 +116,30 @@ function buildClientFromPosTaxMemo(
   const taxId = String(tax.taxId || "").trim() || "-"
   const phone = String(tax.phone || "").trim() || "-"
   return { companyName: name, address, taxId, phone }
+}
+
+function cumulativeBalanceKey(tab: "receivable" | "payable", item: ReceivablePayableItem): string {
+  if (tab === "receivable") {
+    const storeName = String(item.storeName || "").trim()
+    return storeName ? receivableStoreGroupKey(storeName) : ""
+  }
+  return String(item.vendorCode || "").trim().toLowerCase()
+}
+
+function buildCumulativeByKey(
+  tab: "receivable" | "payable",
+  rows: { storeName?: string; vendorCode?: string; balance?: number }[]
+): Record<string, number> {
+  const byKey: Record<string, number> = {}
+  for (const row of rows) {
+    const key =
+      tab === "receivable"
+        ? receivableStoreGroupKey(String(row.storeName || ""))
+        : String(row.vendorCode || "").trim().toLowerCase()
+    if (!key) continue
+    byKey[key] = (byKey[key] || 0) + Number(row.balance ?? 0)
+  }
+  return byKey
 }
 
 function isOfficeLikeLabel(label: string): boolean {
@@ -173,6 +214,39 @@ export function ReceivablePayableTab() {
   const [bulkOutboundRecSyncing, setBulkOutboundRecSyncing] = React.useState(false)
   const [bulkOutboundRecProgress, setBulkOutboundRecProgress] = React.useState("")
   const [taxInvoiceLoadingKey, setTaxInvoiceLoadingKey] = React.useState<string | null>(null)
+  const [manualEdit, setManualEdit] = React.useState<{
+    ledger: "receivable" | "payable"
+    id: number
+    refType: string
+    entity: string
+    amount: string
+    date: string
+    memo: string
+  } | null>(null)
+  const [manualEditSaving, setManualEditSaving] = React.useState(false)
+
+  const showReceivableManualActions = !(tab === "receivable" && isManagerOnly)
+  const showPayableManualActions = canSelectStores
+
+  const openManualBalanceEdit = React.useCallback(
+    (
+      ledger: "receivable" | "payable",
+      row: NonNullable<ReceivablePayableItem["items"]>[number],
+      entity: string
+    ) => {
+      if (row.id == null) return
+      setManualEdit({
+        ledger,
+        id: row.id,
+        refType: String(row.ref_type || ""),
+        entity,
+        amount: String(Math.abs(Number(row.amount ?? 0)) || ""),
+        date: row.trans_date || bangkokTodayStr(),
+        memo: row.memo || "",
+      })
+    },
+    []
+  )
 
   const handleTaxInvoicePrint = React.useCallback(
     async (
@@ -432,16 +506,10 @@ export function ReceivablePayableTab() {
     Promise.all([getReceivablePayableList(listParams), getReceivablePayableSummary(summaryParams)])
       .then(([listRes, summaryRes]) => {
         setListData(listRes.list || [])
-        const byKey: Record<string, number> = {}
-        for (const row of summaryRes.list || []) {
-          const key =
-            tab === "receivable"
-              ? String(row.storeName || "").trim()
-              : String(row.vendorCode || "").trim()
-          if (key) byKey[key] = Number(row.balance ?? 0)
-        }
+        const byKey = buildCumulativeByKey(tab, summaryRes.list || [])
+        const totalAmount = Object.values(byKey).reduce((sum, v) => sum + v, 0)
         setCumulativeSummary({
-          totalAmount: Number(summaryRes.totalAmount ?? 0),
+          totalAmount,
           byKey,
         })
       })
@@ -451,6 +519,73 @@ export function ReceivablePayableTab() {
       })
       .finally(() => setLoading(false))
   }, [tab, recStoreFilter, payStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
+
+  const handleManualBalanceSave = React.useCallback(async () => {
+    if (!manualEdit) return
+    const amount = Number(manualEdit.amount?.replace(/,/g, ""))
+    if (!amount || amount <= 0) {
+      await appAlert(t("pettyAlertAmount") || "Please enter amount.")
+      return
+    }
+    if (!manualEdit.entity?.trim()) {
+      await appAlert(
+        manualEdit.ledger === "receivable"
+          ? tt("receivableSelectCustomer", "Please select customer.")
+          : tt("payableSelectVendor", "Please select vendor.")
+      )
+      return
+    }
+    setManualEditSaving(true)
+    try {
+      const res = await updateManualBalanceTransaction({
+        type: manualEdit.ledger,
+        id: manualEdit.id,
+        amount,
+        transDate: manualEdit.date,
+        memo: manualEdit.memo || undefined,
+        storeName: manualEdit.ledger === "receivable" ? manualEdit.entity : undefined,
+        vendorCode: manualEdit.ledger === "payable" ? manualEdit.entity : undefined,
+      })
+      if (res.success) {
+        setManualEdit(null)
+        loadList()
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || res.message)
+      }
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setManualEditSaving(false)
+    }
+  }, [manualEdit, t, tt, loadList])
+
+  const handleManualBalanceDelete = React.useCallback(
+    async (ledger: "receivable" | "payable", id: number) => {
+      const ok = await appConfirm(
+        ledger === "receivable"
+          ? t("recManualDeleteConfirm") ||
+              "이 수령(또는 기초이월) 내역을 삭제하시겠습니까? 잔액에서 제외됩니다."
+          : t("payManualDeleteConfirm") ||
+              "이 지급(또는 기초이월) 내역을 삭제하시겠습니까? 잔액에서 제외됩니다."
+      )
+      if (!ok) return
+      setManualEditSaving(true)
+      try {
+        const res = await deleteManualBalanceTransaction({ type: ledger, id })
+        if (res.success) {
+          setManualEdit(null)
+          loadList()
+        } else {
+          await appAlert(translateApiMessage(res.message, t) || res.message)
+        }
+      } catch (e) {
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setManualEditSaving(false)
+      }
+    },
+    [t, loadList]
+  )
 
   /** 매출처 선택값과 동일·유사 이름의 매입 거래처(발주·미지급) — 미수금이 비어 있을 때 미지급 탭 유도용 */
   const purchaseVendorMatchForOutlet = React.useMemo(() => {
@@ -496,13 +631,10 @@ export function ReceivablePayableTab() {
       Promise.all([getReceivablePayableList(listParams), getReceivablePayableSummary(summaryParams)])
         .then(([listRes, summaryRes]) => {
           setListData(listRes.list || [])
-          const byKey: Record<string, number> = {}
-          for (const row of summaryRes.list || []) {
-            const key = String(row.vendorCode || "").trim()
-            if (key) byKey[key] = Number(row.balance ?? 0)
-          }
+          const byKey = buildCumulativeByKey("payable", summaryRes.list || [])
+          const totalAmount = Object.values(byKey).reduce((sum, v) => sum + v, 0)
           setCumulativeSummary({
-            totalAmount: Number(summaryRes.totalAmount ?? 0),
+            totalAmount,
             byKey,
           })
         })
@@ -873,10 +1005,7 @@ export function ReceivablePayableTab() {
 
   const getCumulativeForItem = React.useCallback(
     (item: ReceivablePayableItem) => {
-      const key =
-        tab === "receivable"
-          ? String(item.storeName || "").trim()
-          : String(item.vendorCode || "").trim()
+      const key = cumulativeBalanceKey(tab, item)
       if (!key || !(key in cumulativeSummary.byKey)) return undefined
       return cumulativeSummary.byKey[key]
     },
@@ -1401,6 +1530,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     </th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
+                                    {showReceivableManualActions && (
+                                      <th className="text-center py-2 px-1 w-[72px] font-semibold whitespace-nowrap">
+                                        {t("btnEdit") || "수정"}
+                                      </th>
+                                    )}
                                     {showRecSyncBtn && (
                                       <th
                                         className="text-center py-2 px-1 w-[88px] text-xs font-semibold text-muted-foreground"
@@ -1433,7 +1567,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recLineItems = recLineEntry?.items ?? []
                                     const recOrderTotals = recLineEntry?.orderInvoiceTotals
                                     const recLinesLoading = loadingItemsFor === recRowKey
-                                    const recLineColSpan = 9 + (showRecSyncBtn ? 1 : 0)
+                                    const recLineColSpan = 9 + (showReceivableManualActions ? 1 : 0) + (showRecSyncBtn ? 1 : 0)
+                                    const canEditManualRecRow =
+                                      showReceivableManualActions &&
+                                      isManualReceivableBalanceRow(row) &&
+                                      row.id != null &&
+                                      canMutateManualReceivableBalance(
+                                        auth?.role || "",
+                                        auth?.store || "",
+                                        item.storeName || ""
+                                      )
                                     const canEditReceiveCheck =
                                       (row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO") &&
                                       row.id != null &&
@@ -1588,6 +1731,45 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </td>
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                                       <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
+                                      {showReceivableManualActions && (
+                                        <td className="py-1.5 px-1 w-[72px] text-center align-middle">
+                                          {canEditManualRecRow ? (
+                                            <div className="flex justify-center items-center gap-0.5">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 shrink-0"
+                                                title={t("btnEdit") || "수정"}
+                                                aria-label={t("btnEdit") || "수정"}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  openManualBalanceEdit("receivable", row, item.storeName || "")
+                                                }}
+                                              >
+                                                <PencilLine className="h-4 w-4" />
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive"
+                                                title={t("delete") || "삭제"}
+                                                aria-label={t("delete") || "삭제"}
+                                                disabled={manualEditSaving}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  if (row.id != null) void handleManualBalanceDelete("receivable", row.id)
+                                                }}
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <span className="text-muted-foreground text-xs">—</span>
+                                          )}
+                                        </td>
+                                      )}
                                       {showRecSyncBtn && (
                                         <td className="py-1.5 px-1 w-[88px] text-center align-middle">
                                           {row.ref_type === "Order" && rowOrderId != null ? (
@@ -1918,6 +2100,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("payColPaymentStatus") || "지급여부"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
+                                    {showPayableManualActions && (
+                                      <th className="text-center py-2 px-1 w-[72px] font-semibold whitespace-nowrap">
+                                        {t("btnEdit") || "수정"}
+                                      </th>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1928,6 +2115,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const payLineEntry = payableItemsCache[rowKey]
                                     const items = payLineEntry?.items ?? []
                                     const isLoading = loadingItemsFor === rowKey
+                                    const canEditManualPayRow =
+                                      showPayableManualActions &&
+                                      isManualPayableBalanceRow(row) &&
+                                      row.id != null &&
+                                      canMutateManualPayableBalance(auth?.role || "")
                                     return (
                                       <React.Fragment key={row.id ?? rowKey}>
                                         <tr className="border-b border-border/50">
@@ -1996,10 +2188,49 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           </td>
                                           <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                                           <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
+                                          {showPayableManualActions && (
+                                            <td className="py-1.5 px-1 w-[72px] text-center align-middle">
+                                              {canEditManualPayRow ? (
+                                                <div className="flex justify-center items-center gap-0.5">
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 shrink-0"
+                                                    title={t("btnEdit") || "수정"}
+                                                    aria-label={t("btnEdit") || "수정"}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      openManualBalanceEdit("payable", row, item.vendorCode || "")
+                                                    }}
+                                                  >
+                                                    <PencilLine className="h-4 w-4" />
+                                                  </Button>
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive"
+                                                    title={t("delete") || "삭제"}
+                                                    aria-label={t("delete") || "삭제"}
+                                                    disabled={manualEditSaving}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      if (row.id != null) void handleManualBalanceDelete("payable", row.id)
+                                                    }}
+                                                  >
+                                                    <Trash2 className="h-4 w-4" />
+                                                  </Button>
+                                                </div>
+                                              ) : (
+                                                <span className="text-muted-foreground text-xs">—</span>
+                                              )}
+                                            </td>
+                                          )}
                                         </tr>
                                         {isExpanded && (
                                           <tr className="border-b border-border/50 bg-muted/10">
-                                            <td colSpan={8} className="py-2 px-4">
+                                            <td colSpan={showPayableManualActions ? 9 : 8} className="py-2 px-4">
                                               {isLoading ? (
                                                 <p className="text-xs text-muted-foreground py-2">{t("loadingItems")}</p>
                                               ) : items.length > 0 ? (
@@ -2155,6 +2386,121 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={manualEdit != null} onOpenChange={(open) => { if (!open && !manualEditSaving) setManualEdit(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {manualEdit?.ledger === "payable"
+                ? t("payManualEditTitle") || "지급·기초이월 수정"
+                : t("recManualEditTitle") || "수령·기초이월 수정"}
+            </DialogTitle>
+            <DialogDescription>
+              {t("manualBalanceEditHint") ||
+                "통장·주문·발주·입고 연동 건은 이 화면에서 수정할 수 없습니다."}
+            </DialogDescription>
+          </DialogHeader>
+          {manualEdit ? (
+            <div className="space-y-3 py-1">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  {manualEdit.ledger === "receivable" ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")}
+                </label>
+                {manualEdit.ledger === "receivable" ? (
+                  canSelectStores ? (
+                    <Select
+                      value={manualEdit.entity}
+                      onValueChange={(v) => setManualEdit((prev) => (prev ? { ...prev, entity: v } : null))}
+                    >
+                      <SelectTrigger className="w-full h-9">
+                        <SelectValue placeholder={t("outColStore") || "매출처"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(storeList || []).map((s) => (
+                          <SelectItem key={s} value={resolveStoreKey(s)}>
+                            {formatStoreLabel(s)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={formatStoreLabel(manualEdit.entity)} readOnly className="h-9 bg-muted/40" />
+                  )
+                ) : (
+                  <Select
+                    value={manualEdit.entity}
+                    onValueChange={(v) => setManualEdit((prev) => (prev ? { ...prev, entity: v } : null))}
+                  >
+                    <SelectTrigger className="w-full h-9">
+                      <SelectValue placeholder={t("vendor") || "매입처"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.map((v) => (
+                        <SelectItem key={v.code} value={v.code}>
+                          {v.name || v.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex-1 min-w-[120px]">
+                  <label className="text-xs text-muted-foreground block mb-1">{t("amount") || "금액"}</label>
+                  <Input
+                    type="number"
+                    value={manualEdit.amount}
+                    onChange={(e) => setManualEdit((prev) => (prev ? { ...prev, amount: e.target.value } : null))}
+                    className="h-9"
+                  />
+                </div>
+                <div className="flex-1 min-w-[140px]">
+                  <label className="text-xs text-muted-foreground block mb-1">{t("date") || "날짜"}</label>
+                  <Input
+                    type="date"
+                    value={manualEdit.date}
+                    onChange={(e) => setManualEdit((prev) => (prev ? { ...prev, date: e.target.value } : null))}
+                    className="h-9"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">{t("memo") || "메모"}</label>
+                <Input
+                  value={manualEdit.memo}
+                  onChange={(e) => setManualEdit((prev) => (prev ? { ...prev, memo: e.target.value } : null))}
+                  className="h-9"
+                  placeholder={
+                    manualEdit.refType === "Opening"
+                      ? t("recTypeOpening") || "기초이월"
+                      : manualEdit.ledger === "receivable"
+                        ? "수령 메모"
+                        : "지급 메모"
+                  }
+                />
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            {manualEdit ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={manualEditSaving}
+                onClick={() => void handleManualBalanceDelete(manualEdit.ledger, manualEdit.id)}
+              >
+                {t("delete") || "삭제"}
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" disabled={manualEditSaving} onClick={() => setManualEdit(null)}>
+              {t("btnClose") || "닫기"}
+            </Button>
+            <Button type="button" disabled={manualEditSaving || !manualEdit} onClick={() => void handleManualBalanceSave()}>
+              {manualEditSaving ? t("loading") : t("btnSave") || "저장"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -239,6 +239,25 @@ export function ExpenseManagementTab() {
     [router]
   )
 
+  const handleBatchWithdrawalSaved = React.useCallback(
+    (opts: { startStr: string; endStr: string }) => {
+      const start = String(opts.startStr || "").slice(0, 10)
+      const end = String(opts.endStr || "").slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return
+      setStartStr(start)
+      setEndStr(end)
+      setTab("expenseSearch")
+      const q = new URLSearchParams({
+        tab: "expenseSearch",
+        startStr: start,
+        endStr: end,
+        searchRefresh: String(Date.now()),
+      })
+      router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
+    },
+    [router]
+  )
+
   /** 지급예정 탭 진입·등록 저장·auth.role 확정 시 조회. 기간만 바꾼 뒤에는 [조회] 버튼. */
   React.useEffect(() => {
     if (tab !== "plan") return
@@ -1270,7 +1289,10 @@ export function ExpenseManagementTab() {
         </TabsContent>
 
         <TabsContent value="expenseRegister" className={adminTabsContentCn}>
-          <WithdrawalManagementTab onAccrualSaved={handleAccrualSaved} />
+          <WithdrawalManagementTab
+            onAccrualSaved={handleAccrualSaved}
+            onBatchWithdrawalSaved={handleBatchWithdrawalSaved}
+          />
         </TabsContent>
 
         <TabsContent value="expenseSearch" className={adminTabsContentCn}>

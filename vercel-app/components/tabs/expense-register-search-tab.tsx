@@ -37,11 +37,8 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
-import { useRouter } from "next/navigation"
-
-function todayStrBkk() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
-}
+import { useRouter, useSearchParams } from "next/navigation"
+import { getBangkokMonthRange } from "@/lib/bangkok-time"
 
 function getCategoryLabel(cat: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
@@ -89,13 +86,15 @@ export function ExpenseRegisterSearchTab() {
   }, [t])
   const { auth } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { posStores: stores } = useStoreList()
   const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
 
+  const defaultMonthRange = React.useMemo(() => getBangkokMonthRange(), [])
   const [storeFilter, setStoreFilter] = React.useState<string>("__all__")
   const [accountId, setAccountId] = React.useState<string>("__all__")
-  const [startStr, setStartStr] = React.useState(todayStrBkk)
-  const [endStr, setEndStr] = React.useState(todayStrBkk)
+  const [startStr, setStartStr] = React.useState(defaultMonthRange.startStr)
+  const [endStr, setEndStr] = React.useState(defaultMonthRange.endStr)
   const [loading, setLoading] = React.useState(false)
   const [list, setList] = React.useState<ExpenseSearchOverviewRow[]>([])
   const [summary, setSummary] = React.useState<ExpenseSearchOverviewSummary>({
@@ -170,12 +169,14 @@ export function ExpenseRegisterSearchTab() {
     [tt]
   )
 
-  const loadData = React.useCallback(async () => {
+  const loadData = React.useCallback(async (overrides?: { startStr?: string; endStr?: string }) => {
+    const queryStart = overrides?.startStr ?? startStr
+    const queryEnd = overrides?.endStr ?? endStr
     setLoading(true)
     try {
       const res = await getExpenseSearchOverview({
-        startStr,
-        endStr,
+        startStr: queryStart,
+        endStr: queryEnd,
         storeFilter,
         accountId,
         category: categoryFilter !== "__all__" ? categoryFilter : undefined,
@@ -193,9 +194,30 @@ export function ExpenseRegisterSearchTab() {
   }, [accountId, categoryFilter, endStr, startStr, storeFilter, vendorFilter])
 
   React.useEffect(() => {
+    const s = searchParams.get("startStr")
+    const e = searchParams.get("endStr")
+    if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) setStartStr(s)
+    if (e && /^\d{4}-\d{2}-\d{2}$/.test(e)) setEndStr(e)
+  }, [searchParams])
+
+  React.useEffect(() => {
     void loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 초기 진입 1회만 자동 조회
   }, [])
+
+  const handledSearchRefreshRef = React.useRef<string | null>(null)
+
+  React.useEffect(() => {
+    const token = searchParams.get("searchRefresh")
+    if (!token || token === handledSearchRefreshRef.current) return
+    handledSearchRefreshRef.current = token
+    const s = searchParams.get("startStr")
+    const e = searchParams.get("endStr")
+    void loadData({
+      startStr: s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined,
+      endStr: e && /^\d{4}-\d{2}-\d{2}$/.test(e) ? e : undefined,
+    })
+  }, [loadData, searchParams])
 
   const filteredList = React.useMemo(() => {
     return (list || []).filter((r) => {

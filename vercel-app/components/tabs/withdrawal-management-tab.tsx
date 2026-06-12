@@ -52,6 +52,11 @@ import { compressImageForUpload } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { useSearchParams, useRouter } from "next/navigation"
 import { isOfficeStore } from "@/lib/permissions"
+import { getBangkokMonthRange } from "@/lib/bangkok-time"
+import {
+  resolveExpenseFeeAmounts,
+  type ExpenseFeeVatMode,
+} from "@/lib/expense-fee-vat"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -155,9 +160,11 @@ function resolveMonthEndDate(month: string): string | null {
 type WithdrawalManagementTabProps = {
   /** 지출 발생(지급 예정) 저장 후 상위에서 지급예정 탭·기간 동기화 */
   onAccrualSaved?: (opts: { expenseDate: string }) => void
+  /** 월별 수수료 일괄 등록 후 상위에서 지출 검색 탭·해당 월 기간 동기화 */
+  onBatchWithdrawalSaved?: (opts: { startStr: string; endStr: string }) => void
 }
 
-export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagementTabProps = {}) {
+export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved }: WithdrawalManagementTabProps = {}) {
   const { lang } = useLang()
   const t = useT(lang)
   const tt = React.useCallback((key: string, fallback: string) => {
@@ -208,6 +215,10 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
   )
   const [deliveryFeeDialogOpen, setDeliveryFeeDialogOpen] = React.useState(false)
   const [cardFeeDialogOpen, setCardFeeDialogOpen] = React.useState(false)
+  const [deliveryFeeVatMode, setDeliveryFeeVatMode] = React.useState<ExpenseFeeVatMode>("included")
+  const [cardFeeVatMode, setCardFeeVatMode] = React.useState<ExpenseFeeVatMode>("included")
+  /** 수수료 빠른 입력 시 메인 폼 금액·VAT 해석 기준 */
+  const [activeFeeVatMode, setActiveFeeVatMode] = React.useState<ExpenseFeeVatMode | null>(null)
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
   const [payeeCode, setPayeeCode] = React.useState("")
   const [payeeName, setPayeeName] = React.useState("")
@@ -656,8 +667,16 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
-    const vatV =
-      categoryMain === "purchase" || categoryMain === "expense"
+    const feeResolved =
+      categoryMain === "expense" ? resolveFeeSubmitAmounts(amt, activeFeeVatMode) : null
+    let submitInvoiceReceived = invoiceReceived
+    if (feeResolved) {
+      amt = feeResolved.gross
+      submitInvoiceReceived = feeResolved.invoiceReceived
+    }
+    const vatV = feeResolved
+      ? feeResolved.vat
+      : categoryMain === "purchase" || categoryMain === "expense"
         ? Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
         : 0
     const whtV =
@@ -726,7 +745,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
           ...(categoryMain === "purchase" || categoryMain === "expense"
             ? {
-                invoiceReceived,
+                invoiceReceived: submitInvoiceReceived,
                 invoiceNo: invoiceNo.trim() || undefined,
                 ...(accrualInvoicePhotoUrl ? { invoicePhotoUrl: accrualInvoicePhotoUrl } : {}),
               }
@@ -746,6 +765,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         setInvoiceReceived(false)
         setInvoiceNo("")
         setInvoicePhotoFile(null)
+        setActiveFeeVatMode(null)
         hasAppliedParams.current = false
         onAccrualSaved?.({ expenseDate: transDate })
         await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
@@ -769,7 +789,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
           ...(categoryMain === "purchase" || categoryMain === "expense"
             ? {
-                invoiceReceived,
+                invoiceReceived: submitInvoiceReceived,
                 invoiceNo: invoiceNo.trim() || undefined,
                 ...(accrualInvoicePhotoUrl ? { invoicePhotoUrl: accrualInvoicePhotoUrl } : {}),
               }
@@ -789,6 +809,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         setAccrualWithholdingTax("")
         setInvoiceReceived(false)
         setInvoiceNo("")
+        setInvoicePhotoFile(null)
+        setActiveFeeVatMode(null)
         setInvoicePhotoFile(null)
         if (queued) {
           await appAlert(
@@ -930,6 +952,14 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       }
     }
 
+    const feeResolved =
+      categoryMain === "expense" ? resolveFeeSubmitAmounts(amt, activeFeeVatMode) : null
+    const submitAmt = feeResolved?.gross ?? amt
+    const submitVat = feeResolved
+      ? feeResolved.vat
+      : Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
+    const submitInvoiceReceived = feeResolved ? feeResolved.invoiceReceived : invoiceReceived
+
     setSaving(true)
     try {
       const memoText = memo.trim() || (showAdvanceInstallments && advanceInstallments
@@ -949,13 +979,18 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
 
       const res = await executeWithdrawal({
         paymentMethod: effectivePaymentMethod === "card" ? "bank" : effectivePaymentMethod,
-        amount: amt,
+        amount: submitAmt,
         transDate,
         memo: transferMemo || undefined,
         storeName: storeName || undefined,
         categoryMain,
         categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
-        vendorCode: categoryMain === "purchase" ? vendorCode || undefined : undefined,
+        vendorCode:
+          categoryMain === "purchase"
+            ? vendorCode || undefined
+            : categoryMain === "expense" && payeeCode.trim()
+              ? payeeCode.trim()
+              : undefined,
         accountSubjectId: categoryMain === "expense" && accountSubjectId ? Number(accountSubjectId) : undefined,
         accountSubjectCode: categoryMain === "expense" ? subjects.find((s) => String(s.id) === accountSubjectId)?.code : undefined,
         accountSubjectName: categoryMain === "expense" ? (() => {
@@ -970,12 +1005,12 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
         assetName: categoryMain === "fixed_asset" ? assetName || undefined : undefined,
         assetCode: categoryMain === "fixed_asset" ? assetCode || undefined : undefined,
         usefulLifeMonths: categoryMain === "fixed_asset" ? Number(usefulLifeMonths) || 60 : undefined,
-        invoiceReceived: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceReceived : undefined,
+        invoiceReceived: (categoryMain === "purchase" || categoryMain === "expense") ? submitInvoiceReceived : undefined,
         invoiceNo: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceNo.trim() || undefined : undefined,
         invoicePhotoUrl,
         vatAmount:
           categoryMain === "purchase" || categoryMain === "expense"
-            ? Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0) || undefined
+            ? submitVat > 0 ? submitVat : undefined
             : undefined,
         userName: auth?.user,
         userRole: auth?.role,
@@ -1006,6 +1041,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       setMemo("")
       setInvoicePhotoFile(null)
       setInboundLinkAmounts({})
+      setActiveFeeVatMode(null)
       if (res.fixedAssetId) {
         await appAlert(tt("wm_successWithAsset", "Saved. Check auto-linking in the depreciation menu."))
       } else {
@@ -1048,8 +1084,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     if (deliveryFeeAccountSubjectId) {
       setAccountSubjectId(deliveryFeeAccountSubjectId)
     }
+    setActiveFeeVatMode(deliveryFeeVatMode)
     setDeliveryFeeDialogOpen(false)
-  }, [deliveryFeeAccountSubjectId])
+  }, [deliveryFeeAccountSubjectId, deliveryFeeVatMode])
   const cardFeeAccountSubjectId = React.useMemo(() => {
     const byCode = subjects.find((s) => String(s.code || "").trim() === "5529")
     if (byCode?.id != null) return String(byCode.id)
@@ -1079,8 +1116,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     if (cardFeeAccountSubjectId) {
       setAccountSubjectId(cardFeeAccountSubjectId)
     }
+    setActiveFeeVatMode(cardFeeVatMode)
     setCardFeeDialogOpen(false)
-  }, [cardFeeAccountSubjectId])
+  }, [cardFeeAccountSubjectId, cardFeeVatMode])
   const handleDeliveryFeeAmountChange = React.useCallback((presetId: string, raw: string) => {
     const cleaned = String(raw || "").replace(/[^\d.,]/g, "").replace(/,/g, "")
     const parts = cleaned.split(".")
@@ -1096,6 +1134,92 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
     setCardFeeAmounts((prev) => ({ ...prev, [presetId]: normalized }))
   }, [])
+
+  const feeVatModeLabel = React.useCallback(
+    (mode: ExpenseFeeVatMode) => {
+      if (mode === "separate") return tt("expenseFeeVatSeparate", "VAT separate")
+      return tt("expenseFeeVatIncluded", "VAT included")
+    },
+    [tt]
+  )
+
+  const feeAmountFieldLabel = React.useCallback(
+    (mode: ExpenseFeeVatMode) => {
+      if (mode === "separate") return tt("expenseFeeAmountSeparate", "Net (excl. VAT)")
+      return tt("expenseFeeAmountIncluded", "Amount (incl. VAT)")
+    },
+    [tt]
+  )
+
+  const feeVatModeHint = React.useCallback(
+    (mode: ExpenseFeeVatMode) => {
+      if (mode === "separate") {
+        return tt(
+          "expenseFeeVatSeparateHint",
+          "Enter the net amount before VAT. Withdrawal adds 7% VAT on top."
+        )
+      }
+      return tt(
+        "expenseFeeVatIncludedHint",
+        "Enter the invoice total including 7% VAT. Withdrawal uses this gross amount."
+      )
+    },
+    [tt]
+  )
+
+  const renderFeeVatModePicker = React.useCallback(
+    (mode: ExpenseFeeVatMode, onChange: (next: ExpenseFeeVatMode) => void) => (
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">{tt("expenseFeeVatModeLabel", "VAT basis")}</Label>
+        <div className="flex flex-wrap gap-2">
+          {(["included", "separate"] as const).map((opt) => (
+            <Button
+              key={opt}
+              type="button"
+              size="sm"
+              variant={mode === opt ? "default" : "outline"}
+              className="h-8"
+              onClick={() => onChange(opt)}
+            >
+              {feeVatModeLabel(opt)}
+            </Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{feeVatModeHint(mode)}</p>
+      </div>
+    ),
+    [feeVatModeHint, feeVatModeLabel, tt]
+  )
+
+  const resolveFeeSubmitAmounts = React.useCallback(
+    (rawAmount: number, feeMode: ExpenseFeeVatMode | null) => {
+      if (!feeMode || !Number.isFinite(rawAmount) || rawAmount <= 0) {
+        return null
+      }
+      return resolveExpenseFeeAmounts(rawAmount, feeMode)
+    },
+    []
+  )
+
+  const feeAmountPreview = React.useMemo(() => {
+    if (!activeFeeVatMode || categoryMain !== "expense") return null
+    const raw = Number(String(amount).replace(/,/g, ""))
+    if (!Number.isFinite(raw) || raw <= 0) return null
+    return resolveExpenseFeeAmounts(raw, activeFeeVatMode)
+  }, [activeFeeVatMode, amount, categoryMain])
+
+  React.useEffect(() => {
+    if (!activeFeeVatMode || categoryMain !== "expense") return
+    const raw = Number(String(amount).replace(/,/g, ""))
+    if (!Number.isFinite(raw) || raw <= 0) {
+      setAccrualVatAmount("")
+      setInvoiceReceived(false)
+      return
+    }
+    const resolved = resolveExpenseFeeAmounts(raw, activeFeeVatMode)
+    setAccrualVatAmount(resolved.vat > 0 ? String(resolved.vat) : "")
+    setInvoiceReceived(resolved.invoiceReceived)
+  }, [activeFeeVatMode, amount, categoryMain])
 
   const handleRegisterDeliveryFeeBatch = React.useCallback(async () => {
     const batchDate = resolveMonthEndDate(deliveryFeeMonth)
@@ -1131,9 +1255,11 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     setDeliveryFeeSaving(true)
     try {
       for (const row of rows) {
+        const resolved = resolveExpenseFeeAmounts(row.amount, deliveryFeeVatMode)
+        if (resolved.gross <= 0) continue
         const res = await executeWithdrawal({
           paymentMethod: "bank",
-          amount: row.amount,
+          amount: resolved.gross,
           transDate: batchDate,
           memo: `Delivery App fee ${deliveryFeeMonth} - ${row.preset.name}`,
           storeName: storeName || undefined,
@@ -1142,6 +1268,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           vendorCode: row.preset.code,
           accountSubjectId: subjectId,
           accountId: Number(accountId),
+          invoiceReceived: resolved.invoiceReceived,
+          vatAmount: resolved.vat > 0 ? resolved.vat : undefined,
           userName: auth?.user,
           userRole: auth?.role,
           userStore: auth?.store,
@@ -1154,6 +1282,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       }
       setDeliveryFeeAmounts(Object.fromEntries(DELIVERY_APP_FEE_PRESETS.map((preset) => [preset.id, ""])))
       setDeliveryFeeDialogOpen(false)
+      const monthRange = getBangkokMonthRange(deliveryFeeMonth)
+      onBatchWithdrawalSaved?.({ startStr: monthRange.startStr, endStr: monthRange.endStr })
       await appAlert(
         tt("deliveryFeeBatchDone", "월별 배달앱 수수료가 등록되었습니다.")
           + ` (${deliveryFeeMonth}, ${rows.length}${tt("receivPayCount", "건")})`
@@ -1170,6 +1300,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     deliveryFeeAccountSubjectId,
     deliveryFeeAmounts,
     deliveryFeeMonth,
+    deliveryFeeVatMode,
+    onBatchWithdrawalSaved,
     storeName,
     t,
     tt,
@@ -1209,9 +1341,11 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     setCardFeeSaving(true)
     try {
       for (const row of rows) {
+        const resolved = resolveExpenseFeeAmounts(row.amount, cardFeeVatMode)
+        if (resolved.gross <= 0) continue
         const res = await executeWithdrawal({
           paymentMethod: "bank",
-          amount: row.amount,
+          amount: resolved.gross,
           transDate: batchDate,
           memo: `Card fee ${cardFeeMonth} - ${row.preset.name}`,
           storeName: storeName || undefined,
@@ -1220,6 +1354,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
           vendorCode: row.preset.code,
           accountSubjectId: subjectId,
           accountId: Number(accountId),
+          invoiceReceived: resolved.invoiceReceived,
+          vatAmount: resolved.vat > 0 ? resolved.vat : undefined,
           userName: auth?.user,
           userRole: auth?.role,
           userStore: auth?.store,
@@ -1232,6 +1368,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
       }
       setCardFeeAmounts(Object.fromEntries(CARD_FEE_PRESETS.map((preset) => [preset.id, ""])))
       setCardFeeDialogOpen(false)
+      const monthRange = getBangkokMonthRange(cardFeeMonth)
+      onBatchWithdrawalSaved?.({ startStr: monthRange.startStr, endStr: monthRange.endStr })
       await appAlert(
         tt("cardFeeBatchDone", "월별 카드 수수료가 등록되었습니다.")
           + ` (${cardFeeMonth}, ${rows.length}${tt("receivPayCount", "건")})`
@@ -1248,6 +1386,8 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
     cardFeeAccountSubjectId,
     cardFeeAmounts,
     cardFeeMonth,
+    cardFeeVatMode,
+    onBatchWithdrawalSaved,
     storeName,
     t,
     tt,
@@ -2022,9 +2162,11 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
               )}
               <div className="w-[120px]">
                 <Label>
-                  {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense")
-                    ? tt("expenseAccrualGrossTotal", "Total (incl. tax)")
-                    : tt("amount", "Amount")}
+                  {activeFeeVatMode && categoryMain === "expense"
+                    ? feeAmountFieldLabel(activeFeeVatMode)
+                    : isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense")
+                      ? tt("expenseAccrualGrossTotal", "Total (incl. tax)")
+                      : tt("amount", "Amount")}
                 </Label>
                 <Input
                   value={amount}
@@ -2039,6 +2181,18 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
                   className={`w-[120px] h-9 mt-1 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
                   readOnly={isBankLinkMode}
                 />
+                {feeAmountPreview ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">
+                    {tt("expenseFeeWithdrawPreview", "Withdrawal")} ฿{feeAmountPreview.gross.toLocaleString()}
+                    {feeAmountPreview.vat > 0
+                      ? ` (${tt("expenseAccrualVat", "VAT")} ฿${feeAmountPreview.vat.toLocaleString()} · ${tt("expenseFeeNetLabel", "Net")} ฿${feeAmountPreview.net.toLocaleString()})`
+                      : ""}
+                  </p>
+                ) : activeFeeVatMode ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {feeVatModeLabel(activeFeeVatMode)}
+                  </p>
+                ) : null}
               </div>
               <div className="w-[140px]">
                 <Label>{tt("date", "Date")}</Label>
@@ -2222,6 +2376,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {renderFeeVatModePicker(deliveryFeeVatMode, setDeliveryFeeVatMode)}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
               <div className="text-sm font-medium">
                 {tt("deliveryFeePresetTitle", "배달앱 수수료 (빠른 입력)")}
@@ -2270,7 +2425,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {DELIVERY_APP_FEE_PRESETS.map((preset) => (
                   <div key={`dlg-batch-${preset.id}`}>
-                    <Label className="text-xs text-muted-foreground">{preset.name}</Label>
+                    <Label className="text-xs text-muted-foreground">
+                      {preset.name} · {feeAmountFieldLabel(deliveryFeeVatMode)}
+                    </Label>
                     <Input
                       type="text"
                       inputMode="decimal"
@@ -2310,6 +2467,7 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {renderFeeVatModePicker(cardFeeVatMode, setCardFeeVatMode)}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
               <div className="text-sm font-medium">
                 {tt("cardFeePresetTitle", "카드 수수료 (빠른 입력)")}
@@ -2358,7 +2516,9 @@ export function WithdrawalManagementTab({ onAccrualSaved }: WithdrawalManagement
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {CARD_FEE_PRESETS.map((preset) => (
                   <div key={`dlg-card-batch-${preset.id}`}>
-                    <Label className="text-xs text-muted-foreground">{tt(preset.nameKey, preset.name)}</Label>
+                    <Label className="text-xs text-muted-foreground">
+                      {tt(preset.nameKey, preset.name)} · {feeAmountFieldLabel(cardFeeVatMode)}
+                    </Label>
                     <Input
                       type="text"
                       inputMode="decimal"
