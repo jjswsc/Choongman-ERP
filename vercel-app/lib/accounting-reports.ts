@@ -3,6 +3,14 @@ import {
   sumInboundLinkAmountsByBankTransactionId,
 } from '@/lib/accounting-bank-purchase-inbound-net'
 import {
+  buildVendorPurchaseKeyIndex,
+  excludeBankPurchasesWhenDirectInboundPresent,
+  normalizeVendorAmountMap,
+  purchaseVendorKeyMatchesRaw,
+  type VendorPurchaseKeyIndex,
+  type VendorRowForPurchaseKey,
+} from '@/lib/accounting-purchase-vendor-key'
+import {
   buildHqVendorMatchIndex,
   isHqVendorPurchaseKey,
   partitionPurchaseVendorMapByHqCodes,
@@ -244,6 +252,17 @@ export function isOfficeStore(s: string): boolean {
 }
 
 export { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+
+async function loadVendorPurchaseKeyIndex(): Promise<VendorPurchaseKeyIndex> {
+  try {
+    const rows = (await supabaseSelect('vendors', { select: 'code,name,gps_name', limit: 20000 })) as
+      | VendorRowForPurchaseKey[]
+      | null
+    return buildVendorPurchaseKeyIndex(rows || [])
+  } catch {
+    return buildVendorPurchaseKeyIndex([])
+  }
+}
 
 /** vendors.code(대소문자 무시) → 표시용 이름 */
 async function loadVendorCodeNormToNameMap(): Promise<Record<string, string>> {
@@ -1039,29 +1058,37 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       )
     }
 
-    const inboundHq = await getDirectInboundPurchasesByVendor(
-      '입고등록',
-      startStr,
-      endStr,
-      itemUnitCostMap,
-      {},
-      itemAccountSubjectMap,
-      subjectMeta
-    )
-    const inboundByVendorHq = inboundHq.byVendor
-    const bankPayByVendorHq = await fetchBankPurchasePaymentsByVendor({
+    const [inboundHq, vendorPurchaseKeyIndex] = await Promise.all([
+      getDirectInboundPurchasesByVendor(
+        '입고등록',
+        startStr,
+        endStr,
+        itemUnitCostMap,
+        {},
+        itemAccountSubjectMap,
+        subjectMeta
+      ),
+      loadVendorPurchaseKeyIndex(),
+    ])
+    const inboundByVendorHq = normalizeVendorAmountMap(inboundHq.byVendor, vendorPurchaseKeyIndex)
+    const bankPayByVendorHqRaw = await fetchBankPurchasePaymentsByVendor({
       isHQ: true,
       storeFilter,
       startStr,
       endStr,
     })
-    const purchaseVendorMapHq: Record<string, number> = { ...inboundByVendorHq }
-    mergeVendorAmountMap(purchaseVendorMapHq, bankPayByVendorHq)
+    const bankPayByVendorHqNorm = normalizeVendorAmountMap(bankPayByVendorHqRaw, vendorPurchaseKeyIndex)
     purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
       inboundByVendorHq,
-      bankPayByVendorHq
+      bankPayByVendorHqNorm
     )
-    /** 거래처별 내역과 동일: 직접입고 + 통장 매입지급(purchase_payment) */
+    const bankPayByVendorHq = excludeBankPurchasesWhenDirectInboundPresent(
+      inboundByVendorHq,
+      bankPayByVendorHqNorm
+    )
+    const purchaseVendorMapHq: Record<string, number> = { ...inboundByVendorHq }
+    mergeVendorAmountMap(purchaseVendorMapHq, bankPayByVendorHq)
+    /** 거래처별: 직접입고(발생) + 통장 매입지급(입고 없는 거래처만) */
     const inboundHqTotal = Object.values(inboundByVendorHq).reduce((a, b) => a + b, 0)
     const bankHqTotal = Object.values(bankPayByVendorHq).reduce((a, b) => a + b, 0)
     for (const k of Object.keys(bankPayByVendorHq)) bankPurchaseVendorKeys.add(k)
@@ -1168,13 +1195,14 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
-    const [orders, hqVendorIndex] = await Promise.all([
+    const [orders, hqVendorIndex, vendorPurchaseKeyIndexStore] = await Promise.all([
       supabaseSelectFilterAllPages('orders', orderFilter, {
         select: 'total',
         pageSize: 8000,
         maxRows: ACCOUNTING_ROWS_MAX,
       }) as Promise<{ total?: number }[]>,
       loadHqVendorMatchIndex(),
+      loadVendorPurchaseKeyIndex(),
     ])
     let hqOutboundAgg: {
       purchaseTotal: number
@@ -1256,7 +1284,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       startStr,
       endStr,
     })
-    const bankPayByVendorStore: Record<string, number> = {}
+    const bankPayByVendorStorePreHq: Record<string, number> = {}
     for (const [k, v] of Object.entries(bankPayByVendorRaw)) {
       const amt = Number(v) || 0
       if (amt <= 0) continue
@@ -1264,16 +1292,25 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         excludedHqVendorDupRaw.push({ key: k, amount: amt })
         continue
       }
-      bankPayByVendorStore[k] = amt
+      bankPayByVendorStorePreHq[k] = amt
     }
-    const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStore }
-    mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
-    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
-      inboundByVendorStore,
-      bankPayByVendorStore
+    const inboundByVendorStoreNorm = normalizeVendorAmountMap(inboundByVendorStore, vendorPurchaseKeyIndexStore)
+    const bankPayByVendorStoreNorm = normalizeVendorAmountMap(
+      bankPayByVendorStorePreHq,
+      vendorPurchaseKeyIndexStore
     )
+    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
+      inboundByVendorStoreNorm,
+      bankPayByVendorStoreNorm
+    )
+    const bankPayByVendorStore = excludeBankPurchasesWhenDirectInboundPresent(
+      inboundByVendorStoreNorm,
+      bankPayByVendorStoreNorm
+    )
+    const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStoreNorm }
+    mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
     /** 본사 창고 출고 + 거래처별(직접입고 + 통장 매입지급, 본사 법인 제외) — 펼침 합계와 매입 총액 일치 */
-    const inboundStoreTotal = Object.values(inboundByVendorStore).reduce((a, b) => a + b, 0)
+    const inboundStoreTotal = Object.values(inboundByVendorStoreNorm).reduce((a, b) => a + b, 0)
     const bankStoreTotal = Object.values(bankPayByVendorStore).reduce((a, b) => a + b, 0)
     for (const k of Object.keys(bankPayByVendorStore)) bankPurchaseVendorKeys.add(k)
     purchasesStockNet += ordersPurchaseSubtotal + inboundStoreTotal
@@ -1611,16 +1648,20 @@ export type IncomeStatementPurchaseDrillDownResult = {
   truncated: { inbound: boolean; bank: boolean; orders: boolean }
 }
 
-function drillVendorMatchesInboundRow(vendorKey: string, vendorTarget: string | null | undefined): boolean {
-  const raw = String(vendorTarget || '').trim()
-  if (vendorKey === '__pl_vendor_unknown__') return !raw
-  return raw === String(vendorKey || '').trim()
+function drillVendorMatchesInboundRow(
+  vendorKey: string,
+  vendorTarget: string | null | undefined,
+  vendorPurchaseKeyIndex: VendorPurchaseKeyIndex
+): boolean {
+  return purchaseVendorKeyMatchesRaw(vendorKey, vendorTarget, vendorPurchaseKeyIndex)
 }
 
-function drillVendorMatchesBankRow(vendorKey: string, vendorCode: string | null | undefined): boolean {
-  const raw = String(vendorCode || '').trim()
-  if (vendorKey === '__pl_vendor_unknown__') return !raw
-  return raw === String(vendorKey || '').trim()
+function drillVendorMatchesBankRow(
+  vendorKey: string,
+  vendorCode: string | null | undefined,
+  vendorPurchaseKeyIndex: VendorPurchaseKeyIndex
+): boolean {
+  return purchaseVendorKeyMatchesRaw(vendorKey, vendorCode, vendorPurchaseKeyIndex)
 }
 
 async function loadItemCostMapForDrill(): Promise<Record<string, number>> {
@@ -1715,7 +1756,10 @@ export async function computeIncomeStatementPurchaseDrillDown(
     }
   }
 
-  const itemCostMap = await loadItemCostMapForDrill()
+  const [itemCostMap, vendorPurchaseKeyIndexDrill] = await Promise.all([
+    loadItemCostMapForDrill(),
+    loadVendorPurchaseKeyIndex(),
+  ])
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   let inboundFilter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
   if (isHQ) {
@@ -1752,7 +1796,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
     ) {
       continue
     }
-    if (!drillVendorMatchesInboundRow(vendorKey, vendorTarget)) continue
+    if (!drillVendorMatchesInboundRow(vendorKey, vendorTarget, vendorPurchaseKeyIndexDrill)) continue
     const code = String(r.item_code || '').trim()
     if (!code) continue
     const qty = Number(r.qty) || 0
@@ -1801,7 +1845,8 @@ export async function computeIncomeStatementPurchaseDrillDown(
   }
 
   const bankAcc: IncomeStatementPurchaseDrillBankRow[] = []
-  if (accountIds.length > 0) {
+  const includeBankPaymentsInDrill = inboundAcc.length === 0
+  if (includeBankPaymentsInDrill && accountIds.length > 0) {
     const idList = accountIds.join(',')
     let btRows: {
       id?: number
@@ -1835,7 +1880,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
           if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
         }
       }
-      if (!drillVendorMatchesBankRow(vendorKey, r.vendor_code)) continue
+      if (!drillVendorMatchesBankRow(vendorKey, r.vendor_code, vendorPurchaseKeyIndexDrill)) continue
       const id = Number(r.id)
       if (!id) continue
       const netAmt = netBankPurchasePaymentForIncomeStatement(
