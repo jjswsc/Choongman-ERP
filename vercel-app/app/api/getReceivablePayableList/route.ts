@@ -2,7 +2,7 @@
  * 미수금/미지급금 목록 조회
  * - type: receivable | payable
  * - storeFilter / vendorFilter (선택)
- * - startStr, endStr (trans_date 범위)
+ * - startStr, endStr (trans_date 범위 — 목록·그룹 합계 모두 조회 기간 내 거래만)
  * - receivable: store_name으로 vendors 매칭 → vendorCode, vendorName 포함
  * - payable: storeFilter 시 입고(location)·발주(relatedStore/location)·지출(store_name)·통장(store)·패티(store)로 귀속 매장 필터
  */
@@ -151,6 +151,7 @@ export async function GET(request: NextRequest) {
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const vendorFilter = searchParams.get('vendorFilter') || searchParams.get('vendor') || ''
+  const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
   const userStore = String(auth.store || '').trim()
   const userRole = String(auth.role || '').toLowerCase()
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
     if (type === 'payable') {
       const parts: string[] = []
       if (vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
-      // 잔액/누적 조회 기준: endStr(조회 종료일)까지 누적
+      if (startStr) parts.push(`trans_date=gte.${startStr}`)
       if (endStr) parts.push(`trans_date=lte.${endStr}`)
       const filter = parts.length ? parts.join('&') : 'id=gt.0'
       const rawRows = (await supabaseSelectFilter(
@@ -390,7 +391,7 @@ export async function GET(request: NextRequest) {
 
     // receivable
     const parts: string[] = []
-    // 잔액/누적 조회 기준: endStr(조회 종료일)까지 누적
+    if (startStr) parts.push(`trans_date=gte.${startStr}`)
     if (endStr) parts.push(`trans_date=lte.${endStr}`)
     const filter = parts.length ? parts.join('&') : 'id=gt.0'
     let rows = (await supabaseSelectFilter(

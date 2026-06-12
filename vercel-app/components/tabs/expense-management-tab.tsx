@@ -94,7 +94,6 @@ export function ExpenseManagementTab() {
   const [loading, setLoading] = React.useState(false)
   const [expensePlans, setExpensePlans] = React.useState<ExpenseAccrualPlanItem[]>([])
   const [purchasePlans, setPurchasePlans] = React.useState<ExpenseAccrualPlanItem[]>([])
-  const [totals, setTotals] = React.useState({ expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 })
   const [planTypeFilter, setPlanTypeFilter] = React.useState<string>("__all__")
   const [planStoreFilter, setPlanStoreFilter] = React.useState<string>("__all__")
 
@@ -206,16 +205,13 @@ export function ExpenseManagementTab() {
         await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         setExpensePlans([])
         setPurchasePlans([])
-        setTotals({ expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 })
         return
       }
       setExpensePlans(res.expensePlans || [])
       setPurchasePlans(res.purchasePlans || [])
-      setTotals(res.totals || { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 })
     } catch {
       setExpensePlans([])
       setPurchasePlans([])
-      setTotals({ expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 })
     } finally {
       setLoading(false)
     }
@@ -378,17 +374,13 @@ export function ExpenseManagementTab() {
     [expensePlans, purchasePlans]
   )
 
-  const planStoreOptions = React.useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [...(expensePlans || []), ...(purchasePlans || [])]
-            .map((r) => String(r.storeName || "").trim())
-            .filter(Boolean)
-        )
-      ).sort(),
-    [expensePlans, purchasePlans]
-  )
+  const planStoreOptions = React.useMemo(() => {
+    const fromMaster = (stores || []).map((s) => String(s).trim()).filter(Boolean)
+    const fromResults = [...(expensePlans || []), ...(purchasePlans || [])]
+      .map((r) => String(r.storeName || "").trim())
+      .filter(Boolean)
+    return Array.from(new Set([...fromMaster, ...fromResults])).sort()
+  }, [expensePlans, purchasePlans, stores])
 
   const filteredExpensePlans = React.useMemo(
     () =>
@@ -416,6 +408,16 @@ export function ExpenseManagementTab() {
         (planStoreFilter === "__all__" ? true : String(r.storeName || "").trim() === planStoreFilter)
       ),
     [purchasePlans, planStoreFilter, planTypeFilter]
+  )
+
+  /** 조회 기간(API) + 화면 매장·구분 필터 기준 합계 */
+  const filteredPlanTotals = React.useMemo(
+    () => ({
+      expensePlanned: filteredExpensePlans.reduce((s, r) => s + (r.plannedAmount || 0), 0),
+      expenseRemaining: filteredExpensePlans.reduce((s, r) => s + (r.remainingAmount || 0), 0),
+      logisticsRemaining: filteredPurchasePlans.reduce((s, r) => s + (r.remainingAmount || 0), 0),
+    }),
+    [filteredExpensePlans, filteredPurchasePlans]
   )
 
   const purchasePlansByStore = React.useMemo(() => {
@@ -732,12 +734,18 @@ export function ExpenseManagementTab() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{tt("expensePlannedTotal", "General Expense Planned Total")}</div>
-              <div className="text-lg font-semibold tabular-nums">฿{(totals.expensePlanned || 0).toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">
+                {tt("expensePlannedTotal", "General Expense Planned Total")}
+                {planStoreFilter !== "__all__" ? ` · ${planStoreFilter}` : ""}
+              </div>
+              <div className="text-lg font-semibold tabular-nums">฿{(filteredPlanTotals.expensePlanned || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{tt("expenseLogisticsPlanTotal", "Logistics Expense Payment Plan")}</div>
-              <div className="text-lg font-semibold tabular-nums">฿{(totals.logisticsRemaining || 0).toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">
+                {tt("expenseLogisticsPlanTotal", "Logistics Expense Payment Plan")}
+                {planStoreFilter !== "__all__" ? ` · ${planStoreFilter}` : ""}
+              </div>
+              <div className="text-lg font-semibold tabular-nums">฿{(filteredPlanTotals.logisticsRemaining || 0).toLocaleString()}</div>
             </div>
           </div>
           <Card>

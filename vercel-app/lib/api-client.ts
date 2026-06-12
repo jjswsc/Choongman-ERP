@@ -5235,11 +5235,15 @@ export type PosSalesPromoRow = {
   promoId: string
   promoCode: string
   name: string
+  kind: 'set' | 'campaign' | 'other'
   qty: number
   saleAmount: number
   regularAmount: number
   bundleDiscount: number
   discountPct: number
+  discountPctOfGross: number
+  saleSharePctOfGross: number
+  bundleDiscountSharePct: number
   estimatedLineQty: number
   unresolvedLineQty: number
 }
@@ -5251,13 +5255,32 @@ export type PosSalesPromoAggregateTotals = {
   bundleDiscount: number
   paymentDiscount: number
   totalDiscount: number
+  periodGrossSales: number
+  periodOrderCount: number
+  promoLineSaleSharePct: number
+  bundleDiscountPctOfGross: number
+  paymentDiscountPctOfGross: number
+  totalDiscountPctOfGross: number
   estimatedLineQty: number
   unresolvedLineQty: number
+}
+
+export type PosSalesPromoKindTotals = {
+  kind: 'set' | 'campaign' | 'other'
+  qty: number
+  saleAmount: number
+  regularAmount: number
+  bundleDiscount: number
+  discountPct: number
+  saleSharePctOfGross: number
+  bundleDiscountPctOfGross: number
+  bundleDiscountSharePct: number
 }
 
 export type PosSalesByPromoResult = {
   rows: PosSalesPromoRow[]
   totals: PosSalesPromoAggregateTotals
+  byKind?: PosSalesPromoKindTotals[]
   truncated?: boolean
 }
 
@@ -5286,12 +5309,19 @@ export async function getPosSalesByPromo(params: {
     bundleDiscount: 0,
     paymentDiscount: 0,
     totalDiscount: 0,
+    periodGrossSales: 0,
+    periodOrderCount: 0,
+    promoLineSaleSharePct: 0,
+    bundleDiscountPctOfGross: 0,
+    paymentDiscountPctOfGross: 0,
+    totalDiscountPctOfGross: 0,
     estimatedLineQty: 0,
     unresolvedLineQty: 0,
   }
   return {
     rows: Array.isArray(json.rows) ? json.rows : [],
     totals: json.totals ?? emptyTotals,
+    byKind: Array.isArray(json.byKind) ? json.byKind : [],
     truncated: truncated || !!json.truncated,
   }
 }
@@ -5493,6 +5523,73 @@ export async function getExpenseRegisterList(params: {
   if (params.category) q.set('category', params.category)
   const res = await apiFetchWithOffline(`/api/getExpenseRegisterList?${q}`)
   return jsonObjectWithList<ExpenseRegisterItem>(await res.json())
+}
+
+export type ExpenseSearchRelation =
+  | 'plan_only'
+  | 'approved_unpaid'
+  | 'paid_bank'
+  | 'paid_petty'
+  | 'rejected'
+  | 'bank_only'
+
+export interface ExpenseSearchOverviewRow {
+  rowKey: string
+  relation: ExpenseSearchRelation
+  storeName: string
+  category: string
+  payeeCode?: string
+  payeeName?: string
+  accountSubjectId?: number | null
+  vendorCode?: string
+  plannedAmount?: number
+  remainingAmount?: number
+  bankAmount?: number
+  expenseDate?: string
+  dueDate?: string
+  bankTransDate?: string
+  accrualId?: number
+  bankTransactionId?: number
+  accountId?: number
+  planStatus?: 'planned' | 'approved' | 'paid' | 'rejected'
+  memo?: string
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  bankLinked?: boolean
+  pettyLinked?: boolean
+  linkStatus?: string
+}
+
+export interface ExpenseSearchOverviewSummary {
+  planOnly: number
+  approvedUnpaid: number
+  paid: number
+  bankOnly: number
+  rejected: number
+}
+
+export async function getExpenseSearchOverview(params: {
+  startStr: string
+  endStr: string
+  storeFilter?: string
+  accountId?: string | number
+  category?: string
+  vendorFilter?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.storeFilter && params.storeFilter !== '__all__') q.set('storeFilter', params.storeFilter)
+  if (params.accountId && params.accountId !== '__all__') q.set('accountId', String(params.accountId))
+  if (params.category && params.category !== '__all__') q.set('category', params.category)
+  if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  const res = await apiFetch(`/api/getExpenseSearchOverview?${q}`)
+  return res.json() as Promise<{
+    list: ExpenseSearchOverviewRow[]
+    summary: ExpenseSearchOverviewSummary
+  }>
 }
 
 export async function addBankTransaction(params: {
@@ -11993,10 +12090,19 @@ export async function recalculateMemberTier(params?: { memberId?: number }) {
   return res.json() as Promise<{ success: boolean; updated?: number; message?: string }>
 }
 
-export async function getMemberVisits(params?: { memberId?: number; limit?: number }) {
+export async function getMemberVisits(params?: {
+  memberId?: number
+  limit?: number
+  startStr?: string
+  endStr?: string
+  storeCode?: string
+}) {
   const q = new URLSearchParams()
   if (params?.memberId) q.set('memberId', String(params.memberId))
   if (params?.limit != null) q.set('limit', String(params.limit))
+  if (params?.startStr) q.set('start', params.startStr)
+  if (params?.endStr) q.set('end', params.endStr)
+  if (params?.storeCode) q.set('store', params.storeCode)
   const suffix = q.toString()
   const res = await apiFetchWithOffline('/api/member-visits' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<Array<{

@@ -83,6 +83,7 @@ import {
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
 
 function todayStr() {
   return getBangkokTodayDateString()
@@ -1211,7 +1212,7 @@ export function BankTransactionsTab() {
     setAccountManageSaving(true)
     try {
       const store = isOffice ? (editAccountForm.store.trim() || undefined) : (auth?.store || undefined)
-      const ob = editAccountForm.openingBalance.trim() ? Number(String(editAccountForm.openingBalance).replace(/,/g, "")) : 0
+      const ob = editAccountForm.openingBalance.trim() ? parseBahtAmount(editAccountForm.openingBalance) : 0
       const obDate = editAccountForm.openingBalanceDate.trim() && /^\d{4}-\d{2}-\d{2}$/.test(editAccountForm.openingBalanceDate) ? editAccountForm.openingBalanceDate : null
       const res = await saveBankAccount({
         id: editingAccountId,
@@ -3288,9 +3289,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <label className="text-xs text-muted-foreground block mb-0.5">{t("bankCarryOverAmount") || "이월금액"}</label>
                           <Input
                             type="text"
-                            inputMode="numeric"
+                            inputMode="decimal"
                             value={editAccountForm.openingBalance}
-                            onChange={(e) => setEditAccountForm((p) => ({ ...p, openingBalance: e.target.value.replace(/\D/g, "") }))}
+                            onChange={(e) => setEditAccountForm((p) => ({ ...p, openingBalance: formatBahtInputDisplay(e.target.value) }))}
                             className="h-8 text-sm text-right"
                             placeholder="0"
                           />
@@ -3333,7 +3334,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 name: a.name,
                                 bankName: a.bankName || "",
                                 store: a.store || "본사",
-                                openingBalance: a.openingBalance != null && a.openingBalance !== 0 ? String(a.openingBalance) : "",
+                                openingBalance: formatBahtAmountForField(a.openingBalance),
                                 openingBalanceDate: a.openingBalanceDate || "",
                               })
                             }}

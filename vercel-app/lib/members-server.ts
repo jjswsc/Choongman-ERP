@@ -10,6 +10,7 @@ import {
   supabaseUpdateByFilter,
   supabaseUpsert,
 } from '@/lib/supabase-server'
+import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
   loadMemberTierUpgradeBasis,
@@ -1358,27 +1359,38 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
   }
 }
 
-export async function getMemberVisits(params?: { memberId?: number; limit?: number }) {
+export async function getMemberVisits(params?: {
+  memberId?: number
+  limit?: number
+  startStr?: string
+  endStr?: string
+  storeCode?: string
+}) {
   const memberId = Number(params?.memberId || 0)
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
-  const filters: string[] = []
+  const filters: string[] = ['member_id=not.is.null', 'member_id=gt.0']
   if (memberId) filters.push(`member_id=eq.${memberId}`)
+  const startStr = toText(params?.startStr).slice(0, 10)
+  const endStr = toText(params?.endStr).slice(0, 10)
+  if (startStr && endStr) {
+    const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(startStr, endStr)
+    filters.push(`created_at=gte.${encodeURIComponent(gteIso)}`)
+    filters.push(`created_at=lte.${encodeURIComponent(lteIso)}`)
+  }
+  const storeCode = toText(params?.storeCode)
+  if (storeCode && storeCode !== 'All') {
+    filters.push(`store_code=eq.${encodeURIComponent(storeCode)}`)
+  }
   const filter = filters.join('&')
-  const rows = (filter
-    ? await supabaseSelectFilter(
-        'pos_orders',
-        filter,
-        {
-          order: 'created_at.desc',
-          limit,
-          select: 'id,member_id,member_no,store_code,order_no,total,created_at',
-        }
-      )
-    : await supabaseSelect('pos_orders', {
-        order: 'created_at.desc',
-        limit,
-        select: 'id,member_id,member_no,store_code,order_no,total,created_at',
-      })) as {
+  const rows = (await supabaseSelectFilter(
+    'pos_orders',
+    filter,
+    {
+      order: 'created_at.desc',
+      limit,
+      select: 'id,member_id,member_no,store_code,order_no,total,created_at',
+    }
+  )) as {
     id?: number
     member_id?: number
     member_no?: string

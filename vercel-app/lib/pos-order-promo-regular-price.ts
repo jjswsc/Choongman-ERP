@@ -8,10 +8,19 @@ import {
 import { promoItemsToPricingLines } from '@/lib/pos-promo-cut-price'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 
+import type { PosPromoSalesKind } from '@/lib/pos-promo-sales-kind'
+
+export type PromoPricingCatalogPromoMeta = {
+  code: string
+  name: string
+  marketingCampaignId?: string
+  kind: PosPromoSalesKind
+}
+
 export type PromoPricingCatalog = {
   menus: PromoMenuLike[]
   optionsByMenuId: Record<string, PromoOptionLike[]>
-  promoMetaById: Map<string, { code: string; name: string }>
+  promoMetaById: Map<string, PromoPricingCatalogPromoMeta>
   promoItemsByPromoId: Map<string, PromoLineLike[]>
 }
 

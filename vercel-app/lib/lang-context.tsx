@@ -26,6 +26,30 @@ export function normalizeAdminUiLang(lang: string): LangCode {
   return 'ko'
 }
 
+/** `<input type="date">` 등 네이티브 UI 로케일용 BCP 47 */
+export function langCodeToHtmlLang(lang: LangCode): string {
+  switch (lang) {
+    case 'ko':
+      return 'ko'
+    case 'en':
+      return 'en'
+    case 'th':
+      return 'th'
+    case 'mm':
+      return 'my'
+    case 'la':
+      return 'lo'
+    case 'kh':
+      return 'km'
+    case 'vi':
+      return 'vi'
+    case 'ms':
+      return 'ms'
+    default:
+      return 'en'
+  }
+}
+
 export const ADMIN_UI_LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: 'ko', label: '한국어' },
   { value: 'en', label: 'English' },
@@ -65,6 +89,11 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('cm_lang', loaded)
     } catch {}
   }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.documentElement.lang = langCodeToHtmlLang(lang)
+  }, [lang])
 
   const setLang = useCallback((l: LangCode) => {
     setLangState(l)

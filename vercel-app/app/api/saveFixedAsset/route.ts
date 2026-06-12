@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
 import { deleteJournalEntriesBySource, postJournalEntry } from '@/lib/accounting-posting'
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
+import { requireAuth } from '@/lib/verify-auth'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 
 function normalizeAccountCode(v: unknown, fallback: string): string {
   const code = String(v || '')
@@ -50,6 +52,11 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
+
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) return authResult.errorResponse
+  const authRole = authResult.auth.role || ''
+  const authStore = authResult.auth.store || ''
 
   try {
     const body = await request.json()
@@ -282,6 +289,17 @@ export async function POST(request: NextRequest) {
         )
       }
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+    }
+
+    if (!hasOfficeStaffScope(authRole, authStore)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '고정자산 신규 등록은 지출 관리 → 발생등록(유형: 고정자산)에서 하세요. 본사·회계만 예외 등록(기초잔액 등)이 가능합니다.',
+        },
+        { status: 403, headers }
+      )
     }
 
     const existingCode = (await supabaseSelectFilter('fixed_assets', `asset_code=eq.${encodeURIComponent(code)}`, { limit: 1 })) as unknown[]

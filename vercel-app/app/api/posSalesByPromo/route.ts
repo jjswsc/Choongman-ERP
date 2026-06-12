@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
       {
         rows: rowsOut,
         totals: aggregated.totals,
+        byKind: aggregated.byKind,
         truncated,
       },
       { headers }
@@ -87,9 +88,16 @@ export async function GET(request: NextRequest) {
           bundleDiscount: 0,
           paymentDiscount: 0,
           totalDiscount: 0,
+          periodGrossSales: 0,
+          periodOrderCount: 0,
+          promoLineSaleSharePct: 0,
+          bundleDiscountPctOfGross: 0,
+          paymentDiscountPctOfGross: 0,
+          totalDiscountPctOfGross: 0,
           estimatedLineQty: 0,
           unresolvedLineQty: 0,
         },
+        byKind: [],
         truncated: false,
       },
       { headers }

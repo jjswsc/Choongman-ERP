@@ -5,23 +5,31 @@ import {
   resolvePromoRegularPricePerSet,
   type PromoPricingCatalog,
 } from '@/lib/pos-order-promo-regular-price'
+import { resolvePosPromoSalesKind, type PosPromoSalesKind } from '@/lib/pos-promo-sales-kind'
 
 export type { PromoPricingCatalog }
 export { orderTypeToPromoRegularPriceChannel }
+export type { PosPromoSalesKind }
 
 export type PosSalesPromoRow = {
   key: string
   promoId: string
   promoCode: string
   name: string
+  kind: PosPromoSalesKind
   qty: number
   saleAmount: number
   regularAmount: number
   bundleDiscount: number
+  /** 정가 대비 내재 할인율 */
   discountPct: number
-  /** 정가를 카탈로그·DB 구성으로만 추정한 줄 수 */
+  /** 기간 총매출 대비 내재 할인 비중 */
+  discountPctOfGross: number
+  /** 기간 총매출 대비 해당 프로모 판매액 비중 */
+  saleSharePctOfGross: number
+  /** 전체 세트 내재 할인 중 비중 */
+  bundleDiscountSharePct: number
   estimatedLineQty: number
-  /** 정가 산출 불가 줄 수 */
   unresolvedLineQty: number
 }
 
@@ -33,18 +41,40 @@ export type PosSalesPromoAggregateTotals = {
   paymentDiscount: number
   /** 세트 내재 + 결제 할인(중복 없음) */
   totalDiscount: number
+  /** 완료 주문 total 합(동일 기간·필터) */
+  periodGrossSales: number
+  periodOrderCount: number
+  /** 세트·프로모 줄 판매액 / 총매출 */
+  promoLineSaleSharePct: number
+  bundleDiscountPctOfGross: number
+  paymentDiscountPctOfGross: number
+  totalDiscountPctOfGross: number
   estimatedLineQty: number
   unresolvedLineQty: number
+}
+
+export type PosSalesPromoKindTotals = {
+  kind: PosPromoSalesKind
+  qty: number
+  saleAmount: number
+  regularAmount: number
+  bundleDiscount: number
+  discountPct: number
+  saleSharePctOfGross: number
+  bundleDiscountPctOfGross: number
+  bundleDiscountSharePct: number
 }
 
 export type PosSalesPromoAggregateResult = {
   rows: PosSalesPromoRow[]
   totals: PosSalesPromoAggregateTotals
+  byKind: PosSalesPromoKindTotals[]
 }
 
 type OrderRowForPromoAgg = {
   items_json?: string
   order_type?: string
+  total?: number
   discount_amt?: number
   coupon_discount_amt?: number
 }
@@ -55,6 +85,11 @@ function str(v: unknown): string {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+function pctOf(part: number, whole: number): number {
+  if (whole <= 0.0001) return 0
+  return round2((part / whole) * 100)
 }
 
 function resolveLineSaleAmount(row: Record<string, unknown>, qty: number): number {
@@ -71,14 +106,22 @@ function resolvePromoMeta(
   promoCode: string,
   lineName: string,
   catalog: PromoPricingCatalog
-): { code: string; name: string } {
+): { code: string; name: string; kind: PosPromoSalesKind } {
   if (promoId) {
     const hit = catalog.promoMetaById.get(promoId)
-    if (hit) return hit
+    if (hit) {
+      return {
+        code: hit.code || promoCode,
+        name: hit.name,
+        kind: hit.kind,
+      }
+    }
   }
+  const code = promoCode || promoId
   return {
-    code: promoCode || promoId,
-    name: lineName || promoCode || promoId || '(세트·프로모)',
+    code,
+    name: lineName || code || '(세트·프로모)',
+    kind: resolvePosPromoSalesKind({ promoCode: code }),
   }
 }
 
@@ -91,6 +134,16 @@ function parseOrderItems(itemsJson: string | undefined): Record<string, unknown>
   }
 }
 
+function emptyKindTotals(kind: PosPromoSalesKind): Omit<PosSalesPromoKindTotals, 'discountPct' | 'saleSharePctOfGross' | 'bundleDiscountPctOfGross' | 'bundleDiscountSharePct'> {
+  return {
+    kind,
+    qty: 0,
+    saleAmount: 0,
+    regularAmount: 0,
+    bundleDiscount: 0,
+  }
+}
+
 export function filterPromoSalesRows(
   rows: PosSalesPromoRow[],
   searchTokens: string[],
@@ -98,7 +151,7 @@ export function filterPromoSalesRows(
 ): PosSalesPromoRow[] {
   if (searchTokens.length === 0) return rows
   return rows.filter((row) => {
-    const haystack = [row.name, row.promoCode, row.promoId, row.key].join(' ').toLowerCase()
+    const haystack = [row.name, row.promoCode, row.promoId, row.key, row.kind].join(' ').toLowerCase()
     return searchAnd
       ? searchTokens.every((token) => haystack.includes(token))
       : searchTokens.some((token) => haystack.includes(token))
@@ -115,8 +168,13 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
 }): PosSalesPromoAggregateResult {
   const buckets = new Map<
     string,
-    Omit<PosSalesPromoRow, 'discountPct'> & { discountPct: number }
+    Omit<PosSalesPromoRow, 'discountPct' | 'discountPctOfGross' | 'saleSharePctOfGross' | 'bundleDiscountSharePct'>
   >()
+  const kindBuckets = new Map<PosPromoSalesKind, ReturnType<typeof emptyKindTotals>>()
+  for (const kind of ['set', 'campaign', 'other'] as const) {
+    kindBuckets.set(kind, emptyKindTotals(kind))
+  }
+
   const totals: PosSalesPromoAggregateTotals = {
     qty: 0,
     saleAmount: 0,
@@ -124,11 +182,19 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
     bundleDiscount: 0,
     paymentDiscount: 0,
     totalDiscount: 0,
+    periodGrossSales: 0,
+    periodOrderCount: 0,
+    promoLineSaleSharePct: 0,
+    bundleDiscountPctOfGross: 0,
+    paymentDiscountPctOfGross: 0,
+    totalDiscountPctOfGross: 0,
     estimatedLineQty: 0,
     unresolvedLineQty: 0,
   }
 
   for (const order of params.orderRows) {
+    totals.periodGrossSales = round2(totals.periodGrossSales + Math.max(0, Number(order.total) || 0))
+    totals.periodOrderCount += 1
     totals.paymentDiscount += resolvePosSalesDiscountAmount(
       Number(order.discount_amt) || 0,
       Number(order.coupon_discount_amt) || 0
@@ -171,11 +237,11 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
         promoId,
         promoCode: meta.code,
         name: meta.name,
+        kind: meta.kind,
         qty: 0,
         saleAmount: 0,
         regularAmount: 0,
         bundleDiscount: 0,
-        discountPct: 0,
         estimatedLineQty: 0,
         unresolvedLineQty: 0,
       }
@@ -187,6 +253,13 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
       prev.unresolvedLineQty += unresolvedLineQty
       buckets.set(key, prev)
 
+      const kindPrev = kindBuckets.get(meta.kind) ?? emptyKindTotals(meta.kind)
+      kindPrev.qty += qty
+      kindPrev.saleAmount = round2(kindPrev.saleAmount + saleAmount)
+      kindPrev.regularAmount = round2(kindPrev.regularAmount + regularAmount)
+      kindPrev.bundleDiscount = round2(kindPrev.bundleDiscount + bundleDiscount)
+      kindBuckets.set(meta.kind, kindPrev)
+
       totals.qty += qty
       totals.saleAmount = round2(totals.saleAmount + saleAmount)
       totals.regularAmount = round2(totals.regularAmount + regularAmount)
@@ -196,6 +269,13 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
     }
   }
 
+  totals.paymentDiscount = round2(totals.paymentDiscount)
+  totals.totalDiscount = round2(totals.bundleDiscount + totals.paymentDiscount)
+  totals.promoLineSaleSharePct = pctOf(totals.saleAmount, totals.periodGrossSales)
+  totals.bundleDiscountPctOfGross = pctOf(totals.bundleDiscount, totals.periodGrossSales)
+  totals.paymentDiscountPctOfGross = pctOf(totals.paymentDiscount, totals.periodGrossSales)
+  totals.totalDiscountPctOfGross = pctOf(totals.totalDiscount, totals.periodGrossSales)
+
   const rows: PosSalesPromoRow[] = Array.from(buckets.values())
     .map((row) => ({
       ...row,
@@ -203,11 +283,27 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
         row.regularAmount > 0.0001
           ? round2((row.bundleDiscount / row.regularAmount) * 100)
           : 0,
+      discountPctOfGross: pctOf(row.bundleDiscount, totals.periodGrossSales),
+      saleSharePctOfGross: pctOf(row.saleAmount, totals.periodGrossSales),
+      bundleDiscountSharePct: pctOf(row.bundleDiscount, totals.bundleDiscount),
     }))
     .sort((a, b) => b.bundleDiscount - a.bundleDiscount || b.saleAmount - a.saleAmount)
 
-  totals.paymentDiscount = round2(totals.paymentDiscount)
-  totals.totalDiscount = round2(totals.bundleDiscount + totals.paymentDiscount)
+  const byKind: PosSalesPromoKindTotals[] = (['set', 'campaign', 'other'] as const)
+    .map((kind) => {
+      const bucket = kindBuckets.get(kind) ?? emptyKindTotals(kind)
+      return {
+        ...bucket,
+        discountPct:
+          bucket.regularAmount > 0.0001
+            ? round2((bucket.bundleDiscount / bucket.regularAmount) * 100)
+            : 0,
+        saleSharePctOfGross: pctOf(bucket.saleAmount, totals.periodGrossSales),
+        bundleDiscountPctOfGross: pctOf(bucket.bundleDiscount, totals.periodGrossSales),
+        bundleDiscountSharePct: pctOf(bucket.bundleDiscount, totals.bundleDiscount),
+      }
+    })
+    .filter((row) => row.qty > 0 || row.saleAmount > 0 || row.bundleDiscount > 0)
 
-  return { rows, totals }
+  return { rows, totals, byKind }
 }

@@ -137,6 +137,15 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
           ? scopedStoreChoices[0]
           : "All")
   )
+  const parentControlsQuery = Boolean(props.hideControls)
+  const queryYearMonthStart = parentControlsQuery
+    ? (props.yearMonthStart ?? props.yearMonth ?? yearMonthStart)
+    : yearMonthStart
+  const queryYearMonthEnd = parentControlsQuery
+    ? (props.yearMonthEnd ?? props.yearMonth ?? yearMonthEnd)
+    : yearMonthEnd
+  const queryStoreFilter =
+    parentControlsQuery && props.storeFilter != null ? props.storeFilter : storeFilter
   const [loading, setLoading] = React.useState(false)
   const [data, setData] = React.useState<BalanceSheetData | null>(null)
   const [fetchError, setFetchError] = React.useState<string | null>(null)
@@ -144,10 +153,11 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   const [compareBalanceRows, setCompareBalanceRows] = React.useState<{ ym: string; data: BalanceSheetData }[]>([])
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
   const [balanceCompareFetchId, setBalanceCompareFetchId] = React.useState(0)
+  const balanceFetchSeqRef = React.useRef(0)
 
   const periodMonthsFull = React.useMemo(
-    () => expandBangkokYearMonthsInclusive(yearMonthStart, yearMonthEnd),
-    [yearMonthStart, yearMonthEnd]
+    () => expandBangkokYearMonthsInclusive(queryYearMonthStart, queryYearMonthEnd),
+    [queryYearMonthStart, queryYearMonthEnd]
   )
   const periodMonths = React.useMemo(() => {
     if (periodMonthsFull.length <= FINANCIAL_COMPARE_MAX_MONTHS) return periodMonthsFull
@@ -222,11 +232,12 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   }, [props.storeFilter])
 
   const runBalanceFetch = React.useCallback(() => {
-    const sf = storeFilter !== "All" ? storeFilter : undefined
+    const fetchSeq = ++balanceFetchSeqRef.current
+    const sf = queryStoreFilter !== "All" ? queryStoreFilter : undefined
     const months = periodMonths
     setFetchError(null)
     if (months.length <= 1) {
-      const ym = months[0] ?? yearMonthEnd
+      const ym = months[0] ?? queryYearMonthEnd
       setLoading(true)
       setCompareBalanceRows([])
       getBalanceSheet({
@@ -236,14 +247,19 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
         userRole: auth?.role,
       })
         .then((r) => {
+          if (fetchSeq !== balanceFetchSeqRef.current) return
           setData(r)
           setFetchError(null)
         })
         .catch((e) => {
+          if (fetchSeq !== balanceFetchSeqRef.current) return
           setData(null)
           setFetchError(e instanceof Error ? e.message : String(e))
         })
-        .finally(() => setLoading(false))
+        .finally(() => {
+          if (fetchSeq !== balanceFetchSeqRef.current) return
+          setLoading(false)
+        })
       return
     }
     setLoading(true)
@@ -268,6 +284,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
       })
     )
       .then((results) => {
+        if (fetchSeq !== balanceFetchSeqRef.current) return
         const rows = results.filter(
           (row): row is { ym: string; data: BalanceSheetData } =>
             row.data != null && isBalanceSheetData(row.data)
@@ -281,20 +298,25 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
         }
       })
       .catch((e) => {
+        if (fetchSeq !== balanceFetchSeqRef.current) return
         setCompareBalanceRows([])
         setFetchError(e instanceof Error ? e.message : String(e))
       })
       .finally(() => {
+        if (fetchSeq !== balanceFetchSeqRef.current) return
         setBalanceCompareFetchId((x) => x + 1)
         setLoading(false)
       })
-  }, [periodMonths, storeFilter, auth?.store, auth?.role, yearMonthEnd, t])
+  }, [periodMonths, queryStoreFilter, auth?.store, auth?.role, queryYearMonthEnd, t])
+
+  const runBalanceFetchRef = React.useRef(runBalanceFetch)
+  runBalanceFetchRef.current = runBalanceFetch
 
   React.useEffect(() => {
     if (!props.hideControls) return
     if (props.queryToken == null) return
-    runBalanceFetch()
-  }, [props.hideControls, props.queryToken, runBalanceFetch])
+    runBalanceFetchRef.current()
+  }, [props.hideControls, props.queryToken])
 
   const loadData = React.useCallback(() => {
     runBalanceFetch()

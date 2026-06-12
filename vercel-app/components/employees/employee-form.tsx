@@ -374,7 +374,7 @@ export function EmployeeForm({
             </SelectTrigger>
             <SelectContent>
               {jobOptions.map((j) => (
-                <SelectItem key={j} value={j}>{getEmployeeJobOptionLabel(j, t)}</SelectItem>
+                <SelectItem key={j} value={j}>{getEmployeeJobOptionLabel(j)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

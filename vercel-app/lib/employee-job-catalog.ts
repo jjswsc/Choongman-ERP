@@ -28,19 +28,23 @@ export function mergeMissingCoreEmployeeJobs(catalog: string[]): string[] {
   return out
 }
 
-/** 직무 드롭다운·필터 표시명 (value는 영문 Franchise 등 그대로 저장) */
-export function getEmployeeJobOptionLabel(job: string, t: (key: string) => string): string {
+/** 표준 직무명 — UI·저장값 모두 영문 통일 */
+export const CANONICAL_EMPLOYEE_JOB_LABELS: Record<string, string> = {
+  service: 'Service',
+  kitchen: 'Kitchen',
+  franchise: 'Franchise',
+  officer: 'Officer',
+  director: 'Director',
+  logistic: 'Logistic',
+  other: 'Other',
+  기타: 'Other',
+}
+
+/** 직무 드롭다운·필터 표시명 (영문 canonical, 커스텀 직무는 입력값 그대로) */
+export function getEmployeeJobOptionLabel(job: string): string {
   const raw = String(job || '').trim()
   if (!raw) return raw
-  const key = raw.toLowerCase()
-  if (key === 'service') return t('empJobService')
-  if (key === 'kitchen') return t('empJobKitchen')
-  if (key === 'franchise') return t('empJobFranchise')
-  if (key === 'officer') return t('empJobOfficer')
-  if (key === 'director') return t('empJobDirector')
-  if (key === 'logistic') return t('empJobLogistic')
-  if (raw === '기타' || key === 'other') return t('workLogOther')
-  return raw
+  return CANONICAL_EMPLOYEE_JOB_LABELS[raw.toLowerCase()] ?? CANONICAL_EMPLOYEE_JOB_LABELS[raw] ?? raw
 }
 
 const RESERVED_JOB_NOISE = new Set(

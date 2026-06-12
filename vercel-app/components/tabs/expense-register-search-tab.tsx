@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -18,19 +19,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
-  getExpenseRegisterList,
+  getExpenseSearchOverview,
   getBankAccounts,
   getAccountSubjects,
   getVendorsForPurchase,
   deleteExpenseRegisterItem,
   updateBankTransactionInvoice,
+  updateExpenseAccrualInvoice,
   translateTexts,
+  useStoreList,
   type BankAccount,
-  type ExpenseRegisterItem,
+  type ExpenseSearchOverviewRow,
+  type ExpenseSearchOverviewSummary,
+  type ExpenseSearchRelation,
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { compressImageForUpload } from "@/lib/utils"
+import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { useRouter } from "next/navigation"
 
@@ -56,17 +61,22 @@ function getCategoryLabel(cat: string, t: (k: string) => string): string {
   return map[cat] ?? cat
 }
 
-function getLinkFlagsLabel(
-  bankLinked: boolean | undefined,
-  pettyLinked: boolean | undefined,
-  t: (k: string) => string
-): string {
-  if (typeof bankLinked === "boolean" || typeof pettyLinked === "boolean") {
-    const b = bankLinked ? "O" : "X"
-    const p = pettyLinked ? "O" : "X"
-    return `${t("bankTitle") || "Bank"} ${b} · ${t("adminPettyCash") || "Petty Cash"} ${p}`
+function relationBadgeClass(relation: ExpenseSearchRelation): string {
+  switch (relation) {
+    case "plan_only":
+      return "bg-amber-100 text-amber-800 border-amber-200"
+    case "approved_unpaid":
+      return "bg-sky-100 text-sky-800 border-sky-200"
+    case "paid_bank":
+    case "paid_petty":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200"
+    case "rejected":
+      return "bg-red-100 text-red-800 border-red-200"
+    case "bank_only":
+      return "bg-slate-100 text-slate-700 border-slate-200"
+    default:
+      return "bg-muted text-muted-foreground"
   }
-  return "-"
 }
 
 export function ExpenseRegisterSearchTab() {
@@ -79,15 +89,25 @@ export function ExpenseRegisterSearchTab() {
   }, [t])
   const { auth } = useAuth()
   const router = useRouter()
+  const { posStores: stores } = useStoreList()
   const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
 
+  const [storeFilter, setStoreFilter] = React.useState<string>("__all__")
   const [accountId, setAccountId] = React.useState<string>("__all__")
   const [startStr, setStartStr] = React.useState(todayStrBkk)
   const [endStr, setEndStr] = React.useState(todayStrBkk)
   const [loading, setLoading] = React.useState(false)
-  const [list, setList] = React.useState<ExpenseRegisterItem[]>([])
+  const [list, setList] = React.useState<ExpenseSearchOverviewRow[]>([])
+  const [summary, setSummary] = React.useState<ExpenseSearchOverviewSummary>({
+    planOnly: 0,
+    approvedUnpaid: 0,
+    paid: 0,
+    bankOnly: 0,
+    rejected: 0,
+  })
   const [categoryFilter, setCategoryFilter] = React.useState<string>("__all__")
   const [vendorFilter, setVendorFilter] = React.useState("")
+  const [relationFilter, setRelationFilter] = React.useState<string>("__all__")
   const [accounts, setAccounts] = React.useState<BankAccount[]>([])
   const [accountSubjects, setAccountSubjects] = React.useState<AccountSubjectItem[]>([])
   const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
@@ -96,9 +116,10 @@ export function ExpenseRegisterSearchTab() {
   const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
   const [deletingId, setDeletingId] = React.useState<number | null>(null)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+  const [loadedOnce, setLoadedOnce] = React.useState(false)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const invoicePhotoTargetRowRef = React.useRef<ExpenseRegisterItem | null>(null)
+  const invoicePhotoTargetRowRef = React.useRef<ExpenseSearchOverviewRow | null>(null)
 
   React.useEffect(() => {
     Promise.all([
@@ -134,33 +155,92 @@ export function ExpenseRegisterSearchTab() {
 
   const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
 
+  const relationLabel = React.useCallback(
+    (relation: ExpenseSearchRelation) => {
+      const map: Record<ExpenseSearchRelation, string> = {
+        plan_only: tt("expenseSearchRelationPlanOnly", "Planned"),
+        approved_unpaid: tt("expenseSearchRelationApprovedUnpaid", "Approved · Unpaid"),
+        paid_bank: tt("expenseSearchRelationPaidBank", "Paid (Bank)"),
+        paid_petty: tt("expenseSearchRelationPaidPetty", "Paid (Petty)"),
+        rejected: tt("expenseSearchRelationRejected", "Rejected"),
+        bank_only: tt("expenseSearchRelationBankOnly", "Bank Only"),
+      }
+      return map[relation] || relation
+    },
+    [tt]
+  )
+
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getExpenseRegisterList({
-        accountId: (accountId && accountId !== '__all__') ? accountId : undefined,
+      const res = await getExpenseSearchOverview({
         startStr,
         endStr,
+        storeFilter,
+        accountId,
+        category: categoryFilter !== "__all__" ? categoryFilter : undefined,
+        vendorFilter: vendorFilter.trim() || undefined,
       })
       setList(res.list || [])
+      setSummary(res.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
+      setLoadedOnce(true)
     } catch {
       setList([])
+      setSummary({ planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
     } finally {
       setLoading(false)
     }
-  }, [accountId, startStr, endStr])
+  }, [accountId, categoryFilter, endStr, startStr, storeFilter, vendorFilter])
 
-  const handleInvoiceCheckChange = async (r: ExpenseRegisterItem, checked: boolean) => {
-    if (!r.id) return
-    setUpdatingInvoiceId(r.id)
+  React.useEffect(() => {
+    void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 초기 진입 1회만 자동 조회
+  }, [])
+
+  const filteredList = React.useMemo(() => {
+    return (list || []).filter((r) => {
+      if (relationFilter === "__all__") return true
+      if (relationFilter === "paid") {
+        return r.relation === "paid_bank" || r.relation === "paid_petty"
+      }
+      return r.relation === relationFilter
+    })
+  }, [list, relationFilter])
+
+  const handleInvoiceCheckChange = async (r: ExpenseSearchOverviewRow, checked: boolean) => {
+    if (r.bankTransactionId) {
+      setUpdatingInvoiceId(r.bankTransactionId)
+      try {
+        const res = await updateBankTransactionInvoice({
+          bankTransactionId: r.bankTransactionId,
+          invoiceReceived: checked,
+        })
+        if (res.success) {
+          setList((prev) =>
+            prev.map((x) =>
+              x.rowKey === r.rowKey ? { ...x, invoiceReceived: checked } : x
+            )
+          )
+        } else {
+          await appAlert(res.message || t("processFail"))
+        }
+      } catch (e) {
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setUpdatingInvoiceId(null)
+      }
+      return
+    }
+    if (!r.accrualId) return
+    setUpdatingInvoiceId(r.accrualId)
     try {
-      const res = await updateBankTransactionInvoice({
-        bankTransactionId: r.id,
+      const res = await updateExpenseAccrualInvoice({
+        expenseAccrualId: r.accrualId,
         invoiceReceived: checked,
       })
       if (res.success) {
         setList((prev) =>
-          prev.map((x) => (x.id === r.id ? { ...x, invoiceReceived: checked } : x))
+          prev.map((x) => (x.rowKey === r.rowKey ? { ...x, invoiceReceived: checked } : x))
         )
       } else {
         await appAlert(res.message || t("processFail"))
@@ -173,18 +253,19 @@ export function ExpenseRegisterSearchTab() {
   }
 
   const handleInvoicePhotoUpload = React.useCallback(
-    async (r: ExpenseRegisterItem, file: File) => {
-      if (!r.id) return
-      setInvoicePhotoUploadingId(r.id)
+    async (r: ExpenseSearchOverviewRow, file: File) => {
+      const bankId = r.bankTransactionId
+      if (!bankId) return
+      setInvoicePhotoUploadingId(bankId)
       try {
         const dataUrl = await compressImageForUpload(file, 1024, 0.7)
         const res = await updateBankTransactionInvoice({
-          bankTransactionId: r.id,
+          bankTransactionId: bankId,
           invoicePhotoUrl: dataUrl,
         })
         if (res.success) {
           setList((prev) =>
-            prev.map((x) => (x.id === r.id ? { ...x, invoicePhotoUrl: dataUrl } : x))
+            prev.map((x) => (x.rowKey === r.rowKey ? { ...x, invoicePhotoUrl: dataUrl } : x))
           )
         } else {
           await appAlert(res.message || t("msg_upload_fail"))
@@ -216,30 +297,127 @@ export function ExpenseRegisterSearchTab() {
 
   const fmt = (n: number) => `฿${(n ?? 0).toLocaleString()}`
 
+  const accountLabel = React.useCallback(
+    (id?: number) => {
+      if (!id) return "-"
+      const acc = accounts.find((a) => Number(a.id) === Number(id))
+      if (!acc) return `#${id}`
+      return `${acc.bankName ? `[${acc.bankName}] ` : ""}${acc.name}`
+    },
+    [accounts]
+  )
+
   const categoryOptions = React.useMemo(
     () => Array.from(new Set((list || []).map((r) => String(r.category || "").trim()).filter(Boolean))).sort(),
     [list]
   )
 
-  const filteredList = React.useMemo(() => {
-    const vendorCodeNeedle = vendorFilter.trim().toLowerCase()
-    return (list || []).filter((r) => {
-      if (categoryFilter !== "__all__") {
-        const rowCat = String(r.category || "").toLowerCase()
-        if (categoryFilter === "expense") {
-          if (rowCat !== "expense" && rowCat !== "fixed") return false
-        } else if (rowCat !== categoryFilter) return false
-      }
-      if (!vendorCodeNeedle) return true
-      return String(r.vendorCode || "").trim().toLowerCase().includes(vendorCodeNeedle)
-    })
-  }, [list, categoryFilter, vendorFilter])
+  const summaryChips = [
+    { key: "plan_only", label: tt("expenseSearchSummaryPlanOnly", "Planned"), count: summary.planOnly },
+    { key: "approved_unpaid", label: tt("expenseSearchSummaryApprovedUnpaid", "Approved · Unpaid"), count: summary.approvedUnpaid },
+    { key: "paid", label: tt("expenseSearchSummaryPaid", "Paid"), count: summary.paid },
+    { key: "bank_only", label: tt("expenseSearchSummaryBankOnly", "Bank Only"), count: summary.bankOnly },
+    { key: "rejected", label: tt("expenseSearchSummaryRejected", "Rejected"), count: summary.rejected },
+  ]
+
+  /** 조회(기간·매장·통장 등) 결과 + 연결 상태 필터 기준 금액 합계 */
+  const amountTotals = React.useMemo(() => {
+    let plan = 0
+    let bank = 0
+    for (const r of filteredList) {
+      if (r.accrualId && r.plannedAmount != null) plan += r.plannedAmount
+      if (r.bankTransactionId && r.bankAmount != null) bank += r.bankAmount
+    }
+    return { plan, bank }
+  }, [filteredList])
+
+  const renderPayee = (r: ExpenseSearchOverviewRow) => {
+    const isPurchase = ["purchase_payment", "purchase_advance"].includes(r.category)
+    if (isPurchase) {
+      const vendor = r.vendorCode ? vendors.find((v) => v.code === r.vendorCode) : null
+      return vendor ? `${vendor.name} (${vendor.code})` : r.payeeName || r.vendorCode || "—"
+    }
+    if (r.payeeName) return r.payeeName
+    const sub = accountSubjects.find((a) => a.id === r.accountSubjectId)
+    return sub ? `${sub.code} ${asDisplayName(sub)}` : "—"
+  }
+
+  const renderPlanCell = (r: ExpenseSearchOverviewRow) => {
+    if (!r.accrualId) return <span className="text-muted-foreground">—</span>
+    const date = r.dueDate || r.expenseDate || "-"
+    const amount = r.plannedAmount != null ? fmt(r.plannedAmount) : "-"
+    return (
+      <div className="text-xs leading-snug">
+        <div className="font-medium tabular-nums">{amount}</div>
+        <div className="text-muted-foreground">{date}</div>
+        <div className="text-[11px] text-muted-foreground">
+          {tt("expenseSearchPlanRef", "Plan")} #{r.accrualId}
+        </div>
+      </div>
+    )
+  }
+
+  const renderBankCell = (r: ExpenseSearchOverviewRow) => {
+    if (!r.bankTransactionId) {
+      return (
+        <span className="text-xs text-muted-foreground">
+          {tt("expenseSearchNoBankYet", "Unlinked")}
+        </span>
+      )
+    }
+    return (
+      <div className="text-xs leading-snug">
+        <div className="font-medium tabular-nums">{r.bankAmount != null ? fmt(r.bankAmount) : "-"}</div>
+        <div className="text-muted-foreground">{r.bankTransDate || "-"}</div>
+        <div className="text-[11px] text-muted-foreground truncate max-w-[140px]" title={accountLabel(r.accountId)}>
+          {accountLabel(r.accountId)}
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {tt("expenseSearchBankRef", "Bank")} #{r.bankTransactionId}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-muted-foreground px-1">
+        {tt("expenseSearchHint", "Search payment plans and bank registrations together.")}
+      </p>
+
       <Card>
         <CardContent className="pt-4">
+          <div className="mb-3 flex flex-wrap gap-2">
+            {summaryChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => setRelationFilter(relationFilter === chip.key ? "__all__" : chip.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
+                  relationFilter === chip.key
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
+                )}
+              >
+                <span>{chip.label}</span>
+                <span className="font-semibold tabular-nums">{chip.count}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <Select value={storeFilter} onValueChange={setStoreFilter}>
+              <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{tt("all", "All")} {tt("store", "Store")}</SelectItem>
+                {stores.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger className="w-[200px] h-9">
                 <SelectValue placeholder={tt("wm_searchAllAccounts", "All Accounts")} />
@@ -281,70 +459,102 @@ export function ExpenseRegisterSearchTab() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={relationFilter} onValueChange={setRelationFilter}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder={tt("expenseSearchFilterRelation", "Link Status")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{tt("expenseSearchAllRelations", "All Links")}</SelectItem>
+                <SelectItem value="plan_only">{relationLabel("plan_only")}</SelectItem>
+                <SelectItem value="approved_unpaid">{relationLabel("approved_unpaid")}</SelectItem>
+                <SelectItem value="paid_bank">{relationLabel("paid_bank")}</SelectItem>
+                <SelectItem value="paid_petty">{relationLabel("paid_petty")}</SelectItem>
+                <SelectItem value="bank_only">{relationLabel("bank_only")}</SelectItem>
+                <SelectItem value="rejected">{relationLabel("rejected")}</SelectItem>
+              </SelectContent>
+            </Select>
             <Input
               value={vendorFilter}
               onChange={(e) => setVendorFilter(e.target.value)}
               placeholder={tt("vendor", "Vendor") + " " + tt("code", "Code")}
               className="w-[180px] h-9"
             />
-            <Button size="sm" onClick={loadData} disabled={loading} className="h-9">
+            <Button size="sm" onClick={() => void loadData()} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
               {tt("btn_query", "Query")}
             </Button>
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-          />
+          {loadedOnce && !loading ? (
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">
+                  {tt("expenseSearchPlanAmountTotal", "Planned Total")}
+                  {storeFilter !== "__all__" ? ` · ${storeFilter}` : ""}
+                </div>
+                <div className="text-lg font-semibold tabular-nums">{fmt(amountTotals.plan)}</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">
+                  {tt("expenseSearchBankAmountTotal", "Bank Total")}
+                  {storeFilter !== "__all__" ? ` · ${storeFilter}` : ""}
+                </div>
+                <div className="text-lg font-semibold tabular-nums">{fmt(amountTotals.bank)}</div>
+              </div>
+            </div>
+          ) : null}
+
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" />
 
           {loading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
+          ) : !loadedOnce ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : filteredList.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {tt("pettyNoData", "No expense registration records found.")}
             </p>
           ) : (
-            <div className="rounded-lg border overflow-auto max-h-[500px]">
-              <table className="w-full text-sm min-w-[700px]">
-                <thead className="bg-muted/50 sticky top-0">
+            <div className="rounded-lg border overflow-auto max-h-[560px]">
+              <table className="w-full text-sm min-w-[980px]">
+                <thead className="bg-muted/50 sticky top-0 z-[1]">
                   <tr>
-                    <th className="p-2 text-center">{tt("date", "Date")}</th>
+                    <th className="p-2 text-center">{tt("expenseSearchColRelation", "Link")}</th>
+                    <th className="p-2 text-left">{tt("store", "Store")}</th>
                     <th className="p-2 text-center">{tt("bankCategoryLabel", "Category")}</th>
                     <th className="p-2 text-left">{tt("vendor", "Vendor")}</th>
-                    <th className="p-2 text-right">{tt("pettyColAmount", "Amount")}</th>
-                    <th className="p-2 text-center min-w-[160px]" title={tt("poInvoice", "Invoice")}>
+                    <th className="p-2 text-center">{tt("expenseSearchColPlan", "Plan")}</th>
+                    <th className="p-2 text-center">{tt("expenseSearchColBank", "Bank")}</th>
+                    <th className="p-2 text-center min-w-[140px]" title={tt("poInvoice", "Invoice")}>
                       {tt("poInvoice", "Invoice")}
                     </th>
                     <th className="p-2 text-left">{tt("memo", "Memo")}</th>
-                    <th className="p-2 text-center">
-                      {tt("bankTitle", "Bank")}/{tt("adminPettyCash", "Petty Cash")} {tt("wl_status", "Status")}
-                    </th>
                     <th className="p-2 text-center">{tt("action", "Action")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredList.map((r, i) => {
-                    const isPurchase = ["purchase_payment", "purchase_advance"].includes(r.category)
-                    const vendor = isPurchase && r.vendorCode ? vendors.find((v) => v.code === r.vendorCode) : null
-                    const sub = !isPurchase ? accountSubjects.find((a) => a.id === r.accountSubjectId) : null
-                    const payeeLabel = isPurchase
-                      ? (vendor ? `${vendor.name} (${vendor.code})` : r.vendorCode || "—")
-                      : (sub ? `${sub.code} ${asDisplayName(sub)}` : "—")
+                  {filteredList.map((r) => {
+                    const canEditBank = Boolean(r.bankTransactionId)
+                    const canEditPlan = Boolean(r.accrualId && !r.bankTransactionId && r.planStatus === "planned")
+                    const invoiceTargetId = r.bankTransactionId ?? r.accrualId
                     return (
-                      <tr key={r.id ?? i} className="border-t">
-                        <td className="p-2 text-center">{r.transDate}</td>
-                        <td className="p-2 text-center">{getCategoryLabel(r.category, t)}</td>
-                        <td className="p-2">{payeeLabel}</td>
-                        <td className="p-2 text-right tabular-nums">{fmt(r.amount)}</td>
+                      <tr key={r.rowKey} className="border-t align-top">
+                        <td className="p-2 text-center">
+                          <Badge variant="outline" className={cn("text-[11px] font-normal whitespace-nowrap", relationBadgeClass(r.relation))}>
+                            {relationLabel(r.relation)}
+                          </Badge>
+                        </td>
+                        <td className="p-2 text-xs">{r.storeName || "—"}</td>
+                        <td className="p-2 text-center text-xs">{getCategoryLabel(r.category, t)}</td>
+                        <td className="p-2 text-xs">{renderPayee(r)}</td>
+                        <td className="p-2 text-center">{renderPlanCell(r)}</td>
+                        <td className="p-2 text-center">{renderBankCell(r)}</td>
                         <td className="p-2">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
                             <Checkbox
-                              checked={r.invoiceReceived}
+                              checked={Boolean(r.invoiceReceived)}
                               onCheckedChange={(c) => handleInvoiceCheckChange(r, c === true)}
-                              disabled={updatingInvoiceId === r.id}
+                              disabled={!invoiceTargetId || updatingInvoiceId === invoiceTargetId}
                               title={tt("poInvoiceReceived", "Invoice Received")}
                               className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 shrink-0"
                             />
@@ -353,102 +563,149 @@ export function ExpenseRegisterSearchTab() {
                                 {r.invoiceNo}
                               </span>
                             ) : null}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (r.invoicePhotoUrl) {
-                                  setInvoicePhotoPreviewUrl(r.invoicePhotoUrl!)
-                                } else {
-                                  invoicePhotoTargetRowRef.current = r
-                                  fileInputRef.current?.click()
+                            {r.bankTransactionId ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (r.invoicePhotoUrl) {
+                                    setInvoicePhotoPreviewUrl(r.invoicePhotoUrl!)
+                                  } else {
+                                    invoicePhotoTargetRowRef.current = r
+                                    fileInputRef.current?.click()
+                                  }
+                                }}
+                                disabled={invoicePhotoUploadingId === r.bankTransactionId}
+                                className={`inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted shrink-0 overflow-hidden ${r.invoicePhotoUrl ? "text-green-600" : "text-muted-foreground"}`}
+                                title={
+                                  r.invoicePhotoUrl
+                                    ? `${tt("poInvoice", "Invoice")} (${tt("clickToView", "click to view")})`
+                                    : tt("bankInvoicePhotoUpload", "Upload invoice image")
                                 }
-                              }}
-                              disabled={invoicePhotoUploadingId === r.id}
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted shrink-0 overflow-hidden ${r.invoicePhotoUrl ? "text-green-600" : "text-muted-foreground"}`}
-                              title={
-                                r.invoicePhotoUrl
-                                  ? `${tt("poInvoice", "Invoice")} (${tt("clickToView", "click to view")})`
-                                  : tt("bankInvoicePhotoUpload", "Upload invoice image")
-                              }
-                            >
-                              {r.invoicePhotoUrl ? (
-                                <img src={r.invoicePhotoUrl} alt="" className="h-6 w-6 object-cover rounded" />
-                              ) : invoicePhotoUploadingId === r.id ? (
-                                <span className="text-xs">...</span>
-                              ) : (
-                                <Camera className="h-4 w-4" />
-                              )}
-                            </button>
+                              >
+                                {r.invoicePhotoUrl ? (
+                                  <img src={r.invoicePhotoUrl} alt="" className="h-6 w-6 object-cover rounded" />
+                                ) : invoicePhotoUploadingId === r.bankTransactionId ? (
+                                  <span className="text-xs">...</span>
+                                ) : (
+                                  <Camera className="h-4 w-4" />
+                                )}
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                         <td className="p-2 text-muted-foreground text-xs max-w-[180px] truncate" title={r.memo}>
                           {getMemo(r.memo)}
                         </td>
-                        <td className="p-2 text-center text-xs text-muted-foreground">
-                          {getLinkFlagsLabel(r.bankLinked, r.pettyLinked, t)}
-                        </td>
                         <td className="p-2 text-center">
                           <div className="flex items-center justify-center gap-1">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-8 w-8"
-                              title={tt("btnEdit", "Edit")}
-                              onClick={() => {
-                                if (!r.id) return
-                                const q = new URLSearchParams()
-                                q.set("tab", "expenseRegister")
-                                q.set("editMode", "1")
-                                q.set("bankTransactionId", String(r.id))
-                                if (r.accountId) q.set("accountId", String(r.accountId))
-                                if (r.transDate) q.set("transDate", r.transDate)
-                                if (r.amount) q.set("amount", String(r.amount))
-                                if (r.memo) {
-                                  q.set("bankNote", r.memo)
-                                  q.set("bankMemo", r.memo)
-                                }
-                                if (r.category) q.set("category", r.category)
-                                if (r.vendorCode) q.set("vendorCode", r.vendorCode)
-                                if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
-                                q.set("startStr", startStr)
-                                q.set("endStr", endStr)
-                                router.push(`/admin/expense-management?${q.toString()}`)
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-8 w-8 border-destructive/40 text-destructive"
-                              title={tt("delete", "Delete")}
-                              disabled={!r.id || deletingId === r.id}
-                              onClick={async () => {
-                                if (!r.id) return
-                                const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
-                                if (!ok) return
-                                setDeletingId(r.id)
-                                try {
-                                  const res = await deleteExpenseRegisterItem({
-                                    bankTransactionId: r.id,
-                                    userRole: auth?.role,
-                                  })
-                                  if (!res.success) {
-                                    await appAlert(res.message || tt("msg_delete_fail", "Delete failed"))
-                                    return
+                            {canEditPlan ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                title={tt("btnEdit", "Edit")}
+                                onClick={() => {
+                                  const q = new URLSearchParams()
+                                  q.set("tab", "expenseRegister")
+                                  q.set("editAccrualId", String(r.accrualId))
+                                  if (r.plannedAmount != null) q.set("amount", String(r.plannedAmount))
+                                  if (r.expenseDate) q.set("transDate", r.expenseDate)
+                                  if (r.payeeCode) q.set("payeeCode", r.payeeCode)
+                                  if (r.payeeName) q.set("payeeName", r.payeeName)
+                                  if (r.vendorCode) q.set("vendorCode", r.vendorCode)
+                                  if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
+                                  if (r.category) q.set("category", r.category)
+                                  if (r.storeName) q.set("storeName", r.storeName)
+                                  if (r.memo) q.set("memo", r.memo)
+                                  router.push(`/admin/expense-management?${q.toString()}`)
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            {canEditBank ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  title={tt("btnEdit", "Edit")}
+                                  onClick={() => {
+                                    const q = new URLSearchParams()
+                                    q.set("tab", "expenseRegister")
+                                    q.set("editMode", "1")
+                                    q.set("bankTransactionId", String(r.bankTransactionId))
+                                    if (r.accountId) q.set("accountId", String(r.accountId))
+                                    if (r.bankTransDate) q.set("transDate", r.bankTransDate)
+                                    if (r.bankAmount) q.set("amount", String(r.bankAmount))
+                                    if (r.memo) {
+                                      q.set("bankNote", r.memo)
+                                      q.set("bankMemo", r.memo)
+                                    }
+                                    if (r.category) q.set("category", r.category)
+                                    if (r.vendorCode) q.set("vendorCode", r.vendorCode)
+                                    if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
+                                    q.set("startStr", startStr)
+                                    q.set("endStr", endStr)
+                                    router.push(`/admin/expense-management?${q.toString()}`)
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8 border-destructive/40 text-destructive"
+                                  title={tt("delete", "Delete")}
+                                  disabled={deletingId === r.bankTransactionId}
+                                  onClick={async () => {
+                                    if (!r.bankTransactionId) return
+                                    const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
+                                    if (!ok) return
+                                    setDeletingId(r.bankTransactionId)
+                                    try {
+                                      const res = await deleteExpenseRegisterItem({
+                                        bankTransactionId: r.bankTransactionId,
+                                        userRole: auth?.role,
+                                      })
+                                      if (!res.success) {
+                                        await appAlert(res.message || tt("msg_delete_fail", "Delete failed"))
+                                        return
+                                      }
+                                      setList((prev) => prev.filter((x) => x.rowKey !== r.rowKey))
+                                    } catch (e) {
+                                      await appAlert(tt("msg_delete_fail", "Delete failed") + ": " + (e instanceof Error ? e.message : String(e)))
+                                    } finally {
+                                      setDeletingId(null)
+                                    }
+                                  }}
+                                >
+                                  {deletingId === r.bankTransactionId ? <span className="text-xs">...</span> : <Trash2 className="h-4 w-4" />}
+                                </Button>
+                              </>
+                            ) : null}
+                            {r.accrualId && !canEditBank && !canEditPlan ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => {
+                                  const q = new URLSearchParams({ tab: "plan" })
+                                  const d = r.dueDate || r.expenseDate
+                                  if (d) {
+                                    q.set("startStr", d)
+                                    q.set("endStr", d)
                                   }
-                                  setList((prev) => prev.filter((x) => x.id !== r.id))
-                                } catch (e) {
-                                  await appAlert(tt("msg_delete_fail", "Delete failed") + ": " + (e instanceof Error ? e.message : String(e)))
-                                } finally {
-                                  setDeletingId(null)
-                                }
-                              }}
-                            >
-                              {deletingId === r.id ? <span className="text-xs">...</span> : <Trash2 className="h-4 w-4" />}
-                            </Button>
+                                  router.push(`/admin/expense-management?${q.toString()}`)
+                                }}
+                              >
+                                {tt("expensePlanTab", "Payment Plan")}
+                              </Button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>

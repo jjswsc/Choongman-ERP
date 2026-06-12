@@ -2,13 +2,23 @@
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
+import { Search } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { apiFetch } from "@/lib/api/fetch"
-import { getMemberVisits } from "@/lib/api-client"
+import { getMemberVisits, useStoreList } from "@/lib/api-client"
+import { appAlert } from "@/lib/app-message"
+import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -41,6 +51,12 @@ type RfmRow = {
   fScore: number
   mScore: number
   rfmScore: string
+}
+
+function defaultDateRange() {
+  const endYmd = bangkokTodayYmd()
+  const { startYmd } = bangkokInclusivePeriod(endYmd, 30)
+  return { startYmd, endYmd }
 }
 
 function parseDateSafe(value: string): Date | null {
@@ -105,11 +121,19 @@ export default function MemberVisitsPage() {
   const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
+  const { stores: storeKeys } = useStoreList()
+  const initialRange = React.useMemo(() => defaultDateRange(), [])
   const [tab, setTab] = React.useState<"history" | "analysis" | "rfm">("history")
+  const [startDate, setStartDate] = React.useState(initialRange.startYmd)
+  const [endDate, setEndDate] = React.useState(initialRange.endYmd)
+  const [storeCode, setStoreCode] = React.useState("All")
   const [memberId, setMemberId] = React.useState("")
   const [rows, setRows] = React.useState<VisitRow[]>([])
+  const [hasSearched, setHasSearched] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
   const [rfmRows, setRfmRows] = React.useState<RfmRow[]>([])
   const [rfmLoading, setRfmLoading] = React.useState(false)
+  const storeOptions = React.useMemo(() => ["All", ...storeKeys.filter((s) => s !== "All")], [storeKeys])
   const analysisRows = React.useMemo(() => buildMemberVisitAnalysis(rows), [rows])
   const kpi = React.useMemo(() => {
     const memberCount = analysisRows.length
@@ -126,10 +150,35 @@ export default function MemberVisitsPage() {
   }, [analysisRows])
 
   const load = React.useCallback(async () => {
-    const id = Number(memberId || 0)
-    const list = await getMemberVisits({ memberId: id || undefined, limit: 500 })
-    setRows(list)
-  }, [memberId])
+    const start = String(startDate || "").trim()
+    const end = String(endDate || "").trim()
+    if (!start || !end) {
+      await appAlert(t("visit_stats_date_hint") || "시작일과 종료일을 선택해 주세요.")
+      return
+    }
+    if (start > end) {
+      await appAlert(t("visit_stats_date_hint") || "시작일과 종료일을 선택해 주세요.")
+      return
+    }
+    setLoading(true)
+    try {
+      const id = Number(memberId || 0)
+      const list = await getMemberVisits({
+        memberId: id || undefined,
+        startStr: start,
+        endStr: end,
+        storeCode: storeCode === "All" ? undefined : storeCode,
+        limit: 500,
+      })
+      setRows(list)
+      setHasSearched(true)
+    } catch {
+      setRows([])
+      setHasSearched(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [startDate, endDate, storeCode, memberId, t])
 
   const loadRfm = React.useCallback(async () => {
     setRfmLoading(true)
@@ -147,10 +196,6 @@ export default function MemberVisitsPage() {
   }, [])
 
   React.useEffect(() => {
-    load().catch(() => {})
-  }, [load])
-
-  React.useEffect(() => {
     if (searchParams.get("tab") === "rfm") setTab("rfm")
   }, [searchParams])
 
@@ -158,49 +203,93 @@ export default function MemberVisitsPage() {
     if (tab === "rfm") loadRfm().catch(() => {})
   }, [loadRfm, tab])
 
+  const emptyMessage = hasSearched ? t("noData") || "데이터 없음" : t("memberVisitsSearchHint")
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <CrmSubnav />
         <Card className="mb-4">
           <CardHeader><CardTitle>{t("memberVisitsSearchTitle")}</CardTitle></CardHeader>
-          <CardContent className="flex gap-2">
-            <Input placeholder={t("memberVisitsMemberIdPh")} value={memberId} onChange={(e) => setMemberId(e.target.value)} />
-            <Button variant="outline" onClick={() => load()}>{t("btn_query")}</Button>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <label className="text-xs font-semibold block mb-1">{t("visit_start_date")}</label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-9 w-[130px] text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold block mb-1">{t("visit_end_date")}</label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-9 w-[130px] text-xs"
+                />
+              </div>
+              <Select value={storeCode} onValueChange={setStoreCode}>
+                <SelectTrigger className="h-9 w-[140px] text-xs">
+                  <SelectValue placeholder={t("store")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {storeOptions.map((st) => (
+                    <SelectItem key={st} value={st}>{st === "All" ? t("all") : st}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder={t("memberVisitsMemberIdPh")}
+                value={memberId}
+                onChange={(e) => setMemberId(e.target.value)}
+                className="h-9 w-[160px] text-xs"
+              />
+              <Button className="h-9 font-medium" onClick={() => load()} disabled={loading}>
+                <Search className="mr-1.5 h-3.5 w-3.5" />
+                {loading ? t("loading") : t("btn_query")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader><CardTitle className="text-sm">{t("memberVisitsKpiMembers")}</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold">{kpi.memberCount.toLocaleString()}</p></CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgTicketAmount")}</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold">{Number(kpi.avgTicketAmount || 0).toLocaleString()}</p></CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgVisitCycleDays")}</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold">
-                {kpi.avgVisitCycleDays == null ? "-" : `${kpi.avgVisitCycleDays.toFixed(1)} ${t("days")}`}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-sm">{t("memberVisitsTotalContribution")}</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold">{Number(kpi.totalContribution || 0).toLocaleString()}</p></CardContent>
-          </Card>
-        </div>
+        {hasSearched && (
+          <>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader><CardTitle className="text-sm">{t("memberVisitsKpiMembers")}</CardTitle></CardHeader>
+                <CardContent><p className="text-2xl font-semibold">{kpi.memberCount.toLocaleString()}</p></CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgTicketAmount")}</CardTitle></CardHeader>
+                <CardContent><p className="text-2xl font-semibold">{Number(kpi.avgTicketAmount || 0).toLocaleString()}</p></CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgVisitCycleDays")}</CardTitle></CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">
+                    {kpi.avgVisitCycleDays == null ? "-" : `${kpi.avgVisitCycleDays.toFixed(1)} ${t("days")}`}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm">{t("memberVisitsTotalContribution")}</CardTitle></CardHeader>
+                <CardContent><p className="text-2xl font-semibold">{Number(kpi.totalContribution || 0).toLocaleString()}</p></CardContent>
+              </Card>
+            </div>
 
-        {kpi.topContributor && (
-          <Card className="mb-4">
-            <CardHeader><CardTitle className="text-sm">{t("memberVisitsTopContributor")}</CardTitle></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              memberId {kpi.topContributor.memberId} ({kpi.topContributor.memberNo || "-"}) ·
-              {` ${t("memberVisitsVisitCount")} ${kpi.topContributor.visitCount.toLocaleString()} / ${t("memberVisitsTotalContribution")} ${Number(kpi.topContributor.totalContribution || 0).toLocaleString()}`}
-            </CardContent>
-          </Card>
+            {kpi.topContributor && (
+              <Card className="mb-4">
+                <CardHeader><CardTitle className="text-sm">{t("memberVisitsTopContributor")}</CardTitle></CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  memberId {kpi.topContributor.memberId} ({kpi.topContributor.memberNo || "-"}) ·
+                  {` ${t("memberVisitsVisitCount")} ${kpi.topContributor.visitCount.toLocaleString()} / ${t("memberVisitsTotalContribution")} ${Number(kpi.topContributor.totalContribution || 0).toLocaleString()}`}
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "history" | "analysis" | "rfm")} className="mt-4">
@@ -227,16 +316,26 @@ export default function MemberVisitsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((r) => (
-                        <tr key={r.orderId} className="border-t">
-                          <td className="p-2">{r.visitedAt}</td>
-                          <td className="p-2">{r.memberId}</td>
-                          <td className="p-2">{r.memberNo}</td>
-                          <td className="p-2">{r.storeCode}</td>
-                          <td className="p-2">{r.orderNo}</td>
-                          <td className="p-2">{Number(r.total || 0).toLocaleString()}</td>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-muted-foreground">{t("loading")}</td>
                         </tr>
-                      ))}
+                      ) : !hasSearched || rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-muted-foreground">{emptyMessage}</td>
+                        </tr>
+                      ) : (
+                        rows.map((r) => (
+                          <tr key={r.orderId} className="border-t">
+                            <td className="p-2">{r.visitedAt}</td>
+                            <td className="p-2">{r.memberId}</td>
+                            <td className="p-2">{r.memberNo}</td>
+                            <td className="p-2">{r.storeCode}</td>
+                            <td className="p-2">{r.orderNo}</td>
+                            <td className="p-2">{Number(r.total || 0).toLocaleString()}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -262,19 +361,29 @@ export default function MemberVisitsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {analysisRows.map((r) => (
-                        <tr key={r.memberId} className="border-t">
-                          <td className="p-2">{r.memberId}</td>
-                          <td className="p-2">{r.memberNo || "-"}</td>
-                          <td className="p-2">{r.visitCount.toLocaleString()}</td>
-                          <td className="p-2">
-                            {r.avgVisitCycleDays == null ? "-" : `${r.avgVisitCycleDays.toLocaleString()} ${t("days")}`}
-                          </td>
-                          <td className="p-2">{Number(r.avgTicketAmount || 0).toLocaleString()}</td>
-                          <td className="p-2">{Number(r.totalContribution || 0).toLocaleString()}</td>
-                          <td className="p-2">{r.lastVisitedAt || "-"}</td>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("loading")}</td>
                         </tr>
-                      ))}
+                      ) : !hasSearched || analysisRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-muted-foreground">{emptyMessage}</td>
+                        </tr>
+                      ) : (
+                        analysisRows.map((r) => (
+                          <tr key={r.memberId} className="border-t">
+                            <td className="p-2">{r.memberId}</td>
+                            <td className="p-2">{r.memberNo || "-"}</td>
+                            <td className="p-2">{r.visitCount.toLocaleString()}</td>
+                            <td className="p-2">
+                              {r.avgVisitCycleDays == null ? "-" : `${r.avgVisitCycleDays.toLocaleString()} ${t("days")}`}
+                            </td>
+                            <td className="p-2">{Number(r.avgTicketAmount || 0).toLocaleString()}</td>
+                            <td className="p-2">{Number(r.totalContribution || 0).toLocaleString()}</td>
+                            <td className="p-2">{r.lastVisitedAt || "-"}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

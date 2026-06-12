@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
+  getReceivablePayableSummary,
   getPayableTransactionItems,
   getInvoiceData,
   getInvoiceOrderBillToCandidates,
@@ -148,6 +149,10 @@ export function ReceivablePayableTab() {
   const [startStr, setStartStr] = React.useState(bangkokTodayStr)
   const [endStr, setEndStr] = React.useState(bangkokTodayStr)
   const [listData, setListData] = React.useState<ReceivablePayableItem[]>([])
+  const [cumulativeSummary, setCumulativeSummary] = React.useState<{ totalAmount: number; byKey: Record<string, number> }>({
+    totalAmount: 0,
+    byKey: {},
+  })
   const [loading, setLoading] = React.useState(false)
   const [filterUnpaidOnly, setFilterUnpaidOnly] = React.useState(false)
 
@@ -397,17 +402,53 @@ export function ReceivablePayableTab() {
 
   const loadList = React.useCallback(() => {
     setLoading(true)
-    getReceivablePayableList({
-      type: tab,
-      storeFilter: tab === "receivable" && recStoreFilter !== "All" ? recStoreFilter : (tab === "payable" && payStoreFilter !== "All" ? payStoreFilter : undefined),
+    const listParams = {
+      type: tab as "receivable" | "payable",
+      storeFilter:
+        tab === "receivable" && recStoreFilter !== "All"
+          ? recStoreFilter
+          : tab === "payable" && payStoreFilter !== "All"
+            ? payStoreFilter
+            : undefined,
       vendorFilter: tab === "payable" && vendorFilter !== "All" ? vendorFilter : undefined,
       startStr,
       endStr,
       userStore: auth?.store || undefined,
       userRole: auth?.role || undefined,
-    })
-      .then((r) => setListData(r.list || []))
-      .catch(() => setListData([]))
+    }
+    const summaryParams = {
+      type: tab as "receivable" | "payable",
+      endStr,
+      storeFilter:
+        tab === "receivable" && recStoreFilter !== "All"
+          ? recStoreFilter
+          : tab === "payable" && payStoreFilter !== "All"
+            ? payStoreFilter
+            : undefined,
+      vendorFilter: tab === "payable" && vendorFilter !== "All" ? vendorFilter : undefined,
+      userStore: auth?.store || undefined,
+      userRole: auth?.role || undefined,
+    }
+    Promise.all([getReceivablePayableList(listParams), getReceivablePayableSummary(summaryParams)])
+      .then(([listRes, summaryRes]) => {
+        setListData(listRes.list || [])
+        const byKey: Record<string, number> = {}
+        for (const row of summaryRes.list || []) {
+          const key =
+            tab === "receivable"
+              ? String(row.storeName || "").trim()
+              : String(row.vendorCode || "").trim()
+          if (key) byKey[key] = Number(row.balance ?? 0)
+        }
+        setCumulativeSummary({
+          totalAmount: Number(summaryRes.totalAmount ?? 0),
+          byKey,
+        })
+      })
+      .catch(() => {
+        setListData([])
+        setCumulativeSummary({ totalAmount: 0, byKey: {} })
+      })
       .finally(() => setLoading(false))
   }, [tab, recStoreFilter, payStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
 
@@ -436,17 +477,39 @@ export function ReceivablePayableTab() {
     window.setTimeout(() => {
       setLoading(true)
       setHasSearchedList(true)
-      getReceivablePayableList({
-        type: "payable",
+      const listParams = {
+        type: "payable" as const,
         storeFilter: undefined,
         vendorFilter: v.code,
         startStr,
         endStr,
         userStore: auth?.store || undefined,
         userRole: auth?.role || undefined,
-      })
-        .then((r) => setListData(r.list || []))
-        .catch(() => setListData([]))
+      }
+      const summaryParams = {
+        type: "payable" as const,
+        endStr,
+        vendorFilter: v.code,
+        userStore: auth?.store || undefined,
+        userRole: auth?.role || undefined,
+      }
+      Promise.all([getReceivablePayableList(listParams), getReceivablePayableSummary(summaryParams)])
+        .then(([listRes, summaryRes]) => {
+          setListData(listRes.list || [])
+          const byKey: Record<string, number> = {}
+          for (const row of summaryRes.list || []) {
+            const key = String(row.vendorCode || "").trim()
+            if (key) byKey[key] = Number(row.balance ?? 0)
+          }
+          setCumulativeSummary({
+            totalAmount: Number(summaryRes.totalAmount ?? 0),
+            byKey,
+          })
+        })
+        .catch(() => {
+          setListData([])
+          setCumulativeSummary({ totalAmount: 0, byKey: {} })
+        })
         .finally(() => setLoading(false))
     }, 0)
   }, [purchaseVendorMatchForOutlet, canSelectStores, startStr, endStr, auth?.store, auth?.role])
@@ -805,6 +868,33 @@ export function ReceivablePayableTab() {
     }
     return { accrualSum, settlementSum, balanceSum, count }
   }, [listData, tab, filterUnpaidOnly])
+
+  const amountGridCols = "grid grid-cols-[minmax(0,1fr)_110px_110px_110px_110px] gap-2 items-center"
+
+  const getCumulativeForItem = React.useCallback(
+    (item: ReceivablePayableItem) => {
+      const key =
+        tab === "receivable"
+          ? String(item.storeName || "").trim()
+          : String(item.vendorCode || "").trim()
+      if (!key || !(key in cumulativeSummary.byKey)) return undefined
+      return cumulativeSummary.byKey[key]
+    },
+    [tab, cumulativeSummary.byKey]
+  )
+
+  const cumulativeBalanceLabel = React.useMemo(() => {
+    const base =
+      tab === "receivable"
+        ? t("recCumulativeBalanceAsOf") || tt("recCumulativeBalanceAsOf", "종료일 기준 누적 미수잔액")
+        : t("payCumulativeBalanceAsOf") || tt("payCumulativeBalanceAsOf", "종료일 기준 누적 미지급잔액")
+    return endStr ? `${base} (${endStr})` : base
+  }, [tab, endStr, t, tt])
+
+  const cumulativeColLabel =
+    tab === "receivable"
+      ? t("recColCumulativeBalance") || tt("recColCumulativeBalance", "누적 잔액")
+      : t("payColCumulativeBalance") || tt("payColCumulativeBalance", "누적 잔액")
 
   const transactionLineRowKey = (
     mode: "pay" | "rec",
@@ -1194,15 +1284,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
-                    {hasSearchedList && !loading && listSearchTotals.count > 0 ? (
-                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0">
-                        <span className="text-sm font-bold text-primary tabular-nums">
-                          {tt("recSearchTotalRemaining", "조회 합계 (남은 미수액)")}: ฿
-                          {listSearchTotals.balanceSum.toLocaleString()}
-                        </span>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {(t("recColSalesAmount") || "매출금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
-                          {(t("recColReceiveAmount") || "수령금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
+                    {hasSearchedList && !loading ? (
+                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100%,420px)]">
+                        {listSearchTotals.count > 0 ? (
+                          <>
+                            <span className="text-sm font-bold text-primary tabular-nums text-right">
+                              {t("recSearchTotalRemaining") || tt("recSearchTotalRemaining", "조회 기간 합계 (순잔액)")}: ฿
+                              {listSearchTotals.balanceSum.toLocaleString()}
+                            </span>
+                            <span className="text-xs text-muted-foreground tabular-nums text-right">
+                              {(t("recColSalesAmount") || "매출금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
+                              {(t("recColReceiveAmount") || "수령금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
+                            </span>
+                          </>
+                        ) : null}
+                        <span className="text-sm font-semibold tabular-nums text-right">
+                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
                         </span>
                       </div>
                     ) : null}
@@ -1245,12 +1342,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     </div>
                   ) : (
                     <div className="w-full">
-                      {/* 헤더: 출고처, 매출금액, 수령금액, 남은 미수액 */}
-                      <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-2 border-b bg-muted/50 font-semibold text-sm items-center">
+                      {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
                         <div className="text-center">{(t("outColStore") || "출고처")}</div>
                         <div className="text-center tabular-nums">{(t("recColSalesAmount") || "매출금액")}</div>
                         <div className="text-center tabular-nums">{(t("recColReceiveAmount") || "수령금액")}</div>
-                        <div className="text-center tabular-nums">{(t("recColRemainingReceivable") || "남은 미수액")}</div>
+                        <div className="text-center tabular-nums">{(t("recColRemainingReceivable") || "기간 순잔액")}</div>
+                        <div className="text-center tabular-nums">{cumulativeColLabel}</div>
                       </div>
                       <Accordion type="multiple" className="w-full">
                         {listData.map((item) => {
@@ -1263,11 +1361,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             .reduce((s, r) => s + Math.max(0, -Number(r.amount ?? 0)), 0)
                           const salesSum = allItems
                             .reduce((s, r) => s + Math.max(0, Number(r.amount ?? 0)), 0)
+                          const cumulativeBal = getCumulativeForItem(item)
                           return (
                           <AccordionItem key={item.storeName!} value={item.storeName!}>
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
                               <div className="flex-1 min-w-0">
-                                <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 items-center w-full">
+                                <div className={cn(amountGridCols, "w-full")}>
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
                                     <span className="font-semibold truncate">{item.storeName}</span>
                                     {item.vendorCode && (
@@ -1279,6 +1378,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   <div className="text-center tabular-nums">฿{salesSum.toLocaleString()}</div>
                                   <div className="text-center tabular-nums">฿{receiveSum.toLocaleString()}</div>
                                   <div className="text-center tabular-nums font-bold text-primary">฿{(item.balance ?? 0).toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-semibold">
+                                    {cumulativeBal != null ? `฿${cumulativeBal.toLocaleString()}` : "—"}
+                                  </div>
                                 </div>
                               </div>
                             </AccordionTrigger>
@@ -1644,12 +1746,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-3 border-t bg-muted/40 font-semibold text-sm items-center">
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
                           <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums font-bold text-primary">
                             ฿{listSearchTotals.balanceSum.toLocaleString()}
+                          </div>
+                          <div className="text-center tabular-nums font-semibold">
+                            ฿{cumulativeSummary.totalAmount.toLocaleString()}
                           </div>
                         </div>
                       ) : null}
@@ -1732,15 +1837,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
-                    {hasSearchedList && !loading && listSearchTotals.count > 0 ? (
-                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0">
-                        <span className="text-sm font-bold text-primary tabular-nums">
-                          {tt("paySearchTotalRemaining", "조회 합계 (남은 미지급액)")}: ฿
-                          {listSearchTotals.balanceSum.toLocaleString()}
-                        </span>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {(t("payColPurchaseAmount") || "매입금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
-                          {(t("payColPaymentAmount") || "지급금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
+                    {hasSearchedList && !loading ? (
+                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100%,420px)]">
+                        {listSearchTotals.count > 0 ? (
+                          <>
+                            <span className="text-sm font-bold text-primary tabular-nums text-right">
+                              {t("paySearchTotalRemaining") || tt("paySearchTotalRemaining", "조회 기간 합계 (순잔액)")}: ฿
+                              {listSearchTotals.balanceSum.toLocaleString()}
+                            </span>
+                            <span className="text-xs text-muted-foreground tabular-nums text-right">
+                              {(t("payColPurchaseAmount") || "매입금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
+                              {(t("payColPaymentAmount") || "지급금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
+                            </span>
+                          </>
+                        ) : null}
+                        <span className="text-sm font-semibold tabular-nums text-right">
+                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
                         </span>
                       </div>
                     ) : null}
@@ -1755,12 +1867,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("payFilterUnpaidOnlyEmpty") || "미지급만 필터 적용 시 해당하는 내역이 없습니다."}</p>
                   ) : (
                     <div className="w-full">
-                      {/* 헤더: 매입처, 매입금액, 지급금액, 남은 미지급액 */}
-                      <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-2 border-b bg-muted/50 font-semibold text-sm items-center">
+                      {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
                         <div className="text-center">{(t("vendor") || "매입처")}</div>
                         <div className="text-center tabular-nums">{(t("payColPurchaseAmount") || "매입금액")}</div>
                         <div className="text-center tabular-nums">{(t("payColPaymentAmount") || "지급금액")}</div>
-                        <div className="text-center tabular-nums">{(t("payColRemainingPayable") || "남은 미지급액")}</div>
+                        <div className="text-center tabular-nums">{(t("payColRemainingPayable") || "기간 순잔액")}</div>
+                        <div className="text-center tabular-nums">{cumulativeColLabel}</div>
                       </div>
                       <Accordion type="multiple" className="w-full">
                         {listData.map((item) => {
@@ -1773,17 +1886,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             .reduce((s, r) => s + Math.max(0, -Number(r.amount ?? 0)), 0)
                           const purchaseSum = allItems
                             .reduce((s, r) => s + Math.max(0, Number(r.amount ?? 0)), 0)
+                          const cumulativeBal = getCumulativeForItem(item)
                           return (
                           <AccordionItem key={item.vendorCode!} value={item.vendorCode!}>
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
                               <div className="flex-1 min-w-0">
-                                <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 items-center w-full">
+                                <div className={cn(amountGridCols, "w-full")}>
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
                                     <span className="font-semibold truncate">{formatVendorDisplay(item.vendorCode)}</span>
                                   </div>
                                   <div className="text-center tabular-nums">฿{purchaseSum.toLocaleString()}</div>
                                   <div className="text-center tabular-nums">฿{paymentSum.toLocaleString()}</div>
                                   <div className="text-center tabular-nums font-bold text-primary">฿{(item.balance ?? 0).toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-semibold">
+                                    {cumulativeBal != null ? `฿${cumulativeBal.toLocaleString()}` : "—"}
+                                  </div>
                                 </div>
                               </div>
                             </AccordionTrigger>
@@ -1944,12 +2061,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-3 border-t bg-muted/40 font-semibold text-sm items-center">
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
                           <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums font-bold text-primary">
                             ฿{listSearchTotals.balanceSum.toLocaleString()}
+                          </div>
+                          <div className="text-center tabular-nums font-semibold">
+                            ฿{cumulativeSummary.totalAmount.toLocaleString()}
                           </div>
                         </div>
                       ) : null}

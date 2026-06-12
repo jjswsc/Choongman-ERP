@@ -63,17 +63,18 @@ import {
 } from "@/components/employees"
 import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
+import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
-const JOB_STYLE: Record<string, { bg: string; label: string }> = {
-  Service: { bg: "bg-amber-50/90 dark:bg-amber-950/20", label: "empJobService" },
-  Kitchen: { bg: "bg-emerald-50/90 dark:bg-emerald-950/20", label: "empJobKitchen" },
-  Franchise: { bg: "bg-orange-50/90 dark:bg-orange-950/20", label: "empJobFranchise" },
-  Officer: { bg: "bg-sky-50/90 dark:bg-sky-950/20", label: "empJobOfficer" },
-  Director: { bg: "bg-violet-50/90 dark:bg-violet-950/20", label: "empJobDirector" },
-  Logistic: { bg: "bg-teal-50/90 dark:bg-teal-950/20", label: "empJobLogistic" },
-  기타: { bg: "bg-slate-50/90 dark:bg-slate-800/15", label: "workLogOther" },
+const JOB_STYLE: Record<string, { bg: string }> = {
+  Service: { bg: "bg-amber-50/90 dark:bg-amber-950/20" },
+  Kitchen: { bg: "bg-emerald-50/90 dark:bg-emerald-950/20" },
+  Franchise: { bg: "bg-orange-50/90 dark:bg-orange-950/20" },
+  Officer: { bg: "bg-sky-50/90 dark:bg-sky-950/20" },
+  Director: { bg: "bg-violet-50/90 dark:bg-violet-950/20" },
+  Logistic: { bg: "bg-teal-50/90 dark:bg-teal-950/20" },
+  Other: { bg: "bg-slate-50/90 dark:bg-slate-800/15" },
 }
 
 function JobCountSummary({
@@ -83,22 +84,32 @@ function JobCountSummary({
   rows: { job?: string }[]
   t: (k: string) => string
 }) {
-  const counts: Record<string, number> = { Service: 0, Kitchen: 0, Franchise: 0, Officer: 0, Director: 0, Logistic: 0, 기타: 0 }
+  const counts: Record<string, number> = {
+    Service: 0,
+    Kitchen: 0,
+    Franchise: 0,
+    Officer: 0,
+    Director: 0,
+    Logistic: 0,
+    Other: 0,
+  }
   for (const r of rows) {
     const j = String(r.job || "").trim()
-    if (j && counts[j] !== undefined) counts[j]++
-    else counts.기타++
+    const key = j && counts[j] !== undefined ? j : "Other"
+    counts[key]++
   }
   const unit = t("empJobCountUnit")
-  const items = ["Service", "Kitchen", "Officer", "Director", "Logistic", "기타"].filter((j) => counts[j] > 0)
+  const items = ["Service", "Kitchen", "Franchise", "Officer", "Director", "Logistic", "Other"].filter(
+    (j) => counts[j] > 0
+  )
   const total = items.reduce((s, j) => s + counts[j as keyof typeof counts], 0)
   if (items.length === 0) return null
   return (
     <div className="flex rounded-lg overflow-hidden border border-border shadow-sm">
       {items.map((j) => {
         const n = counts[j as keyof typeof counts]
-        const style = JOB_STYLE[j]
-        const label = t(style.label)
+        const style = JOB_STYLE[j] ?? JOB_STYLE.Other
+        const label = getEmployeeJobOptionLabel(j)
         return (
           <div
             key={j}

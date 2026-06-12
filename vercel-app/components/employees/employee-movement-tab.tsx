@@ -158,6 +158,7 @@ export function EmployeeMovementTab({
   const { startStr, endStr } = React.useMemo(() => getBangkokMonthRange(yearMonth), [yearMonth])
   const [storeFilter, setStoreFilter] = React.useState("")
   const [loading, setLoading] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [list, setList] = React.useState<AdminEmployeeItem[]>([])
   const [stores, setStores] = React.useState<string[]>([])
 
@@ -167,14 +168,17 @@ export function EmployeeMovementTab({
       const res = await getAdminEmployeeList({ userStore, userRole })
       setList(res.list || [])
       setStores(res.stores || [])
+      setHasSearched(true)
     } finally {
       setLoading(false)
     }
   }, [userStore, userRole])
 
   React.useEffect(() => {
-    void load()
-  }, [load])
+    setHasSearched(false)
+    setList([])
+    setStores([])
+  }, [userStore, userRole])
 
   const filtered = React.useMemo(() => {
     const sf = storeFilter.trim()
@@ -281,10 +285,16 @@ export function EmployeeMovementTab({
           disabled={loading}
           className="inline-flex h-9 min-h-9 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          {loading ? t("loading") : t("emp_mov_load")}
+          {loading ? t("loading") : t("search")}
         </button>
       </div>
 
+      {!hasSearched ? (
+        <div className="rounded-lg border border-border bg-muted/20 px-6 py-16 text-center text-sm text-muted-foreground">
+          {t("emp_mov_search_hint")}
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-center">
           <div className="text-xs text-muted-foreground">{t("emp_mov_joins")}</div>
@@ -398,6 +408,8 @@ export function EmployeeMovementTab({
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }

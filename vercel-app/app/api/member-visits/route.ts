@@ -10,7 +10,15 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const memberId = Number(searchParams.get('memberId') || 0)
     const limit = Number(searchParams.get('limit') || 200)
-    const rows = await getMemberVisits({ memberId, limit })
+    const startStr = String(searchParams.get('start') || searchParams.get('startStr') || '').trim()
+    const endStr = String(searchParams.get('end') || searchParams.get('endStr') || '').trim()
+    const storeCode = String(searchParams.get('store') || searchParams.get('storeCode') || '').trim()
+    const rows = await getMemberVisits({
+      memberId,
+      limit,
+      ...(startStr && endStr ? { startStr, endStr } : {}),
+      ...(storeCode ? { storeCode } : {}),
+    })
     return NextResponse.json(rows, { headers })
   } catch (e) {
     console.error('GET /api/member-visits:', e)

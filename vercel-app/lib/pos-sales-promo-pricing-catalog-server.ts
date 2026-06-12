@@ -4,6 +4,7 @@ import { supabaseSelect, supabaseSelectAllPages } from '@/lib/supabase-server'
 import type { PromoLineLike, PromoMenuLike, PromoOptionLike } from '@/lib/promo-economics'
 import { promoItemsToPricingLines } from '@/lib/pos-promo-cut-price'
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
+import { resolvePosPromoSalesKind } from '@/lib/pos-promo-sales-kind'
 
 function buildOptionsByMenuId(
   rows: {
@@ -72,18 +73,44 @@ export async function loadPosSalesPromoPricingCatalog(): Promise<PromoPricingCat
     }
   }
 
-  const promoRows = (await supabaseSelect('pos_promos', {
-    limit: 10000,
-    select: 'id,code,name',
-  })) as { id?: number | string; code?: string; name?: string }[] | null
+  let promoRows: {
+    id?: number | string
+    code?: string
+    name?: string
+    marketing_campaign_id?: number | string | null
+  }[] = []
+  for (const select of ['id,code,name,marketing_campaign_id', 'id,code,name']) {
+    try {
+      promoRows =
+        ((await supabaseSelect('pos_promos', {
+          limit: 10000,
+          select,
+        })) as typeof promoRows) ?? []
+      break
+    } catch {
+      if (select === 'id,code,name') promoRows = []
+    }
+  }
 
-  const promoMetaById = new Map<string, { code: string; name: string }>()
+  const promoMetaById = new Map<
+    string,
+    {
+      code: string
+      name: string
+      marketingCampaignId?: string
+      kind: ReturnType<typeof resolvePosPromoSalesKind>
+    }
+  >()
   for (const p of promoRows || []) {
     const id = String(p.id ?? '').trim()
     if (!id) continue
+    const code = String(p.code ?? '').trim()
+    const marketingCampaignId = String(p.marketing_campaign_id ?? '').trim() || undefined
     promoMetaById.set(id, {
-      code: String(p.code ?? '').trim(),
-      name: String(p.name ?? '').trim() || String(p.code ?? '').trim() || id,
+      code,
+      name: String(p.name ?? '').trim() || code || id,
+      marketingCampaignId,
+      kind: resolvePosPromoSalesKind({ marketingCampaignId, promoCode: code }),
     })
   }
 

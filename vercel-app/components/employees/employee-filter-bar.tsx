@@ -23,10 +23,6 @@ interface EmployeeFilterBarProps {
 
 const GRADES = ["All", "S", "A", "B", "C", "F"]
 
-function getJobOptionLabel(job: string, t: (k: string) => string): string {
-  return getEmployeeJobOptionLabel(job, t)
-}
-
 export function EmployeeFilterBar({
   stores,
   storeFilter,
@@ -63,7 +59,7 @@ export function EmployeeFilterBar({
       >
         <option value="All">{t("emp_job_all")}</option>
         {jobOptions.map((j) => (
-          <option key={j} value={j}>{getJobOptionLabel(j, t)}</option>
+          <option key={j} value={j}>{getEmployeeJobOptionLabel(j)}</option>
         ))}
       </select>
       <select

@@ -209,9 +209,16 @@ export async function getPosSalesByPromoWithCache(params: {
       bundleDiscount: 0,
       paymentDiscount: 0,
       totalDiscount: 0,
+      periodGrossSales: 0,
+      periodOrderCount: 0,
+      promoLineSaleSharePct: 0,
+      bundleDiscountPctOfGross: 0,
+      paymentDiscountPctOfGross: 0,
+      totalDiscountPctOfGross: 0,
       estimatedLineQty: 0,
       unresolvedLineQty: 0,
     },
+    byKind: [],
     truncated: false,
   }
   const key = cacheKeyAnalytics('promoBundle', {

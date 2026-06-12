@@ -1467,6 +1467,16 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
           ? scopedStoreChoices[0]
           : "All")
   )
+  /** 상위 재무제표 페이지가 필터를 제어할 때는 props를 즉시 반영(로컬 state 1틱 지연 방지) */
+  const parentControlsQuery = Boolean(props.hideControls)
+  const queryYearMonthStart = parentControlsQuery
+    ? (props.yearMonthStart ?? props.yearMonth ?? yearMonthStart)
+    : yearMonthStart
+  const queryYearMonthEnd = parentControlsQuery
+    ? (props.yearMonthEnd ?? props.yearMonth ?? yearMonthEnd)
+    : yearMonthEnd
+  const queryStoreFilter =
+    parentControlsQuery && props.storeFilter != null ? props.storeFilter : storeFilter
   const [data, setData] = React.useState<IncomeStatementData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [showExpenseDetails, setShowExpenseDetails] = React.useState(false)
@@ -1695,8 +1705,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   ])
 
   const periodMonthsFull = React.useMemo(
-    () => expandBangkokYearMonthsInclusive(yearMonthStart, yearMonthEnd),
-    [yearMonthStart, yearMonthEnd]
+    () => expandBangkokYearMonthsInclusive(queryYearMonthStart, queryYearMonthEnd),
+    [queryYearMonthStart, queryYearMonthEnd]
   )
   const periodMonths = React.useMemo(() => {
     if (periodMonthsFull.length <= FINANCIAL_COMPARE_MAX_MONTHS) return periodMonthsFull
@@ -1711,6 +1721,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [compareFetchError, setCompareFetchError] = React.useState<string | null>(null)
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
   const [incomeCompareFetchId, setIncomeCompareFetchId] = React.useState(0)
+  const incomeFetchSeqRef = React.useRef(0)
 
   React.useEffect(() => {
     setCompareUnifiedExpandSales(false)
@@ -1719,7 +1730,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   }, [incomeCompareFetchId])
 
   const runIncomeFetch = React.useCallback(() => {
-    const sf = storeFilter !== "All" ? storeFilter : undefined
+    const fetchSeq = ++incomeFetchSeqRef.current
+    const sf = queryStoreFilter !== "All" ? queryStoreFilter : undefined
     const months = periodMonths
     setCompareFetchError(null)
 
@@ -1737,7 +1749,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     })
 
     if (months.length <= 1) {
-      const ym = months[0] ?? yearMonthEnd
+      const ym = months[0] ?? queryYearMonthEnd
       setLoading(true)
       setCompareIncomeRows([])
       getIncomeStatement({
@@ -1747,16 +1759,23 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         userRole: auth?.role,
         includeDebug: showExpenseDetails,
       })
-        .then((r) => setData(r))
-        .catch((e) =>
+        .then((r) => {
+          if (fetchSeq !== incomeFetchSeqRef.current) return
+          setData(r)
+        })
+        .catch((e) => {
+          if (fetchSeq !== incomeFetchSeqRef.current) return
           setData(
             emptyIncomeOnFetchError(
               ym,
               e instanceof Error ? e.message : String(e || "FETCH_FAILED")
             )
           )
-        )
-        .finally(() => setLoading(false))
+        })
+        .finally(() => {
+          if (fetchSeq !== incomeFetchSeqRef.current) return
+          setLoading(false)
+        })
       return
     }
 
@@ -1785,6 +1804,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       })
     )
       .then((rows) => {
+        if (fetchSeq !== incomeFetchSeqRef.current) return
         const ok = rows.filter((r) => isIncomeStatementData(r.data))
         setCompareIncomeRows(ok)
         const err = rows
@@ -1793,28 +1813,33 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         setCompareFetchError(err?.trim() || (ok.length === 0 ? t("inNoData") || "No data found." : null))
       })
       .catch(() => {
+        if (fetchSeq !== incomeFetchSeqRef.current) return
         setCompareIncomeRows([])
         setCompareFetchError(t("inNoData") || "No data found.")
       })
       .finally(() => {
+        if (fetchSeq !== incomeFetchSeqRef.current) return
         setIncomeCompareFetchId((x) => x + 1)
         setLoading(false)
       })
   }, [
     periodMonths,
-    storeFilter,
+    queryStoreFilter,
     auth?.store,
     auth?.role,
     showExpenseDetails,
-    yearMonthEnd,
+    queryYearMonthEnd,
     t,
   ])
+
+  const runIncomeFetchRef = React.useRef(runIncomeFetch)
+  runIncomeFetchRef.current = runIncomeFetch
 
   React.useEffect(() => {
     if (!props.hideControls) return
     if (props.queryToken == null) return
-    runIncomeFetch()
-  }, [props.hideControls, props.queryToken, runIncomeFetch])
+    runIncomeFetchRef.current()
+  }, [props.hideControls, props.queryToken])
 
   const loadData = React.useCallback(() => {
     runIncomeFetch()

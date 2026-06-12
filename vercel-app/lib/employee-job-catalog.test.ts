@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_EMPLOYEE_JOB_CATALOG,
+  getEmployeeJobOptionLabel,
   mergeMissingCoreEmployeeJobs,
   normalizeEmployeeJobCatalog,
 } from '@/lib/employee-job-catalog'
@@ -21,6 +22,13 @@ describe('employee job catalog', () => {
 
   it('normalizeEmployeeJobCatalog keeps custom jobs', () => {
     expect(normalizeEmployeeJobCatalog(['HR', 'Barista'])).toEqual(['HR', 'Barista'])
+  })
+
+  it('getEmployeeJobOptionLabel returns English canonical names', () => {
+    expect(getEmployeeJobOptionLabel('kitchen')).toBe('Kitchen')
+    expect(getEmployeeJobOptionLabel('Franchise')).toBe('Franchise')
+    expect(getEmployeeJobOptionLabel('Barista')).toBe('Barista')
+    expect(getEmployeeJobOptionLabel('기타')).toBe('Other')
   })
 })
 
