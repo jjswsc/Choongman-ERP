@@ -40,9 +40,13 @@ export function parseMemberPickupAtBangkok(value: string): Date {
   return new Date(bangkokWallToUtcMs(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5])))
 }
 
-export function assertMemberPickupTimeAllowed(pickupAtRaw: string, minLeadMinutes = 30): string {
+export function assertMemberPickupTimeAllowed(
+  pickupAtRaw: string,
+  minLeadMinutes = 30
+): string {
+  const lead = Math.min(240, Math.max(5, Math.trunc(Number(minLeadMinutes || 30))))
   const pickup = parseMemberPickupAtBangkok(pickupAtRaw)
-  const minMs = Date.now() + minLeadMinutes * 60_000
+  const minMs = Date.now() + lead * 60_000
   if (pickup.getTime() < minMs - 60_000) {
     throw new Error('pickup_too_soon')
   }

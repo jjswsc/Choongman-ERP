@@ -29,6 +29,7 @@ import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
 } from '@/lib/pos-order-paid-at'
+import { notifyMemberPortalPickupReady } from '@/lib/member-portal-pickup-notify'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -464,6 +465,12 @@ export async function POST(req: NextRequest) {
         },
         { headers }
       )
+    }
+
+    if (nextStatus === 'ready' && prevStatus !== 'ready') {
+      void notifyMemberPortalPickupReady(id).catch((notifyErr) => {
+        console.error('updatePosOrderStatus member portal pickup notify:', notifyErr)
+      })
     }
 
     return NextResponse.json({ success: true }, { headers })

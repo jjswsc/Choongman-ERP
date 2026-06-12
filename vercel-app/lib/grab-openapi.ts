@@ -5,7 +5,9 @@
  * - 429/5xx + 네트워크 오류 백오프 재시도
  */
 
-export type GrabApiEnv = 'staging' | 'production'
+import type { GrabOAuthCredentials, GrabApiEnv } from '@/lib/grab-oauth-credentials'
+
+export type { GrabApiEnv } from '@/lib/grab-oauth-credentials'
 
 const DEFAULT_MAX_ATTEMPTS = 4
 const RETRY_BASE_DELAY_MS = 500
@@ -20,6 +22,25 @@ type GrabTokenCache = {
 
 let tokenCache: GrabTokenCache | null = null
 let inflightTokenPromise: Promise<string> | null = null
+const tokenCachesByKey = new Map<string, GrabTokenCache>()
+const inflightTokenPromisesByKey = new Map<string, Promise<string>>()
+
+function resolveGrabCredentials(credentials?: GrabOAuthCredentials): GrabOAuthCredentials {
+  const clientId = credentials?.clientId?.trim() || process.env.GRAB_CLIENT_ID?.trim() || ''
+  const clientSecret = credentials?.clientSecret?.trim() || process.env.GRAB_CLIENT_SECRET?.trim() || ''
+  const apiEnvRaw = String(credentials?.apiEnv || process.env.GRAB_API_ENV || 'staging').trim().toLowerCase()
+  const apiEnv: GrabApiEnv =
+    apiEnvRaw === 'prod' || apiEnvRaw === 'production' ? 'production' : 'staging'
+  return {
+    cacheKey: credentials?.cacheKey || 'env-default',
+    clientId,
+    clientSecret,
+    apiEnv,
+    partnerApiBaseUrl: credentials?.partnerApiBaseUrl?.trim() || process.env.GRAB_PARTNER_API_BASE_URL?.trim(),
+    authBaseUrl: credentials?.authBaseUrl?.trim() || process.env.GRAB_AUTH_BASE_URL?.trim(),
+    requestTimeoutMs: credentials?.requestTimeoutMs,
+  }
+}
 
 function nowMs(): number {
   return Date.now()
@@ -55,7 +76,8 @@ function normalizePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`
 }
 
-export function resolveGrabApiEnv(): GrabApiEnv {
+export function resolveGrabApiEnv(credentials?: GrabOAuthCredentials): GrabApiEnv {
+  if (credentials?.apiEnv) return credentials.apiEnv
   const raw = String(process.env.GRAB_API_ENV || 'staging').trim().toLowerCase()
   if (raw === 'prod' || raw === 'production') return 'production'
   return 'staging'
@@ -65,8 +87,11 @@ export function resolveGrabApiEnv(): GrabApiEnv {
  * Grab partner API base URL (sandbox/prod prefix 포함)
  * - override: GRAB_PARTNER_API_BASE_URL
  */
-export function getGrabPartnerApiBaseUrl(env: GrabApiEnv = resolveGrabApiEnv()): string {
-  const override = process.env.GRAB_PARTNER_API_BASE_URL?.trim()
+export function getGrabPartnerApiBaseUrl(
+  env: GrabApiEnv = resolveGrabApiEnv(),
+  credentials?: GrabOAuthCredentials
+): string {
+  const override = credentials?.partnerApiBaseUrl?.trim() || process.env.GRAB_PARTNER_API_BASE_URL?.trim()
   if (override) return override.replace(/\/$/, '')
   const root = 'https://partner-api.grab.com'
   return env === 'production' ? `${root}/grabfood` : `${root}/grabfood-sandbox`
@@ -76,19 +101,21 @@ export function getGrabPartnerApiBaseUrl(env: GrabApiEnv = resolveGrabApiEnv()):
  * Grab OAuth endpoint (문서상 stg/prod 동일)
  * - override: GRAB_AUTH_BASE_URL
  */
-function getGrabAuthUrl(): string {
-  const override = process.env.GRAB_AUTH_BASE_URL?.trim()
+function getGrabAuthUrl(credentials?: GrabOAuthCredentials): string {
+  const override = credentials?.authBaseUrl?.trim() || process.env.GRAB_AUTH_BASE_URL?.trim()
   if (override) return `${override.replace(/\/$/, '')}/grabid/v1/oauth2/token`
   return 'https://api.grab.com/grabid/v1/oauth2/token'
 }
 
-function getRequiredGrabClientCredentials(): { clientId: string; clientSecret: string } {
-  const clientId = process.env.GRAB_CLIENT_ID?.trim() || ''
-  const clientSecret = process.env.GRAB_CLIENT_SECRET?.trim() || ''
-  if (!clientId || !clientSecret) {
+function getRequiredGrabClientCredentials(credentials?: GrabOAuthCredentials): {
+  clientId: string
+  clientSecret: string
+} {
+  const resolved = resolveGrabCredentials(credentials)
+  if (!resolved.clientId || !resolved.clientSecret) {
     throw new Error('Grab OAuth credentials are missing (GRAB_CLIENT_ID / GRAB_CLIENT_SECRET)')
   }
-  return { clientId, clientSecret }
+  return { clientId: resolved.clientId, clientSecret: resolved.clientSecret }
 }
 
 function isTokenUsable(cache: GrabTokenCache | null): cache is GrabTokenCache {
@@ -102,15 +129,17 @@ type GrabOauthResponse = {
   expires_in?: number
 }
 
-async function requestNewGrabAccessToken(): Promise<string> {
-  const { clientId, clientSecret } = getRequiredGrabClientCredentials()
+async function requestNewGrabAccessToken(credentials?: GrabOAuthCredentials): Promise<string> {
+  const resolved = resolveGrabCredentials(credentials)
+  const { clientId, clientSecret } = getRequiredGrabClientCredentials(resolved)
+  const cacheKey = resolved.cacheKey
   const payload = {
     client_id: clientId,
     client_secret: clientSecret,
     grant_type: 'client_credentials',
     scope: 'food.partner_api',
   }
-  const res = await fetch(getGrabAuthUrl(), {
+  const res = await fetch(getGrabAuthUrl(resolved), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -129,26 +158,41 @@ async function requestNewGrabAccessToken(): Promise<string> {
   }
 
   const expiresInSec = Math.max(60, Number(json.expires_in ?? 3600) || 3600)
-  tokenCache = {
+  const entry = {
     accessToken: String(json.access_token),
     expiresAtMs: nowMs() + expiresInSec * 1000,
   }
-  return tokenCache.accessToken
+  tokenCachesByKey.set(cacheKey, entry)
+  if (cacheKey === 'env-default') tokenCache = entry
+  return entry.accessToken
 }
 
 /**
  * 토큰 조회 (캐시 우선)
  * forceRefresh=true면 캐시 무시하고 재발급
  */
-export async function getGrabAccessToken(forceRefresh = false): Promise<string> {
-  if (!forceRefresh && isTokenUsable(tokenCache)) return tokenCache.accessToken
+export async function getGrabAccessToken(
+  forceRefresh = false,
+  credentials?: GrabOAuthCredentials
+): Promise<string> {
+  const resolved = resolveGrabCredentials(credentials)
+  const cacheKey = resolved.cacheKey
+  const scopedCache = tokenCachesByKey.get(cacheKey) || (cacheKey === 'env-default' ? tokenCache : null)
 
-  if (!forceRefresh && inflightTokenPromise) return inflightTokenPromise
+  if (!forceRefresh && isTokenUsable(scopedCache)) return scopedCache!.accessToken
 
-  inflightTokenPromise = requestNewGrabAccessToken().finally(() => {
-    inflightTokenPromise = null
+  const inflight =
+    inflightTokenPromisesByKey.get(cacheKey) ||
+    (cacheKey === 'env-default' ? inflightTokenPromise : null)
+  if (!forceRefresh && inflight) return inflight
+
+  const promise = requestNewGrabAccessToken(resolved).finally(() => {
+    inflightTokenPromisesByKey.delete(cacheKey)
+    if (cacheKey === 'env-default') inflightTokenPromise = null
   })
-  return inflightTokenPromise
+  inflightTokenPromisesByKey.set(cacheKey, promise)
+  if (cacheKey === 'env-default') inflightTokenPromise = promise
+  return promise
 }
 
 export type GrabRequestOptions = {
@@ -162,10 +206,12 @@ export type GrabRequestOptions = {
   body?: unknown
   env?: GrabApiEnv
   maxAttempts?: number
+  credentials?: GrabOAuthCredentials
 }
 
 function buildUrl(opts: GrabRequestOptions): string {
-  const base = getGrabPartnerApiBaseUrl(opts.env)
+  const creds = resolveGrabCredentials(opts.credentials)
+  const base = getGrabPartnerApiBaseUrl(opts.env ?? creds.apiEnv, creds)
   const url = new URL(`${base}${normalizePath(opts.path)}`)
   const q = opts.query || {}
   for (const [k, v] of Object.entries(q)) {
@@ -187,9 +233,13 @@ export async function grabRequest(opts: GrabRequestOptions): Promise<Response> {
   const method = opts.method || 'GET'
   const url = buildUrl(opts)
   const extraHeaders = opts.headers || {}
-  const timeoutMs = resolveRequestTimeoutMs()
+  const creds = resolveGrabCredentials(opts.credentials)
+  const timeoutMs =
+    creds.requestTimeoutMs && Number.isFinite(creds.requestTimeoutMs)
+      ? Math.min(60_000, Math.max(3_000, Math.floor(creds.requestTimeoutMs)))
+      : resolveRequestTimeoutMs()
 
-  let token = await getGrabAccessToken(false)
+  let token = await getGrabAccessToken(false, creds)
   let refreshedOn401 = false
   let lastError: unknown = null
   let lastResponse: Response | null = null
@@ -217,7 +267,7 @@ export async function grabRequest(opts: GrabRequestOptions): Promise<Response> {
       // 401 -> 토큰 강제 재발급 후 1회 재시도
       if (res.status === 401 && !refreshedOn401) {
         refreshedOn401 = true
-        token = await getGrabAccessToken(true)
+        token = await getGrabAccessToken(true, creds)
         continue
       }
 
@@ -272,5 +322,7 @@ export async function grabJsonRequest<T = unknown>(opts: GrabJsonRequestOptions)
 export function clearGrabTokenCacheForTest(): void {
   tokenCache = null
   inflightTokenPromise = null
+  tokenCachesByKey.clear()
+  inflightTokenPromisesByKey.clear()
 }
 

@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getSignupWelcomeCouponCode } from '@/lib/member-portal-signup-welcome-coupon'
+import {
+  loadMemberPortalPrepayConfig,
+  MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
+} from '@/lib/member-portal-prepay-config'
+import { resolveMemberPortalPickupMinLeadMinutes } from '@/lib/member-portal-pickup-settings'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const KEY_FACEBOOK = 'member_portal_contact_facebook_url'
@@ -26,6 +31,9 @@ export async function GET() {
       map.set(key, value)
     }
 
+    const prepayConfig = await loadMemberPortalPrepayConfig()
+    const pickupMinLeadMinutes = await resolveMemberPortalPickupMinLeadMinutes()
+
     return NextResponse.json({
       success: true,
       facebookUrl: map.get(KEY_FACEBOOK) || brand.memberContactFacebookUrl,
@@ -35,6 +43,9 @@ export async function GET() {
       appBackgroundUrl: map.get(KEY_APP_BG) || '',
       heroFoodImageUrl: '',
       signupWelcomeCouponEnabled: Boolean(await getSignupWelcomeCouponCode()),
+      prepayEnabled: prepayConfig.enabled,
+      prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
+      pickupMinLeadMinutes,
     })
   } catch {
     return NextResponse.json({
@@ -46,6 +57,9 @@ export async function GET() {
       appBackgroundUrl: '',
       heroFoodImageUrl: '',
       signupWelcomeCouponEnabled: false,
+      prepayEnabled: String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1',
+      prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
+      pickupMinLeadMinutes: 30,
     })
   }
 }

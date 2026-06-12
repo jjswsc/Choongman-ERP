@@ -21,7 +21,6 @@ import {
   DEFAULT_STAGE_PRICES,
   FALLBACK_TENANTS,
   resolveCurrentChargeAmount,
-  SALES_STAGE_LABEL,
   type BillingCycle,
   type PlanTier,
   type SalesStage,
@@ -29,18 +28,21 @@ import {
   type TenantItem,
 } from "@/lib/saas-admin-control-plane"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
+import {
+  SAAS_ADMIN_FEATURE_KEYS,
+  SAAS_ADMIN_SALES_STAGES,
+  saasAdminDateLocale,
+  saasAdminStageLabel,
+  saasAdminStatusLabel,
+} from "@/lib/i18n-saas-admin"
 
-const PLAN_LABEL: Record<PlanTier, string> = {
+const PLAN_TIER_NAME: Record<PlanTier, string> = {
   starter: "Starter",
   growth: "Growth",
   enterprise: "Enterprise",
-}
-
-const STATUS_LABEL = {
-  trial: "체험중",
-  active: "정상",
-  grace: "유예중",
-  suspended: "정지",
 }
 
 const STATUS_VARIANT = {
@@ -49,19 +51,6 @@ const STATUS_VARIANT = {
   grace: "outline",
   suspended: "destructive",
 } as const
-
-const FEATURE_LABELS: { key: keyof TenantItem["features"]; label: string; desc: string }[] = [
-  { key: "pos", label: "POS 주문/결제", desc: "매장 주문, 결제, 영수증 출력" },
-  { key: "kitchenDisplay", label: "주방 디스플레이", desc: "주문 티켓/주방 프린트 관리" },
-  { key: "inventory", label: "재고관리", desc: "입출고/재고 대시보드" },
-  { key: "payroll", label: "급여관리", desc: "근태/급여 계산" },
-  { key: "accounting", label: "회계/정산", desc: "매출/입출금/정산" },
-  { key: "analytics", label: "리포트 분석", desc: "지점/기간별 KPI 분석" },
-  { key: "marketing", label: "마케팅", desc: "캠페인/소재/성과 관리" },
-  { key: "aiAssistant", label: "AI 도우미", desc: "AI 질의 및 자동 추천" },
-  { key: "apiAccess", label: "외부 API 연동", desc: "Webhook/API Key 발급" },
-  { key: "sso", label: "SSO 로그인", desc: "SAML/OIDC 기반 로그인" },
-]
 
 function limitProgress(current: number, max: number): number {
   if (max <= 0) return 0
@@ -83,12 +72,12 @@ function UsageBar({ current, max }: { current: number; max: number }) {
   )
 }
 
-function formatBangkokDateTime(value: string): string {
+function formatBangkokDateTime(value: string, locale: string): string {
   const text = String(value || "").trim()
   if (!text) return "-"
   const dt = new Date(text)
   if (Number.isNaN(dt.getTime())) return text
-  return dt.toLocaleString("ko-KR", { timeZone: "Asia/Bangkok", hour12: false })
+  return dt.toLocaleString(locale, { timeZone: "Asia/Bangkok", hour12: false })
 }
 
 function usageRatio(current: number, max: number): number {
@@ -155,14 +144,17 @@ function normalizeTenantRows(rows: TenantItem[]): TenantItem[] {
   }))
 }
 
-function getExpiryInfo(tenant: TenantItem): { text: string; variant: "destructive" | "outline" | "secondary" } | null {
+function getExpiryInfo(
+  tenant: TenantItem,
+  t: (k: string) => string
+): { text: string; variant: "destructive" | "outline" | "secondary" } | null {
   const base = tenant.status === "trial" ? tenant.trialEndsAt : tenant.nextBillingDate
   const d = diffDaysFromTodayBangkok(base)
   if (d == null) return null
-  if (d < 0) return { text: `${Math.abs(d)}일 지남`, variant: "destructive" }
-  if (d === 0) return { text: "오늘 만료", variant: "destructive" }
-  if (d <= 3) return { text: `${d}일 남음`, variant: "outline" }
-  if (d <= 7) return { text: `${d}일 남음`, variant: "secondary" }
+  if (d < 0) return { text: tr(t, "saasAdminCust_expiryPast", { n: String(Math.abs(d)) }), variant: "destructive" }
+  if (d === 0) return { text: t("saasAdminCust_expiryToday"), variant: "destructive" }
+  if (d <= 3) return { text: tr(t, "saasAdminCust_expiryDaysLeft", { n: String(d) }), variant: "outline" }
+  if (d <= 7) return { text: tr(t, "saasAdminCust_expiryDaysLeft", { n: String(d) }), variant: "secondary" }
   return null
 }
 
@@ -173,6 +165,9 @@ function escapeCsv(value: unknown): string {
 }
 
 export default function SaasCustomersPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const dateLocale = saasAdminDateLocale(lang)
   const fallbackTenant = FALLBACK_TENANTS[0]!
   const [tenants, setTenants] = useState<TenantItem[]>(FALLBACK_TENANTS)
   const [selectedTenantId, setSelectedTenantId] = useState<string>(fallbackTenant.id)
@@ -213,7 +208,7 @@ export default function SaasCustomersPage() {
       const bundle = `${tenant.id} ${tenant.companyName} ${tenant.ownerName} ${tenant.phone}`.toLowerCase()
       return bundle.includes(keyword)
     })
-    const withExpiry = expiryOnly ? rows.filter((x) => getExpiryInfo(x) != null) : rows
+    const withExpiry = expiryOnly ? rows.filter((x) => getExpiryInfo(x, t) != null) : rows
     if (sortBy === "risk_desc") {
       return [...withExpiry].sort((a, b) => tenantRiskCount(b) - tenantRiskCount(a))
     }
@@ -227,7 +222,7 @@ export default function SaasCustomersPage() {
       })
     }
     return withExpiry
-  }, [expiryOnly, search, sortBy, statusFilter, tenants])
+  }, [expiryOnly, search, sortBy, statusFilter, t, tenants])
 
   const stats = useMemo(() => {
     const active = tenants.filter((x) => x.status === "active").length
@@ -264,7 +259,7 @@ export default function SaasCustomersPage() {
       const res = await apiFetch("/api/getSaasTenantSettings")
       const json = (await res.json()) as { success?: boolean; fallback?: boolean; message?: string; tenants?: TenantItem[] }
       if (!res.ok || json.success !== true || !Array.isArray(json.tenants)) {
-        throw new Error(json.message || "고객사 설정을 불러오지 못했습니다.")
+        throw new Error(json.message || t("saasAdminCust_errLoadSettings"))
       }
       const rows = normalizeTenantRows(json.tenants)
       if (rows.length > 0) {
@@ -276,16 +271,16 @@ export default function SaasCustomersPage() {
       } else {
         setTenants([])
       }
-      setLoadNotice(json.fallback ? json.message || "샘플 데이터로 표시 중입니다." : "")
+      setLoadNotice(json.fallback ? json.message || t("saasAdminCust_sampleData") : "")
     } catch (error) {
       const msg = String(error)
-      setLoadNotice(`불러오기 실패: ${msg}`)
+      setLoadNotice(tr(t, "saasAdminCust_loadFailed", { msg }))
       setTenants(FALLBACK_TENANTS)
       setSelectedTenantId(FALLBACK_TENANTS[0]!.id)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void loadTenants()
@@ -317,7 +312,7 @@ export default function SaasCustomersPage() {
     })
     const json = (await res.json()) as { success?: boolean; message?: string }
     if (!res.ok || json.success !== true) {
-      throw new Error(json.message || "저장에 실패했습니다.")
+      throw new Error(json.message || t("saasAdminCust_errSave"))
     }
   }
 
@@ -325,10 +320,10 @@ export default function SaasCustomersPage() {
     setLoading(true)
     try {
       await persistTenant(selectedTenant)
-      await appAlert(`[${selectedTenant.companyName}] 설정을 저장했습니다.`)
+      await appAlert(tr(t, "saasAdminCust_saved", { name: selectedTenant.companyName }))
       await loadTenants()
     } catch (error) {
-      await appAlert(`저장 실패: ${String(error)}`)
+      await appAlert(tr(t, "saasAdminCust_saveFailed", { msg: String(error) }))
     } finally {
       setLoading(false)
     }
@@ -338,15 +333,15 @@ export default function SaasCustomersPage() {
     const id = newTenantId.trim().toLowerCase()
     const name = newTenantName.trim()
     if (!id || !name) {
-      await appAlert("고객사 ID와 고객사명은 필수입니다.")
+      await appAlert(t("saasAdminCust_errRequiredIdName"))
       return
     }
     if (!/^[a-z0-9_-]{3,40}$/.test(id)) {
-      await appAlert("고객사 ID는 영문 소문자/숫자/_/-만 사용하고 3~40자로 입력해 주세요.")
+      await appAlert(t("saasAdminCust_errIdFormat"))
       return
     }
     if (tenants.some((x) => x.id === id)) {
-      await appAlert("이미 존재하는 고객사 ID입니다.")
+      await appAlert(t("saasAdminCust_errIdExists"))
       return
     }
     const draft: TenantItem = {
@@ -387,7 +382,7 @@ export default function SaasCustomersPage() {
     setLoading(true)
     try {
       await persistTenant(draft)
-      await appAlert(`[${draft.companyName}] 고객사를 생성했습니다.`)
+      await appAlert(tr(t, "saasAdminCust_created", { name: draft.companyName }))
       setOpenCreate(false)
       setNewTenantId("")
       setNewTenantName("")
@@ -396,7 +391,7 @@ export default function SaasCustomersPage() {
       await loadTenants()
       setSelectedTenantId(id)
     } catch (error) {
-      await appAlert(`고객사 생성 실패: ${String(error)}`)
+      await appAlert(tr(t, "saasAdminCust_createFailed", { msg: String(error) }))
     } finally {
       setLoading(false)
     }
@@ -409,15 +404,15 @@ export default function SaasCustomersPage() {
     const pw = bootPw.trim()
     const pw2 = bootPw2.trim()
     if (!storeName || !adminName || !pw) {
-      await appAlert("첫 매장명, 관리자 표시 이름, 비밀번호를 모두 입력해 주세요.")
+      await appAlert(t("saasAdminCust_errBootstrapRequired"))
       return
     }
     if (pw.length < 4) {
-      await appAlert("비밀번호는 4자 이상으로 입력해 주세요.")
+      await appAlert(t("saasAdminCust_errPwMin"))
       return
     }
     if (pw !== pw2) {
-      await appAlert("비밀번호 확인이 일치하지 않습니다.")
+      await appAlert(t("saasAdminCust_errPwMismatch"))
       return
     }
     setLoading(true)
@@ -435,11 +430,15 @@ export default function SaasCustomersPage() {
       })
       const json = (await res.json()) as { success?: boolean; message?: string; code?: string; companyName?: string }
       if (!res.ok || json.success !== true) {
-        await appAlert(json.message || "초기 계정 생성에 실패했습니다.")
+        await appAlert(json.message || t("saasAdminCust_errBootstrapFailed"))
         return
       }
       await appAlert(
-        `로그인 안내: 회사「${json.companyName || selectedTenant.companyName}」·매장「${storeName}」·이름「${adminName}」로 /login 또는 /admin/login 에서 로그인할 수 있습니다.`
+        tr(t, "saasAdminCust_bootstrapSuccess", {
+          company: json.companyName || selectedTenant.companyName,
+          store: storeName,
+          admin: adminName,
+        })
       )
       setBootStoreName("")
       setBootStoreCode("")
@@ -448,7 +447,7 @@ export default function SaasCustomersPage() {
       setBootPw2("")
       await loadTenants()
     } catch (error) {
-      await appAlert(`오류: ${String(error)}`)
+      await appAlert(tr(t, "saasAdminCust_errGeneric", { msg: String(error) }))
     } finally {
       setLoading(false)
     }
@@ -472,7 +471,7 @@ export default function SaasCustomersPage() {
   const requestBulkUpdateStatus = async (status: TenantItem["status"]) => {
     const targets = tenants.filter((x) => selectedIds.includes(x.id))
     if (targets.length === 0) {
-      await appAlert("먼저 일괄 변경할 고객사를 선택해 주세요.")
+      await appAlert(t("saasAdminCust_selectBulkFirst"))
       return
     }
     setBulkPendingStatus(status)
@@ -493,10 +492,15 @@ export default function SaasCustomersPage() {
       for (const tenant of targets) {
         await persistTenant({ ...tenant, status })
       }
-      await appAlert(`${targets.length}개 고객사의 상태를 ${STATUS_LABEL[status]}(으)로 변경했습니다.`)
+      await appAlert(
+        tr(t, "saasAdminCust_bulkStatusDone", {
+          n: String(targets.length),
+          status: saasAdminStatusLabel(status, t),
+        })
+      )
       await loadTenants()
     } catch (error) {
-      await appAlert(`일괄 상태 변경 실패: ${String(error)}`)
+      await appAlert(tr(t, "saasAdminCust_bulkStatusFailed", { msg: String(error) }))
     } finally {
       setLoading(false)
       setBulkConfirmOpen(false)
@@ -585,7 +589,7 @@ export default function SaasCustomersPage() {
           selectedTenant.id,
           selectedTenant.companyName,
           row.employeeId || "",
-          formatBangkokDateTime(row.changedAt),
+          formatBangkokDateTime(row.changedAt, dateLocale),
           row.action,
           row.actorName,
           row.actorRole,
@@ -629,18 +633,16 @@ export default function SaasCustomersPage() {
     <main className="space-y-4 p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">고객사 관리</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            요금제, 기능 권한, 계정 허용량, 태블릿/POS 단말, 과금/보안 정책을 통합 관리합니다.
-          </p>
+          <h1 className="text-2xl font-semibold">{t("saasAdminCust_pageTitle")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("saasAdminCust_pageIntro")}</p>
           {loadNotice ? <p className="mt-2 text-xs text-amber-600">{loadNotice}</p> : null}
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" onClick={() => setOpenCreate(true)} disabled={loading}>
-            신규 고객사 추가
+            {t("saasAdminCust_addTenant")}
           </Button>
           <Button type="button" onClick={saveTenantSettings} disabled={loading || tenants.length === 0}>
-            현재 설정 저장
+            {t("saasAdminCust_saveSettings")}
           </Button>
         </div>
       </div>
@@ -648,37 +650,37 @@ export default function SaasCustomersPage() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">전체 고객사</p>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statTotal")}</p>
             <p className="text-2xl font-semibold">{tenants.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">정상/체험</p>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statActiveTrial")}</p>
             <p className="text-2xl font-semibold">{stats.active + stats.trial}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">유예</p>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statGrace")}</p>
             <p className="text-2xl font-semibold">{stats.grace}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">정지</p>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statSuspended")}</p>
             <p className="text-2xl font-semibold">{stats.suspended}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">한도 위험 고객사</p>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statHighRisk")}</p>
             <p className="text-2xl font-semibold">{stats.highRisk}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">이번달 주문합계</p>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statMonthlyOrders")}</p>
             <p className="text-2xl font-semibold">{stats.totalOrders.toLocaleString()}</p>
           </CardContent>
         </Card>
@@ -686,71 +688,69 @@ export default function SaasCustomersPage() {
 
       <div className="grid gap-3 md:grid-cols-4">
         <div className="space-y-2">
-          <Label>고객사 검색</Label>
+          <Label>{t("saasAdminCust_searchLabel")}</Label>
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="고객사명/ID/담당자/전화번호 검색"
+            placeholder={t("saasAdminCust_searchPh")}
           />
         </div>
         <div className="space-y-2">
-          <Label>상태 필터</Label>
+          <Label>{t("saasAdminCust_statusFilter")}</Label>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | TenantItem["status"])}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">전체</SelectItem>
-              <SelectItem value="active">정상</SelectItem>
-              <SelectItem value="trial">체험중</SelectItem>
-              <SelectItem value="grace">유예중</SelectItem>
-              <SelectItem value="suspended">정지</SelectItem>
+              <SelectItem value="all">{t("all")}</SelectItem>
+              <SelectItem value="active">{saasAdminStatusLabel("active", t)}</SelectItem>
+              <SelectItem value="trial">{saasAdminStatusLabel("trial", t)}</SelectItem>
+              <SelectItem value="grace">{saasAdminStatusLabel("grace", t)}</SelectItem>
+              <SelectItem value="suspended">{saasAdminStatusLabel("suspended", t)}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>정렬</Label>
+          <Label>{t("saasAdminCust_sortLabel")}</Label>
           <Select value={sortBy} onValueChange={(value) => setSortBy(value as "default" | "risk_desc" | "expiry_soon")}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="default">기본순</SelectItem>
-              <SelectItem value="risk_desc">위험도 높은 순</SelectItem>
-              <SelectItem value="expiry_soon">만료 임박 순</SelectItem>
+              <SelectItem value="default">{t("saasAdminCust_sortDefault")}</SelectItem>
+              <SelectItem value="risk_desc">{t("saasAdminCust_sortRiskDesc")}</SelectItem>
+              <SelectItem value="expiry_soon">{t("saasAdminCust_sortExpirySoon")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>빠른 조건</Label>
+          <Label>{t("saasAdminCust_quickFilter")}</Label>
           <label className="flex h-9 items-center gap-2 rounded-md border px-3">
             <Checkbox checked={expiryOnly} onCheckedChange={(checked) => setExpiryOnly(Boolean(checked))} />
-            <span className="text-sm">만료예정 고객만 보기</span>
+            <span className="text-sm">{t("saasAdminCust_expiryOnly")}</span>
           </label>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" variant="outline" onClick={() => requestBulkUpdateStatus("active")} disabled={loading}>
-          선택 고객사 정상 전환
+          {t("saasAdminCust_bulkActivate")}
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => requestBulkUpdateStatus("grace")} disabled={loading}>
-          선택 고객사 유예 전환
+          {t("saasAdminCust_bulkGrace")}
         </Button>
         <Button type="button" size="sm" variant="destructive" onClick={() => requestBulkUpdateStatus("suspended")} disabled={loading}>
-          선택 고객사 정지 전환
+          {t("saasAdminCust_bulkSuspend")}
         </Button>
         <Button type="button" size="sm" onClick={exportCsv} disabled={filteredTenants.length === 0}>
-          CSV 내보내기
+          {t("saasAdminCust_exportCsv")}
         </Button>
       </div>
 
       {tenants.length === 0 ? (
         <Card>
           <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground">
-              등록된 고객사가 없습니다. 먼저 `tenants`/`tenant_subscriptions` 데이터를 생성해 주세요.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("saasAdminCust_noTenants")}</p>
           </CardContent>
         </Card>
       ) : null}
@@ -758,9 +758,9 @@ export default function SaasCustomersPage() {
       {tenants.length > 0 ? <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_minmax(0,2fr)]">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">고객사 목록</CardTitle>
+            <CardTitle className="text-lg">{t("saasAdminCust_listTitle")}</CardTitle>
             <CardDescription>
-              실 고객사 운영 상태와 구독 상태를 확인하고 편집 대상을 선택합니다. ({filteredTenants.length}개 표시)
+              {tr(t, "saasAdminCust_listDesc", { n: String(filteredTenants.length) })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -773,19 +773,19 @@ export default function SaasCustomersPage() {
                       onCheckedChange={(checked) => toggleSelectAllFiltered(Boolean(checked))}
                     />
                   </TableHead>
-                  <TableHead>고객사</TableHead>
-                  <TableHead>요금제</TableHead>
-                  <TableHead>판매단계</TableHead>
-                  <TableHead>상태</TableHead>
-                  <TableHead>만료예정</TableHead>
-                  <TableHead>위험</TableHead>
+                  <TableHead>{t("saasAdminCust_colTenant")}</TableHead>
+                  <TableHead>{t("saasAdminCust_colPlan")}</TableHead>
+                  <TableHead>{t("saasAdminCust_colSalesStage")}</TableHead>
+                  <TableHead>{t("status")}</TableHead>
+                  <TableHead>{t("saasAdminCust_colExpiry")}</TableHead>
+                  <TableHead>{t("saasAdminCust_colRisk")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTenants.map((tenant) => {
                   const active = tenant.id === selectedTenant.id
                   const risks = tenantRiskCount(tenant)
-                  const expiry = getExpiryInfo(tenant)
+                  const expiry = getExpiryInfo(tenant, t)
                   return (
                     <TableRow
                       key={tenant.id}
@@ -802,16 +802,20 @@ export default function SaasCustomersPage() {
                         <div className="font-medium">{tenant.companyName}</div>
                         <p className="text-xs text-muted-foreground">{tenant.ownerName}</p>
                       </TableCell>
-                      <TableCell>{PLAN_LABEL[tenant.planTier]}</TableCell>
+                      <TableCell>{PLAN_TIER_NAME[tenant.planTier]}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{SALES_STAGE_LABEL[tenant.policy.salesStage]}</Badge>
+                        <Badge variant="outline">{saasAdminStageLabel(tenant.policy.salesStage, t)}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_VARIANT[tenant.status]}>{STATUS_LABEL[tenant.status]}</Badge>
+                        <Badge variant={STATUS_VARIANT[tenant.status]}>{saasAdminStatusLabel(tenant.status, t)}</Badge>
                       </TableCell>
                       <TableCell>{expiry ? <Badge variant={expiry.variant}>{expiry.text}</Badge> : <span className="text-xs text-muted-foreground">-</span>}</TableCell>
                       <TableCell>
-                        {risks > 0 ? <Badge variant="destructive">{risks}건</Badge> : <Badge variant="outline">정상</Badge>}
+                        {risks > 0 ? (
+                          <Badge variant="destructive">{tr(t, "saasAdminCust_riskCount", { n: String(risks) })}</Badge>
+                        ) : (
+                          <Badge variant="outline">{t("saasAdminCust_riskOk")}</Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -819,7 +823,7 @@ export default function SaasCustomersPage() {
                 {filteredTenants.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground">
-                      검색/필터 조건에 맞는 고객사가 없습니다.
+                      {t("saasAdminCust_noFilterMatch")}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -833,45 +837,46 @@ export default function SaasCustomersPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-lg">{selectedTenant.companyName}</CardTitle>
-                <CardDescription>테넌트 ID: {selectedTenant.id}</CardDescription>
+                <CardDescription>{tr(t, "saasAdminCust_tenantIdLine", { id: selectedTenant.id })}</CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 <Button asChild size="sm" variant="secondary">
-                  <Link href={selectedTenantLoginHref}>회사 로그인 바로가기</Link>
+                  <Link href={selectedTenantLoginHref}>{t("saasAdminCust_loginLink")}</Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
                   <Link href={selectedTenantLoginHref} target="_blank" rel="noopener noreferrer">
-                    로그인 새 탭
+                    {t("saasAdminCust_loginNewTab")}
                   </Link>
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setTenantStatus("active")}>
-                  정상
+                  {saasAdminStatusLabel("active", t)}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setTenantStatus("grace")}>
-                  유예
+                  {saasAdminStatusLabel("grace", t)}
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => setTenantStatus("suspended")}>
-                  정지
+                  {saasAdminStatusLabel("suspended", t)}
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="plan" className="w-full">
-              <TabsList className="w-full justify-start">
-                <TabsTrigger value="plan">요금제/기능</TabsTrigger>
-                <TabsTrigger value="limits">허용량/단말</TabsTrigger>
-                <TabsTrigger value="policy">운영정책</TabsTrigger>
-                <TabsTrigger value="usage">실사용량</TabsTrigger>
-                <TabsTrigger value="billing">과금이력</TabsTrigger>
-                <TabsTrigger value="audit">변경이력</TabsTrigger>
-                <TabsTrigger value="bootstrap">초기 로그인</TabsTrigger>
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+                <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
+                <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
+                <TabsTrigger value="policy">{t("saasAdminCust_tabPolicy")}</TabsTrigger>
+                <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
+                <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
+                <TabsTrigger value="audit">{t("saasAdminCust_tabAudit")}</TabsTrigger>
+                <TabsTrigger value="integrations">{t("saasAdminCust_tabIntegrations")}</TabsTrigger>
+                <TabsTrigger value="bootstrap">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="plan" className="space-y-4 pt-2">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>요금제 티어</Label>
+                    <Label>{t("saasAdminCust_planTier")}</Label>
                     <Select
                       value={selectedTenant.planTier}
                       onValueChange={(value) =>
@@ -889,7 +894,7 @@ export default function SaasCustomersPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>과금 주기</Label>
+                    <Label>{t("saasAdminCust_billingCycle")}</Label>
                     <Select
                       value={selectedTenant.billingCycle}
                       onValueChange={(value) =>
@@ -900,8 +905,8 @@ export default function SaasCustomersPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="monthly">월간 과금</SelectItem>
-                        <SelectItem value="yearly">연간 과금</SelectItem>
+                        <SelectItem value="monthly">{t("saasAdminCust_billingMonthly")}</SelectItem>
+                        <SelectItem value="yearly">{t("saasAdminCust_billingYearly")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -909,7 +914,7 @@ export default function SaasCustomersPage() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>다음 청구일</Label>
+                    <Label>{t("saasAdminCust_nextBilling")}</Label>
                     <Input
                       type="date"
                       value={selectedTenant.nextBillingDate}
@@ -919,7 +924,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>체험 종료일</Label>
+                    <Label>{t("saasAdminCust_trialEnds")}</Label>
                     <Input
                       type="date"
                       value={selectedTenant.trialEndsAt}
@@ -931,21 +936,21 @@ export default function SaasCustomersPage() {
                 </div>
 
                 <div className="grid gap-3 rounded-md border p-3">
-                  <h3 className="text-sm font-semibold">기능 토글 (Feature Flag)</h3>
-                  {FEATURE_LABELS.map((feature) => (
-                    <label key={feature.key} className="flex items-start gap-3 rounded-md border p-3">
+                  <h3 className="text-sm font-semibold">{t("saasAdminCust_featureFlags")}</h3>
+                  {SAAS_ADMIN_FEATURE_KEYS.map((featureKey) => (
+                    <label key={featureKey} className="flex items-start gap-3 rounded-md border p-3">
                       <Checkbox
-                        checked={selectedTenant.features[feature.key]}
+                        checked={selectedTenant.features[featureKey]}
                         onCheckedChange={(checked) =>
                           updateTenant((tenant) => ({
                             ...tenant,
-                            features: { ...tenant.features, [feature.key]: Boolean(checked) },
+                            features: { ...tenant.features, [featureKey]: Boolean(checked) },
                           }))
                         }
                       />
                       <div className="space-y-0.5">
-                        <p className="text-sm font-medium">{feature.label}</p>
-                        <p className="text-xs text-muted-foreground">{feature.desc}</p>
+                        <p className="text-sm font-medium">{t(`saasAdminFeature_${featureKey}`)}</p>
+                        <p className="text-xs text-muted-foreground">{t(`saasAdminFeature_${featureKey}_desc`)}</p>
                       </div>
                     </label>
                   ))}
@@ -953,12 +958,10 @@ export default function SaasCustomersPage() {
               </TabsContent>
 
               <TabsContent value="limits" className="space-y-4 pt-2">
-                <p className="text-sm text-muted-foreground">
-                  실제 운영 중 가장 많이 요청되는 제한값(계정 수, 태블릿 수, POS 단말 수, API 키 수)을 고객사별로 조정합니다.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("saasAdminCust_limitsIntro")}</p>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>매장 허용 개수</Label>
+                    <Label>{t("saasAdminCust_maxStores")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -972,7 +975,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>매니저 계정 허용 개수</Label>
+                    <Label>{t("saasAdminCust_maxManagers")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -986,7 +989,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>일반 직원 계정 허용 개수</Label>
+                    <Label>{t("saasAdminCust_maxStaff")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -1000,7 +1003,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>태블릿 허용 개수</Label>
+                    <Label>{t("saasAdminCust_maxTablets")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -1014,7 +1017,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>POS 단말 허용 개수</Label>
+                    <Label>{t("saasAdminCust_maxPos")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -1028,7 +1031,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>API Key 허용 개수</Label>
+                    <Label>{t("saasAdminCust_maxApiKeys")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -1042,7 +1045,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label>월 주문량 제한</Label>
+                    <Label>{t("saasAdminCust_monthlyOrderQuota")}</Label>
                     <Input
                       type="number"
                       min={1000}
@@ -1060,13 +1063,11 @@ export default function SaasCustomersPage() {
               </TabsContent>
 
               <TabsContent value="policy" className="space-y-4 pt-2">
-                <p className="text-sm text-muted-foreground">
-                  단순 요금제 외에 연체 대응/보안 기준/백업/데이터 보존 정책을 고객사별로 차등 적용합니다.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("saasAdminCust_policyIntro")}</p>
 
                 <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_auto] md:items-end">
                   <div className="space-y-2">
-                    <Label>판매 단계(패키지)</Label>
+                    <Label>{t("saasAdminCust_salesStage")}</Label>
                     <Select
                       value={selectedTenant.policy.salesStage}
                       onValueChange={(value) =>
@@ -1077,12 +1078,11 @@ export default function SaasCustomersPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="basic">{SALES_STAGE_LABEL.basic}</SelectItem>
-                        <SelectItem value="payment">{SALES_STAGE_LABEL.payment}</SelectItem>
-                        <SelectItem value="delivery">{SALES_STAGE_LABEL.delivery}</SelectItem>
-                        <SelectItem value="erp1">{SALES_STAGE_LABEL.erp1}</SelectItem>
-                        <SelectItem value="erp2">{SALES_STAGE_LABEL.erp2}</SelectItem>
-                        <SelectItem value="ai">{SALES_STAGE_LABEL.ai}</SelectItem>
+                        {SAAS_ADMIN_SALES_STAGES.map((stage) => (
+                          <SelectItem key={stage} value={stage}>
+                            {saasAdminStageLabel(stage, t)}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1096,30 +1096,32 @@ export default function SaasCustomersPage() {
                       }))
                     }
                   >
-                    단계 기능 자동 적용
+                    {t("saasAdminCust_applyStageFeatures")}
                   </Button>
                 </div>
 
                 <div className="grid gap-3 rounded-md border p-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">단계별 가격표 (고객사 커스텀)</h3>
+                    <h3 className="text-sm font-semibold">{t("saasAdminCust_stagePricing")}</h3>
                     <Badge variant="outline">
-                      현재 청구 예상: {selectedTenant.pricing.currentChargeAmount.toLocaleString()}{" "}
-                      {selectedTenant.pricing.currency}
+                      {tr(t, "saasAdminCust_currentCharge", {
+                        amount: selectedTenant.pricing.currentChargeAmount.toLocaleString(),
+                        currency: selectedTenant.pricing.currency,
+                      })}
                     </Badge>
                   </div>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>단계</TableHead>
-                        <TableHead>월간 청구(THB)</TableHead>
-                        <TableHead>연간 청구(THB)</TableHead>
+                        <TableHead>{t("saasAdminCust_stageCol")}</TableHead>
+                        <TableHead>{t("saasAdminCust_monthlyThb")}</TableHead>
+                        <TableHead>{t("saasAdminCust_yearlyThb")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(["basic", "payment", "delivery", "erp1", "erp2", "ai"] as SalesStage[]).map((stage) => (
+                      {SAAS_ADMIN_SALES_STAGES.map((stage) => (
                         <TableRow key={stage}>
-                          <TableCell>{SALES_STAGE_LABEL[stage]}</TableCell>
+                          <TableCell>{saasAdminStageLabel(stage, t)}</TableCell>
                           <TableCell>
                             <Input
                               type="number"
@@ -1199,7 +1201,7 @@ export default function SaasCustomersPage() {
                         }))
                       }
                     />
-                    연체 시 자동 정지
+                    {t("saasAdminCust_autoSuspendOverdue")}
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
@@ -1211,7 +1213,7 @@ export default function SaasCustomersPage() {
                         }))
                       }
                     />
-                    허용량 초과 사용 허용 (후불 청구)
+                    {t("saasAdminCust_allowOverage")}
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
@@ -1223,7 +1225,7 @@ export default function SaasCustomersPage() {
                         }))
                       }
                     />
-                    관리자 2차 인증(2FA) 필수
+                    {t("saasAdminCust_require2fa")}
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
@@ -1235,7 +1237,7 @@ export default function SaasCustomersPage() {
                         }))
                       }
                     />
-                    허용 IP 목록(Allowlist) 필수
+                    {t("saasAdminCust_requireIpAllowlist")}
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
@@ -1247,13 +1249,13 @@ export default function SaasCustomersPage() {
                         }))
                       }
                     />
-                    주간 백업 강제
+                    {t("saasAdminCust_forceWeeklyBackup")}
                   </label>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
-                    <Label>연체 유예일</Label>
+                    <Label>{t("saasAdminCust_overdueGraceDays")}</Label>
                     <Input
                       type="number"
                       min={0}
@@ -1267,7 +1269,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>데이터 보존일</Label>
+                    <Label>{t("saasAdminCust_dataRetentionDays")}</Label>
                     <Input
                       type="number"
                       min={90}
@@ -1281,7 +1283,7 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>지원 등급</Label>
+                    <Label>{t("saasAdminCust_supportTier")}</Label>
                     <Select
                       value={selectedTenant.policy.supportTier}
                       onValueChange={(value) =>
@@ -1295,56 +1297,59 @@ export default function SaasCustomersPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="standard">Standard</SelectItem>
-                        <SelectItem value="priority">Priority</SelectItem>
-                        <SelectItem value="dedicated">Dedicated CSM</SelectItem>
+                        <SelectItem value="standard">{t("saasAdminCust_supportStandard")}</SelectItem>
+                        <SelectItem value="priority">{t("saasAdminCust_supportPriority")}</SelectItem>
+                        <SelectItem value="dedicated">{t("saasAdminCust_supportDedicated")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
               </TabsContent>
 
+              <TabsContent value="integrations" className="space-y-4 pt-2">
+                <SaasAdminTenantIntegrationsPanel
+                  tenantId={selectedTenant.id}
+                  companyName={selectedTenant.companyName}
+                />
+              </TabsContent>
+
               <TabsContent value="bootstrap" className="space-y-4 pt-2">
-                <p className="text-sm text-muted-foreground">
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">tenants</code>에 등록된 고객사명과 동일한{" "}
-                  <strong>회사명</strong>으로 로그인할 수 있게, 첫 매장(
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">erp_stores</code>)과 초기 관리자(
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">employees</code>)를 만듭니다. 이미 해당 테넌트에 직원이 있으면
-                  생성할 수 없습니다.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("saasAdminCust_bootstrapIntro")}</p>
                 <div className="rounded-md border border-dashed p-4 space-y-3">
-                  <p className="text-sm font-medium">선택 고객사: {selectedTenant.companyName}</p>
+                  <p className="text-sm font-medium">
+                    {tr(t, "saasAdminCust_selectedTenant", { name: selectedTenant.companyName })}
+                  </p>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>첫 매장명</Label>
+                      <Label>{t("saasAdminCust_firstStoreName")}</Label>
                       <Input
                         value={bootStoreName}
                         onChange={(e) => setBootStoreName(e.target.value)}
-                        placeholder='예: 본사, HQ'
+                        placeholder={t("saasAdminCust_firstStorePh")}
                         autoComplete="off"
                       />
-                      <p className="text-xs text-muted-foreground">로그인 화면의 「매장」에 그대로 입력합니다.</p>
+                      <p className="text-xs text-muted-foreground">{t("saasAdminCust_firstStoreHint")}</p>
                     </div>
                     <div className="space-y-2">
-                      <Label>매장 코드 (선택)</Label>
+                      <Label>{t("saasAdmin_storeCodeOptional")}</Label>
                       <Input
                         value={bootStoreCode}
                         onChange={(e) => setBootStoreCode(e.target.value)}
-                        placeholder="비우면 자동 생성"
+                        placeholder={t("saasAdmin_autoGenerate")}
                         autoComplete="off"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>관리자 표시 이름</Label>
+                      <Label>{t("saasAdminCust_adminDisplayName")}</Label>
                       <Input
                         value={bootAdminName}
                         onChange={(e) => setBootAdminName(e.target.value)}
-                        placeholder="로그인 이름과 동일"
+                        placeholder={t("saasAdminCust_adminDisplayPh")}
                         autoComplete="off"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>비밀번호</Label>
+                      <Label>{t("saasAdmin_password")}</Label>
                       <Input
                         type="password"
                         value={bootPw}
@@ -1353,7 +1358,7 @@ export default function SaasCustomersPage() {
                       />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <Label>비밀번호 확인</Label>
+                      <Label>{t("saasAdmin_passwordConfirm")}</Label>
                       <Input
                         type="password"
                         value={bootPw2}
@@ -1363,7 +1368,7 @@ export default function SaasCustomersPage() {
                     </div>
                   </div>
                   <Button type="button" onClick={() => void bootstrapTenantLogin()} disabled={loading}>
-                    첫 매장·초기 관리자 생성
+                    {t("saasAdminCust_bootstrapCreate")}
                   </Button>
                 </div>
               </TabsContent>
@@ -1372,7 +1377,7 @@ export default function SaasCustomersPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">매장 사용량</CardTitle>
+                      <CardTitle className="text-sm">{t("saasAdminCust_usageStores")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <UsageBar current={selectedTenant.usage.stores} max={selectedTenant.limits.maxStores} />
@@ -1380,7 +1385,7 @@ export default function SaasCustomersPage() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">매니저 계정 사용량</CardTitle>
+                      <CardTitle className="text-sm">{t("saasAdminCust_usageManagers")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <UsageBar
@@ -1391,7 +1396,7 @@ export default function SaasCustomersPage() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">직원 계정 사용량</CardTitle>
+                      <CardTitle className="text-sm">{t("saasAdminCust_usageStaff")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <UsageBar
@@ -1402,7 +1407,7 @@ export default function SaasCustomersPage() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">태블릿 사용량</CardTitle>
+                      <CardTitle className="text-sm">{t("saasAdminCust_usageTablets")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <UsageBar current={selectedTenant.usage.tablets} max={selectedTenant.limits.maxTablets} />
@@ -1410,7 +1415,7 @@ export default function SaasCustomersPage() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">POS 단말 사용량</CardTitle>
+                      <CardTitle className="text-sm">{t("saasAdminCust_usagePos")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <UsageBar current={selectedTenant.usage.posDevices} max={selectedTenant.limits.maxPosDevices} />
@@ -1418,7 +1423,7 @@ export default function SaasCustomersPage() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">월 주문량 사용량</CardTitle>
+                      <CardTitle className="text-sm">{t("saasAdminCust_usageOrders")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <UsageBar
@@ -1431,28 +1436,28 @@ export default function SaasCustomersPage() {
               </TabsContent>
 
               <TabsContent value="billing" className="space-y-3 pt-2">
-                <p className="text-sm text-muted-foreground">청구/결제/수정 이벤트를 최신순으로 표시합니다.</p>
+                <p className="text-sm text-muted-foreground">{t("saasAdminCust_billingIntro")}</p>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>시각(방콕)</TableHead>
-                      <TableHead>이벤트</TableHead>
-                      <TableHead>금액</TableHead>
-                      <TableHead>상태</TableHead>
-                      <TableHead>메모</TableHead>
+                      <TableHead>{t("saasAdminCust_billingTime")}</TableHead>
+                      <TableHead>{t("saasAdminCust_billingEvent")}</TableHead>
+                      <TableHead>{t("saasAdminCust_billingAmount")}</TableHead>
+                      <TableHead>{t("status")}</TableHead>
+                      <TableHead>{t("saasAdminCust_billingMemo")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {selectedTenant.billingHistory.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground">
-                          과금 이력이 없습니다.
+                          {t("saasAdminCust_noBilling")}
                         </TableCell>
                       </TableRow>
                     ) : (
                       selectedTenant.billingHistory.map((row) => (
                         <TableRow key={row.id}>
-                          <TableCell>{formatBangkokDateTime(row.happenedAt)}</TableCell>
+                          <TableCell>{formatBangkokDateTime(row.happenedAt, dateLocale)}</TableCell>
                           <TableCell>{row.eventType}</TableCell>
                           <TableCell>
                             {row.amount.toLocaleString()} {row.currency}
@@ -1470,7 +1475,7 @@ export default function SaasCustomersPage() {
 
               <TabsContent value="audit" className="space-y-3 pt-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm text-muted-foreground">누가 어떤 설정을 바꿨는지 감사 로그를 확인합니다.</p>
+                  <p className="text-sm text-muted-foreground">{t("saasAdminCust_auditIntro")}</p>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -1478,7 +1483,7 @@ export default function SaasCustomersPage() {
                       variant={auditFilter === "all" ? "default" : "outline"}
                       onClick={() => setAuditFilter("all")}
                     >
-                      전체
+                      {t("all")}
                     </Button>
                     <Button
                       type="button"
@@ -1486,10 +1491,10 @@ export default function SaasCustomersPage() {
                       variant={auditFilter === "employee_only" ? "default" : "outline"}
                       onClick={() => setAuditFilter("employee_only")}
                     >
-                      직원 변경만
+                      {t("saasAdminCust_auditEmployeeOnly")}
                     </Button>
                     <Button type="button" size="sm" variant="outline" onClick={exportAuditCsv} disabled={filteredAuditTrail.length === 0}>
-                      CSV 내보내기
+                      {t("saasAdminCust_exportCsv")}
                     </Button>
                   </div>
                 </div>
@@ -1500,7 +1505,7 @@ export default function SaasCustomersPage() {
                     variant={auditPeriod === "all" ? "default" : "outline"}
                     onClick={() => setAuditPeriod("all")}
                   >
-                    기간 전체
+                    {t("saasAdminCust_auditPeriodAll")}
                   </Button>
                   <Button
                     type="button"
@@ -1508,7 +1513,7 @@ export default function SaasCustomersPage() {
                     variant={auditPeriod === "today" ? "default" : "outline"}
                     onClick={() => setAuditPeriod("today")}
                   >
-                    오늘
+                    {t("saasAdminCust_auditPeriodToday")}
                   </Button>
                   <Button
                     type="button"
@@ -1516,7 +1521,7 @@ export default function SaasCustomersPage() {
                     variant={auditPeriod === "7d" ? "default" : "outline"}
                     onClick={() => setAuditPeriod("7d")}
                   >
-                    최근 7일
+                    {t("saasAdminCust_auditPeriod7d")}
                   </Button>
                   <Button
                     type="button"
@@ -1524,37 +1529,37 @@ export default function SaasCustomersPage() {
                     variant={auditPeriod === "30d" ? "default" : "outline"}
                     onClick={() => setAuditPeriod("30d")}
                   >
-                    최근 30일
+                    {t("saasAdminCust_auditPeriod30d")}
                   </Button>
                 </div>
                 <div className="max-w-sm space-y-1">
-                  <Label>작업자 검색</Label>
+                  <Label>{t("saasAdminCust_auditActorSearch")}</Label>
                   <Input
                     value={auditActorQuery}
                     onChange={(e) => setAuditActorQuery(e.target.value)}
-                    placeholder="작업자 이름/역할 검색"
+                    placeholder={t("saasAdminCust_auditActorPh")}
                   />
                 </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>시각(방콕)</TableHead>
-                      <TableHead>액션</TableHead>
-                      <TableHead>작업자</TableHead>
-                      <TableHead>요약</TableHead>
+                      <TableHead>{t("saasAdminCust_billingTime")}</TableHead>
+                      <TableHead>{t("saasAdminCust_auditAction")}</TableHead>
+                      <TableHead>{t("saasAdminCust_auditActor")}</TableHead>
+                      <TableHead>{t("saasAdminCust_auditSummary")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredAuditTrail.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-muted-foreground">
-                          {auditFilter === "employee_only" ? "직원 변경 이력이 없습니다." : "변경 이력이 없습니다."}
+                          {auditFilter === "employee_only" ? t("saasAdminCust_noAuditEmployee") : t("saasAdminCust_noAudit")}
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredAuditTrail.map((row) => (
                         <TableRow key={row.id}>
-                          <TableCell>{formatBangkokDateTime(row.changedAt)}</TableCell>
+                          <TableCell>{formatBangkokDateTime(row.changedAt, dateLocale)}</TableCell>
                           <TableCell>{row.action}</TableCell>
                           <TableCell>
                             {row.actorName} ({row.actorRole})
@@ -1564,7 +1569,9 @@ export default function SaasCustomersPage() {
                               <span>{row.summary || "-"}</span>
                               {row.employeeId ? (
                                 <Button asChild type="button" size="sm" variant="outline" className="h-6 px-2 text-xs">
-                                  <Link href={employeeAuditLink(row.employeeId)}>직원#{row.employeeId}</Link>
+                                  <Link href={employeeAuditLink(row.employeeId)}>
+                                    {tr(t, "saasAdminCust_employeeLink", { id: String(row.employeeId) })}
+                                  </Link>
                                 </Button>
                               ) : null}
                             </div>
@@ -1583,15 +1590,17 @@ export default function SaasCustomersPage() {
       <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>일괄 상태 변경 확인</DialogTitle>
+            <DialogTitle>{t("saasAdminCust_bulkConfirmTitle")}</DialogTitle>
             <DialogDescription>
-              선택된 {selectedIds.length}개 고객사의 상태를{" "}
-              {bulkPendingStatus ? STATUS_LABEL[bulkPendingStatus] : "-"}(으)로 변경합니다. 계속하시겠습니까?
+              {tr(t, "saasAdminCust_bulkConfirmDesc", {
+                n: String(selectedIds.length),
+                status: bulkPendingStatus ? saasAdminStatusLabel(bulkPendingStatus, t) : "-",
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setBulkConfirmOpen(false)}>
-              취소
+              {t("cancel")}
             </Button>
             <Button
               type="button"
@@ -1599,7 +1608,7 @@ export default function SaasCustomersPage() {
               onClick={bulkUpdateStatus}
               disabled={loading}
             >
-              확인 후 적용
+              {t("saasAdminCust_bulkConfirmApply")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1608,33 +1617,33 @@ export default function SaasCustomersPage() {
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>신규 고객사 추가</DialogTitle>
-            <DialogDescription>기본 플랜(Starter/월간)으로 고객사를 생성한 뒤 상세 정책을 조정하세요.</DialogDescription>
+            <DialogTitle>{t("saasAdminCust_createTitle")}</DialogTitle>
+            <DialogDescription>{t("saasAdminCust_createDesc")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="space-y-1">
-              <Label>고객사 ID</Label>
-              <Input value={newTenantId} onChange={(e) => setNewTenantId(e.target.value)} placeholder="예: omni-kr-001" />
+              <Label>{t("saasAdminCust_tenantIdLabel")}</Label>
+              <Input value={newTenantId} onChange={(e) => setNewTenantId(e.target.value)} placeholder={t("saasAdminCust_tenantIdPh")} />
             </div>
             <div className="space-y-1">
-              <Label>고객사명</Label>
-              <Input value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} placeholder="예: CM Bangkok 1호점" />
+              <Label>{t("saasAdminCust_tenantNameLabel")}</Label>
+              <Input value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} placeholder={t("saasAdminCust_tenantNamePh")} />
             </div>
             <div className="space-y-1">
-              <Label>담당자명</Label>
-              <Input value={newOwnerName} onChange={(e) => setNewOwnerName(e.target.value)} placeholder="선택 입력" />
+              <Label>{t("saasAdminCust_ownerLabel")}</Label>
+              <Input value={newOwnerName} onChange={(e) => setNewOwnerName(e.target.value)} placeholder={t("saasAdminCust_optionalInput")} />
             </div>
             <div className="space-y-1">
-              <Label>연락처</Label>
-              <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="선택 입력" />
+              <Label>{t("saasAdminCust_phoneLabel")}</Label>
+              <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder={t("saasAdminCust_optionalInput")} />
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpenCreate(false)}>
-              취소
+              {t("cancel")}
             </Button>
             <Button type="button" onClick={createTenant} disabled={loading}>
-              생성 후 저장
+              {t("saasAdminCust_createSave")}
             </Button>
           </DialogFooter>
         </DialogContent>

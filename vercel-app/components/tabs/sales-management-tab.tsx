@@ -499,7 +499,7 @@ const SALES_IA: SalesSubMenuConfig[] = [
   {
     id: "sales-discount",
     labelKey: "salesManagementTabDiscount",
-    fallbackLabel: "할인·프로모",
+    fallbackLabel: "할인현황",
     topics: [
       {
         id: "report-promo-bundle",
@@ -1741,17 +1741,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       if (selectedView === "promo-bundle") {
         const t = promoBundleData.totals
         sheets.push({
-          name: tr("salesPromoAnalyticsTitle", "할인 영향 분석"),
+          name: tr("salesBundleDiscountAnalyticsTitle", "세트 할인 영향 분석"),
           headers: [tr("salesMenu", "메뉴"), tr("pL_sales", "매출")],
           rows: [
             [tr("salesPromoPeriodGrossSales", "기간 총매출"), numCell(t.periodGrossSales)],
-            [tr("salesPromoLineSaleShare", "세트·프로모 판매 비중"), t.promoLineSaleSharePct / 100],
-            [tr("salesPromoBundleDiscount", "세트 내재 할인"), numCell(t.bundleDiscount)],
+            [tr("salesPromoLineSaleShare", "세트 판매 비중"), t.promoLineSaleSharePct / 100],
+            [tr("salesPromoSaleAmount", "판매액"), numCell(t.saleAmount)],
+            [tr("salesPromoBundleDiscount", "세트 할인"), numCell(t.bundleDiscount)],
             [tr("salesPromoDiscountPctOfGross", "총매출 대비 할인"), t.bundleDiscountPctOfGross / 100],
-            [tr("salesPromoPaymentDiscount", "결제 할인(기간)"), numCell(t.paymentDiscount)],
-            [`${tr("salesPromoPaymentDiscount", "결제 할인(기간)")} %`, t.paymentDiscountPctOfGross / 100],
-            [tr("salesPromoTotalDiscount", "할인 합계"), numCell(t.totalDiscount)],
-            [`${tr("salesPromoTotalDiscount", "할인 합계")} %`, t.totalDiscountPctOfGross / 100],
+            [tr("salesPromoSaleQty", "세트 판매 수량"), t.qty],
+            [tr("salesPromoRegularAmount", "정가 합계"), numCell(t.regularAmount)],
           ],
           colFormats: [salesExcelCol.text, salesExcelCol.money],
         })
@@ -1787,7 +1786,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
       if (selectedView === "promo-bundle" && promoBundleData.rows.length > 0) {
         sheets.push({
-          name: tr("salesTopicPromoBundleReport", "세트·프로모 할인"),
+          name: tr("salesTopicPromoBundleReport", "세트 할인"),
           headers: [
             tr("salesMenu", "메뉴"),
             tr("salesPromoCode", "프로모 코드"),

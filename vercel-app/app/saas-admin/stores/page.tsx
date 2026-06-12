@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 
 type TenantOpt = { id: string; companyName: string }
 
@@ -28,6 +30,8 @@ type StoreRow = {
 }
 
 export default function SaasStoresPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [tenantFilter, setTenantFilter] = useState<string>("")
   const [createTenantId, setCreateTenantId] = useState<string>("")
   const [createStoreName, setCreateStoreName] = useState("")
@@ -68,7 +72,7 @@ export default function SaasStoresPage() {
           pagination?: { hasMore?: boolean }
         }
         if (!res.ok || json.success !== true) {
-          setNotice(json.message || "목록을 불러오지 못했습니다.")
+          setNotice(json.message || t("saasAdmin_errLoadList"))
           if (!opts.append) setRows([])
           return
         }
@@ -84,7 +88,7 @@ export default function SaasStoresPage() {
         setLoading(false)
       }
     },
-    [tenantFilter, qApplied]
+    [tenantFilter, qApplied, t]
   )
 
   useEffect(() => {
@@ -114,7 +118,7 @@ export default function SaasStoresPage() {
     const storeName = createStoreName.trim()
     const storeCode = createStoreCode.trim()
     if (!tenantId || !storeName) {
-      await appAlert("고객사와 매장명을 입력해 주세요.")
+      await appAlert(t("saasAdminStore_errTenantStoreRequired"))
       return
     }
     try {
@@ -129,10 +133,15 @@ export default function SaasStoresPage() {
       })
       const json = (await res.json()) as { success?: boolean; message?: string; companyName?: string; storeName?: string }
       if (!res.ok || json.success !== true) {
-        await appAlert(json.message || "매장 생성에 실패했습니다.")
+        await appAlert(json.message || t("saasAdminStore_createFailed"))
         return
       }
-      await appAlert(`[${json.companyName || tenantId}] ${json.storeName || storeName} 매장을 생성했습니다.`)
+      await appAlert(
+        tr(t, "saasAdminStore_created", {
+          company: json.companyName || tenantId,
+          store: json.storeName || storeName,
+        })
+      )
       setManagerTenantId(tenantId)
       setManagerCompanyName(json.companyName || "")
       setManagerStoreName(json.storeName || storeName)
@@ -153,12 +162,17 @@ export default function SaasStoresPage() {
 
   const toggleStoreActive = async (row: StoreRow) => {
     if (row.kind !== "saas") {
-      await appAlert("레거시 매장 행은 이 화면에서 상태 변경을 지원하지 않습니다.")
+      await appAlert(t("saasAdminStore_legacyNoToggle"))
       return
     }
     const next = !row.isActive
+    const statusLabel = next ? t("saasAdmin_statusActive") : t("saasAdmin_statusInactive")
     const ok = await appConfirm(
-      `매장 [${row.label}] 상태를 ${next ? "사용" : "중지"}로 변경할까요?\n회사: ${row.companyName || "-"}`
+      tr(t, "saasAdminStore_toggleConfirm", {
+        label: row.label,
+        status: statusLabel,
+        company: row.companyName || "-",
+      })
     )
     if (!ok) return
     try {
@@ -175,7 +189,7 @@ export default function SaasStoresPage() {
       })
       const json = (await res.json()) as { success?: boolean; message?: string }
       if (!res.ok || json.success !== true) {
-        await appAlert(json.message || "상태 변경에 실패했습니다.")
+        await appAlert(json.message || t("saasAdminStore_toggleFailed"))
         return
       }
       setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, isActive: next } : x)))
@@ -191,15 +205,15 @@ export default function SaasStoresPage() {
     const pw = managerPassword.trim()
     const pw2 = managerPassword2.trim()
     if (!tenantId || !storeName || !name || !pw) {
-      await appAlert("매장 관리자 이름과 비밀번호를 입력해 주세요.")
+      await appAlert(t("saasAdminStore_errManagerRequired"))
       return
     }
     if (pw.length < 4) {
-      await appAlert("비밀번호는 4자 이상 입력해 주세요.")
+      await appAlert(t("saasAdminCust_errPwMin"))
       return
     }
     if (pw !== pw2) {
-      await appAlert("비밀번호 확인이 일치하지 않습니다.")
+      await appAlert(t("saasAdminCust_errPwMismatch"))
       return
     }
     try {
@@ -217,11 +231,15 @@ export default function SaasStoresPage() {
       })
       const json = (await res.json()) as { success?: boolean; message?: string; companyName?: string; storeName?: string; name?: string }
       if (!res.ok || json.success !== true) {
-        await appAlert(json.message || "매장 관리자 생성에 실패했습니다.")
+        await appAlert(json.message || t("saasAdminStore_managerCreateFailed"))
         return
       }
       await appAlert(
-        `[${json.companyName || managerCompanyName || tenantId}] ${json.storeName || storeName} / ${json.name || name} 계정을 생성했습니다.`
+        tr(t, "saasAdminStore_managerCreated", {
+          company: json.companyName || managerCompanyName || tenantId,
+          store: json.storeName || storeName,
+          name: json.name || name,
+        })
       )
       if (openLoginAfterCreate) {
         const p = new URLSearchParams()
@@ -243,57 +261,55 @@ export default function SaasStoresPage() {
   return (
     <main className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">매장 관리</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          등록된 모든 고객사의 <code className="rounded bg-muted px-1">erp_stores</code> 매장을 조회합니다. 레거시(테넌트 미지정) 행은 유형이 표시됩니다.
-        </p>
+        <h1 className="text-2xl font-semibold">{t("saasAdminStore_pageTitle")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("saasAdminStore_pageIntro")}</p>
         <p className="mt-2 text-sm">
           <Link href="/saas-admin/customers" className="text-primary underline underline-offset-4">
-            고객사 관리
+            {t("saasAdmin_linkCustomers")}
           </Link>
-          에서 신규 고객사·초기 로그인(첫 매장)을 설정할 수 있습니다.
+          {t("saasAdminStore_pageLinkHint")}
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">신규 매장 생성</CardTitle>
-          <CardDescription>고객사를 선택하고 새 매장을 등록합니다. 등록 후 관리자 페이지에서 매장 기반 운영에 사용할 수 있습니다.</CardDescription>
+          <CardTitle className="text-lg">{t("saasAdminStore_createTitle")}</CardTitle>
+          <CardDescription>{t("saasAdminStore_createDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-4">
           <div className="space-y-2">
-            <Label>고객사</Label>
+            <Label>{t("saasAdmin_labelTenant")}</Label>
             <Select value={createTenantId || "__none__"} onValueChange={(v) => setCreateTenantId(v === "__none__" ? "" : v)}>
               <SelectTrigger>
-                <SelectValue placeholder="고객사 선택" />
+                <SelectValue placeholder={t("saasAdmin_selectTenant")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">선택 안함</SelectItem>
-                {tenantOptions.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.companyName || t.id}
+                <SelectItem value="__none__">{t("saasAdmin_selectNone")}</SelectItem>
+                {tenantOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.companyName || opt.id}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>매장명</Label>
+            <Label>{t("saasAdmin_labelStoreName")}</Label>
             <Input
               value={createStoreName}
               onChange={(e) => setCreateStoreName(e.target.value)}
-              placeholder="예: 강남점, 본사"
+              placeholder={t("saasAdminStore_storeNamePh")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void createStore()
               }}
             />
           </div>
           <div className="space-y-2">
-            <Label>매장 코드 (선택)</Label>
+            <Label>{t("saasAdmin_storeCodeOptional")}</Label>
             <Input
               value={createStoreCode}
               onChange={(e) => setCreateStoreCode(e.target.value)}
-              placeholder="비우면 자동 생성"
+              placeholder={t("saasAdmin_autoGenerate")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void createStore()
               }}
@@ -301,7 +317,7 @@ export default function SaasStoresPage() {
           </div>
           <div className="flex items-end">
             <Button type="button" onClick={() => void createStore()} disabled={loading}>
-              매장 생성
+              {t("saasAdminStore_createBtn")}
             </Button>
           </div>
         </CardContent>
@@ -310,30 +326,28 @@ export default function SaasStoresPage() {
       <Dialog open={managerDialogOpen} onOpenChange={setManagerDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>초기 매장 관리자 생성</DialogTitle>
-            <DialogDescription>
-              방금 만든 매장에 바로 로그인할 수 있는 관리자 계정을 생성합니다.
-            </DialogDescription>
+            <DialogTitle>{t("saasAdminStore_managerDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("saasAdminStore_managerDialogDesc")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div className="space-y-1">
-              <Label>고객사</Label>
+              <Label>{t("saasAdmin_labelTenant")}</Label>
               <Input value={managerCompanyName || managerTenantId} disabled />
             </div>
             <div className="space-y-1">
-              <Label>매장명</Label>
+              <Label>{t("saasAdmin_labelStoreName")}</Label>
               <Input value={managerStoreName} disabled />
             </div>
             <div className="space-y-1">
-              <Label>관리자 이름</Label>
-              <Input value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="예: manager" />
+              <Label>{t("saasAdminStore_managerName")}</Label>
+              <Input value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder={t("saasAdminStore_managerNamePh")} />
             </div>
             <div className="space-y-1">
-              <Label>비밀번호</Label>
+              <Label>{t("saasAdmin_password")}</Label>
               <Input type="password" value={managerPassword} onChange={(e) => setManagerPassword(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label>비밀번호 확인</Label>
+              <Label>{t("saasAdmin_passwordConfirm")}</Label>
               <Input type="password" value={managerPassword2} onChange={(e) => setManagerPassword2(e.target.value)} />
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -342,15 +356,15 @@ export default function SaasStoresPage() {
                 checked={openLoginAfterCreate}
                 onChange={(e) => setOpenLoginAfterCreate(e.target.checked)}
               />
-              생성 후 회사 로그인 화면을 새 탭에서 열기
+              {t("saasAdminStore_openLoginAfter")}
             </label>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setManagerDialogOpen(false)}>
-              나중에 하기
+              {t("saasAdmin_later")}
             </Button>
             <Button type="button" onClick={() => void createStoreManager()}>
-              관리자 계정 생성
+              {t("saasAdminStore_createManagerBtn")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -358,21 +372,21 @@ export default function SaasStoresPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">필터</CardTitle>
-          <CardDescription>고객사(테넌트)별로 매장 목록을 좁힐 수 있습니다.</CardDescription>
+          <CardTitle className="text-lg">{t("saasAdmin_filter")}</CardTitle>
+          <CardDescription>{t("saasAdmin_filterTenantHint")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="space-y-2 md:min-w-[220px]">
-            <Label>고객사</Label>
+            <Label>{t("saasAdmin_labelTenant")}</Label>
             <Select value={tenantFilter || "__all__"} onValueChange={(v) => setTenantFilter(v === "__all__" ? "" : v)}>
               <SelectTrigger>
-                <SelectValue placeholder="전체" />
+                <SelectValue placeholder={t("all")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">전체</SelectItem>
-                {tenantOptions.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.companyName || t.id}
+                <SelectItem value="__all__">{t("all")}</SelectItem>
+                {tenantOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.companyName || opt.id}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -380,18 +394,18 @@ export default function SaasStoresPage() {
           </div>
           <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-end">
             <div className="space-y-2 md:flex-1">
-              <Label>검색 (매장명·코드·회사명)</Label>
+              <Label>{t("saasAdminStore_searchLabel")}</Label>
               <Input
                 value={qInput}
                 onChange={(e) => setQInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") applySearch()
                 }}
-                placeholder="입력 후 검색"
+                placeholder={t("saasAdmin_searchPlaceholder")}
               />
             </div>
             <Button type="button" variant="secondary" onClick={applySearch} disabled={loading}>
-              검색
+              {t("search")}
             </Button>
           </div>
         </CardContent>
@@ -401,30 +415,30 @@ export default function SaasStoresPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">매장 목록</CardTitle>
+          <CardTitle className="text-lg">{t("saasAdminStore_listTitle")}</CardTitle>
           <CardDescription>
-            {loading ? "불러오는 중…" : `${rows.length}건 표시`}
-            {qApplied ? " · 검색 모드(최대 5000건까지 조회 후 필터)" : ""}
+            {loading ? t("saasAdmin_loading") : tr(t, "saasAdmin_rowsShown", { n: rows.length })}
+            {qApplied ? t("saasAdmin_searchModeStores") : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>고객사</TableHead>
-                <TableHead>테넌트 ID</TableHead>
-                <TableHead>매장 표시</TableHead>
-                <TableHead>코드</TableHead>
-                <TableHead>유형</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead className="text-right">관리</TableHead>
+                <TableHead>{t("saasAdmin_labelTenant")}</TableHead>
+                <TableHead>{t("saasAdmin_tenantId")}</TableHead>
+                <TableHead>{t("saasAdmin_storeDisplay")}</TableHead>
+                <TableHead>{t("saasAdmin_code")}</TableHead>
+                <TableHead>{t("saasAdmin_type")}</TableHead>
+                <TableHead>{t("status")}</TableHead>
+                <TableHead className="text-right">{t("saasAdmin_manage")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    데이터가 없습니다.
+                    {t("saasAdmin_noData")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -451,10 +465,14 @@ export default function SaasStoresPage() {
                     <TableCell>{r.label}</TableCell>
                     <TableCell>{r.storeCode || "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={r.kind === "saas" ? "default" : "secondary"}>{r.kind === "saas" ? "SaaS" : "레거시"}</Badge>
+                      <Badge variant={r.kind === "saas" ? "default" : "secondary"}>
+                        {r.kind === "saas" ? t("saasAdmin_kindSaas") : t("saasAdmin_kindLegacy")}
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={r.isActive ? "outline" : "destructive"}>{r.isActive ? "사용" : "중지"}</Badge>
+                      <Badge variant={r.isActive ? "outline" : "destructive"}>
+                        {r.isActive ? t("saasAdmin_statusActive") : t("saasAdmin_statusInactive")}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -464,7 +482,7 @@ export default function SaasStoresPage() {
                         onClick={() => void toggleStoreActive(r)}
                         disabled={loading || r.kind !== "saas"}
                       >
-                        {r.isActive ? "중지" : "재개"}
+                        {r.isActive ? t("saasAdmin_suspend") : t("saasAdmin_resume")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -475,7 +493,7 @@ export default function SaasStoresPage() {
           {hasMore ? (
             <div className="mt-4 flex justify-center">
               <Button type="button" variant="outline" onClick={loadMore} disabled={loading}>
-                더 보기
+                {t("saasAdmin_loadMore")}
               </Button>
             </div>
           ) : null}

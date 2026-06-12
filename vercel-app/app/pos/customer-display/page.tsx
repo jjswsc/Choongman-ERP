@@ -12,6 +12,7 @@ import {
   type PosCustomerDisplayPayload,
 } from "@/lib/pos-customer-display-state"
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from "@/lib/pos-pricing"
+import { formatBahtNum } from "@/lib/utils"
 
 type DisplayTheme = "dark" | "light" | "brand"
 
@@ -308,6 +309,51 @@ export default function PosCustomerDisplayPage() {
                 </div>
               </>
             ) : null}
+          </div>
+        ) : null}
+
+        {current === "change" ? (
+          <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
+            {resolvedBrandLogo ? (
+              <img
+                src={resolvedBrandLogo}
+                alt=""
+                className="mb-6 h-16 max-w-[min(100%,280px)] object-contain"
+              />
+            ) : null}
+            <h2 className="text-3xl font-semibold md:text-4xl">
+              {state?.title || (t("posCashChangePostPaymentTitle") || "거스름돈")}
+            </h2>
+            <p className="mt-4 max-w-xl text-lg opacity-90 md:text-xl">
+              {state?.message ||
+                (t("posCashChangePostPaymentBody") || "결제가 완료되었습니다. 아래 금액을 거슬러 주세요.")}
+            </p>
+            <div
+              className={
+                theme === "light"
+                  ? "mt-8 w-full max-w-lg rounded-2xl border border-emerald-300/70 bg-emerald-50 px-6 py-8"
+                  : "mt-8 w-full max-w-lg rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-6 py-8"
+              }
+            >
+              <p
+                className={
+                  theme === "light"
+                    ? "text-base font-semibold text-emerald-800"
+                    : "text-base font-semibold text-emerald-200"
+                }
+              >
+                {t("posCashChangeAmount") || "거슬러줄 금액"}
+              </p>
+              <p
+                className={
+                  theme === "light"
+                    ? "mt-3 text-5xl font-extrabold tabular-nums tracking-tight text-emerald-700 md:text-6xl"
+                    : "mt-3 text-5xl font-extrabold tabular-nums tracking-tight text-emerald-300 md:text-6xl"
+                }
+              >
+                {formatBahtNum(state?.changeAmountBaht)} ฿
+              </p>
+            </div>
           </div>
         ) : null}
 

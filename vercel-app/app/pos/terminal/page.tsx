@@ -137,6 +137,7 @@ import {
   isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
+import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-pending'
 import { formatGrabDeliveryTableDisplayName } from '@/lib/pos-grab-manual-delivery-guard'
 import {
   buildDineInAddKitchenAutoPrintDedupeKey,
@@ -1087,7 +1088,7 @@ export default function PosTerminalPage() {
   const [deliveryEditOrderNoOpen, setDeliveryEditOrderNoOpen] = useState(false)
   const [deliveryEditOrderNoValue, setDeliveryEditOrderNoValue] = useState('')
   const [deliveryListMode, setDeliveryListMode] = useState<'in_progress' | 'completed' | 'all'>('in_progress')
-  const [takeoutListMode, setTakeoutListMode] = useState<'in_progress' | 'completed' | 'all'>('in_progress')
+  const [takeoutListMode, setTakeoutListMode] = useState<'in_progress' | 'completed' | 'all' | 'member_portal'>('in_progress')
   const [tableListMode, setTableListMode] = useState<'in_progress' | 'completed' | 'all'>('all')
   const [deliveryAppsFromApi, setDeliveryAppsFromApi] = useState<PosDeliveryApp[]>([])
   const [menus, setMenus] = useState<PosMenu[]>([])
@@ -3468,8 +3469,20 @@ export default function PosTerminalPage() {
     const showLiveKbankQr =
       Boolean(String(liveKbankQrPayload || '').trim()) &&
       String(effectiveCustomerDisplayQrPayload || '').trim().length > 0
+    const showPostPayChange =
+      postPaymentCashChangeBaht != null && Number.isFinite(postPaymentCashChangeBaht)
 
-    const payload: PosCustomerDisplayPayload = showPostPayQr
+    const payload: PosCustomerDisplayPayload = showPostPayChange
+      ? {
+          ...base,
+          kind: 'change',
+          title: customerDisplayT('posCashChangePostPaymentTitle') || '거스름돈',
+          message:
+            customerDisplayT('posCashChangePostPaymentBody') ||
+            '결제가 완료되었습니다. 아래 금액을 거슬러 주세요.',
+          changeAmountBaht: postPaymentCashChangeBaht,
+        }
+      : showPostPayQr
       ? {
           ...base,
           kind: 'qr',
@@ -3556,6 +3569,7 @@ export default function PosTerminalPage() {
     customerDisplayIdleMediaUrl,
     receiptLogoImageUrl,
     postPaymentQrUntil,
+    postPaymentCashChangeBaht,
     customerDisplayPaymentDraft,
     customerDisplayT,
     customerDisplayUiLang,
@@ -4735,7 +4749,14 @@ export default function PosTerminalPage() {
         String(row.status ?? '').trim().toLowerCase() === 'pending'
       const shouldWaitForDeliveryAccept =
         isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
-      if (!shouldWaitForDeliveryAccept) {
+      const shouldWaitForMemberPortalPrepay = isMemberPortalPaymentPendingOrder({
+        memo: String(memo ?? ''),
+        status: String(row.status ?? ''),
+        payment_qr: Number(row.payment_qr ?? 0),
+        created_by: String(row.created_by ?? ''),
+      })
+      const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+      if (!shouldDeferAutoprint) {
         logPosPrintDebug('realtime_insert_autoprint_start', {
           orderId,
           autoPrintReceiptOnOrder,
@@ -4743,6 +4764,7 @@ export default function PosTerminalPage() {
           itemCount: items.length,
           isPendingDelivery,
           shouldWaitForDeliveryAccept,
+          shouldWaitForMemberPortalPrepay,
         })
         if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
           printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
@@ -4752,10 +4774,11 @@ export default function PosTerminalPage() {
           setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
         }
       } else {
-        logPosPrintDebug('realtime_insert_pending_delivery_wait_accept', {
+        logPosPrintDebug('realtime_insert_deferred_autoprint', {
           orderId,
           status: String(row.status ?? ''),
           isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(memo ?? '')),
+          shouldWaitForMemberPortalPrepay,
         })
       }
       if (autoPrintReceiptOnPayment) {
@@ -5050,6 +5073,54 @@ export default function PosTerminalPage() {
         }
       }
 
+      const oldRowForPrepay = payload.old as Record<string, unknown> | undefined
+      if (
+        oldRowForPrepay &&
+        isMemberPortalPaymentPendingOrder({
+          memo: String(oldRowForPrepay.memo ?? ''),
+          status: String(oldRowForPrepay.status ?? ''),
+          payment_qr: Number(oldRowForPrepay.payment_qr ?? 0),
+          created_by: String(oldRowForPrepay.created_by ?? ''),
+        }) &&
+        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
+        posOrderRowPaymentSum(row) > 0 &&
+        reserveKitchenAutoPrintKey(`mp-prepay-paid:${orderId}`)
+      ) {
+        logPosPrintDebug('realtime_update_member_portal_prepay_paid', { orderId })
+        playIncomingOrderBeep()
+        refetchCurrentStore()
+        void getPosOrders({ orderId, storeCode: currentStoreId })
+          .then(async (list) => {
+            const order = list[0] as PosOrder | undefined
+            if (!order?.items?.length) return
+            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
+            if (autoPrintKitchenSlipOnOrder) {
+              await printKitchenFromPosOrder(order)
+            }
+            if (autoPrintReceiptOnOrder) {
+              const hallPayload = hallOrderReceiptPayloadFromOrderFields(
+                {
+                  orderNo: order.orderNo ?? '',
+                  storeCode: order.storeCode ?? rowStore,
+                  orderType: resolvePosOrderTypeReceiptLabel(String(order.orderType ?? ''), t),
+                  tableName: order.tableName ?? '',
+                  memo: order.memo ?? '',
+                  items: order.items ?? [],
+                  subtotal: Math.max(0, Number(order.subtotal ?? 0) || 0),
+                  discountAmt: Math.max(0, Number(order.discountAmt ?? 0) || 0),
+                  couponDiscountAmt: Math.max(0, Number(order.couponDiscountAmt ?? 0) || 0),
+                  discountReason: String(order.discountReason ?? '').trim() || undefined,
+                  total: Math.max(0, Number(order.total ?? 0) || 0),
+                  ...posGuestCountSpread(order.guestCount),
+                },
+                pricingAdjustments
+              )
+              await printReceiptNow(hallPayload, undefined, false, undefined, true)
+            }
+          })
+          .catch((e) => console.error('member portal prepay paid autoprint:', e))
+      }
+
       if (
         wantPayment &&
         isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
@@ -5262,6 +5333,9 @@ export default function PosTerminalPage() {
     t,
     refetchCurrentStore,
     printReceiptNow,
+    printKitchenFromPosOrder,
+    reserveKitchenAutoPrintKey,
+    playIncomingOrderBeep,
   ])
 
   useEffect(() => {
@@ -5546,7 +5620,14 @@ export default function PosTerminalPage() {
             String(order.status ?? '').trim().toLowerCase() === 'pending'
           const shouldWaitForDeliveryAccept =
             isPendingDelivery && isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))
-          if (!shouldWaitForDeliveryAccept) {
+          const shouldWaitForMemberPortalPrepay = isMemberPortalPaymentPendingOrder({
+            memo: String(order.memo ?? ''),
+            status: String(order.status ?? ''),
+            payment_qr: order.paymentQr,
+            created_by: undefined,
+          })
+          const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+          if (!shouldDeferAutoprint) {
             logPosPrintDebug('poll_autoprint_start', {
               orderId: oid,
               autoPrintReceiptOnOrder,
@@ -5554,6 +5635,7 @@ export default function PosTerminalPage() {
               itemCount: items.length,
               isPendingDelivery,
               shouldWaitForDeliveryAccept,
+              shouldWaitForMemberPortalPrepay,
             })
             if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
               printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
@@ -5563,10 +5645,11 @@ export default function PosTerminalPage() {
               setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
             }
           } else {
-            logPosPrintDebug('poll_pending_delivery_wait_accept', {
+            logPosPrintDebug('poll_deferred_autoprint', {
               orderId: oid,
               status: String(order.status ?? ''),
               isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(order.memo ?? '')),
+              shouldWaitForMemberPortalPrepay,
             })
           }
           if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
@@ -7906,7 +7989,33 @@ export default function PosTerminalPage() {
     deduped.sort((a, b) => (new Date(a.createdAt || 0).getTime()) - (new Date(b.createdAt || 0).getTime()))
     return deduped
   }, [takeoutBarItems, packagedTakeoutBarItems])
-  const currentTakeoutBarItems = takeoutListMode === 'all' ? allTakeoutBarItems : takeoutListMode === 'completed' ? completedTakeoutBarItems : inProgressOrPackagedTakeoutBarItems
+  const memberPortalTakeoutBarItems = useMemo(() => {
+    return allTakeoutBarItems.filter((item) => {
+      const m = /^takeout-order-(.+)$/.exec(String(item.id || '').trim())
+      const oid = m?.[1] || ''
+      if (!oid) return false
+      const order =
+        takeoutOrders.find((o) => String(o.id) === oid) ||
+        packagedTakeoutOrders.find((o) => String(o.id) === oid) ||
+        completedTakeoutOrders.find((o) => String(o.id) === oid)
+      if (!order) return false
+      return resolveMemberPortalTakeoutMeta({
+        memo: order.memo,
+        memberId: order.memberId,
+        memberNo: order.memberNo,
+        tableName: order.tableName,
+      }).isMemberPortal
+    })
+  }, [allTakeoutBarItems, takeoutOrders, packagedTakeoutOrders, completedTakeoutOrders])
+
+  const currentTakeoutBarItems =
+    takeoutListMode === 'member_portal'
+      ? memberPortalTakeoutBarItems
+      : takeoutListMode === 'all'
+        ? allTakeoutBarItems
+        : takeoutListMode === 'completed'
+          ? completedTakeoutBarItems
+          : inProgressOrPackagedTakeoutBarItems
 
   const handleTableSelect = (tableId: string) => {
     if (selectedTableId != null && selectedTableId !== tableId) {
@@ -10201,7 +10310,7 @@ export default function PosTerminalPage() {
                   {activeTab === 'takeout' && (
                     <Select
                       value={takeoutListMode}
-                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => {
+                      onValueChange={(v: 'in_progress' | 'completed' | 'all' | 'member_portal') => {
                         setTakeoutListMode(v)
                         setSelectedTakeoutTargetId(null)
                       }}
@@ -10212,6 +10321,7 @@ export default function PosTerminalPage() {
                       <SelectContent>
                         <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
                         <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="member_portal">{t('posFilterMemberPortal') || '회원앱'}</SelectItem>
                         <SelectItem value="all">{t('posStatusAll')}</SelectItem>
                       </SelectContent>
                     </Select>

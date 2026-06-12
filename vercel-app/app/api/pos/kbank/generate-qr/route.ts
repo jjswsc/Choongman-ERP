@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/verify-auth'
 import { generateKbankQr } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankGenerateQrRequest } from '@/lib/payments/kbank-types'
+import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
+import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 import {
   extractKbankQrResponseMeta,
   maskKbankMessageForLog,
@@ -118,8 +120,10 @@ export async function POST(req: NextRequest) {
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
+    const scope = integrationScopeFromAuth(authResult.auth, storeCode)
+    const kbankRuntime = await resolveKbankRuntime(scope)
     const terminalId = String(
-      body.terminalId || payloadObj?.terminalId || process.env.KBANK_TERMINAL_ID || ''
+      body.terminalId || payloadObj?.terminalId || kbankRuntime.terminalId || process.env.KBANK_TERMINAL_ID || ''
     ).trim()
 
     if (amount <= 0) {
@@ -158,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     const requestedAt = new Date().toISOString()
-    const result = await generateKbankQr(payload)
+    const result = await generateKbankQr(payload, { runtime: kbankRuntime })
 
     const status = result.ok ? 200 : 422
     const responseData = result.response && typeof result.response === 'object'

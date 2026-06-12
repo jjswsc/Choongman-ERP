@@ -17,6 +17,7 @@ import { addPosStoreCodeVariants, resolvePosStoreFilterCandidates } from '@/lib/
 import { normStoreKey } from '@/lib/store-list-keys'
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
+import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-pending'
 import { supabaseSelectFilterStrippingUnknownColumns, extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { POS_ORDER_FULL_SELECT, POS_ORDER_POLL_MINIMAL_SELECT } from '@/lib/pos-order-select'
 
@@ -572,6 +573,17 @@ export async function GET(request: NextRequest) {
 
     const list = (rows || [])
       .filter((r) => {
+        if (orderId != null && orderId > 0) return true
+        if (
+          isMemberPortalPaymentPendingOrder({
+            memo: r.memo,
+            status: r.status,
+            payment_qr: (r as { payment_qr?: number | null }).payment_qr,
+            created_by: (r as { created_by?: string | null }).created_by,
+          })
+        ) {
+          return false
+        }
         if (startDate && endDate) return true
         const rowDate = toDateStrBangkok(r.created_at)
         if (!rowDate) return false

@@ -1,7 +1,7 @@
 /** POS UI 언어 코드 — `lib/lang-context` LangCode 와 동일 집합 */
 export type PosCustomerDisplayUiLang = "ko" | "en" | "th" | "mm" | "la" | "kh" | "vi" | "ms"
 
-export type PosCustomerDisplayStateKind = "idle" | "ordering" | "payment" | "qr"
+export type PosCustomerDisplayStateKind = "idle" | "ordering" | "payment" | "qr" | "change"
 
 export type PosCustomerDisplayPayload = {
   storeCode: string
@@ -44,6 +44,8 @@ export type PosCustomerDisplayPayload = {
   /** 평상시 배경 (터미널이 설정에서 로드해 브로드캐스트) */
   idleMediaType?: "none" | "image" | "video"
   idleMediaUrl?: string
+  /** 결제 후 현금 거스름(고객 모니터 표시용) */
+  changeAmountBaht?: number
 }
 
 const CHANNEL_NAME = "cm-pos-customer-display"

@@ -5,6 +5,21 @@
 - 기본은 멀티테넌트 1개 Supabase 프로젝트를 사용한다.
 - 엔터프라이즈 고객은 전용 Supabase 프로젝트로 분기한다.
 
+## 고객사별 KBank / Grab 연동 (DB)
+
+Vercel env는 **Omni 플랫폼 1세트**만 유지합니다. 고객·매장별 카시콘·Grab 자격은 DB에 저장합니다.
+
+1. Supabase SQL Editor에 `sql/tenant_integrations.sql` 실행
+2. `/saas-admin/customers` → 고객사 선택 → **연동(KBank/Grab)** 탭에서 입력
+3. API: `GET/POST /api/saasAdminIntegrations?tenantId=...`
+
+| 테이블 | 용도 |
+|--------|------|
+| `tenant_integrations` | 고객사별 KBank OAuth / Grab OAuth |
+| `tenant_store_integrations` | 매장별 terminalId, Grab merchant 매핑 |
+
+DB 행이 없으면 기존 `process.env` 폴백(충만 단일 운영 호환).
+
 ## 환경 변수
 - `NEXT_PUBLIC_APP_BRAND`: `choongman` | `omnifoodtech`
 - `NEXT_PUBLIC_APP_DOMAIN`: 브랜드 도메인 문자열

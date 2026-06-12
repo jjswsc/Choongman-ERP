@@ -48,6 +48,26 @@ export default function CrmMemberAppContentPage() {
   const [contactSaving, setContactSaving] = React.useState(false)
   const [signupBenefitsSaving, setSignupBenefitsSaving] = React.useState(false)
   const [deliverySaving, setDeliverySaving] = React.useState(false)
+  const [prepayEnabled, setPrepayEnabled] = React.useState(false)
+  const [prepayStoreCodesText, setPrepayStoreCodesText] = React.useState("")
+  const [prepayAllPublic, setPrepayAllPublic] = React.useState(false)
+  const [prepayAdminStores, setPrepayAdminStores] = React.useState<
+    Array<{ storeCode: string; displayName: string; isActive?: boolean }>
+  >([])
+  const [prepayEnvOverride, setPrepayEnvOverride] = React.useState(false)
+  const [prepaySaving, setPrepaySaving] = React.useState(false)
+  const [prepayStats, setPrepayStats] = React.useState<{
+    days: number
+    totalOrders: number
+    paidOrders: number
+    expiredOrders: number
+    awaitingPayment: number
+    conversionRate: number
+  } | null>(null)
+  const [pickupMinLeadMinutes, setPickupMinLeadMinutes] = React.useState(30)
+  const [pickupStoreMinLead, setPickupStoreMinLead] = React.useState<Record<string, string>>({})
+  const [pickupLineNotifyEnabled, setPickupLineNotifyEnabled] = React.useState(true)
+  const [pickupSaving, setPickupSaving] = React.useState(false)
   const [designSaving, setDesignSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [notice, setNotice] = React.useState("")
@@ -144,13 +164,92 @@ export default function CrmMemberAppContentPage() {
     }
   }, [])
 
+  const loadPrepaySettings = React.useCallback(async () => {
+    try {
+      const [prepayRes, storesRes, statsRes, pickupRes] = await Promise.all([
+        apiFetch("/api/member-portal/admin/settings/prepay", { cache: "no-store" }),
+        apiFetch("/api/member-portal/admin/stores", { cache: "no-store" }),
+        apiFetch("/api/member-portal/admin/settings/prepay/stats?days=7", { cache: "no-store" }),
+        apiFetch("/api/member-portal/admin/settings/pickup", { cache: "no-store" }),
+      ])
+      const data = (await prepayRes.json()) as {
+        success: boolean
+        enabled?: boolean
+        storeCodes?: string[]
+        allPublicStores?: boolean
+        envOverride?: boolean
+      }
+      const storesData = (await storesRes.json()) as {
+        success?: boolean
+        stores?: Array<{ storeCode: string; displayName: string; isActive?: boolean }>
+      }
+      if (storesData.success) {
+        setPrepayAdminStores(
+          (storesData.stores || []).filter((s) => s.isActive !== false)
+        )
+      }
+      const pickupData = (await pickupRes.json()) as {
+        success?: boolean
+        globalMinLeadMinutes?: number
+        storeMinLeadMinutes?: Record<string, number>
+        lineNotifyEnabled?: boolean
+      }
+      const statsData = (await statsRes.json()) as {
+        success?: boolean
+        stats?: typeof prepayStats
+      }
+      if (statsData.success && statsData.stats) setPrepayStats(statsData.stats)
+      if (pickupData.success) {
+        setPickupMinLeadMinutes(Number(pickupData.globalMinLeadMinutes || 30))
+        setPickupLineNotifyEnabled(pickupData.lineNotifyEnabled !== false)
+        const storeMap = pickupData.storeMinLeadMinutes || {}
+        const nextStore: Record<string, string> = {}
+        for (const [code, minutes] of Object.entries(storeMap)) {
+          if (code && minutes != null) nextStore[code] = String(minutes)
+        }
+        setPickupStoreMinLead(nextStore)
+      }
+      if (!prepayRes.ok || !data.success) return
+      setPrepayEnabled(Boolean(data.enabled))
+      setPrepayStoreCodesText((data.storeCodes || []).join(", "))
+      setPrepayAllPublic(Boolean(data.allPublicStores))
+      setPrepayEnvOverride(Boolean(data.envOverride))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const prepaySelectedStoreCodes = React.useMemo(() => {
+    return prepayStoreCodesText
+      .split(/[,;\n]+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }, [prepayStoreCodesText])
+
+  const togglePrepayStoreCode = React.useCallback((storeCode: string) => {
+    const code = String(storeCode || "").trim()
+    if (!code) return
+    setPrepayStoreCodesText((prev) => {
+      const set = new Set(
+        prev
+          .split(/[,;\n]+/)
+          .map((x) => x.trim())
+          .filter(Boolean)
+      )
+      if (set.has(code)) set.delete(code)
+      else set.add(code)
+      return Array.from(set).join(", ")
+    })
+  }, [])
+
   React.useEffect(() => {
     refresh().catch(() => {})
     loadContactSettings().catch(() => {})
     loadDeliverySettings().catch(() => {})
     loadDesignSettings().catch(() => {})
     loadSignupBenefitsSettings().catch(() => {})
-  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, loadSignupBenefitsSettings, refresh])
+    loadPrepaySettings().catch(() => {})
+  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, loadSignupBenefitsSettings, loadPrepaySettings, refresh])
 
   const saveContactSettings = React.useCallback(async () => {
     setContactSaving(true)
@@ -231,6 +330,72 @@ export default function CrmMemberAppContentPage() {
       setDeliverySaving(false)
     }
   }, [deliveryGrabUrl, deliveryLinemanUrl, deliveryShopeeUrl, loadDeliverySettings, t])
+
+  const savePrepaySettings = React.useCallback(async () => {
+    setPrepaySaving(true)
+    setError("")
+    setNotice("")
+    try {
+      const res = await apiFetch("/api/member-portal/admin/settings/prepay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: prepayEnabled,
+          storeCodesText: prepayStoreCodesText,
+          allPublicStores: prepayAllPublic,
+        }),
+      })
+      const data = (await res.json()) as { success: boolean; message?: string }
+      if (!res.ok || !data.success) {
+        setError(
+          data.message === "prepay_env_override"
+            ? t("mpAdmin_prepayEnvOverride")
+            : data.message || t("mpAdmin_errPrepaySave")
+        )
+        return
+      }
+      setNotice(t("mpAdmin_noticePrepaySaved"))
+      await loadPrepaySettings()
+    } catch {
+      setError(t("mpAdmin_errPrepaySaveGeneric"))
+    } finally {
+      setPrepaySaving(false)
+    }
+  }, [loadPrepaySettings, prepayAllPublic, prepayEnabled, prepayStoreCodesText, t])
+
+  const savePickupSettings = React.useCallback(async () => {
+    setPickupSaving(true)
+    setError("")
+    try {
+      const storeMinLeadMinutes: Record<string, number> = {}
+      for (const [code, raw] of Object.entries(pickupStoreMinLead)) {
+        const trimmed = String(raw || "").trim()
+        if (!trimmed) continue
+        const n = Math.trunc(Number(trimmed))
+        if (n >= 5 && n <= 240) storeMinLeadMinutes[code] = n
+      }
+      const res = await apiFetch("/api/member-portal/admin/settings/pickup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          globalMinLeadMinutes: pickupMinLeadMinutes,
+          storeMinLeadMinutes,
+          lineNotifyEnabled: pickupLineNotifyEnabled,
+        }),
+      })
+      const data = (await res.json()) as { success?: boolean }
+      if (!res.ok || !data.success) {
+        setError(t("mpAdmin_errPickupSave"))
+        return
+      }
+      setNotice(t("mpAdmin_noticePickupSaved"))
+      await loadPrepaySettings()
+    } catch {
+      setError(t("mpAdmin_errPickupSave"))
+    } finally {
+      setPickupSaving(false)
+    }
+  }, [loadPrepaySettings, pickupLineNotifyEnabled, pickupMinLeadMinutes, pickupStoreMinLead, t])
 
   const saveDesignSettings = React.useCallback(async () => {
     setDesignSaving(true)
@@ -560,6 +725,166 @@ export default function CrmMemberAppContentPage() {
                     {t("mpAdmin_reload")}
                   </Button>
                 </div>
+                </fieldset>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_prepayTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_prepayDesc")}</p>
+                {prepayStats ? (
+                  <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-3 text-sm sm:grid-cols-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t("mpAdmin_prepayStatsTotal")}</p>
+                      <p className="font-semibold">{prepayStats.totalOrders}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t("mpAdmin_prepayStatsPaid")}</p>
+                      <p className="font-semibold">{prepayStats.paidOrders}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t("mpAdmin_prepayStatsExpired")}</p>
+                      <p className="font-semibold">{prepayStats.expiredOrders}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t("mpAdmin_prepayStatsConversion")}</p>
+                      <p className="font-semibold">{prepayStats.conversionRate}%</p>
+                    </div>
+                  </div>
+                ) : null}
+                {prepayEnvOverride ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {t("mpAdmin_prepayEnvOverride")}
+                  </div>
+                ) : null}
+                <fieldset disabled={!canEdit || prepayEnvOverride} className="space-y-4 disabled:opacity-60">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={prepayEnabled}
+                      onChange={(e) => setPrepayEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {t("mpAdmin_prepayEnabled")}
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={prepayAllPublic}
+                      onChange={(e) => setPrepayAllPublic(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {t("mpAdmin_prepayAllPublic")}
+                  </label>
+                  <div className="space-y-1.5">
+                    <Label>{t("mpAdmin_prepayStoreCodes")}</Label>
+                    <Input
+                      value={prepayStoreCodesText}
+                      onChange={(e) => setPrepayStoreCodesText(e.target.value)}
+                      placeholder={t("mpAdmin_prepayStoreCodesPh")}
+                      disabled={prepayAllPublic}
+                    />
+                    {prepayAdminStores.length > 0 ? (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs text-muted-foreground">{t("mpAdmin_prepayStorePickHint")}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {prepayAdminStores.map((store) => {
+                            const selected = prepaySelectedStoreCodes.includes(store.storeCode)
+                            return (
+                              <button
+                                key={store.storeCode}
+                                type="button"
+                                disabled={prepayAllPublic}
+                                onClick={() => togglePrepayStoreCode(store.storeCode)}
+                                className={`rounded-full border px-3 py-1 text-xs transition ${
+                                  selected
+                                    ? "border-amber-500 bg-amber-50 text-amber-900"
+                                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                                } disabled:cursor-not-allowed disabled:opacity-50`}
+                              >
+                                {store.displayName || store.storeCode}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => savePrepaySettings()} disabled={prepaySaving || !canEdit || prepayEnvOverride}>
+                      {prepaySaving ? t("mpAdmin_saving") : t("mpAdmin_prepaySave")}
+                    </Button>
+                    <Button variant="outline" onClick={() => loadPrepaySettings().catch(() => {})}>
+                      {t("mpAdmin_reload")}
+                    </Button>
+                  </div>
+                </fieldset>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_pickupTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_pickupDesc")}</p>
+                <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
+                  <div className="space-y-1.5">
+                    <Label>{t("mpAdmin_pickupMinLead")}</Label>
+                    <Input
+                      type="number"
+                      min={5}
+                      max={240}
+                      value={pickupMinLeadMinutes}
+                      onChange={(e) => setPickupMinLeadMinutes(Number(e.target.value || 30))}
+                    />
+                  </div>
+                  {prepayAdminStores.length > 0 ? (
+                    <div className="space-y-2">
+                      <Label>{t("mpAdmin_pickupStoreOverrides")}</Label>
+                      <p className="text-xs text-muted-foreground">{t("mpAdmin_pickupStoreOverridesHint")}</p>
+                      <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border p-2">
+                        {prepayAdminStores.map((store) => (
+                          <div key={store.storeCode} className="flex items-center gap-2 text-sm">
+                            <span className="min-w-0 flex-1 truncate font-medium">{store.displayName}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">{store.storeCode}</span>
+                            <Input
+                              type="number"
+                              min={5}
+                              max={240}
+                              className="h-8 w-20 shrink-0"
+                              placeholder={String(pickupMinLeadMinutes)}
+                              value={pickupStoreMinLead[store.storeCode] ?? ""}
+                              onChange={(e) =>
+                                setPickupStoreMinLead((prev) => ({
+                                  ...prev,
+                                  [store.storeCode]: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <label className="flex cursor-pointer items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={pickupLineNotifyEnabled}
+                      onChange={(e) => setPickupLineNotifyEnabled(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                    />
+                    <span>
+                      <span className="font-medium">{t("mpAdmin_pickupLineNotify")}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {t("mpAdmin_pickupLineNotifyDesc")}
+                      </span>
+                    </span>
+                  </label>
+                  <Button onClick={() => savePickupSettings()} disabled={pickupSaving || !canEdit}>
+                    {pickupSaving ? t("mpAdmin_saving") : t("mpAdmin_pickupSave")}
+                  </Button>
                 </fieldset>
               </CardContent>
             </Card>

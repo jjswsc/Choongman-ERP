@@ -24,13 +24,22 @@ import {
   resolveKbankQrTypeCode,
   resolveKbankVoidTxnNoForRequest,
 } from '@/lib/payments/kbank-api-reference'
+import type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
+import { kbankRuntimeField, mustKbankRuntimeField } from '@/lib/payments/kbank-runtime-env'
+
+export type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
+
+export type KbankClientOpts = {
+  timeoutMs?: number
+  runtime?: KbankRuntimeEnv
+}
+
+type KbankCtx = { runtime?: KbankRuntimeEnv }
 
 const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
 
-function mustEnv(name: string): string {
-  const v = String(process.env[name] || '').trim()
-  if (!v) throw new Error(`${name} environment variable is required.`)
-  return v
+function mustEnvCtx(ctx: KbankCtx, name: string): string {
+  return mustKbankRuntimeField(ctx.runtime, name)
 }
 
 function stripTrailingSlash(v: string): string {
@@ -42,21 +51,21 @@ function normalizePath(v: string): string {
   return v.startsWith('/') ? v : `/${v}`
 }
 
-function buildUrl(pathEnvName: string, defaultPath: string): string {
-  const base = stripTrailingSlash(mustEnv('KBANK_OPENAPI_BASE_URL'))
-  const p = normalizePath(String(process.env[pathEnvName] || '').trim() || defaultPath)
+function buildUrl(ctx: KbankCtx, pathEnvName: string, defaultPath: string): string {
+  const base = stripTrailingSlash(mustEnvCtx(ctx, 'KBANK_OPENAPI_BASE_URL'))
+  const p = normalizePath(kbankRuntimeField(ctx.runtime, pathEnvName) || defaultPath)
   return `${base}${p}`
 }
 
-function buildTokenUrl(defaultPath: string): string {
-  const tokenBase = String(process.env.KBANK_OAUTH_BASE_URL || '').trim()
-  const base = stripTrailingSlash(tokenBase || mustEnv('KBANK_OPENAPI_BASE_URL'))
-  const p = normalizePath(String(process.env.KBANK_TOKEN_PATH || '').trim() || defaultPath)
+function buildTokenUrl(ctx: KbankCtx, defaultPath: string): string {
+  const tokenBase = kbankRuntimeField(ctx.runtime, 'KBANK_OAUTH_BASE_URL')
+  const base = stripTrailingSlash(tokenBase || mustEnvCtx(ctx, 'KBANK_OPENAPI_BASE_URL'))
+  const p = normalizePath(kbankRuntimeField(ctx.runtime, 'KBANK_TOKEN_PATH') || defaultPath)
   return `${base}${p}`
 }
 
-function getProxySecret(): string {
-  return String(process.env.KBANK_PROXY_SECRET || '').trim()
+function getProxySecret(ctx: KbankCtx): string {
+  return kbankRuntimeField(ctx.runtime, 'KBANK_PROXY_SECRET')
 }
 
 function isLikelyProxyUrl(urlStr: string): boolean {
@@ -68,8 +77,8 @@ function isLikelyProxyUrl(urlStr: string): boolean {
   }
 }
 
-function withProxySecret(headers: Record<string, string>, _urlStr: string): Record<string, string> {
-  const proxySecret = getProxySecret()
+function withProxySecret(ctx: KbankCtx, headers: Record<string, string>, _urlStr: string): Record<string, string> {
+  const proxySecret = getProxySecret(ctx)
   if (proxySecret) {
     return {
       ...headers,
@@ -79,9 +88,9 @@ function withProxySecret(headers: Record<string, string>, _urlStr: string): Reco
   return headers
 }
 
-function buildProxyHint(urlStr: string, status: number): string {
+function buildProxyHint(ctx: KbankCtx, urlStr: string, status: number): string {
   if (status !== 403 || !isLikelyProxyUrl(urlStr)) return ''
-  if (!getProxySecret()) {
+  if (!getProxySecret(ctx)) {
     return ' (Proxy detected but KBANK_PROXY_SECRET is not set.)'
   }
   return ' (Proxy secret mismatch or proxy access policy denied.)'
@@ -166,35 +175,49 @@ type CachedKbankToken = {
   expiresAtMs: number
 }
 
-let cachedKbankToken: CachedKbankToken | null = null
-let inFlightKbankTokenPromise: Promise<KbankTokenResponse> | null = null
+const cachedKbankTokens = new Map<string, CachedKbankToken>()
+const inFlightKbankTokenPromises = new Map<string, Promise<KbankTokenResponse>>()
 
-export function clearKbankAccessTokenCache(): void {
-  cachedKbankToken = null
-  inFlightKbankTokenPromise = null
+function tokenCacheKey(ctx: KbankCtx): string {
+  return ctx.runtime?.cacheKey || 'env-default'
 }
 
-function isUsableCachedToken(nowMs: number): boolean {
-  if (!cachedKbankToken) return false
-  const token = String(cachedKbankToken.token.access_token || '').trim()
+export function clearKbankAccessTokenCache(cacheKey?: string): void {
+  if (cacheKey) {
+    cachedKbankTokens.delete(cacheKey)
+    inFlightKbankTokenPromises.delete(cacheKey)
+    return
+  }
+  cachedKbankTokens.clear()
+  inFlightKbankTokenPromises.clear()
+}
+
+function isUsableCachedToken(entry: CachedKbankToken | undefined, nowMs: number): boolean {
+  if (!entry) return false
+  const token = String(entry.token.access_token || '').trim()
   if (!token) return false
-  return cachedKbankToken.expiresAtMs > nowMs
+  return entry.expiresAtMs > nowMs
 }
 
-export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTokenResponse> {
+export async function fetchKbankAccessToken(
+  timeoutMs = 12000,
+  opts?: Pick<KbankClientOpts, 'runtime'>
+): Promise<KbankTokenResponse> {
+  const ctx: KbankCtx = { runtime: opts?.runtime }
+  const key = tokenCacheKey(ctx)
   const nowMs = Date.now()
-  if (isUsableCachedToken(nowMs)) {
-    return cachedKbankToken!.token
+  const cached = cachedKbankTokens.get(key)
+  if (isUsableCachedToken(cached, nowMs)) {
+    return cached!.token
   }
-  if (inFlightKbankTokenPromise) {
-    return inFlightKbankTokenPromise
-  }
+  const inflight = inFlightKbankTokenPromises.get(key)
+  if (inflight) return inflight
 
-  inFlightKbankTokenPromise = (async () => {
-    const consumerId = mustEnv('KBANK_CONSUMER_ID')
-    const consumerSecret = mustEnv('KBANK_CONSUMER_SECRET')
-    const tokenUrl = buildTokenUrl('/v2/oauth/token')
-    const scope = String(process.env.KBANK_TOKEN_SCOPE || '').trim()
+  const promise = (async () => {
+    const consumerId = mustEnvCtx(ctx, 'KBANK_CONSUMER_ID')
+    const consumerSecret = mustEnvCtx(ctx, 'KBANK_CONSUMER_SECRET')
+    const tokenUrl = buildTokenUrl(ctx, '/v2/oauth/token')
+    const scope = kbankRuntimeField(ctx.runtime, 'KBANK_TOKEN_SCOPE')
 
     const form = new URLSearchParams()
     form.set('grant_type', 'client_credentials')
@@ -206,6 +229,7 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
       const res = await fetch(tokenUrl, {
         method: 'POST',
         headers: withProxySecret(
+          ctx,
           {
             Authorization: `Basic ${basic}`,
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -225,7 +249,7 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
         } catch {
           /* keep raw */
         }
-        throw new Error(`${detail}${buildProxyHint(tokenUrl, res.status)}`)
+        throw new Error(`${detail}${buildProxyHint(ctx, tokenUrl, res.status)}`)
       }
       let json: Record<string, unknown>
       try {
@@ -248,36 +272,37 @@ export async function fetchKbankAccessToken(timeoutMs = 12000): Promise<KbankTok
         expires_in: expiresInSec || undefined,
         scope: String(json.scope || '').trim() || undefined,
       }
-      // 만료 직전의 토큰 재사용으로 인한 401을 피하기 위해, 30초 전에 갱신하도록 여유를 둔다.
       const ttlMs = Math.max(60_000, (expiresInSec > 0 ? expiresInSec : 300) * 1000)
       const safeExpiresAtMs = Date.now() + ttlMs - 30_000
-      cachedKbankToken = {
+      cachedKbankTokens.set(key, {
         token,
         expiresAtMs: safeExpiresAtMs,
-      }
+      })
       return token
     } finally {
       clear()
     }
   })()
+
+  inFlightKbankTokenPromises.set(key, promise)
   try {
-    return await inFlightKbankTokenPromise
+    return await promise
   } finally {
-    inFlightKbankTokenPromise = null
+    inFlightKbankTokenPromises.delete(key)
   }
 }
 
-function buildQrPayload(req: KbankGenerateQrRequest): Record<string, unknown> {
-  const partnerId = mustEnv('KBANK_PARTNER_ID')
-  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
-  const merchantId = mustEnv('KBANK_MERCHANT_ID')
+function buildQrPayload(ctx: KbankCtx, req: KbankGenerateQrRequest): Record<string, unknown> {
+  const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
+  const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
+  const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
   const payload = { ...(req.payload || {}) } as Record<string, unknown>
   const partnerTxnUid = String(req.partnerTransactionId || '')
     .trim()
     .slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
   const reference1 = String(req.reference1 || '').trim() || partnerTxnUid
   const terminalId = String(
-    payload.terminalId || process.env.KBANK_TERMINAL_ID || ''
+    payload.terminalId || kbankRuntimeField(ctx.runtime, 'KBANK_TERMINAL_ID') || ''
   ).trim()
   const qrType = resolveKbankQrTypeCode(req.qrType)
   const txnAmount = Number(req.amount || 0).toFixed(2)
@@ -302,24 +327,26 @@ function buildQrPayload(req: KbankGenerateQrRequest): Record<string, unknown> {
 
 export async function generateKbankQr(
   req: KbankGenerateQrRequest,
-  opts?: { timeoutMs?: number }
+  opts?: KbankClientOpts
 ): Promise<KbankGenerateQrResult> {
-  const token = await fetchKbankAccessToken(opts?.timeoutMs ?? 12000)
-  const qrUrl = buildUrl('KBANK_QR_GENERATE_PATH', '/v1/qrpayment/request')
-  const partnerId = mustEnv('KBANK_PARTNER_ID')
-  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
-  const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  const body = buildQrPayload(req)
+  const ctx: KbankCtx = { runtime: opts?.runtime }
+  const timeoutMs = opts?.timeoutMs ?? 12000
+  const token = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+  const qrUrl = buildUrl(ctx, 'KBANK_QR_GENERATE_PATH', '/v1/qrpayment/request')
+  const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
+  const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
+  const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
+  const body = buildQrPayload(ctx, req)
   const sentQrTypeCode = String(body.qrType || '').trim()
   const requestBodyMasked = maskKbankMessageForLog(body) as Record<string, unknown>
 
-  const timeoutMs = opts?.timeoutMs ?? 12000
   const { signal, clear } = timeoutSignal(timeoutMs)
   try {
     let activeToken = token
     let res = await fetch(qrUrl, {
       method: 'POST',
       headers: withProxySecret(
+        ctx,
         {
           Authorization: `Bearer ${activeToken.access_token}`,
           'Content-Type': 'application/json',
@@ -342,11 +369,12 @@ export async function generateKbankQr(
     }
 
     if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
-      clearKbankAccessTokenCache()
-      activeToken = await fetchKbankAccessToken(timeoutMs)
+      clearKbankAccessTokenCache(tokenCacheKey(ctx))
+      activeToken = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
       res = await fetch(qrUrl, {
         method: 'POST',
         headers: withProxySecret(
+          ctx,
           {
             Authorization: `Bearer ${activeToken.access_token}`,
             'Content-Type': 'application/json',
@@ -402,20 +430,21 @@ export async function generateKbankQr(
 }
 
 function buildCheckStatusPayload(
+  ctx: KbankCtx,
   req: KbankCheckStatusRequest,
   requestTxnUid: string,
   origPartnerTxnUid?: string
 ): Record<string, unknown> {
-  const partnerId = mustEnv('KBANK_PARTNER_ID')
-  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
-  const merchantId = mustEnv('KBANK_MERCHANT_ID')
-  // qrType은 클라이언트에서 txnNo 판정용으로만 쓰고, KBank Inquiry v5 본문에는 보내지 않는다.
-  // (라벨 'CREDIT_CARD'를 그대로 보내면 "Invalid Request Format(openapi_error)"가 난다.)
+  const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
+  const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
+  const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
   const { qrType: rawQrType, ...payloadRest } = {
     ...(req.payload || {}),
   } as Record<string, unknown>
   const payload = payloadRest
-  const terminalId = String(payload.terminalId || req.terminalId || process.env.KBANK_TERMINAL_ID || '').trim()
+  const terminalId = String(
+    payload.terminalId || req.terminalId || kbankRuntimeField(ctx.runtime, 'KBANK_TERMINAL_ID') || ''
+  ).trim()
   const resolvedOrigPartnerTxnUid = String(origPartnerTxnUid || '').trim().slice(0, KBANK_PARTNER_TXN_UID_MAX_LEN)
   if (!resolvedOrigPartnerTxnUid) {
     throw new Error('origPartnerTxnUid is required for Inquire Payment (v5).')
@@ -439,13 +468,15 @@ function buildCheckStatusPayload(
 
 export async function checkKbankQrStatus(
   req: KbankCheckStatusRequest,
-  opts?: { timeoutMs?: number }
+  opts?: KbankClientOpts
 ): Promise<KbankCheckStatusResult> {
-  const token = await fetchKbankAccessToken(opts?.timeoutMs ?? 12000)
-  const statusUrl = buildUrl('KBANK_QR_STATUS_PATH', '/v1/qrpayment/v5/inquiry')
-  const partnerId = mustEnv('KBANK_PARTNER_ID')
-  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
-  const merchantId = mustEnv('KBANK_MERCHANT_ID')
+  const ctx: KbankCtx = { runtime: opts?.runtime }
+  const timeoutMs = opts?.timeoutMs ?? 12000
+  const token = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+  const statusUrl = buildUrl(ctx, 'KBANK_QR_STATUS_PATH', '/v1/qrpayment/v5/inquiry')
+  const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
+  const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
+  const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
   const payload = (req.payload || {}) as Record<string, unknown>
   const payloadRequestTxnUid = String(payload.partnerTxnUid || '').trim()
   const requestId = normalizePartnerTxnUid(payloadRequestTxnUid || undefined, 'INQ')
@@ -455,13 +486,14 @@ export async function checkKbankQrStatus(
   const inferredOrigTxnUid = inferredOrigSource
     ? normalizePartnerTxnUid(inferredOrigSource, 'ORIG')
     : ''
-  const body = buildCheckStatusPayload(req, requestId, inferredOrigTxnUid)
+  const body = buildCheckStatusPayload(ctx, req, requestId, inferredOrigTxnUid)
 
-  const { signal, clear } = timeoutSignal(opts?.timeoutMs ?? 12000)
+  const { signal, clear } = timeoutSignal(timeoutMs)
   try {
     const res = await fetch(statusUrl, {
       method: 'POST',
       headers: withProxySecret(
+        ctx,
         {
           Authorization: `Bearer ${token.access_token}`,
           'Content-Type': 'application/json',
@@ -513,6 +545,7 @@ export async function checkKbankQrStatus(
 }
 
 function buildTxnPayload(
+  ctx: KbankCtx,
   req:
     | KbankCancelQrRequest
     | KbankVoidPaymentRequest
@@ -526,9 +559,9 @@ function buildTxnPayload(
     includeTxnNo?: boolean
   }
 ): Record<string, unknown> {
-  const partnerId = mustEnv('KBANK_PARTNER_ID')
-  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
-  const merchantId = mustEnv('KBANK_MERCHANT_ID')
+  const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
+  const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
+  const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
   const payload = { ...(req.payload || {}) } as Record<string, unknown>
   const reqTerminalId =
     'terminalId' in req ? String((req as { terminalId?: string }).terminalId || '').trim() : ''
@@ -538,7 +571,9 @@ function buildTxnPayload(
     'origPartnerTxnUid' in req
       ? String((req as { origPartnerTxnUid?: string }).origPartnerTxnUid || '').trim()
       : ''
-  const terminalId = String(payload.terminalId || reqTerminalId || process.env.KBANK_TERMINAL_ID || '').trim()
+  const terminalId = String(
+    payload.terminalId || reqTerminalId || kbankRuntimeField(ctx.runtime, 'KBANK_TERMINAL_ID') || ''
+  ).trim()
   if (options?.requireTerminalId && !terminalId) {
     throw new Error('terminalId is required (set KBANK_TERMINAL_ID or pass terminalId).')
   }
@@ -557,7 +592,12 @@ function buildTxnPayload(
   }
   const qrType = options?.includeQrType
     ? resolveKbankQrTypeCode(
-        String(payload.qrType || reqQrType || process.env.KBANK_QR_TYPE_THAI || '3').trim() || undefined
+        String(
+          payload.qrType ||
+            reqQrType ||
+            kbankRuntimeField(ctx.runtime, 'KBANK_QR_TYPE_THAI') ||
+            '3'
+        ).trim() || undefined
       )
     : ''
   const rawTxnNo = options?.includeTxnNo
@@ -581,6 +621,7 @@ function buildTxnPayload(
 }
 
 async function callKbankActionApi(
+  ctx: KbankCtx,
   pathEnvName: string,
   defaultPath: string,
   req:
@@ -603,24 +644,25 @@ async function callKbankActionApi(
   statusMessage?: string
   response: Record<string, unknown>
 }> {
-  const token = await fetchKbankAccessToken(timeoutMs)
-  const url = buildUrl(pathEnvName, defaultPath)
-  const partnerId = mustEnv('KBANK_PARTNER_ID')
-  const partnerSecret = mustEnv('KBANK_PARTNER_SECRET')
-  const merchantId = mustEnv('KBANK_MERCHANT_ID')
+  const token = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+  const url = buildUrl(ctx, pathEnvName, defaultPath)
+  const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
+  const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
+  const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
   const payloadPartnerTxnUid =
     req.payload && typeof req.payload === 'object'
       ? String((req.payload as Record<string, unknown>).partnerTxnUid || '').trim()
       : ''
   const requestId = normalizePartnerTxnUid(payloadPartnerTxnUid || undefined, fallbackRequestPrefix)
 
-  const requestBody = buildTxnPayload(req, requestId, payloadOptions)
+  const requestBody = buildTxnPayload(ctx, req, requestId, payloadOptions)
   const { signal, clear } = timeoutSignal(timeoutMs)
   try {
     let activeToken = token
     let res = await fetch(url, {
       method: 'POST',
       headers: withProxySecret(
+        ctx,
         {
           Authorization: `Bearer ${activeToken.access_token}`,
           'Content-Type': 'application/json',
@@ -643,11 +685,12 @@ async function callKbankActionApi(
     }
 
     if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
-      clearKbankAccessTokenCache()
-      activeToken = await fetchKbankAccessToken(timeoutMs)
+      clearKbankAccessTokenCache(tokenCacheKey(ctx))
+      activeToken = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
       res = await fetch(url, {
         method: 'POST',
         headers: withProxySecret(
+          ctx,
           {
             Authorization: `Bearer ${activeToken.access_token}`,
             'Content-Type': 'application/json',
@@ -695,9 +738,11 @@ async function callKbankActionApi(
 
 export async function cancelKbankQr(
   req: KbankCancelQrRequest,
-  opts?: { timeoutMs?: number }
+  opts?: KbankClientOpts
 ): Promise<KbankCancelQrResult> {
+  const ctx: KbankCtx = { runtime: opts?.runtime }
   return callKbankActionApi(
+    ctx,
     'KBANK_QR_CANCEL_PATH',
     '/v1/qrpayment/cancel',
     req,
@@ -709,9 +754,11 @@ export async function cancelKbankQr(
 
 export async function voidKbankPayment(
   req: KbankVoidPaymentRequest,
-  opts?: { timeoutMs?: number }
+  opts?: KbankClientOpts
 ): Promise<KbankVoidPaymentResult> {
+  const ctx: KbankCtx = { runtime: opts?.runtime }
   return callKbankActionApi(
+    ctx,
     'KBANK_QR_VOID_PATH',
     '/v1/qrpayment/void',
     req,
@@ -728,8 +775,9 @@ export async function voidKbankPayment(
 
 export async function settleKbankPayment(
   req: KbankSettlementRequest,
-  opts?: { timeoutMs?: number }
+  opts?: KbankClientOpts
 ): Promise<KbankSettlementResult> {
+  const ctx: KbankCtx = { runtime: opts?.runtime }
   const qrTypeRaw = String(req.qrType || (req.payload as Record<string, unknown> | undefined)?.qrType || '')
     .trim()
     .toUpperCase()
@@ -744,6 +792,7 @@ export async function settleKbankPayment(
     }
   }
   return callKbankActionApi(
+    ctx,
     'KBANK_QR_SETTLEMENT_PATH',
     '/v1/qrpayment/settlement',
     req,

@@ -11,6 +11,14 @@
     {
       "path": "/api/applyDuePriceSchedules",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/member-portal/cron/expire-pending-payments",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/member-portal/cron/reconcile-pending-payments",
+      "schedule": "*/10 * * * *"
     }
   ],
   "headers": [

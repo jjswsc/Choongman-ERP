@@ -128,36 +128,37 @@ export function SalesPromoBundleDiscountPanel({
     <>
       <div className="mb-4 rounded-lg border bg-muted/20 p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-sm font-semibold">{tr("salesPromoAnalyticsTitle", "할인 영향 분석")}</h3>
+          <h3 className="text-sm font-semibold">
+            {tr("salesBundleDiscountAnalyticsTitle", "세트 할인 영향 분석")}
+          </h3>
           <p className="text-xs text-muted-foreground">
             {tr("salesPromoOrderCount", "완료 주문")}: {totals.periodOrderCount.toLocaleString()}
           </p>
         </div>
         <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
           {tr(
-            "salesPromoAnalyticsHint",
-            "총매출은 동일 기간·매장·주문유형의 완료 주문 합계입니다. 세트 내재 할인은 정가 대비 판매가 차이이며, 결제 할인과는 별도 층입니다."
+            "salesBundleDiscountAnalyticsHint",
+            "세트·프로모 줄의 정가 대비 판매가 차이(세트 할인)만 집계합니다. 결제 할인은 「결제 할인」리포트를 보세요."
           )}
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label={tr("salesPromoPeriodGrossSales", "기간 총매출")} value={formatSalesAmount(totals.periodGrossSales)} />
           <MetricCard
-            label={tr("salesPromoLineSaleShare", "세트·프로모 판매 비중")}
+            label={tr("salesPromoLineSaleShare", "세트 판매 비중")}
             value={formatSalesPct(totals.promoLineSaleSharePct)}
             sub={formatSalesAmount(totals.saleAmount)}
           />
           <MetricCard
-            label={tr("salesPromoBundleDiscount", "세트 내재 할인")}
+            label={tr("salesPromoBundleDiscount", "세트 할인")}
             value={`-${formatSalesAmount(totals.bundleDiscount)}`}
             sub={`${tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}: ${formatSalesPct(totals.bundleDiscountPctOfGross)}`}
             accent="rose"
+            highlight
           />
           <MetricCard
-            label={tr("salesPromoTotalDiscount", "할인 합계")}
-            value={`-${formatSalesAmount(totals.totalDiscount)}`}
-            sub={`${formatSalesPct(totals.totalDiscountPctOfGross)} ${tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}`}
-            foot={`${tr("salesPromoPaymentDiscount", "결제 할인(기간)")} -${formatSalesAmount(totals.paymentDiscount)} (${formatSalesPct(totals.paymentDiscountPctOfGross)})`}
-            highlight
+            label={tr("salesPromoSaleQty", "세트 판매 수량")}
+            value={totals.qty.toLocaleString()}
+            sub={`${tr("salesPromoRegularAmount", "정가 합계")}: ${formatSalesAmount(totals.regularAmount)}`}
           />
         </div>
       </div>
@@ -178,9 +179,9 @@ export function SalesPromoBundleDiscountPanel({
             value: k.bundleDiscount,
           }))}
           col2Header={tr("salesPromoSaleAmount", "판매액")}
-          discountHeader={tr("salesPromoBundleDiscount", "세트 내재 할인")}
+          discountHeader={tr("salesPromoBundleDiscount", "세트 할인")}
           shareHeaderKey="salesPromoBundleDiscountShare"
-          shareHeaderFallback="내재 할인 비중"
+          shareHeaderFallback="세트 할인 비중"
         />
       ) : null}
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -193,7 +194,7 @@ export function SalesPromoBundleDiscountPanel({
               ? formatSalesPct((totals.bundleDiscount / totals.regularAmount) * 100)
               : "—"
           }
-          sub={`${tr("salesPromoBundleDiscount", "세트 내재 할인")} / ${tr("salesPromoRegularAmount", "정가 합계")}`}
+          sub={`${tr("salesPromoBundleDiscount", "세트 할인")} / ${tr("salesPromoRegularAmount", "정가 합계")}`}
           compact
         />
       </div>
@@ -279,16 +280,16 @@ export function SalesPaymentDiscountPanel({
             sub={`${totals.orderCountWithDiscount.toLocaleString()} ${tr("salesOccupancy", "주문건수")}`}
           />
           <MetricCard
-            label={tr("salesPromoPaymentDiscount", "결제 할인(기간)")}
+            label={tr("salesPromoPaymentDiscount", "결제 할인")}
             value={`-${formatSalesAmount(totals.discountAmount)}`}
             sub={`${tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}: ${formatSalesPct(totals.discountPctOfGross)}`}
             accent="rose"
+            highlight
           />
           <MetricCard
             label={tr("salesPaymentDiscountKindCount", "할인 유형")}
             value={String(payment.byKind.length)}
             sub={tr("salesPaymentDiscountKindCountHint", "수동·협업·쿠폰·플랫폼 등")}
-            highlight
           />
         </div>
       </div>
@@ -308,7 +309,7 @@ export function SalesPaymentDiscountPanel({
             value: k.discountAmount,
           }))}
           col2Header={tr("salesOccupancy", "주문건수")}
-          discountHeader={tr("salesPromoPaymentDiscount", "결제 할인(기간)")}
+          discountHeader={tr("salesPromoPaymentDiscount", "결제 할인")}
           shareHeaderKey="salesPaymentDiscountShare"
           shareHeaderFallback="할인 비중"
         />
@@ -356,19 +357,19 @@ export function SalesCombinedDiscountPanel({
         <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
           {tr(
             "salesCombinedDiscountAnalyticsHint",
-            "세트 내재 할인과 결제 할인을 합산한 참고 지표입니다. 두 할인은 서로 다른 층이며, 한 주문에 동시에 적용될 수 있습니다."
+            "세트 할인과 결제 할인을 한 화면에서 비교합니다. 합산 %는 참고 지표이며, 두 할인은 서로 다른 층입니다."
           )}
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label={tr("salesPromoPeriodGrossSales", "기간 총매출")} value={formatSalesAmount(totals.periodGrossSales)} />
           <MetricCard
-            label={tr("salesPromoBundleDiscount", "세트 내재 할인")}
+            label={tr("salesPromoBundleDiscount", "세트 할인")}
             value={`-${formatSalesAmount(totals.bundleDiscount)}`}
             sub={formatSalesPct(totals.bundleDiscountPctOfGross)}
             accent="rose"
           />
           <MetricCard
-            label={tr("salesPromoPaymentDiscount", "결제 할인(기간)")}
+            label={tr("salesPromoPaymentDiscount", "결제 할인")}
             value={`-${formatSalesAmount(totals.paymentDiscount)}`}
             sub={formatSalesPct(totals.paymentDiscountPctOfGross)}
             accent="rose"
@@ -390,7 +391,7 @@ export function SalesCombinedDiscountPanel({
       )}
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <MetricCard
-          label={tr("salesPromoLineSaleShare", "세트·프로모 판매 비중")}
+          label={tr("salesPromoLineSaleShare", "세트 판매 비중")}
           value={formatSalesPct(totals.promoLineSaleSharePct)}
           sub={formatSalesAmount(totals.promoLineSaleAmount)}
           compact
@@ -531,7 +532,7 @@ function PromoDetailTable({
             <th className="px-3 py-2 text-right">{tr("salesQuantity", "수량")}</th>
             <th className="px-3 py-2 text-right">{tr("salesPromoRegularAmount", "정가 합계")}</th>
             <th className="px-3 py-2 text-right">{tr("salesPromoSaleAmount", "판매액")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoBundleDiscount", "세트 내재 할인")}</th>
+            <th className="px-3 py-2 text-right">{tr("salesPromoBundleDiscount", "세트 할인")}</th>
             <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPct", "할인율")}</th>
             <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}</th>
           </tr>
@@ -597,7 +598,7 @@ function PaymentDetailTable({
             <th className="px-3 py-2 text-left">{tr("salesPromoCode", "프로모 코드")}</th>
             <th className="px-3 py-2 text-left">{tr("salesDiscountKindColumn", "유형")}</th>
             <th className="px-3 py-2 text-right">{tr("salesOccupancy", "주문건수")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoPaymentDiscount", "결제 할인(기간)")}</th>
+            <th className="px-3 py-2 text-right">{tr("salesPromoPaymentDiscount", "결제 할인")}</th>
             <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}</th>
             <th className="px-3 py-2 text-right">{tr("salesPaymentDiscountShare", "할인 비중")}</th>
           </tr>

@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { finalizeMemberPortalPrepaidOrder } from '@/lib/member-portal-checkout-server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   extractKbankPaymentTxnNo,
@@ -300,7 +301,14 @@ export async function POST(
 
   try {
     if (matchedOrderId && normalized === 'approved') {
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${matchedOrderId}`, { status: 'paid' })
+      const finalized = await finalizeMemberPortalPrepaidOrder({
+        orderId: matchedOrderId,
+        paymentQr: amount,
+        partnerTransactionId: primaryLocalTxId || partnerTransactionId || undefined,
+      })
+      if (!finalized.ok) {
+        await supabaseUpdateByFilter('pos_orders', `id=eq.${matchedOrderId}`, { status: 'paid' })
+      }
     }
   } catch (e) {
     console.error('kbank webhook update pos_orders failed:', e)

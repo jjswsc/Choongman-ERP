@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 
 type TenantOpt = { id: string; companyName: string }
 
@@ -38,6 +40,8 @@ function normalizeRole(v: string): RoleOption {
 }
 
 export default function SaasUsersPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [tenantFilter, setTenantFilter] = useState<string>("")
   const [qInput, setQInput] = useState("")
   const [qApplied, setQApplied] = useState("")
@@ -71,7 +75,7 @@ export default function SaasUsersPage() {
           pagination?: { hasMore?: boolean }
         }
         if (!res.ok || json.success !== true) {
-          setNotice(json.message || "목록을 불러오지 못했습니다.")
+          setNotice(json.message || t("saasAdmin_errLoadList"))
           if (!opts.append) setRows([])
           return
         }
@@ -87,7 +91,7 @@ export default function SaasUsersPage() {
         setLoading(false)
       }
     },
-    [tenantFilter, qApplied]
+    [tenantFilter, qApplied, t]
   )
 
   useEffect(() => {
@@ -129,7 +133,7 @@ export default function SaasUsersPage() {
     const changedRole = draft.role !== normalizeRole(row.role)
     const changedJob = draft.job.trim() !== String(row.job || "").trim()
     if (!changedRole && !changedJob) {
-      await appAlert("변경된 값이 없습니다.")
+      await appAlert(t("saasAdminUser_noChanges"))
       return
     }
     setSaving(row.id, true)
@@ -145,11 +149,11 @@ export default function SaasUsersPage() {
       })
       const json = (await res.json()) as { success?: boolean; message?: string }
       if (!res.ok || json.success !== true) {
-        await appAlert(json.message || "직원 수정에 실패했습니다.")
+        await appAlert(json.message || t("saasAdminUser_saveFailed"))
         return
       }
       setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, role: draft.role, job: draft.job.trim() } : x)))
-      await appAlert("직원 정보를 저장했습니다.")
+      await appAlert(t("saasAdminUser_saved"))
     } catch (e) {
       await appAlert(String(e))
     } finally {
@@ -160,8 +164,14 @@ export default function SaasUsersPage() {
   const toggleResign = async (row: EmpRow) => {
     const isResigned = Boolean(row.resignDate)
     const nextDate = isResigned ? null : new Date().toISOString().slice(0, 10)
+    const action = isResigned ? t("saasAdminUser_actionRestore") : t("saasAdminUser_actionResign")
     const ok = await appConfirm(
-      `[${row.company || "-"} / ${row.store || "-"} / ${row.name}] 계정을 ${isResigned ? "재직 복구" : "퇴사 처리"}할까요?`
+      tr(t, "saasAdminUser_toggleConfirm", {
+        company: row.company || "-",
+        store: row.store || "-",
+        name: row.name,
+        action,
+      })
     )
     if (!ok) return
     setSaving(row.id, true)
@@ -176,7 +186,7 @@ export default function SaasUsersPage() {
       })
       const json = (await res.json()) as { success?: boolean; message?: string }
       if (!res.ok || json.success !== true) {
-        await appAlert(json.message || "재직 상태 변경에 실패했습니다.")
+        await appAlert(json.message || t("saasAdminUser_statusChangeFailed"))
         return
       }
       setRows((prev) => prev.map((x) => (x.id === row.id ? { ...x, resignDate: nextDate || "" } : x)))
@@ -217,15 +227,15 @@ export default function SaasUsersPage() {
       body: JSON.stringify(payload),
     })
     const json = (await res.json()) as { success?: boolean; message?: string }
-    if (!res.ok || json.success !== true) throw new Error(json.message || "업데이트 실패")
+    if (!res.ok || json.success !== true) throw new Error(json.message || t("saasAdminUser_updateFailed"))
   }
 
   const bulkApplyRole = async () => {
     if (selectedRows.length === 0) {
-      await appAlert("일괄 변경할 직원을 먼저 선택해 주세요.")
+      await appAlert(t("saasAdminUser_selectBulkFirst"))
       return
     }
-    const ok = await appConfirm(`선택한 ${selectedRows.length}명 직원의 역할을 [${bulkRole}]로 변경할까요?`)
+    const ok = await appConfirm(tr(t, "saasAdminUser_bulkRoleConfirm", { n: selectedRows.length, role: bulkRole }))
     if (!ok) return
     setSavingIds((prev) => [...new Set([...prev, ...selectedRows.map((r) => r.id)])])
     try {
@@ -245,8 +255,8 @@ export default function SaasUsersPage() {
       }
       await appAlert(
         failCount > 0
-          ? `역할 일괄 변경 완료: 성공 ${successIds.length}명, 실패 ${failCount}명`
-          : `역할을 ${successIds.length}명에게 적용했습니다.`
+          ? tr(t, "saasAdminUser_bulkRolePartial", { ok: successIds.length, fail: failCount })
+          : tr(t, "saasAdminUser_bulkRoleDone", { n: successIds.length })
       )
     } finally {
       setSavingIds((prev) => prev.filter((id) => !selectedRows.some((r) => r.id === id)))
@@ -255,11 +265,11 @@ export default function SaasUsersPage() {
 
   const bulkSetResign = async (resign: boolean) => {
     if (selectedRows.length === 0) {
-      await appAlert("일괄 처리할 직원을 먼저 선택해 주세요.")
+      await appAlert(t("saasAdminUser_selectBulkFirst"))
       return
     }
-    const label = resign ? "퇴사 처리" : "재직 복구"
-    const ok = await appConfirm(`선택한 ${selectedRows.length}명 직원을 ${label}할까요?`)
+    const action = resign ? t("saasAdminUser_bulkResignAction") : t("saasAdminUser_bulkRestoreAction")
+    const ok = await appConfirm(tr(t, "saasAdminUser_bulkResignConfirm", { n: selectedRows.length, action }))
     if (!ok) return
     const targetDate = resign ? new Date().toISOString().slice(0, 10) : null
     setSavingIds((prev) => [...new Set([...prev, ...selectedRows.map((r) => r.id)])])
@@ -272,8 +282,8 @@ export default function SaasUsersPage() {
       }
       await appAlert(
         failCount > 0
-          ? `${label} 완료: 성공 ${successIds.length}명, 실패 ${failCount}명`
-          : `${label}를 ${successIds.length}명에게 적용했습니다.`
+          ? tr(t, "saasAdminUser_bulkResignPartial", { action, ok: successIds.length, fail: failCount })
+          : tr(t, "saasAdminUser_bulkResignDone", { action, n: successIds.length })
       )
     } finally {
       setSavingIds((prev) => prev.filter((id) => !selectedRows.some((r) => r.id === id)))
@@ -283,36 +293,36 @@ export default function SaasUsersPage() {
   return (
     <main className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">사용자(직원) 관리</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          모든 고객사의 <code className="rounded bg-muted px-1">employees</code> 계정을 한 화면에서 조회합니다. 비밀번호는 표시하지 않습니다.
-        </p>
+        <h1 className="text-2xl font-semibold">{t("saasAdminUser_pageTitle")}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t("saasAdminUser_pageIntro")}</p>
         <p className="mt-2 text-sm">
-          신규 고객사의 <strong>첫 관리자</strong>는{" "}
+          {t("saasAdminUser_pageHintBefore")}
+          <strong>{t("saasAdminUser_pageHintStrong")}</strong>
+          {t("saasAdminUser_pageHintMid")}
           <Link href="/saas-admin/customers" className="text-primary underline underline-offset-4">
-            고객사 → 초기 로그인
-          </Link>{" "}
-          탭에서 만든 뒤, 이후 직원은 해당 회사 ERP의 직원 메뉴에서 추가하는 흐름을 권장합니다.
+            {t("saasAdminUser_pageHintLink")}
+          </Link>
+          {t("saasAdminUser_pageHintAfter")}
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">필터</CardTitle>
-          <CardDescription>고객사(테넌트)별로 직원 목록을 좁힐 수 있습니다.</CardDescription>
+          <CardTitle className="text-lg">{t("saasAdmin_filter")}</CardTitle>
+          <CardDescription>{t("saasAdmin_filterTenantHint")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="space-y-2 md:min-w-[220px]">
-            <Label>고객사</Label>
+            <Label>{t("saasAdmin_labelTenant")}</Label>
             <Select value={tenantFilter || "__all__"} onValueChange={(v) => setTenantFilter(v === "__all__" ? "" : v)}>
               <SelectTrigger>
-                <SelectValue placeholder="전체" />
+                <SelectValue placeholder={t("all")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">전체</SelectItem>
-                {tenantOptions.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.companyName || t.id}
+                <SelectItem value="__all__">{t("all")}</SelectItem>
+                {tenantOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.companyName || opt.id}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -320,18 +330,18 @@ export default function SaasUsersPage() {
           </div>
           <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-end">
             <div className="space-y-2 md:flex-1">
-              <Label>검색 (이름·매장·회사·역할)</Label>
+              <Label>{t("saasAdminUser_searchLabel")}</Label>
               <Input
                 value={qInput}
                 onChange={(e) => setQInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") applySearch()
                 }}
-                placeholder="입력 후 검색"
+                placeholder={t("saasAdmin_searchPlaceholder")}
               />
             </div>
             <Button type="button" variant="secondary" onClick={applySearch} disabled={loading}>
-              검색
+              {t("search")}
             </Button>
           </div>
         </CardContent>
@@ -341,15 +351,15 @@ export default function SaasUsersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">직원 목록</CardTitle>
+          <CardTitle className="text-lg">{t("saasAdminUser_listTitle")}</CardTitle>
           <CardDescription>
-            {loading ? "불러오는 중…" : `${rows.length}건 표시`}
-            {qApplied ? " · 검색 모드(최대 8000건까지 조회 후 필터)" : ""}
+            {loading ? t("saasAdmin_loading") : tr(t, "saasAdmin_rowsShown", { n: rows.length })}
+            {qApplied ? t("saasAdmin_searchModeUsers") : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border p-3">
-            <span className="text-sm text-muted-foreground">선택 {selectedIds.length}명</span>
+            <span className="text-sm text-muted-foreground">{tr(t, "saasAdminUser_selectedCount", { n: selectedIds.length })}</span>
             <Select value={bulkRole} onValueChange={(v) => setBulkRole(normalizeRole(v))}>
               <SelectTrigger className="h-8 w-[150px]">
                 <SelectValue />
@@ -363,7 +373,7 @@ export default function SaasUsersPage() {
               </SelectContent>
             </Select>
             <Button type="button" size="sm" variant="secondary" onClick={() => void bulkApplyRole()} disabled={selectedIds.length === 0}>
-              역할 일괄 적용
+              {t("saasAdminUser_bulkApplyRole")}
             </Button>
             <Button
               type="button"
@@ -372,34 +382,34 @@ export default function SaasUsersPage() {
               onClick={() => void bulkSetResign(true)}
               disabled={selectedIds.length === 0}
             >
-              선택 퇴사
+              {t("saasAdminUser_bulkResign")}
             </Button>
             <Button type="button" size="sm" variant="default" onClick={() => void bulkSetResign(false)} disabled={selectedIds.length === 0}>
-              선택 복구
+              {t("saasAdminUser_bulkRestore")}
             </Button>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[52px]">
-                  <Checkbox checked={allChecked} onCheckedChange={(v) => toggleAll(Boolean(v))} aria-label="전체 선택" />
+                  <Checkbox checked={allChecked} onCheckedChange={(v) => toggleAll(Boolean(v))} aria-label={t("saasAdminUser_selectAll")} />
                 </TableHead>
-                <TableHead>회사명</TableHead>
-                <TableHead>테넌트 ID</TableHead>
-                <TableHead>매장</TableHead>
-                <TableHead>이름</TableHead>
-                <TableHead>역할</TableHead>
-                <TableHead>직무</TableHead>
-                <TableHead>직원코드</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead className="text-right">관리</TableHead>
+                <TableHead>{t("saasAdminUser_colCompany")}</TableHead>
+                <TableHead>{t("saasAdmin_tenantId")}</TableHead>
+                <TableHead>{t("saasAdminUser_colStore")}</TableHead>
+                <TableHead>{t("saasAdminUser_colName")}</TableHead>
+                <TableHead>{t("saasAdminUser_colRole")}</TableHead>
+                <TableHead>{t("saasAdminUser_colJob")}</TableHead>
+                <TableHead>{t("saasAdminUser_colEmployeeCode")}</TableHead>
+                <TableHead>{t("status")}</TableHead>
+                <TableHead className="text-right">{t("saasAdmin_manage")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center text-muted-foreground">
-                    데이터가 없습니다.
+                    {t("saasAdmin_noData")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -409,7 +419,7 @@ export default function SaasUsersPage() {
                       <Checkbox
                         checked={selectedIds.includes(r.id)}
                         onCheckedChange={(v) => toggleRow(r.id, Boolean(v))}
-                        aria-label={`${r.name} 선택`}
+                        aria-label={tr(t, "saasAdminUser_selectRow", { name: r.name })}
                       />
                     </TableCell>
                     <TableCell className="font-medium">{r.company || "—"}</TableCell>
@@ -440,21 +450,21 @@ export default function SaasUsersPage() {
                         onChange={(e) => updateDraft(r.id, { job: e.target.value })}
                         className="h-8"
                         disabled={isSaving(r.id)}
-                        placeholder="예: officer"
+                        placeholder={t("saasAdminUser_jobPh")}
                       />
                     </TableCell>
                     <TableCell className="text-xs">{r.employeeCode || "—"}</TableCell>
                     <TableCell>
                       {r.resignDate ? (
-                        <Badge variant="secondary">퇴사 {r.resignDate}</Badge>
+                        <Badge variant="secondary">{tr(t, "saasAdminUser_statusResigned", { date: r.resignDate })}</Badge>
                       ) : (
-                        <Badge variant="outline">재직</Badge>
+                        <Badge variant="outline">{t("saasAdminUser_statusActive")}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button type="button" size="sm" onClick={() => void saveEmployeeDraft(r)} disabled={isSaving(r.id)}>
-                          저장
+                          {t("save")}
                         </Button>
                         <Button
                           type="button"
@@ -463,10 +473,10 @@ export default function SaasUsersPage() {
                           onClick={() => void toggleResign(r)}
                           disabled={isSaving(r.id)}
                         >
-                          {r.resignDate ? "복구" : "퇴사"}
+                          {r.resignDate ? t("saasAdminUser_restore") : t("saasAdminUser_resign")}
                         </Button>
                         <Button asChild type="button" size="sm" variant="outline">
-                          <Link href={employeeAdminLink(r)}>ERP 직원</Link>
+                          <Link href={employeeAdminLink(r)}>{t("saasAdminUser_erpLink")}</Link>
                         </Button>
                       </div>
                     </TableCell>
@@ -478,7 +488,7 @@ export default function SaasUsersPage() {
           {hasMore ? (
             <div className="mt-4 flex justify-center">
               <Button type="button" variant="outline" onClick={loadMore} disabled={loading}>
-                더 보기
+                {t("saasAdmin_loadMore")}
               </Button>
             </div>
           ) : null}

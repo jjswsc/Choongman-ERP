@@ -28,7 +28,8 @@ import type { MemberSummary } from "@/lib/members-server"
 import { formatBangkokDateTimeLocalInput } from "@/lib/member-portal-pickup-time"
 import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
-import { formatBaht } from "@/components/member-portal/portal-ui"
+import { formatBaht, formatDateTime } from "@/components/member-portal/portal-ui"
+import { memberPortalOrderStatusLabelKey } from "@/lib/member-portal-orders-list-server"
 import { mpGlassCard, mpGlassCardSoft } from "@/lib/member-portal-design"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
@@ -45,6 +46,9 @@ import {
 } from "@/lib/pos-option-selection-groups"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
+import { MemberPortalCheckoutSheet } from "@/components/member-portal/member-portal-checkout-sheet"
+import { MemberPortalQrPayDialog } from "@/components/member-portal/member-portal-qr-pay-dialog"
+import { readMemberPortalCheckoutDraft } from "@/lib/member-portal-checkout-draft-storage"
 import { MemberPortalDeliveryAppLogo } from "@/components/member-portal/member-portal-delivery-app-logo"
 import {
   PROMOTION_MAIN_CATEGORY,
@@ -364,6 +368,20 @@ function buildAllMenuSections(menus: PosMenu[], mainTabs: string[]): MenuListSec
   return sections
 }
 
+type MemberOrderRow = {
+  orderId: number
+  orderNo: string
+  storeCode: string
+  status: string
+  total: number
+  pointUsed: number
+  pickupHint: string
+  createdAt: string
+  awaitingPayment: boolean
+  paymentExpired: boolean
+  paymentExpiresAt?: string | null
+}
+
 type OrderView = "hub" | "delivery" | "pickup"
 
 type MemberPortalOrderTabProps = {
@@ -384,7 +402,7 @@ async function postMemberOrder(body: Record<string, unknown>) {
   return res.json() as Promise<{ success: boolean; message?: string; orderNo?: string }>
 }
 
-export function MemberPortalOrderTab({ lang, t, member: _member, stores, favoriteStoreCodes }: MemberPortalOrderTabProps) {
+export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCodes }: MemberPortalOrderTabProps) {
   const primaryFavoriteStoreCode = favoriteStoreCodes[0] || ""
   const [view, setView] = React.useState<OrderView>("hub")
   const [deliveryLinks, setDeliveryLinks] = React.useState<DeliveryLinks | null>(null)
@@ -412,6 +430,26 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
   const [storeSearch, setStoreSearch] = React.useState("")
   const [cartSheetOpen, setCartSheetOpen] = React.useState(false)
   const [cartConfirmOpen, setCartConfirmOpen] = React.useState(false)
+  const [checkoutOpen, setCheckoutOpen] = React.useState(false)
+  const [storePrepayEnabled, setStorePrepayEnabled] = React.useState(false)
+  const [myOrders, setMyOrders] = React.useState<MemberOrderRow[]>([])
+  const [myOrdersLoading, setMyOrdersLoading] = React.useState(false)
+  const [resumePayOrder, setResumePayOrder] = React.useState<MemberOrderRow | null>(null)
+
+  const dateLocale = lang === "ko" ? "ko-KR" : lang === "en" ? "en-US" : "th-TH"
+
+  const loadMyOrders = React.useCallback(async () => {
+    setMyOrdersLoading(true)
+    try {
+      const res = await fetch("/api/member-portal/orders?limit=10", { credentials: "same-origin" })
+      const data = (await res.json()) as { success?: boolean; rows?: MemberOrderRow[] }
+      if (data.success) setMyOrders(data.rows || [])
+    } catch {
+      setMyOrders([])
+    } finally {
+      setMyOrdersLoading(false)
+    }
+  }, [])
 
   React.useEffect(() => {
     if (primaryFavoriteStoreCode && !pickupStore) setPickupStore(primaryFavoriteStoreCode)
@@ -433,6 +471,13 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
       })
       .finally(() => setDeliveryLoading(false))
   }, [view, deliveryLinks])
+
+  React.useEffect(() => {
+    if (view !== "hub") return
+    void loadMyOrders()
+    const id = window.setInterval(() => void loadMyOrders(), 30_000)
+    return () => window.clearInterval(id)
+  }, [loadMyOrders, view, orderMessage])
 
   const todayStr = React.useMemo(() => getBangkokTodayDateString(), [])
 
@@ -710,8 +755,38 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
     }
     if (at !== pickupAt) setPickupAt(at)
     setOrderError("")
-    scheduleAfterPaint(() => setCartConfirmOpen(true))
-  }, [cart.length, pickupAt, refreshPickupTimeBounds, t])
+    scheduleAfterPaint(() => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/member-portal/orders/checkout-preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              storeCode: pickupStore,
+              items: cart.map(({ menuId, optionId, code, name, price, qty }) => ({
+                menuId,
+                ...(optionId ? { optionId } : {}),
+                ...(code ? { optionCode: String(code) } : {}),
+                code,
+                name,
+                price,
+                qty,
+              })),
+              pointUsed: 0,
+            }),
+          })
+          const data = (await res.json()) as { success?: boolean; preview?: { prepayEnabled?: boolean } }
+          const prepay = Boolean(data.success && data.preview?.prepayEnabled)
+          setStorePrepayEnabled(prepay)
+          if (prepay) setCheckoutOpen(true)
+          else setCartConfirmOpen(true)
+        } catch {
+          setCartConfirmOpen(true)
+        }
+      })()
+    })
+  }, [cart, pickupAt, pickupStore, refreshPickupTimeBounds, t])
 
   const submitPickupOrder = React.useCallback(async () => {
     if (!pickupStore || cart.length === 0) return
@@ -762,6 +837,91 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
     }
   }, [cart, lang, pickupAt, pickupStore, t])
 
+  const restoreCheckoutDraft = React.useCallback(() => {
+    const draft = readMemberPortalCheckoutDraft()
+    if (!draft?.cart?.length) return
+    setPickupStore(draft.storeCode)
+    setPickupAt(draft.pickupAt)
+    setCart(
+      draft.cart.map((line) => ({
+        cartKey: cartLineKey(line.menuId, line.optionId),
+        menuId: line.menuId,
+        optionId: line.optionId,
+        code: line.code,
+        name: line.name,
+        price: line.price,
+        qty: line.qty,
+      }))
+    )
+    setView("pickup")
+    setCheckoutOpen(false)
+  }, [])
+
+  const handleReorder = React.useCallback(
+    async (row: MemberOrderRow) => {
+      setOrderError("")
+      try {
+        const res = await fetch(`/api/member-portal/orders/${row.orderId}/reorder-items`, {
+          credentials: "same-origin",
+        })
+        const data = (await res.json()) as {
+          success?: boolean
+          storeCode?: string
+          items?: Array<{
+            menuId: string
+            optionId?: string
+            code?: string
+            name: string
+            price: number
+            qty: number
+          }>
+        }
+        if (!data.success || !data.items?.length) {
+          setOrderError(t("orderSubmitFail"))
+          return
+        }
+        setPickupStore(data.storeCode || row.storeCode)
+        setCart(
+          data.items.map((line) => ({
+            cartKey: cartLineKey(line.menuId, line.optionId),
+            menuId: line.menuId,
+            optionId: line.optionId,
+            code: line.code,
+            name: line.name,
+            price: line.price,
+            qty: line.qty,
+          }))
+        )
+        setView("pickup")
+        setOrderMessage(t("orderMyOrdersReorderDone"))
+      } catch {
+        setOrderError(t("orderSubmitFail"))
+      }
+    },
+    [t]
+  )
+
+  const handleCheckoutPaid = React.useCallback(
+    ({ orderNo, paidWithPointsOnly }: { orderNo: string; paidWithPointsOnly: boolean }) => {
+      startTransition(() => {
+        setOrderMessage(
+          paidWithPointsOnly
+            ? t("orderSubmitSuccessPoints", { orderNo })
+            : t("orderSubmitSuccessPaid", { orderNo })
+        )
+        setCart([])
+        setCartSheetOpen(false)
+        setCartConfirmOpen(false)
+        setCheckoutOpen(false)
+        setOrderError("")
+        setPickupReady(false)
+        setView("hub")
+        void loadMyOrders()
+      })
+    },
+    [loadMyOrders, t]
+  )
+
   const handleConfirmSubmit = React.useCallback(() => {
     if (!pickupStore || cart.length === 0 || submitting) return
     setSubmitting(true)
@@ -773,6 +933,15 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
   const resolvedDeliveryLinks = deliveryLinks ?? DEFAULT_DELIVERY_LINKS
   const pickupStoreName =
     stores.find((s) => s.storeCode === pickupStore)?.displayName || pickupStore
+
+  const readyPickupOrder = React.useMemo(() => {
+    return myOrders.find((row) => String(row.status || "").toLowerCase() === "ready") || null
+  }, [myOrders])
+
+  const readyPickupStoreLabel = readyPickupOrder
+    ? stores.find((s) => s.storeCode === readyPickupOrder.storeCode)?.displayName ||
+      readyPickupOrder.storeCode
+    : ""
 
   const deliveryApps = [
     { code: "grab", label: "GrabFood", color: "from-[#00B14F] to-[#008f41]", url: resolvedDeliveryLinks.grab },
@@ -792,6 +961,78 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
             {orderMessage}
           </div>
         )}
+        {readyPickupOrder ? (
+          <div className="rounded-2xl border border-sky-400/30 bg-sky-500/15 px-4 py-3 text-sm text-sky-100">
+            {t("orderPickupReadyBanner", {
+              orderNo: readyPickupOrder.orderNo,
+              store: readyPickupStoreLabel,
+            })}
+          </div>
+        ) : null}
+        <div className={`${mpGlassCardSoft} p-4`}>
+          <h3 className="text-sm font-semibold text-white/80">{t("orderMyOrdersTitle")}</h3>
+          {myOrdersLoading ? (
+            <p className="mt-3 text-sm text-white/45">{t("loginChecking")}</p>
+          ) : myOrders.length === 0 ? (
+            <p className="mt-3 text-sm text-white/45">{t("orderMyOrdersEmpty")}</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {myOrders.map((row) => {
+                const statusKey = memberPortalOrderStatusLabelKey(row)
+                const storeLabel =
+                  stores.find((s) => s.storeCode === row.storeCode)?.displayName || row.storeCode
+                return (
+                  <li
+                    key={row.orderId}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-white/90">{storeLabel}</p>
+                        <p className="text-xs text-white/45">
+                          {row.orderNo}
+                          {row.pickupHint ? ` · ${row.pickupHint}` : ""}
+                        </p>
+                        <p className="text-[11px] text-white/35">
+                          {formatDateTime(row.createdAt, dateLocale)}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-semibold tabular-nums text-amber-200">{formatBaht(row.total)}</p>
+                        <p className="text-[11px] text-white/50">{t(statusKey)}</p>
+                      </div>
+                    </div>
+                    {row.awaitingPayment ? (
+                      <button
+                        type="button"
+                        className="mt-2 w-full rounded-xl bg-amber-400 py-2 text-xs font-semibold text-black"
+                        onClick={() => setResumePayOrder(row)}
+                      >
+                        {t("orderMyOrdersResumePay")}
+                      </button>
+                    ) : row.paymentExpired ? (
+                      <button
+                        type="button"
+                        className="mt-2 w-full rounded-xl border border-white/20 py-2 text-xs font-semibold text-white/90"
+                        onClick={() => void handleReorder(row)}
+                      >
+                        {t("orderCheckoutRestoreCart")}
+                      </button>
+                    ) : !row.awaitingPayment && row.status !== "cancelled" && row.status !== "canceled" ? (
+                      <button
+                        type="button"
+                        className="mt-2 w-full rounded-xl border border-white/15 py-2 text-xs font-medium text-white/70"
+                        onClick={() => void handleReorder(row)}
+                      >
+                        {t("orderMyOrdersReorder")}
+                      </button>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
         <div className="grid gap-3">
           <button
             type="button"
@@ -827,6 +1068,25 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
             </div>
           </button>
         </div>
+        <MemberPortalQrPayDialog
+          open={Boolean(resumePayOrder)}
+          orderId={resumePayOrder?.orderId ?? 0}
+          orderNo={resumePayOrder?.orderNo}
+          qrAmount={resumePayOrder?.total ?? 0}
+          paymentExpiresAt={resumePayOrder?.paymentExpiresAt}
+          onClose={() => setResumePayOrder(null)}
+          onPaid={() => {
+            const no = resumePayOrder?.orderNo || ""
+            setResumePayOrder(null)
+            setOrderMessage(t("orderSubmitSuccessPaid", { orderNo: no }))
+            void loadMyOrders()
+          }}
+          onExpired={() => {
+            setResumePayOrder(null)
+            void loadMyOrders()
+          }}
+          t={t}
+        />
       </div>
     )
   }
@@ -1117,7 +1377,9 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                           <Trash2 className="h-3.5 w-3.5" />
                           {t("orderClearCart")}
                         </button>
-                        <span className="text-xs text-neutral-500">{t("orderPayAtPickup")}</span>
+                        <span className="text-xs text-neutral-500">
+                          {storePrepayEnabled ? t("orderCheckoutPayBtn") : t("orderPayAtPickup")}
+                        </span>
                       </div>
                       {!!orderError ? (
                         <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -1152,6 +1414,20 @@ export function MemberPortalOrderTab({ lang, t, member: _member, stores, favorit
                 onCancel={() => setCartConfirmOpen(false)}
                 onConfirm={handleConfirmSubmit}
                 t={t}
+              />
+              <MemberPortalCheckoutSheet
+                open={checkoutOpen}
+                lang={lang}
+                t={t}
+                member={member}
+                storeCode={pickupStore}
+                storeName={pickupStoreName}
+                pickupAt={pickupAt}
+                cart={cart}
+                onClose={() => setCheckoutOpen(false)}
+                onPaid={handleCheckoutPaid}
+                onError={(msg) => setOrderError(msg)}
+                onRestoreCart={restoreCheckoutDraft}
               />
             </>
           ) : null}

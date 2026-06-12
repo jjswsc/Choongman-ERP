@@ -48,6 +48,36 @@ export async function getLineUserProfile(userId: string): Promise<{ displayName:
   }
 }
 
+export async function pushLineTextMessage(params: {
+  userId: string
+  text: string
+}): Promise<{ ok: boolean; message?: string }> {
+  const token = getLineAccessToken()
+  if (!token) return { ok: false, message: 'no_token' }
+
+  const userId = String(params.userId || '').trim()
+  const text = String(params.text || '').trim()
+  if (!userId || !text) return { ok: false, message: 'invalid_params' }
+
+  const res = await fetch(`${getLineApiBase()}/v2/bot/message/push`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      to: userId,
+      messages: [{ type: 'text', text: text.slice(0, 5000) }],
+    }),
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    return { ok: false, message: `line_push_${res.status}:${body.slice(0, 200)}` }
+  }
+  return { ok: true }
+}
+
 export async function getLineFollowerIds(params?: { limit?: number; cursor?: string }): Promise<{ userIds: string[]; next: string }> {
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 1000))
   const q = new URLSearchParams()

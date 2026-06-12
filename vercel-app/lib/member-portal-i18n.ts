@@ -114,6 +114,44 @@ export type MemberPortalKey =
   | 'orderSubmit'
   | 'orderSubmitSuccess'
   | 'orderSubmitFail'
+  | 'orderSubmitSuccessPaid'
+  | 'orderSubmitSuccessPoints'
+  | 'orderCheckoutTitle'
+  | 'orderCheckoutPointsLabel'
+  | 'orderCheckoutPointsBalance'
+  | 'orderCheckoutUseAllPoints'
+  | 'orderCheckoutQrAmount'
+  | 'orderCheckoutPayBtn'
+  | 'orderCheckoutPayWithPoints'
+  | 'orderCheckoutQrTitle'
+  | 'orderCheckoutQrHint'
+  | 'orderCheckoutQrWaiting'
+  | 'orderCheckoutQrCountdown'
+  | 'orderCheckoutQrExpired'
+  | 'orderCheckoutRestoreCart'
+  | 'orderCheckoutPreviewFail'
+  | 'orderCheckoutQrFail'
+  | 'orderCheckoutPackaging'
+  | 'orderCheckoutCouponLabel'
+  | 'orderCheckoutCouponNone'
+  | 'orderCheckoutCouponInvalid'
+  | 'orderCheckoutCouponDiscount'
+  | 'orderMyOrdersTitle'
+  | 'orderMyOrdersEmpty'
+  | 'orderMyOrdersResumePay'
+  | 'orderMyOrdersReorder'
+  | 'orderMyOrdersReorderDone'
+  | 'orderPickupReadyBanner'
+  | 'orderCheckoutCouponMinOrder'
+  | 'orderStatusAwaitingPayment'
+  | 'orderStatusPaid'
+  | 'orderStatusCooking'
+  | 'orderStatusReady'
+  | 'orderStatusPending'
+  | 'orderStatusCompleted'
+  | 'orderStatusCancelled'
+  | 'orderStatusExpired'
+  | 'orderCheckoutOrderExpired'
   | 'pickup_too_soon'
   | 'empty_cart'
   | 'store_required'
@@ -574,6 +612,104 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '주문 접수됨 ({orderNo}). 픽업 시 결제해 주세요.',
   },
   orderSubmitFail: { en: 'Order failed. Try again.', th: 'สั่งไม่สำเร็จ', ko: '주문에 실패했습니다.' },
+  orderSubmitSuccessPaid: {
+    en: 'Payment complete ({orderNo}). See you at pickup!',
+    th: 'ชำระแล้ว ({orderNo}) พบกันที่ร้าน!',
+    ko: '결제 완료 ({orderNo}). 픽업 때 뵙겠습니다!',
+  },
+  orderSubmitSuccessPoints: {
+    en: 'Paid with points ({orderNo}). See you at pickup!',
+    th: 'ใช้พอยท์แล้ว ({orderNo}) พบกันที่ร้าน!',
+    ko: '포인트 결제 완료 ({orderNo}). 픽업 때 뵙겠습니다!',
+  },
+  orderCheckoutTitle: { en: 'Checkout', th: 'ชำระเงิน', ko: '결제하기' },
+  orderCheckoutPointsLabel: { en: 'Use points', th: 'ใช้พอยท์', ko: '포인트 사용' },
+  orderCheckoutPointsBalance: {
+    en: 'Balance: {balance} pts',
+    th: 'คงเหลือ {balance} พอยท์',
+    ko: '보유 {balance}P',
+  },
+  orderCheckoutUseAllPoints: { en: 'Use all', th: 'ใช้ทั้งหมด', ko: '전액 사용' },
+  orderCheckoutQrAmount: { en: 'Pay by QR', th: 'ชำระ QR', ko: 'QR 결제' },
+  orderCheckoutPayBtn: { en: 'Pay with QR', th: 'ชำระด้วย QR', ko: 'QR로 결제' },
+  orderCheckoutPayWithPoints: { en: 'Pay with points', th: 'ชำระด้วยพอยท์', ko: '포인트로 결제' },
+  orderCheckoutQrTitle: { en: 'Scan to pay', th: 'สแกนชำระ', ko: 'QR 스캔 결제' },
+  orderCheckoutQrHint: {
+    en: 'Scan with your banking app (PromptPay). Your order is sent to the store only after payment. QR expires in 5 minutes.',
+    th: 'สแกนผ่านแอปธนาคาร (PromptPay) ส่งคำสั่งซื้อหลังชำระ QR หมดอายุ 5 นาที',
+    ko: '뱅킹 앱으로 PromptPay QR을 스캔해 주세요. 결제가 확인된 뒤 매장에 주문이 접수됩니다. (5분 내 결제)',
+  },
+  orderCheckoutQrWaiting: {
+    en: 'Waiting for payment confirmation…',
+    th: 'รอยืนยันการชำระ…',
+    ko: '결제 확인 대기 중…',
+  },
+  orderCheckoutQrCountdown: {
+    en: 'Time left: {{time}}',
+    th: 'เหลือเวลา {{time}}',
+    ko: '남은 시간 {{time}}',
+  },
+  orderCheckoutQrExpired: {
+    en: 'QR expired. Please order again.',
+    th: 'QR หมดอายุ กรุณาสั่งใหม่',
+    ko: 'QR이 만료되었습니다. 다시 주문해 주세요.',
+  },
+  orderCheckoutRestoreCart: {
+    en: 'Restore cart & order again',
+    th: 'คืนตะกร้าแล้วสั่งใหม่',
+    ko: '장바구니 복원 후 다시 주문',
+  },
+  orderCheckoutPreviewFail: {
+    en: 'Could not load checkout.',
+    th: 'โหลดการชำระไม่สำเร็จ',
+    ko: '결제 정보를 불러오지 못했습니다.',
+  },
+  orderCheckoutQrFail: {
+    en: 'Could not create QR. Try again.',
+    th: 'สร้าง QR ไม่สำเร็จ',
+    ko: 'QR 생성에 실패했습니다.',
+  },
+  orderCheckoutPackaging: { en: 'Packaging', th: 'บรรจุภัณฑ์', ko: '포장비' },
+  orderCheckoutCouponLabel: { en: 'Coupon', th: 'คูปอง', ko: '쿠폰' },
+  orderCheckoutCouponNone: { en: 'No coupon', th: 'ไม่ใช้คูปอง', ko: '쿠폰 미사용' },
+  orderCheckoutCouponInvalid: {
+    en: 'This coupon cannot be used for this order.',
+    th: 'ใช้คูปองนี้กับคำสั่งซื้อนี้ไม่ได้',
+    ko: '이 주문에 사용할 수 없는 쿠폰입니다.',
+  },
+  orderCheckoutCouponDiscount: { en: 'Coupon discount', th: 'ส่วนลดคูปอง', ko: '쿠폰 할인' },
+  orderMyOrdersTitle: { en: 'My pickup orders', th: 'คำสั่งซื้อของฉัน', ko: '내 주문' },
+  orderMyOrdersEmpty: { en: 'No orders yet.', th: 'ยังไม่มีคำสั่งซื้อ', ko: '주문 내역이 없습니다.' },
+  orderMyOrdersResumePay: { en: 'Pay now', th: 'ชำระเลย', ko: '결제하기' },
+  orderMyOrdersReorder: { en: 'Order again', th: 'สั่งอีกครั้ง', ko: '다시 주문' },
+  orderMyOrdersReorderDone: {
+    en: 'Items added to cart.',
+    th: 'เพิ่มในตะกร้าแล้ว',
+    ko: '장바구니에 담았습니다.',
+  },
+  orderPickupReadyBanner: {
+    en: '{{orderNo}} is ready for pickup at {{store}}.',
+    th: '{{orderNo}} พร้อมรับที่ {{store}}',
+    ko: '{{orderNo}} — {{store}}에서 픽업 준비가 완료되었습니다.',
+  },
+  orderCheckoutCouponMinOrder: {
+    en: 'Min. order ฿{{amount}}',
+    th: 'ขั้นต่ำ ฿{{amount}}',
+    ko: '최소 주문 ฿{{amount}}',
+  },
+  orderStatusAwaitingPayment: { en: 'Awaiting payment', th: 'รอชำระ', ko: '결제 대기' },
+  orderStatusPaid: { en: 'Paid · preparing', th: 'ชำระแล้ว · กำลังเตรียม', ko: '결제 완료 · 준비 중' },
+  orderStatusCooking: { en: 'Preparing', th: 'กำลังทำ', ko: '조리 중' },
+  orderStatusReady: { en: 'Ready for pickup', th: 'พร้อมรับ', ko: '픽업 준비 완료' },
+  orderStatusPending: { en: 'Accepted', th: 'รับแล้ว', ko: '접수됨' },
+  orderStatusCompleted: { en: 'Completed', th: 'เสร็จสิ้น', ko: '완료' },
+  orderStatusCancelled: { en: 'Cancelled', th: 'ยกเลิก', ko: '취소' },
+  orderStatusExpired: { en: 'Payment expired', th: 'หมดเวลาชำระ', ko: '결제 만료' },
+  orderCheckoutOrderExpired: {
+    en: 'This order expired. Please place a new order.',
+    th: 'คำสั่งซื้อหมดเวลาแล้ว กรุณาสั่งใหม่',
+    ko: '결제 시간이 만료되었습니다. 다시 주문해 주세요.',
+  },
   pickup_too_soon: {
     en: 'Pickup must be at least 30 minutes from now.',
     th: 'เวลารับต้องอย่างน้อย 30 นาทีจากนี้',

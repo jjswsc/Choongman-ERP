@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchErpStoresMaster } from '@/lib/erp-store-master'
-import { memberPortalStoresFromMasters } from '@/lib/member-portal-stores'
+import { memberPortalStoresForSession } from '@/lib/member-portal-stores'
 import { requireMemberSession } from '@/lib/member-portal-session'
 
 export async function GET(req: NextRequest) {
@@ -8,8 +7,7 @@ export async function GET(req: NextRequest) {
   if (error) return error
 
   try {
-    const rows = await fetchErpStoresMaster()
-    const stores = memberPortalStoresFromMasters(rows)
+    const stores = await memberPortalStoresForSession()
     return NextResponse.json({ success: true, stores })
   } catch (e) {
     return NextResponse.json(

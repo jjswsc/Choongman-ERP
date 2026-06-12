@@ -16,7 +16,7 @@ export function paymentKindLabel(kind: string, tr: SalesDiscountTr): string {
 }
 
 export function combinedLayerLabel(layer: string, tr: SalesDiscountTr): string {
-  if (layer === 'bundle') return tr('salesCombinedLayerBundle', '세트·프로모')
+  if (layer === 'bundle') return tr('salesCombinedLayerBundle', '세트 할인')
   return tr('salesCombinedLayerPayment', '결제 할인')
 }
 

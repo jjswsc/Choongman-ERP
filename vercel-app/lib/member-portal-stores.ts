@@ -1,5 +1,11 @@
 import { buildLegacyToCanonicalMap, type ErpStoreMasterRow } from '@/lib/erp-store-master-shared'
+import { fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
+import {
+  isMemberPortalPrepayStore,
+  loadMemberPortalPrepayConfig,
+  type MemberPortalPrepayConfig,
+} from '@/lib/member-portal-prepay-config'
 import { isPosSalesTestOfficeStoreCode } from '@/lib/pos-sales-test-office'
 import { normStoreKey } from '@/lib/store-list-keys'
 
@@ -127,13 +133,25 @@ function pickPrimaryMemberPortalStore(members: MemberPortalStoreDto[]): MemberPo
   })
 }
 
-export function memberPortalStoresFromMasters(rows: ErpStoreMasterRow[]): MemberPortalStoreDto[] {
+function isMemberPortalOrderStore(
+  store: MemberPortalStoreDto,
+  prepay?: MemberPortalPrepayConfig
+): boolean {
+  if (isMemberPortalPublicStore(store)) return true
+  if (prepay?.enabled && isMemberPortalPrepayStore(store, prepay)) return true
+  return false
+}
+
+export function memberPortalStoresFromMasters(
+  rows: ErpStoreMasterRow[],
+  opts?: { prepay?: MemberPortalPrepayConfig }
+): MemberPortalStoreDto[] {
   const legacyToCanonical = buildLegacyToCanonicalMap(rows)
   const mapped = rows
     .map(mapErpStoreToMemberPortal)
     .filter((s): s is MemberPortalStoreDto => Boolean(s))
     .filter((s) => s.isActive)
-    .filter(isMemberPortalPublicStore)
+    .filter((s) => isMemberPortalOrderStore(s, opts?.prepay))
 
   if (mapped.length <= 1) {
     return mapped.sort((a, b) => {
@@ -159,6 +177,12 @@ export function memberPortalStoresFromMasters(rows: ErpStoreMasterRow[]): Member
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
     return a.displayName.localeCompare(b.displayName, 'ko')
   })
+}
+
+export async function memberPortalStoresForSession(): Promise<MemberPortalStoreDto[]> {
+  const rows = await fetchErpStoresMaster()
+  const prepay = await loadMemberPortalPrepayConfig()
+  return memberPortalStoresFromMasters(rows, { prepay })
 }
 
 export function memberPortalStoreMatchesQuery(store: MemberPortalStoreDto, query: string): boolean {
