@@ -1,4 +1,8 @@
 import {
+  netBankPurchasePaymentForIncomeStatement,
+  sumInboundLinkAmountsByBankTransactionId,
+} from '@/lib/accounting-bank-purchase-inbound-net'
+import {
   buildHqVendorMatchIndex,
   isHqVendorPurchaseKey,
   partitionPurchaseVendorMapByHqCodes,
@@ -346,9 +350,30 @@ function buildHqOutboundFromOfficeFilter(
   return filter
 }
 
+async function loadInboundLinkedAmountByBankId(bankIds: number[]): Promise<Map<number, number>> {
+  const unique = [...new Set(bankIds.filter((id) => id > 0))]
+  if (unique.length === 0) return new Map()
+  const CHUNK = 400
+  const allLinks: { bank_transaction_id?: number; amount?: number }[] = []
+  try {
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const chunk = unique.slice(i, i + CHUNK)
+      const rows = (await supabaseSelectFilter(
+        'bank_transaction_inbound_links',
+        `bank_transaction_id=in.(${chunk.join(',')})`,
+        { select: 'bank_transaction_id,amount', limit: 5000 }
+      )) as { bank_transaction_id?: number; amount?: number }[] | null
+      if (rows?.length) allLinks.push(...rows)
+    }
+  } catch {
+    return new Map()
+  }
+  return sumInboundLinkAmountsByBankTransactionId(allLinks)
+}
+
 /**
- * 통장 출금 중 category=purchase_payment — 손익 '매입' 거래처별 내역에 반영 (미지급 정산 지급).
- * COGS용 입고·발주와 중복될 수 있으나, 사용자가 통장에서만 매입처를 구분해 등록한 경우 표시 누락을 막기 위함.
+ * 통장 출금 중 category=purchase_payment — 손익 '매입' 거래처별 내역.
+ * 입고 연동(bank_transaction_inbound_links)된 금액은 직접입고와 이중이므로 제외. 미연동분만 합산(통장만 등록한 매입 포함).
  */
 async function fetchBankPurchasePaymentsByVendor(params: {
   isHQ: boolean
@@ -383,16 +408,19 @@ async function fetchBankPurchasePaymentsByVendor(params: {
   }
   if (accountIds.length === 0) return {}
   const idList = accountIds.join(',')
-  let btRows: { amount?: number; vendor_code?: string; store?: string | null }[] | null
+  let btRows: { id?: number; amount?: number; vendor_code?: string; store?: string | null }[] | null
   try {
     btRows = (await supabaseSelectFilter(
       'bank_transactions',
       `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
-      { select: 'amount,vendor_code,store', limit: BASE_LIMIT }
-    )) as { amount?: number; vendor_code?: string; store?: string | null }[] | null
+      { select: 'id,amount,vendor_code,store', limit: BASE_LIMIT }
+    )) as { id?: number; amount?: number; vendor_code?: string; store?: string | null }[] | null
   } catch {
     return {}
   }
+  const linkedByBankId = await loadInboundLinkedAmountByBankId(
+    (btRows || []).map((r) => Number(r.id)).filter((id) => id > 0)
+  )
   const out: Record<string, number> = {}
   for (const r of btRows || []) {
     if (storeFilter !== 'All') {
@@ -403,8 +431,14 @@ async function fetchBankPurchasePaymentsByVendor(params: {
         if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
       }
     }
+    const bankId = Number(r.id)
+    const netAmt = netBankPurchasePaymentForIncomeStatement(
+      Number(r.amount) || 0,
+      bankId > 0 ? linkedByBankId.get(bankId) || 0 : 0
+    )
+    if (netAmt <= 0) continue
     const v = String(r.vendor_code || '').trim() || '__pl_vendor_unknown__'
-    out[v] = (out[v] || 0) + Math.abs(Number(r.amount) || 0)
+    out[v] = (out[v] || 0) + netAmt
   }
   return out
 }
@@ -1789,6 +1823,9 @@ export async function computeIncomeStatementPurchaseDrillDown(
     } catch {
       btRows = null
     }
+    const linkedByBankIdDrill = await loadInboundLinkedAmountByBankId(
+      (btRows || []).map((r) => Number(r.id)).filter((id) => id > 0)
+    )
     for (const r of btRows || []) {
       if (storeFilter !== 'All') {
         const bts = String(r.store || '').trim()
@@ -1801,12 +1838,17 @@ export async function computeIncomeStatementPurchaseDrillDown(
       if (!drillVendorMatchesBankRow(vendorKey, r.vendor_code)) continue
       const id = Number(r.id)
       if (!id) continue
+      const netAmt = netBankPurchasePaymentForIncomeStatement(
+        Number(r.amount) || 0,
+        linkedByBankIdDrill.get(id) || 0
+      )
+      if (netAmt <= 0) continue
       const rid = r.ref_id != null && !isNaN(Number(r.ref_id)) ? Number(r.ref_id) : null
       bankAcc.push({
         kind: 'bank',
         id,
         transDate: String(r.trans_date || '').slice(0, 10),
-        amount: Math.abs(Number(r.amount) || 0),
+        amount: netAmt,
         vendorCode: r.vendor_code != null ? String(r.vendor_code).trim() || null : null,
         memo: r.memo != null ? String(r.memo) : null,
         note: r.note != null ? String(r.note) : null,
