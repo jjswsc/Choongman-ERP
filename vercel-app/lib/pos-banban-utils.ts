@@ -434,8 +434,18 @@ export function isLikelyBanbanSideOrExtraLabel(raw: string | null | undefined): 
   return false
 }
 
+/** Grab modifier placeholder — 실제 맛 이름이 아님 */
+export function isGrabBanbanFlavorSlotPlaceholderLabel(raw: string | null | undefined): boolean {
+  const lab = String(raw ?? '').trim().toLowerCase()
+  if (!lab) return false
+  return /^flavor\s*[12]$/.test(lab) || lab === '1' || lab === '2'
+}
+
 function pickBanbanFlavorPairFromLabelList(labels: string[]): [string, string] | null {
-  const cleaned = labels.map((s) => String(s ?? '').trim()).filter(Boolean)
+  const cleaned = labels
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+    .filter((lab) => !isGrabBanbanFlavorSlotPlaceholderLabel(lab))
   if (cleaned.length < 2) return null
   const withoutExtras = cleaned.filter((lab) => !isLikelyBanbanSideOrExtraLabel(lab))
   const pick = withoutExtras.length >= 2 ? withoutExtras : cleaned

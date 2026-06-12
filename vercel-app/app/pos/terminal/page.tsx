@@ -132,6 +132,7 @@ import {
   isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
+import { formatGrabDeliveryTableDisplayName } from '@/lib/pos-grab-manual-delivery-guard'
 import {
   buildDineInAddKitchenAutoPrintDedupeKey,
   buildDineInAddKitchenPrintDedupeSuffix,
@@ -207,6 +208,7 @@ import {
   upsertPosSplitReceiptsInMemo,
 } from '@/lib/pos-split-receipt-memo'
 import { buildSplitPaymentReceiptBatch } from '@/lib/pos-split-payment-receipt-batch'
+import { mergeGrabOrderItemsForKitchenPrint } from '@/lib/grab-kitchen-print-items'
 import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
@@ -1307,6 +1309,24 @@ export default function PosTerminalPage() {
       })),
     [optionNameByCode, optionNameById]
   )
+  /** Grab 주방 자동인쇄 — 영수증과 동일하게 세트 자식 병합·`grabSetChild` 제거 후 맵 */
+  const prepareOrderItemsForKitchenPrint = useCallback(
+    (orderItems: unknown[], deliveryAppCode?: string | null) => {
+      const base = Array.isArray(orderItems) ? orderItems : []
+      const merged = mergeGrabOrderItemsForKitchenPrint(
+        base as Parameters<typeof mergeGrabOrderItemsForKitchenPrint>[0],
+        grabCatalogForPrint
+      )
+      return merged.map((it) =>
+        mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
+          menus,
+          deliveryAppCode,
+          enrichPromoItems: enrichPromoItemsWithOptionName,
+        })
+      )
+    },
+    [grabCatalogForPrint, menus, enrichPromoItemsWithOptionName]
+  )
   /** 분할 결제 영수증 배치 시작 — 기존 큐·모달 상태를 비우고 첫 장부터 순서대로 인쇄 */
   const startReceiptBatch = useCallback((batch: ReceiptModalData[]) => {
     if (!Array.isArray(batch) || batch.length === 0) return
@@ -1694,13 +1714,7 @@ export default function PosTerminalPage() {
             ? (order.items as unknown as Array<Record<string, unknown>>)
             : []
       if (!rawItems.length) throw new Error('empty_order_items')
-      const items = rawItems.map((it) =>
-        mapPosOrderRowForKitchenPrint(it, {
-          menus,
-          deliveryAppCode: order.deliveryAppCode,
-          enrichPromoItems: enrichPromoItemsWithOptionName,
-        })
-      )
+      const items = prepareOrderItemsForKitchenPrint(rawItems, order.deliveryAppCode)
       const settings = await getPrinterSettingsForStore(effectiveStoreCode)
       const menusForPrint = await resolveMenusForKitchenPrint(items as Array<Record<string, unknown>>, effectiveStoreCode)
       const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
@@ -1764,13 +1778,12 @@ export default function PosTerminalPage() {
     },
     [
       currentStoreId,
-      enrichPromoItemsWithOptionName,
       getPrinterSettingsForStore,
       kitchenItemsWithResolvedPromo,
       kitchenSlipItemsForPrint,
       lang,
-      menus,
       optionNameByCode,
+      prepareOrderItemsForKitchenPrint,
       resolveMenusForKitchenPrint,
     ]
   )
@@ -2738,13 +2751,7 @@ export default function PosTerminalPage() {
         logPosPrintDebug('accept_flow_skip_empty_items', { orderId })
         return
       }
-      const items = (order.items || []).map((it) =>
-        mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
-          menus,
-          deliveryAppCode: order.deliveryAppCode,
-          enrichPromoItems: enrichPromoItemsWithOptionName,
-        })
-      )
+      const items = prepareOrderItemsForKitchenPrint(order.items || [], order.deliveryAppCode)
       const runKitchenForAcceptedOrder = () => {
         if (!autoPrintKitchenSlipOnOrder) return
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
@@ -2925,13 +2932,7 @@ export default function PosTerminalPage() {
             }
             const order = list[0]
             if (order?.items?.length) {
-              const items = (order.items || []).map((it) =>
-                mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
-                  menus,
-                  deliveryAppCode: order.deliveryAppCode,
-                  enrichPromoItems: enrichPromoItemsWithOptionName,
-                })
-              )
+              const items = prepareOrderItemsForKitchenPrint(order.items || [], order.deliveryAppCode)
               const runKitchenForAcceptedOrder = () => {
                 if (!autoPrintKitchenSlipOnOrder) return
                 if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
@@ -5422,14 +5423,10 @@ export default function PosTerminalPage() {
             logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
             continue
           }
-          const items = (order.items || []).map((it) =>
-            mapPosOrderRowForKitchenPrint(it as unknown as Record<string, unknown>, {
-              menus,
-              deliveryAppCode:
-                (order as { deliveryAppCode?: string }).deliveryAppCode ??
-                (order.items || []).find((row) => String(row.deliveryAppCode ?? '').trim())?.deliveryAppCode,
-              enrichPromoItems: enrichPromoItemsWithOptionName,
-            })
+          const items = prepareOrderItemsForKitchenPrint(
+            order.items || [],
+            (order as { deliveryAppCode?: string }).deliveryAppCode ??
+              (order.items || []).find((row) => String(row.deliveryAppCode ?? '').trim())?.deliveryAppCode
           )
           /* 품목이 아직 비어 있으면 seen/워터마크에 넣지 않음 → 다음 폴링에서 다시 조회 */
           if (items.length === 0) {
@@ -7353,6 +7350,7 @@ export default function PosTerminalPage() {
     { id: 'shopee', name: 'Shopee' },
   ] : []
   const effectiveDeliveryApps = deliveryApps.length > 0 ? deliveryApps : deliveryAppsFallback
+  const grabDeliveryHintVisible = String(deliveryApp ?? '').trim().toLowerCase() === 'grab'
   const cartOrderType = activeTab === 'delivery' ? 'delivery' : activeTab === 'takeout' ? 'takeout' : 'dine-in'
   const formatTakeoutSlotLabel = (slot: string) => {
     const rawTemplate = String(t('posTakeoutSlotN') ?? '').trim()
@@ -7585,7 +7583,9 @@ export default function PosTerminalPage() {
     const accentRaw = matched?.accentColor || null
     const accent = mapPosAccentToBar(accentRaw || (platformLabel.toLowerCase().includes('grab') ? 'lime' : platformLabel.toLowerCase().includes('line') ? 'sky' : platformLabel.toLowerCase().includes('shopee') ? 'amber' : 'slate'))
 
-    const customer = String(order.customerName || '').trim()
+    const customer =
+      formatGrabDeliveryTableDisplayName(tableName, memo) ||
+      String(order.customerName || '').trim()
     return {
       deliveryAppAccent: accent,
       deliveryAppName: platformLabel || undefined,
@@ -9621,7 +9621,12 @@ export default function PosTerminalPage() {
                   ...(hasPayment ? { closeStatus: 'paid' as const } : {}),
                 })
                 if (!res.success) {
-                  const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                  const msg = localizeApiMessage(
+                    (res as { message?: string }).message,
+                    t,
+                    t('posOrderSaveFailed') || '주문 저장에 실패했습니다.',
+                    lang
+                  )
                   await appAlert(msg)
                   return false
                 }
@@ -10268,6 +10273,12 @@ export default function PosTerminalPage() {
                     + {t('posNewOrder') || '새 주문'}
                   </Button>
                 </div>
+                {grabDeliveryHintVisible ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('posGrabManualDeliveryHint') ||
+                      'Grab: 자동 수신 주문은 배달 목록에서 선택하세요. GF 번호는 재사용될 수 있습니다.'}
+                  </p>
+                ) : null}
                 <Button
                   size="sm"
                   variant="outline"

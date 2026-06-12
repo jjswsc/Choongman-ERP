@@ -1,9 +1,14 @@
+import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { normalizePromoLookupText } from '@/lib/pos-payment-receipt-from-order'
 import type { GrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import {
   enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   resolveGrabDeliveryLineNote,
 } from '@/lib/grab-pos-order-enrich'
+import {
+  parseBanbanFlavorsFromDisplayName,
+  parseBanbanFlavorsFromPersistedNote,
+} from '@/lib/pos-banban-utils'
 
 export type GrabSetPosLine = {
   id: string
@@ -120,6 +125,41 @@ function findParentLineIndex(params: {
   return -1
 }
 
+/** 세트 자식 ingest 후 `(맛 / 맛)`·`(L - Boneless)` 등이 name에 있으면 유지 */
+export function resolveGrabSetChildKitchenDisplayName(
+  row: Pick<GrabSetPosLine, 'name'>,
+  childName: string
+): string {
+  const full = String(row.name ?? '').trim()
+  const child = String(childName ?? '').trim()
+  if (!child) return full
+  const parsed = parseGrabSetChildLineName(full)
+  const tail = parsed ? String(parsed.childName ?? '').trim() : full
+  if (tail.toLowerCase().startsWith(child.toLowerCase()) && /\([^)]+\)/.test(tail)) {
+    return tail
+  }
+  if (full.toLowerCase().includes(child.toLowerCase()) && /\([^)]+\)/.test(full)) {
+    const bracketTail = full.slice(full.lastIndexOf(']') + 1).trim()
+    if (bracketTail.toLowerCase().startsWith(child.toLowerCase())) return bracketTail
+    const fromDisplay = parseBanbanFlavorsFromDisplayName(full)
+    if (fromDisplay && fromDisplay.baseName.toLowerCase() === child.toLowerCase()) {
+      return `${fromDisplay.baseName} (${fromDisplay.flavor1} / ${fromDisplay.flavor2})`
+    }
+  }
+  return child
+}
+
+function resolveGrabSetChildPromoOptionSummary(
+  row: GrabSetPosLine,
+  optionNameByCode: Map<string, string>
+): string {
+  const fromToken = parseBanbanFlavorsFromPersistedNote(row.note)
+  if (fromToken) return `${fromToken.flavor1} / ${fromToken.flavor2}`
+  const fromName = parseBanbanFlavorsFromDisplayName(row.name)
+  if (fromName) return `${fromName.flavor1} / ${fromName.flavor2}`
+  return promoOptionSummaryFromChildNote(row.note, optionNameByCode)
+}
+
 function promoOptionSummaryFromChildNote(
   note: string | undefined,
   optionNameByCode: Map<string, string>
@@ -163,6 +203,7 @@ export function mergeGrabSetChildLinesIntoPromoParents(
 
   for (const child of children) {
     const row = out[child.index]
+    const childMenuName = splitPosPrintItemLine(child.childName).mainName || child.childName
     const promoMeta = findPromoMetaByLabelExact(child.promoLabel, catalog)
     const parentIdx = findParentLineIndex({
       promoLabel: child.promoLabel,
@@ -172,17 +213,20 @@ export function mergeGrabSetChildLinesIntoPromoParents(
       skipIndices: childIndices,
     })
     const menuId =
-      String(row.menuId1 ?? '').trim() || resolveMenuIdByDisplayName(child.childName, catalog) || ''
+      String(row.menuId1 ?? '').trim() ||
+      resolveMenuIdByDisplayName(childMenuName, catalog) ||
+      resolveMenuIdByDisplayName(child.childName, catalog) ||
+      ''
     const optionCode = String(row.optionCode1 ?? row.optionCode ?? '').trim() || undefined
     const optionName =
-      promoOptionSummaryFromChildNote(row.note, catalog.optionNameByCode) ||
+      resolveGrabSetChildPromoOptionSummary(row, catalog.optionNameByCode) ||
       (optionCode ? findOptionLabelByCode(catalog.optionNameByCode, optionCode) : '')
     const promoLineRaw = {
       menuId: menuId || '',
       optionId: null as string | null,
       ...(optionCode ? { optionCode } : {}),
       ...(optionName ? { optionName } : {}),
-      menuName: child.childName,
+      menuName: childMenuName,
       quantity: Math.max(1, Number(row.qty) || 1),
     }
     const promoLine =
@@ -191,7 +235,26 @@ export function mergeGrabSetChildLinesIntoPromoParents(
     if (parentIdx >= 0 && parentIdx !== child.index) {
       const parent = out[parentIdx]
       const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
-      list.push(promoLine)
+      const childKey = normalizePromoLookupText(childMenuName)
+      const existingIdx = list.findIndex((p) => {
+        const byName = normalizePromoLookupText(String(p.menuName ?? ''))
+        if (childKey && byName && byName === childKey) return true
+        const pid = String(p.menuId ?? '').trim()
+        return Boolean(menuId && pid && pid === menuId)
+      })
+      if (existingIdx >= 0) {
+        const prev = list[existingIdx]
+        list[existingIdx] = {
+          ...prev,
+          ...promoLine,
+          quantity: Math.max(1, Number(prev.quantity) || 1),
+          ...(promoLine.optionName || prev.optionName
+            ? { optionName: promoLine.optionName || prev.optionName }
+            : {}),
+        }
+      } else {
+        list.push(promoLine)
+      }
       const enrichedList = enrichGrabPromoItemsWithDefaultSizeFromCatalog(list, catalog) ?? list
       out[parentIdx] = { ...parent, promoItems: enrichedList }
       out[child.index] = { ...row, grabSetChild: true }
@@ -199,9 +262,10 @@ export function mergeGrabSetChildLinesIntoPromoParents(
     }
 
     // 부모 줄이 없으면 자식 이름만 정리해 주방·영수증에 구성명이 보이게 한다
+    const displayName = resolveGrabSetChildKitchenDisplayName(row, childMenuName)
     out[child.index] = {
       ...row,
-      name: child.childName,
+      name: displayName,
       ...(optionName && !String(row.note ?? '').trim() ? { note: `mods:${optionName}` } : {}),
     }
   }

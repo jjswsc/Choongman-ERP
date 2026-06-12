@@ -7004,6 +7004,8 @@ export const i18n = {
     posIncomingDeliveryDeferredTabHint: '배달 ({{count}}건 결제 중 대기)',
     posGrabCustomerCancelledAlert:
       '고객이 Grab에서 주문을 취소했습니다.\n\n{{label}}\n\n배달 탭에서 확인해 주세요.',
+    posGrabManualDeliveryHint:
+      'Grab: 자동 수신 주문은 배달 목록에서 선택하세요. GF 번호는 Grab에서 재사용될 수 있으니, 수동 입력 전 목록에 같은 번호가 없는지 확인하세요.',
     posGrabDeliveryProgressTitle: 'Grab 배달 단계',
     posGrabDeliveryProgressHint: 'Grab에서 푸시한 배송 상태입니다. 매장 조리·결제 흐름과는 별도로 표시됩니다.',
     posGrabStageWaitConfirm: '확인 대기',
@@ -16452,6 +16454,8 @@ orderItemQty: 'Qty',
     posIncomingDeliveryDeferredTabHint: 'Delivery ({{count}} waiting during checkout)',
     posGrabCustomerCancelledAlert:
       'The customer cancelled this order on Grab.\n\n{{label}}\n\nPlease check the Delivery tab.',
+    posGrabManualDeliveryHint:
+      'Grab: pick auto-received orders from the delivery list. GF numbers can repeat — check the list before creating a manual order.',
     posGrabDeliveryProgressTitle: 'Grab delivery stages',
     posGrabDeliveryProgressHint: 'Status from Grab pushes. Shown separately from in-store prep and payment.',
     posGrabStageWaitConfirm: 'Waiting for confirmation',
@@ -25033,6 +25037,8 @@ orderItemQty: 'จำนวน',
     posIncomingDeliveryDeferredTabHint: 'เดลิเวอรี (รอ {{count}} ระหว่างคิดเงิน)',
     posGrabCustomerCancelledAlert:
       'ลูกค้ายกเลิกออเดอร์นี้ใน Grab แล้ว\n\n{{label}}\n\nโปรดตรวจสอบที่แท็บเดลิเวอรี',
+    posGrabManualDeliveryHint:
+      'Grab: เลือกออเดอร์ที่รับอัตโนมัติจากรายการเดลิเวอรี ก่อนสร้างมือให้เช็คว่าเลข GF ซ้ำในรายการหรือยัง (Grab ใช้เลขซ้ำได้)',
     posGrabDeliveryProgressTitle: 'ขั้น Grab',
     posGrabDeliveryProgressHint: 'สถานะจาก Grab แยกจากการปรุงและชำระเงินในร้าน',
     posGrabStageWaitConfirm: 'รอยืนยัน',

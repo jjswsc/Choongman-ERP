@@ -34,6 +34,7 @@ import {
   parseGrabSetChildLineName,
   type GrabSetPosLine,
 } from '@/lib/grab-set-pos-lines'
+import { normalizePromoLookupText } from '@/lib/pos-payment-receipt-from-order'
 import {
   extractGrabBanbanFlavorSlotsFromModifiers,
   isBanbanMenu,
@@ -747,6 +748,49 @@ function resolveMenuCodeForGrabLine(params: {
   return String(fromName || '').trim()
 }
 
+function mergeSetChildModifiersFromParent(
+  item: Record<string, unknown>,
+  flatModifiers: Record<string, unknown>[],
+  allRawItems: unknown[]
+): Record<string, unknown>[] {
+  const itemName = String(item.name ?? item.title ?? '').trim()
+  const childParsed = parseGrabSetChildLineName(itemName)
+  if (!childParsed) return flatModifiers
+
+  const slotProbe = extractGrabBanbanFlavorSlotsFromModifiers(flatModifiers, null)
+  const hasBanbanSlots = slotProbe.flavorMenuIds.length >= 2
+  const hasOptionCodes = flatModifiers.some((m) => extractOptionCodesFromModifier(asRecord(m)).length > 0)
+  const hasReadableMods = flatModifiers.some((m) => extractReadableModifierNames(asRecord(m)).length > 0)
+  if (hasBanbanSlots && (hasOptionCodes || hasReadableMods)) return flatModifiers
+
+  const labelKey = normalizePromoLookupText(childParsed.promoLabel)
+  if (!labelKey) return flatModifiers
+
+  for (const raw of allRawItems) {
+    const parent = asRecord(raw)
+    const parentName = String(parent.name ?? parent.title ?? '').trim()
+    if (!parentName || parseGrabSetChildLineName(parentName)) continue
+    const parentKey = normalizePromoLookupText(
+      parentName.replace(/^\[+/, '').replace(/\]+$/, '').replace(/\]\s*\[/g, ' ')
+    )
+    if (parentKey !== labelKey && !parentKey.includes(labelKey) && !labelKey.includes(parentKey)) {
+      continue
+    }
+    const parentMods = flattenGrabOrderItemModifiers(parent)
+    if (parentMods.length === 0) continue
+    const merged = [...flatModifiers]
+    const seen = new Set(flatModifiers.map((m) => buildModifierPriceSignature(asRecord(m))))
+    for (const mod of parentMods) {
+      const sig = buildModifierPriceSignature(asRecord(mod))
+      if (seen.has(sig)) continue
+      seen.add(sig)
+      merged.push(mod)
+    }
+    return merged
+  }
+  return flatModifiers
+}
+
 async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]> {
   const exponent = currencyExponent(order)
   const rawItems = Array.isArray(order.items) ? order.items : []
@@ -758,7 +802,8 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
   for (const raw of rawItems) {
     const item = asRecord(raw)
     const qty = Math.max(1, Math.trunc(toNumber(item.quantity) || 1))
-    const flatModifiers = flattenGrabOrderItemModifiers(item)
+    let flatModifiers = flattenGrabOrderItemModifiers(item)
+    flatModifiers = mergeSetChildModifiersFromParent(item, flatModifiers, rawItems)
     let modifierMinor = 0
     const modifierNames: string[] = []
     const pricedModifierSignatures = new Set<string>()
@@ -1103,12 +1148,15 @@ function resolveFulfillmentLabel(order: Record<string, unknown>): string {
 
 function resolveDisplayName(order: Record<string, unknown>): string {
   const short = String(order.shortOrderNumber ?? '').trim()
+  const orderID = String(order.orderID ?? '').trim()
+  const idSuffix = orderID.length > 10 ? orderID.slice(-8) : orderID
   const receiver = asRecord(order.receiver)
   const receiverName = String(receiver.name ?? '').trim()
   const fulfill = resolveFulfillmentLabel(order)
-  if (short && receiverName) return `Grab #${short} · ${fulfill} · ${receiverName}`
-  if (short) return `Grab #${short} · ${fulfill}`
-  if (receiverName) return `Grab · ${fulfill} · ${receiverName}`
+  const idTail = idSuffix ? ` · ID ${idSuffix}` : ''
+  if (short && receiverName) return `Grab #${short} · ${fulfill} · ${receiverName}${idTail}`
+  if (short) return `Grab #${short} · ${fulfill}${idTail}`
+  if (receiverName) return `Grab · ${fulfill} · ${receiverName}${idTail}`
   return 'Grab'
 }
 
@@ -1303,10 +1351,12 @@ async function findPosOrderRowForGrabStateSync(orderID: string): Promise<PosOrde
     : tableFilter
 
   rows = (await supabaseSelectFilter('pos_orders', filter, {
-    limit: 1,
+    limit: 2,
     order: 'created_at.desc',
     select: 'id,status,memo',
   })) as PosOrderGrabSyncRow[]
+
+  if ((rows?.length ?? 0) > 1) return null
 
   return rows?.[0] ?? null
 }

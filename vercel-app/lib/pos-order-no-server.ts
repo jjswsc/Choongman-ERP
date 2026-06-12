@@ -22,7 +22,7 @@ import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 
 const SELECT_LIMIT = 12000
 
-function storeCodeQueryVariants(storeCode: string): string[] {
+export function storeCodeQueryVariants(storeCode: string): string[] {
   const s = String(storeCode || '').trim()
   if (!s) return []
   const out = new Set<string>()
