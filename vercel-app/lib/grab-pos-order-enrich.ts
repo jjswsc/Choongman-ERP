@@ -919,8 +919,15 @@ export function formatGrabPromoComposeLinesForPrint(
   const qty = Math.max(1, Number(p.quantity) || 1)
   const optName = String(p.optionName ?? '').trim()
   const optionParts = splitPromoOptionNameParts(optName)
+  // 사이즈·파트(예: "Size S", "M - Boneless")는 메뉴명 없이 단독으로는 주방에서 의미가 없다.
+  // 세트명이 메뉴명을 부분 포함하는 경우(예: "Set 1 Golden Fried Chicken" ⊃ "GOLDEN FRIED CHICKEN")
+  // 메뉴명을 지우면 "Size S"만 남아 어떤 치킨인지 알 수 없으므로, 사이즈·파트 옵션은 메뉴명을 유지한다.
+  // (반반 맛처럼 그 자체가 메뉴를 설명하는 옵션은 기존대로 옵션만 출력한다.)
+  const optionIsSizeOrPart =
+    isGrabExplicitSizeOrPartLabel(optName) || optionParts.some((part) => isGrabExplicitSizeOrPartLabel(part))
   const optionOnly =
     optName &&
+    !optionIsSizeOrPart &&
     shouldGrabPromoComposeOptionOnly(p.parentItemName, menuName) &&
     (grabSplit || optionParts.length > 1)
 
