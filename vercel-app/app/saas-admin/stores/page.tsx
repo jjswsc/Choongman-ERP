@@ -30,8 +30,7 @@ type StoreRow = {
 }
 
 export default function SaasStoresPage() {
-  const { lang } = useLang()
-  const t = useT(lang)
+  const t = useT(useLang().lang)
   const [tenantFilter, setTenantFilter] = useState<string>("")
   const [createTenantId, setCreateTenantId] = useState<string>("")
   const [createStoreName, setCreateStoreName] = useState("")

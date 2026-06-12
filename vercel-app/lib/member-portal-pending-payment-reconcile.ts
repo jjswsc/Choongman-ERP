@@ -1,6 +1,8 @@
 import { finalizeMemberPortalPrepaidOrder } from '@/lib/member-portal-checkout-server'
+import { MEMBER_PORTAL_PAYMENT_PENDING_TAG } from '@/lib/member-portal-payment-pending'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
+import { resolveKbankRuntimeForStoreCode } from '@/lib/tenant-integration-resolve'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 export async function reconcileStaleMemberPortalQrPayments(): Promise<{
@@ -33,23 +35,40 @@ export async function reconcileStaleMemberPortalQrPayments(): Promise<{
 
     const orders = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
       limit: 1,
-      select: 'id,status,created_by,memo',
-    })) as Array<{ id?: number; status?: string; created_by?: string | null; memo?: string | null }>
+      select: 'id,status,created_by,memo,store_code,payment_qr',
+    })) as Array<{
+      id?: number
+      status?: string
+      created_by?: string | null
+      memo?: string | null
+      store_code?: string | null
+      payment_qr?: number | null
+    }>
     const order = orders?.[0]
     if (!order?.id) continue
     if (!String(order.created_by || '').startsWith('member_portal:')) continue
     const status = String(order.status || '').trim().toLowerCase()
-    if (status === 'paid' || status === 'completed' || status === 'cancelled' || status === 'canceled') {
-      continue
-    }
+    const memo = String(order.memo || '')
+    const paidQr = Math.max(0, Number(order.payment_qr || 0))
+    const cancelledRecoverable =
+      (status === 'cancelled' || status === 'canceled') &&
+      memo.includes(MEMBER_PORTAL_PAYMENT_PENDING_TAG) &&
+      paidQr < 0.0001
+    if (status === 'paid' || status === 'completed') continue
+    if ((status === 'cancelled' || status === 'canceled') && !cancelledRecoverable) continue
 
     try {
-      const result = await checkKbankQrStatus({
-        orderId,
-        partnerTransactionId,
-        originalTransactionId: partnerTransactionId,
-        payload: { origPartnerTxnUid: partnerTransactionId },
-      })
+      const storeCode = String(order.store_code || '').trim()
+      const kbankRuntime = await resolveKbankRuntimeForStoreCode(storeCode)
+      const result = await checkKbankQrStatus(
+        {
+          orderId,
+          partnerTransactionId,
+          originalTransactionId: partnerTransactionId,
+          payload: { origPartnerTxnUid: partnerTransactionId },
+        },
+        { runtime: kbankRuntime }
+      )
       const response =
         result.response && typeof result.response === 'object'
           ? (result.response as Record<string, unknown>)

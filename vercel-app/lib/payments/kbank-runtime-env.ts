@@ -36,9 +36,13 @@ export function kbankRuntimeField(runtime: KbankRuntimeEnv | undefined, envName:
     KBANK_TOKEN_PATH: 'tokenPath',
     KBANK_QR_GENERATE_PATH: 'qrGeneratePath',
     KBANK_INQUIRY_PATH: 'inquiryPath',
+    KBANK_QR_STATUS_PATH: 'inquiryPath',
     KBANK_CANCEL_PATH: 'cancelPath',
+    KBANK_QR_CANCEL_PATH: 'cancelPath',
     KBANK_VOID_PATH: 'voidPath',
+    KBANK_QR_VOID_PATH: 'voidPath',
     KBANK_SETTLEMENT_PATH: 'settlementPath',
+    KBANK_QR_SETTLEMENT_PATH: 'settlementPath',
     KBANK_TERMINAL_ID: 'terminalId',
     KBANK_QR_TYPE_THAI: 'qrTypeThai',
   }

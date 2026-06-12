@@ -19,6 +19,7 @@ import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 import { isMemberPortalPublicStore } from '@/lib/member-portal-stores'
 import { isMemberPortalPrepayStore } from '@/lib/member-portal-prepay-config'
 import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
+import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
@@ -51,7 +52,6 @@ type ResolvedCheckoutPricing = MemberPortalCheckoutPreview & {
 }
 
 import {
-  MEMBER_PORTAL_PAYMENT_EXPIRED_TAG,
   MEMBER_PORTAL_PAYMENT_PENDING_TAG,
   stripMemberPortalPaymentPendingTag,
 } from '@/lib/member-portal-payment-pending'
@@ -587,10 +587,12 @@ export async function issueMemberPortalOrderQr(params: {
   }
 
   const storeCode = String(order.store_code || '').trim()
+  const tenantId = await resolveTenantIdForStoreCode(storeCode)
   const gen = await generateMemberPortalKbankQr({
     amount: qrAmount,
     orderId,
     storeCode,
+    tenantId,
   })
   if (!gen.ok) {
     return { ok: false, message: gen.statusMessage || 'qr_generate_failed' }
@@ -640,8 +642,16 @@ export async function pollMemberPortalOrderPayment(params: {
 
   const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
     limit: 1,
-    select: 'id,status,member_id,created_by',
-  })) as Array<{ id?: number; status?: string; member_id?: number | null; created_by?: string | null }>
+    select: 'id,status,member_id,created_by,store_code,memo,payment_qr',
+  })) as Array<{
+    id?: number
+    status?: string
+    member_id?: number | null
+    created_by?: string | null
+    store_code?: string | null
+    memo?: string | null
+    payment_qr?: number | null
+  }>
   const order = rows?.[0]
   if (!order?.id || Number(order.member_id || 0) !== Number(params.member.id)) {
     return { status: 'forbidden', paid: false, message: 'order_forbidden' }
@@ -651,16 +661,27 @@ export async function pollMemberPortalOrderPayment(params: {
   if (curStatus === 'paid' || curStatus === 'completed') {
     return { status: 'approved', paid: true }
   }
-  if (curStatus === 'cancelled' || curStatus === 'canceled') {
+  const memo = String(order.memo || '')
+  const paidQr = Math.max(0, Number(order.payment_qr || 0))
+  const cancelledRecoverable =
+    (curStatus === 'cancelled' || curStatus === 'canceled') &&
+    memo.includes(MEMBER_PORTAL_PAYMENT_PENDING_TAG) &&
+    paidQr < 0.0001
+  if ((curStatus === 'cancelled' || curStatus === 'canceled') && !cancelledRecoverable) {
     return { status: 'expired', paid: false, message: 'order_expired' }
   }
 
-  const result = await checkKbankQrStatus({
-    orderId,
-    partnerTransactionId,
-    originalTransactionId: partnerTransactionId,
-    payload: { origPartnerTxnUid: partnerTransactionId },
-  })
+  const storeCode = String(order.store_code || '').trim()
+  const kbankRuntime = await resolveKbankRuntimeForStoreCode(storeCode)
+  const result = await checkKbankQrStatus(
+    {
+      orderId,
+      partnerTransactionId,
+      originalTransactionId: partnerTransactionId,
+      payload: { origPartnerTxnUid: partnerTransactionId },
+    },
+    { runtime: kbankRuntime }
+  )
   const response =
     result.response && typeof result.response === 'object'
       ? (result.response as Record<string, unknown>)

@@ -4,6 +4,8 @@ import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import type { KbankCheckStatusRequest } from '@/lib/payments/kbank-types'
 import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
+import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
+import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,7 +130,8 @@ export async function POST(req: NextRequest) {
     }
 
     const requestedAt = new Date().toISOString()
-    const result = await checkKbankQrStatus(payload)
+    const kbankRuntime = await resolveKbankRuntime(integrationScopeFromAuth(authResult.auth, storeCode))
+    const result = await checkKbankQrStatus(payload, { runtime: kbankRuntime })
     const statusLabel = extractTxnStatus(result.response)
     const approvedAmount = statusLabel === 'approved' ? extractApprovedAmount(result.response) : 0
 

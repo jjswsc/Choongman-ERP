@@ -48,10 +48,10 @@ export function kbankRuntimeFromProcessEnv(): KbankRuntimeEnv {
     tokenScope: readEnv('KBANK_TOKEN_SCOPE'),
     tokenPath: readEnv('KBANK_TOKEN_PATH'),
     qrGeneratePath: readEnv('KBANK_QR_GENERATE_PATH'),
-    inquiryPath: readEnv('KBANK_INQUIRY_PATH'),
-    cancelPath: readEnv('KBANK_CANCEL_PATH'),
-    voidPath: readEnv('KBANK_VOID_PATH'),
-    settlementPath: readEnv('KBANK_SETTLEMENT_PATH'),
+    inquiryPath: readEnv('KBANK_INQUIRY_PATH') || readEnv('KBANK_QR_STATUS_PATH'),
+    cancelPath: readEnv('KBANK_CANCEL_PATH') || readEnv('KBANK_QR_CANCEL_PATH'),
+    voidPath: readEnv('KBANK_VOID_PATH') || readEnv('KBANK_QR_VOID_PATH'),
+    settlementPath: readEnv('KBANK_SETTLEMENT_PATH') || readEnv('KBANK_QR_SETTLEMENT_PATH'),
     terminalId: readEnv('KBANK_TERMINAL_ID'),
     qrTypeThai: readEnv('KBANK_QR_TYPE_THAI'),
   }
@@ -151,7 +151,7 @@ function mergeGrabTenantConfig(
 
 export async function resolveGrabOAuthCredentials(scope?: IntegrationScope): Promise<GrabOAuthCredentials> {
   const tenantId = String(scope?.tenantId || '').trim()
-  let creds = grabOAuthFromProcessEnv()
+  const creds = grabOAuthFromProcessEnv()
   if (!tenantId) return creds
   const tenantRow = await loadTenantIntegration(tenantId, 'grab')
   if (!tenantRow) return creds
@@ -235,3 +235,27 @@ export async function resolveTenantIdByGrabLookup(seed: string): Promise<string 
 }
 
 export { parseGrabPartnerApiMenuMerchantMap }
+
+/** erp_stores.store_code → tenant_id (SaaS 매장) */
+export async function resolveTenantIdForStoreCode(storeCode: string): Promise<string | undefined> {
+  const code = String(storeCode || '').trim()
+  if (!code) return undefined
+  try {
+    const { supabaseSelectFilter } = await import('@/lib/supabase-server')
+    const rows = (await supabaseSelectFilter('erp_stores', `store_code=eq.${encodeURIComponent(code)}`, {
+      limit: 1,
+      select: 'tenant_id',
+    })) as { tenant_id?: string | null }[] | null
+    const tenantId = String(rows?.[0]?.tenant_id || '').trim()
+    return tenantId || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** erp_stores.store_code → tenant DB KBank/Grab 자격 resolve */
+export async function resolveKbankRuntimeForStoreCode(storeCode: string): Promise<KbankRuntimeEnv> {
+  const code = String(storeCode || '').trim()
+  const tenantId = await resolveTenantIdForStoreCode(code)
+  return resolveKbankRuntime({ tenantId, storeCode: code || undefined })
+}

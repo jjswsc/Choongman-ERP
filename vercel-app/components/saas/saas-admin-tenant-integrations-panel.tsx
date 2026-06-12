@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 
 type IntegrationProvider = "kbank" | "grab"
 
@@ -65,6 +67,7 @@ function readStr(obj: Record<string, unknown>, key: string): string {
 
 export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; companyName: string }) {
   const { tenantId, companyName } = props
+  const t = useT(useLang().lang)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [kbankTenant, setKbankTenant] = useState({ ...EMPTY_KBANK_TENANT, isEnabled: true })
@@ -85,7 +88,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
         message?: string
       }
       if (!res.ok || json.success !== true) {
-        throw new Error(json.message || "연동 설정을 불러오지 못했습니다.")
+        throw new Error(json.message || t("saasAdminInt_errLoad"))
       }
       const kbankT = json.tenantIntegrations?.find((x) => x.provider === "kbank")
       const grabT = json.tenantIntegrations?.find((x) => x.provider === "grab")
@@ -132,6 +135,8 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
             terminalId: readStr(c, "terminalId"),
             qrEnabled: c.qrEnabled !== false,
           })
+        } else {
+          setKbankStore({ ...EMPTY_KBANK_STORE, isEnabled: true })
         }
         if (grabS) {
           const c = grabS.config || {}
@@ -142,14 +147,19 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
             menuMerchantId: readStr(c, "menuMerchantId"),
             erpStoreCode: readStr(c, "erpStoreCode"),
           })
+        } else {
+          setGrabStore({ ...EMPTY_GRAB_STORE, isEnabled: true })
         }
+      } else {
+        setKbankStore({ ...EMPTY_KBANK_STORE, isEnabled: true })
+        setGrabStore({ ...EMPTY_GRAB_STORE, isEnabled: true })
       }
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [tenantId, storeCode])
+  }, [tenantId, storeCode, t])
 
   useEffect(() => {
     void load()
@@ -195,8 +205,8 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
         body: JSON.stringify(body),
       })
       const json = (await res.json()) as { success?: boolean; message?: string }
-      if (!res.ok || json.success !== true) throw new Error(json.message || "저장 실패")
-      await appAlert(`${provider.toUpperCase()} 테넌트 연동을 저장했습니다.`)
+      if (!res.ok || json.success !== true) throw new Error(json.message || t("saasAdminInt_errSave"))
+      await appAlert(tr(t, "saasAdminInt_savedTenant", { provider: provider.toUpperCase() }))
       await load()
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))
@@ -208,7 +218,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
   const saveStore = async (provider: IntegrationProvider) => {
     const code = storeCode.trim()
     if (!code) {
-      await appAlert("매장 코드(store_code)를 입력하세요.")
+      await appAlert(t("saasAdminInt_errStoreCode"))
       return
     }
     setSaving(true)
@@ -245,8 +255,8 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
         body: JSON.stringify(body),
       })
       const json = (await res.json()) as { success?: boolean; message?: string }
-      if (!res.ok || json.success !== true) throw new Error(json.message || "저장 실패")
-      await appAlert(`${provider.toUpperCase()} 매장 연동을 저장했습니다.`)
+      if (!res.ok || json.success !== true) throw new Error(json.message || t("saasAdminInt_errSave"))
+      await appAlert(tr(t, "saasAdminInt_savedStore", { provider: provider.toUpperCase() }))
       await load()
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : String(e))
@@ -258,22 +268,21 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        <strong>{companyName}</strong> ({tenantId}) — KBank·Grab 자격은 Vercel env가 아니라 DB에 저장됩니다.
-        env만 있는 충만 단일 운영은 기존처럼 env 폴백을 사용합니다.
+        <strong>{companyName}</strong> ({tenantId}) — {t("saasAdminInt_intro")}
       </p>
 
       <Tabs defaultValue="kbank-tenant">
         <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="kbank-tenant">KBank (고객사)</TabsTrigger>
-          <TabsTrigger value="grab-tenant">Grab (고객사)</TabsTrigger>
-          <TabsTrigger value="store">매장별</TabsTrigger>
+          <TabsTrigger value="kbank-tenant">{t("saasAdminInt_tabKbankTenant")}</TabsTrigger>
+          <TabsTrigger value="grab-tenant">{t("saasAdminInt_tabGrabTenant")}</TabsTrigger>
+          <TabsTrigger value="store">{t("saasAdminInt_tabStore")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="kbank-tenant" className="space-y-4 pt-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">KBank — 테넌트 공통</CardTitle>
-              <CardDescription>OAuth·파트너 ID·OpenAPI Base URL 등</CardDescription>
+              <CardTitle className="text-base">{t("saasAdminInt_kbankTenantTitle")}</CardTitle>
+              <CardDescription>{t("saasAdminInt_kbankTenantDesc")}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2 flex items-center gap-2">
@@ -281,7 +290,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                   checked={kbankTenant.isEnabled}
                   onCheckedChange={(v) => setKbankTenant((s) => ({ ...s, isEnabled: v === true }))}
                 />
-                <Label>활성</Label>
+                <Label>{t("saasAdminInt_enabled")}</Label>
               </div>
               {(
                 [
@@ -291,8 +300,8 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                   ["partnerSecret", "Partner Secret"],
                   ["merchantId", "Merchant ID"],
                   ["openapiBaseUrl", "OpenAPI Base URL"],
-                  ["oauthBaseUrl", "OAuth Base URL (선택)"],
-                  ["proxySecret", "Proxy Secret (선택)"],
+                  ["oauthBaseUrl", t("saasAdminInt_oauthOptional")],
+                  ["proxySecret", t("saasAdminInt_proxyOptional")],
                 ] as const
               ).map(([key, label]) => (
                 <div key={key} className="space-y-1">
@@ -307,7 +316,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
               ))}
               <div className="md:col-span-2">
                 <Button type="button" disabled={loading || saving} onClick={() => void saveTenant("kbank")}>
-                  KBank 테넌트 저장
+                  {t("saasAdminInt_saveKbankTenant")}
                 </Button>
               </div>
             </CardContent>
@@ -317,7 +326,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
         <TabsContent value="grab-tenant" className="space-y-4 pt-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Grab — 테넌트 공통</CardTitle>
+              <CardTitle className="text-base">{t("saasAdminInt_grabTenantTitle")}</CardTitle>
               <CardDescription>Partner OAuth Client ID / Secret</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
@@ -326,7 +335,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                   checked={grabTenant.isEnabled}
                   onCheckedChange={(v) => setGrabTenant((s) => ({ ...s, isEnabled: v === true }))}
                 />
-                <Label>활성</Label>
+                <Label>{t("saasAdminInt_enabled")}</Label>
               </div>
               <div className="space-y-1">
                 <Label>Client ID</Label>
@@ -346,7 +355,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                 />
               </div>
               <div className="space-y-1">
-                <Label>API 환경</Label>
+                <Label>{t("saasAdminInt_apiEnv")}</Label>
                 <Select
                   value={grabTenant.apiEnv}
                   onValueChange={(v) => setGrabTenant((s) => ({ ...s, apiEnv: v }))}
@@ -361,7 +370,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Partner API Base URL (선택)</Label>
+                <Label>{t("saasAdminInt_partnerApiOptional")}</Label>
                 <Input
                   value={grabTenant.partnerApiBaseUrl}
                   onChange={(e) => setGrabTenant((s) => ({ ...s, partnerApiBaseUrl: e.target.value }))}
@@ -369,7 +378,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
               </div>
               <div className="md:col-span-2">
                 <Button type="button" disabled={loading || saving} onClick={() => void saveTenant("grab")}>
-                  Grab 테넌트 저장
+                  {t("saasAdminInt_saveGrabTenant")}
                 </Button>
               </div>
             </CardContent>
@@ -378,23 +387,23 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
 
         <TabsContent value="store" className="space-y-4 pt-2">
           <div className="space-y-2 max-w-md">
-            <Label>매장 코드 (erp_stores.store_code)</Label>
+            <Label>{t("saasAdminInt_storeCodeLabel")}</Label>
             <Input
               value={storeCode}
               onChange={(e) => setStoreCode(e.target.value)}
-              placeholder="예: cm-silom"
+              placeholder={t("saasAdminInt_storeCodePh")}
               autoComplete="off"
             />
             <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load()}>
-              매장 설정 불러오기
+              {t("saasAdminInt_loadStore")}
             </Button>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">KBank — 매장</CardTitle>
-                <CardDescription>Terminal ID 등</CardDescription>
+                <CardTitle className="text-base">{t("saasAdminInt_kbankStoreTitle")}</CardTitle>
+                <CardDescription>{t("saasAdminInt_kbankStoreDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -402,7 +411,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                     checked={kbankStore.isEnabled}
                     onCheckedChange={(v) => setKbankStore((s) => ({ ...s, isEnabled: v === true }))}
                   />
-                  <Label>활성</Label>
+                  <Label>{t("saasAdminInt_enabled")}</Label>
                 </div>
                 <div className="space-y-1">
                   <Label>Terminal ID</Label>
@@ -412,15 +421,15 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                   />
                 </div>
                 <Button type="button" disabled={saving} onClick={() => void saveStore("kbank")}>
-                  KBank 매장 저장
+                  {t("saasAdminInt_saveKbankStore")}
                 </Button>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Grab — 매장</CardTitle>
-                <CardDescription>Merchant ID 매핑</CardDescription>
+                <CardTitle className="text-base">{t("saasAdminInt_grabStoreTitle")}</CardTitle>
+                <CardDescription>{t("saasAdminInt_grabStoreDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -428,14 +437,14 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                     checked={grabStore.isEnabled}
                     onCheckedChange={(v) => setGrabStore((s) => ({ ...s, isEnabled: v === true }))}
                   />
-                  <Label>활성</Label>
+                  <Label>{t("saasAdminInt_enabled")}</Label>
                 </div>
                 {(
                   [
                     ["grabMerchantId", "Grab Merchant ID (3-C…)"],
-                    ["partnerMerchantId", "Partner Store ID (1048 등)"],
+                    ["partnerMerchantId", "Partner Store ID (1048 etc.)"],
                     ["menuMerchantId", "Menu API Merchant (GFSBPOS-…)"],
-                    ["erpStoreCode", "ERP store_code (비우면 위 매장 코드)"],
+                    ["erpStoreCode", t("saasAdminInt_erpStoreCodeHint")],
                   ] as const
                 ).map(([key, label]) => (
                   <div key={key} className="space-y-1">
@@ -447,7 +456,7 @@ export function SaasAdminTenantIntegrationsPanel(props: { tenantId: string; comp
                   </div>
                 ))}
                 <Button type="button" disabled={saving} onClick={() => void saveStore("grab")}>
-                  Grab 매장 저장
+                  {t("saasAdminInt_saveGrabStore")}
                 </Button>
               </CardContent>
             </Card>
