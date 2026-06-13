@@ -26,11 +26,16 @@ if [ "${VERCEL_GIT_PREVIOUS_SHA:-}" = "" ]; then
   exit 1
 fi
 
+if [ -n "${VERCEL_GIT_PREVIOUS_SHA:-}" ] && [ "${VERCEL_GIT_PREVIOUS_SHA}" = "${VERCEL_GIT_COMMIT_SHA:-}" ]; then
+  echo "Same commit as previous deployment — running build (manual redeploy)."
+  exit 1
+fi
+
 CHANGED_FILES="$(git diff --name-only "$VERCEL_GIT_PREVIOUS_SHA" "$VERCEL_GIT_COMMIT_SHA" 2>/dev/null || true)"
 
 if [ "$CHANGED_FILES" = "" ]; then
-  echo "No changed files. Skipping build."
-  exit 0
+  echo "No changed files in git diff — running build anyway (redeploy or shallow clone)."
+  exit 1
 fi
 
 echo "Changed files:"
