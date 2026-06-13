@@ -653,6 +653,15 @@ interface CartPanelProps {
 type CartItem = OrderItem
 
 const CART_ITEMS_CACHE = new Map<string, CartItem[]>()
+
+/** 터미널 탭 전환 시 홀/포장 장바구니 스냅샷 (배달 알림으로 탭이 바뀌어도 복원) */
+export function readPosCartItemsCache(key: string): CartItem[] {
+  return cloneCartItems(CART_ITEMS_CACHE.get(key) ?? [])
+}
+export function writePosCartItemsCache(key: string, items: CartItem[]): void {
+  CART_ITEMS_CACHE.set(key, cloneCartItems(items))
+}
+
 const cloneCartItems = (items: CartItem[]): CartItem[] =>
   items.map((i) => ({
     ...i,

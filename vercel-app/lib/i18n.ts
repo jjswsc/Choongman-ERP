@@ -9,6 +9,37 @@ import { I18N_MP_ADMIN_EN, I18N_MP_ADMIN_KO, I18N_MP_ADMIN_TH } from "./i18n-mem
 import { I18N_CRM_EN, I18N_CRM_KO, I18N_CRM_TH } from "./i18n-crm"
 import { I18N_CRM_SEGMENTS_EN, I18N_CRM_SEGMENTS_KO, I18N_CRM_SEGMENTS_TH } from "./i18n-crm-segments"
 import { I18N_SAAS_ADMIN_EN, I18N_SAAS_ADMIN_KO, I18N_SAAS_ADMIN_TH } from "./i18n-saas-admin"
+import {
+  I18N_ACCOUNTING_ADMIN_EN,
+  I18N_ACCOUNTING_ADMIN_KH,
+  I18N_ACCOUNTING_ADMIN_KO,
+  I18N_ACCOUNTING_ADMIN_LA,
+  I18N_ACCOUNTING_ADMIN_MM,
+  I18N_ACCOUNTING_ADMIN_MS,
+  I18N_ACCOUNTING_ADMIN_TH,
+  I18N_ACCOUNTING_ADMIN_VI,
+} from "./i18n-accounting-admin"
+import { I18N_INTERIOR_ADMIN_EN, I18N_INTERIOR_ADMIN_KO, I18N_INTERIOR_ADMIN_TH } from "./i18n-interior-admin"
+import {
+  I18N_STORE_ADMIN_EN,
+  I18N_STORE_ADMIN_KH,
+  I18N_STORE_ADMIN_KO,
+  I18N_STORE_ADMIN_LA,
+  I18N_STORE_ADMIN_MM,
+  I18N_STORE_ADMIN_MS,
+  I18N_STORE_ADMIN_TH,
+  I18N_STORE_ADMIN_VI,
+} from "./i18n-store-admin"
+import {
+  I18N_MARKETING_HUB_EN,
+  I18N_MARKETING_HUB_KH,
+  I18N_MARKETING_HUB_KO,
+  I18N_MARKETING_HUB_LA,
+  I18N_MARKETING_HUB_MM,
+  I18N_MARKETING_HUB_MS,
+  I18N_MARKETING_HUB_TH,
+  I18N_MARKETING_HUB_VI,
+} from "./i18n-marketing-hub"
 
 export const i18n = {
   ko: {
@@ -4842,8 +4873,8 @@ export const i18n = {
     visit_heatmap_total: '합계',
     visit_chart_items: '개 항목',
     visit_chart_input_time: '투입시간',
-    tab_complaint_input: '✏️ 입력',
-    tab_complaint_list: '📋 검색',
+    tab_complaint_input: '입력',
+    tab_complaint_list: '검색',
     complaint_number: '고유 번호',
     complaint_number_auto: '저장 시 자동 부여',
     complaint_time: '일시',
@@ -7395,8 +7426,8 @@ export const i18n = {
     posIncomingDeliveryArrivedPrompt: '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?',
     posIncomingDeliveryDecisionPrompt: '신규 배달 주문입니다.\n이 주문을 수락할까요?',
     posIncomingDeliveryDeferredBatchHint:
-      '결제 중 배달 주문 {{count}}건이 대기했습니다. 배달 탭에서 확인해 주세요.',
-    posIncomingDeliveryDeferredTabHint: '배달 ({{count}}건 결제 중 대기)',
+      '홀/포장 주문 입력 또는 결제 중 배달 주문 {{count}}건이 대기했습니다. 배달 탭에서 확인해 주세요.',
+    posIncomingDeliveryDeferredTabHint: '배달 ({{count}}건 대기 중)',
     posGrabCustomerCancelledAlert:
       '고객이 Grab에서 주문을 취소했습니다.\n\n{{label}}\n\n배달 탭에서 확인해 주세요.',
     posGrabManualDeliveryHint:
@@ -7593,6 +7624,8 @@ export const i18n = {
     memberAppContent: '회원 페이지',
     ...I18N_MP_ADMIN_KO,
     ...I18N_SAAS_ADMIN_KO,
+    ...I18N_ACCOUNTING_ADMIN_KO,
+    ...I18N_INTERIOR_ADMIN_KO,
     adminMarketingCampaigns: '캠페인',
     marketingCampaignFinderLabel: '캠페인 찾기',
     adminMarketingCollabMenus: '협업 관리',
@@ -8399,6 +8432,7 @@ export const i18n = {
     interiorRedo: '다시 실행',
     adminSectionAccounting: '회계 관리',
     adminSectionStore: '매장 관리',
+    ...I18N_STORE_ADMIN_KO,
     adminSectionSettings: '설정',
     workLogCarriedOver: '이월됨',
     workLogFrom: '부터',
@@ -14862,8 +14896,8 @@ Only matters the employee must handle personally on a working day:
     visit_heatmap_total: 'Total',
     visit_chart_items: ' items',
     visit_chart_input_time: 'Hours',
-    tab_complaint_input: '✏️ Input',
-    tab_complaint_list: '📋 List',
+    tab_complaint_input: 'Input',
+    tab_complaint_list: 'List',
     complaint_number: 'ID',
     complaint_number_auto: 'Auto on save',
     complaint_time: 'Time',
@@ -17617,6 +17651,8 @@ orderItemQty: 'Qty',
     memberAppContent: 'Member Page',
     ...I18N_MP_ADMIN_EN,
     ...I18N_SAAS_ADMIN_EN,
+    ...I18N_ACCOUNTING_ADMIN_EN,
+    ...I18N_INTERIOR_ADMIN_EN,
     adminMarketingCampaigns: 'Campaigns',
     marketingCampaignFinderLabel: 'Find campaign',
     adminMarketingCollabMenus: 'Collab management',
@@ -18422,6 +18458,7 @@ orderItemQty: 'Qty',
     interiorRedo: 'Redo',
     adminSectionAccounting: 'Accounting',
     adminSectionStore: 'Store',
+    ...I18N_STORE_ADMIN_EN,
     adminSectionSettings: 'Settings',
     workLogCarriedOver: 'Carried over',
     workLogFrom: 'from',
@@ -23583,8 +23620,8 @@ orderItemQty: 'จำนวน',
     store_check_summary_fail: 'FAIL ({n} รายการ)',
     store_col_item_path: 'รายการ',
     store_col_manage: 'จัดการ',
-    tab_complaint_input: '✏️ กรอก',
-    tab_complaint_list: '📋 รายการ',
+    tab_complaint_input: 'กรอก',
+    tab_complaint_list: 'รายการ',
     complaint_number: 'เลขที่',
     complaint_time: 'เวลา',
     complaint_writer: 'ผู้เขียน',
@@ -23945,6 +23982,8 @@ orderItemQty: 'จำนวน',
     memberAppContent: 'หน้าสมาชิก',
     ...I18N_MP_ADMIN_TH,
     ...I18N_SAAS_ADMIN_TH,
+    ...I18N_ACCOUNTING_ADMIN_TH,
+    ...I18N_INTERIOR_ADMIN_TH,
     adminSectionMarketing: 'การตลาด',
     adminMarketingCampaigns: 'แคมเปญ',
     marketingCampaignFinderLabel: 'ค้นหาแคมเปญ',
@@ -24724,6 +24763,7 @@ orderItemQty: 'จำนวน',
     interiorRedo: 'กู้คืน',
     adminSectionAccounting: 'บัญชี',
     adminSectionStore: 'ร้านค้า',
+    ...I18N_STORE_ADMIN_TH,
     adminSectionSettings: 'ตั้งค่า',
     workLogCarriedOver: 'โอนย้าย',
     workLogFrom: 'ตั้งแต่',
@@ -26628,8 +26668,8 @@ orderItemQty: 'จำนวน',
     posIncomingDeliveryArrivedPrompt: 'มีออเดอร์เดลิเวอรีใหม่ ไปหน้ารายการออเดอร์ตอนนี้หรือไม่?',
     posIncomingDeliveryDecisionPrompt: 'มีออเดอร์เดลิเวอรีใหม่\nต้องการรับออเดอร์นี้หรือไม่?',
     posIncomingDeliveryDeferredBatchHint:
-      'มีออเดอร์เดลิเวอรี {{count}} รายการรอระหว่างคิดเงิน โปรดตรวจสอบที่แท็บเดลิเวอรี',
-    posIncomingDeliveryDeferredTabHint: 'เดลิเวอรี (รอ {{count}} ระหว่างคิดเงิน)',
+      'มีออเดอร์เดลิเวอรี {{count}} รายการรอระหว่างรับออเดอร์ โปรดตรวจสอบที่แท็บเดลิเวอรี',
+    posIncomingDeliveryDeferredTabHint: 'เดลิเวอรี (รอ {{count}} รายการ)',
     posGrabCustomerCancelledAlert:
       'ลูกค้ายกเลิกออเดอร์นี้ใน Grab แล้ว\n\n{{label}}\n\nโปรดตรวจสอบที่แท็บเดลิเวอรี',
     posGrabManualDeliveryHint:
@@ -31310,8 +31350,8 @@ orderItemQty: 'အရေအတွက်',
     store_check_summary_fail: 'FAIL ({n} ခု)',
     store_col_item_path: 'အရာလမ်းကြောင်း',
     store_col_manage: 'စီမံခန့်ခွဲမှု',
-    tab_complaint_input: '✏️ ထည့်သွင်း',
-    tab_complaint_list: '📋 စာရင်း',
+    tab_complaint_input: 'ထည့်သွင်း',
+    tab_complaint_list: 'စာရင်း',
     complaint_number: 'နံပါတ်',
     complaint_time: 'အချိန်',
     complaint_writer: 'ရေးသူ',
@@ -32395,6 +32435,7 @@ orderItemQty: 'အရေအတွက်',
     interiorRedo: 'ပြန်လုပ်',
     adminSectionAccounting: 'စာရင်းကိုင်',
     adminSectionStore: 'ဆိုင်',
+    ...I18N_STORE_ADMIN_MM,
     adminSectionSettings: 'ဆက်တင်များ',
     workLogCarriedOver: 'လွှဲပြောင်း',
     workLogFrom: 'မှ',
@@ -38744,8 +38785,8 @@ orderItemQty: 'ຈຳນວນ',
     store_check_summary_fail: 'FAIL ({n} ລາຍການ)',
     store_col_item_path: 'ລາຍການ',
     store_col_manage: 'ຈັດການ',
-    tab_complaint_input: '✏️ ໃສ່ຂໍ້ມູນ',
-    tab_complaint_list: '📋 ລາຍການ',
+    tab_complaint_input: 'ໃສ່ຂໍ້ມູນ',
+    tab_complaint_list: 'ລາຍການ',
     complaint_number: 'ເລກ',
     complaint_time: 'ເວລາ',
     complaint_writer: 'ຜູ້ຂຽນ',
@@ -39780,6 +39821,7 @@ orderItemQty: 'ຈຳນວນ',
     interiorRedo: 'ເຮັດຄືນ',
     adminSectionAccounting: 'ບັນຊີ',
     adminSectionStore: 'ຮ້ານ',
+    ...I18N_STORE_ADMIN_LA,
     adminSectionSettings: 'ຕັ້ງຄ່າ',
     workLogCarriedOver: 'ໂອນ',
     workLogFrom: 'ຈາກ',
@@ -43136,6 +43178,7 @@ orderItemQty: 'ຈຳນວນ',
     adminMarketingReport: 'របាយការណ៍ប្រចាំខែ',
     adminMarketingIntegrations: 'ការតភ្ជប់ទីផ្សារ',
     adminSectionStore: 'ផ្នែកហាង',
+    ...I18N_STORE_ADMIN_KH,
     adminStoreCheck: 'ពិនិត្យហាង',
     adminStoreVisit: 'ស្ថិតិទស្សនៈហាង',
     adminComplaints: 'ពាក្យបណ្តឹង',
@@ -47595,6 +47638,7 @@ orderItemQty: 'ຈຳນວນ',
     adminMarketingReport: 'Báo cáo tháng',
     adminMarketingIntegrations: 'Tích hợp marketing',
     adminSectionStore: 'Cửa hàng',
+    ...I18N_STORE_ADMIN_VI,
     adminStoreCheck: 'Kiểm tra cửa hàng',
     adminStoreVisit: 'Thăm cửa hàng',
     adminComplaints: 'Khiếu nại',
@@ -52018,6 +52062,7 @@ orderItemQty: 'ຈຳນວນ',
     adminMarketingReport: 'Laporan bulanan',
     adminMarketingIntegrations: 'Integrasi pemasaran',
     adminSectionStore: 'Kedai',
+    ...I18N_STORE_ADMIN_MS,
     adminStoreCheck: 'Pemeriksaan kedai',
     adminStoreVisit: 'Lawatan kedai',
     adminComplaints: 'Aduan',
@@ -56294,10 +56339,59 @@ function shouldPreferKoDemoCopy(
   return localized === enDict[key]
 }
 
+const ACCOUNTING_ADMIN_BY_LANG: Record<string, Record<string, string>> = {
+  ko: I18N_ACCOUNTING_ADMIN_KO,
+  en: I18N_ACCOUNTING_ADMIN_EN,
+  th: I18N_ACCOUNTING_ADMIN_TH,
+  mm: I18N_ACCOUNTING_ADMIN_MM,
+  la: I18N_ACCOUNTING_ADMIN_LA,
+  kh: I18N_ACCOUNTING_ADMIN_KH,
+  vi: I18N_ACCOUNTING_ADMIN_VI,
+  ms: I18N_ACCOUNTING_ADMIN_MS,
+}
+
+const INTERIOR_ADMIN_BY_LANG: Record<string, Record<string, string>> = {
+  ko: I18N_INTERIOR_ADMIN_KO,
+  en: I18N_INTERIOR_ADMIN_EN,
+  th: I18N_INTERIOR_ADMIN_TH,
+  mm: I18N_INTERIOR_ADMIN_EN,
+  la: I18N_INTERIOR_ADMIN_EN,
+  kh: I18N_INTERIOR_ADMIN_EN,
+  vi: I18N_INTERIOR_ADMIN_EN,
+  ms: I18N_INTERIOR_ADMIN_EN,
+}
+
+
+const MARKETING_HUB_BY_LANG: Record<string, Record<string, string>> = {
+  ko: I18N_MARKETING_HUB_KO,
+  en: I18N_MARKETING_HUB_EN,
+  th: I18N_MARKETING_HUB_TH,
+  mm: I18N_MARKETING_HUB_MM,
+  la: I18N_MARKETING_HUB_LA,
+  kh: I18N_MARKETING_HUB_KH,
+  vi: I18N_MARKETING_HUB_VI,
+  ms: I18N_MARKETING_HUB_MS,
+}
+
+const STORE_ADMIN_BY_LANG: Record<string, Record<string, string>> = {
+  ko: I18N_STORE_ADMIN_KO,
+  en: I18N_STORE_ADMIN_EN,
+  th: I18N_STORE_ADMIN_TH,
+  mm: I18N_STORE_ADMIN_MM,
+  la: I18N_STORE_ADMIN_LA,
+  kh: I18N_STORE_ADMIN_KH,
+  vi: I18N_STORE_ADMIN_VI,
+  ms: I18N_STORE_ADMIN_MS,
+}
+
 const i18nWithPosBackfill: Record<string, Record<string, string>> = Object.fromEntries(
   Object.entries(i18n).map(([lang, dict]) => {
     const base = (dict as Record<string, string> | null | undefined) ?? (i18n.ko as Record<string, string>)
-    const merged = { ...base }
+    const accountingPack = ACCOUNTING_ADMIN_BY_LANG[lang] ?? I18N_ACCOUNTING_ADMIN_EN
+    const interiorPack = INTERIOR_ADMIN_BY_LANG[lang] ?? I18N_INTERIOR_ADMIN_EN
+    const storeAdminPack = STORE_ADMIN_BY_LANG[lang] ?? I18N_STORE_ADMIN_EN
+    const marketingHubPack = MARKETING_HUB_BY_LANG[lang] ?? I18N_MARKETING_HUB_EN
+    const merged = { ...base, ...accountingPack, ...interiorPack, ...storeAdminPack, ...marketingHubPack }
     const enDict = enOrKoDict()
 
     for (const key of Object.keys(enDict)) {

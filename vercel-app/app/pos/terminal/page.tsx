@@ -17,6 +17,8 @@ import {
   type CartPanelAddItemPayload,
   type CartPanelPaymentPayload,
   type CartPanelSplitReceiptPayload,
+  readPosCartItemsCache,
+  writePosCartItemsCache,
 } from '@/components/pos/cart-panel'
 import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
 import { usePosStore } from '@/hooks/use-pos-store'
@@ -102,6 +104,7 @@ import { isLangCode, useLang, type LangCode } from '@/lib/lang-context'
 import { tr, useT } from '@/lib/i18n'
 import { localizeApiMessage, translateApiMessage } from '@/lib/translate-api-message'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
+import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import {
   computePosPricing,
@@ -2297,12 +2300,16 @@ export default function PosTerminalPage() {
     Boolean(pendingDineInOrderId) ||
     Boolean(pendingTakeoutOrderId) ||
     Boolean(pendingDeliveryOrderId)
-  /** 결제 모달·QR 대기·거스름 확인 등 — 신규 배달 자동 탭 전환 억제 */
+  /** 홀·포장 장바구니 입력 중 — 배달 자동 탭 전환·모달 억제(결제 중과 동일 대기 큐) */
+  const hasActiveWalkInCart =
+    terminalCartLines.length > 0 && (activeTab === 'tables' || activeTab === 'takeout')
+  /** 결제 모달·QR 대기·거스름 확인·홀/포장 입력 중 — 신규 배달 자동 탭 전환 억제 */
   const isIncomingDeliveryFocusLocked =
     tourPaymentModalOpen ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null ||
-    kbankCallbackState === 'waiting'
+    kbankCallbackState === 'waiting' ||
+    hasActiveWalkInCart
   const customerDisplayOrderItems = useMemo(
     () =>
       terminalCartLines.map((line) => {
@@ -2927,6 +2934,7 @@ export default function PosTerminalPage() {
       storeCode?: string
       memo?: string
       deliveryAppCode?: string
+      onAccepted?: () => void
     }) => {
       try {
         const confirmed = await appConfirm(
@@ -2957,9 +2965,13 @@ export default function PosTerminalPage() {
             await appAlert(localizeApiPopupMessage(res.message, t('processFail') || '처리 실패'))
           }
           refetchStores({ scope: 'all' })
-          setActiveTab('delivery')
-          setDeliveryListMode('all')
-          setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+          if (params.onAccepted) {
+            params.onAccepted()
+          } else {
+            setActiveTab('delivery')
+            setDeliveryListMode('all')
+            setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+          }
           if (String(params.deliveryAppCode || '').trim()) {
             setDeliveryApp(String(params.deliveryAppCode || '').trim().toLowerCase())
           }
@@ -3143,20 +3155,34 @@ export default function PosTerminalPage() {
       const status = String(params.status ?? '').trim().toLowerCase()
       if (deliveryCode) setDeliveryApp(deliveryCode)
       refetchStores({ scope: 'all' })
-      setActiveTab('delivery')
-      setDeliveryListMode('all')
-      setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
-      setSelectedDeliveryTargetLabel('')
       playIncomingOrderBeep()
+      const focusDeliveryOrder = () => {
+        setActiveTab('delivery')
+        setDeliveryListMode('all')
+        setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+        setSelectedDeliveryTargetLabel('')
+      }
       if (status === 'pending') {
         window.setTimeout(() => {
           /** 수동 키잉 배달은 `pending`이어도 웹훅 memo 앵커가 없음 → 수락/거절 팝업 생략 */
-          if (!isApiInboundDeliveryOrderMemo(String(params.memo ?? ''))) return
+          if (!isApiInboundDeliveryOrderMemo(String(params.memo ?? ''))) {
+            void (async () => {
+              const accepted = await appConfirm(
+                t('posIncomingDeliveryArrivedPrompt') ||
+                  '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?'
+              )
+              if (!accepted) return
+              refetchStores({ scope: 'all' })
+              focusDeliveryOrder()
+            })()
+            return
+          }
           void decideIncomingPendingDeliveryOrder({
             orderId,
             storeCode: params.storeCode,
             memo: params.memo,
             deliveryAppCode: deliveryCode,
+            onAccepted: focusDeliveryOrder,
           })
         }, 120)
         return
@@ -3169,9 +3195,7 @@ export default function PosTerminalPage() {
           )
           if (!accepted) return
           refetchStores({ scope: 'all' })
-          setActiveTab('delivery')
-          setDeliveryListMode('all')
-          setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+          focusDeliveryOrder()
         })()
       }, 120)
     },
@@ -3244,7 +3268,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     flushDeferredIncomingDeliveryOrders()
-  }, [flushDeferredIncomingDeliveryOrders])
+  }, [flushDeferredIncomingDeliveryOrders, isIncomingDeliveryFocusLocked])
 
   /** Grab 고객 취소(push order state) — Realtime UPDATE 시 팝업·알림음 */
   const notifyGrabCustomerCancelledOrder = useCallback(
@@ -7524,6 +7548,31 @@ export default function PosTerminalPage() {
     selectedTakeoutTargetLabel || baseTakeoutLabel,
     t
   )
+  const buildTerminalCartSessionKeyForTab = useCallback(
+    (tab: 'tables' | 'delivery' | 'takeout') => {
+      const orderType = tab === 'delivery' ? 'delivery' : tab === 'takeout' ? 'takeout' : 'dine-in'
+      return getPosCartSessionKey({
+        currentStoreId,
+        orderType,
+        selectedTableId: selectedTableId ?? '',
+        deliveryApp: orderType === 'delivery' ? deliveryApp : null,
+        deliveryOrderNo: orderType === 'delivery' ? deliveryOrderNo : null,
+        takeoutLabel:
+          orderType === 'takeout' || orderType === 'delivery'
+            ? translateTakeoutOrderDisplayLabel(selectedTakeoutTargetLabel || baseTakeoutLabel, t)
+            : null,
+      })
+    },
+    [
+      currentStoreId,
+      selectedTableId,
+      deliveryApp,
+      deliveryOrderNo,
+      selectedTakeoutTargetLabel,
+      baseTakeoutLabel,
+      t,
+    ]
+  )
   const resolveTakeoutOrderBarLabel = (order: Order) => {
     const memberTable = resolveMemberPortalTakeoutTableDisplay({
       tableName: order.tableName,
@@ -10261,6 +10310,13 @@ export default function PosTerminalPage() {
             onValueChange={(v) => {
               const next = v as 'tables' | 'delivery' | 'takeout'
               if (next !== activeTab) {
+                if (terminalCartLines.length > 0) {
+                  writePosCartItemsCache(
+                    buildTerminalCartSessionKeyForTab(activeTab),
+                    terminalCartLines as OrderItem[]
+                  )
+                }
+                const prevTableId = selectedTableId
                 clearCartFromTerminal()
                 if (next === 'tables') {
                   setSelectedTableId(null)
@@ -10274,6 +10330,28 @@ export default function PosTerminalPage() {
                   setSelectedTakeoutTargetId(null)
                   setSelectedTakeoutTargetLabel('')
                 }
+                setActiveTab(next)
+                if (next === 'tables' && prevTableId) {
+                  const dineInKey = getPosCartSessionKey({
+                    currentStoreId,
+                    orderType: 'dine-in',
+                    selectedTableId: prevTableId,
+                    deliveryApp: null,
+                    deliveryOrderNo: null,
+                    takeoutLabel: null,
+                  })
+                  const restoredDineIn = readPosCartItemsCache(dineInKey)
+                  if (restoredDineIn.length > 0) {
+                    setSelectedTableId(prevTableId)
+                    setTerminalCartLines(restoredDineIn as OrderItem[])
+                    return
+                  }
+                }
+                const restored = readPosCartItemsCache(buildTerminalCartSessionKeyForTab(next))
+                if (restored.length > 0) {
+                  setTerminalCartLines(restored as OrderItem[])
+                }
+                return
               }
               setActiveTab(next)
             }}
