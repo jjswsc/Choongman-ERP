@@ -2397,6 +2397,8 @@ export default function PosTerminalPage() {
   /** 결제 등 화면 잠금 중 유입된 배달 — 잠금 해제 후 순서대로 포커스 */
   const deferredIncomingDeliveryQueueRef = useRef<IncomingDeliveryFocusParams[]>([])
   const [deferredIncomingDeliveryCount, setDeferredIncomingDeliveryCount] = useState(0)
+  /** 결제·주문 입력 중(화면 잠금) 백그라운드로 자동 수락+인쇄 처리한 배달 주문 — 잠금 해제 후 재수락·재인쇄·수락 팝업 방지 */
+  const backgroundAcceptedDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
   const promptedGrabCustomerCancelIdsRef = useRef<Set<number>>(new Set())
   const grabCancelWatchSnapshotRef = useRef<Map<number, GrabCancelWatchSnap>>(new Map())
   const grabCancelWatchSeededRef = useRef(false)
@@ -3163,6 +3165,11 @@ export default function PosTerminalPage() {
         setSelectedDeliveryTargetLabel('')
       }
       if (status === 'pending') {
+        /** 잠금 중 백그라운드로 이미 수락+인쇄한 주문 — 재수락·재인쇄·팝업 없이 해당 주문만 포커스 */
+        if (backgroundAcceptedDeliveryOrderIdsRef.current.has(orderId)) {
+          focusDeliveryOrder()
+          return
+        }
         window.setTimeout(() => {
           /** 수동 키잉 배달은 `pending`이어도 웹훅 memo 앵커가 없음 → 수락/거절 팝업 생략 */
           if (!isApiInboundDeliveryOrderMemo(String(params.memo ?? ''))) {
@@ -3203,6 +3210,60 @@ export default function PosTerminalPage() {
   )
 
   /**
+   * 결제·주문 입력 등 화면이 잠긴 상태에서 유입된 배달 웹훅(Grab 등) 주문을
+   * 화면을 뺏지 않고 **백그라운드로 자동 수락 + 주방/영수증 인쇄**한다.
+   * - 화면 포커스(탭 전환·수락 팝업)는 잠금 해제 후 flush에서 처리(여기선 인쇄만).
+   * - 수동 키잉 배달(memo 앵커 없음)은 대상 아님 — 기존 "이동할까요?" 안내 유지.
+   * - 이미 처리한 주문은 재수락·재인쇄·수락 팝업을 막기 위해 ref에 기록.
+   */
+  const backgroundAcceptAndPrintInboundDeliveryOrder = useCallback(
+    async (params: IncomingDeliveryFocusParams) => {
+      const orderId = Number(params.orderId)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      if (!isMainPosDevice) return
+      if (!autoPrintReceiptOnOrder && !autoPrintKitchenSlipOnOrder) return
+      if (!isApiInboundDeliveryOrderMemo(String(params.memo ?? ''))) return
+      const status = String(params.status ?? '').trim().toLowerCase()
+      if (status !== 'pending') return
+      if (backgroundAcceptedDeliveryOrderIdsRef.current.has(orderId)) return
+      backgroundAcceptedDeliveryOrderIdsRef.current.add(orderId)
+      try {
+        const grabOrderId = extractGrabOrderIdFromMemoText(String(params.memo ?? ''))
+        const res = await updatePosOrderStatus({
+          id: orderId,
+          status: 'cooking',
+          ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}),
+        })
+        const applied = Boolean(res.success || res.statusAlreadyApplied)
+        if (!applied) {
+          backgroundAcceptedDeliveryOrderIdsRef.current.delete(orderId)
+          logPosPrintDebug('bg_accept_status_failed', { orderId, message: String(res.message ?? '') })
+          return
+        }
+        refetchStores({ scope: 'all' })
+        await runAutoPrintForAcceptedDeliveryOrder({
+          orderId,
+          storeCode: params.storeCode,
+          memo: params.memo,
+          deliveryAppCode: params.deliveryAppCode,
+        })
+        logPosPrintDebug('bg_accept_autoprint_done', { orderId })
+      } catch (e) {
+        backgroundAcceptedDeliveryOrderIdsRef.current.delete(orderId)
+        console.error('Background accept+print (locked):', e)
+      }
+    },
+    [
+      isMainPosDevice,
+      autoPrintReceiptOnOrder,
+      autoPrintKitchenSlipOnOrder,
+      refetchStores,
+      runAutoPrintForAcceptedDeliveryOrder,
+      logPosPrintDebug,
+    ]
+  )
+
+  /**
    * 신규 "배달" 주문 자동 처리:
    * - 배달 탭으로 전환(결제 중이면 대기 큐)
    * - 해당 주문 자동 선택
@@ -3226,6 +3287,8 @@ export default function PosTerminalPage() {
         setDeferredIncomingDeliveryCount(deferredIncomingDeliveryQueueRef.current.length)
         refetchStores({ scope: 'all' })
         playIncomingOrderBeep()
+        /** 화면은 안 뺏되, 주방·영수증 빌지는 백그라운드로 즉시 출력(웹훅 배달만) */
+        void backgroundAcceptAndPrintInboundDeliveryOrder({ ...params, orderId })
         return
       }
 
@@ -3237,6 +3300,7 @@ export default function PosTerminalPage() {
       isIncomingDeliveryFocusLocked,
       playIncomingOrderBeep,
       refetchStores,
+      backgroundAcceptAndPrintInboundDeliveryOrder,
     ]
   )
 

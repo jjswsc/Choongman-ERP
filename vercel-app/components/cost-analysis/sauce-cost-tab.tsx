@@ -31,7 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getSauces, saveSauce, deleteSauce, recalculateSauces, getAdminItems, type SauceRow, type AdminItem } from "@/lib/api-client"
-import { setRuntimeApiItems, setRuntimeSauces, getIngredientCodeByItemCode, getIngredientItemCode, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredientCodeByItemCode, getIngredientItemCode, MISE_DEFAULT } from "@/lib/cost-data"
+import { syncCostAnalysisRuntime } from "@/lib/cost-analysis-runtime"
 import type { RecipeItem } from "@/lib/cost-data"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -198,8 +199,7 @@ export function SauceCostTab({ canEdit = true }: { canEdit?: boolean }) {
     setFormFoodItems([])
     setFormUsageKind("for_sale")
     setFormLinkedItemCode("")
-    setRuntimeApiItems(itemList)
-    setRuntimeSauces(sauceList)
+    await syncCostAnalysisRuntime("full")
     setEditOpen(true)
   }
 
@@ -213,16 +213,16 @@ export function SauceCostTab({ canEdit = true }: { canEdit?: boolean }) {
     setFormTotalQuantity(s.totalQuantity ?? s.ingredients.reduce((sum, i) => sum + i.quantity, 0))
     setFormUsageKind(s.usageKind === "store_use" ? "store_use" : "for_sale")
     setFormLinkedItemCode(s.linkedItemCode ?? "")
-    setRuntimeApiItems(items)
-    setRuntimeSauces(sauces.filter((sa) => sa.code !== s.code))
-    const foodItems = s.ingredients
-      .map((i): RecipeItem | null => {
-        const code = getIngredientCodeByItemCode(i.itemCode)
-        if (code == null) return null
-        return { ingredientCode: code, quantity: i.quantity, misePercent: i.lossRate ?? MISE_DEFAULT }
-      })
-      .filter((x): x is RecipeItem => x != null)
-    setFormFoodItems(foodItems)
+    void syncCostAnalysisRuntime("full").then(() => {
+      const foodItems = s.ingredients
+        .map((i): RecipeItem | null => {
+          const code = getIngredientCodeByItemCode(i.itemCode)
+          if (code == null) return null
+          return { ingredientCode: code, quantity: i.quantity, misePercent: i.lossRate ?? MISE_DEFAULT }
+        })
+        .filter((x): x is RecipeItem => x != null)
+      setFormFoodItems(foodItems)
+    })
     setEditOpen(true)
   }
 
@@ -303,6 +303,7 @@ export function SauceCostTab({ canEdit = true }: { canEdit?: boolean }) {
     if (!editOpen) {
       setLinkedItemFilterSearch("")
       setLinkedItemFilterCategory("all")
+      void syncCostAnalysisRuntime("calculator")
     }
   }, [editOpen])
 

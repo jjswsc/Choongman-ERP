@@ -3,6 +3,7 @@
  * Run: node vercel-app/scripts/patch-interior-i18n-regional.mjs
  */
 import fs from "fs"
+import { writeI18nFileSync } from "./lib/i18n-encoding-guard.mjs"
 
 const path = "c:/CM_ERP/vercel-app/lib/i18n.ts"
 let lines = fs.readFileSync(path, "utf8").split(/\r?\n/)
@@ -134,7 +135,7 @@ for (const lang of langs) {
 }
 
 if (patched > 0) {
-  fs.writeFileSync(path, lines.join("\n"), "utf8")
+  writeI18nFileSync(path, lines.join("\n"))
   console.log(`Patched ${patched} language block(s).`)
 } else {
   console.log("No patches needed.")

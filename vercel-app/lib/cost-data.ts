@@ -96,8 +96,71 @@ export function setRuntimeIngredients(items: Array<{ code: number; name: string;
   runtimeIngredientMap = new Map(items.map((i) => [i.code, { name: i.name, bahtPerUnit: i.bahtPerUnit, category: i.category, itemCode: i.itemCode }]))
 }
 
+/** setRuntimeIngredients 대신 기존 품목·배합 맵을 유지하며 breakdown 폴백만 추가 */
+export function mergeRuntimeIngredients(items: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode?: string }>) {
+  for (const i of items) {
+    runtimeIngredientMap.set(i.code, {
+      name: i.name,
+      bahtPerUnit: i.bahtPerUnit,
+      category: i.category,
+      itemCode: i.itemCode,
+    })
+  }
+}
+
 export function clearRuntimeIngredients() {
   runtimeIngredientMap = new Map()
+}
+
+const RUNTIME_BREAKDOWN_FALLBACK_OFFSET = 10000
+
+/**
+ * breakdown 행 → runtime code. API 품목·배합 맵에 없을 때 이름·단가 폴백 등록.
+ * (getSauces/getAdminItems 완료 전에 BOM을 그려도 S002 등이 코드 문자열로만 보이지 않게)
+ */
+export function seedRuntimeFromBreakdownRow(params: {
+  itemCode: string
+  itemName?: string
+  costPerUnit?: number
+  ingredientType?: "food" | "packaging"
+  fallbackIndex?: number
+}): number {
+  const itemCode = String(params.itemCode ?? "").trim()
+  if (!itemCode) return RUNTIME_BREAKDOWN_FALLBACK_OFFSET + (params.fallbackIndex ?? 0)
+
+  const existing = getIngredientCodeByItemCode(itemCode)
+  if (existing != null) return existing
+
+  const cat = params.ingredientType === "packaging" ? "packaging" : "food"
+  const name = String(params.itemName ?? itemCode).trim() || itemCode
+  const bahtPerUnit = Number(params.costPerUnit) || 0
+
+  if (/^S\d+/i.test(itemCode)) {
+    return registerRuntimeSauceIfAbsent({
+      itemCode,
+      name,
+      bahtPerUnit,
+      usageKind: "for_sale",
+    })
+  }
+
+  const codeNum = /^\d+$/.test(itemCode) ? parseInt(itemCode, 10) : NaN
+  const code = !isNaN(codeNum) ? codeNum : RUNTIME_BREAKDOWN_FALLBACK_OFFSET + (params.fallbackIndex ?? 0)
+  mergeRuntimeIngredients([{ code, name, bahtPerUnit, category: cat, itemCode }])
+  return code
+}
+
+/** savedItemCode 기준으로 ingredientCode 재매핑 (런타임 API 로드 후) */
+export function reResolveRecipeItems(items: RecipeItem[]): RecipeItem[] {
+  return items.map((item) => {
+    const ic = String(item.savedItemCode ?? getIngredientItemCode(item.ingredientCode) ?? "").trim()
+    if (!ic) return item
+    const resolved = getIngredientCodeByItemCode(ic)
+    if (resolved != null && resolved !== item.ingredientCode) {
+      return { ...item, ingredientCode: resolved }
+    }
+    return item
+  })
 }
 
 export function getRuntimeIngredients(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging" }> {

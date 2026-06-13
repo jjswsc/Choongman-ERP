@@ -1,5 +1,6 @@
 const fs = require("fs")
 const path = require("path")
+const { spawnSync } = require("child_process")
 
 const root = path.resolve(__dirname, "..")
 const i18nPath = path.join(root, "lib", "i18n.ts")
@@ -118,6 +119,11 @@ for (const e of edits) {
 
 if (edits.length) {
   fs.writeFileSync(i18nPath, next, "utf8")
+  const v = spawnSync(process.execPath, [path.join(__dirname, "check-i18n-encoding.mjs")], {
+    cwd: root,
+    stdio: "inherit",
+  })
+  if (v.status !== 0) process.exit(v.status ?? 1)
 }
 
 for (const e of edits.reverse()) {

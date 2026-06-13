@@ -5,7 +5,7 @@ import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 export default function MarketingPage() {
   return (
-    <MarketingPageShell maxWidthClass="max-w-6xl" showSubnav={false}>
+    <MarketingPageShell maxWidthClass="max-w-6xl">
       <MarketingHomePanel />
     </MarketingPageShell>
   )

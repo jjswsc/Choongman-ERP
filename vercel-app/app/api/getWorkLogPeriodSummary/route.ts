@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc } from '@/lib/supabase-server'
-import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveWorkLogEmployeeById, workLogsEmployeeMatchFilter } from '@/lib/work-log-name-server'
+import { aggregateWorkLogPeriodDays } from '@/lib/work-log-aggregate-fallback'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
         p_employee_name: employeeName,
       })
 
-      if (Array.isArray(rows)) {
+      if (Array.isArray(rows) && rows.some((r) => Number(r.total_tasks) > 0)) {
         return NextResponse.json(
           {
             days: rows.map((r) => ({
@@ -52,10 +53,45 @@ export async function GET(req: NextRequest) {
         )
       }
     } catch {
-      /* RPC 미배포 */
+      /* RPC 미배포 또는 빈 결과 — JS fallback */
     }
 
-    return NextResponse.json({ days: [] }, { headers })
+    if (!emp && !employeeName) {
+      return NextResponse.json({ days: [] }, { headers })
+    }
+
+    const filters = [
+      `log_date=gte.${encodeURIComponent(startStr)}`,
+      `log_date=lte.${encodeURIComponent(endStr)}`,
+    ]
+    if (emp) {
+      filters.push(workLogsEmployeeMatchFilter(emp))
+    } else if (employeeName) {
+      filters.push(`name=eq.${encodeURIComponent(employeeName)}`)
+    }
+
+    const workRows =
+      (await supabaseSelectFilter('work_logs', filters.join('&'), {
+        order: 'log_date.asc',
+        limit: 5000,
+        select: 'log_date,name,employee_id,progress,status,store',
+      })) || []
+
+    const days = aggregateWorkLogPeriodDays(
+      workRows as {
+        log_date?: string | Date
+        name?: string
+        employee_id?: number | null
+        progress?: number
+        status?: string
+      }[],
+      startStr,
+      endStr,
+      emp,
+      employeeName
+    )
+
+    return NextResponse.json({ days }, { headers })
   } catch (e) {
     console.error('getWorkLogPeriodSummary:', e)
     return NextResponse.json({ days: [] }, { headers })

@@ -30,8 +30,24 @@ import {
 import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
-import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, getBahtPerStandardUnit, getQuantityFactorToStore, getQuantityFactorToDisplay, registerRuntimeSauceIfAbsent, pickDefaultStandardUnitKey, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientCodeByItemCode, getIngredientStandardUnits, getBahtPerStandardUnit, getQuantityFactorToStore, getQuantityFactorToDisplay, registerRuntimeSauceIfAbsent, pickDefaultStandardUnitKey, MISE_DEFAULT } from "@/lib/cost-data"
 import { coerceQuantityUnitKeyForStandardUnits, parseQuantityUnitKey } from "@/lib/pos-menu-ingredient-quantity-unit"
+
+function recipeIngredientDisplayName(item: RecipeItem): string {
+  const direct = getIngredient(item.ingredientCode)
+  const directName = direct?.name?.trim()
+  const itemCode = getIngredientItemCode(item.ingredientCode) ?? item.savedItemCode ?? ""
+  if (directName && directName !== itemCode) return directName
+  const saved = String(item.savedItemCode ?? "").trim()
+  if (saved) {
+    const resolved = getIngredientCodeByItemCode(saved)
+    if (resolved != null) {
+      const bySaved = getIngredient(resolved)
+      if (bySaved?.name?.trim()) return bySaved.name.trim()
+    }
+  }
+  return directName || saved || "—"
+}
 
 type IngredientSource = "api" | "ingredient" | "sauce"
 
@@ -49,6 +65,7 @@ interface IngredientPickerProps {
   rowIndex: number
   onOpenChange: (index: number | null) => void
   t: (key: string) => string
+  displayNameOverride?: string
 }
 
 function IngredientPicker({
@@ -59,6 +76,7 @@ function IngredientPicker({
   rowIndex,
   onOpenChange,
   t,
+  displayNameOverride,
 }: IngredientPickerProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
@@ -101,7 +119,7 @@ function IngredientPicker({
 
   const currentIng = ingredients.find((i) => i.code === value)
   const fallbackIng = getIngredient(value)
-  const displayLabel = currentIng?.name ?? fallbackIng?.name ?? "-"
+  const displayLabel = displayNameOverride ?? currentIng?.name ?? fallbackIng?.name ?? "-"
 
   return (
     <div ref={wrapperRef} className="relative min-w-[180px]">
@@ -563,7 +581,7 @@ export function IngredientTable({
                   <TableCell>
                     {readOnly ? (
                       <span className="text-sm truncate block max-w-[200px]">
-                        {getIngredient(item.ingredientCode)?.name ?? "—"}
+                        {recipeIngredientDisplayName(item)}
                       </span>
                     ) : (
                       <IngredientPicker
@@ -574,6 +592,7 @@ export function IngredientTable({
                         rowIndex={index}
                         onOpenChange={setOpenPickerRow}
                         t={t}
+                        displayNameOverride={recipeIngredientDisplayName(item)}
                       />
                     )}
                   </TableCell>

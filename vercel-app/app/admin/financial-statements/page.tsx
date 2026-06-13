@@ -38,7 +38,6 @@ import { FinancialStatementStorePicker } from "@/components/financial-statements
 import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
-import { AccountingWorkflowLinks } from "@/components/erp/accounting-workflow-links"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 
 export default function FinancialStatementsPage() {
@@ -147,8 +146,6 @@ export default function FinancialStatementsPage() {
       title={t("adminFinancialStatements")}
       subtitle={t("adminFinancialStatementsSub")}
     >
-      <AccountingWorkflowLinks context="financial" />
-
         <AdminFilterBar className="mb-4">
             <div className="flex flex-wrap items-end gap-3">
               <AdminFilterField label={t("fs_periodStartMonth")}>

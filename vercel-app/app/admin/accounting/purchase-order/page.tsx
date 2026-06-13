@@ -21,8 +21,6 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerRole } from "@/lib/permissions"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
-import { AccountingWorkflowLinks } from "@/components/erp/accounting-workflow-links"
-
 export default function AccountingPurchaseOrderPage() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -52,7 +50,6 @@ export default function AccountingPurchaseOrderPage() {
       title={t("adminAccountingPurchaseOrderTitle")}
       subtitle={t("adminAccountingPurchaseOrderSub")}
     >
-      <AccountingWorkflowLinks context="po" />
       <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
         <AdminTabsBarWithHelp>
           <TabsList className={adminTabsListRowCn}>

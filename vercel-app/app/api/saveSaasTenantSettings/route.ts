@@ -28,6 +28,8 @@ import {
   summarizeModulePricingChanges,
 } from "@/lib/saas-module-billing"
 import { normalizePosDeviceBillingBasis, resolvePosDeviceBillingBasis } from "@/lib/saas-tenant-pos-licensed"
+import { tenantBillingDbPatch } from "@/lib/saas-billing-company-profile"
+import { supabaseUpsertMergeWithPgrst204Fallback } from "@/lib/supabase-pgrst204-retry"
 import {
   defaultModuleCatalogRows,
   mergeTenantModulePricing,
@@ -236,11 +238,22 @@ export async function POST(req: NextRequest) {
     const nextBillingIso = toBangkokStartIso(String(tenant.nextBillingDate || "").slice(0, 10))
     const graceDays = Math.max(0, Math.floor(Number(tenant.policy.overdueGraceDays || 0)))
 
-    await supabaseUpsertMerge("tenants", "id", {
-      id: tenantId,
-      company_name: companyName,
-      is_active: tenant.status !== "suspended",
-    })
+    await supabaseUpsertMergeWithPgrst204Fallback(
+      "tenants",
+      "id",
+      {
+        id: tenantId,
+        is_active: tenant.status !== "suspended",
+        ...tenantBillingDbPatch({
+          companyName,
+          ownerName: tenant.ownerName,
+          phone: tenant.phone,
+          billingCompany: tenant.billingCompany,
+        }),
+        updated_at: nowIso,
+      },
+      "saveSaasTenantSettings tenants"
+    )
 
     if (isNewTenant && scope.kind === "partner") {
       await assignTenantToPartner({

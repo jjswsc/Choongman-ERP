@@ -119,6 +119,46 @@ export function isAttendanceOutApproved(approval: string | undefined | null): bo
   return a === '승인완료' || a === '승인'
 }
 
+/** GPS·강제퇴근 등 status만으로 관리자 승인이 필요한 경우 (getAttendanceRecordsAdmin과 동일) */
+export function attendanceStatusNeedsManagerApproval(status: string | null | undefined): boolean {
+  return /위치미확인|승인대기|강제퇴근/.test(String(status || '').trim())
+}
+
+/**
+ * `approved=대기` 중 실제로 관리자 승인·조정이 필요한 로그.
+ * submitAttendance는 정상 출퇴근도 `approved=대기`로 저장하므로, 대기 전체 COUNT는 과대 집계됨.
+ */
+export function attendanceLogNeedsManagerApproval(row: {
+  approved?: string | null
+  status?: string | null
+  late_min?: number | null
+  ot_min?: number | null
+  early_min?: number | null
+}): boolean {
+  if (String(row.approved || '').trim() !== '대기') return false
+  if (attendanceStatusNeedsManagerApproval(row.status)) return true
+  if ((Number(row.late_min) || 0) > 0) return true
+  if ((Number(row.ot_min) || 0) > 0) return true
+  if ((Number(row.early_min) || 0) > 0) return true
+  return false
+}
+
+/** PostgREST `attendance_logs` — 승인 대기(실제 처리 필요) 건수·목록 조회용 필터 */
+export function attendancePendingApprovalPostgrestFilter(prefixFilter?: string): string {
+  const pendingEq = encodeURIComponent('대기')
+  const statusOr = [
+    'late_min.gt.0',
+    'ot_min.gt.0',
+    'early_min.gt.0',
+    `status.like.${encodeURIComponent('*위치미확인*')}`,
+    `status.like.${encodeURIComponent('*승인대기*')}`,
+    `status.like.${encodeURIComponent('*강제퇴근*')}`,
+  ].join(',')
+  const core = `and=(approved.eq.${pendingEq},or=(${statusOr}))`
+  const prefix = String(prefixFilter || '').trim()
+  return prefix ? `${prefix}&${core}` : core
+}
+
 /** 현재 시각을 방콕 기준 날짜 YYYY-MM-DD */
 export function todayStrBangkok(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })

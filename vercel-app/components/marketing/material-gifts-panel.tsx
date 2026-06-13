@@ -424,7 +424,6 @@ export function MarketingMaterialGiftsPanel({
           allowEmpty
           emptyOptionLabel={t("marketingMaterialGiftSelectCampaignPlaceholder")}
           onRefresh={loadData}
-          maxListHeightClass="max-h-48"
           disabled={loading || Boolean(syncCampaignId?.trim())}
         />
         <div className="flex flex-wrap gap-2">

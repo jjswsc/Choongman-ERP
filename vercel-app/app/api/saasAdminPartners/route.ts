@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
 import type { CatalogRepricePolicy } from "@/lib/saas-partner-pricing-policy"
+import {
+  mapPartnerBillingCompanyFromRow,
+  partnerBillingDbPatch,
+  type SaasBillingCompanyInfo,
+} from "@/lib/saas-billing-company-profile"
 import { SAAS_MODULE_KEYS, type SaasModuleKey } from "@/lib/saas-module-pricing"
+import {
+  supabaseSelectFilterStrippingUnknownColumns,
+  supabaseUpsertMergeWithPgrst204Fallback,
+} from "@/lib/supabase-pgrst204-retry"
 import {
   supabaseSelectFilter,
   supabaseSelectFilterRange,
   supabaseUpsert,
-  supabaseUpsertMerge,
 } from "@/lib/supabase-server"
 
 export const dynamic = "force-dynamic"
@@ -19,6 +27,9 @@ type PartnerRow = {
   contact_name?: string | null
   contact_phone?: string | null
   contact_email?: string | null
+  legal_name?: string | null
+  tax_id?: string | null
+  billing_address?: string | null
   is_active: boolean
 }
 
@@ -36,7 +47,19 @@ type MarginRuleRow = {
 }
 
 const PARTNER_SELECT =
-  "id,name,default_margin_pct,catalog_reprice_policy,contact_name,contact_phone,contact_email,is_active"
+  "id,name,default_margin_pct,catalog_reprice_policy,contact_name,contact_phone,contact_email,legal_name,tax_id,billing_address,is_active"
+
+async function loadPartners(
+  filter: string,
+  opts: { limit?: number; order?: string }
+): Promise<PartnerRow[]> {
+  return (await supabaseSelectFilterStrippingUnknownColumns(
+    "saas_partners",
+    filter,
+    { ...opts, select: PARTNER_SELECT },
+    "saasAdminPartners"
+  )) as PartnerRow[]
+}
 
 function mapPartner(p: PartnerRow, tenantCount = 0, userCount = 0) {
   return {
@@ -47,6 +70,7 @@ function mapPartner(p: PartnerRow, tenantCount = 0, userCount = 0) {
     contactName: p.contact_name || "",
     contactPhone: p.contact_phone || "",
     contactEmail: p.contact_email || "",
+    billingCompany: mapPartnerBillingCompanyFromRow(p),
     isActive: p.is_active !== false,
     tenantCount,
     userCount,
@@ -103,10 +127,7 @@ export async function GET(req: NextRequest) {
 
   if (detailPartnerId) {
     try {
-      const rows = (await supabaseSelectFilter("saas_partners", `id=eq.${encodeURIComponent(detailPartnerId)}`, {
-        limit: 1,
-        select: PARTNER_SELECT,
-      })) as PartnerRow[]
+      const rows = await loadPartners(`id=eq.${encodeURIComponent(detailPartnerId)}`, { limit: 1 })
       const partner = rows?.[0]
       if (!partner) {
         return NextResponse.json({ success: false, message: "대리점을 찾을 수 없습니다." }, { status: 404, headers })
@@ -219,11 +240,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const partners = (await supabaseSelectFilter("saas_partners", "", {
-      limit: 500,
-      order: "name.asc",
-      select: PARTNER_SELECT,
-    })) as PartnerRow[]
+    const partners = await loadPartners("", { limit: 500, order: "name.asc" })
 
     let users: PartnerUserRow[] = []
     try {
@@ -287,6 +304,7 @@ type SavePartnerBody = {
     contactName?: string
     contactPhone?: string
     contactEmail?: string
+    billingCompany?: Partial<SaasBillingCompanyInfo>
     isActive?: boolean
   }
   linkUser?: {
@@ -336,17 +354,25 @@ export async function POST(req: NextRequest) {
       if (!id || !name) {
         return NextResponse.json({ success: false, message: "partner.id/name이 필요합니다." }, { status: 400, headers })
       }
-      await supabaseUpsertMerge("saas_partners", "id", {
-        id,
-        name,
-        default_margin_pct: Math.max(0, Number(body.partner.defaultMarginPct ?? 0)),
-        catalog_reprice_policy: body.partner.catalogRepricePolicy || "retain_margin_pct",
-        contact_name: String(body.partner.contactName || "").trim() || null,
-        contact_phone: String(body.partner.contactPhone || "").trim() || null,
-        contact_email: String(body.partner.contactEmail || "").trim() || null,
-        is_active: body.partner.isActive !== false,
-        updated_at: nowIso,
-      })
+      await supabaseUpsertMergeWithPgrst204Fallback(
+        "saas_partners",
+        "id",
+        {
+          id,
+          default_margin_pct: Math.max(0, Number(body.partner.defaultMarginPct ?? 0)),
+          catalog_reprice_policy: body.partner.catalogRepricePolicy || "retain_margin_pct",
+          is_active: body.partner.isActive !== false,
+          updated_at: nowIso,
+          ...partnerBillingDbPatch({
+            name,
+            contactName: body.partner.contactName,
+            contactPhone: body.partner.contactPhone,
+            contactEmail: body.partner.contactEmail,
+            billingCompany: body.partner.billingCompany,
+          }),
+        },
+        "saasAdminPartners save partner"
+      )
     }
 
     if (body.catalogRepricePolicy) {
@@ -355,11 +381,16 @@ export async function POST(req: NextRequest) {
       if (!partnerId || !["retain_margin_pct", "retain_margin_amount", "retain_retail"].includes(policy)) {
         return NextResponse.json({ success: false, message: "partnerId/policy가 올바르지 않습니다." }, { status: 400, headers })
       }
-      await supabaseUpsertMerge("saas_partners", "id", {
-        id: partnerId,
-        catalog_reprice_policy: policy,
-        updated_at: nowIso,
-      })
+      await supabaseUpsertMergeWithPgrst204Fallback(
+        "saas_partners",
+        "id",
+        {
+          id: partnerId,
+          catalog_reprice_policy: policy,
+          updated_at: nowIso,
+        },
+        "saasAdminPartners catalogRepricePolicy"
+      )
     }
 
     if (body.marginRules) {

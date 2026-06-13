@@ -1,7 +1,6 @@
 "use client"
 
 import type { LucideIcon } from "lucide-react"
-import { StoreSubnav } from "@/components/erp/store-subnav"
 import { cn } from "@/lib/utils"
 
 type StorePageShellProps = {
@@ -33,7 +32,6 @@ export function StorePageShell({
             {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
           </div>
         </div>
-        <StoreSubnav />
         {children}
       </div>
     </div>

@@ -1,0 +1,24 @@
+# i18n.ts 인코딩·대량 수정 안전 규칙
+
+## 배경
+
+`lib/i18n.ts`는 6만 줄 이상. UTF-8 손상 시 ko/th 등이 전부 `???`로 표시되어 **전 매장 UI 장애**가 발생했다.
+
+## 원칙
+
+1. **신규 UI 문자열은 satellite 파일 우선** — `i18n-*-admin.ts` 등에 추가 후 `i18n.ts`에는 import + spread만.
+2. **`i18n.ts` 직접 대량 치환·패치 금지** — patch/sync 스크립트 실행 전 git diff로 ko `welcome`/`all`/`search` 확인.
+3. **저장은 항상 UTF-8** — `fs.writeFileSync(path, content, "utf8")` 또는 `writeI18nFileSync()` (`scripts/lib/i18n-encoding-guard.mjs`).
+4. **커밋 전·CI** — `npm run i18n:encoding:check` 통과 필수 (`build:prep`에 포함).
+
+## 손상 징후
+
+- 파일 헤더 `공통 번역` → `?? ??`
+- `welcome: '?????!'`, `all: '??'`
+- en만 정상, ko/th/mm 등 비ASCII 로케일만 `?`
+
+## 복구
+
+1. `git show <good-commit>:vercel-app/lib/i18n.ts` 로 ko 블록 샘플 확인
+2. satellite merge(import/spread/`i18nWithPosBackfill`)만 재적용
+3. `node scripts/check-i18n-encoding.mjs` 통과 후 배포

@@ -5,6 +5,7 @@ import {
   DEFAULT_STAGE_PRICES,
   type TenantItem,
 } from "./saas-admin-control-plane"
+import { emptySaasBillingCompanyInfo } from "./saas-billing-company-profile"
 import { buildNewTenantPricing } from "./saas-module-billing"
 import type { SaasModuleKey, SaasModulePriceRow } from "./saas-module-pricing"
 import { resolvePosDeviceBillingBasis } from "./saas-tenant-pos-licensed"
@@ -41,6 +42,7 @@ export function createNewTenantDraft(input: NewTenantDraftInput): TenantItem {
     companyName,
     ownerName: input.ownerName?.trim() || "-",
     phone: input.phone?.trim() || "-",
+    billingCompany: emptySaasBillingCompanyInfo(),
     planTier: "starter",
     billingCycle: "monthly",
     status: "trial",

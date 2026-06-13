@@ -304,11 +304,13 @@ export function PosCostListPanel({
     )
   }
 
-  const sortBtn = (col: PosCostListSortKey, label: string, align: "left" | "right" = "left") => (
+  const sortBtn = (col: PosCostListSortKey, label: string, align: "left" | "center" | "right" = "left") => (
     <button
       type="button"
       className={cn(
         "inline-flex w-full min-w-0 items-center gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline",
+        align === "left" && "justify-start",
+        align === "center" && "justify-center",
         align === "right" && "ml-auto justify-end"
       )}
       onClick={() => setListSortKey(col)}
@@ -456,21 +458,21 @@ export function PosCostListPanel({
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
                   <tr className="border-b">
                     <th className="w-8 px-2 py-3 sticky left-0 z-20 bg-muted/95" aria-hidden />
-                    <th className="px-2 py-2.5 text-left text-xs sticky left-8 z-20 bg-muted/95 min-w-[72px]">
-                      {sortBtn("code", t("posMenuCode"))}
+                    <th className="px-2 py-2.5 text-center text-xs sticky left-8 z-20 bg-muted/95 min-w-[72px]">
+                      {sortBtn("code", t("posMenuCode"), "center")}
                     </th>
-                    <th className="px-2 py-2.5 text-left text-xs">{sortBtn("mainCat", t("posMenuCategoryMain"))}</th>
-                    <th className="px-2 py-2.5 text-left text-xs">{sortBtn("category", t("posMenuCategory"))}</th>
-                    <th className="px-2 py-2.5 text-left text-xs min-w-[140px]">{sortBtn("name", t("posMenuName"))}</th>
-                    <th className="px-2 py-2.5 text-right text-xs">{sortBtn("cook", t("posCostTableHdrCook"), "right")}</th>
-                    <th className="px-2 py-2.5 text-right text-xs border-l border-border/60" colSpan={3}>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostDineIn")}</span>
+                    <th className="px-2 py-2.5 text-center text-xs">{sortBtn("mainCat", t("posMenuCategoryMain"), "center")}</th>
+                    <th className="px-2 py-2.5 text-center text-xs">{sortBtn("category", t("posMenuCategory"), "center")}</th>
+                    <th className="px-2 py-2.5 text-center text-xs min-w-[140px]">{sortBtn("name", t("posMenuName"), "center")}</th>
+                    <th className="px-2 py-2.5 text-center text-xs">{sortBtn("cook", t("posCostTableHdrCook"), "center")}</th>
+                    <th className="px-2 py-2.5 text-center text-xs border-l border-border/60" colSpan={3}>
+                      <span className="block text-center text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostDineIn")}</span>
                     </th>
-                    <th className="px-2 py-2.5 text-right text-xs border-l border-border/60" colSpan={3}>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostDelivery")}</span>
+                    <th className="px-2 py-2.5 text-center text-xs border-l border-border/60" colSpan={3}>
+                      <span className="block text-center text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostDelivery")}</span>
                     </th>
-                    <th className="px-2 py-2.5 text-right text-xs border-l border-border/60" colSpan={2}>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostMargin")}</span>
+                    <th className="px-2 py-2.5 text-center text-xs border-l border-border/60" colSpan={2}>
+                      <span className="block text-center text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostMargin")}</span>
                     </th>
                   </tr>
                   <tr className="border-b bg-muted/80 text-xs">

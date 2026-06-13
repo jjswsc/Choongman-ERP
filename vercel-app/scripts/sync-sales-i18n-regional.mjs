@@ -3,6 +3,7 @@
  * Run: node vercel-app/scripts/sync-sales-i18n-regional.mjs
  */
 import fs from "fs"
+import { writeI18nFileSync } from "./lib/i18n-encoding-guard.mjs"
 
 const path = "c:/CM_ERP/vercel-app/lib/i18n.ts"
 let lines = fs.readFileSync(path, "utf8").split(/\r?\n/)
@@ -243,5 +244,5 @@ for (const lang of targets) {
   console.log(`${lang}: added ${insertLines.length} keys`)
 }
 
-fs.writeFileSync(path, lines.join("\n"))
+writeI18nFileSync(path, lines.join("\n"))
 console.log("done")

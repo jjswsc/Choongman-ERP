@@ -14,7 +14,6 @@ import {
   type HrCalendarEvent,
   type HrCalendarEventKind,
 } from "@/lib/hr-calendar-events"
-import { HrSubnav } from "@/components/hr/hr-subnav"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -249,7 +248,6 @@ export default function AdminHrCalendarPage() {
   return (
     <div className="flex-1 overflow-auto bg-gradient-to-b from-muted/40 via-background to-background">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <HrSubnav />
         <Card className="overflow-hidden border-border/60 shadow-md">
           <CardHeader className="space-y-4 border-b border-border/50 bg-gradient-to-br from-primary/[0.06] via-card to-card pb-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

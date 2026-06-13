@@ -87,14 +87,21 @@ AS $$
       wl.progress,
       wl.status
     FROM work_logs wl
+    LEFT JOIN employees e ON e.id = wl.employee_id
     WHERE wl.log_date >= p_start
       AND wl.log_date <= p_end
       AND (
-        (p_employee_id IS NOT NULL AND p_employee_id > 0 AND wl.employee_id = p_employee_id)
+        (p_employee_id IS NOT NULL AND p_employee_id > 0 AND (
+          wl.employee_id = p_employee_id OR e.id = p_employee_id
+        ))
         OR (
           p_employee_name IS NOT NULL
           AND TRIM(p_employee_name) <> ''
-          AND wl.name = p_employee_name
+          AND (
+            wl.name = p_employee_name
+            OR e.name = p_employee_name
+            OR (e.nick IS NOT NULL AND TRIM(e.nick) <> '' AND wl.name = e.nick)
+          )
         )
       )
   )
@@ -132,7 +139,8 @@ STABLE
 AS $$
 DECLARE
   v_name text := NULLIF(TRIM(p_employee_name), '');
-  v_store text := NULLIF(TRIM(p_store), '');
+  v_filter_store text := NULLIF(TRIM(p_store), '');
+  v_emp_store text := NULL;
   v_eid bigint := CASE WHEN p_employee_id > 0 THEN p_employee_id ELSE NULL END;
   v_work jsonb;
   v_attendance jsonb;
@@ -143,7 +151,7 @@ BEGIN
   END IF;
 
   IF v_eid IS NOT NULL THEN
-    SELECT e.name, e.store INTO v_name, v_store
+    SELECT e.name, e.store INTO v_name, v_emp_store
     FROM employees e WHERE e.id = v_eid LIMIT 1;
   END IF;
 
@@ -157,12 +165,21 @@ BEGIN
       COUNT(*) FILTER (WHERE wl.status IN ('Continue', 'Carry Over'))::int AS carried,
       ROUND(AVG(COALESCE(wl.progress, 0))::numeric, 1) AS avg_progress
     FROM work_logs wl
+    LEFT JOIN employees e ON e.id = wl.employee_id
     WHERE wl.log_date >= p_start AND wl.log_date <= p_end
       AND (
-        (v_eid IS NOT NULL AND wl.employee_id = v_eid)
-        OR (v_name IS NOT NULL AND wl.name = v_name)
+        (v_eid IS NOT NULL AND (wl.employee_id = v_eid OR e.id = v_eid))
+        OR (v_name IS NOT NULL AND (
+          wl.name = v_name
+          OR e.name = v_name
+          OR (e.nick IS NOT NULL AND TRIM(e.nick) <> '' AND wl.name = e.nick)
+        ))
       )
-      AND (v_store IS NULL OR wl.store = v_store OR wl.store IS NULL)
+      AND (
+        v_filter_store IS NULL
+        OR wl.store = v_filter_store
+        OR TRIM(COALESCE(wl.store, '')) = ''
+      )
     GROUP BY wl.log_date
     ORDER BY wl.log_date
   ) t;
@@ -176,12 +193,21 @@ BEGIN
       COUNT(*) FILTER (WHERE al.log_type ILIKE '%out%' OR al.log_type ILIKE '%퇴%')::int AS clock_out_count,
       COALESCE(SUM(al.ot_min), 0)::int AS ot_min_sum
     FROM attendance_logs al
+    LEFT JOIN employees e ON e.id = al.employee_id
     WHERE al.log_date >= p_start AND al.log_date <= p_end
       AND (
-        (v_eid IS NOT NULL AND al.employee_id = v_eid)
-        OR (v_name IS NOT NULL AND al.name = v_name)
+        (v_eid IS NOT NULL AND (al.employee_id = v_eid OR e.id = v_eid))
+        OR (v_name IS NOT NULL AND (
+          al.name = v_name
+          OR e.name = v_name
+          OR (e.nick IS NOT NULL AND TRIM(e.nick) <> '' AND al.name = e.nick)
+        ))
       )
-      AND (v_store IS NULL OR al.store_name = v_store)
+      AND (
+        v_filter_store IS NULL
+        OR al.store_name = v_filter_store
+        OR TRIM(COALESCE(al.store_name, '')) = ''
+      )
     GROUP BY al.log_date
     ORDER BY al.log_date
   ) t;
@@ -198,14 +224,14 @@ BEGIN
     FROM evaluation_results er
     WHERE er.eval_date >= p_start AND er.eval_date <= p_end
       AND v_name IS NOT NULL AND er.employee_name = v_name
-      AND (v_store IS NULL OR er.store_name = v_store)
+      AND (v_filter_store IS NULL OR er.store_name = v_filter_store)
     ORDER BY er.eval_date DESC
     LIMIT 20
   ) t;
 
   RETURN jsonb_build_object(
     'employeeName', v_name,
-    'employeeStore', v_store,
+    'employeeStore', COALESCE(v_filter_store, v_emp_store),
     'work', COALESCE(v_work, '[]'::jsonb),
     'attendance', COALESCE(v_attendance, '[]'::jsonb),
     'evaluations', COALESCE(v_eval, '[]'::jsonb)

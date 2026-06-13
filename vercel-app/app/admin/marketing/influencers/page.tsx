@@ -584,7 +584,6 @@ export default function MarketingInfluencersPage() {
             onChange={setCampaignFilter}
             campaigns={campaigns}
             onRefresh={refreshAllLists}
-            maxListHeightClass="max-h-52"
             disabled={loading}
           />
 

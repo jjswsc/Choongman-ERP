@@ -12,7 +12,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
-import { MarketingSubnav } from "@/components/marketing/marketing-subnav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -99,8 +98,6 @@ export function MarketingHomePanel() {
           </Button>
         }
       />
-      <MarketingSubnav />
-
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border bg-card px-3 py-3">
           <div className="text-[10px] text-muted-foreground">{t("marketingHomeStatOngoing")}</div>

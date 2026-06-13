@@ -39,11 +39,22 @@ import {
 } from "@/lib/saas-module-billing"
 import { loadLicensedPosByTenant } from "@/lib/saas-tenant-pos-licensed-server"
 import { normalizePosDeviceBillingBasis, resolvePosDeviceBillingBasis } from "@/lib/saas-tenant-pos-licensed"
+import { mapTenantBillingCompanyFromRow } from "@/lib/saas-billing-company-profile"
+import { supabaseSelectFilterStrippingUnknownColumns } from "@/lib/supabase-pgrst204-retry"
+
+const TENANT_SELECT =
+  "id,company_name,is_active,owner_name,phone,legal_name,tax_id,billing_address,billing_email"
 
 type TenantRow = {
   id: string
   company_name: string
   is_active?: boolean | null
+  owner_name?: string | null
+  phone?: string | null
+  legal_name?: string | null
+  tax_id?: string | null
+  billing_address?: string | null
+  billing_email?: string | null
 }
 
 type SubRow = {
@@ -248,10 +259,12 @@ export async function GET(req: NextRequest) {
   const scopeMeta = saasScopeToClientMeta(scope)
 
   try {
-    let tenants = (await supabaseSelect("tenants", {
-      order: "created_at.asc",
-      limit: SAAS_TENANT_LIST_LIMIT,
-    })) as TenantRow[]
+    let tenants = (await supabaseSelectFilterStrippingUnknownColumns(
+      "tenants",
+      "",
+      { order: "created_at.asc", limit: SAAS_TENANT_LIST_LIMIT, select: TENANT_SELECT },
+      "getSaasTenantSettings tenants"
+    )) as TenantRow[]
     if (!Array.isArray(tenants) || tenants.length === 0) {
       return NextResponse.json({ success: true, tenants: [], scope: scopeMeta }, { headers })
     }
@@ -465,8 +478,9 @@ export async function GET(req: NextRequest) {
       rows.push({
         id: tenant.id,
         companyName: tenant.company_name || tenant.id,
-        ownerName: "-",
-        phone: "-",
+        ownerName: String(tenant.owner_name ?? "").trim() || "-",
+        phone: String(tenant.phone ?? "").trim() || "-",
+        billingCompany: mapTenantBillingCompanyFromRow(tenant),
         planTier: tier,
         billingCycle: cycle,
         status,

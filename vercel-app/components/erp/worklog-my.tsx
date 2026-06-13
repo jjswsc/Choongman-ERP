@@ -565,7 +565,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
           <h3 className="text-sm font-bold text-foreground">{title}</h3>
           {headerExtra}
         </div>
-        <div className="min-h-[120px] flex-1 overflow-y-auto p-3 space-y-2 max-h-[min(36rem,60vh)]">
+        <div className="min-h-[120px] flex-1 overflow-y-auto p-4 space-y-3">
           {children}
         </div>
       </div>
@@ -699,7 +699,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="flex flex-col gap-5">
             <WorklogSection
               tone="success"
               icon={<CheckCircle2 className="h-4 w-4 text-success" />}
@@ -762,8 +762,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         value={it.content}
                         onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value, false)}
                         placeholder={t("workLogTaskPlaceholder")}
-                        className="min-h-[4.5rem] text-xs flex-1 resize-y"
-                        rows={3}
+                        className="min-h-[5.5rem] text-sm flex-1 resize-y"
+                        rows={4}
                       />
                       <div className="flex shrink-0 flex-col gap-1">
                         <Select
@@ -848,8 +848,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         value={it.content}
                         onChange={(e) => updateContent(setLocalToday, idx, e.target.value, true)}
                         placeholder={t("workLogTaskPlaceholder")}
-                        className="min-h-[4.5rem] text-xs flex-1 resize-y"
-                        rows={3}
+                        className="min-h-[5.5rem] text-sm flex-1 resize-y"
+                        rows={4}
                       />
                       <div className="flex shrink-0 flex-col gap-1">
                         <Select

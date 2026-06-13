@@ -6,9 +6,12 @@ import {
 } from '@/lib/supabase-server'
 import {
   resolveWorkLogFilterNameFromEmployeeIdParam,
+  resolveWorkLogEmployeeById,
+  workLogsEmployeeMatchFilter,
   workLogsOrEmployeeIdOrNameFilter,
 } from '@/lib/work-log-name-server'
 import { dedupeWorkLogReportByDateNameContent } from '@/lib/work-log-dedupe'
+import { aggregateWorkLogWeeklySummaries } from '@/lib/work-log-aggregate-fallback'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -24,10 +27,11 @@ export async function GET(req: NextRequest) {
 
     const employeeId =
       employee && employee !== 'all' ? Number.parseInt(String(employee).trim(), 10) : NaN
-    const resolvedName =
-      employee && employee !== 'all'
-        ? await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
+    const resolvedEmp =
+      employee && employee !== 'all' && Number.isFinite(employeeId) && employeeId > 0
+        ? await resolveWorkLogEmployeeById(employeeId)
         : null
+    const resolvedName = resolvedEmp?.name ?? (await resolveWorkLogFilterNameFromEmployeeIdParam(employee))
 
     try {
       const rpcRows = await supabaseRpc<
@@ -50,7 +54,7 @@ export async function GET(req: NextRequest) {
           Number.isFinite(employeeId) && employeeId > 0 ? employeeId : null,
         p_store: store && store !== 'all' ? store : null,
       })
-      if (Array.isArray(rpcRows) && rpcRows.length >= 0) {
+      if (Array.isArray(rpcRows) && rpcRows.length > 0) {
         const summaries = rpcRows.map((r) => ({
           employee: r.employee_name,
           role: r.employee_role || '',
@@ -81,13 +85,17 @@ export async function GET(req: NextRequest) {
     if (dept && dept !== 'all') fullFilter += `&dept=eq.${encodeURIComponent(dept)}`
     if (store && store !== 'all') fullFilter += `&store=eq.${encodeURIComponent(store)}`
     if (employee && employee !== 'all') {
-      const id = Number.parseInt(String(employee).trim(), 10)
-      const resolvedFromId = await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
-      if (resolvedFromId && Number.isFinite(id) && id > 0) {
-        fullFilter += `&${workLogsOrEmployeeIdOrNameFilter(id, resolvedFromId)}`
+      if (resolvedEmp) {
+        fullFilter += `&${workLogsEmployeeMatchFilter(resolvedEmp)}`
       } else {
-        const nameOnly = resolvedFromId || String(employee).trim()
-        if (nameOnly) fullFilter += `&name=eq.${encodeURIComponent(nameOnly)}`
+        const id = Number.parseInt(String(employee).trim(), 10)
+        const resolvedFromId = await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
+        if (resolvedFromId && Number.isFinite(id) && id > 0) {
+          fullFilter += `&${workLogsOrEmployeeIdOrNameFilter(id, resolvedFromId)}`
+        } else {
+          const nameOnly = resolvedFromId || String(employee).trim()
+          if (nameOnly) fullFilter += `&name=eq.${encodeURIComponent(nameOnly)}`
+        }
       }
     }
 
@@ -108,11 +116,6 @@ export async function GET(req: NextRequest) {
       if (nk && nk !== full) nameToRole[nk] = e.job || ''
     }
 
-    const byEmployee: Record<
-      string,
-      { total: number; completed: number; carried: number; inProgress: number; progressSum: number; count: number }
-    > = {}
-
     const dedupedRows = dedupeWorkLogReportByDateNameContent(
       (rows as {
         id?: string
@@ -131,60 +134,17 @@ export async function GET(req: NextRequest) {
       }))
     )
 
-    for (const r of dedupedRows) {
-      const name = r.name || ''
-      if (!name) continue
-      if (!byEmployee[name]) {
-        byEmployee[name] = {
-          total: 0,
-          completed: 0,
-          carried: 0,
-          inProgress: 0,
-          progressSum: 0,
-          count: 0,
-        }
-      }
-      const p = byEmployee[name]
-      p.total++
-      p.progressSum += Number(r.progress) || 0
-      p.count++
-      const st = String(r.status || '')
-      if (st === 'Finish' || (Number(r.progress) || 0) >= 100) p.completed++
-      else if (st === 'Continue' || st === 'Carry Over') p.carried++
-      else p.inProgress++
-    }
-
-    const summaries = Object.entries(byEmployee).map(([employee, p]) => ({
-      employee,
-      role: nameToRole[employee] || '',
-      totalTasks: p.total,
-      completed: p.completed,
-      carried: p.carried,
-      inProgress: p.inProgress,
-      avgProgress:
-        p.count > 0 ? Math.round(p.progressSum / p.count) : 0,
-    }))
-
-    const totalTasks = summaries.reduce((a, s) => a + s.totalTasks, 0)
-    const totalCompleted = summaries.reduce((a, s) => a + s.completed, 0)
-    const totalCarried = summaries.reduce((a, s) => a + s.carried, 0)
-    const overallAvg =
-      summaries.length > 0
-        ? Math.round(
-            summaries.reduce((a, s) => a + s.avgProgress, 0) / summaries.length
-          )
-        : 0
-
-    return NextResponse.json(
-      {
-        summaries,
-        totalTasks,
-        totalCompleted,
-        totalCarried,
-        overallAvg,
-      },
-      { headers }
+    const agg = aggregateWorkLogWeeklySummaries(
+      dedupedRows.map((r) => ({
+        log_date: r.date,
+        name: r.name,
+        progress: r.progress,
+        status: r.status,
+      })),
+      nameToRole
     )
+
+    return NextResponse.json(agg, { headers })
   } catch (e) {
     console.error('getWorkLogWeekly:', e)
     return NextResponse.json(

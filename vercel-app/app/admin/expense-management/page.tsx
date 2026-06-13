@@ -2,7 +2,6 @@
 
 import { ExpenseManagementTab } from "@/components/tabs/expense-management-tab"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
-import { AccountingWorkflowLinks } from "@/components/erp/accounting-workflow-links"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { Receipt } from "lucide-react"
@@ -23,7 +22,6 @@ export default function ExpenseManagementPage() {
       title={t("expenseManagementTitle")}
       subtitle={t("expenseManagementSub")}
     >
-      <AccountingWorkflowLinks context="expense" />
       <ExpenseManagementTab />
     </AccountingPageShell>
   )

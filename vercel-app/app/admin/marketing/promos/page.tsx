@@ -222,7 +222,6 @@ export default function MarketingPromosPage() {
               allowEmpty
               emptyOptionLabel={t('marketingPromoCampaignSelectRequiredOption')}
               onRefresh={loadMenusAndMeta}
-              maxListHeightClass="max-h-56"
               disabled={pageLoading}
               className="mb-0 mt-3 rounded-lg border border-border/60 bg-muted/15 shadow-none"
               summary={

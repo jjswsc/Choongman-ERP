@@ -899,7 +899,6 @@ export default function MarketingMaterialsPage() {
             await loadData()
             await loadInquiryMaterials()
           }}
-          maxListHeightClass="max-h-52"
           disabled={loading}
         />
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -1281,7 +1280,6 @@ export default function MarketingMaterialsPage() {
             await loadData()
             await loadInquiryMaterials()
           }}
-          maxListHeightClass="max-h-52"
           disabled={loading}
         />
         <div className="mb-4 space-y-3">

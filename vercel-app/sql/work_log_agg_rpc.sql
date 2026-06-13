@@ -47,19 +47,37 @@ AS $$
         p_employee_id IS NULL
         OR p_employee_id <= 0
         OR wl.employee_id = p_employee_id
-        OR (wl.employee_id IS NULL AND p_employee_name IS NOT NULL AND wl.name = p_employee_name)
-      )
-      AND (
-        p_employee_name IS NULL
-        OR p_employee_name = ''
-        OR p_employee_name = 'all'
-        OR wl.name = p_employee_name
-        OR (p_employee_id IS NOT NULL AND p_employee_id > 0 AND wl.employee_id = p_employee_id)
+        OR EXISTS (
+          SELECT 1 FROM employees ex
+          WHERE ex.id = p_employee_id
+            AND (
+              wl.employee_id = ex.id
+              OR wl.name = ex.name
+              OR (ex.nick IS NOT NULL AND TRIM(ex.nick) <> '' AND wl.name = ex.nick)
+            )
+        )
+        OR (
+          p_employee_name IS NOT NULL
+          AND TRIM(p_employee_name) <> ''
+          AND (
+            wl.name = p_employee_name
+            OR EXISTS (
+              SELECT 1 FROM employees ex
+              WHERE ex.name = p_employee_name
+                AND (
+                  wl.employee_id = ex.id
+                  OR wl.name = ex.name
+                  OR (ex.nick IS NOT NULL AND TRIM(ex.nick) <> '' AND wl.name = ex.nick)
+                )
+            )
+          )
+        )
       )
       AND (
         p_store IS NULL OR p_store = '' OR p_store = 'all'
         OR wl.store = p_store
-        OR (wl.store IS NULL AND e.store = p_store)
+        OR TRIM(COALESCE(wl.store, '')) = ''
+        OR (TRIM(COALESCE(wl.store, '')) = '' AND e.store = p_store)
       )
   )
   SELECT

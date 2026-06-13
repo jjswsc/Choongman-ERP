@@ -52,6 +52,14 @@ export function workLogReviewBadgeClass(managerCheck: string, hasComment: boolea
   return "bg-muted text-muted-foreground"
 }
 
+/** YYYY-MM-DD → MM-DD (검토 목록 등) */
+export function formatWorkLogDateMonthDay(dateStr: string): string {
+  const s = String(dateStr || "").trim().slice(0, 10)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (m) return `${m[2]}-${m[3]}`
+  return s
+}
+
 export function escapeCsvCell(v: string | number): string {
   const s = String(v ?? "")
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`

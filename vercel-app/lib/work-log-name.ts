@@ -13,3 +13,10 @@ export function formatWorkLogStaffSelectLabel(s: { name: string; displayName: st
   if (disp && full && disp !== full) return `${disp} (${full})`
   return full || disp
 }
+
+/** 검토 목록 등 — 닉네임만 표시 (displayName 우선) */
+export function formatWorkLogStaffNickname(s: { name: string; displayName: string }): string {
+  const disp = String(s.displayName || '').trim()
+  const full = String(s.name || '').trim()
+  return disp || full
+}

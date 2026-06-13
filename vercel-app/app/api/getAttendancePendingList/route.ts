@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
+import {
+  attendanceLogNeedsManagerApproval,
+  attendancePendingApprovalPostgrestFilter,
+  attendanceStoreNamePostgrestFilter,
+} from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -76,22 +80,23 @@ export async function GET(request: NextRequest) {
       approved?: string
       late_min?: number
       ot_min?: number
+      early_min?: number
     }
     let rows: Row[] = []
 
     if (store && store !== 'All' && store !== '전체') {
-      const filter = `${attendanceStoreNamePostgrestFilter(store)}&approved=eq.대기`
+      const filter = attendancePendingApprovalPostgrestFilter(attendanceStoreNamePostgrestFilter(store))
       rows = (await supabaseSelectFilter('attendance_logs', filter, {
         order: 'log_at.desc',
         limit: 500,
-        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min',
+        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
       })) as Row[]
     } else {
-      const filter = 'approved=eq.대기'
+      const filter = attendancePendingApprovalPostgrestFilter()
       rows = (await supabaseSelectFilter('attendance_logs', filter, {
         order: 'log_at.desc',
         limit: 500,
-        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min',
+        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
       })) as Row[]
     }
 
@@ -126,6 +131,7 @@ export async function GET(request: NextRequest) {
     }[] = []
 
     for (const r of rows || []) {
+      if (!attendanceLogNeedsManagerApproval(r)) continue
       const rowDate = toDateStrBangkok(r.log_at)
       if (startStr && rowDate < startStr) continue
       if (endStr && rowDate > endStr) continue

@@ -18,11 +18,14 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   bangkokPeriodYm,
+  billingPartyFromPartner,
   buildPartnerSettlement,
   buildPartnerSettlementCsv,
   buildPartnerSettlementHtml,
   buildPartnerWholesaleInvoiceHtml,
 } from "@/lib/saas-partner-settlement"
+import type { SaasBillingCompanyInfo } from "@/lib/saas-billing-company-profile"
+import { SaasBillingCompanyFields } from "@/components/saas/saas-billing-company-fields"
 import type { CatalogRepricePolicy } from "@/lib/saas-partner-pricing-policy"
 import { SAAS_MODULE_KEYS, SAAS_MODULE_LABEL_KEY, type SaasModuleKey } from "@/lib/saas-module-pricing"
 import { SaasPricingBreakdownVisual, SaasPricingColumnHead } from "@/components/saas/saas-pricing-breakdown-visual"
@@ -37,6 +40,7 @@ type PartnerDetail = {
   contactName?: string
   contactPhone?: string
   contactEmail?: string
+  billingCompany: SaasBillingCompanyInfo
   isActive: boolean
   tenantCount?: number
   userCount?: number
@@ -206,6 +210,40 @@ export default function SaasPartnerDetailPage() {
     }
   }
 
+  const savePartnerCompany = async () => {
+    if (!partner) return
+    setSaving(true)
+    try {
+      const res = await apiFetch("/api/saasAdminPartners", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          partner: {
+            id: partner.id,
+            name: partner.name,
+            defaultMarginPct: partner.defaultMarginPct,
+            catalogRepricePolicy: partner.catalogRepricePolicy,
+            contactName: partner.contactName,
+            contactPhone: partner.contactPhone,
+            contactEmail: partner.contactEmail,
+            billingCompany: partner.billingCompany,
+            isActive: partner.isActive,
+          },
+        }),
+      })
+      const json = (await res.json()) as { success?: boolean; message?: string }
+      if (!res.ok || json.success !== true) {
+        await appAlert(json.message || t("saasAdminPartners_errSave"))
+        return
+      }
+      await appAlert(t("saasAdminPartnerDetail_companySaved"))
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const saveSettlementSnapshot = async (status: "draft" | "confirmed" | "paid") => {
     setSaving(true)
     try {
@@ -251,12 +289,25 @@ export default function SaasPartnerDetailPage() {
   }
 
   const printHtml = (kind: "settlement" | "wholesale") => {
+    const partnerParty = billingPartyFromPartner({
+      name: partner?.name || partnerId,
+      contactName: partner?.contactName,
+      contactPhone: partner?.contactPhone,
+      contactEmail: partner?.contactEmail,
+      billingCompany: partner?.billingCompany,
+    })
     const html =
       kind === "wholesale"
-        ? buildPartnerWholesaleInvoiceHtml(settlement, partner?.name || partnerId, {
+        ? buildPartnerWholesaleInvoiceHtml(settlement, partnerParty, {
             title: t("saasAdminPartnerDetail_wholesaleInvoice"),
             subtitle: t("saasAdminPartnerDetail_wholesaleSubtitle"),
             amountDue: t("saasAdminPartnerDetail_amountDue"),
+            billTo: t("saasAdminBillingCompany_billTo"),
+            legalName: t("saasAdminBillingCompany_legalName"),
+            taxId: t("saasAdminBillingCompany_taxId"),
+            address: t("saasAdminBillingCompany_billingAddress"),
+            contact: t("saasAdminBillingCompany_contactName"),
+            email: t("saasAdminBillingCompany_billingEmail"),
           })
         : buildPartnerSettlementHtml(settlement, {
             title: t("saasAdminPartnerDetail_settlementTitle"),
@@ -318,6 +369,48 @@ export default function SaasPartnerDetailPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{t("saasAdminPartnerDetail_companyTitle")}</CardTitle>
+            <CardDescription>{t("saasAdminPartnerDetail_companyDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {partner ? (
+              <SaasBillingCompanyFields
+                mode="partner"
+                t={t}
+                values={{
+                  name: partner.name,
+                  contactName: partner.contactName || "",
+                  contactPhone: partner.contactPhone || "",
+                  contactEmail: partner.contactEmail || "",
+                  billingCompany: partner.billingCompany,
+                }}
+                onChange={(patch) => {
+                  setPartner((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          name: patch.name ?? prev.name,
+                          contactName: patch.contactName ?? prev.contactName,
+                          contactPhone: patch.contactPhone ?? prev.contactPhone,
+                          contactEmail: patch.contactEmail ?? prev.contactEmail,
+                          billingCompany: {
+                            ...prev.billingCompany,
+                            ...patch.billingCompany,
+                          },
+                        }
+                      : prev
+                  )
+                }}
+              />
+            ) : null}
+            <Button type="button" disabled={saving || !partner} onClick={() => void savePartnerCompany()}>
+              {t("saasAdminPartnerDetail_saveCompany")}
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">{t("saasAdminPartners_linkTitle")}</CardTitle>

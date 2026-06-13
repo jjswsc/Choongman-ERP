@@ -5,7 +5,7 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { ClipboardList, User, ShieldCheck, BarChart3, History, Sparkles } from "lucide-react"
 import {
-  adminTabsContentFlushCn,
+  adminTabsContentCn,
   adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
@@ -108,7 +108,7 @@ export function WorklogPage() {
           </TabsList>
         </AdminTabsBarWithHelp>
 
-        <TabsContent value="my" className={adminTabsContentFlushCn}>
+        <TabsContent value="my" className={adminTabsContentCn}>
           {auth?.user ? (
             <React.Suspense fallback={null}>
               <WorklogMy
@@ -123,19 +123,19 @@ export function WorklogPage() {
           )}
         </TabsContent>
         {showApproval && (
-          <TabsContent value="approval" className={adminTabsContentFlushCn}>
+          <TabsContent value="approval" className={adminTabsContentCn}>
             <WorklogApproval onPendingChange={setPendingCount} />
           </TabsContent>
         )}
-        <TabsContent value="weekly" className={adminTabsContentFlushCn}>
+        <TabsContent value="weekly" className={adminTabsContentCn}>
           <WorklogWeekly />
         </TabsContent>
         {showOfficeTabs && (
           <>
-            <TabsContent value="insights" className={adminTabsContentFlushCn}>
+            <TabsContent value="insights" className={adminTabsContentCn}>
               <WorklogInsightsPanel />
             </TabsContent>
-            <TabsContent value="audit" className={adminTabsContentFlushCn}>
+            <TabsContent value="audit" className={adminTabsContentCn}>
               <WorklogAuditPanel />
             </TabsContent>
           </>

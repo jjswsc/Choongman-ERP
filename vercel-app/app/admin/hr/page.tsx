@@ -9,7 +9,7 @@ import { useT } from "@/lib/i18n"
 export default function AdminHrPage() {
   const t = useT(useLang().lang)
   return (
-    <HrPageShell icon={LayoutDashboard} title={t("adminHrHome")} subtitle={t("adminHrHomeSub")} showSubnav={false}>
+    <HrPageShell icon={LayoutDashboard} title={t("adminHrHome")} subtitle={t("adminHrHomeSub")}>
       <AdminHrHub />
     </HrPageShell>
   )

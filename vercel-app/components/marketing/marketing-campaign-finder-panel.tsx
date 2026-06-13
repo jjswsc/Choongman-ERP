@@ -23,6 +23,10 @@ import type { CampaignHubLinkFilterValue } from "@/lib/marketing-campaign-filter
 import { getCampaignTypeLabel } from "@/lib/marketing-campaign-type-utils"
 import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 
+/** 마케팅 허브 캠페인 목록 — 약 7행(52vh·30rem cap, 최소 ~4행) */
+export const MARKETING_CAMPAIGN_FINDER_LIST_HEIGHT_CLASS =
+  "max-h-[min(52vh,30rem)] min-h-[14rem] sm:min-h-[18rem]"
+
 export type MarketingCampaignFinderPanelProps = {
   value: string
   onChange: (campaignId: string) => void
@@ -58,7 +62,7 @@ export function MarketingCampaignFinderPanel({
   onFilteredCampaignsChange,
   allowEmpty = false,
   emptyOptionLabel,
-  maxListHeightClass = "max-h-72",
+  maxListHeightClass = MARKETING_CAMPAIGN_FINDER_LIST_HEIGHT_CLASS,
   className,
   onRefresh,
   disabled = false,

@@ -4,6 +4,7 @@
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
+import { writeI18nFileSync } from "./lib/i18n-encoding-guard.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const filePath = path.join(__dirname, "../lib/i18n.ts")
@@ -506,5 +507,5 @@ patch(
   "en-emp-how"
 )
 
-fs.writeFileSync(filePath, s, "utf8")
+writeI18nFileSync(filePath, s)
 console.log("\nWrote", filePath)

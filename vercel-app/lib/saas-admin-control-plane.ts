@@ -96,11 +96,20 @@ export type AuditLogItem = {
   employeeId?: number | null
 }
 
+export type SaasBillingCompanyInfo = {
+  legalName: string
+  taxId: string
+  billingAddress: string
+  billingEmail: string
+}
+
 export type TenantItem = {
   id: string
   companyName: string
   ownerName: string
   phone: string
+  /** 청구·세금계산서용 법인 정보 */
+  billingCompany: SaasBillingCompanyInfo
   planTier: PlanTier
   billingCycle: BillingCycle
   status: TenantStatus
@@ -225,6 +234,12 @@ export const FALLBACK_TENANTS: TenantItem[] = [
     companyName: "Bangkok Dakgalbi Co.",
     ownerName: "Kim Hana",
     phone: "+66-81-223-4401",
+    billingCompany: {
+      legalName: "Bangkok Dakgalbi Co., Ltd.",
+      taxId: "0105566137147",
+      billingAddress: "123 Sukhumvit Rd, Bangkok",
+      billingEmail: "billing@example.com",
+    },
     planTier: "growth",
     billingCycle: "monthly",
     status: "active",

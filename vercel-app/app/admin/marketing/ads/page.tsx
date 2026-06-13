@@ -419,7 +419,6 @@ export default function MarketingAdsPage() {
             onChange={setCampaignFilter}
             campaigns={campaigns}
             onRefresh={refreshAllLists}
-            maxListHeightClass="max-h-52"
             disabled={loading}
           />
 

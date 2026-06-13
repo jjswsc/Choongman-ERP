@@ -29,6 +29,8 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
+import { SaasBillingCompanyFields } from "@/components/saas/saas-billing-company-fields"
+import { emptySaasBillingCompanyInfo } from "@/lib/saas-billing-company-profile"
 import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
@@ -65,6 +67,7 @@ const STATUS_VARIANT = {
 
 const CUSTOMER_DETAIL_TABS = [
   "plan",
+  "company",
   "bootstrap",
   "limits",
   "policy",
@@ -171,6 +174,10 @@ function normalizeTenantRows(rows: TenantItem[]): TenantItem[] {
     )
     return {
       ...row,
+      billingCompany: {
+        ...emptySaasBillingCompanyInfo(),
+        ...row.billingCompany,
+      },
       policy: {
         ...DEFAULT_POLICY,
         ...row.policy,
@@ -305,7 +312,8 @@ export default function SaasCustomersPage() {
         if (partnerFilter !== "__direct__" && tenant.partnerId !== partnerFilter) return false
       }
       if (!keyword) return true
-      const bundle = `${tenant.id} ${tenant.companyName} ${tenant.ownerName} ${tenant.phone}`.toLowerCase()
+      const bundle =
+        `${tenant.id} ${tenant.companyName} ${tenant.ownerName} ${tenant.phone} ${tenant.billingCompany?.legalName || ""} ${tenant.billingCompany?.taxId || ""}`.toLowerCase()
       return bundle.includes(keyword)
     })
     const withExpiry = expiryOnly ? rows.filter((x) => getExpiryInfo(x, t) != null) : rows
@@ -636,6 +644,9 @@ export default function SaasCustomersPage() {
       "company_name",
       "owner_name",
       "phone",
+      "legal_name",
+      "tax_id",
+      "billing_email",
       "status",
       "plan_tier",
       "billing_cycle",
@@ -661,6 +672,9 @@ export default function SaasCustomersPage() {
           row.companyName,
           row.ownerName,
           row.phone,
+          row.billingCompany?.legalName || "",
+          row.billingCompany?.taxId || "",
+          row.billingCompany?.billingEmail || "",
           row.status,
           row.planTier,
           row.billingCycle,
@@ -1085,6 +1099,7 @@ export default function SaasCustomersPage() {
             <Tabs value={detailTab} onValueChange={onDetailTabChange} className="w-full">
               <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                 <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
+                <TabsTrigger value="company">{t("saasAdminCust_tabCompany")}</TabsTrigger>
                 <TabsTrigger value="bootstrap">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
                 <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
                 <TabsTrigger value="policy">{t("saasAdminCust_tabPolicy")}</TabsTrigger>
@@ -1668,6 +1683,38 @@ export default function SaasCustomersPage() {
                     })
                   }}
                 />
+              </TabsContent>
+
+              <TabsContent value="company" className="space-y-4 pt-2">
+                <div className="rounded-md border bg-muted/20 p-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-medium">{t("saasAdminBillingCompany_title")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("saasAdminBillingCompany_desc")}</p>
+                  </div>
+                  <SaasBillingCompanyFields
+                    mode="tenant"
+                    t={t}
+                    values={{
+                      companyName: selectedTenant.companyName,
+                      ownerName: selectedTenant.ownerName,
+                      phone: selectedTenant.phone,
+                      billingCompany: selectedTenant.billingCompany,
+                    }}
+                    onChange={(patch) => {
+                      updateTenant((tenant) => ({
+                        ...tenant,
+                        companyName: patch.companyName ?? tenant.companyName,
+                        ownerName: patch.ownerName ?? tenant.ownerName,
+                        phone: patch.phone ?? tenant.phone,
+                        billingCompany: {
+                          ...tenant.billingCompany,
+                          ...patch.billingCompany,
+                        },
+                      }))
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("saasAdminBillingCompany_saveHint")}</p>
+                </div>
               </TabsContent>
 
               <TabsContent value="bootstrap" className="space-y-4 pt-2">

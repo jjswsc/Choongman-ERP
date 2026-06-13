@@ -1,5 +1,11 @@
 import type { TenantItem } from "./saas-admin-control-plane"
 import {
+  billingPartyFromPartner,
+  billingPartyFromTenant,
+  renderBillingPartyHtml,
+  type SaasBillingParty,
+} from "./saas-billing-company-profile"
+import {
   moduleBillingLimitsFromTenant,
   resolveModuleChargeWithLimits,
 } from "./saas-module-billing"
@@ -8,6 +14,8 @@ import { normalizeModulePrices, SAAS_MODULE_KEYS, type SaasModuleKey, type SaasM
 export type PartnerSettlementLine = {
   tenantId: string
   companyName: string
+  legalName: string
+  taxId: string
   billingCycle: TenantItem["billingCycle"]
   wholesale: number
   margin: number
@@ -84,6 +92,8 @@ export function buildPartnerSettlement(params: {
     lines.push({
       tenantId: tenant.id,
       companyName: tenant.companyName,
+      legalName: tenant.billingCompany?.legalName || tenant.companyName,
+      taxId: tenant.billingCompany?.taxId || "",
       billingCycle: tenant.billingCycle,
       wholesale: totals.wholesale,
       margin: totals.margin,
@@ -117,13 +127,27 @@ function escapeCsvCell(value: unknown): string {
 }
 
 export function buildPartnerSettlementCsv(summary: PartnerSettlementSummary): string {
-  const header = ["partner_id", "period", "tenant_id", "company", "cycle", "wholesale", "margin", "retail", "currency"]
+  const header = [
+    "partner_id",
+    "period",
+    "tenant_id",
+    "company",
+    "legal_name",
+    "tax_id",
+    "cycle",
+    "wholesale",
+    "margin",
+    "retail",
+    "currency",
+  ]
   const rows = summary.lines.map((line) =>
     [
       summary.partnerId,
       summary.periodYm,
       line.tenantId,
       line.companyName,
+      line.legalName,
+      line.taxId,
       line.billingCycle,
       line.wholesale,
       line.margin,
@@ -156,7 +180,7 @@ export function buildPartnerSettlementHtml(
   const lineRows = summary.lines
     .map(
       (line) =>
-        `<tr><td>${line.companyName}<br><small>${line.tenantId}</small></td><td>${line.billingCycle}</td><td style="text-align:right">${line.wholesale.toLocaleString()}</td><td style="text-align:right">${line.margin.toLocaleString()}</td><td style="text-align:right">${line.retail.toLocaleString()}</td></tr>`
+        `<tr><td>${line.companyName}${line.legalName && line.legalName !== line.companyName ? `<br><small>${line.legalName}</small>` : ""}${line.taxId ? `<br><small>TIN ${line.taxId}</small>` : ""}<br><small>${line.tenantId}</small></td><td>${line.billingCycle}</td><td style="text-align:right">${line.wholesale.toLocaleString()}</td><td style="text-align:right">${line.margin.toLocaleString()}</td><td style="text-align:right">${line.retail.toLocaleString()}</td></tr>`
     )
     .join("")
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${labels.title}</title>
@@ -173,15 +197,33 @@ export function buildPartnerSettlementHtml(
 
 export function buildPartnerWholesaleInvoiceHtml(
   summary: PartnerSettlementSummary,
-  partnerName: string,
-  labels: { title: string; subtitle: string; amountDue: string }
+  partner: SaasBillingParty,
+  labels: {
+    title: string
+    subtitle: string
+    amountDue: string
+    billTo: string
+    legalName: string
+    taxId: string
+    address: string
+    contact: string
+    email: string
+  }
 ): string {
+  const partyHtml = renderBillingPartyHtml(partner, {
+    legalName: labels.legalName,
+    taxId: labels.taxId,
+    address: labels.address,
+    contact: labels.contact,
+    email: labels.email,
+  })
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${labels.title}</title></head>
 <body style="font-family:system-ui,sans-serif;padding:24px">
 <h1>${labels.title}</h1>
 <p>${labels.subtitle}</p>
-<p><strong>${partnerName}</strong> (${summary.partnerId}) · ${summary.periodYm}</p>
+<p style="font-size:12px;color:#666">${labels.billTo}</p>
+<div style="margin:12px 0;padding:12px;border:1px solid #ddd;border-radius:8px">${partyHtml}</div>
 <p style="font-size:24px">${labels.amountDue}: <strong>${summary.wholesaleTotal.toLocaleString()} ${summary.currency}</strong></p>
-<p style="font-size:12px;color:#666">Platform wholesale charges for ${summary.tenantCount} customer(s).</p>
+<p style="font-size:12px;color:#666">${summary.periodYm} · ${summary.tenantCount} customer(s)</p>
 </body></html>`
 }

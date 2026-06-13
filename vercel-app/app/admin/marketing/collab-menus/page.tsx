@@ -245,7 +245,6 @@ export default function MarketingCollabMenusPage() {
                 allowEmpty
                 emptyOptionLabel={t("marketingCollabMenusCampaignPickerAll")}
                 onRefresh={load}
-                maxListHeightClass="max-h-[min(52vh,30rem)] min-h-[14rem] sm:min-h-[18rem]"
                 disabled={loading}
                 className="mb-0 rounded-none border-0 bg-muted/15 shadow-none ring-0"
                 aside={

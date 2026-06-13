@@ -16,9 +16,7 @@ import {
   emptyFoodRecipe,
   emptyPackagingRecipe,
   calculateSubTotal,
-  setRuntimeIngredients,
-  setRuntimeSauces,
-  setRuntimeApiItems,
+  mergeRuntimeIngredients,
   clearRuntimeIngredients,
   getIngredientItemCode,
   getIngredientCodeByItemCode,
@@ -28,6 +26,8 @@ import {
   MISE_DEFAULT,
   resolveDeliveryAppFeePercent,
   pickDefaultStandardUnitKey,
+  seedRuntimeFromBreakdownRow,
+  reResolveRecipeItems,
 } from "@/lib/cost-data"
 import {
   coerceQuantityUnitKeyForStandardUnits,
@@ -37,7 +37,8 @@ import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
-import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients } from "@/lib/api-client"
+import { getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients } from "@/lib/api-client"
+import { syncCostAnalysisRuntime } from "@/lib/cost-analysis-runtime"
 
 interface CostCalculatorTabProps {
   /** false면 조회만 (가맹·매니저) */
@@ -56,17 +57,28 @@ interface CostCalculatorTabProps {
 function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem[]; packaging: RecipeItem[] } {
   const food: RecipeItem[] = []
   const packaging: RecipeItem[] = []
-  const runtimeItems: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
+  const runtimeFallbacks: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
 
   const breakdown = Array.isArray(row.breakdown) ? row.breakdown : []
   breakdown.forEach((b, idx) => {
     const itemCode = String(b.itemCode ?? "").trim()
-    const resolved = getIngredientCodeByItemCode(itemCode)
-    const codeNum = parseInt(itemCode, 10)
-    const code = resolved ?? (!isNaN(codeNum) ? codeNum : 10000 + idx)
     const cat = b.ingredientType === "packaging" ? "packaging" : "food"
+    const code = seedRuntimeFromBreakdownRow({
+      itemCode,
+      itemName: b.itemName,
+      costPerUnit: b.costPerUnit,
+      ingredientType: cat,
+      fallbackIndex: idx,
+    })
+    const resolved = getIngredientCodeByItemCode(itemCode)
     if (!resolved) {
-      runtimeItems.push({ code, name: b.itemName, bahtPerUnit: b.costPerUnit, category: cat, itemCode })
+      runtimeFallbacks.push({
+        code,
+        name: String(b.itemName ?? itemCode).trim() || itemCode,
+        bahtPerUnit: Number(b.costPerUnit) || 0,
+        category: cat,
+        itemCode,
+      })
     }
     if (itemCode.startsWith("MENU:")) {
       const item: RecipeItem = {
@@ -88,14 +100,14 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
       ingredientCode: code,
       quantity: (Number(b.quantity) || 0) * factor,
       misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
-      savedItemCode: String(b.itemCode ?? "").trim() || undefined,
+      savedItemCode: itemCode || undefined,
       quantityUnitKey: unitKey,
     }
     if (cat === "packaging") packaging.push(item)
     else food.push(item)
   })
 
-  setRuntimeIngredients(runtimeItems)
+  if (runtimeFallbacks.length > 0) mergeRuntimeIngredients(runtimeFallbacks)
   return { food, packaging }
 }
 
@@ -103,20 +115,25 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
 function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: RecipeItem[]; packaging: RecipeItem[] } {
   const food: RecipeItem[] = []
   const packaging: RecipeItem[] = []
-  const runtimeItems: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
+  const runtimeFallbacks: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
 
   ings.forEach((ing, idx) => {
     const itemCode = String(ing.itemCode ?? "").trim()
     if (!itemCode) return
     const cat = ing.ingredientType === "packaging" ? "packaging" : "food"
+    const code = seedRuntimeFromBreakdownRow({
+      itemCode,
+      itemName: itemCode,
+      costPerUnit: 0,
+      ingredientType: cat,
+      fallbackIndex: idx,
+    })
     const resolved = getIngredientCodeByItemCode(itemCode)
-    const codeNum = parseInt(itemCode, 10)
-    const code = resolved ?? (!isNaN(codeNum) ? codeNum : 10000 + idx)
-    const meta = getIngredient(code)
-    const name = meta?.name ?? itemCode
-    const bahtPerUnit = meta && "bahtPerUnit" in meta ? Number(meta.bahtPerUnit) || 0 : 0
     if (!resolved) {
-      runtimeItems.push({ code, name, bahtPerUnit, category: cat, itemCode })
+      const meta = getIngredient(code)
+      const name = meta?.name ?? itemCode
+      const bahtPerUnit = meta && "bahtPerUnit" in meta ? Number(meta.bahtPerUnit) || 0 : 0
+      runtimeFallbacks.push({ code, name, bahtPerUnit, category: cat, itemCode })
     }
     const fallbackKey = cat === "packaging" ? "ea::1" : pickDefaultStandardUnitKey(code) || "g::1"
     const rawKey = ing.quantityUnitKey ?? fallbackKey
@@ -133,7 +150,7 @@ function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: Rec
     else food.push(item)
   })
 
-  setRuntimeIngredients(runtimeItems)
+  if (runtimeFallbacks.length > 0) mergeRuntimeIngredients(runtimeFallbacks)
   return { food, packaging }
 }
 
@@ -157,6 +174,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(emptyPackagingRecipe)
   /** 재료·배합 API 로드 완료 시 재렌더 (배합 원가 반영) */
   const [, bumpAfterRuntimeLoad] = useReducer((n: number) => n + 1, 0)
+  const [runtimeReady, setRuntimeReady] = useState(false)
   const [sauceRowsFull, setSauceRowsFull] = useState<SauceRow[]>([])
 
   const storeUseSauceRowsForDialog = useMemo(
@@ -168,104 +186,99 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
   )
 
   const refreshApiItemsForCostRuntime = useCallback(async () => {
-    const items = await getAdminItems()
-    setRuntimeApiItems(Array.isArray(items) ? items : [])
+    const { sauces } = await syncCostAnalysisRuntime("calculator")
+    setSauceRowsFull(sauces)
   }, [])
 
   useEffect(() => {
-    let done = 0
-    const check = () => {
-      done += 1
-      if (done >= 2) bumpAfterRuntimeLoad()
-    }
-    getAdminItems()
-      .then((items) => {
-        setRuntimeApiItems(items)
-        check()
-      })
-      .catch(check)
-    getSauces()
-      .then((list) => {
-        const L = list || []
-        setSauceRowsFull(L)
-        setRuntimeSauces(L, { mode: "calculator" })
-        check()
+    let cancelled = false
+    void syncCostAnalysisRuntime("calculator")
+      .then(({ sauces }) => {
+        if (cancelled) return
+        setSauceRowsFull(sauces)
+        setRuntimeReady(true)
+        bumpAfterRuntimeLoad()
       })
       .catch((err) => {
-        console.error("[CostCalculatorTab] getSauces failed:", err)
-        setSauceRowsFull([])
-        setRuntimeSauces([], { mode: "calculator" })
-        check()
+        console.error("[CostCalculatorTab] syncCostAnalysisRuntime failed:", err)
+        if (!cancelled) {
+          setSauceRowsFull([])
+          setRuntimeReady(true)
+          bumpAfterRuntimeLoad()
+        }
       })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
     const row = initialLoadFromRow && typeof initialLoadFromRow === "object" && !Array.isArray(initialLoadFromRow) && initialLoadFromRow.menuId != null
       ? { ...initialLoadFromRow, breakdown: Array.isArray(initialLoadFromRow.breakdown) ? initialLoadFromRow.breakdown : [] }
       : null
-    if (row) {
-      const priceHall = row.priceHall ?? 0
-      const priceDelivery = row.priceDelivery ?? null
-      const deliveryPercent = resolveDeliveryAppFeePercent(row.deliveryAppFeePercent)
-      const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
-      setMenuItem({
-        ...emptyMenuItem,
-        menuCode: rowWithCode.displayCode ?? row.menuCode ?? "",
-        menuName: (row.menuName ?? "") + (row.optionName ? ` (${row.optionName})` : ""),
-        category: row.category ?? "",
-        categoryMain: row.categoryMain ?? "",
-        serviceType: "Dine-In",
-        inclVat: priceHall,
-        vatIncluded: row.vatIncluded !== false,
-        priceHall,
-        priceDelivery,
-        deliveryPercent,
-        cookingTimeMin: row.cookingTimeMin ?? null,
-      })
-
-      const breakdown = row.breakdown
-      if (breakdown.length > 0) {
-        const { food, packaging } = breakdownToRecipeItems(row)
-        setFoodItems(food)
-        setPackagingItems(packaging)
-        return
-      }
-
-      /** breakdown이 비어 있으면(저장 직후 목록 갱신 지연·RLS 등) BOM API로 재료 복원 */
-      setFoodItems(emptyFoodRecipe)
-      setPackagingItems(emptyPackagingRecipe)
-      const menuIdStr = String(row.menuId ?? "").trim()
-      if (!menuIdStr) return
-
-      let cancelled = false
-      void (async () => {
-        try {
-          const opt = ingredientsQueryOptionId(row)
-          const ings = await getPosMenuIngredients({ menuId: menuIdStr, optionId: opt })
-          if (cancelled) return
-          const { food, packaging } = posMenuIngredientsToRecipeState(Array.isArray(ings) ? ings : [])
-          setFoodItems(food)
-          setPackagingItems(packaging)
-        } catch {
-          if (!cancelled) {
-            setFoodItems(emptyFoodRecipe)
-            setPackagingItems(emptyPackagingRecipe)
-          }
-        }
-      })()
-
-      return () => {
-        cancelled = true
-      }
-    } else {
+    if (!row) {
       clearRuntimeIngredients()
       setMenuItem(emptyMenuItem)
       setFoodItems(emptyFoodRecipe)
       setPackagingItems(emptyPackagingRecipe)
+      return
     }
-    // cleanup에서 clearRuntimeIngredients 금지: Strict Mode·탭 전환 등으로 맵만 비면
-    // getIngredientItemCode가 전부 실패 → 저장 시 toSave 빈 배열 → DB 재료 전량 삭제됨.
-  }, [initialLoadFromRow])
+
+    const priceHall = row.priceHall ?? 0
+    const priceDelivery = row.priceDelivery ?? null
+    const deliveryPercent = resolveDeliveryAppFeePercent(row.deliveryAppFeePercent)
+    const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
+    setMenuItem({
+      ...emptyMenuItem,
+      menuCode: rowWithCode.displayCode ?? row.menuCode ?? "",
+      menuName: (row.menuName ?? "") + (row.optionName ? ` (${row.optionName})` : ""),
+      category: row.category ?? "",
+      categoryMain: row.categoryMain ?? "",
+      serviceType: "Dine-In",
+      inclVat: priceHall,
+      vatIncluded: row.vatIncluded !== false,
+      priceHall,
+      priceDelivery,
+      deliveryPercent,
+      cookingTimeMin: row.cookingTimeMin ?? null,
+    })
+
+    if (!runtimeReady) return
+
+    const breakdown = row.breakdown
+    if (breakdown.length > 0) {
+      const { food, packaging } = breakdownToRecipeItems(row)
+      setFoodItems(reResolveRecipeItems(food))
+      setPackagingItems(reResolveRecipeItems(packaging))
+      return
+    }
+
+    setFoodItems(emptyFoodRecipe)
+    setPackagingItems(emptyPackagingRecipe)
+    const menuIdStr = String(row.menuId ?? "").trim()
+    if (!menuIdStr) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const opt = ingredientsQueryOptionId(row)
+        const ings = await getPosMenuIngredients({ menuId: menuIdStr, optionId: opt })
+        if (cancelled) return
+        const { food, packaging } = posMenuIngredientsToRecipeState(Array.isArray(ings) ? ings : [])
+        setFoodItems(reResolveRecipeItems(food))
+        setPackagingItems(reResolveRecipeItems(packaging))
+      } catch {
+        if (!cancelled) {
+          setFoodItems(emptyFoodRecipe)
+          setPackagingItems(emptyPackagingRecipe)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialLoadFromRow, runtimeReady])
 
   const foodSubTotal = useMemo(() => calculateSubTotal(foodItems), [foodItems])
   const packagingSubTotal = useMemo(() => calculateSubTotal(packagingItems), [packagingItems])

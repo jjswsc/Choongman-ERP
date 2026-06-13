@@ -38,7 +38,29 @@ export async function resolveWorkLogEmployeeById(employeeId: unknown): Promise<W
  * PostgREST: 해당 직원의 신규 행(employee_id 일치) + 이름만 있던 레거시 행(name 일치) 동시 조회
  */
 export function workLogsOrEmployeeIdOrNameFilter(employeeId: number, fullName: string): string {
-  return `or=(employee_id.eq.${employeeId},name.eq.${encodeURIComponent(fullName)})`
+  return workLogsEmployeeMatchFilter({ id: employeeId, name: fullName, nick: '' })
+}
+
+/** work_logs·attendance_logs: employee_id + 풀네임 + (다를 때) 닉 레거시 동시 매칭 */
+export function workLogsEmployeeMatchFilter(emp: {
+  id: number
+  name: string
+  nick?: string
+}): string {
+  const parts = [`employee_id.eq.${emp.id}`]
+  const full = String(emp.name || '').trim()
+  if (full) parts.push(`name.eq.${encodeURIComponent(full)}`)
+  const nick = String(emp.nick || '').trim()
+  if (nick && nick !== full) parts.push(`name.eq.${encodeURIComponent(nick)}`)
+  return `or=(${parts.join(',')})`
+}
+
+export function attendanceLogsEmployeeMatchFilter(emp: {
+  id: number
+  name: string
+  nick?: string
+}): string {
+  return workLogsEmployeeMatchFilter(emp)
 }
 
 /**

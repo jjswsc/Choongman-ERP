@@ -62,3 +62,7 @@ where wholesale_monthly is null or wholesale_yearly is null;
 -- insert into public.tenant_partner_assignments (tenant_id, partner_id)
 -- values ('your-tenant-id', 'partner-demo-001')
 -- on conflict (tenant_id) do update set partner_id = excluded.partner_id;
+
+-- 재가격 정책 (전체는 saas_partner_enhancements.sql — 미실행 DB도 목록 API 동작용)
+alter table if exists public.saas_partners
+  add column if not exists catalog_reprice_policy text not null default 'retain_margin_pct';

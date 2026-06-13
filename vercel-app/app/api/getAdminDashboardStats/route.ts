@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
+import {
+  attendancePendingApprovalPostgrestFilter,
+  leavePendingApprovalPostgrestFilter,
+  ordersPendingApprovalPostgrestFilter,
+} from '@/lib/admin-pending-badge-filters'
 import { supabaseCountFilter } from '@/lib/supabase-server'
 
-/** 관리자 대시보드용 집계 - 미승인 주문, 이달 입고/출고, 휴가 대기, 근태 대기. COUNT만 사용해 egress 최소화 */
+/** 관리자 대시보드·사이드바 배지 — 승인·조치가 필요한 건만 COUNT (egress 최소화) */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -18,29 +23,29 @@ export async function GET() {
       thisMonthInbound,
       outboundCount,
       forceOutboundCount,
-      leavePendingKo,
-      leavePendingEn,
+      leavePending,
       attPending,
     ] = await Promise.all([
-      supabaseCountFilter('orders', 'status=eq.Pending'),
+      supabaseCountFilter('orders', ordersPendingApprovalPostgrestFilter()),
       supabaseCountFilter('stock_logs', `log_type=eq.Inbound&log_date=gte.${startStr}&log_date=lte.${endStr}`),
       supabaseCountFilter('stock_logs', `log_type=eq.Outbound&is_deleted=is.false&log_date=gte.${startStr}&log_date=lte.${endStr}`),
       supabaseCountFilter('stock_logs', `log_type=eq.ForceOutbound&is_deleted=is.false&log_date=gte.${startStr}&log_date=lte.${endStr}`),
-      supabaseCountFilter('leave_requests', 'status=eq.대기'),
-      supabaseCountFilter('leave_requests', 'status=eq.Pending'),
-      supabaseCountFilter('attendance_logs', 'approved=eq.대기'),
+      supabaseCountFilter('leave_requests', leavePendingApprovalPostgrestFilter()),
+      supabaseCountFilter('attendance_logs', attendancePendingApprovalPostgrestFilter()),
     ])
 
     const thisMonthOutbound = outboundCount + forceOutboundCount
-    const leavePending = leavePendingKo + leavePendingEn
 
-    return NextResponse.json({
-      unapprovedOrders,
-      thisMonthInbound,
-      thisMonthOutbound,
-      leavePending,
-      attPending,
-    }, { headers })
+    return NextResponse.json(
+      {
+        unapprovedOrders,
+        thisMonthInbound,
+        thisMonthOutbound,
+        leavePending,
+        attPending,
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('getAdminDashboardStats:', e)
     return NextResponse.json(

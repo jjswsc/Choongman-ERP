@@ -3,6 +3,7 @@ import {
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
   supabaseUpdateByFilter,
+  supabaseUpsertMerge,
 } from '@/lib/supabase-server'
 
 /** PostgREST PGRST204: Could not find the 'col' / "col" column */
@@ -60,6 +61,27 @@ export async function supabaseUpdateByFilterWithPgrst204Fallback(
   for (let i = 0; i < 40; i++) {
     try {
       await supabaseUpdateByFilter(table, filter, working)
+      return
+    } catch (e) {
+      const missingCol = extractAnyMissingColumn(e)
+      if (!missingCol || !(missingCol in working)) throw e
+      delete working[missingCol]
+      console.warn(`${logLabel}: skip missing column '${missingCol}'`)
+    }
+  }
+  throw new Error(`${logLabel}: too many missing-column retries`)
+}
+
+export async function supabaseUpsertMergeWithPgrst204Fallback(
+  table: string,
+  onConflictColumn: string,
+  row: Record<string, unknown>,
+  logLabel: string
+): Promise<void> {
+  const working: Record<string, unknown> = { ...row }
+  for (let i = 0; i < 40; i++) {
+    try {
+      await supabaseUpsertMerge(table, onConflictColumn, working)
       return
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)

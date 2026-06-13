@@ -314,46 +314,48 @@ export function WorklogWeekly() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <WorklogKpiCard
-          icon={
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-              <BarChart3 className="h-4 w-4 text-primary" />
-            </div>
-          }
-          label={t("workLogTotalTasks")}
-          value={totalTasks}
-        />
-        <WorklogKpiCard
-          icon={
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-            </div>
-          }
-          label={t("workLogCompleted")}
-          value={totalCompleted}
-          tone="success"
-        />
-        <WorklogKpiCard
-          icon={
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
-              <ArrowRightFromLine className="h-4 w-4 text-warning" />
-            </div>
-          }
-          label={t("workLogCarried")}
-          value={totalCarried}
-          tone="warning"
-        />
-        <WorklogKpiCard
-          icon={
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </div>
-          }
-          label={t("workLogAvgProgress")}
-          value={`${overallAvg}%`}
-        />
-      </div>
+      {hasSearched && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+          <WorklogKpiCard
+            icon={
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                <BarChart3 className="h-4 w-4 text-primary" />
+              </div>
+            }
+            label={t("workLogTotalTasks")}
+            value={totalTasks}
+          />
+          <WorklogKpiCard
+            icon={
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+              </div>
+            }
+            label={t("workLogCompleted")}
+            value={totalCompleted}
+            tone="success"
+          />
+          <WorklogKpiCard
+            icon={
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
+                <ArrowRightFromLine className="h-4 w-4 text-warning" />
+              </div>
+            }
+            label={t("workLogCarried")}
+            value={totalCarried}
+            tone="warning"
+          />
+          <WorklogKpiCard
+            icon={
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </div>
+            }
+            label={t("workLogAvgProgress")}
+            value={`${overallAvg}%`}
+          />
+        </div>
+      )}
 
       {hasSearched && chartData.length > 0 && (
         <div className="rounded-xl border bg-card p-5 shadow-sm">
