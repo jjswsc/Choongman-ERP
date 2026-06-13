@@ -17,25 +17,22 @@
 
 ```
 vercel-app/
-├── app/                    # Next.js App Router
-│   ├── api/                 # API 라우트 (165+ 개)
-│   ├── admin/               # 관리자 페이지 (28개)
-│   ├── pos/                 # POS 화면
-│   └── login/               # 로그인
-├── components/              # React 컴포넌트
-│   ├── erp/                 # ERP 공통 (발주, 재고, 발주내역 등)
-│   ├── admin/               # 관리자 전용 (급여, 스케줄, 직원 등)
-│   ├── shipment/            # 출고 관련
-│   ├── inbound/             # 입고 관련
-│   └── ui/                  # shadcn/ui 기반 UI
-├── lib/                     # 유틸·클라이언트
-│   ├── api-client.ts        # API 호출 함수 (145+ 개)
-│   ├── supabase-server.ts   # Supabase REST (서버 전용)
-│   ├── auth-context.tsx     # 인증 컨텍스트
-│   ├── i18n.ts              # 다국어 번역
-│   └── offline/             # POS 오프라인 동기화
-└── docs/                    # 문서
+├── app/
+│   ├── api/                 # API 라우트 (~720개)
+│   ├── admin/               # 관리자 페이지 (~107개)
+│   ├── pos/                 # POS·키오스크
+│   └── saas-admin/          # SaaS 관리
+├── components/              # React UI (~490 TSX)
+├── lib/
+│   ├── api-client.ts        # API barrel (re-export)
+│   ├── api-client/          # 도메인별 클라이언트 (~38모듈)
+│   ├── api/                 # fetch·auth 코어
+│   ├── supabase-server.ts   # Supabase REST (서버)
+│   └── offline/             # POS·ERP 오프라인 큐
+└── sql/                     # Supabase RPC·마이그레이션
 ```
+
+상세 모듈 맵: [`docs/architecture-map.md`](docs/architecture-map.md)
 
 ## 로컬 실행
 

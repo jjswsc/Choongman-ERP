@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { assertTenantInScope, requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
+import { mapTenantBillingCompanyFromRow } from "@/lib/saas-billing-company-profile"
+import { supabaseSelectFilterStrippingUnknownColumns } from "@/lib/supabase-pgrst204-retry"
 import { supabaseSelectFilter } from "@/lib/supabase-server"
 import {
   DEFAULT_FEATURE_FLAGS,
@@ -44,10 +46,24 @@ function labelsFromLang(lang: string): Record<string, string> {
 }
 
 async function loadTenantItem(tenantId: string): Promise<TenantItem | null> {
-  const tenants = (await supabaseSelectFilter("tenants", `id=eq.${encodeURIComponent(tenantId)}`, { limit: 1 })) as {
+  const tenants = (await supabaseSelectFilterStrippingUnknownColumns(
+    "tenants",
+    `id=eq.${encodeURIComponent(tenantId)}`,
+    {
+      limit: 1,
+      select: "id,company_name,owner_name,phone,legal_name,tax_id,billing_address,billing_email",
+    },
+    "saasAdminModuleInvoice tenants"
+  )) as Array<{
     id: string
     company_name?: string
-  }[]
+    owner_name?: string | null
+    phone?: string | null
+    legal_name?: string | null
+    tax_id?: string | null
+    billing_address?: string | null
+    billing_email?: string | null
+  }>
   const row = tenants?.[0]
   if (!row) return null
 
@@ -95,8 +111,9 @@ async function loadTenantItem(tenantId: string): Promise<TenantItem | null> {
   const tenant: TenantItem = {
     id: row.id,
     companyName: String(row.company_name || row.id),
-    ownerName: "-",
-    phone: "-",
+    ownerName: String(row.owner_name ?? "").trim() || "-",
+    phone: String(row.phone ?? "").trim() || "-",
+    billingCompany: mapTenantBillingCompanyFromRow(row),
     planTier: (planTier === "enterprise" || planTier === "growth" ? planTier : "starter") as TenantItem["planTier"],
     billingCycle,
     status: (String(sub.subscription_status || "trial") as TenantItem["status"]) || "trial",

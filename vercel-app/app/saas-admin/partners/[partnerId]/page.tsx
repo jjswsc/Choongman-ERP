@@ -18,13 +18,16 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   bangkokPeriodYm,
-  billingPartyFromPartner,
   buildPartnerSettlement,
   buildPartnerSettlementCsv,
   buildPartnerSettlementHtml,
   buildPartnerWholesaleInvoiceHtml,
 } from "@/lib/saas-partner-settlement"
-import type { SaasBillingCompanyInfo } from "@/lib/saas-billing-company-profile"
+import {
+  billingPartyFromPartner,
+  emptySaasBillingCompanyInfo,
+  type SaasBillingCompanyInfo,
+} from "@/lib/saas-billing-company-profile"
 import { SaasBillingCompanyFields } from "@/components/saas/saas-billing-company-fields"
 import type { CatalogRepricePolicy } from "@/lib/saas-partner-pricing-policy"
 import { SAAS_MODULE_KEYS, SAAS_MODULE_LABEL_KEY, type SaasModuleKey } from "@/lib/saas-module-pricing"
@@ -95,7 +98,10 @@ export default function SaasPartnerDetailPage() {
         await appAlert(detailJson.message || t("saasAdminPartners_errLoad"))
         return
       }
-      setPartner(detailJson.partner)
+      setPartner({
+        ...detailJson.partner,
+        billingCompany: detailJson.partner.billingCompany ?? emptySaasBillingCompanyInfo(),
+      })
       setPartnerUsers(detailJson.partnerUsers || [])
       const rules: Partial<Record<SaasModuleKey, string>> = {}
       for (const key of SAAS_MODULE_KEYS) {

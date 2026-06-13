@@ -1,5 +1,6 @@
 import type { BillingCycle, FeatureFlags, TenantItem, TenantLimits, TenantPolicy, TenantUsage } from "./saas-admin-control-plane"
 import { resolveCurrentChargeAmount } from "./saas-admin-control-plane"
+import { billingPartyFromTenant, renderBillingPartyHtml } from "./saas-billing-company-profile"
 import type { PosDeviceBillingBasis } from "./saas-tenant-pos-licensed"
 import { resolvePosDeviceBillingBasis } from "./saas-tenant-pos-licensed"
 import {
@@ -378,10 +379,24 @@ function escapeCsvCell(value: unknown): string {
 export function buildModuleInvoiceCsv(tenant: TenantItem, labels: Record<string, string>): string {
   const { lines, total, currency, pos } = buildModuleInvoiceLines(tenant, labels)
   const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
-  const header = ["tenant_id", "company", "invoice_date", "billing_cycle", "module", "qty", "unit_thb", "line_total_thb"]
+  const header = [
+    "tenant_id",
+    "company",
+    "legal_name",
+    "tax_id",
+    "invoice_date",
+    "billing_cycle",
+    "module",
+    "qty",
+    "unit_thb",
+    "line_total_thb",
+  ]
+  const party = billingPartyFromTenant(tenant)
   const rows = lines.map((line) => [
     tenant.id,
     tenant.companyName,
+    party.legalName,
+    party.taxId,
     ymd,
     tenant.billingCycle,
     labels[line.labelKey] || line.labelKey,
@@ -389,9 +404,9 @@ export function buildModuleInvoiceCsv(tenant: TenantItem, labels: Record<string,
     line.isCustomQuote ? "" : String(line.unitAmount),
     line.isCustomQuote ? "" : String(line.lineTotal),
   ])
-  const footer = ["", "", "", "", "TOTAL", "", "", String(total), currency]
+  const footer = ["", "", "", "", "", "", "TOTAL", "", String(total), currency]
   if (pos.capped) {
-    rows.push(["", "", "", "", "POS_NOTE", `${pos.billable}/${pos.reported}`, "capped", ""])
+    rows.push(["", "", "", "", "", "POS_NOTE", `${pos.billable}/${pos.reported}`, "capped", "", ""])
   }
   return [header, ...rows, footer].map((row) => row.map(escapeCsvCell).join(",")).join("\n")
 }
@@ -412,10 +427,18 @@ export function buildModuleInvoiceHtml(tenant: TenantItem, labels: Record<string
   const capNote = pos.capped
     ? `<p style="color:#b45309;font-size:12px">POS terminals billed: ${pos.billable} (in use ${pos.reported}, capped by plan limit)</p>`
     : ""
+  const party = billingPartyFromTenant(tenant)
+  const partyHtml = renderBillingPartyHtml(party, {
+    legalName: "Legal",
+    taxId: "Tax ID",
+    address: "Address",
+    contact: "Contact",
+    email: "Email",
+  })
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${tenant.companyName}</title>
 <style>body{font-family:system-ui,sans-serif;padding:24px;color:#111}table{border-collapse:collapse;width:100%;margin-top:16px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.total{font-weight:700;font-size:18px;margin-top:16px}</style></head>
 <body><h1>Module billing estimate</h1>
-<p><strong>${tenant.companyName}</strong> (${tenant.id})<br>Date: ${ymd} · Cycle: ${cycleLabel} · Currency: ${currency}</p>
+<div style="margin-bottom:12px">${partyHtml}<br><small>${tenant.id} · Date: ${ymd} · Cycle: ${cycleLabel} · Currency: ${currency}</small></div>
 ${capNote}
 <table><thead><tr><th>Module</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit (THB)</th><th style="text-align:right">Subtotal</th></tr></thead>
 <tbody>${lineRows || `<tr><td colspan="4">Package billing (non-module mode)</td></tr>`}</tbody></table>

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
+import { billingPartyFromPartner, mapPartnerBillingCompanyFromRow } from "@/lib/saas-billing-company-profile"
+import { supabaseSelectFilterStrippingUnknownColumns } from "@/lib/supabase-pgrst204-retry"
 import { supabaseSelectFilter, supabaseUpsertMerge } from "@/lib/supabase-server"
 import type { TenantItem } from "@/lib/saas-admin-control-plane"
 import {
@@ -97,12 +99,54 @@ export async function GET(req: NextRequest) {
         cp.scope.kind === "partner"
           ? cp.scope.partnerName
           : searchParams.get("partnerName")?.trim() || partnerId
+      let partnerParty = billingPartyFromPartner({
+        name: partnerName,
+        billingCompany: {},
+      })
+      try {
+        const partnerRows = (await supabaseSelectFilterStrippingUnknownColumns(
+          "saas_partners",
+          `id=eq.${encodeURIComponent(partnerId)}`,
+          {
+            limit: 1,
+            select:
+              "id,name,contact_name,contact_phone,contact_email,legal_name,tax_id,billing_address",
+          },
+          "saasAdminPartnerSettlement partner"
+        )) as Array<{
+          name?: string
+          contact_name?: string | null
+          contact_phone?: string | null
+          contact_email?: string | null
+          legal_name?: string | null
+          tax_id?: string | null
+          billing_address?: string | null
+        }>
+        const prow = partnerRows?.[0]
+        if (prow) {
+          partnerParty = billingPartyFromPartner({
+            name: String(prow.name || partnerName),
+            contactName: prow.contact_name || "",
+            contactPhone: prow.contact_phone || "",
+            contactEmail: prow.contact_email || "",
+            billingCompany: mapPartnerBillingCompanyFromRow(prow),
+          })
+        }
+      } catch {
+        /* optional */
+      }
       const html =
         format === "wholesale"
-          ? buildPartnerWholesaleInvoiceHtml(summary, partnerName, {
+          ? buildPartnerWholesaleInvoiceHtml(summary, partnerParty, {
               title: "Platform wholesale invoice",
               subtitle: "Amount due to platform (wholesale)",
               amountDue: "Amount due",
+              billTo: "Bill To",
+              legalName: "Legal name",
+              taxId: "Tax ID",
+              address: "Address",
+              contact: "Contact",
+              email: "Email",
             })
           : buildPartnerSettlementHtml(summary, {
               title: "Partner settlement",
