@@ -6,11 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   getMembersCursor,
   importLineCrmFile,
   resetLineMemberList,
   type Member,
 } from "@/lib/api-client"
+import { downloadCsv } from "@/lib/crm-export"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
 
@@ -70,6 +78,7 @@ const MemberListTable = React.memo(function MemberListTable({
   loadingLabel,
   onSelect,
   joinStoreLabels,
+  selectedMemberId,
   t,
 }: {
   members: Member[]
@@ -77,6 +86,7 @@ const MemberListTable = React.memo(function MemberListTable({
   loadingLabel: string
   onSelect: (m: Member) => void
   joinStoreLabels: Record<string, string>
+  selectedMemberId?: number | null
   t: ReturnType<typeof useT>
 }) {
   if (loading) {
@@ -104,7 +114,7 @@ const MemberListTable = React.memo(function MemberListTable({
           {members.map((m) => (
             <tr
               key={m.id}
-              className="cursor-pointer border-t hover:bg-muted/20"
+              className={`cursor-pointer border-t hover:bg-muted/20 ${selectedMemberId === m.id ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
               onClick={() => onSelect(m)}
             >
               <td className="p-2">{m.name || "—"}</td>
@@ -135,11 +145,12 @@ export type MemberListPanelHandle = {
 
 type MemberListPanelProps = {
   onSelectMember: (member: Member) => void
+  selectedMemberId?: number | null
 }
 
 export const MemberListPanel = React.memo(
   React.forwardRef<MemberListPanelHandle, MemberListPanelProps>(function MemberListPanel(
-    { onSelectMember },
+    { onSelectMember, selectedMemberId },
     ref
   ) {
     const { lang } = useLang()
@@ -158,6 +169,8 @@ export const MemberListPanel = React.memo(
     const [hasMore, setHasMore] = React.useState(false)
     const [actionMessage, setActionMessage] = React.useState("")
     const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
+    const [filterTier, setFilterTier] = React.useState("all")
+    const [filterStatus, setFilterStatus] = React.useState("all")
     const importFileRef = React.useRef<HTMLInputElement | null>(null)
     const [joinStoreLabels, setJoinStoreLabels] = React.useState<Record<string, string>>({
       office: t("mpAdmin_signupStoreStatsOffice"),
@@ -281,6 +294,28 @@ export const MemberListPanel = React.memo(
 
     const crmHintText = t("memberCrmColumnHint")
 
+    const filteredMembers = React.useMemo(() => {
+      return members.filter((m) => {
+        if (filterTier !== "all" && String(m.tierCode || "").toUpperCase() !== filterTier.toUpperCase()) return false
+        if (filterStatus !== "all" && String(m.status || "active") !== filterStatus) return false
+        return true
+      })
+    }, [members, filterTier, filterStatus])
+
+    const exportMembersCsv = () => {
+      downloadCsv(
+        "members.csv",
+        [t("name"), t("memberPhone"), t("memberNo"), t("memberTier"), t("status")],
+        filteredMembers.map((m) => [
+          m.name || "",
+          m.phone || "",
+          m.memberNo || "",
+          m.tierCode || "",
+          m.status || "",
+        ])
+      )
+    }
+
     return (
       <Card>
         <CardHeader className="space-y-3">
@@ -293,6 +328,34 @@ export const MemberListPanel = React.memo(
               searchPh={t("memberSearchPh")}
               onSearch={runSearch}
             />
+            <Select value={filterTier} onValueChange={setFilterTier}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder={t("crmMemberFilterTier")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("crmMemberFilterAll")}</SelectItem>
+                {Array.from(new Set(members.map((m) => String(m.tierCode || "").toUpperCase()).filter(Boolean))).map(
+                  (code) => (
+                    <SelectItem key={code} value={code}>
+                      {code}
+                    </SelectItem>
+                  )
+                )}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[110px]">
+                <SelectValue placeholder={t("crmMemberFilterStatus")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("crmMemberFilterAll")}</SelectItem>
+                <SelectItem value="active">{t("crmMemberStatusActive")}</SelectItem>
+                <SelectItem value="inactive">{t("crmMemberStatusInactive")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={exportMembersCsv} disabled={!filteredMembers.length}>
+              {t("crmMemberExportCsv")}
+            </Button>
             <input
               ref={importFileRef}
               type="file"
@@ -371,7 +434,7 @@ export const MemberListPanel = React.memo(
           ) : (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
-                {t("memberSearchResult")}: {tr(t, "memberListPageShowing", { count: String(members.length) })}
+                {t("memberSearchResult")}: {tr(t, "memberListPageShowing", { count: String(filteredMembers.length) })}
                 {pageIndex > 0 ? ` · ${pageIndex + 1}` : ""}
               </p>
               {!!selectedImportFileName && (
@@ -386,11 +449,12 @@ export const MemberListPanel = React.memo(
         </CardHeader>
         <CardContent className="space-y-3">
           <MemberListTable
-            members={members}
+            members={filteredMembers}
             loading={loading}
             loadingLabel={t("loading")}
             onSelect={onSelectMember}
             joinStoreLabels={joinStoreLabels}
+            selectedMemberId={selectedMemberId}
             t={t}
           />
           {!loading && (

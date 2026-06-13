@@ -12,6 +12,7 @@ import {
   resolveFranchiseePosSalesFetchStoreCodes,
 } from "@/lib/franchisee-multi-store"
 import { useStoreView } from "@/lib/store-view-context"
+import { useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -36,7 +37,7 @@ import {
   type HierarchyLevelsByOrderType,
 } from "@/lib/pos-sales-menu-hierarchy-compare"
 import { sumHierarchyRows } from "@/lib/pos-sales-menu-hierarchy-aggregate"
-import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_CHART_COLORS, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import {
   buildPosStoreDisplayNameLookup,
   resolvePosStoreDisplayName,
@@ -71,7 +72,7 @@ const LEVELS: { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }
   { id: "option", labelKey: "totalSalesLevelOption", fallback: "옵션" },
 ]
 
-const CHART_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#64748b"]
+const CHART_COLORS = [...ADMIN_CHART_COLORS]
 
 const CHART_TOP_N = 12
 const PIE_TOP_N = 8
@@ -130,6 +131,26 @@ export function TotalSalesTab() {
   const tr = React.useCallback((key: string, fallback: string) => t(key) || fallback, [t])
 
   const { viewStore } = useStoreView()
+  const searchParams = useSearchParams()
+  const urlHydratedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (urlHydratedRef.current) return
+    const qStart = searchParams.get("start")
+    const qEnd = searchParams.get("end")
+    const qStores = searchParams.get("stores")
+    if (!qStart && !qEnd && !qStores) return
+    urlHydratedRef.current = true
+    if (qStart) {
+      setStartStr(qStart.slice(0, 10))
+      setPeriodPreset("custom")
+    }
+    if (qEnd) setEndStr(qEnd.slice(0, 10))
+    if (qStores) {
+      const parts = qStores.split(",").map((s) => s.trim()).filter(Boolean)
+      if (parts.length) setSelectedStores(parts)
+    }
+  }, [searchParams])
+
   const canSearchAll = canSelectAllStoresForPosSalesManagement(
     auth?.role || "",
     auth?.store || ""
@@ -443,11 +464,29 @@ export function TotalSalesTab() {
   const loadDataRef = React.useRef(loadData)
   loadDataRef.current = loadData
 
+  const drillToChildLevel = React.useCallback(
+    (row: PosSalesHierarchyRow) => {
+      const next: Partial<Record<PosSalesHierarchyLevel, PosSalesHierarchyLevel>> = {
+        main: "category",
+        category: "menu",
+        menu: "option",
+      }
+      const child = next[level]
+      if (!child) return
+      setLevel(child)
+      setSearch(row.label)
+      setSearchAnd(false)
+    },
+    [level]
+  )
+
   React.useEffect(() => {
-    if (canQuery && periodPreset === "today") {
+    if (!canQuery) return
+    const tid = window.setTimeout(() => {
       void loadDataRef.current()
-    }
-  }, [canQuery, periodPreset])
+    }, periodPreset === "custom" ? 400 : 0)
+    return () => window.clearTimeout(tid)
+  }, [canQuery, periodPreset, startStr, endStr, selectedStoresKey])
 
   const prevCompareChannelsRef = React.useRef(compareChannels)
   React.useEffect(() => {
@@ -1025,6 +1064,11 @@ export function TotalSalesTab() {
               {formatSalesAmount(totals.sales)}
             </span>
           </div>
+          {level !== "option" ? (
+            <p className="text-xs text-muted-foreground">
+              {tr("totalSalesDrillHint", "클릭 시 하위 집계·검색으로 이동")}
+            </p>
+          ) : null}
 
           <div className="overflow-auto max-h-[calc(100vh-520px)] rounded-lg border">
             <table
@@ -1172,7 +1216,20 @@ export function TotalSalesTab() {
                   activeRows.map((row, idx) => (
                     <tr key={row.key} className="border-b hover:bg-muted/30">
                       <td className="py-1.5 pl-3 text-muted-foreground">{idx + 1}</td>
-                      <td className="py-1.5 pr-2">{row.label}</td>
+                      <td className="py-1.5 pr-2">
+                        {level !== "option" ? (
+                          <button
+                            type="button"
+                            className="text-left font-medium hover:underline"
+                            onClick={() => drillToChildLevel(row)}
+                            title={tr("totalSalesDrillHint", "클릭 시 하위 집계·검색으로 이동")}
+                          >
+                            {row.label}
+                          </button>
+                        ) : (
+                          row.label
+                        )}
+                      </td>
                       {level !== "main" ? (
                         <td className="hidden py-1.5 md:table-cell text-muted-foreground">{row.categoryMain || "—"}</td>
                       ) : null}

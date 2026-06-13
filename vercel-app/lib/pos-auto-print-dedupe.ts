@@ -129,6 +129,26 @@ export function reservePosAutoPrintKeys(
   return true
 }
 
+/** reserve 없이 최근 인쇄 여부만 확인(Realtime 추가주문 오인 차단용) */
+export function hasRecentPosAutoPrintKey(
+  storeCode: string,
+  key: string,
+  ttlMs: number = DEFAULT_TTL_MS
+): boolean {
+  const part = String(key ?? '').trim()
+  if (!part) return false
+  const fk = fullKey(storeCode, part)
+  if (!fk) return false
+  const now = Date.now()
+  const ttl = Math.max(1000, Number(ttlMs) || DEFAULT_TTL_MS)
+  pruneMemory(now)
+  const memPrev = memoryReservedAt.get(fk)
+  if (typeof memPrev === 'number' && now - memPrev < ttl) return true
+  const map = pruneMap(readMap(), now)
+  const prev = map[fk]
+  return typeof prev === 'number' && now - prev < ttl
+}
+
 /** 테스트·디버그용 */
 export function clearPosAutoPrintDedupeForTests(): void {
   memoryReservedAt.clear()

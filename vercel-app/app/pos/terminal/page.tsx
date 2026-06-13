@@ -81,6 +81,7 @@ import {
   posPaymentAutoPrintDedupeKey,
   reservePosAutoPrintKey,
   reservePosAutoPrintKeys,
+  hasRecentPosAutoPrintKey,
 } from '@/lib/pos-auto-print-dedupe'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import {
@@ -145,7 +146,7 @@ import {
   buildDineInQtySnapshotMap,
   buildKitchenCartLinesFromSnapshotDelta,
   collectDineInSnapshotIncreasedKeys,
-  filterKitchenCartLinesForDineInAdd,
+  resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
 import { isPosDineInTableNameOnlyUpdate } from '@/lib/pos-dine-in-realtime-update'
@@ -520,8 +521,10 @@ const MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX = 'pos_main_last_seen_order_id:'
 const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
 const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
 const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
-const MAIN_POS_META_SCAN_INTERVAL_MS = 30000
+const MAIN_POS_META_SCAN_INTERVAL_MS = 12_000
 const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
+/** 로컬 제출 인쇄 직후 Realtime·폴링이 같은 주문을 추가주문으로 오인해 2장째를 찍지 않도록 */
+const DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS = 45_000
 
 function readMainPosLastSeenOrderId(storeCodeRaw: unknown): number {
   if (typeof window === 'undefined') return 0
@@ -2504,6 +2507,41 @@ export default function PosTerminalPage() {
       }
     },
     [currentStoreId, isMainPosDevice]
+  )
+
+  const shouldSkipDineInRemoteAddAutoprint = useCallback(
+    (
+      orderId: number,
+      storeCode: string,
+      prevQtyById: Map<string, number>,
+      newQtyById: Map<string, number>,
+      changedKeys: Iterable<string>
+    ): boolean => {
+      const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId)
+      if (suppressUntil != null && Date.now() < suppressUntil) {
+        return true
+      }
+      const store = String(storeCode || currentStoreId || '').trim()
+      const cooldown = DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
+      if (
+        hasRecentPosAutoPrintKey(store, `order:${orderId}:hall:auto`, cooldown) ||
+        hasRecentPosAutoPrintKey(store, `k2:order:${orderId}:kitchen`, cooldown)
+      ) {
+        return true
+      }
+      let prevTotal = 0
+      for (const q of prevQtyById.values()) prevTotal += Math.max(0, Number(q) || 0)
+      let newTotal = 0
+      for (const q of newQtyById.values()) newTotal += Math.max(0, Number(q) || 0)
+      if (prevTotal > 0 && prevTotal === newTotal) {
+        for (const _ of changedKeys) {
+          logPosPrintDebug('remote_dine_in_add_skip_key_drift', { orderId, prevTotal, newTotal })
+          return true
+        }
+      }
+      return false
+    },
+    [currentStoreId, logPosPrintDebug]
   )
 
   type DineInAddonKitchenCartLine = {
@@ -5190,10 +5228,20 @@ export default function PosTerminalPage() {
       if (!parsed.ok || parsed.items.length === 0) return
 
       const items = parsed.items
-      const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
+      let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
       const newQtyById = buildDineInQtySnapshot(items)
       if (newQtyById.size === 0) return
 
+      if (!prevQtyById) {
+        const oldRow = payload.old as Record<string, unknown> | undefined
+        if (oldRow) {
+          const parsedOld = parseRealtimePosOrderRowItemsJson(oldRow)
+          if (parsedOld.ok && parsedOld.items.length > 0) {
+            prevQtyById = buildDineInQtySnapshot(parsedOld.items)
+            logPosPrintDebug('realtime_update_dine_in_prev_from_old_row', { orderId })
+          }
+        }
+      }
       if (!prevQtyById) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         logPosPrintDebug('realtime_update_dine_in_snapshot_seeded', { orderId })
@@ -5204,6 +5252,15 @@ export default function PosTerminalPage() {
       const changedIds = [...changedSet]
       if (changedIds.length === 0) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        return
+      }
+
+      const storeCodeForSkip = String(row.store_code ?? currentStoreId)
+      if (
+        shouldSkipDineInRemoteAddAutoprint(orderId, storeCodeForSkip, prevQtyById, newQtyById, changedSet)
+      ) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        logPosPrintDebug('remote_dine_in_add_skip_recent_local_print', { orderId })
         return
       }
 
@@ -5327,6 +5384,7 @@ export default function PosTerminalPage() {
     enrichPromoItemsWithOptionName,
     dispatchDineInAddonKitchenPrint,
     buildDineInQtySnapshot,
+    shouldSkipDineInRemoteAddAutoprint,
     resolveDineInSnapshotItemKey,
     formatLineNoteForPrint,
     logPosPrintDebug,
@@ -5672,22 +5730,23 @@ export default function PosTerminalPage() {
             realtimeChannelHealthy: realtimeChannelHealthyRef.current,
             lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
           })
-          if (needHeavyMetaScan) {
+          const wantMetaDineInAddonReceipt =
+            autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
+          const wantMetaDineInAddonKitchen = autoPrintKitchenSlipOnOrder
+          const wantDineInAddonMetaScan = wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen
+          if (needHeavyMetaScan || wantDineInAddonMetaScan) {
             try {
               const watchOrders = await getPosOrders({
-              startStr: today,
-              endStr: today,
-              posBizDayScope: true,
-              storeCode: currentStoreId,
-              limit: 800,
-              orderBy: 'id.desc',
-              pollMinimal: true,
-            })
-            const wantMetaDineInAddonReceipt =
-              autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
-            const wantMetaDineInAddonKitchen = autoPrintKitchenSlipOnOrder
-            if (wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen) {
-              for (const o of watchOrders) {
+                startStr: today,
+                endStr: today,
+                posBizDayScope: true,
+                storeCode: currentStoreId,
+                limit: 800,
+                orderBy: 'id.desc',
+                pollMinimal: true,
+              })
+              if (wantDineInAddonMetaScan) {
+                for (const o of watchOrders) {
                 const oid = Number(o.id)
                 if (!Number.isFinite(oid) || oid <= 0) continue
                 if (String(o.orderType ?? '').trim().toLowerCase() !== 'dine_in') continue
@@ -5762,6 +5821,15 @@ export default function PosTerminalPage() {
                   dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                   continue
                 }
+                const storeCodePoll = String(o.storeCode ?? currentStoreId)
+                const changedSet = new Set(changedIds)
+                if (
+                  shouldSkipDineInRemoteAddAutoprint(oid, storeCodePoll, prevQtyById, newQtyById, changedSet)
+                ) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  logPosPrintDebug('poll_meta_remote_dine_in_add_skip_recent_local_print', { orderId: oid })
+                  continue
+                }
                 const cartLikeNew = items.map((it) => ({
                   id: resolveDineInSnapshotItemKey(it),
                   name: it.name,
@@ -5780,7 +5848,6 @@ export default function PosTerminalPage() {
                 )
                 dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                 refetchCurrentStore()
-                const changedSet = new Set(changedIds)
                 const receiptPrintItemsRemote = items.map((it) => ({
                   ...it,
                   ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
@@ -5795,7 +5862,6 @@ export default function PosTerminalPage() {
                   adjustments: pricingAdjustments,
                 })
                 const orderNoStr = String(o.orderNo ?? '')
-                const storeCodePoll = String(o.storeCode ?? currentStoreId)
                 const tableNamePoll = String(o.tableName ?? '')
                 const memoPoll = String(o.memo ?? '')
                 const receiptPayloadRemote = {
@@ -5848,16 +5914,18 @@ export default function PosTerminalPage() {
                     })
                   }, kitchenDelayMs)
                 }
+                }
               }
+              if (needHeavyMetaScan) {
+                if (!grabCancelWatchSeededRef.current) {
+                  runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
+                } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
+                  refetchCurrentStore()
+                }
+              }
+            } catch {
+              /* meta scan: dine-in add / grab cancel */
             }
-            if (!grabCancelWatchSeededRef.current) {
-              runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
-            } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
-              refetchCurrentStore()
-            }
-          } catch {
-            /* grab cancel watch */
-          }
           }
         }
 
@@ -5916,6 +5984,7 @@ export default function PosTerminalPage() {
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
     buildDineInQtySnapshot,
+    shouldSkipDineInRemoteAddAutoprint,
     resolveDineInSnapshotItemKey,
     resolveOrderItemDisplayName,
     enrichPromoItemsWithOptionName,
@@ -8651,7 +8720,10 @@ export default function PosTerminalPage() {
                    * `posItemsForSave`는 `mergeDineInAddonCartPosItemsWithExisting`로 후자일 때 DB 줄을 유지한다.
                    */
                   if (isMainPosDevice) {
-                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(existingOrderId, Date.now() + 12_000)
+                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                      existingOrderId,
+                      Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
+                    )
                   }
                   const updateReq = {
                     id: existingOrderId,
@@ -8838,25 +8910,12 @@ export default function PosTerminalPage() {
                 const orderNoStr = savedOrderNo
                 const existingItemsBeforeAdd =
                   isAddOrder && existingOrder ? orderUiItemsToPosOrderItems(existingOrder.items) : []
-                const kitchenCartLines = (() => {
-                  if (!(isAddOrder && existingOrder)) return payloadItemsNormalized
-                  const delta = filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd, {
-                    formatNote: formatLineNoteForPrint,
-                  })
-                  /**
-                   * 테이블/리패치 레이스에서 기존 스냅샷이 이미 병합 상태로 보이면 delta가 0줄이 될 수 있다.
-                   * 추가주문에서 입력분이 있는데 주방 미출력을 막기 위해 1회 fallback.
-                   */
-                  if (delta.length === 0 && incomingItems.length > 0) {
-                    logPosPrintDebug('submit_add_kitchen_delta_empty_fallback', {
-                      orderId: existingOrderId,
-                      incomingItems: incomingItems.length,
-                      existingItems: existingItemsBeforeAdd.length,
-                    })
-                    return incomingItems
-                  }
-                  return delta
-                })()
+                const kitchenCartLines =
+                  isAddOrder && existingOrder
+                    ? resolveDineInKitchenLinesForAddSubmit(incomingItems, existingItemsBeforeAdd, {
+                        formatNote: formatLineNoteForPrint,
+                      })
+                    : payloadItemsNormalized
                 const addKitchenDedupeSuffix = isAddOrder
                   ? buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)
                   : ''
@@ -9127,8 +9186,11 @@ export default function PosTerminalPage() {
                    * Realtime add 감지에서 `isAddon`으로 오인되어 `1x > ...` 추가영수증이 한 장 더 찍힐 수 있다.
                    * 신규 주문은 짧은 창에서 add 감지를 건너뛰고 스냅샷만 갱신한다.
                    */
-                  if (!isAddOrder && isMainPosDevice) {
-                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(savedOrderId, Date.now() + 15_000)
+                  if (isMainPosDevice) {
+                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                      savedOrderId,
+                      Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
+                    )
                   }
                 }
                 if (savedOrderId != null) {
@@ -9600,13 +9662,11 @@ export default function PosTerminalPage() {
                     cardPaymentAmount: 0,
                     adjustments: pricingAdjustments,
                   })
-                  const kitchenCartLines = (() => {
-                    const delta = filterKitchenCartLinesForDineInAdd(incomingItems, existingItemsBeforeAdd, {
-                      formatNote: formatLineNoteForPrint,
-                    })
-                    if (delta.length === 0 && incomingItems.length > 0) return incomingItems
-                    return delta
-                  })()
+                  const kitchenCartLines = resolveDineInKitchenLinesForAddSubmit(
+                    incomingItems,
+                    existingItemsBeforeAdd,
+                    { formatNote: formatLineNoteForPrint }
+                  )
                   const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
                   const shouldAutoPrintReceipt = storeAutoPrint.receiptOnAddOrder
                   const autoPrintKitchenForSubmit = storeAutoPrint.kitchenOnOrder

@@ -234,6 +234,8 @@ export function CompanyHybridDocumentsPanel() {
   const [listOffset, setListOffset] = React.useState(0)
   const [listTruncated, setListTruncated] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
+  /** false면 목록·KPI 미조회 — 검색 버튼으로만 로드 */
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [summary, setSummary] = React.useState<CompanyHybridDocumentsSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = React.useState(false)
   const [categories, setCategories] = React.useState<CompanyHybridDocumentCategory[]>([])
@@ -544,11 +546,14 @@ export function CompanyHybridDocumentsPanel() {
   }, [initialized, auth, selectedStore, onUnauthorized])
 
   const loadList = React.useCallback(
-    async (offset: number) => {
+    async (offset: number, opts?: { sortTitle?: "asc" | "desc" | null }) => {
       if (!initialized || !auth || !selectedStore) return
       setLoading(true)
       try {
-        const res = await getCompanyHybridDocuments(buildListQuery(offset))
+        const q = buildListQuery(offset)
+        const sort = opts?.sortTitle !== undefined ? opts.sortTitle : titleSort
+        if (sort) q.sortTitle = sort
+        const res = await getCompanyHybridDocuments(q)
         if (onUnauthorized(res.httpStatus)) {
           setList([])
           setListTotal(0)
@@ -572,37 +577,32 @@ export function CompanyHybridDocumentsPanel() {
         setLoading(false)
       }
     },
-    [initialized, auth, selectedStore, buildListQuery, onUnauthorized, t]
+    [initialized, auth, selectedStore, buildListQuery, titleSort, onUnauthorized, t]
   )
 
-  const reloadListFromStart = React.useCallback(() => {
+  const invalidateListSearch = React.useCallback(() => {
+    setHasSearched(false)
+    setList([])
+    setListTotal(0)
     setListOffset(0)
-    void loadList(0)
-  }, [loadList])
+    setListTruncated(false)
+    setSummary(null)
+    setTitleSort(null)
+  }, [])
 
-  React.useEffect(() => {
-    if (!initialized || !auth || !selectedStore || !filtersRestored) return
+  const handleListSearch = React.useCallback(() => {
+    setHasSearched(true)
     setListOffset(0)
     void loadList(0)
     void loadSummary()
-  }, [
-    initialized,
-    auth,
-    selectedStore,
-    filtersRestored,
-    listCategoryFilter,
-    listTitleSearch,
-    listExpiryFilter,
-    listSourceFilter,
-    listVisibilityFilter,
-    listCorrPresence,
-    listCorrDirection,
-    listCorrStatus,
-    listCorrCounterpartySearch,
-    titleSort,
-    loadList,
-    loadSummary,
-  ])
+  }, [loadList, loadSummary])
+
+  const reloadListFromStart = React.useCallback(() => {
+    setHasSearched(true)
+    setListOffset(0)
+    void loadList(0)
+    void loadSummary()
+  }, [loadList, loadSummary])
 
   const resetRegisterForm = React.useCallback(() => {
     const ws = writeStoreForMutations || ""
@@ -999,21 +999,25 @@ export function CompanyHybridDocumentsPanel() {
     setListCorrDirection("")
     setListCorrStatus("")
     setListCorrCounterpartySearch("")
-    setTitleSort(null)
-  }, [])
+    invalidateListSearch()
+  }, [invalidateListSearch])
 
-  const removeFilterChip = React.useCallback((id: string) => {
-    if (id === "store") return
-    if (id === "category") setListCategoryFilter("all")
-    if (id === "title") setListTitleSearch("")
-    if (id === "expiry") setListExpiryFilter("all")
-    if (id === "source") setListSourceFilter("all")
-    if (id === "visibility") setListVisibilityFilter("all")
-    if (id === "corrPresence") setListCorrPresence("all")
-    if (id === "corrDirection") setListCorrDirection("")
-    if (id === "corrStatus") setListCorrStatus("")
-    if (id === "corrCounterparty") setListCorrCounterpartySearch("")
-  }, [])
+  const removeFilterChip = React.useCallback(
+    (id: string) => {
+      if (id === "store") return
+      if (id === "category") setListCategoryFilter("all")
+      if (id === "title") setListTitleSearch("")
+      if (id === "expiry") setListExpiryFilter("all")
+      if (id === "source") setListSourceFilter("all")
+      if (id === "visibility") setListVisibilityFilter("all")
+      if (id === "corrPresence") setListCorrPresence("all")
+      if (id === "corrDirection") setListCorrDirection("")
+      if (id === "corrStatus") setListCorrStatus("")
+      if (id === "corrCounterparty") setListCorrCounterpartySearch("")
+      invalidateListSearch()
+    },
+    [invalidateListSearch]
+  )
 
   const onExportCsv = async () => {
     if (!selectedStore || exportBusy) return
@@ -1074,12 +1078,12 @@ export function CompanyHybridDocumentsPanel() {
   const applyListStoreFilterChange = React.useCallback(
     (v: string) => {
       setSelectedStore(v)
-      setListOffset(0)
+      invalidateListSearch()
       if (registerOpen && !editing) {
         resetRegisterForm()
       }
     },
-    [registerOpen, editing, resetRegisterForm]
+    [registerOpen, editing, resetRegisterForm, invalidateListSearch]
   )
 
   return (
@@ -1099,18 +1103,22 @@ export function CompanyHybridDocumentsPanel() {
         </AdminTabsBarWithHelp>
 
         <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
-          <CompanyHybridDocumentKpiCards
-            summary={summary}
-            loading={summaryLoading}
-            labels={{
-              total: t("companyHybridDocKpiTotal"),
-              expiringSoon: t("companyHybridDocKpiExpiringSoon"),
-              expired: t("companyHybridDocKpiExpired"),
-              corrOverdue: t("companyHybridDocKpiCorrOverdue"),
-            }}
-          />
+          <p className="text-sm text-muted-foreground">{t("companyHybridDocListFilterHint")}</p>
 
-          {showExpiringBanner ? (
+          {hasSearched ? (
+            <CompanyHybridDocumentKpiCards
+              summary={summary}
+              loading={summaryLoading}
+              labels={{
+                total: t("companyHybridDocKpiTotal"),
+                expiringSoon: t("companyHybridDocKpiExpiringSoon"),
+                expired: t("companyHybridDocKpiExpired"),
+                corrOverdue: t("companyHybridDocKpiCorrOverdue"),
+              }}
+            />
+          ) : null}
+
+          {hasSearched && showExpiringBanner ? (
             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <p>{t("companyHybridDocExpiringBanner")}</p>
@@ -1131,7 +1139,13 @@ export function CompanyHybridDocumentsPanel() {
                 />
                 <div className="min-w-[150px] space-y-1.5">
                   <Label>{t("companyHybridDocColCategory")}</Label>
-                  <Select value={listCategoryFilter} onValueChange={setListCategoryFilter}>
+                  <Select
+                    value={listCategoryFilter}
+                    onValueChange={(v) => {
+                      setListCategoryFilter(v)
+                      invalidateListSearch()
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1151,6 +1165,12 @@ export function CompanyHybridDocumentsPanel() {
                   <Input
                     value={listTitleSearch}
                     onChange={(e) => setListTitleSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleListSearch()
+                      }
+                    }}
                     placeholder="…"
                   />
                 </div>
@@ -1158,7 +1178,10 @@ export function CompanyHybridDocumentsPanel() {
                   <Label>{t("companyHybridDocValidTo")}</Label>
                   <Select
                     value={listExpiryFilter}
-                    onValueChange={(v) => setListExpiryFilter(v as ExpiryFilter)}
+                    onValueChange={(v) => {
+                      setListExpiryFilter(v as ExpiryFilter)
+                      invalidateListSearch()
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1173,7 +1196,13 @@ export function CompanyHybridDocumentsPanel() {
                 </div>
                 <div className="min-w-[9rem] space-y-1.5">
                   <Label>{t("companyHybridDocSource")}</Label>
-                  <Select value={listSourceFilter} onValueChange={(v) => setListSourceFilter(v as SourceFilter)}>
+                  <Select
+                    value={listSourceFilter}
+                    onValueChange={(v) => {
+                      setListSourceFilter(v as SourceFilter)
+                      invalidateListSearch()
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1188,7 +1217,10 @@ export function CompanyHybridDocumentsPanel() {
                   <Label>{t("companyHybridDocPermission")}</Label>
                   <Select
                     value={listVisibilityFilter}
-                    onValueChange={(v) => setListVisibilityFilter(v as VisibilityFilter)}
+                    onValueChange={(v) => {
+                      setListVisibilityFilter(v as VisibilityFilter)
+                      invalidateListSearch()
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1200,6 +1232,9 @@ export function CompanyHybridDocumentsPanel() {
                     </SelectContent>
                   </Select>
                 </div>
+                <Button type="button" variant="secondary" onClick={handleListSearch} disabled={loading || !selectedStore}>
+                  {t("stockBtnSearch")}
+                </Button>
               </div>
 
               <Collapsible
@@ -1232,7 +1267,10 @@ export function CompanyHybridDocumentsPanel() {
                     <Label className="text-xs">{t("companyHybridCorrTab")}</Label>
                     <Select
                       value={listCorrPresence}
-                      onValueChange={(v) => setListCorrPresence(v as CorrespondencePresence)}
+                      onValueChange={(v) => {
+                        setListCorrPresence(v as CorrespondencePresence)
+                        invalidateListSearch()
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -1248,9 +1286,12 @@ export function CompanyHybridDocumentsPanel() {
                     <Label className="text-xs">{t("companyHybridCorrDirection")}</Label>
                     <Select
                       value={listCorrDirection || LIST_CORR_SELECT_NONE}
-                      onValueChange={(v) =>
-                        setListCorrDirection(v === LIST_CORR_SELECT_NONE ? "" : (v as "outbound" | "inbound"))
-                      }
+                      onValueChange={(v) => {
+                        setListCorrDirection(
+                          v === LIST_CORR_SELECT_NONE ? "" : (v as "outbound" | "inbound")
+                        )
+                        invalidateListSearch()
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={t("companyHybridCorrDirectionPh")} />
@@ -1266,11 +1307,12 @@ export function CompanyHybridDocumentsPanel() {
                     <Label className="text-xs">{t("companyHybridCorrStatus")}</Label>
                     <Select
                       value={listCorrStatus || LIST_CORR_SELECT_NONE}
-                      onValueChange={(v) =>
+                      onValueChange={(v) => {
                         setListCorrStatus(
                           v === LIST_CORR_SELECT_NONE ? "" : (v as "draft" | "sent" | "filed" | "replied")
                         )
-                      }
+                        invalidateListSearch()
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={t("companyHybridCorrStatusPh")} />
@@ -1289,6 +1331,12 @@ export function CompanyHybridDocumentsPanel() {
                     <Input
                       value={listCorrCounterpartySearch}
                       onChange={(e) => setListCorrCounterpartySearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          handleListSearch()
+                        }
+                      }}
                       placeholder="…"
                     />
                   </div>
@@ -1325,6 +1373,8 @@ export function CompanyHybridDocumentsPanel() {
             <CardContent className="space-y-4">
               {loading ? (
                 <CompanyHybridDocumentListSkeleton />
+              ) : !hasSearched ? (
+                <p className="text-sm text-muted-foreground">{t("msg_click_query")}</p>
               ) : list.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("companyHybridDocListEmpty")}</p>
               ) : (
@@ -1335,6 +1385,10 @@ export function CompanyHybridDocumentsPanel() {
                   onTitleSort={() => {
                     const next = titleSort === "asc" ? "desc" : "asc"
                     setTitleSort(next)
+                    if (hasSearched) {
+                      setListOffset(0)
+                      void loadList(0, { sortTitle: next })
+                    }
                   }}
                   t={t}
                   formatStoreLabel={formatStoreLabel}
@@ -1354,7 +1408,7 @@ export function CompanyHybridDocumentsPanel() {
                 />
               )}
 
-              {!loading && listTotal > 0 ? (
+              {hasSearched && !loading && listTotal > 0 ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
                   <p className="text-muted-foreground">
                     {t("companyHybridDocPaginationTotal").replace("{total}", String(listTotal))}
@@ -1400,7 +1454,7 @@ export function CompanyHybridDocumentsPanel() {
             </CardContent>
           </Card>
 
-          {showComplianceSection && summary?.stores ? (
+          {hasSearched && showComplianceSection && summary?.stores ? (
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-base">{t("companyHybridDocComplianceTitle")}</CardTitle>

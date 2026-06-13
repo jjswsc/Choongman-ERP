@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { History, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -173,7 +174,11 @@ export function CrmCouponHistoryPanel() {
               ) : (
                 displayRows.map((r) => (
                   <tr key={r.id} className="border-t hover:bg-muted/20">
-                    <td className="p-3 font-mono text-xs">{r.memberNo || r.memberId}</td>
+                    <td className="p-3 font-mono text-xs">
+                      <Link href={`/admin/members?memberId=${r.memberId}`} className="text-primary hover:underline">
+                        {r.memberNo || r.memberId}
+                      </Link>
+                    </td>
                     <td className="p-3">{r.memberName || "—"}</td>
                     <td className="p-3">
                       <div className="font-mono font-semibold">{r.couponCode}</div>
@@ -190,7 +195,15 @@ export function CrmCouponHistoryPanel() {
                     <td className="p-3 text-xs whitespace-nowrap">{r.issuedAt || "—"}</td>
                     <td className="p-3 text-xs whitespace-nowrap">{r.expiresAt || r.validTo || "—"}</td>
                     <td className="p-3 text-xs whitespace-nowrap">{r.usedAt || "—"}</td>
-                    <td className="p-3 text-xs">{r.orderId ? `#${r.orderId}` : "—"}</td>
+                    <td className="p-3 text-xs">
+                      {r.orderId ? (
+                        <Link href={`/admin/pos-orders?orderId=${r.orderId}`} className="text-primary hover:underline">
+                          #{r.orderId}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="p-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
                         {couponIssueStatusLabel(r.status, t)}

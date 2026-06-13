@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Search } from "lucide-react"
+import { Search, CalendarDays } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +16,10 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { CrmPageHero, CrmKpiCard, CrmMemberLink } from "@/components/crm/crm-shared-ui"
+import { CrmRfmMatrix } from "@/components/crm/crm-rfm-matrix"
 import { apiFetch } from "@/lib/api/fetch"
-import { getMemberVisits, useStoreList } from "@/lib/api-client"
+import { getMemberVisits, getMembers, useStoreList } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { useLang } from "@/lib/lang-context"
@@ -35,6 +38,7 @@ type VisitRow = {
 type MemberVisitAnalysisRow = {
   memberId: number
   memberNo: string
+  memberName: string
   visitCount: number
   avgVisitCycleDays: number | null
   avgTicketAmount: number
@@ -107,6 +111,7 @@ function buildMemberVisitAnalysis(rows: VisitRow[]): MemberVisitAnalysisRow[] {
     out.push({
       memberId,
       memberNo: String(list[0]?.memberNo || ""),
+      memberName: "",
       visitCount,
       avgVisitCycleDays,
       avgTicketAmount,
@@ -115,6 +120,27 @@ function buildMemberVisitAnalysis(rows: VisitRow[]): MemberVisitAnalysisRow[] {
     })
   }
   return out.sort((a, b) => b.totalContribution - a.totalContribution)
+}
+
+async function loadVisitAnalysis(params: {
+  startStr: string
+  endStr: string
+  storeCode?: string
+  memberId?: number
+  q?: string
+}): Promise<MemberVisitAnalysisRow[]> {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+    limit: "500",
+  })
+  if (params.storeCode && params.storeCode !== "All") q.set("storeCode", params.storeCode)
+  if (params.memberId) q.set("memberId", String(params.memberId))
+  if (params.q) q.set("q", params.q)
+  const res = await apiFetch(`/api/crm/member-visit-analysis?${q}`, { cache: "no-store" })
+  const data = (await res.json()) as { rows?: MemberVisitAnalysisRow[] }
+  if (data.rows?.length) return data.rows
+  return []
 }
 
 export default function MemberVisitsPage() {
@@ -128,13 +154,14 @@ export default function MemberVisitsPage() {
   const [endDate, setEndDate] = React.useState(initialRange.endYmd)
   const [storeCode, setStoreCode] = React.useState("All")
   const [memberId, setMemberId] = React.useState("")
+  const [memberSearch, setMemberSearch] = React.useState("")
   const [rows, setRows] = React.useState<VisitRow[]>([])
+  const [analysisRows, setAnalysisRows] = React.useState<MemberVisitAnalysisRow[]>([])
   const [hasSearched, setHasSearched] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [rfmRows, setRfmRows] = React.useState<RfmRow[]>([])
   const [rfmLoading, setRfmLoading] = React.useState(false)
   const storeOptions = React.useMemo(() => ["All", ...storeKeys.filter((s) => s !== "All")], [storeKeys])
-  const analysisRows = React.useMemo(() => buildMemberVisitAnalysis(rows), [rows])
   const kpi = React.useMemo(() => {
     const memberCount = analysisRows.length
     const totalContribution = analysisRows.reduce((sum, row) => sum + Number(row.totalContribution || 0), 0)
@@ -162,23 +189,40 @@ export default function MemberVisitsPage() {
     }
     setLoading(true)
     try {
-      const id = Number(memberId || 0)
-      const list = await getMemberVisits({
-        memberId: id || undefined,
-        startStr: start,
-        endStr: end,
-        storeCode: storeCode === "All" ? undefined : storeCode,
-        limit: 500,
-      })
+      let id = Number(memberId || 0)
+      const q = memberSearch.trim()
+      if (!id && q) {
+        const found = await getMembers({ q, limit: 1 })
+        id = Number(found[0]?.id || 0)
+        if (id) setMemberId(String(id))
+      }
+      const [list, analysis] = await Promise.all([
+        getMemberVisits({
+          memberId: id || undefined,
+          startStr: start,
+          endStr: end,
+          storeCode: storeCode === "All" ? undefined : storeCode,
+          limit: 500,
+        }),
+        loadVisitAnalysis({
+          startStr: start,
+          endStr: end,
+          storeCode,
+          memberId: id || undefined,
+          q: q || undefined,
+        }),
+      ])
       setRows(list)
+      setAnalysisRows(analysis.length ? analysis : buildMemberVisitAnalysis(list))
       setHasSearched(true)
     } catch {
       setRows([])
+      setAnalysisRows([])
       setHasSearched(true)
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, storeCode, memberId, t])
+  }, [startDate, endDate, storeCode, memberId, memberSearch, t])
 
   const loadRfm = React.useCallback(async () => {
     setRfmLoading(true)
@@ -197,6 +241,8 @@ export default function MemberVisitsPage() {
 
   React.useEffect(() => {
     if (searchParams.get("tab") === "rfm") setTab("rfm")
+    const mid = Number(searchParams.get("memberId") || 0)
+    if (mid) setMemberId(String(mid))
   }, [searchParams])
 
   React.useEffect(() => {
@@ -207,7 +253,15 @@ export default function MemberVisitsPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <CrmPageHero
+          icon={CalendarDays}
+          title={t("memberVisitsSearchTitle")}
+          description={t("memberVisitsSearchHint")}
+          gradient="from-cyan-50 to-sky-50"
+          border="border-cyan-200/60"
+          iconClass="bg-cyan-500/10 text-cyan-600"
+        />
         <CrmSubnav />
         <Card className="mb-4">
           <CardHeader><CardTitle>{t("memberVisitsSearchTitle")}</CardTitle></CardHeader>
@@ -242,10 +296,16 @@ export default function MemberVisitsPage() {
                 </SelectContent>
               </Select>
               <Input
+                placeholder={t("crmVisitsSearchMemberPh")}
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                className="h-9 w-[180px] text-xs"
+              />
+              <Input
                 placeholder={t("memberVisitsMemberIdPh")}
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
-                className="h-9 w-[160px] text-xs"
+                className="h-9 w-[120px] text-xs"
               />
               <Button className="h-9 font-medium" onClick={() => load()} disabled={loading}>
                 <Search className="mr-1.5 h-3.5 w-3.5" />
@@ -258,34 +318,27 @@ export default function MemberVisitsPage() {
         {hasSearched && (
           <>
             <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader><CardTitle className="text-sm">{t("memberVisitsKpiMembers")}</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-semibold">{kpi.memberCount.toLocaleString()}</p></CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgTicketAmount")}</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-semibold">{Number(kpi.avgTicketAmount || 0).toLocaleString()}</p></CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm">{t("memberVisitsAvgVisitCycleDays")}</CardTitle></CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-semibold">
-                    {kpi.avgVisitCycleDays == null ? "-" : `${kpi.avgVisitCycleDays.toFixed(1)} ${t("days")}`}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm">{t("memberVisitsTotalContribution")}</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-semibold">{Number(kpi.totalContribution || 0).toLocaleString()}</p></CardContent>
-              </Card>
+              <CrmKpiCard label={t("memberVisitsKpiMembers")} value={kpi.memberCount.toLocaleString()} tone="primary" />
+              <CrmKpiCard label={t("memberVisitsAvgTicketAmount")} value={Number(kpi.avgTicketAmount || 0).toLocaleString()} />
+              <CrmKpiCard
+                label={t("memberVisitsAvgVisitCycleDays")}
+                value={kpi.avgVisitCycleDays == null ? "—" : `${kpi.avgVisitCycleDays.toFixed(1)} ${t("days")}`}
+              />
+              <CrmKpiCard label={t("memberVisitsTotalContribution")} value={Number(kpi.totalContribution || 0).toLocaleString()} tone="success" />
             </div>
 
             {kpi.topContributor && (
               <Card className="mb-4">
                 <CardHeader><CardTitle className="text-sm">{t("memberVisitsTopContributor")}</CardTitle></CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  memberId {kpi.topContributor.memberId} ({kpi.topContributor.memberNo || "-"}) ·
-                  {` ${t("memberVisitsVisitCount")} ${kpi.topContributor.visitCount.toLocaleString()} / ${t("memberVisitsTotalContribution")} ${Number(kpi.topContributor.totalContribution || 0).toLocaleString()}`}
+                <CardContent className="text-sm">
+                  <CrmMemberLink
+                    memberId={kpi.topContributor.memberId}
+                    name={kpi.topContributor.memberName}
+                    memberNo={kpi.topContributor.memberNo}
+                  />
+                  {" · "}
+                  {t("memberVisitsVisitCount")} {kpi.topContributor.visitCount.toLocaleString()} / {t("memberVisitsTotalContribution")}{" "}
+                  {Number(kpi.topContributor.totalContribution || 0).toLocaleString()}
                 </CardContent>
               </Card>
             )}
@@ -294,9 +347,9 @@ export default function MemberVisitsPage() {
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "history" | "analysis" | "rfm")} className="mt-4">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="history">방문 기록</TabsTrigger>
-            <TabsTrigger value="analysis">방문 분석</TabsTrigger>
-            <TabsTrigger value="rfm">RFM 점수</TabsTrigger>
+            <TabsTrigger value="history">{t("crmVisitsTabHistory")}</TabsTrigger>
+            <TabsTrigger value="analysis">{t("crmVisitsTabAnalysis")}</TabsTrigger>
+            <TabsTrigger value="rfm">{t("crmVisitsTabRfm")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="history">
@@ -328,10 +381,16 @@ export default function MemberVisitsPage() {
                         rows.map((r) => (
                           <tr key={r.orderId} className="border-t">
                             <td className="p-2">{r.visitedAt}</td>
-                            <td className="p-2">{r.memberId}</td>
+                            <td className="p-2">
+                              <CrmMemberLink memberId={r.memberId} memberNo={r.memberNo} />
+                            </td>
                             <td className="p-2">{r.memberNo}</td>
                             <td className="p-2">{r.storeCode}</td>
-                            <td className="p-2">{r.orderNo}</td>
+                            <td className="p-2">
+                              <Link href={`/admin/pos-orders?orderId=${r.orderId}`} className="text-primary hover:underline">
+                                {r.orderNo}
+                              </Link>
+                            </td>
                             <td className="p-2">{Number(r.total || 0).toLocaleString()}</td>
                           </tr>
                         ))
@@ -372,8 +431,10 @@ export default function MemberVisitsPage() {
                       ) : (
                         analysisRows.map((r) => (
                           <tr key={r.memberId} className="border-t">
-                            <td className="p-2">{r.memberId}</td>
-                            <td className="p-2">{r.memberNo || "-"}</td>
+                            <td className="p-2">
+                              <CrmMemberLink memberId={r.memberId} name={r.memberName} memberNo={r.memberNo} />
+                            </td>
+                            <td className="p-2">{r.memberNo || "—"}</td>
                             <td className="p-2">{r.visitCount.toLocaleString()}</td>
                             <td className="p-2">
                               {r.avgVisitCycleDays == null ? "-" : `${r.avgVisitCycleDays.toLocaleString()} ${t("days")}`}
@@ -394,23 +455,22 @@ export default function MemberVisitsPage() {
           <TabsContent value="rfm">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>RFM 점수</CardTitle>
+                <CardTitle>{t("crmVisitsRfmTitle")}</CardTitle>
                 <Button variant="outline" onClick={() => loadRfm()} disabled={rfmLoading}>
-                  {rfmLoading ? "계산 중..." : "새로고침"}
+                  {rfmLoading ? t("loading") : t("adminOpsCenterReload")}
                 </Button>
               </CardHeader>
-              <CardContent>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  R(최근성) / F(방문빈도) / M(구매금액)을 같은 화면에서 함께 보고 고객군을 운영합니다.
-                </p>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-muted-foreground">{t("crmVisitsRfmHint")}</p>
+                <CrmRfmMatrix rows={rfmRows} />
                 <div className="overflow-auto rounded border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40">
                       <tr>
-                        <th className="p-2 text-left">memberId</th>
-                        <th className="p-2 text-left">Recency(day)</th>
-                        <th className="p-2 text-left">Frequency</th>
-                        <th className="p-2 text-left">Monetary</th>
+                        <th className="p-2 text-left">{t("crmVisitsRfmColMember")}</th>
+                        <th className="p-2 text-left">{t("crmVisitsRfmColRecency")}</th>
+                        <th className="p-2 text-left">{t("crmVisitsRfmColFrequency")}</th>
+                        <th className="p-2 text-left">{t("crmVisitsRfmColMonetary")}</th>
                         <th className="p-2 text-left">R</th>
                         <th className="p-2 text-left">F</th>
                         <th className="p-2 text-left">M</th>
@@ -420,7 +480,9 @@ export default function MemberVisitsPage() {
                     <tbody>
                       {rfmRows.map((r) => (
                         <tr key={r.memberId} className="border-t">
-                          <td className="p-2">{r.memberId}</td>
+                          <td className="p-2">
+                            <CrmMemberLink memberId={r.memberId} />
+                          </td>
                           <td className="p-2">{r.recencyDays}</td>
                           <td className="p-2">{r.frequencyCount}</td>
                           <td className="p-2">{Number(r.monetaryAmount || 0).toLocaleString()}</td>

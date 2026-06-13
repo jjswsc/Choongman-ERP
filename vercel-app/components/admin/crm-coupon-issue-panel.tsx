@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Gift, Search, UserRound } from "lucide-react"
 import { appAlert } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,7 @@ import {
 import { couponsForMemberIssue, formatCouponBenefit, redemptionModeLabel } from "@/lib/crm-coupon-admin"
 
 export function CrmCouponIssuePanel() {
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const [memberQuery, setMemberQuery] = React.useState("")
@@ -35,6 +37,22 @@ export function CrmCouponIssuePanel() {
       .then((rows) => setCoupons(couponsForMemberIssue(rows || [])))
       .catch(() => setCoupons([]))
   }, [])
+
+  React.useEffect(() => {
+    const memberId = Number(searchParams.get("memberId") || 0)
+    if (!memberId) return
+    getMembers({ q: String(memberId), limit: 5 })
+      .then((rows) => {
+        const m = rows.find((x) => x.id === memberId) || rows[0]
+        if (!m) return
+        setSelectedMemberId(m.id)
+        setMemberQuery(m.memberNo || m.phone || m.name || String(m.id))
+        setMemberResults([
+          { id: m.id, memberNo: m.memberNo, name: m.name || m.fullName || "", phone: m.phone || "" },
+        ])
+      })
+      .catch(() => {})
+  }, [searchParams])
 
   const searchMembers = React.useCallback(async () => {
     const q = memberQuery.trim()

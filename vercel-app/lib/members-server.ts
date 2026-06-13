@@ -936,13 +936,31 @@ export async function saveMemberTier(params: {
   )
 }
 
-export async function listMemberPoints(params?: { memberId?: number; limit?: number }) {
+export async function listMemberPoints(params?: {
+  memberId?: number
+  limit?: number
+  startStr?: string
+  endStr?: string
+  offset?: number
+}) {
   const memberId = Number(params?.memberId || 0)
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
-  const filter = memberId ? `member_id=eq.${memberId}` : ''
+  const offset = Math.max(0, Number(params?.offset || 0))
+  const filters: string[] = []
+  if (memberId) filters.push(`member_id=eq.${memberId}`)
+  const startStr = toText(params?.startStr).slice(0, 10)
+  const endStr = toText(params?.endStr).slice(0, 10)
+  if (startStr) {
+    filters.push(`created_at=gte.${encodeURIComponent(`${startStr}T00:00:00`)}`)
+  }
+  if (endStr) {
+    filters.push(`created_at=lte.${encodeURIComponent(`${endStr}T23:59:59`)}`)
+  }
+  const filter = filters.join('&')
+  const opts = { order: 'id.desc' as const, limit, offset }
   const rows = filter
-    ? ((await supabaseSelectFilter('member_points_ledger', filter, { order: 'id.desc', limit })) as MemberPointLedgerRow[])
-    : ((await supabaseSelect('member_points_ledger', { order: 'id.desc', limit })) as MemberPointLedgerRow[])
+    ? ((await supabaseSelectFilter('member_points_ledger', filter, opts)) as MemberPointLedgerRow[])
+    : ((await supabaseSelect('member_points_ledger', opts)) as MemberPointLedgerRow[])
   return (rows || []).map((row) => ({
     id: Number(row.id || 0),
     memberId: Number(row.member_id || 0),

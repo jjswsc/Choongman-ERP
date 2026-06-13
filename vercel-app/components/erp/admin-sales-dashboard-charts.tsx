@@ -28,7 +28,7 @@ import {
   getPosSalesByStoreChannel,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
+import { ERP_NUMERIC_CHART_TICK, ADMIN_CHART_COLORS } from "@/lib/admin-ui-standards"
 import {
   translateChannelKey,
   translateDeliveryAppCode,
@@ -39,7 +39,7 @@ import {
 } from "@/lib/pos-store-display-name"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 
-const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
+const COLORS = [...ADMIN_CHART_COLORS]
 
 function formatSalesAmount(n: number) {
   const v = Number(n ?? 0)
@@ -64,6 +64,8 @@ export type AdminSalesDashboardChartsProps = {
   salesStoreCodes?: string[]
   /** POS 테이블 스냅샷 — 매장 canonical 키별 진행 중 주문 합계 */
   tableTotalByStore?: Record<string, number>
+  /** 부모 자동 갱신 토큰 */
+  refreshToken?: number
 }
 
 function resolveStoresParam(storeCode: string): string[] | undefined {
@@ -91,6 +93,7 @@ export function AdminSalesDashboardCharts({
   isOfficeSelector: _isOfficeSelector,
   salesStoreCodes,
   tableTotalByStore,
+  refreshToken,
 }: AdminSalesDashboardChartsProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -197,6 +200,11 @@ export function AdminSalesDashboardCharts({
   React.useEffect(() => {
     void loadCharts()
   }, [loadCharts])
+
+  React.useEffect(() => {
+    if (refreshToken == null || refreshToken <= 0) return
+    void loadCharts()
+  }, [refreshToken, loadCharts])
 
   const handleSearch = React.useCallback(() => {
     void loadCharts()

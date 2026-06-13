@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -103,8 +104,40 @@ import {
   SalesMomComparePanel,
   SalesYoyComparePanel,
 } from "@/components/tabs/sales-forecast-report-panels"
+import {
+  SALES_IA,
+  PERIOD_GROUP_TOPIC_VIEWS,
+  type AnalyticsView,
+  type PeriodGroupValue,
+} from "@/components/tabs/sales-management-ia"
+import { SalesOverviewPanel } from "@/components/tabs/sales-overview-panel"
+import {
+  EMPTY_POS_SALES_BY_PROMO,
+  formatSalesAmount,
+  formatSalesPct,
+  filterStoreRowsBySalesSelection,
+  I18N_KO,
+  mapPosSalesPeriodRowToChartRow,
+  normalizeStoreCodes,
+  PERIOD_GROUP,
+  PERIOD_GROUP_VALUES,
+  PERIOD_PAYMENT_COLUMNS,
+  periodPaymentAmount,
+  resolveDefaultSalesLanding,
+  SALES_FILTER_PRESET_STORAGE_KEY,
+  SALES_ORDER_TYPE_TOGGLES,
+  sumStoreSalesTotals,
+  type SalesFilterPreset,
+  type StoreSalesAggregateRow,
+} from "@/components/tabs/sales-management-shared"
+import {
+  SalesPaymentTenderGapAlert,
+  SalesPeriodTrendChartBlock,
+  SALES_CHART_COLORS,
+} from "@/components/tabs/sales-management-charts"
+import { SalesStorePicker } from "@/components/tabs/sales-management-store-picker"
+import { SalesManagementSummaryInsights } from "@/components/tabs/sales-management-summary-insights"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
-import { displayPosCancelReasonKey } from "@/lib/pos-cancel-reason-key"
 import {
   getPosSalesFilterOptionsWithCache,
   getPosSalesByPeriodWithCache,
@@ -129,449 +162,11 @@ import {
   Legend,
 } from "recharts"
 
-/** 번역 누락 시 주제·힌트 라벨 폴백 (ko 기준) */
-const I18N_KO = i18n.ko as Record<string, string>
-
-const PERIOD_GROUP = [
-  { value: "year", labelKey: "salesPeriodYear" },
-  { value: "month", labelKey: "salesPeriodMonth" },
-  { value: "week", labelKey: "salesPeriodWeek" },
-  { value: "day", labelKey: "salesPeriodDay" },
-  { value: "hour", labelKey: "salesPeriodHour" },
-  { value: "dow", labelKey: "salesPeriodDow" },
-] as const
-const PERIOD_GROUP_VALUES = new Set(PERIOD_GROUP.map((g) => g.value))
-type PeriodGroupValue = (typeof PERIOD_GROUP)[number]["value"]
-
-type PeriodPaymentField = "cashSales" | "creditSales" | "qrSales" | "otherSales" | "deliveryAppSales"
-
-const PERIOD_PAYMENT_COLUMNS: { field: PeriodPaymentField; labelKey: string; fallback: string }[] = [
-  { field: "cashSales", labelKey: "salesPayCash", fallback: "현금" },
-  { field: "creditSales", labelKey: "salesPayCard", fallback: "카드" },
-  { field: "qrSales", labelKey: "salesPayQr", fallback: "QR" },
-  { field: "deliveryAppSales", labelKey: "salesPayDeliveryApp", fallback: "배달앱" },
-  { field: "otherSales", labelKey: "salesPayOther", fallback: "기타" },
-]
-
-type PeriodPaymentRow = Partial<Record<PeriodPaymentField, number>>
-
-function periodPaymentAmount(row: PeriodPaymentRow, field: PeriodPaymentField) {
-  return Number(row[field] ?? 0) || 0
-}
-
-function SalesPaymentTenderGapAlert({
-  gaps,
-  tr,
-  maxRows = 8,
-}: {
-  gaps: PosSalesPaymentTenderGapItem[]
-  tr: (key: string, fallback: string) => string
-  maxRows?: number
-}) {
-  if (gaps.length === 0) return null
-  const shown = gaps.slice(0, maxRows)
-  const rest = gaps.length - shown.length
-  return (
-    <div className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
-      <p className="font-medium">
-        {tr(
-          "salesPaymentTenderGapWarning",
-          "매출액과 결제수단 합계가 맞지 않는 기간이 있습니다. POS 영수증 관리에서 결제 미기록·서비스(컴) 주문을 확인·정정하세요."
-        )}
-      </p>
-      <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs leading-relaxed">
-        {shown.map((g) => (
-          <li key={`${g.storeCode ?? ""}\t${g.key}`}>
-            {g.storeLabel ? `${g.storeLabel} · ` : ""}
-            {g.label}: {tr("salesAmount", "매출액")} {formatSalesAmount(g.total)} −{" "}
-            {tr("salesPaymentTenderSum", "결제 합계")} {formatSalesAmount(g.tenderSum)} ={" "}
-            <span className="font-erp-numeric font-semibold">{formatSalesAmount(g.gap)}</span>
-          </li>
-        ))}
-      </ul>
-      {rest > 0 ? (
-        <p className="mt-1 text-xs">
-          {tr("salesPaymentTenderGapMore", "외 {n}건").replace("{n}", String(rest))}
-        </p>
-      ) : null}
-      <p className="mt-1.5 text-[11px] opacity-90">
-        {tr(
-          "salesPaymentTenderGapHint",
-          "진단 SQL: vercel-app/sql/pos_sales_payment_tender_gap_diagnostic.sql · API: POST /api/correctPosOrderPayment"
-        )}
-      </p>
-    </div>
-  )
-}
-
-const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
-
-type PeriodTrendChartRow = { axisLabel: string; sales: number }
-
-function SalesPeriodTrendChartBlock({
-  rows,
-  periodBarXAxisProps,
-  periodChartYAxisProps,
-  tr,
-  showFootnote = true,
-}: {
-  rows: PeriodTrendChartRow[]
-  periodBarXAxisProps: Record<string, unknown>
-  periodChartYAxisProps: { tick: { fontSize: number }; tickFormatter: (v: number) => string }
-  tr: (key: string, fallback: string) => string
-  showFootnote?: boolean
-}) {
-  if (rows.length === 0) return null
-  return (
-    <div className="mb-4">
-      <p className="mb-2 text-sm font-medium">{tr("salesPeriodTrendChartLabel", "매출 추이 (집계 기간)")}</p>
-      <div className="h-[220px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
-            <YAxis {...periodChartYAxisProps} />
-            <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-            <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      {showFootnote ? (
-        <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-          {tr(
-            "salesTopicPeriodTrendFootnote",
-            "상단 막대 차트는「집계 기간」기준 추이입니다. 아래 표·파이·상세는 선택한 날짜 범위 전체 합계입니다."
-          )}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
-function formatSalesAmount(n: number) {
-  const v = Number(n ?? 0)
-  if (!Number.isFinite(v)) return "0"
-  return Math.round(v).toLocaleString()
-}
-
-function formatSalesPct(n: number) {
-  const v = Number(n ?? 0)
-  if (!Number.isFinite(v)) return "0.0%"
-  return `${v.toFixed(1)}%`
-}
-
-const EMPTY_POS_SALES_PROMO_TOTALS: PosSalesPromoAggregateTotals = {
-  qty: 0,
-  saleAmount: 0,
-  regularAmount: 0,
-  bundleDiscount: 0,
-  paymentDiscount: 0,
-  totalDiscount: 0,
-  periodGrossSales: 0,
-  periodOrderCount: 0,
-  promoLineSaleSharePct: 0,
-  bundleDiscountPctOfGross: 0,
-  paymentDiscountPctOfGross: 0,
-  totalDiscountPctOfGross: 0,
-  estimatedLineQty: 0,
-  unresolvedLineQty: 0,
-}
-
-const EMPTY_POS_SALES_BY_PROMO: PosSalesByPromoResult = {
-  rows: [],
-  totals: EMPTY_POS_SALES_PROMO_TOTALS,
-  byKind: [],
-  payment: {
-    rows: [],
-    totals: {
-      discountAmount: 0,
-      orderCountWithDiscount: 0,
-      periodGrossSales: 0,
-      periodOrderCount: 0,
-      discountPctOfGross: 0,
-    },
-    byKind: [],
-  },
-  combined: {
-    totals: {
-      periodGrossSales: 0,
-      periodOrderCount: 0,
-      bundleDiscount: 0,
-      paymentDiscount: 0,
-      totalDiscount: 0,
-      bundleDiscountPctOfGross: 0,
-      paymentDiscountPctOfGross: 0,
-      totalDiscountPctOfGross: 0,
-      promoLineSaleSharePct: 0,
-      promoLineSaleAmount: 0,
-      paymentOrderSharePct: 0,
-    },
-    byKind: [],
-  },
-  truncated: false,
-}
-
-/** API·캐시 행에 집계 필드가 일부 누락될 수 있음 — 본문에서 ?? 로 보정 */
-function mapPosSalesPeriodRowToChartRow(
-  r: Partial<PosSalesPeriodRow> & Pick<PosSalesPeriodRow, "label" | "key">,
-  periodGroup: PeriodGroupValue,
-  tr: (key: string, fallback: string) => string
-) {
-  const total = r.total ?? r.sales ?? 0
-  const count = r.count ?? 0
-  const guestSum = r.guestSum ?? 0
-  const dineInOrderCount = r.dineInOrderCount ?? 0
-  const dineInGuestSum = r.dineInGuestSum ?? 0
-  const dineInTotal = r.dineInTotal ?? 0
-  const legacyBreakdown =
-    r.dineInOrderCount === undefined &&
-    r.dineInGuestSum === undefined &&
-    r.dineInTotal === undefined
-  const hallGuestSum = legacyBreakdown ? guestSum : dineInGuestSum
-
-  const salesPerDineInOrder =
-    dineInOrderCount > 0
-      ? r.salesPerDineInOrder != null && r.salesPerDineInOrder > 0
-        ? r.salesPerDineInOrder
-        : Math.round((dineInTotal / dineInOrderCount) * 100) / 100
-      : 0
-
-  let salesPerGuestHall = 0
-  if (dineInGuestSum > 0 && dineInTotal > 0) {
-    salesPerGuestHall =
-      r.salesPerGuest != null && r.salesPerGuest > 0
-        ? r.salesPerGuest
-        : Math.round((dineInTotal / dineInGuestSum) * 100) / 100
-  } else if (legacyBreakdown && hallGuestSum > 0 && total > 0) {
-    salesPerGuestHall =
-      r.salesPerGuest != null && r.salesPerGuest > 0
-        ? r.salesPerGuest
-        : Math.round((total / hallGuestSum) * 100) / 100
-  }
-
-  const salesPerOrder =
-    count > 0
-      ? r.salesPerOrder != null
-        ? r.salesPerOrder
-        : Math.round((total / count) * 100) / 100
-      : 0
-
-  return {
-    label: r.label,
-    key: r.key,
-    sales: r.sales ?? total,
-    count,
-    subtotal: r.subtotal ?? 0,
-    vat: r.vat ?? 0,
-    discount: r.discount ?? 0,
-    service: r.service ?? 0,
-    total,
-    guestSum,
-    hallGuestSum,
-    dineInOrderCount,
-    dineInTotal,
-    dineInGuestSum,
-    salesPerDineInOrder,
-    salesPerGuestHall,
-    salesPerOrder,
-    cashSales: Number(r.cashSales ?? 0) || 0,
-    creditSales: Number(r.creditSales ?? 0) || 0,
-    qrSales: Number(r.qrSales ?? 0) || 0,
-    otherSales: Number(r.otherSales ?? 0) || 0,
-    deliveryAppSales: Number(r.deliveryAppSales ?? 0) || 0,
-    axisLabel: translatePeriodAxisLabel(r, periodGroup, tr),
-  }
-}
-
-function normalizeStoreCodes(values: string[]): string[] {
-  return [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b)
-  )
-}
-
-type StoreSalesAggregateRow = {
-  storeName: string
-  count: number
-  subtotal: number
-  vat: number
-  discount?: number
-  service?: number
-  total: number
-}
-
-function filterStoreRowsBySalesSelection<T extends { storeName: string }>(
-  rows: T[],
-  stores: string[] | undefined
-): T[] {
-  if (!stores?.length) return rows
-  return rows.filter((r) => stores.some((code) => rowMatchesSalesStoreSelection(r.storeName, code)))
-}
-
-function sumStoreSalesTotals(rows: StoreSalesAggregateRow[]) {
-  return rows.reduce(
-    (acc, r) => ({
-      subtotal: acc.subtotal + Number(r.subtotal ?? 0),
-      vat: acc.vat + Number(r.vat ?? 0),
-      discount: acc.discount + Number(r.discount ?? 0),
-      service: acc.service + Number(r.service ?? 0),
-      total: acc.total + Number(r.total ?? 0),
-    }),
-    { subtotal: 0, vat: 0, discount: 0, service: 0, total: 0 }
-  )
-}
-
-type AnalyticsView =
-  | "period"
-  | "delivery"
-  | "channel"
-  | "menu"
-  | "promo-bundle"
-  | "payment-discount"
-  | "discount-all"
-  | "payment"
-  | "store"
-  | "store-category"
-  | "store-period"
-  | "yoy-compare"
-  | "mom-compare"
-  | "forecast"
-  | null
-
-/** 집계 기간 UI·상단 추이 차트를 공유하는 리포트 주제 (실시간 운영 제외) */
-const PERIOD_GROUP_TOPIC_VIEWS: Exclude<AnalyticsView, null>[] = [
-  "period",
-  "store-period",
-  "channel",
-  "menu",
-  "delivery",
-  "store-category",
-  "payment",
-]
-
-const SALES_ORDER_TYPE_TOGGLES: { type: PosOrderTypeValue; labelKey: string; fallback: string }[] = [
-  { type: "dine_in", labelKey: "salesAmountKindDineIn", fallback: "홀" },
-  { type: "takeout", labelKey: "salesAmountKindTakeout", fallback: "포장" },
-  { type: "delivery", labelKey: "salesAmountKindDelivery", fallback: "배달" },
-]
-
-type SalesTopicConfig = {
-  id: string
-  labelKey: string
-  hintKey?: string
-  view: AnalyticsView
-}
-
-type SalesSubMenuConfig = {
-  id: string
-  labelKey: string
-  fallbackLabel: string
-  topics: SalesTopicConfig[]
-}
-
-const SALES_IA: SalesSubMenuConfig[] = [
-  {
-    id: "sales-analysis",
-    labelKey: "salesManagementSubmenuQuickSales",
-    fallbackLabel: "실적 분석",
-    topics: [
-      { id: "analysis-period", labelKey: "salesTopicExplorePeriod", hintKey: "salesTopicExplorePeriodHint", view: "period" },
-      { id: "analysis-channel", labelKey: "salesTopicExploreChannel", hintKey: "salesTopicExploreChannelHint", view: "channel" },
-      { id: "analysis-payment", labelKey: "salesTopicExplorePayment", hintKey: "salesTopicExplorePaymentHint", view: "payment" },
-      { id: "analysis-menu", labelKey: "salesTopicExploreMenu", hintKey: "salesTopicExploreMenuHint", view: "menu" },
-      { id: "analysis-delivery", labelKey: "salesTopicExploreDelivery", hintKey: "salesTopicExploreDeliveryHint", view: "delivery" },
-    ],
-  },
-  {
-    id: "sales-compare",
-    labelKey: "salesManagementSubmenuAggregateInfo",
-    fallbackLabel: "매장 비교",
-    topics: [
-      { id: "compare-store-summary", labelKey: "salesTopicPivotStoreSummary", hintKey: "salesTopicPivotStoreSummaryHint", view: "store" },
-      {
-        id: "compare-store-by-period",
-        labelKey: "salesTopicPivotStoreByPeriod",
-        hintKey: "salesTopicPivotStoreByPeriodHint",
-        view: "store-period",
-      },
-      { id: "compare-store-category", labelKey: "salesTopicPivotStoreCategory", hintKey: "salesTopicPivotStoreCategoryHint", view: "store-category" },
-    ],
-  },
-  {
-    id: "sales-discount",
-    labelKey: "salesManagementTabDiscount",
-    fallbackLabel: "할인현황",
-    topics: [
-      {
-        id: "report-promo-bundle",
-        labelKey: "salesTopicPromoBundleReport",
-        hintKey: "salesTopicPromoBundleReportHint",
-        view: "promo-bundle",
-      },
-      {
-        id: "report-payment-discount",
-        labelKey: "salesTopicPaymentDiscountReport",
-        hintKey: "salesTopicPaymentDiscountReportHint",
-        view: "payment-discount",
-      },
-      {
-        id: "report-discount-all",
-        labelKey: "salesTopicCombinedDiscountReport",
-        hintKey: "salesTopicCombinedDiscountReportHint",
-        view: "discount-all",
-      },
-    ],
-  },
-  {
-    id: "sales-forecast-report",
-    labelKey: "salesManagementTabForecast",
-    fallbackLabel: "예측·리포트",
-    topics: [
-      { id: "report-month-year", labelKey: "salesTopicCompareMonthYear", hintKey: "salesTopicCompareMonthYearHint", view: "yoy-compare" },
-      { id: "report-month-mom", labelKey: "salesTopicCompareMonthMom", hintKey: "salesTopicCompareMonthMomHint", view: "mom-compare" },
-      { id: "report-forecast-monthly", labelKey: "salesTopicForecastMonthly", hintKey: "salesTopicForecastMonthlyHint", view: "forecast" },
-      { id: "report-overview", labelKey: "salesTopicOverviewReport", hintKey: "salesTopicOverviewReportHint", view: "channel" },
-    ],
-  },
-]
-
-type SalesFilterPreset = {
-  id: string
-  name: string
-  stores: string[]
-  periodGroup: PeriodGroupValue
-  orderTypesKey: string
-  activeSubMenuId: string
-  selectedTopicId: string
-  menuSearch: string
-  menuSearchAnd: boolean
-  compareStores: boolean
-}
-
-const SALES_FILTER_PRESET_STORAGE_KEY = "cm-sales-filter-presets-v1"
+const COLORS = [...SALES_CHART_COLORS]
 
 export interface SalesManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
   offlineAware?: boolean
-}
-
-function resolveDefaultSalesLanding(pathname: string): {
-  menuId: string
-  topicId: string
-  periodGroup: PeriodGroupValue
-} {
-  const p = String(pathname || "")
-  if (p.startsWith("/admin/")) {
-    return {
-      menuId: "sales-compare",
-      topicId: "compare-store-summary",
-      periodGroup: "month",
-    }
-  }
-  return {
-    menuId: "sales-analysis",
-    topicId: "analysis-period",
-    periodGroup: "day",
-  }
 }
 
 export function SalesManagementTab(props: SalesManagementTabProps = {}) {
@@ -1096,7 +691,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const insightShowMenu = selectedView === "menu"
   const insightShowChannel = selectedView === "channel"
   const needsPeriodGroup =
-    selectedView != null && PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView)
+    selectedView != null &&
+    PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView) &&
+    selectedView !== "overview"
 
   const storesForCompareChart = React.useMemo(
     () => selectedStoresParam ?? [],
@@ -1365,6 +962,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "yoy-compare" ||
       selectedView === "mom-compare" ||
       selectedView === "forecast")
+
+  const showInsightPanel =
+    !isHoursPanel &&
+    showSalesResults &&
+    (insightShowTotals ||
+      insightShowMenu ||
+      insightShowChannel ||
+      cancelReasonSummary.lineRows.length > 0 ||
+      cancelReasonSummary.orderRows.length > 0)
 
   const totalsSummary = React.useMemo(() => {
     const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
@@ -2349,26 +1955,31 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const promoBundleFetcher = offlineAware ? getPosSalesByPromoWithCache : getPosSalesByPromo
     const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
     const needDelivery = selectedView === "delivery"
-    const needChannel = selectedView === "channel"
+    const needChannel = selectedView === "channel" || selectedView === "overview"
     const needMenu = selectedView === "menu"
     const needDiscountAnalytics =
       selectedView === "promo-bundle" ||
       selectedView === "payment-discount" ||
       selectedView === "discount-all"
-    const needPayment = selectedView === "payment"
+    const needPayment = selectedView === "payment" || selectedView === "overview"
     const needStore =
       selectedView === "store" ||
       selectedView === "store-category" ||
       selectedView === "store-period" ||
+      selectedView === "overview" ||
       (selectedView === "period" && (selectedStoresParam?.length ?? 0) > 0)
     const needYoyCompare = selectedView === "yoy-compare"
     const needMomCompare = selectedView === "mom-compare"
     const needForecast = selectedView === "forecast"
     const needPeriodChart =
-      selectedView != null && PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView)
+      selectedView != null &&
+      (PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView) || selectedView === "overview")
+    const effectivePeriodGroup: PeriodGroupValue =
+      selectedView === "overview" ? "day" : periodGroup
     const needFullSummary =
       selectedView === "period" ||
       selectedView === "store-period" ||
+      selectedView === "overview" ||
       needYoyCompare ||
       needMomCompare ||
       needForecast
@@ -2412,7 +2023,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         periodRun({
           startStr,
           endStr,
-          groupBy: periodGroup,
+          groupBy: effectivePeriodGroup,
           stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
           splitByStore: needSplit,
@@ -2678,7 +2289,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .catch(() => gPromoBundle(EMPTY_POS_SALES_BY_PROMO))
       )
     }
-    if (needFullSummary && (selectedView === "period" || selectedView === "store-period")) {
+    if (needFullSummary && (selectedView === "period" || selectedView === "store-period" || selectedView === "overview")) {
       const storeSummaryFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
       const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
         rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
@@ -2873,124 +2484,52 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {canMultiStorePicker ? (
-                <div className="relative" ref={storePickerRef}>
-                  <Button
-                    id={storePickerBtnId}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="min-w-[220px] justify-between"
-                    aria-expanded={storePickerOpen}
-                    aria-controls={storePickerListId}
-                    aria-haspopup="dialog"
-                    onClick={() => setStorePickerOpen((prev) => !prev)}
-                  >
-                    <span className="truncate text-left">
-                      {selectedStores.length === 0
-                        ? storePickerPlaceholder
-                        : selectedStores.length === posBizDayStoreChoices.length &&
-                            posBizDayStoreChoices.length > 1
-                          ? canFranchiseeMultiStore
-                            ? tr("salesSelectMyFranchiseStoresAll", "내 매장 전체")
-                            : tr("salesSelectStoreAll", "전체 매장")
-                          : selectedStores.length === 1
-                            ? posStoreDisplayName(selectedStores[0])
-                            : `${selectedStores.length}${tr("selected", "개 선택")}`}
-                    </span>
-                    <span className="ml-2 text-xs text-muted-foreground">{storePickerOpen ? "▲" : "▼"}</span>
-                  </Button>
-                  {storePickerOpen ? (
-                    <div
-                      id={storePickerListId}
-                      role="dialog"
-                      aria-modal="false"
-                      aria-labelledby={storePickerBtnId}
-                      className="absolute z-20 mt-2 w-[320px] rounded-md border bg-background p-2 shadow-lg"
-                    >
-                      <Input
-                        value={storeSearch}
-                        onChange={(e) => setStoreSearch(e.target.value)}
-                        placeholder={tr("salesStoreSearch", "매장 검색")}
-                        className="mb-2 h-8"
-                      />
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            skipDefaultStoreAutoSelectRef.current = false
-                            const all = normalizeStoreCodes(
-                              canSearchAll ? [...posOptions] : [...posBizDayStoreChoices]
-                            )
-                            userSelectedRef.current.storesKey = all.join(",")
-                            setSelectedStores(all)
-                          }}
-                        >
-                          {tr("salesStoreSelectAll", "전체 선택")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            skipDefaultStoreAutoSelectRef.current = true
-                            userSelectedRef.current.storesKey = ""
-                            setSelectedStores([])
-                          }}
-                        >
-                          {tr("salesStoreDeselectAll", "전체 해제")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setStorePickerOpen(false)}
-                        >
-                          {tr("close", "닫기")}
-                        </Button>
-                      </div>
-                      <div className="max-h-56 overflow-auto rounded border p-1">
-                        {filteredStoreOptions.map((p) => {
-                          const active = selectedStores.includes(p)
-                          return (
-                            <label
-                              key={p}
-                              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/40"
-                            >
-                              <Checkbox
-                                checked={active}
-                                onCheckedChange={() => {
-                                  skipDefaultStoreAutoSelectRef.current = false
-                                  setSelectedStores((prev) => {
-                                    const exists = prev.includes(p)
-                                    const next = exists ? prev.filter((v) => v !== p) : [...prev, p]
-                                    const normalized = normalizeStoreCodes(next)
-                                    userSelectedRef.current.storesKey = normalized.join(",")
-                                    return normalized
-                                  })
-                                }}
-                              />
-                              <span className="text-sm">{posStoreDisplayName(p)}</span>
-                            </label>
-                          )
-                        })}
-                        {filteredStoreOptions.length === 0 && (
-                          <p className="px-2 py-3 text-sm text-muted-foreground">
-                            {tr("salesNoStoreResult", "검색 결과 없음")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <Button type="button" size="sm" variant="default" disabled>
-                  {posStoreDisplayName(selectedStores[0] ?? auth?.store ?? "") ||
-                    tr("salesSelectStoreAll", "매장(전체)")}
-                </Button>
-              )}
+              <SalesStorePicker
+                tr={tr}
+                canSearchAll={canSearchAll}
+                canFranchiseeMultiStore={canFranchiseeMultiStore}
+                storePickerBtnId={storePickerBtnId}
+                storePickerListId={storePickerListId}
+                storePickerOpen={storePickerOpen}
+                setStorePickerOpen={setStorePickerOpen}
+                storePickerRef={storePickerRef}
+                storePickerPlaceholder={storePickerPlaceholder}
+                selectedStores={selectedStores}
+                setSelectedStores={(action) => {
+                  skipDefaultStoreAutoSelectRef.current = false
+                  setSelectedStores((prev) => {
+                    const next = typeof action === "function" ? action(prev) : action
+                    const normalized = normalizeStoreCodes(next)
+                    userSelectedRef.current.storesKey = normalized.join(",")
+                    return normalized
+                  })
+                }}
+                posBizDayStoreChoices={posBizDayStoreChoices}
+                posOptions={posOptions}
+                posStoreDisplayName={posStoreDisplayName}
+                filteredStoreOptions={filteredStoreOptions}
+                storeSearch={storeSearch}
+                setStoreSearch={setStoreSearch}
+                onSelectAll={() => {
+                  skipDefaultStoreAutoSelectRef.current = false
+                  const all = normalizeStoreCodes(
+                    canSearchAll ? [...posOptions] : [...posBizDayStoreChoices]
+                  )
+                  userSelectedRef.current.storesKey = all.join(",")
+                  setSelectedStores(all)
+                }}
+                onClearAll={() => {
+                  skipDefaultStoreAutoSelectRef.current = true
+                  userSelectedRef.current.storesKey = ""
+                  setSelectedStores([])
+                }}
+                singleStoreLabel={
+                  canMultiStorePicker
+                    ? undefined
+                    : posStoreDisplayName(selectedStores[0] ?? auth?.store ?? "") ||
+                      tr("salesSelectStoreAll", "매장(전체)")
+                }
+              />
             </div>
             <Button
               size="sm"
@@ -3200,6 +2739,18 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               ))}
             </div>
           </div>
+
+          {selectedTopic.hintKey ? (
+            <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+              <span className="font-medium text-foreground">
+                {tr("salesTopicHintLabel", "이 리포트")}:{" "}
+              </span>
+              {tr(
+                selectedTopic.hintKey,
+                I18N_KO[selectedTopic.hintKey] ?? selectedTopic.hintKey
+              )}
+            </p>
+          ) : null}
 
             <div className="mb-3 space-y-4 rounded-lg border bg-muted/20 p-3 md:hidden">
               <div className="space-y-2">
@@ -3452,173 +3003,24 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </p>
           ) : null}
 
-          {summaryRowShowFull ? (
-            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
-                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCardsCurrentDisplay)}</p>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevRange", "직전 동일기간")}</p>
-                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCards.prevRange)}</p>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevWeek", "전주 동기간")}</p>
-                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(summaryCards.prevWeek)}</p>
-              </div>
-            </div>
-          ) : summaryRowShowCurrentOnly ? (
-            <div className="mb-3 max-w-sm">
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
-                <p className="mt-1 text-base font-semibold font-erp-numeric">{formatSalesAmount(activeSummaryCurrent)}</p>
-              </div>
-            </div>
-          ) : null}
-
-          {!isHoursPanel &&
-          showSalesResults &&
-          (insightShowTotals ||
-            insightShowMenu ||
-            insightShowChannel ||
-            cancelReasonSummary.lineRows.length > 0 ||
-            cancelReasonSummary.orderRows.length > 0) ? (
-            <div className="mb-3 max-w-2xl">
-              {insightShowTotals ? (
-                <div className="rounded-lg border bg-card p-3">
-                  <p className="text-xs text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</p>
-                  <p className="mt-1 text-sm font-semibold font-erp-numeric">{formatSalesAmount(activeTotalsSummary.gross)}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
-                  <p className="mt-1 text-sm font-semibold font-erp-numeric">-{formatSalesAmount(activeTotalsSummary.discount)}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{tr("salesServiceAmount", "서비스처리 금액")}</p>
-                  <p className="mt-1 text-sm font-semibold font-erp-numeric">-{formatSalesAmount(activeTotalsSummary.service)}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
-                  <p className="mt-1 text-base font-bold font-erp-numeric">{formatSalesAmount(activeTotalsSummary.total)}</p>
-                </div>
-              ) : null}
-              {insightShowMenu ? (
-                <div className="rounded-lg border bg-card p-3">
-                  <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopMenu", "TOP 메뉴")}</p>
-                  {insightTopMenus.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
-                  ) : (
-                    <ul className="space-y-1 text-sm">
-                      {insightTopMenus.map((row) => (
-                        <li key={`top-${row.name}`} className="flex items-center justify-between gap-2">
-                          <span className="truncate">{row.name}</span>
-                          <span className="shrink-0 font-erp-numeric font-medium">{formatSalesAmount(row.sales)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <p className="mb-2 mt-3 text-xs text-muted-foreground">{tr("salesInsightBottomMenu", "LOW 메뉴")}</p>
-                  {insightBottomMenus.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
-                  ) : (
-                    <ul className="space-y-1 text-sm">
-                      {insightBottomMenus.map((row) => (
-                        <li key={`low-${row.name}`} className="flex items-center justify-between gap-2">
-                          <span className="truncate">{row.name}</span>
-                          <span className="shrink-0 font-erp-numeric font-medium">{formatSalesAmount(row.sales)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
-              {insightShowChannel ? (
-                <div className="rounded-lg border bg-card p-3">
-                  <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopChannel", "TOP 채널")}</p>
-                  {insightTopChannels.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
-                  ) : (
-                    <ul className="space-y-1 text-sm">
-                      {insightTopChannels.map((row) => (
-                        <li key={`ch-${row.channelKey}`} className="flex items-center justify-between gap-2">
-                          <span className="truncate">{row.axisLabel}</span>
-                          <span className="shrink-0 font-erp-numeric font-medium">{formatSalesAmount(row.sales)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
-              {cancelReasonSummary.lineRows.length > 0 ? (
-                <div className="rounded-lg border bg-card p-3">
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    {tr("salesCancelReasonTopLine", "품목 취소 사유 TOP")}
-                  </p>
-                  <ul className="space-y-1 text-sm">
-                    {cancelReasonSummary.lineRows.slice(0, 5).map((row) => (
-                      <li key={`line-${row.reason}`}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/50"
-                          onClick={() => handleCancelReasonDrilldown(row.reason, "line")}
-                          title={tr("salesCancelReasonDrilldownHint", "클릭 시 해당 사유 주문으로 이동")}
-                        >
-                          <span className="truncate">
-                            {displayPosCancelReasonKey(row.reason, tr("posCancelReasonNotSet", "사유 미입력"))} (
-                            {row.count}
-                            {tr("posCount", "건")})
-                          </span>
-                          <span className="shrink-0 font-erp-numeric font-medium">
-                            {formatSalesAmount(row.amount)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {tr("salesCancelReasonLineTotal", "품목 취소 합계")} {cancelReasonSummary.lineTotalCount}
-                    {tr("posCount", "건")} / {formatSalesAmount(cancelReasonSummary.lineTotalAmount)}
-                  </p>
-                  {cancelReasonSummary.truncated ? (
-                    <p className="mt-1 text-[11px] text-amber-700">
-                      {tr("salesDataTruncatedWarning", "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요.")}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              {cancelReasonSummary.orderRows.length > 0 ? (
-                <div className="rounded-lg border bg-card p-3">
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    {tr("salesCancelReasonTopOrder", "주문 전체 취소 사유 TOP")}
-                  </p>
-                  <ul className="space-y-1 text-sm">
-                    {cancelReasonSummary.orderRows.slice(0, 5).map((row) => (
-                      <li key={`order-${row.reason}`}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/50"
-                          onClick={() => handleCancelReasonDrilldown(row.reason, "order")}
-                          title={tr("salesCancelReasonDrilldownHint", "클릭 시 해당 사유 주문으로 이동")}
-                        >
-                          <span className="truncate">
-                            {displayPosCancelReasonKey(row.reason, tr("posCancelReasonNotSet", "사유 미입력"))} (
-                            {row.count}
-                            {tr("posCount", "건")})
-                          </span>
-                          <span className="shrink-0 font-erp-numeric font-medium">
-                            {formatSalesAmount(row.amount)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {tr("salesCancelReasonOrderTotal", "주문 전체 취소 합계")} {cancelReasonSummary.orderTotalCount}
-                    {tr("posCount", "건")} / {formatSalesAmount(cancelReasonSummary.orderTotalAmount)}
-                  </p>
-                  {cancelReasonSummary.truncated ? (
-                    <p className="mt-1 text-[11px] text-amber-700">
-                      {tr("salesDataTruncatedWarning", "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요.")}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <SalesManagementSummaryInsights
+            tr={tr}
+            summaryRowShowFull={summaryRowShowFull}
+            summaryRowShowCurrentOnly={summaryRowShowCurrentOnly}
+            summaryCardsCurrentDisplay={summaryCardsCurrentDisplay}
+            summaryCards={summaryCards}
+            activeSummaryCurrent={activeSummaryCurrent}
+            insightShowTotals={insightShowTotals}
+            insightShowMenu={insightShowMenu}
+            insightShowChannel={insightShowChannel}
+            activeTotalsSummary={activeTotalsSummary}
+            insightTopMenus={insightTopMenus}
+            insightBottomMenus={insightBottomMenus}
+            insightTopChannels={insightTopChannels}
+            cancelReasonSummary={cancelReasonSummary}
+            showInsightPanel={showInsightPanel}
+            onCancelReasonDrilldown={handleCancelReasonDrilldown}
+          />
 
           <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
             {isHoursPanel ? (
@@ -4105,6 +3507,34 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               )
             )}
 
+            {selectedView === "overview" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {salesAnalyticsPlaceholder}
+                </p>
+              ) : (
+                <SalesOverviewPanel
+                  startStr={startStr}
+                  endStr={endStr}
+                  storesQuery={selectedStoresKey || undefined}
+                  currentTotal={summaryCards.current}
+                  prevRangeTotal={summaryCards.prevRange}
+                  prevWeekTotal={summaryCards.prevWeek}
+                  channelRows={channelChartRows}
+                  storeRows={storeChartRows}
+                  paymentBreakdown={paymentBreakdownData}
+                  periodDayRows={periodChartRows.map((r) => ({
+                    axisLabel: r.axisLabel,
+                    sales: Number(r.total ?? r.sales ?? 0) || 0,
+                  }))}
+                  posStoreDisplayName={posStoreDisplayName}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                  loading={loading}
+                />
+              )
+            )}
+
             {selectedView === "channel" && (
               salesAnalyticsPlaceholder ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -4178,6 +3608,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       />
                       <span>{tr("salesMenuSearchAndMode", "검색어 모두 포함 (AND)")}</span>
                     </label>
+                    <Button asChild size="sm" variant="outline">
+                      <Link
+                        href={`/admin/total-sales?start=${encodeURIComponent(startStr)}&end=${encodeURIComponent(endStr)}${selectedStoresKey ? `&stores=${encodeURIComponent(selectedStoresKey)}` : ""}`}
+                      >
+                        {tr("salesOverviewLinkTotalSales", "메뉴별 상세 (Total Sales)")}
+                      </Link>
+                    </Button>
                   </div>
                   <table className="w-full text-sm">
                     <thead>

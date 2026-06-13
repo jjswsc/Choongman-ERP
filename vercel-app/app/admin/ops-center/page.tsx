@@ -9,9 +9,10 @@ import { useT, tOr } from "@/lib/i18n"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useStoreList } from "@/lib/api-client"
 import { useStoreView, filterOperationalStorePickerOptions } from "@/lib/store-view-context"
-import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
-import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
+import { SalesSubnav } from "@/components/erp/sales-subnav"
+import { SalesPageHeader } from "@/components/erp/sales-page-header"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -22,8 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-
-const OPS_CENTER_HELP_SUM = hrefToHelpSummaryKey("/admin/ops-center")
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 
 type OpsKpi = {
   orderSuccess: number
@@ -40,6 +40,20 @@ type OpsAlert = {
   message: string
 }
 
+type HqStoreScore = {
+  storeCode: string
+  printFailed: number
+  printQueued: number
+  closePending: number
+  score: number
+}
+
+function alertActionHref(code: string): string | null {
+  if (code === "PRINT_FAILED" || code === "PRINT_BACKLOG") return "/admin/pos-printers"
+  if (code === "CLOSE_PENDING") return "/admin/pos-settlement"
+  return null
+}
+
 export default function AdminOpsCenterPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -52,7 +66,6 @@ export default function AdminOpsCenterPage() {
 
   const branchStores = React.useMemo(() => filterOperationalStorePickerOptions(stores), [stores])
 
-  /** 운영 KPI·경보는 매장 단일만 — 전역「전체 매장」과 분리해 이 화면에서만 지점 선택 */
   const [opsStoreCode, setOpsStoreCode] = React.useState("")
 
   React.useEffect(() => {
@@ -83,6 +96,8 @@ export default function AdminOpsCenterPage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [kpi, setKpi] = React.useState<OpsKpi | null>(null)
   const [alerts, setAlerts] = React.useState<OpsAlert[]>([])
+  const [hqStores, setHqStores] = React.useState<HqStoreScore[]>([])
+  const [hqLoading, setHqLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -145,40 +160,76 @@ export default function AdminOpsCenterPage() {
     }
   }, [date, apiStoreCode, isOfficeSelector, storesLoading, t])
 
+  const loadHqSummary = React.useCallback(async () => {
+    if (!isOfficeSelector) {
+      setHqStores([])
+      return
+    }
+    setHqLoading(true)
+    try {
+      const qs = new URLSearchParams({ date: date.slice(0, 10), limit: "8" })
+      const res = await fetch(`/api/ops/hq-summary?${qs}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean
+        stores?: HqStoreScore[]
+      }
+      setHqStores(res.ok && json.success && Array.isArray(json.stores) ? json.stores : [])
+    } catch {
+      setHqStores([])
+    } finally {
+      setHqLoading(false)
+    }
+  }, [date, isOfficeSelector])
+
   React.useEffect(() => {
     void load()
-  }, [load])
+    void loadHqSummary()
+  }, [load, loadHqSummary])
 
-  const kpiTiles: [string, number][] = [
-    [t("adminOpsCenterKpiOrderSuccess"), kpi?.orderSuccess ?? 0],
-    [t("adminOpsCenterKpiOrderFailed"), kpi?.orderFailed ?? 0],
-    [t("adminOpsCenterKpiPaymentFailed"), kpi?.paymentFailed ?? 0],
-    [t("adminOpsCenterKpiPrintFailed"), kpi?.printFailed ?? 0],
-    [t("adminOpsCenterKpiPrintQueued"), kpi?.printQueued ?? 0],
-    [t("adminOpsCenterKpiClosePending"), kpi?.closePending ?? 0],
+  const kpiTiles: { key: keyof OpsKpi; label: string; tone?: "danger" | "warning" }[] = [
+    { key: "orderSuccess", label: t("adminOpsCenterKpiOrderSuccess") },
+    { key: "orderFailed", label: t("adminOpsCenterKpiOrderFailed"), tone: "warning" },
+    { key: "paymentFailed", label: t("adminOpsCenterKpiPaymentFailed"), tone: "danger" },
+    { key: "printFailed", label: t("adminOpsCenterKpiPrintFailed"), tone: "danger" },
+    { key: "printQueued", label: t("adminOpsCenterKpiPrintQueued"), tone: "warning" },
+    { key: "closePending", label: t("adminOpsCenterKpiClosePending"), tone: "warning" },
   ]
+
+  const alertHint = (code: string) => {
+    if (code === "PRINT_FAILED") return t("adminOpsCenterAlertPrintFailed")
+    if (code === "PRINT_BACKLOG") return t("adminOpsCenterAlertPrintBacklog")
+    if (code === "CLOSE_PENDING") return t("adminOpsCenterAlertClosePending")
+    return ""
+  }
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-4">
-          <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                <LayoutDashboard className="h-4 w-4 text-primary" />
-              </div>
-              <h1 className="text-xl font-bold tracking-tight">
-                {tOr(t, "adminOpsCenterTitle", t("adminOpsCenter"))}
-              </h1>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("adminOpsCenterSub")}</p>
-            <HelpSumHowBlocks helpSumKey={OPS_CENTER_HELP_SUM} className="mt-2 max-w-xl" compact />
-          </div>
-          <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => void load()} disabled={loading}>
-            <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {t("adminOpsCenterReload")}
-          </Button>
-        </div>
+      <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+        <SalesSubnav />
+        <SalesPageHeader
+          href="/admin/ops-center"
+          title={tOr(t, "adminOpsCenterTitle", t("adminOpsCenter"))}
+          subtitle={t("adminOpsCenterSub")}
+          icon={LayoutDashboard}
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                void load()
+                void loadHqSummary()
+              }}
+              disabled={loading}
+            >
+              <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              {t("adminOpsCenterReload")}
+            </Button>
+          }
+        />
 
         <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-card/40 p-4">
           {isOfficeSelector ? (
@@ -237,48 +288,140 @@ export default function AdminOpsCenterPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {kpiTiles.map(([label, value]) => (
-            <div key={label} className="rounded-md border bg-card p-3">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{Number(value).toLocaleString()}</p>
-            </div>
-          ))}
+        {isOfficeSelector ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{t("adminOpsCenterHqSummaryTitle")}</CardTitle>
+              <p className="text-xs text-muted-foreground">{t("adminOpsCenterHqSummarySub")}</p>
+            </CardHeader>
+            <CardContent>
+              {hqLoading ? (
+                <p className="text-sm text-muted-foreground">{t("loading")}</p>
+              ) : hqStores.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("adminOpsCenterNoAlerts")}</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {hqStores.map((s) => (
+                    <li
+                      key={s.storeCode}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                      <Link
+                        href={`/admin/ops-center?store=${encodeURIComponent(s.storeCode)}`}
+                        className="font-medium hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setOpsStoreCode(s.storeCode)
+                          setViewStore(s.storeCode)
+                        }}
+                      >
+                        {formatStoreLabel(s.storeCode) || s.storeCode}
+                      </Link>
+                      <span className={`text-xs text-muted-foreground ${ADMIN_NUMERIC_CN}`}>
+                        {t("adminOpsCenterKpiPrintFailed")} {s.printFailed} ·{" "}
+                        {t("adminOpsCenterKpiPrintQueued")} {s.printQueued} ·{" "}
+                        {t("adminOpsCenterKpiClosePending")} {s.closePending}
+                      </span>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href="/admin/live-store-sales">{t("adminOpsCenterLinkLiveSales")}</Link>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {kpiTiles.map(({ key, label, tone }) => {
+            const value = kpi?.[key] ?? 0
+            const highlight =
+              tone === "danger" && value > 0
+                ? "border-destructive/40 bg-destructive/5"
+                : tone === "warning" && value > 0
+                  ? "border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/20"
+                  : ""
+            return (
+              <Card key={key} className={highlight}>
+                <CardHeader className="pb-1 pt-3">
+                  <CardTitle className="text-[11px] font-medium text-muted-foreground leading-snug">
+                    {label}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className={`pb-3 text-2xl font-semibold ${ADMIN_NUMERIC_CN}`}>
+                  {Number(value).toLocaleString()}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
 
-        <div className="rounded-md border bg-card p-4">
-          <h2 className="mb-2 text-sm font-semibold">{t("adminOpsCenterAlertsTitle")}</h2>
-          {alerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("adminOpsCenterNoAlerts")}</p>
-          ) : (
-            <ul className="space-y-2">
-              {alerts.map((a) => (
-                <li
-                  key={`${a.code}-${a.message}`}
-                  className={`rounded px-3 py-2 text-sm ${
-                    a.severity === "critical"
-                      ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-200"
-                      : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
-                  }`}
-                >
-                  [{a.code}] {a.message}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">{t("adminOpsCenterAlertsTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {alerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("adminOpsCenterNoAlerts")}</p>
+            ) : (
+              <ul className="space-y-2">
+                {alerts.map((a) => {
+                  const href = alertActionHref(a.code)
+                  const hint = alertHint(a.code)
+                  return (
+                    <li
+                      key={`${a.code}-${a.message}`}
+                      className={`rounded-lg px-3 py-2 text-sm ${
+                        a.severity === "critical"
+                          ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-200"
+                          : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">
+                            [{a.code}] {a.message}
+                          </p>
+                          {hint ? <p className="mt-1 text-xs opacity-90">{hint}</p> : null}
+                        </div>
+                        {href ? (
+                          <Button asChild size="sm" variant="secondary">
+                            <Link href={href}>
+                              {a.code.startsWith("PRINT")
+                                ? t("adminOpsCenterLinkPosPrinters")
+                                : t("adminOpsCenterLinkPosSettlement")}
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-        <div className="rounded-md border bg-muted/30 p-4">
-          <h2 className="mb-3 text-sm font-semibold">{t("adminOpsCenterQuickLinksTitle")}</h2>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Card className="bg-muted/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">{t("adminOpsCenterQuickLinksTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button asChild variant="secondary" size="sm">
               <Link href="/admin/live-store-sales">{t("adminOpsCenterLinkLiveSales")}</Link>
             </Button>
             <Button asChild variant="secondary" size="sm">
               <Link href="/admin/pos-settlement">{t("adminOpsCenterLinkSettlement")}</Link>
             </Button>
-          </div>
-        </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/pos-printers">{t("adminOpsCenterLinkPosPrinters")}</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/sales-management">{t("adminSalesManagement")}</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

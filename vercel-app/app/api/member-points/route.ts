@@ -10,7 +10,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const memberId = Number(searchParams.get('memberId') || 0)
     const limit = Number(searchParams.get('limit') || 200)
-    const rows = await listMemberPoints({ memberId, limit })
+    const offset = Number(searchParams.get('offset') || 0)
+    const startStr = searchParams.get('startStr') || undefined
+    const endStr = searchParams.get('endStr') || undefined
+    const rows = await listMemberPoints({ memberId, limit, offset, startStr, endStr })
     return NextResponse.json(rows, { headers })
   } catch (e) {
     console.error('GET /api/member-points:', e)

@@ -255,3 +255,15 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
   }
   return filteredBySignature
 }
+
+/**
+ * 추가 주문 제출 시 주방 줄 — delta가 비면 전체 카트를 찍지 않는다.
+ * (리패치 레이스로 filter가 0줄이어도 incoming 전체 fallback 시 기존+신규가 함께 출력됨)
+ */
+export function resolveDineInKitchenLinesForAddSubmit<T extends KitchenComparableLine>(
+  incomingLines: T[],
+  existingOrderItems: Array<{ id?: string; quantity?: number; qty?: number }> | null | undefined,
+  opts?: { formatNote?: DineInNoteNormalizer }
+): T[] {
+  return filterKitchenCartLinesForDineInAdd(incomingLines, existingOrderItems, opts)
+}

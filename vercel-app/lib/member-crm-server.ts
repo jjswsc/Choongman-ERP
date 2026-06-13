@@ -4,7 +4,7 @@ import {
   getBangkokStartOfDayUtcIso,
   getBangkokTodayDateString,
 } from '@/lib/bangkok-time'
-import { adjustMemberPoints } from '@/lib/members-server'
+import { adjustMemberPoints, getMemberVisits } from '@/lib/members-server'
 import {
   supabaseInsert,
   supabaseRpc,
@@ -283,5 +283,106 @@ export async function approveReferral(params: {
     referred_by_member_id: referrerMemberId,
     updated_at: getBangkokDateTimeString(),
   })
+}
+
+export async function getSegmentCounts(): Promise<Record<CrmSegmentType, number>> {
+  const segments: CrmSegmentType[] = ['recent30', 'dormant90', 'new30', 'vip', 'atRisk']
+  const out = {} as Record<CrmSegmentType, number>
+  await Promise.all(
+    segments.map(async (segment) => {
+      const rows = await listSegmentMembers({ segment, limit: 5000 })
+      out[segment] = rows.length
+    })
+  )
+  return out
+}
+
+export type MemberVisitAnalysisRow = {
+  memberId: number
+  memberNo: string
+  memberName: string
+  visitCount: number
+  avgVisitCycleDays: number | null
+  avgTicketAmount: number
+  totalContribution: number
+  lastVisitedAt: string
+}
+
+export async function getMemberVisitAnalysis(params: {
+  startStr: string
+  endStr: string
+  storeCode?: string
+  memberId?: number
+  q?: string
+  limit?: number
+}): Promise<MemberVisitAnalysisRow[]> {
+  const limit = Math.max(1, Math.min(Number(params.limit || 500), 2000))
+  try {
+    const rows = (await supabaseRpc<Array<{
+      member_id?: number
+      member_no?: string
+      member_name?: string
+      visit_count?: number
+      avg_visit_cycle_days?: number | null
+      avg_ticket_amount?: number
+      total_contribution?: number
+      last_visited_at?: string
+    }>>('get_member_visit_analysis', {
+      p_start_ymd: toText(params.startStr).slice(0, 10),
+      p_end_ymd: toText(params.endStr).slice(0, 10),
+      p_store_code: params.storeCode && params.storeCode !== 'All' ? params.storeCode : null,
+      p_member_id: Number(params.memberId || 0) || null,
+      p_q: toText(params.q) || null,
+      p_limit: limit,
+    })) || []
+    return rows.map((r) => ({
+      memberId: Number(r.member_id || 0),
+      memberNo: toText(r.member_no),
+      memberName: toText(r.member_name),
+      visitCount: Number(r.visit_count || 0),
+      avgVisitCycleDays: r.avg_visit_cycle_days == null ? null : Number(r.avg_visit_cycle_days),
+      avgTicketAmount: Number(r.avg_ticket_amount || 0),
+      totalContribution: Number(r.total_contribution || 0),
+      lastVisitedAt: toText(r.last_visited_at),
+    }))
+  } catch {
+    const visitRows = await getMemberVisits({
+      startStr: params.startStr,
+      endStr: params.endStr,
+      storeCode: params.storeCode,
+      memberId: params.memberId,
+      limit: 500,
+    })
+    const byMember = new Map<number, typeof visitRows>()
+    for (const row of visitRows) {
+      const id = Number(row.memberId || 0)
+      if (!id) continue
+      const list = byMember.get(id) || []
+      list.push(row)
+      byMember.set(id, list)
+    }
+    const out: MemberVisitAnalysisRow[] = []
+    for (const [memberId, list] of byMember.entries()) {
+      const visitCount = list.length
+      const totalContribution = list.reduce((s, x) => s + Number(x.total || 0), 0)
+      const avgTicketAmount = visitCount > 0 ? totalContribution / visitCount : 0
+      const sorted = [...list].sort((a, b) => String(b.visitedAt).localeCompare(String(a.visitedAt)))
+      out.push({
+        memberId,
+        memberNo: String(list[0]?.memberNo || ''),
+        memberName: '',
+        visitCount,
+        avgVisitCycleDays: null,
+        avgTicketAmount,
+        totalContribution,
+        lastVisitedAt: sorted[0]?.visitedAt || '',
+      })
+    }
+    const q = toText(params.q).toLowerCase()
+    const filtered = q
+      ? out.filter((r) => r.memberNo.toLowerCase().includes(q) || String(r.memberId).includes(q))
+      : out
+    return filtered.sort((a, b) => b.totalContribution - a.totalContribution).slice(0, limit)
+  }
 }
 

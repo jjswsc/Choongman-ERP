@@ -2,15 +2,18 @@
 
 import * as React from "react"
 import { Suspense } from "react"
+import Link from "next/link"
 import { SalesManagementTab } from "@/components/tabs/sales-management-tab"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { BarChart3 } from "lucide-react"
+import { SalesSubnav } from "@/components/erp/sales-subnav"
+import { SalesPageHeader } from "@/components/erp/sales-page-header"
 
 const SalesTab = SalesManagementTab as React.ComponentType<{ offlineAware?: boolean }>
 
-/** useSearchParams — Next/React 19에서 Suspense 밖이면 마운트 전 상태 갱신 경고가 날 수 있음 */
 function SalesTabFallback() {
   return (
     <div className="space-y-4" aria-hidden>
@@ -27,15 +30,19 @@ export default function SalesManagementPage() {
   const t = useT(useLang().lang)
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <BarChart3 className="h-4 w-4 text-primary" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">
-            {t("salesManagementTitle") || "매출 관리"}
-          </h1>
-        </div>
+      <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+        <SalesSubnav />
+        <SalesPageHeader
+          href="/admin/sales-management"
+          title={t("salesManagementTitle") || "매출 관리"}
+          subtitle={t("salesManagementPageSub")}
+          icon={BarChart3}
+          actions={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/total-sales">{t("adminTotalSales")}</Link>
+            </Button>
+          }
+        />
         <Suspense fallback={<SalesTabFallback />}>
           <SalesTab offlineAware />
         </Suspense>

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { MemberTierBenefitsPreview } from "@/components/admin/member-tier-benefits-preview"
+import { CrmTierLadder } from "@/components/crm/crm-tier-ladder"
 import { getMemberTierPolicy, getMemberTiers, recalculateMemberTier, saveMemberTier, saveMemberTierPolicy } from "@/lib/api-client"
 import type { MemberPortalLang } from "@/lib/member-tier-public"
 import {
@@ -127,6 +128,7 @@ export function MemberPointsPolicyTab() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{t("memberPointsEarnHint")}</p>
       <p className="text-sm text-muted-foreground">{t("memberTierLineHint")}</p>
+      <CrmTierLadder rows={rows} upgradeBasis={upgradeBasis} />
 
       <Card>
         <CardHeader>

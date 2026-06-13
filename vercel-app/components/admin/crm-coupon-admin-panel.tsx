@@ -9,6 +9,7 @@ import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmCouponDefinitionPanel } from "@/components/admin/crm-coupon-definition-panel"
 import { CrmCouponIssuePanel } from "@/components/admin/crm-coupon-issue-panel"
 import { CrmCouponHistoryPanel } from "@/components/admin/crm-coupon-history-panel"
+import { CrmCouponKpiStrip } from "@/components/crm/crm-coupon-kpi-strip"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { parseCrmCouponAdminTab, type CrmCouponAdminTab } from "@/lib/crm-coupon-admin"
@@ -61,7 +62,8 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
         </div>
 
         <Tabs value={tab} onValueChange={handleTab}>
-          <TabsList className="grid w-full max-w-xl grid-cols-3">
+          <CrmCouponKpiStrip />
+          <TabsList className="mt-4 grid w-full max-w-xl grid-cols-3">
             <TabsTrigger value="definitions" className="gap-1.5">
               <Ticket className="h-4 w-4" />
               {t("crmCouponTabDefinitions") || "쿠폰 정의"}

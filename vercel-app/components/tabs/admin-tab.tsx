@@ -22,7 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CheckCircle2, Save, UserCog, Search, Palmtree } from "lucide-react"
+import { CheckCircle2, Save, UserCog, Search, Palmtree, Send, History } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
@@ -39,6 +39,7 @@ import {
 } from "@/lib/api-client"
 import {
   adminTabsContentCn,
+  adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsTriggerCn,
@@ -322,9 +323,11 @@ export function AdminTab() {
         <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="compose" className={adminTabsTriggerCn}>
+                <Send className={adminTabsIconCn} aria-hidden />
                 {t("noticeNewTitle")}
               </TabsTrigger>
               <TabsTrigger value="history" className={adminTabsTriggerCn}>
+                <History className={adminTabsIconCn} aria-hidden />
                 {t("noticeHistoryTitle")}
               </TabsTrigger>
             </TabsList>

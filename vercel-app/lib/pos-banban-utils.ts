@@ -560,7 +560,7 @@ export function resolveBanbanFlavorPairForKitchenPrint(
 
   const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
   const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
-  if (mid1 && mid2 && mid1 !== mid2) {
+  if (mid1 && mid2) {
     const flavor1 = resolveMenuNameById(menus, mid1)
     const flavor2 = resolveMenuNameById(menus, mid2)
     if (flavor1 && flavor2) return { flavor1, flavor2 }
@@ -596,7 +596,7 @@ export function isBanbanKitchenLine(item: BanbanKitchenLineLike): boolean {
   if (parseBanbanFlavorsFromPersistedNote(item.note)) return true
   const mid1 = String(item.menuId1 ?? item.menu_id1 ?? '').trim()
   const mid2 = String(item.menuId2 ?? item.menu_id2 ?? '').trim()
-  if (mid1 && mid2 && mid1 !== mid2) return true
+  if (mid1 && mid2) return true
   if (extractBanbanFlavorsFromModsNote(String(item.note ?? ''))) return true
   return false
 }

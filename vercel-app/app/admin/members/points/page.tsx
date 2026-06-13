@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { CrmPageHero } from "@/components/crm/crm-shared-ui"
 import { MemberPointsPolicyTab } from "@/components/admin/member-points-policy-tab"
 import { MemberPointsSearchPanel } from "@/components/admin/member-points-search-panel"
-import { adjustMemberPoints, getMemberPoints, type Member } from "@/lib/api-client"
+import { adjustMemberPoints, getMembers, type Member } from "@/lib/api-client"
+import { apiFetch } from "@/lib/api/fetch"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -44,26 +46,50 @@ export default function MemberPointsPage() {
   const [rows, setRows] = React.useState<LedgerRow[]>([])
   const [ledgerLoading, setLedgerLoading] = React.useState(false)
   const [adjusting, setAdjusting] = React.useState(false)
+  const [ledgerFrom, setLedgerFrom] = React.useState("")
+  const [ledgerTo, setLedgerTo] = React.useState("")
+  const [ledgerOffset, setLedgerOffset] = React.useState(0)
+  const LEDGER_PAGE = 100
 
-  const loadLedger = React.useCallback(async (memberId: number) => {
+  const loadLedger = React.useCallback(async (memberId: number, offset = 0) => {
     setLedgerLoading(true)
     try {
-      const points = await getMemberPoints({ memberId, limit: 300 })
-      setRows(points as LedgerRow[])
+      const q = new URLSearchParams({
+        memberId: String(memberId),
+        limit: String(LEDGER_PAGE),
+        offset: String(offset),
+      })
+      if (ledgerFrom) q.set("startStr", ledgerFrom)
+      if (ledgerTo) q.set("endStr", ledgerTo)
+      const res = await apiFetch(`/api/member-points?${q}`)
+      const points = (await res.json()) as LedgerRow[]
+      setRows(points)
+      setLedgerOffset(offset)
     } catch {
       setRows([])
     } finally {
       setLedgerLoading(false)
     }
-  }, [])
+  }, [ledgerFrom, ledgerTo])
 
   React.useEffect(() => {
     if (selectedMember?.id) {
-      void loadLedger(selectedMember.id)
+      void loadLedger(selectedMember.id, 0)
     } else {
       setRows([])
     }
   }, [selectedMember?.id, loadLedger])
+
+  React.useEffect(() => {
+    const memberId = Number(searchParams.get("memberId") || 0)
+    if (!memberId) return
+    getMembers({ q: String(memberId), limit: 5 })
+      .then((list) => {
+        const m = list.find((x) => x.id === memberId) || list[0]
+        if (m) setSelectedMember(m)
+      })
+      .catch(() => {})
+  }, [searchParams])
 
   React.useEffect(() => {
     const next = searchParams.get("tab") === "policy" ? "policy" : "ledger"
@@ -79,15 +105,14 @@ export default function MemberPointsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Wallet className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("memberPoints")}</h1>
-            <p className="text-xs text-muted-foreground">{t("memberPointsPageSub")}</p>
-          </div>
-        </div>
+        <CrmPageHero
+          icon={Wallet}
+          title={t("memberPoints")}
+          description={t("memberPointsPageSub")}
+          gradient="from-emerald-50 to-teal-50"
+          border="border-emerald-200/60"
+          iconClass="bg-emerald-500/10 text-emerald-600"
+        />
         <CrmSubnav />
 
         <Tabs value={tab} onValueChange={setTab} className="mt-4 space-y-4">
@@ -169,7 +194,7 @@ export default function MemberPointsPage() {
                               setSelectedMember((prev) =>
                                 prev ? { ...prev, pointBalance: Number(prev.pointBalance || 0) + p } : prev
                               )
-                              await loadLedger(selectedMember.id)
+                              await loadLedger(selectedMember.id, ledgerOffset)
                             } finally {
                               setAdjusting(false)
                             }
@@ -184,7 +209,25 @@ export default function MemberPointsPage() {
                       <CardHeader>
                         <CardTitle className="text-base">{t("memberPointsLedgerTitle")}</CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="space-y-3">
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div>
+                            <p className="text-xs text-muted-foreground">{t("crmPointsLedgerFrom")}</p>
+                            <Input type="date" value={ledgerFrom} onChange={(e) => setLedgerFrom(e.target.value)} className="h-9 w-[140px]" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">{t("crmPointsLedgerTo")}</p>
+                            <Input type="date" value={ledgerTo} onChange={(e) => setLedgerTo(e.target.value)} className="h-9 w-[140px]" />
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!selectedMember?.id}
+                            onClick={() => selectedMember?.id && loadLedger(selectedMember.id, 0)}
+                          >
+                            {t("crmPointsLedgerFilter")}
+                          </Button>
+                        </div>
                         {ledgerLoading ? (
                           <p className="text-sm text-muted-foreground">{t("loading")}</p>
                         ) : (
@@ -227,6 +270,24 @@ export default function MemberPointsPage() {
                             </table>
                           </div>
                         )}
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={ledgerOffset <= 0 || !selectedMember?.id}
+                            onClick={() => selectedMember?.id && loadLedger(selectedMember.id, Math.max(0, ledgerOffset - LEDGER_PAGE))}
+                          >
+                            {t("memberListPagePrev")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={rows.length < LEDGER_PAGE || !selectedMember?.id}
+                            onClick={() => selectedMember?.id && loadLedger(selectedMember.id, ledgerOffset + LEDGER_PAGE)}
+                          >
+                            {t("memberListPageNext")}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   </>

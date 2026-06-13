@@ -20,3 +20,15 @@ export const ERP_NUMERIC_CHART_TICK = {
   fontFamily: 'var(--font-pretendard), var(--font-inter), ui-sans-serif, system-ui, sans-serif',
   fontFeatureSettings: '"tnum", "lnum"',
 } as const
+
+/** 관리자 매출·분석 차트 공통 팔레트 */
+export const ADMIN_CHART_COLORS = [
+  '#3b82f6',
+  '#22c55e',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#ec4899',
+  '#06b6d4',
+  '#64748b',
+] as const

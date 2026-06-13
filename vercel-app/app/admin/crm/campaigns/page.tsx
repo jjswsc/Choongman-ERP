@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Megaphone, PlayCircle, Sparkles, Target } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,9 @@ import { apiFetch } from "@/lib/api/fetch"
 import { getPosCoupons } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { CrmPageHero } from "@/components/crm/crm-shared-ui"
+import { useLang } from "@/lib/lang-context"
+import { tr, useT } from "@/lib/i18n"
 
 type CampaignRow = {
   id: number
@@ -34,13 +38,26 @@ type CampaignRunRow = {
   executedAt: string
 }
 
+const AUDIENCE_SEGMENT_MAP: Record<string, { audienceType: string; recentDays?: string; dormantDays?: string }> = {
+  recent30: { audienceType: "recent", recentDays: "30" },
+  dormant90: { audienceType: "dormant", dormantDays: "90" },
+  new30: { audienceType: "new_joined", recentDays: "30" },
+  vip: { audienceType: "tier", },
+  atRisk: { audienceType: "dormant", dormantDays: "60" },
+}
+
 function toText(v: unknown): string {
   return String(v ?? "").trim()
 }
 
 export default function CrmCampaignsPage() {
+  const searchParams = useSearchParams()
+  const { lang } = useLang()
+  const t = useT(lang)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
+  const [previewing, setPreviewing] = React.useState(false)
+  const [previewCount, setPreviewCount] = React.useState<number | null>(null)
   const [runningId, setRunningId] = React.useState<number | null>(null)
   const [rows, setRows] = React.useState<CampaignRow[]>([])
   const [couponCodes, setCouponCodes] = React.useState<string[]>([])
@@ -59,6 +76,19 @@ export default function CrmCampaignsPage() {
     dormantDays: "90",
     birthMonth: "",
   })
+
+  React.useEffect(() => {
+    const aud = searchParams.get("audience")
+    if (!aud || !AUDIENCE_SEGMENT_MAP[aud]) return
+    const mapped = AUDIENCE_SEGMENT_MAP[aud]
+    setForm((p) => ({
+      ...p,
+      audienceType: mapped.audienceType,
+      tierCode: aud === "vip" ? "VIP" : p.tierCode,
+      recentDays: mapped.recentDays || p.recentDays,
+      dormantDays: mapped.dormantDays || p.dormantDays,
+    }))
+  }, [searchParams])
 
   const loadCampaigns = React.useCallback(async () => {
     const res = await apiFetch("/api/crm/campaigns", { cache: "no-store" })
@@ -93,21 +123,44 @@ export default function CrmCampaignsPage() {
     })()
   }, [loadCampaigns, loadCoupons])
 
-  const saveCampaign = async () => {
-    if (!form.name.trim()) {
-      await appAlert("캠페인 이름을 입력해 주세요.")
-      return
-    }
-    if (!form.couponCode.trim()) {
-      await appAlert("쿠폰 코드를 선택해 주세요.")
-      return
-    }
+  const buildAudiencePayload = () => {
     const audiencePayload: Record<string, unknown> = {}
     if (form.audienceType === "tier") audiencePayload.tierCode = form.tierCode.trim().toUpperCase()
     if (form.audienceType === "recent") audiencePayload.days = Math.max(1, Number(form.recentDays || 30))
     if (form.audienceType === "dormant") audiencePayload.days = Math.max(1, Number(form.dormantDays || 90))
     if (form.audienceType === "birthday_month") audiencePayload.month = Math.max(1, Number(form.birthMonth || 1))
+    if (form.audienceType === "new_joined") audiencePayload.days = Math.max(1, Number(form.recentDays || 30))
+    return audiencePayload
+  }
 
+  const previewAudience = async () => {
+    setPreviewing(true)
+    try {
+      const res = await apiFetch("/api/crm/campaigns/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audienceType: form.audienceType,
+          audiencePayload: buildAudiencePayload(),
+          issueLimit: Math.max(1, Number(form.issueLimit || 200)),
+        }),
+      })
+      const json = (await res.json()) as { success?: boolean; count?: number; capped?: number }
+      setPreviewCount(Number(json.count || 0))
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  const saveCampaign = async () => {
+    if (!form.name.trim()) {
+      await appAlert(t("crmCampaignNamePh"))
+      return
+    }
+    if (!form.couponCode.trim()) {
+      await appAlert(t("crmCouponTabIssue"))
+      return
+    }
     setSaving(true)
     try {
       const res = await apiFetch("/api/crm/campaigns", {
@@ -120,18 +173,18 @@ export default function CrmCampaignsPage() {
           status: form.status,
           triggerType: form.triggerType,
           audienceType: form.audienceType,
-          audiencePayload,
+          audiencePayload: buildAudiencePayload(),
           couponCode: form.couponCode.trim().toUpperCase(),
           issueLimit: Math.max(1, Number(form.issueLimit || 200)),
         }),
       })
       const json = (await res.json()) as { success?: boolean; message?: string }
       if (!json.success) {
-        await appAlert(json.message || "캠페인 저장에 실패했습니다.")
+        await appAlert(json.message || t("crmCampaignSave"))
         return
       }
       await loadCampaigns()
-      await appAlert("캠페인을 저장했습니다.")
+      await appAlert(t("crmCampaignSaved"))
     } finally {
       setSaving(false)
     }
@@ -154,12 +207,17 @@ export default function CrmCampaignsPage() {
         failedCount?: number
       }
       if (!json.success) {
-        await appAlert(json.message || "캠페인 실행에 실패했습니다.")
+        await appAlert(json.message || t("crmCampaignRun"))
         return
       }
       await loadRuns(campaignId)
       await appAlert(
-        `실행 완료\n대상 ${json.targetCount ?? 0}명 / 발급 ${json.issuedCount ?? 0} / 중복 ${json.skippedCount ?? 0} / 실패 ${json.failedCount ?? 0}`
+        tr(t, "crmCampaignRunResult", {
+          target: String(json.targetCount ?? 0),
+          issued: String(json.issuedCount ?? 0),
+          skipped: String(json.skippedCount ?? 0),
+          failed: String(json.failedCount ?? 0),
+        })
       )
     } finally {
       setRunningId(null)
@@ -168,6 +226,7 @@ export default function CrmCampaignsPage() {
 
   const pickCampaign = (row: CampaignRow) => {
     setSelectedId(row.id)
+    setPreviewCount(null)
     setForm((prev) => ({
       ...prev,
       name: row.name,
@@ -185,127 +244,120 @@ export default function CrmCampaignsPage() {
     void loadRuns(row.id)
   }
 
+  const statusLabel = (v: string) => {
+    const map: Record<string, string> = {
+      draft: t("crmCampaignStatusDraft"),
+      active: t("crmCampaignStatusActive"),
+      paused: t("crmCampaignStatusPaused"),
+      archived: t("crmCampaignStatusArchived"),
+    }
+    return map[v] || v
+  }
+
+  const audienceLabel = (v: string) => {
+    const map: Record<string, string> = {
+      all: t("crmCampaignAudienceAll"),
+      tier: t("crmCampaignAudienceTier"),
+      recent: t("crmCampaignAudienceRecent"),
+      dormant: t("crmCampaignAudienceDormant"),
+      birthday_month: t("crmCampaignAudienceBirthday"),
+      new_joined: t("crmCampaignAudienceNew"),
+    }
+    return map[v] || v
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
         <CrmSubnav />
-        <div className="rounded-2xl border border-rose-200/60 bg-gradient-to-r from-rose-50 to-amber-50 px-5 py-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-rose-500/10 p-2 text-rose-600">
-              <Megaphone className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">CRM 쿠폰 캠페인 허브</p>
-              <p className="text-xs text-muted-foreground">
-                타겟 조건으로 쿠폰을 자동 발급하고, 실행 결과를 즉시 확인합니다.
-              </p>
-            </div>
-          </div>
-        </div>
+        <CrmPageHero
+          icon={Megaphone}
+          title={t("crmCampaignTitle")}
+          description={t("crmCampaignSub")}
+          gradient="from-rose-50 to-amber-50"
+          border="border-rose-200/60"
+          iconClass="bg-rose-500/10 text-rose-600"
+        />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-rose-500" />
-              CRM 쿠폰 캠페인 설정
+              {t("crmCampaignFormTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <Input
-              placeholder="캠페인 이름"
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-            />
+            <Input placeholder={t("crmCampaignNamePh")} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
             <Select value={form.couponCode || "_"} onValueChange={(v) => setForm((p) => ({ ...p, couponCode: v === "_" ? "" : v }))}>
-              <SelectTrigger><SelectValue placeholder="쿠폰 코드 선택" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("crmCouponTabDefinitions")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="_">선택</SelectItem>
-                {couponCodes.map((code) => <SelectItem key={code} value={code}>{code}</SelectItem>)}
+                <SelectItem value="_">{t("btnSelect")}</SelectItem>
+                {couponCodes.map((code) => (
+                  <SelectItem key={code} value={code}>{code}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="draft">draft</SelectItem>
-                <SelectItem value="active">active</SelectItem>
-                <SelectItem value="paused">paused</SelectItem>
-                <SelectItem value="archived">archived</SelectItem>
+                <SelectItem value="draft">{t("crmCampaignStatusDraft")}</SelectItem>
+                <SelectItem value="active">{t("crmCampaignStatusActive")}</SelectItem>
+                <SelectItem value="paused">{t("crmCampaignStatusPaused")}</SelectItem>
+                <SelectItem value="archived">{t("crmCampaignStatusArchived")}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={form.triggerType} onValueChange={(v) => setForm((p) => ({ ...p, triggerType: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="manual">manual</SelectItem>
-                <SelectItem value="auto">auto</SelectItem>
+                <SelectItem value="manual">{t("crmCampaignTriggerManual")}</SelectItem>
+                <SelectItem value="auto">{t("crmCampaignTriggerAuto")}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={form.audienceType} onValueChange={(v) => setForm((p) => ({ ...p, audienceType: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체 회원</SelectItem>
-                <SelectItem value="tier">등급 기반</SelectItem>
-                <SelectItem value="recent">최근 방문</SelectItem>
-                <SelectItem value="dormant">휴면 고객</SelectItem>
-                <SelectItem value="birthday_month">생일 월</SelectItem>
-                <SelectItem value="new_joined">신규 가입</SelectItem>
+                <SelectItem value="all">{t("crmCampaignAudienceAll")}</SelectItem>
+                <SelectItem value="tier">{t("crmCampaignAudienceTier")}</SelectItem>
+                <SelectItem value="recent">{t("crmCampaignAudienceRecent")}</SelectItem>
+                <SelectItem value="dormant">{t("crmCampaignAudienceDormant")}</SelectItem>
+                <SelectItem value="birthday_month">{t("crmCampaignAudienceBirthday")}</SelectItem>
+                <SelectItem value="new_joined">{t("crmCampaignAudienceNew")}</SelectItem>
               </SelectContent>
             </Select>
-            <Input
-              type="number"
-              min={1}
-              max={2000}
-              placeholder="발급 상한"
-              value={form.issueLimit}
-              onChange={(e) => setForm((p) => ({ ...p, issueLimit: e.target.value }))}
-            />
+            <Input type="number" min={1} max={2000} placeholder={t("crmCampaignIssueLimitPh")} value={form.issueLimit} onChange={(e) => setForm((p) => ({ ...p, issueLimit: e.target.value }))} />
             {form.audienceType === "tier" ? (
-              <Input
-                placeholder="등급 코드 (예: GOLD)"
-                value={form.tierCode}
-                onChange={(e) => setForm((p) => ({ ...p, tierCode: e.target.value }))}
-              />
+              <Input placeholder={t("crmCampaignTierPh")} value={form.tierCode} onChange={(e) => setForm((p) => ({ ...p, tierCode: e.target.value }))} />
             ) : null}
-            {form.audienceType === "recent" ? (
-              <Input
-                type="number"
-                min={1}
-                placeholder="최근 N일"
-                value={form.recentDays}
-                onChange={(e) => setForm((p) => ({ ...p, recentDays: e.target.value }))}
-              />
+            {(form.audienceType === "recent" || form.audienceType === "new_joined") ? (
+              <Input type="number" min={1} placeholder={t("crmCampaignRecentDaysPh")} value={form.recentDays} onChange={(e) => setForm((p) => ({ ...p, recentDays: e.target.value }))} />
             ) : null}
             {form.audienceType === "dormant" ? (
-              <Input
-                type="number"
-                min={1}
-                placeholder="휴면 기준 N일"
-                value={form.dormantDays}
-                onChange={(e) => setForm((p) => ({ ...p, dormantDays: e.target.value }))}
-              />
+              <Input type="number" min={1} placeholder={t("crmCampaignDormantDaysPh")} value={form.dormantDays} onChange={(e) => setForm((p) => ({ ...p, dormantDays: e.target.value }))} />
             ) : null}
             {form.audienceType === "birthday_month" ? (
-              <Input
-                type="number"
-                min={1}
-                max={12}
-                placeholder="생일 월 (1~12)"
-                value={form.birthMonth}
-                onChange={(e) => setForm((p) => ({ ...p, birthMonth: e.target.value }))}
-              />
+              <Input type="number" min={1} max={12} placeholder={t("crmCampaignBirthMonthPh")} value={form.birthMonth} onChange={(e) => setForm((p) => ({ ...p, birthMonth: e.target.value }))} />
             ) : null}
-            <Input
-              className="sm:col-span-2"
-              placeholder="설명"
-              value={form.description}
-              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-            />
-            <div className="sm:col-span-2 flex flex-wrap gap-2">
-              <Button onClick={saveCampaign} disabled={saving}>{saving ? "저장 중..." : "캠페인 저장"}</Button>
+            <Input className="sm:col-span-2" placeholder={t("crmCampaignDescPh")} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+            <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+              <Button onClick={saveCampaign} disabled={saving}>{saving ? t("loading") : t("crmCampaignSave")}</Button>
+              <Button type="button" variant="outline" onClick={() => void previewAudience()} disabled={previewing}>
+                {previewing ? t("loading") : t("crmCampaignPreview")}
+              </Button>
+              {previewCount != null ? (
+                <span className="text-sm text-muted-foreground">
+                  {tr(t, "crmCampaignPreviewCount", {
+                    count: previewCount.toLocaleString(),
+                    limit: form.issueLimit,
+                  })}
+                </span>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => {
                   setSelectedId(null)
                   setRuns([])
+                  setPreviewCount(null)
                   setForm({
                     name: "",
                     status: "draft",
@@ -321,7 +373,7 @@ export default function CrmCampaignsPage() {
                   })
                 }}
               >
-                신규 입력
+                {t("crmCampaignNew")}
               </Button>
             </div>
           </CardContent>
@@ -331,24 +383,24 @@ export default function CrmCampaignsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-4 w-4 text-indigo-500" />
-              캠페인 목록
+              {t("crmCampaignListTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-sm text-muted-foreground">로딩 중...</p>
+              <p className="text-sm text-muted-foreground">{t("loading")}</p>
             ) : (
               <div className="overflow-auto rounded-xl border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="p-2 text-left">ID</th>
-                      <th className="p-2 text-left">이름</th>
-                      <th className="p-2 text-left">쿠폰</th>
-                      <th className="p-2 text-left">대상</th>
-                      <th className="p-2 text-left">상태</th>
-                      <th className="p-2 text-left">수정일</th>
-                      <th className="p-2 text-left">동작</th>
+                      <th className="p-2 text-left">{t("name")}</th>
+                      <th className="p-2 text-left">{t("memberCoupons")}</th>
+                      <th className="p-2 text-left">{t("type")}</th>
+                      <th className="p-2 text-left">{t("status")}</th>
+                      <th className="p-2 text-left">{t("date")}</th>
+                      <th className="p-2 text-left">{t("apply")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -357,23 +409,19 @@ export default function CrmCampaignsPage() {
                         <td className="p-2">{row.id}</td>
                         <td className="p-2 font-medium">{row.name}</td>
                         <td className="p-2 font-mono">{row.couponCode}</td>
-                        <td className="p-2">{row.audienceType}</td>
+                        <td className="p-2">{audienceLabel(row.audienceType)}</td>
                         <td className="p-2">
                           <span className="rounded-full border bg-background px-2 py-0.5 text-xs font-medium">
-                            {row.status}
+                            {statusLabel(row.status)}
                           </span>
                         </td>
-                        <td className="p-2">{row.updatedAt || "-"}</td>
+                        <td className="p-2">{row.updatedAt || "—"}</td>
                         <td className="p-2">
                           <div className="flex flex-wrap gap-1">
-                            <Button size="sm" variant="outline" onClick={() => pickCampaign(row)}>편집</Button>
-                            <Button
-                              size="sm"
-                              onClick={() => runCampaign(row.id)}
-                              disabled={runningId === row.id || row.status === "archived"}
-                            >
+                            <Button size="sm" variant="outline" onClick={() => pickCampaign(row)}>{t("crmCampaignEdit")}</Button>
+                            <Button size="sm" onClick={() => runCampaign(row.id)} disabled={runningId === row.id || row.status === "archived"}>
                               <PlayCircle className="mr-1 h-3.5 w-3.5" />
-                              {runningId === row.id ? "실행 중..." : "즉시 실행"}
+                              {runningId === row.id ? t("crmCampaignRunning") : t("crmCampaignRun")}
                             </Button>
                           </div>
                         </td>
@@ -390,40 +438,38 @@ export default function CrmCampaignsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PlayCircle className="h-4 w-4 text-emerald-500" />
-              최근 실행 이력
+              {t("crmCampaignRunsTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {selectedId == null ? (
-              <p className="text-sm text-muted-foreground">캠페인을 선택하면 실행 이력이 표시됩니다.</p>
+              <p className="text-sm text-muted-foreground">{t("crmCampaignSelectHint")}</p>
             ) : runs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">실행 이력이 없습니다.</p>
+              <p className="text-sm text-muted-foreground">{t("crmCampaignNoRuns")}</p>
             ) : (
               <div className="overflow-auto rounded-xl border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="p-2 text-left">실행ID</th>
-                      <th className="p-2 text-left">모드</th>
-                      <th className="p-2 text-left">대상</th>
-                      <th className="p-2 text-left">발급</th>
-                      <th className="p-2 text-left">중복</th>
-                      <th className="p-2 text-left">실패</th>
-                      <th className="p-2 text-left">실행자</th>
-                      <th className="p-2 text-left">시각</th>
+                      <th className="p-2 text-left">ID</th>
+                      <th className="p-2 text-left">{t("type")}</th>
+                      <th className="p-2 text-left">{t("crmCampaignPreview")}</th>
+                      <th className="p-2 text-left">{t("crmCouponKpiUsed")}</th>
+                      <th className="p-2 text-left">{t("memberFail")}</th>
+                      <th className="p-2 text-left">{t("manager")}</th>
+                      <th className="p-2 text-left">{t("dateTime")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {runs.map((run) => (
-                      <tr key={run.id} className="border-t hover:bg-muted/20">
+                      <tr key={run.id} className="border-t">
                         <td className="p-2">{run.id}</td>
                         <td className="p-2">{run.runMode}</td>
                         <td className="p-2">{run.targetCount}</td>
                         <td className="p-2">{run.issuedCount}</td>
-                        <td className="p-2">{run.skippedCount}</td>
                         <td className="p-2">{run.failedCount}</td>
-                        <td className="p-2">{run.executedBy || "-"}</td>
-                        <td className="p-2">{run.executedAt || "-"}</td>
+                        <td className="p-2">{run.executedBy || "—"}</td>
+                        <td className="p-2">{run.executedAt || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -436,4 +482,3 @@ export default function CrmCampaignsPage() {
     </div>
   )
 }
-

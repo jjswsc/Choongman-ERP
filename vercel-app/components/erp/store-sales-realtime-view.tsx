@@ -29,10 +29,10 @@ import type { Store } from "@/lib/pos-types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
+import { ERP_NUMERIC_CHART_TICK, ADMIN_CHART_COLORS } from "@/lib/admin-ui-standards"
 
 const ALL_STORE_VALUE = "All"
-const CHART_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
+const CHART_COLORS = [...ADMIN_CHART_COLORS]
 
 const chartYAxisProps = {
   tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK },
@@ -78,6 +78,8 @@ export type StoreSalesRealtimeViewProps = {
   showSalesCharts?: boolean
   /** 관리자 전체 매장: 상단 `AdminSalesDashboardCharts` 매장별 표와 중복 방지 */
   hideByStoreSection?: boolean
+  /** 부모 자동 갱신 토큰 */
+  refreshToken?: number
   className?: string
 }
 
@@ -95,6 +97,7 @@ export function StoreSalesRealtimeView({
   onRegisterRefresh,
   showSalesCharts = false,
   hideByStoreSection = false,
+  refreshToken,
   className,
 }: StoreSalesRealtimeViewProps) {
   const { lang } = useLang()
@@ -317,6 +320,11 @@ export function StoreSalesRealtimeView({
   const handleManualRefresh = useCallback(() => {
     refreshRealtimeSection()
   }, [refreshRealtimeSection])
+
+  useEffect(() => {
+    if (refreshToken == null || refreshToken <= 0) return
+    refreshRealtimeSection()
+  }, [refreshToken, refreshRealtimeSection])
 
   const refreshLatest = useRef(refreshRealtimeSection)
   refreshLatest.current = refreshRealtimeSection

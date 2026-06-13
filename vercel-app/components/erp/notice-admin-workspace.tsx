@@ -1,33 +1,58 @@
 "use client"
 
 import * as React from "react"
-import { Megaphone } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import { Megaphone, Send, History } from "lucide-react"
 import { AdminNoticeCompose } from "@/components/erp/admin-notice-compose"
 import { AdminNoticeHistory } from "@/components/erp/admin-notice-history"
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import {
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
+type NoticeTab = "compose" | "history"
+
+function parseNoticeTab(raw: string | null): NoticeTab {
+  return raw === "history" ? "history" : "compose"
+}
+
 export function NoticeAdminWorkspace() {
   const { lang } = useLang()
   const t = useT(lang)
+  const searchParams = useSearchParams()
+  const [tab, setTab] = React.useState<NoticeTab>(() => parseNoticeTab(searchParams.get("tab")))
+
+  React.useEffect(() => {
+    setTab(parseNoticeTab(searchParams.get("tab")))
+  }, [searchParams])
 
   return (
-    <Tabs defaultValue="compose" className="flex flex-col gap-4">
-      <TabsList className="w-full sm:w-auto h-10">
-        <TabsTrigger value="compose" className="text-xs sm:text-sm">
-          {t("noticeNewTitle")}
-        </TabsTrigger>
-        <TabsTrigger value="history" className="text-xs sm:text-sm">
-          {t("noticeHistoryTitle")}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="compose" className="mt-0">
+    <Tabs value={tab} onValueChange={(v) => setTab(v as NoticeTab)} className={adminTabsRootCn}>
+      <AdminTabsBarWithHelp>
+        <TabsList className={adminTabsListRowCn}>
+          <TabsTrigger value="compose" className={adminTabsTriggerCn}>
+            <Send className={adminTabsIconCn} aria-hidden />
+            {t("noticeNewTitle")}
+          </TabsTrigger>
+          <TabsTrigger value="history" className={adminTabsTriggerCn}>
+            <History className={adminTabsIconCn} aria-hidden />
+            {t("noticeHistoryTitle")}
+          </TabsTrigger>
+        </TabsList>
+      </AdminTabsBarWithHelp>
+      <TabsContent value="compose" className={adminTabsContentCn}>
         <React.Suspense fallback={null}>
           <AdminNoticeCompose />
         </React.Suspense>
       </TabsContent>
-      <TabsContent value="history" className="mt-0">
+      <TabsContent value="history" className={adminTabsContentCn}>
         <AdminNoticeHistory />
       </TabsContent>
     </Tabs>

@@ -18,9 +18,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
-import { ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
+import { ERP_NUMERIC_CHART_TICK, ADMIN_CHART_COLORS } from "@/lib/admin-ui-standards"
 
-const CHART_COLORS = ["#3b82f6", "#f59e0b", "#ef4444", "#22c55e", "#8b5cf6", "#ec4899"]
+const CHART_COLORS = [...ADMIN_CHART_COLORS]
 
 type StoreRow = {
   storeCode: string
@@ -66,6 +66,8 @@ type PosRevenueRealtimeDashboardProps = {
   /** POS 테이블 스냅샷 기준 진행 중 주문 합계 */
   tableTotal?: number
   tableTotalLoading?: boolean
+  /** 부모 자동 갱신 토큰 */
+  refreshToken?: number
 }
 
 function formatBaht(value: number): string {
@@ -90,6 +92,7 @@ export function PosRevenueRealtimeDashboard({
   salesStoreCodes,
   tableTotal,
   tableTotalLoading = false,
+  refreshToken,
 }: PosRevenueRealtimeDashboardProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -123,6 +126,11 @@ export function PosRevenueRealtimeDashboard({
   React.useEffect(() => {
     void loadDashboard()
   }, [loadDashboard])
+
+  React.useEffect(() => {
+    if (refreshToken == null || refreshToken <= 0) return
+    void loadDashboard()
+  }, [refreshToken, loadDashboard])
 
   const handleSearch = React.useCallback(() => {
     void loadDashboard()

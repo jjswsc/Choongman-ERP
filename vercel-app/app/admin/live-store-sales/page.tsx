@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
-import { Radio } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Radio, RefreshCw } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
@@ -20,12 +20,20 @@ import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-b
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
 import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
 import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
+import { SalesSubnav } from "@/components/erp/sales-subnav"
+import { SalesPageHeader } from "@/components/erp/sales-page-header"
 import { storeMatches } from "@/lib/admin-employee-store-access"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { computeRealtimeTableTotal, mergeRealtimeStoreSalesRows } from "@/lib/pos-realtime-store-rows"
 import { useStoreList } from "@/lib/use-store-list"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { getBangkokDateTimeString } from "@/lib/bangkok-time"
 
 const ALL_STORE_VALUE = "All"
+const AUTO_REFRESH_MS = 60_000
 
 export default function AdminLiveStoreSalesPage() {
   const { auth } = useAuth()
@@ -51,7 +59,6 @@ export default function AdminLiveStoreSalesPage() {
     if (!v) setViewStore(FRANCHISEE_AGGREGATE_ALL_STORES_VALUE)
   }, [canFranchiseeAll, viewStore, setViewStore])
 
-  /** 본사: Office → 전체 매장. 가맹 복수: viewStore All → 허용 매장 합산. 그 외: 단일 매장 */
   const effectiveStoreCode = useMemo(() => {
     if (isOfficeSelector) {
       const v = String(viewStore || ALL_STORE_VALUE).trim()
@@ -129,11 +136,9 @@ export default function AdminLiveStoreSalesPage() {
   const showFranchiseAllRealtime =
     canFranchiseeAll && effectiveStoreCode === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
 
-  /** 본사 전체 매장 — 당일 합계·테이블 갱신(매장별 표는 AdminSalesDashboardCharts) */
   const showOfficeAllRealtime =
     isOfficeSelector && effectiveStoreCode === ALL_STORE_VALUE
 
-  /** 전체 매장 집계 시 매장별 표 중복 숨김 — 상단 당일 매출 차트에 이미 있음 */
   const hideDuplicateByStoreSection = showOfficeAllRealtime || showFranchiseAllRealtime
 
   useEffect(() => {
@@ -154,56 +159,126 @@ export default function AdminLiveStoreSalesPage() {
     return effectiveStoreCode || "—"
   }, [isOfficeSelector, effectiveStoreCode, showFranchiseAllRealtime, t])
 
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const [refreshToken, setRefreshToken] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const refreshInFlight = useRef(false)
+
+  const runRefresh = useCallback(() => {
+    if (refreshInFlight.current) return
+    refreshInFlight.current = true
+    setRefreshToken((n) => n + 1)
+    const refreshTask = refetchStores({
+      scope: isAllStoresTableTotal ? "all" : "current",
+      storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
+      immediate: true,
+    })
+    void Promise.resolve(refreshTask).finally(() => {
+      refreshInFlight.current = false
+      setLastUpdated(new Date())
+    })
+  }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+      runRefresh()
+    }, AUTO_REFRESH_MS)
+    return () => window.clearInterval(id)
+  }, [autoRefresh, runRefresh])
+
+  const headerActions = (
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="outline" className="gap-2" onClick={runRefresh}>
+          <RefreshCw className="h-4 w-4" />
+          {t("adminOpsCenterReload")}
+        </Button>
+        <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="live-auto-refresh"
+          checked={autoRefresh}
+          onCheckedChange={(c) => setAutoRefresh(c === true)}
+        />
+        <Label htmlFor="live-auto-refresh" className="text-xs text-muted-foreground cursor-pointer">
+          {t("liveStoreSalesAutoRefresh")}
+        </Label>
+      </div>
+      {lastUpdated ? (
+        <p className="text-[11px] text-muted-foreground">
+          {t("liveStoreSalesLastUpdated")}: {getBangkokDateTimeString(lastUpdated)}
+        </p>
+      ) : null}
+    </div>
+  )
+
+  const showRealtimeBlock =
+    showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-              <Radio className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">
-                {tOr(t, "adminLiveStoreSales", "실시간 매출")}
-              </h1>
-              <p className="text-xs text-muted-foreground">{liveSalesSubtitle}</p>
-            </div>
-          </div>
-          <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
-        </div>
+        <SalesSubnav />
+        <SalesPageHeader
+          href="/admin/live-store-sales"
+          title={tOr(t, "adminLiveStoreSales", "실시간 매출")}
+          subtitle={liveSalesSubtitle}
+          icon={Radio}
+          iconTone="emerald"
+          actions={headerActions}
+        />
 
-        <>
-          {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
+        {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
-          {showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime ? (
-            <StoreSalesRealtimeView
+        <Tabs defaultValue="realtime" className="space-y-4">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+            <TabsTrigger value="realtime">{t("liveStoreSalesTabRealtime")}</TabsTrigger>
+            <TabsTrigger value="charts">{t("liveStoreSalesTabCharts")}</TabsTrigger>
+            <TabsTrigger value="ops">{t("liveStoreSalesTabOps")}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="realtime" className="mt-0 space-y-4">
+            {showRealtimeBlock ? (
+              <StoreSalesRealtimeView
+                effectiveStoreCode={effectiveStoreCode}
+                stores={storesForRealtime}
+                loadingTables={loadingTables}
+                refetchStores={refetchStores}
+                currentStore={
+                  showFranchiseAllRealtime || showOfficeAllRealtime ? undefined : currentStore
+                }
+                showInlineRefresh
+                showHeaderBadge
+                hideByStoreSection={hideDuplicateByStoreSection}
+                refreshToken={refreshToken}
+              />
+            ) : null}
+          </TabsContent>
+
+          <TabsContent value="charts" className="mt-0">
+            <AdminSalesDashboardCharts
               effectiveStoreCode={effectiveStoreCode}
-              stores={storesForRealtime}
-              loadingTables={loadingTables}
-              refetchStores={refetchStores}
-              currentStore={
-                showFranchiseAllRealtime || showOfficeAllRealtime ? undefined : currentStore
-              }
-              showInlineRefresh
-              showHeaderBadge
-              hideByStoreSection={hideDuplicateByStoreSection}
+              isOfficeSelector={isOfficeSelector}
+              salesStoreCodes={franchiseSalesStoreCodes}
+              tableTotalByStore={tableTotalByStore}
+              refreshToken={refreshToken}
             />
-          ) : null}
+          </TabsContent>
 
-          <AdminSalesDashboardCharts
-            effectiveStoreCode={effectiveStoreCode}
-            isOfficeSelector={isOfficeSelector}
-            salesStoreCodes={franchiseSalesStoreCodes}
-            tableTotalByStore={tableTotalByStore}
-          />
-          <PosRevenueRealtimeDashboard
-            effectiveStoreCode={effectiveStoreCode}
-            isOfficeSelector={isOfficeSelector}
-            salesStoreCodes={franchiseSalesStoreCodes}
-            tableTotal={adminTableTotal}
-            tableTotalLoading={loadingTables}
-          />
-        </>
+          <TabsContent value="ops" className="mt-0">
+            <PosRevenueRealtimeDashboard
+              effectiveStoreCode={effectiveStoreCode}
+              isOfficeSelector={isOfficeSelector}
+              salesStoreCodes={franchiseSalesStoreCodes}
+              tableTotal={adminTableTotal}
+              tableTotalLoading={loadingTables}
+              refreshToken={refreshToken}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

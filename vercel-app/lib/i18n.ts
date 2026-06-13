@@ -6,6 +6,7 @@ import { useMemo } from "react"
 import { isLangCode } from "./lang-context"
 import { I18N_HELP_LONG_EN, I18N_HELP_LONG_KO } from "./i18n-admin-help-long"
 import { I18N_MP_ADMIN_EN, I18N_MP_ADMIN_KO, I18N_MP_ADMIN_TH } from "./i18n-member-portal-admin"
+import { I18N_CRM_EN, I18N_CRM_KO, I18N_CRM_TH } from "./i18n-crm"
 import { I18N_CRM_SEGMENTS_EN, I18N_CRM_SEGMENTS_KO, I18N_CRM_SEGMENTS_TH } from "./i18n-crm-segments"
 import { I18N_SAAS_ADMIN_EN, I18N_SAAS_ADMIN_KO, I18N_SAAS_ADMIN_TH } from "./i18n-saas-admin"
 
@@ -886,7 +887,7 @@ export const i18n = {
     companyHybridDocTabList: '목록',
     companyHybridDocTabRegister: '등록',
     companyHybridDocTabCategories: '카테고리',
-    companyHybridDocListFilterHint: '매장·필터를 맞추면 목록이 자동으로 갱신됩니다. 카테고리·제목·만료·공문 조건으로 좁힐 수 있습니다.',
+    companyHybridDocListFilterHint: '매장·필터를 맞춘 뒤 검색을 눌러 목록을 불러옵니다. 카테고리·제목·만료·공문 조건으로 좁힐 수 있습니다.',
     companyHybridDocColCategory: '카테고리',
     companyHybridDocCategoryFilterAll: '전체',
     companyHybridDocSearchTitle: '제목 검색',
@@ -3997,6 +3998,8 @@ export const i18n = {
     fixedExpDeleteConfirm: '이 고정비를 삭제하시겠습니까?',
     incomeStatementTitle: '손익계산서',
     salesManagementTitle: '매출 관리',
+    salesManagementPageSub:
+      '기간·매장·채널·메뉴·할인·예측 리포트 — 조건 저장·엑셀·URL 공유를 지원합니다.',
     salesMainTabReports: '매출 리포트',
     salesMainTabBusinessHours: '영업시간 설정',
     salesManagementSubmenuQuickSales: '영업속보',
@@ -4113,7 +4116,8 @@ export const i18n = {
     salesCompareWeekdayColumn: '요일',
     salesMultiStoreSelected: '선택 매장 합계',
     salesTopicOverviewReport: '종합 매출 리포트',
-    salesTopicOverviewReportHint: '요약 관점',
+    salesTopicOverviewReportHint:
+      '기간·매장 KPI, 채널·매장·결제·일별 추이를 한눈에 보는 요약 리포트입니다.',
     salesTopicPromoBundleReport: '세트 할인',
     salesTopicPromoBundleReportHint:
       '세트·프로모 줄의 정가 대비 판매가 차이(세트 할인)만 분석합니다. 유형별·메뉴별 상세와 총매출 대비 비중을 제공합니다.',
@@ -7538,6 +7542,7 @@ export const i18n = {
     adminCrmDashboard: 'CRM 대시보드',
     adminCrmSegments: '고객 세그먼트',
     adminCrmRfm: 'RFM 점수',
+    ...I18N_CRM_KO,
     ...I18N_CRM_SEGMENTS_KO,
     memberAppContent: '회원 페이지',
     ...I18N_MP_ADMIN_KO,
@@ -8407,6 +8412,35 @@ export const i18n = {
       '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
       '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 「주문 유형」(전체·홀·포장·배달)으로 범위를 맞추고, 필요하면 메뉴 검색어를 입력한 뒤 「조회」합니다.\n② 「채널별 비교」를 켜면 같은 품목을 홀·포장·배달 열로 나란히 비교합니다(주문 유형 선택 시 해당 채널만).\n③ 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다.\n④ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n⑤ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
+    helpSum_admin_sales_management:
+      '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다.',
+    helpHow_admin_sales_management:
+      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(실적 분석·매장 비교·할인·예측)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n④ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑤ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑥ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.',
+    salesSubnavAria: '매출 관리 메뉴',
+    salesTopicHintLabel: '이 리포트',
+    salesOverviewIntro:
+      '선택 기간·매장의 핵심 KPI와 채널·매장·결제·일별 추이를 한 화면에서 봅니다. 상세는 아래 링크로 이어집니다.',
+    salesOverviewDelta: '대비',
+    salesOverviewTopChannel: 'TOP 채널',
+    salesOverviewLinkTotalSales: '메뉴별 상세 (Total Sales)',
+    salesOverviewLinkPeriod: '기간별 분석',
+    salesOverviewLinkChannel: '채널 분석',
+    salesOverviewLinkLive: '실시간 매출',
+    salesOverviewDailyTrend: '일별 매출 추이',
+    liveStoreSalesTabRealtime: '실시간·테이블',
+    liveStoreSalesTabCharts: '당일 차트',
+    liveStoreSalesTabOps: '운영 지표',
+    liveStoreSalesAutoRefresh: '자동 갱신 (60초)',
+    liveStoreSalesLastUpdated: '마지막 갱신',
+    adminOpsCenterHqSummaryTitle: '주의 매장 (본사)',
+    adminOpsCenterHqSummarySub: '인쇄 실패·대기열·일마감 미완료가 많은 지점',
+    adminOpsCenterLinkPosPrinters: '프린터 설정',
+    adminOpsCenterLinkPosSettlement: 'POS 일정산',
+    adminOpsCenterAlertPrintFailed: '인쇄 실패 — 프린터·주방 라우팅 점검',
+    adminOpsCenterAlertPrintBacklog: '인쇄 대기열 — 실시간 매출·동기화 확인',
+    adminOpsCenterAlertClosePending: '일마감 미완료 — POS 일정산 처리',
+    totalSalesDrillHint: '클릭 시 하위 집계·검색으로 이동',
+    totalSalesLinkSalesMgmt: '매출 관리',
     helpSum_admin:
       'ERP 홈입니다. 실시간 매출·매출 관리·운영 센터 등 자주 쓰는 메뉴로 바로 이동하고, 미승인 발주 알림을 확인합니다. 물류 역할은 입출고·미승인 주문 운영 패널이 표시됩니다.',
     helpHow_admin:
@@ -8434,7 +8468,7 @@ export const i18n = {
     helpSum_admin_company_documents:
       '매장별 계약·면허·세무 등 회사 문서를 Drive 링크 또는 파일 업로드로 등록하고, KPI·만료·공문 필터로 검색·관리하는 화면입니다.',
     helpHow_admin_company_documents:
-      '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② KPI: 만료 임박·만료·공문 회신 지연 건수를 확인합니다.\n③ 목록: 필터·칩을 맞춘 뒤 자동/수동 조회로 불러옵니다. 행 클릭 또는「상세」로 메타·감사 이력을 봅니다. CSV 내보내기·페이지 이동을 사용할 수 있습니다.\n④ 등록: 「새 문서」로 Sheet에서 제목·카테고리·연결(직원/매장 등)·권한·날짜·공문을 입력한 뒤 Drive URL 저장 또는 드래그 업로드합니다.\n⑤ 카테고리: 전사 공통 목록을 추가·수정합니다.\n⑥ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
+      '① 매장: 상단에서 조회할 매장을 고릅니다. 권한이 있으면「전체 매장」으로 모든 문서를 볼 수 있습니다.\n② KPI: 검색 후 만료 임박·만료·공문 회신 지연 건수를 확인합니다.\n③ 목록: 필터를 맞춘 뒤「검색」을 눌러 불러옵니다. 행 클릭으로 메타·감사 이력을 봅니다. CSV 내보내기·페이지 이동을 사용할 수 있습니다.\n④ 등록: 「새 문서」로 Sheet에서 제목·카테고리·연결·권한·날짜·공문을 입력한 뒤 Drive URL 저장 또는 드래그 업로드합니다.\n⑤ 카테고리: 전사 공통 목록을 추가·수정합니다.\n⑥ 우측「도움말」에서 자세한 안내를 보고, 끝나면「화면으로 돌아가기」로 돌아옵니다.',
     helpSum_admin_employees:
       '직원 명단을 매장·직무·등급·재직 상태로 조회하고, 행 선택 시 우측 패널에서 인적·급여·은행·세무 정보를 등록·수정하며, 직원 입력 이력·인원 이동·적정 인원·직원 평가(하위 탭) 등 HR 보조 탭을 한 화면에서 다룹니다.',
     helpHow_admin_employees:
@@ -10790,7 +10824,7 @@ Only matters the employee must handle personally on a working day:
     companyHybridDocTabList: 'List',
     companyHybridDocTabRegister: 'Register',
     companyHybridDocTabCategories: 'Categories',
-    companyHybridDocListFilterHint: 'Set store and filters — the list refreshes automatically. Narrow by category, title, expiry, or correspondence.',
+    companyHybridDocListFilterHint: 'Set store and filters, then press Search to load the list. Narrow by category, title, expiry, or correspondence.',
     companyHybridDocColCategory: 'Category',
     companyHybridDocCategoryFilterAll: 'All',
     companyHybridDocSearchTitle: 'Search title',
@@ -13897,6 +13931,8 @@ Only matters the employee must handle personally on a working day:
     fixedExpDeleteConfirm: 'Delete this fixed expense?',
     incomeStatementTitle: 'Income Statement',
     salesManagementTitle: 'Sales Management',
+    salesManagementPageSub:
+      'Period, store, channel, menu, discount, and forecast reports — saved filters, Excel, and shareable URLs.',
     salesMainTabReports: 'Sales reports',
     salesMainTabBusinessHours: 'Business hours',
     salesManagementSubmenuQuickSales: 'Sales Snapshot',
@@ -14013,7 +14049,6 @@ Only matters the employee must handle personally on a working day:
     salesCompareWeekdayColumn: 'Weekday',
     salesMultiStoreSelected: 'Selected stores total',
     salesTopicOverviewReport: 'Overview report',
-    salesTopicOverviewReportHint: 'Summary view',
     salesTopicPromoBundleReport: 'Set discount',
     salesTopicPromoBundleReportHint:
       'Analyzes set/promo line regular price vs sale price (set discount only). Type and menu breakdown with share of gross sales.',
@@ -17445,6 +17480,7 @@ orderItemQty: 'Qty',
     adminCrmDashboard: 'CRM Dashboard',
     adminCrmSegments: 'Customer Segments',
     adminCrmRfm: 'RFM Scores',
+    ...I18N_CRM_EN,
     ...I18N_CRM_SEGMENTS_EN,
     memberAppContent: 'Member Page',
     ...I18N_MP_ADMIN_EN,
@@ -18315,6 +18351,37 @@ orderItemQty: 'Qty',
       'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:
       '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑤ If orders are truncated, split the date range and query again.',
+    helpSum_admin_sales_management:
+      'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache.',
+    helpHow_admin_sales_management:
+      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (analysis, store compare, discounts, forecast) and a report topic; read the hint under the topic buttons.\n③ Reuse filters via URL or Save preset.\n④ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑤ Business hours tab adjusts POS business-day boundaries.\n⑥ If payment tender gap warning appears, fix missing payments in POS receipt management.',
+    salesSubnavAria: 'Sales menu',
+    salesTopicHintLabel: 'This report',
+    salesOverviewIntro:
+      'Core KPIs plus channel, store, payment, and daily trend for the selected period and stores. Use links below for detail.',
+    salesOverviewDelta: 'vs prior',
+    salesOverviewTopChannel: 'Top channel',
+    salesOverviewLinkTotalSales: 'Menu detail (Total Sales)',
+    salesOverviewLinkPeriod: 'Period analysis',
+    salesOverviewLinkChannel: 'Channel analysis',
+    salesOverviewLinkLive: 'Live sales',
+    salesOverviewDailyTrend: 'Daily sales trend',
+    salesTopicOverviewReportHint:
+      'Summary of KPIs, channels, stores, payments, and daily trend for the selected scope.',
+    liveStoreSalesTabRealtime: 'Live & tables',
+    liveStoreSalesTabCharts: 'Today charts',
+    liveStoreSalesTabOps: 'Ops metrics',
+    liveStoreSalesAutoRefresh: 'Auto refresh (60s)',
+    liveStoreSalesLastUpdated: 'Last updated',
+    adminOpsCenterHqSummaryTitle: 'Stores needing attention (HQ)',
+    adminOpsCenterHqSummarySub: 'Branches with print failures, backlog, or pending day-close',
+    adminOpsCenterLinkPosPrinters: 'Printer settings',
+    adminOpsCenterLinkPosSettlement: 'POS settlement',
+    adminOpsCenterAlertPrintFailed: 'Print failures — check printers and kitchen routing',
+    adminOpsCenterAlertPrintBacklog: 'Print backlog — check live sales and sync',
+    adminOpsCenterAlertClosePending: 'Day-close pending — open POS settlement',
+    totalSalesDrillHint: 'Click to drill into child level and search',
+    totalSalesLinkSalesMgmt: 'Sales management',
     helpSum_admin:
       'ERP home: quick links to live sales, sales management, and ops center, plus unapproved order alerts. Logistics roles see the inbound/outbound operations panel.',
     helpHow_admin:
@@ -18342,7 +18409,7 @@ orderItemQty: 'Qty',
     helpSum_admin_company_documents:
       'Register and manage company documents per store via Drive links or uploads; use KPI, expiry, and correspondence filters to search and track compliance.',
     helpHow_admin_company_documents:
-      '① Store: pick the store at the top. With permission, choose All stores for every store’s documents.\n② KPI: review expiring, expired, and overdue reply counts.\n③ List: filters refresh the list automatically. Click a row or View details for metadata and activity log. Export CSV and use pagination as needed.\n④ Register: use New document to open the sheet — title, category, relation (employee/store/project), permission, dates, optional official-mail fields, then Drive URL or drag-and-drop upload.\n⑤ Categories: manage the global category tree.\n⑥ Use Help on the right, then Back to screen when finished.',
+      '① Store: pick the store at the top. With permission, choose All stores for every store’s documents.\n② KPI: after Search, review expiring, expired, and overdue reply counts.\n③ List: set filters and press Search. Click a row for metadata and activity log. Export CSV and use pagination as needed.\n④ Register: use New document to open the sheet — title, category, relation, permission, dates, optional official-mail fields, then Drive URL or drag-and-drop upload.\n⑤ Categories: manage the global category tree.\n⑥ Use Help on the right, then Back to screen when finished.',
     helpSum_admin_employees:
       'Look up staff by store, job, grade, and employment status; edit HR, payroll, bank, and tax fields in a right-side panel; and use satellite tabs for input history, movement, headcount, and employee evaluation (with sub-tabs) in one place.',
     helpHow_admin_employees:
@@ -20572,7 +20639,7 @@ orderItemQty: 'Qty',
     companyHybridDocTabList: 'รายการ',
     companyHybridDocTabRegister: 'ลงทะเบียน',
     companyHybridDocTabCategories: 'หมวดหมู่',
-    companyHybridDocListFilterHint: 'ตั้งสาขาและตัวกรอง — รายการจะรีเฟรชอัตโนมัติ กรองด้วยหมวดหมู่ หัวข้อ วันหมดอายุ หรือหนังสือราชการ',
+    companyHybridDocListFilterHint: 'ตั้งสาขาและตัวกรอง แล้วกดค้นหาเพื่อโหลดรายการ กรองด้วยหมวดหมู่ หัวข้อ วันหมดอายุ หรือหนังสือราชการ',
     companyHybridDocColCategory: 'หมวดหมู่',
     companyHybridDocCategoryFilterAll: 'ทั้งหมด',
     companyHybridDocSearchTitle: 'ค้นหาหัวข้อ',
@@ -23656,6 +23723,7 @@ orderItemQty: 'จำนวน',
     adminCrmDashboard: 'แดชบอร์ด CRM',
     adminCrmSegments: 'กลุ่มลูกค้า',
     adminCrmRfm: 'คะแนน RFM',
+    ...I18N_CRM_TH,
     ...I18N_CRM_SEGMENTS_TH,
     memberAppContent: 'หน้าสมาชิก',
     ...I18N_MP_ADMIN_TH,
@@ -28623,7 +28691,7 @@ orderItemQty: 'จำนวน',
     companyHybridDocTabList: 'စာရင်း',
     companyHybridDocTabRegister: 'မှတ်ပုံတင်',
     companyHybridDocTabCategories: 'အမျိုးအစားများ',
-    companyHybridDocListFilterHint: 'ဆိုင်နှင့် filter များကို သတ်မှတ်ပါ — စာရင်းကို အလိုအလျောက် ပြန်လည်ဖွင့်ပါသည်။ အမျိုးအစား၊ ခေါင်းစဉ်၊ သက်တမ်းကုန်ချိန် သို့မဟုတ် တရားဝင်စာဖြင့် စစ်ထုတ်ပါ။',
+    companyHybridDocListFilterHint: 'ဆိုင်နှင့် filter များကို သတ်မှတ်ပြီး ရှာဖွေခလုတ်ကို နှိပ်ပါ — စာရင်းကို ဖွင့်ပါ။ အမျိုးအစား၊ ခေါင်းစဉ်၊ သက်တမ်းကုန်ချိန် သို့မဟုတ် တရားဝင်စာဖြင့် စစ်ထုတ်ပါ။',
     companyHybridDocColCategory: 'အမျိုးအစား',
     companyHybridDocCategoryFilterAll: 'အားလုံး',
     companyHybridDocSearchTitle: 'ခေါင်းစဉ်ရှာရန်',
@@ -36011,7 +36079,7 @@ orderItemQty: 'အရေအတွက်',
     companyHybridDocTabList: 'ລາຍການ',
     companyHybridDocTabRegister: 'ລົງທະບຽນ',
     companyHybridDocTabCategories: 'ໝວດໝູ່',
-    companyHybridDocListFilterHint: 'ເລືອກສາຂາເພື່ອໂຫຼດລາຍການ. ກອງດ້ວຍໝວດໝູ່, ຫົວຂໍ້ ຫຼື ການເຊື່ອມ.',
+    companyHybridDocListFilterHint: 'ເລືອກສາຂາແລະຕົວກອງ ແລ້ວກົດຄົ້ນຫາເພື່ອໂຫຼດລາຍການ. ກອງດ້ວຍໝວດໝູ່, ຫົວຂໍ້, ວັນໝົດອາຍຸ ຫຼື ຫນັງສືລາຊການ.',
     companyHybridDocColCategory: 'ໝວດໝູ່',
     companyHybridDocCategoryFilterAll: 'ທັງໝົດ',
     companyHybridDocSearchTitle: 'ຄົ້ນຫາຫົວຂໍ້',

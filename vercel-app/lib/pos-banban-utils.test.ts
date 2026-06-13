@@ -322,6 +322,23 @@ describe('resolveBanbanFlavorPairForKitchenPrint', () => {
     })
   })
 
+  it('menuId1·menuId2 가 같아도(동일 맛 2번) 재인쇄 맛을 복원한다', () => {
+    expect(
+      resolveBanbanFlavorPairForKitchenPrint(
+        {
+          id: 'banban-11-11',
+          name: 'Banban Chicken',
+          menuId1: '11',
+          menuId2: '11',
+        },
+        menus
+      )
+    ).toEqual({
+      flavor1: 'GOLDEN FRIED CHICKEN',
+      flavor2: 'GOLDEN FRIED CHICKEN',
+    })
+  })
+
   it('banbanFlavors note 토큰으로 재인쇄 맛을 복원한다', () => {
     expect(
       resolveBanbanFlavorPairForKitchenPrint({

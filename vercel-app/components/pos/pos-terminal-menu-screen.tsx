@@ -1595,7 +1595,6 @@ export function PosTerminalMenuScreen({
                         <button
                           key={menu.id}
                           type="button"
-                          disabled={!!first && first.id === menu.id}
                           onClick={() => {
                             fireMenuAction(() => {
                               if (first) {
@@ -1605,12 +1604,7 @@ export function PosTerminalMenuScreen({
                               }
                             })
                           }}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition",
-                            first?.id === menu.id
-                              ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                              : "border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50"
-                          )}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                         >
                           <span className="min-w-0 flex-1 text-left break-words">
                             <span className="block font-medium text-slate-800">{menu.name}</span>
@@ -1620,15 +1614,9 @@ export function PosTerminalMenuScreen({
                               </span>
                             ) : null}
                           </span>
-                          {first?.id === menu.id ? (
-                            <span className="rounded bg-slate-200 px-2 py-1 text-[11px] shrink-0">
-                              {t('posSelected')}
-                            </span>
-                          ) : (
-                            <span className="rounded bg-emerald-100 px-2 py-1 text-[11px] text-emerald-700 shrink-0 whitespace-nowrap">
-                              {first ? (t('posSelect') || '선택') : (t('posBanbanFirstHalf') || '1번째 맛')}
-                            </span>
-                          )}
+                          <span className="rounded bg-emerald-100 px-2 py-1 text-[11px] text-emerald-700 shrink-0 whitespace-nowrap">
+                            {first ? (t('posSelect') || '선택') : (t('posBanbanFirstHalf') || '1번째 맛')}
+                          </span>
                         </button>
                         )
                       })}

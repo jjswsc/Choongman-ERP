@@ -2,13 +2,23 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createMember, updateMember, type Member } from "@/lib/api-client"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { createMember, getMembers, updateMember, type Member } from "@/lib/api-client"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { CrmPageHero } from "@/components/crm/crm-shared-ui"
+import { CrmMember360Panel } from "@/components/crm/crm-member-360-panel"
 import { MemberListPanel, type MemberListPanelHandle } from "@/components/admin/member-list-panel"
 import { MemberMergePanel } from "@/components/admin/member-merge-panel"
 import { useLang } from "@/lib/lang-context"
@@ -147,7 +157,14 @@ const MemberFormPanel = React.memo(function MemberFormPanel({
           </div>
           <div className="space-y-1.5">
             <Label>{t("gender")}</Label>
-            <Input placeholder={t("memberGenderPh")} value={form.gender ?? ""} onChange={(e) => onFormChange({ gender: e.target.value })} />
+            <Select value={form.gender || "_"} onValueChange={(v) => onFormChange({ gender: v === "_" ? "" : v })}>
+              <SelectTrigger><SelectValue placeholder={t("memberGenderPh")} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_">—</SelectItem>
+                <SelectItem value="M">{t("crmMemberGenderMale")}</SelectItem>
+                <SelectItem value="F">{t("crmMemberGenderFemale")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -157,7 +174,14 @@ const MemberFormPanel = React.memo(function MemberFormPanel({
           </div>
           <div className="space-y-1.5">
             <Label>{t("memberJoinChannel")}</Label>
-            <Input value={form.joinChannel ?? ""} onChange={(e) => onFormChange({ joinChannel: e.target.value })} />
+            <Select value={form.joinChannel || "store"} onValueChange={(v) => onFormChange({ joinChannel: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="store">{t("crmMemberJoinChannelStore")}</SelectItem>
+                <SelectItem value="app">{t("crmMemberJoinChannelApp")}</SelectItem>
+                <SelectItem value="line">{t("crmMemberJoinChannelLine")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -198,10 +222,16 @@ const MemberFormPanel = React.memo(function MemberFormPanel({
         </div>
         <div className="space-y-1.5">
           <Label>{t("memberStatus")}</Label>
-          <Input
+          <Select
             value={form.status ?? "active"}
-            onChange={(e) => onFormChange({ status: e.target.value === "inactive" ? "inactive" : "active" })}
-          />
+            onValueChange={(v) => onFormChange({ status: v === "inactive" ? "inactive" : "active" })}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">{t("crmMemberStatusActive")}</SelectItem>
+              <SelectItem value="inactive">{t("crmMemberStatusInactive")}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex gap-2 pt-1">
           <Button onClick={onSave} disabled={saving}>
@@ -217,12 +247,27 @@ const MemberFormPanel = React.memo(function MemberFormPanel({
 })
 
 export default function MembersPage() {
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const listRef = React.useRef<MemberListPanelHandle>(null)
   const [saving, setSaving] = React.useState(false)
   const [form, setForm] = React.useState<MemberForm>({ ...emptyForm })
   const [selectedMember, setSelectedMember] = React.useState<Member | null>(null)
+
+  React.useEffect(() => {
+    const id = Number(searchParams.get("memberId") || 0)
+    if (!id) return
+    getMembers({ q: String(id), limit: 5 })
+      .then((rows) => {
+        const m = rows.find((x) => x.id === id) || rows[0]
+        if (m) {
+          setForm(memberToForm(m))
+          setSelectedMember(m)
+        }
+      })
+      .catch(() => {})
+  }, [searchParams])
 
   const handleFormChange = React.useCallback((patch: Partial<MemberForm>) => {
     setForm((p) => ({ ...p, ...patch }))
@@ -327,16 +372,15 @@ export default function MembersPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Users className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("memberManagementTitle")}</h1>
-            <p className="text-xs text-muted-foreground">{t("memberManagementSub")}</p>
-          </div>
-        </div>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <CrmPageHero
+          icon={Users}
+          title={t("memberManagementTitle")}
+          description={t("memberManagementSub")}
+          gradient="from-blue-50 to-indigo-50"
+          border="border-blue-200/60"
+          iconClass="bg-blue-500/10 text-blue-600"
+        />
         <CrmSubnav />
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
@@ -352,7 +396,10 @@ export default function MembersPage() {
             <MemberMergePanel targetMember={selectedMember} onMerged={handleMerged} t={t} />
           </div>
 
-          <MemberListPanel ref={listRef} onSelectMember={handleSelectMember} />
+          <div className="space-y-4">
+            <MemberListPanel ref={listRef} onSelectMember={handleSelectMember} selectedMemberId={selectedMember?.id ?? null} />
+            <CrmMember360Panel member={selectedMember} />
+          </div>
         </div>
       </div>
     </div>

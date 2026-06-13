@@ -5,6 +5,7 @@ import {
   buildKitchenCartLinesFromSnapshotDelta,
   collectDineInSnapshotIncreasedKeys,
   filterKitchenCartLinesForDineInAdd,
+  resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
 
@@ -76,6 +77,18 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
     expect(delta).toEqual([
       { id: 'cart-soup-new', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
     ])
+  })
+
+  it('resolveDineInKitchenLinesForAddSubmit does not return full cart when delta is empty', () => {
+    const cart = [
+      { id: 'cart-existing-0-a', name: 'Rice', price: 50, quantity: 1, menuId: '1' },
+      { id: 'cart-new-1', name: 'Soup', price: 99, quantity: 1, menuId: '2' },
+    ]
+    const existing = [
+      { id: 'a', name: 'Rice', price: 50, quantity: 1, qty: 1, menuId: '1' },
+      { id: 'b', name: 'Soup', price: 99, quantity: 1, qty: 1, menuId: '2' },
+    ]
+    expect(resolveDineInKitchenLinesForAddSubmit(cart, existing)).toEqual([])
   })
 
   it('without a note normalizer the drift would re-emit existing chicken (documents root cause)', () => {

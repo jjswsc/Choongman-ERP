@@ -12,6 +12,8 @@ import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
 import { MemberStampCardAdminPanel } from "@/components/admin/member-stamp-card-admin-panel"
+import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
+import { CrmMemberAppPreview } from "@/components/crm/crm-member-app-preview"
 import type { MemberPortalContentAdminItem } from "@/lib/member-portal-content-admin"
 import { countContentForAdminTab } from "@/lib/member-portal-content-admin"
 import { useAuth } from "@/lib/auth-context"
@@ -720,6 +722,7 @@ export default function CrmMemberAppContentPage() {
           </TabsList>
 
           <TabsContent value="design" className="space-y-4">
+            <CrmMemberAppPreview />
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_designTitle")}</CardTitle>
@@ -735,13 +738,12 @@ export default function CrmMemberAppContentPage() {
                       onChange={(e) => setLoginBackgroundUrl(e.target.value)}
                       placeholder="https://..."
                     />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) void uploadDesignImage(file, "login")
-                      }}
+                    <CrmImageUploadField
+                      disabled={!canEdit}
+                      uploading={uploading}
+                      previewUrl={loginBackgroundUrl}
+                      alt={t("mpAdmin_loginBgAlt")}
+                      onFile={(file) => void uploadDesignImage(file, "login")}
                     />
                     {loginBackgroundUrl ? (
                       <img src={loginBackgroundUrl} alt={t("mpAdmin_loginBgAlt")} className="h-28 w-full rounded object-cover" />
@@ -754,13 +756,12 @@ export default function CrmMemberAppContentPage() {
                       onChange={(e) => setAppBackgroundUrl(e.target.value)}
                       placeholder="https://..."
                     />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) void uploadDesignImage(file, "app")
-                      }}
+                    <CrmImageUploadField
+                      disabled={!canEdit}
+                      uploading={uploading}
+                      previewUrl={appBackgroundUrl}
+                      alt={t("mpAdmin_appBgAlt")}
+                      onFile={(file) => void uploadDesignImage(file, "app")}
                     />
                     {appBackgroundUrl ? (
                       <img src={appBackgroundUrl} alt={t("mpAdmin_appBgAlt")} className="h-28 w-full rounded object-cover" />

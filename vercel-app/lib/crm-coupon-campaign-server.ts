@@ -273,6 +273,20 @@ function computeIssueExpiry(campaign: ReturnType<typeof mapCampaign>, coupon: Co
   return campaignEndsAt < couponValidTo ? campaignEndsAt : couponValidTo
 }
 
+export async function previewCampaignAudience(params: {
+  audienceType?: string
+  audiencePayload?: Record<string, unknown>
+  issueLimit?: number
+}): Promise<{ count: number; capped: number }> {
+  const campaign = {
+    audienceType: toText(params.audienceType) || 'all',
+    audiencePayload: params.audiencePayload && typeof params.audiencePayload === 'object' ? params.audiencePayload : {},
+    issueLimit: parseIssueLimit(params.issueLimit),
+  } as ReturnType<typeof mapCampaign>
+  const ids = await resolveTargetMembers(campaign)
+  return { count: ids.length, capped: campaign.issueLimit }
+}
+
 export async function runCrmCouponCampaign(params: {
   campaignId: number
   runMode?: 'manual' | 'auto' | 'retry'
