@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { canAccessSaasAdmin } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
+import { assertTenantInScope, requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
 import { hashPassword } from "@/lib/password"
 import { supabaseInsert, supabaseSelectFilter, supabaseCountFilter } from "@/lib/supabase-server"
 
@@ -32,11 +31,8 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as Body
@@ -67,6 +63,11 @@ export async function POST(req: NextRequest) {
     }
     if (tenant.is_active === false) {
       return NextResponse.json({ success: false, message: "비활성 고객사에는 계정을 만들 수 없습니다." }, { status: 400, headers })
+    }
+
+    const inScope = await assertTenantInScope(cp.scope, tenantId)
+    if (!inScope) {
+      return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
     }
 
     const companyName = String(tenant.company_name || "").trim()

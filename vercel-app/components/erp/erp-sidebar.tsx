@@ -78,6 +78,7 @@ import {
   isLogisticsStaffRole,
 } from "@/lib/permissions"
 import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
+import { useAiCenterModuleEnabled } from "@/lib/use-ai-center-module"
 interface MenuItem {
   titleKey: string
   icon: React.ElementType
@@ -302,6 +303,7 @@ export function ErpSidebar() {
   const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
   const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
   const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
+  const aiModuleEnabled = useAiCenterModuleEnabled()
 
   React.useEffect(() => {
     let cancelled = false
@@ -450,7 +452,7 @@ export function ErpSidebar() {
               <div className="space-y-0.5">
                 {mainItems
                   .filter((item) => item.href !== "/admin/pos-cost-analysis" || canAccessPosCostAnalysis(auth?.role || ""))
-                  .filter((item) => item.href !== "/admin/ai-center" || canAccessAiCenter(auth?.role || ""))
+                  .filter((item) => item.href !== "/admin/ai-center" || (canAccessAiCenter(auth?.role || "") && aiModuleEnabled !== false))
                   .map((item) => (
                   <Link
                     key={item.href}

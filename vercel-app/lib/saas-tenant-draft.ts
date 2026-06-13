@@ -15,6 +15,7 @@ export type NewTenantDraftInput = {
   ownerName?: string
   phone?: string
   catalog: Record<SaasModuleKey, SaasModulePriceRow>
+  partnerMarginPct?: number
 }
 
 export function createNewTenantDraft(input: NewTenantDraftInput): TenantItem {
@@ -59,6 +60,7 @@ export function createNewTenantDraft(input: NewTenantDraftInput): TenantItem {
       usage,
       limits,
       policy,
+      partnerMarginPct: input.partnerMarginPct ?? 0,
     }),
     billingHistory: [],
     auditTrail: [],

@@ -48,6 +48,11 @@ import {
 import { MemberPortalProfileContactLinks, MemberPortalContactChannelButtons } from "@/components/member-portal/member-portal-contact-links"
 import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import {
+  MemberPortalStampCard,
+  MemberPortalStampHomeWidget,
+  useMemberPortalStampStatus,
+} from "@/components/member-portal/member-portal-stamp-card"
+import {
   GlassCard,
   MemberPortalAmbienceBackground,
   MemberPortalContentSheet,
@@ -138,6 +143,11 @@ export function MemberPortalApp() {
   const { tiers: portalTiers } = useMemberPortalTiers()
   const dateLocale = memberPortalDateLocale(lang)
   const [member, setMember] = React.useState<MemberSummary | null>(null)
+  const {
+    status: stampStatus,
+    loading: stampLoading,
+    reload: reloadStampStatus,
+  } = useMemberPortalStampStatus(lang, Boolean(member))
   const [dashboard, setDashboard] = React.useState<PortalDashboard | null>(null)
   const [phone, setPhone] = React.useState("")
   const [birthDate, setBirthDate] = React.useState("")
@@ -154,6 +164,11 @@ export function MemberPortalApp() {
   )
   const [signupName, setSignupName] = React.useState("")
   const [signupGender, setSignupGender] = React.useState<"" | "M" | "F">("")
+  const [signupStoreCode, setSignupStoreCode] = React.useState("")
+  const [signupStoreOptions, setSignupStoreOptions] = React.useState<
+    Array<{ storeCode: string; displayName: string }>
+  >([])
+  const [signupOfficeStoreCode, setSignupOfficeStoreCode] = React.useState("office")
   const [signupConsentMarketing, setSignupConsentMarketing] = React.useState(true)
   const [loading, setLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState(false)
@@ -285,8 +300,9 @@ export function MemberPortalApp() {
     setPoints(pointsRes.rows || [])
     setCoupons(couponsRes.rows || [])
     setVisits(visitsRes.rows || [])
+    void reloadStampStatus()
     return true
-  }, [loadFavoriteStorePreference, loadMemberContent, loadMemberStores])
+  }, [loadFavoriteStorePreference, loadMemberContent, loadMemberStores, reloadStampStatus])
 
   React.useEffect(() => {
     ;(async () => {
@@ -337,7 +353,18 @@ export function MemberPortalApp() {
           heroFoodImageUrl: "",
         })
       })
-  }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, brand.memberContactLineOfficialUrl, loadSession])
+    getJson<{
+      success: boolean
+      officeStoreCode?: string
+      stores?: Array<{ storeCode: string; displayName: string }>
+    }>("/api/member-portal/signup-stores?lang=" + encodeURIComponent(lang))
+      .then((r) => {
+        if (!r.success) return
+        setSignupOfficeStoreCode(String(r.officeStoreCode || "office"))
+        setSignupStoreOptions(Array.isArray(r.stores) ? r.stores : [])
+      })
+      .catch(() => {})
+  }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, brand.memberContactLineOfficialUrl, lang, loadSession])
 
   React.useEffect(() => {
     setFavoriteStoreCodes(readFavoriteStoreCodesFromLocalStorage())
@@ -392,6 +419,25 @@ export function MemberPortalApp() {
     }
   }
 
+  const completeJoinStore = async () => {
+    setActionLoading(true)
+    setError("")
+    try {
+      const res = await postJson<{ success: boolean; code?: string; member?: MemberSummary }>(
+        "/api/member-portal/me/join-store",
+        { joinStoreCode: signupStoreCode }
+      )
+      if (!res.success) {
+        setError(res.code ? memberPortalLoginError(lang, res.code) : t("saveFailed"))
+        return
+      }
+      if (res.member) applyLoggedInMember(res.member)
+      await loadSession()
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const signupWithPhoneBirth = async () => {
     setActionLoading(true)
     setError("")
@@ -409,6 +455,7 @@ export function MemberPortalApp() {
         phone: normalizeMemberPhone(phone),
         birthDate,
         gender: signupGender,
+        joinStoreCode: signupStoreCode,
         consentMarketing: signupConsentMarketing,
         deviceLabel: "member-web",
       })
@@ -571,6 +618,61 @@ export function MemberPortalApp() {
     )
   }
 
+  if (member && !member.joinStoreCode) {
+    const portalFieldClass =
+      "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white shadow-inner shadow-black/20 placeholder:text-white/30 focus-visible:border-amber-400/50 focus-visible:ring-amber-400/20"
+    const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-white/45"
+    return (
+      <div className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white">
+        <MemberPortalLoungeBackdrop
+          customFullBackgroundUrl={designBackgrounds.loginBackgroundUrl}
+          heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
+          variant="login"
+        />
+        <div className="relative mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-5 py-8">
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <p className="text-lg font-semibold text-white">{t("joinStoreCompleteTitle")}</p>
+            <p className="mt-2 text-sm text-white/60">{t("joinStoreCompleteDesc")}</p>
+            {!!error && (
+              <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                {error}
+              </div>
+            )}
+            <div className="mt-5 space-y-3">
+              <div className="space-y-1.5">
+                <Label className={portalLabelClass}>{t("signupStoreLabel")}</Label>
+                <select
+                  value={signupStoreCode}
+                  onChange={(e) => setSignupStoreCode(e.target.value)}
+                  className={`${portalFieldClass} w-full px-3 text-sm`}
+                >
+                  <option value="" className="bg-[#141418] text-white/70">
+                    {t("signupStorePlaceholder")}
+                  </option>
+                  <option value={signupOfficeStoreCode} className="bg-[#141418] text-white">
+                    {t("signupStoreOffice")}
+                  </option>
+                  {signupStoreOptions.map((store) => (
+                    <option key={store.storeCode} value={store.storeCode} className="bg-[#141418] text-white">
+                      {store.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                onClick={completeJoinStore}
+                disabled={actionLoading || !signupStoreCode}
+                className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#ef233c] to-[#d90429] text-base font-semibold text-white"
+              >
+                {actionLoading ? t("signupChecking") : t("joinStoreCompleteBtn")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!member) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
     const portalFieldClass =
@@ -631,11 +733,31 @@ export function MemberPortalApp() {
             </div>
 
             <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className={portalLabelClass}>{t("signupStoreLabel")}</Label>
+                <select
+                  value={signupStoreCode}
+                  onChange={(e) => setSignupStoreCode(e.target.value)}
+                  className={`${portalFieldClass} w-full px-3 text-sm`}
+                >
+                  <option value="" className="bg-[#141418] text-white/70">
+                    {t("signupStorePlaceholder")}
+                  </option>
+                  <option value={signupOfficeStoreCode} className="bg-[#141418] text-white">
+                    {t("signupStoreOffice")}
+                  </option>
+                  {signupStoreOptions.map((store) => (
+                    <option key={store.storeCode} value={store.storeCode} className="bg-[#141418] text-white">
+                      {store.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <Button
                 className="h-14 w-full rounded-2xl border-0 bg-[#06C755] text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(6,199,85,0.28)] transition hover:bg-[#05b34c] disabled:opacity-50"
-                disabled={!lineLoginEnabled}
+                disabled={!lineLoginEnabled || !signupStoreCode}
                 onClick={() => {
-                  window.location.href = "/api/member-portal/auth/line/start"
+                  window.location.href = `/api/member-portal/auth/line/start?joinStore=${encodeURIComponent(signupStoreCode)}`
                 }}
               >
                 <span className="inline-flex items-center gap-3">
@@ -757,7 +879,8 @@ export function MemberPortalApp() {
                       !signupName.trim() ||
                       !normalizeMemberPhone(phone) ||
                       !birthDateReady ||
-                      !signupGender
+                      !signupGender ||
+                      !signupStoreCode
                     }
                     className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#ef233c] to-[#d90429] text-base font-semibold text-white shadow-[0_8px_24px_rgba(239,35,60,0.22)] hover:from-[#d90429] hover:to-[#b9132a]"
                   >
@@ -960,6 +1083,12 @@ export function MemberPortalApp() {
               }}
             />
 
+            <MemberPortalStampHomeWidget
+              lang={lang}
+              status={stampStatus}
+              onOpenPrivilege={() => changeTab("privilege")}
+            />
+
             <MemberPortalHomePromosAndMenus
               contentItems={contentItems}
               lang={lang}
@@ -1080,6 +1209,13 @@ export function MemberPortalApp() {
               pointsValue={formatPoints(member.pointBalance || 0)}
               visitsLabel={t("statVisits")}
               visitsValue={`${activeDashboard.stats.visitCount}`}
+            />
+            <MemberPortalStampCard
+              lang={lang}
+              memberId={member.id}
+              status={stampStatus}
+              loading={stampLoading}
+              onGoCoupons={() => changeTab("privilege")}
             />
             <MemberPortalTierBenefits tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
             {coupons.length === 0 ? (

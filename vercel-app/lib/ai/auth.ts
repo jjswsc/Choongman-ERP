@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getVerifiedAuth } from "@/lib/verify-auth"
 import { canAccessAiCenter, canApproveAiActions } from "@/lib/permissions"
 import type { AiScopedAuth } from "@/lib/ai/types"
+import { isAiCenterModuleEnabledForAuth } from "@/lib/ai/tenant-gate"
 
 export async function requireAiAccess(req: NextRequest): Promise<
   | { ok: true; scoped: AiScopedAuth }
@@ -20,6 +21,19 @@ export async function requireAiAccess(req: NextRequest): Promise<
     return {
       ok: false,
       response: NextResponse.json({ error: "Forbidden", code: "AI_FORBIDDEN" }, { status: 403 }),
+    }
+  }
+  const moduleEnabled = await isAiCenterModuleEnabledForAuth(auth)
+  if (!moduleEnabled) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: "AI 센터 모듈이 이 고객사 계약에 포함되어 있지 않습니다.",
+          code: "AI_FORBIDDEN",
+        },
+        { status: 403 }
+      ),
     }
   }
   return {

@@ -13,6 +13,7 @@ import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documen
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
 import { resolveCategoryIdForDocument } from '@/lib/company-hybrid-category-server'
 import { mergeMetadataWithCorrespondence } from '@/lib/company-hybrid-correspondence'
+import { parseCompanyHybridDocRelatedFromBody } from '@/lib/company-hybrid-documents-related'
 
 const BUCKET = COMPANY_DOCUMENTS_BUCKET
 
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
     const validFrom = parseCompanyHybridDocDate(body.validFrom)
     const validTo = parseCompanyHybridDocDate(body.validTo)
     const hasCorrespondenceKey = Object.prototype.hasOwnProperty.call(body, 'correspondence')
+    const related = parseCompanyHybridDocRelatedFromBody(body)
     const fileName = norm(body.fileName)
     const storagePath = norm(body.storagePath)
     const fileSize = Number(body.fileSize)
@@ -91,8 +93,8 @@ export async function POST(request: NextRequest) {
     )
     const inserted = await supabaseInsert('company_hybrid_documents', {
       store,
-      related_type: 'none',
-      related_id: null,
+      related_type: related.related_type,
+      related_id: related.related_id,
       doc_type: companyHybridDocVisibilityToDocType(visibility),
       category_id: categoryId,
       title,

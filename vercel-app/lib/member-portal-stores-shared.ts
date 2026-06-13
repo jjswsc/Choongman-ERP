@@ -6,6 +6,9 @@ import { normStoreKey } from '@/lib/store-list-keys'
 export type MemberPortalStoreDto = {
   storeCode: string
   displayName: string
+  displayNameKo?: string
+  displayNameEn?: string
+  displayNameTh?: string
   address: string
   mapQuery: string
   photoUrl: string
@@ -79,6 +82,9 @@ export function mapErpStoreToMemberPortal(row: ErpStoreMasterRow): MemberPortalS
   return {
     storeCode,
     displayName,
+    displayNameKo: String(row.display_name_ko || '').trim() || undefined,
+    displayNameEn: String(row.display_name_en || '').trim() || undefined,
+    displayNameTh: String(row.display_name_th || '').trim() || undefined,
     address,
     mapQuery: mapQueryRaw || defaultMemberPortalMapQuery(displayName),
     photoUrl,

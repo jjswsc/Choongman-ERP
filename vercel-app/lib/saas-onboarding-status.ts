@@ -140,3 +140,40 @@ export function parseOnboardingSteps(raw: unknown): OnboardingStepStatus | null 
 export function onboardingStorageKey(tenantId: string): string {
   return `saas-onboard-draft:${tenantId}`
 }
+
+export function onboardingFlagsStorageKey(tenantId: string): string {
+  return `saas-onboard-flags:${tenantId}`
+}
+
+export function readLocalOnboardingFlags(tenantId: string): OnboardingFlags {
+  if (typeof window === "undefined" || !tenantId) return {}
+  try {
+    const raw = sessionStorage.getItem(onboardingFlagsStorageKey(tenantId))
+    if (!raw) return {}
+    return parseOnboardingFlags(JSON.parse(raw))
+  } catch {
+    return {}
+  }
+}
+
+export function mergeLocalOnboardingFlags(tenantId: string, patch: OnboardingFlags): OnboardingFlags {
+  const merged = { ...readLocalOnboardingFlags(tenantId), ...patch }
+  if (typeof window !== "undefined" && tenantId) {
+    try {
+      sessionStorage.setItem(onboardingFlagsStorageKey(tenantId), JSON.stringify(merged))
+    } catch {
+      /* ignore quota */
+    }
+  }
+  return merged
+}
+
+export function isOnboardingFlagsMissingApiResponse(input: {
+  code?: string
+  message?: string
+  flagsPersisted?: boolean
+}): boolean {
+  if (input.flagsPersisted === false || input.code === "onboarding_flags_missing") return true
+  const msg = String(input.message || "")
+  return /onboarding_flags/i.test(msg) && /column|컬럼|42703|PGRST204|sql\/saas_tenant_onboarding/i.test(msg)
+}

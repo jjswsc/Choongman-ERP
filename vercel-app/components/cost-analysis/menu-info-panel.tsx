@@ -34,13 +34,15 @@ interface MenuInfoPanelProps {
   onRequestChangeMenu?: () => void
   /** 코드·카테고리·메뉴명 읽기 전용 (pos 메뉴 관리와 연동) */
   readOnlyMenuInfo?: boolean
+  /** 가격·조리시간·설명 등 편집 불가 (가맹·매니저 조회 전용) */
+  readOnlyEdits?: boolean
   /** 현재 메뉴 ID (조리 시간 저장 시 사용, 목록에서 선택된 메뉴) */
   menuId?: string
   /** 조리 시간 변경 시 DB 저장 콜백 (menuId, cookingTimeMin) */
   onSaveCookingTime?: (menuId: string, cookingTimeMin: number | null) => void
 }
 
-export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mainCategories = [], menuRows = [], onMenuSelect, onRequestChangeMenu, readOnlyMenuInfo = false, menuId, onSaveCookingTime }: MenuInfoPanelProps) {
+export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mainCategories = [], menuRows = [], onMenuSelect, onRequestChangeMenu, readOnlyMenuInfo = false, readOnlyEdits = false, menuId, onSaveCookingTime }: MenuInfoPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const categoryOptions = categories.length > 0 ? categories : ["Size S", "Size M", "Size L", "Set"]
@@ -176,82 +178,98 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
               {t("posMenuCookingTimeMin") || "조리 시간"}
             </Label>
             <div className="flex items-center gap-1">
-              <Input
-                id="cookingTimeMin"
-                type="number"
-                min={0}
-                max={999}
-                placeholder={t("posMenuMin") || "분"}
-                value={menuItem.cookingTimeMin != null ? Math.floor(menuItem.cookingTimeMin) : ""}
-                onChange={(e) => {
-                  const minVal = e.target.value === "" ? 0 : (parseInt(e.target.value, 10) || 0)
-                  const sec = Math.round(((menuItem.cookingTimeMin ?? 0) % 1) * 60)
-                  const v = minVal + sec / 60
-                  onMenuItemChange({ ...menuItem, cookingTimeMin: v })
-                }}
-                onBlur={() => {
-                  if (onSaveCookingTime && readOnlyMenuInfo && menuId) {
-                    const total = menuItem.cookingTimeMin != null ? Math.round((menuItem.cookingTimeMin ?? 0) * 60) / 60 : null
-                    onSaveCookingTime(menuId, total)
-                  }
-                }}
-                className="h-9 min-h-[36px] w-14 font-mono bg-secondary/50 border-border [& input]:text-right"
-              />
-              <span className="text-sm text-muted-foreground">{t("posMenuMin") || "분"}</span>
-              <Input
-                id="cookingTimeSec"
-                type="number"
-                min={0}
-                max={59}
-                placeholder="초"
-                value={menuItem.cookingTimeMin != null ? Math.round(((menuItem.cookingTimeMin ?? 0) % 1) * 60) : ""}
-                onChange={(e) => {
-                  const secVal = e.target.value === "" ? 0 : Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0))
-                  const min = Math.floor(menuItem.cookingTimeMin ?? 0)
-                  const v = min + secVal / 60
-                  onMenuItemChange({ ...menuItem, cookingTimeMin: v })
-                }}
-                onBlur={() => {
-                  if (onSaveCookingTime && readOnlyMenuInfo && menuId) {
-                    const total = menuItem.cookingTimeMin != null ? Math.round((menuItem.cookingTimeMin ?? 0) * 60) / 60 : null
-                    onSaveCookingTime(menuId, total)
-                  }
-                }}
-                className="h-9 min-h-[36px] w-14 font-mono bg-secondary/50 border-border [& input]:text-right"
-              />
-              <span className="text-sm text-muted-foreground">{t("posMenuSec") || "초"}</span>
+              {readOnlyEdits ? (
+                <div className="h-9 min-h-[36px] px-3 flex items-center text-sm font-mono bg-muted/30 rounded-md border border-border">
+                  {menuItem.cookingTimeMin != null
+                    ? `${Math.floor(menuItem.cookingTimeMin)}${t("posMenuMin") || "분"} ${Math.round(((menuItem.cookingTimeMin ?? 0) % 1) * 60)}${t("posMenuSec") || "초"}`
+                    : "—"}
+                </div>
+              ) : (
+                <>
+                  <Input
+                    id="cookingTimeMin"
+                    type="number"
+                    min={0}
+                    max={999}
+                    placeholder={t("posMenuMin") || "분"}
+                    value={menuItem.cookingTimeMin != null ? Math.floor(menuItem.cookingTimeMin) : ""}
+                    onChange={(e) => {
+                      const minVal = e.target.value === "" ? 0 : (parseInt(e.target.value, 10) || 0)
+                      const sec = Math.round(((menuItem.cookingTimeMin ?? 0) % 1) * 60)
+                      const v = minVal + sec / 60
+                      onMenuItemChange({ ...menuItem, cookingTimeMin: v })
+                    }}
+                    onBlur={() => {
+                      if (onSaveCookingTime && readOnlyMenuInfo && menuId) {
+                        const total = menuItem.cookingTimeMin != null ? Math.round((menuItem.cookingTimeMin ?? 0) * 60) / 60 : null
+                        onSaveCookingTime(menuId, total)
+                      }
+                    }}
+                    className="h-9 min-h-[36px] w-14 font-mono bg-secondary/50 border-border [& input]:text-right"
+                  />
+                  <span className="text-sm text-muted-foreground">{t("posMenuMin") || "분"}</span>
+                  <Input
+                    id="cookingTimeSec"
+                    type="number"
+                    min={0}
+                    max={59}
+                    placeholder="초"
+                    value={menuItem.cookingTimeMin != null ? Math.round(((menuItem.cookingTimeMin ?? 0) % 1) * 60) : ""}
+                    onChange={(e) => {
+                      const secVal = e.target.value === "" ? 0 : Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0))
+                      const min = Math.floor(menuItem.cookingTimeMin ?? 0)
+                      const v = min + secVal / 60
+                      onMenuItemChange({ ...menuItem, cookingTimeMin: v })
+                    }}
+                    onBlur={() => {
+                      if (onSaveCookingTime && readOnlyMenuInfo && menuId) {
+                        const total = menuItem.cookingTimeMin != null ? Math.round((menuItem.cookingTimeMin ?? 0) * 60) / 60 : null
+                        onSaveCookingTime(menuId, total)
+                      }
+                    }}
+                    className="h-9 min-h-[36px] w-14 font-mono bg-secondary/50 border-border [& input]:text-right"
+                  />
+                  <span className="text-sm text-muted-foreground">{t("posMenuSec") || "초"}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="space-y-1.5 shrink-0 ml-auto">
             <Label htmlFor="inclVat" className="text-xs font-medium text-foreground block">
               {t("posCostPriceInVat") || "가격(In VAT)"}
             </Label>
-            <Input
-              id="inclVat"
-              type="number"
-              value={menuItem.inclVat}
-              onChange={(e) => {
-                const parsed = parseFloat(e.target.value)
-                const v = Number.isFinite(parsed) ? parsed : 0
-                /** Dine-In: 홀가(price)만 편집. Delivery: 배달가(price_delivery)만 편집 — 섞이면 저장 시 한쪽 가격이 잘못 갱신됨 */
-                if (menuItem.serviceType === "Delivery") {
-                  onMenuItemChange({
-                    ...menuItem,
-                    inclVat: v,
-                    priceDelivery: v,
-                  })
-                } else {
-                  onMenuItemChange({
-                    ...menuItem,
-                    inclVat: v,
-                    priceHall: v,
-                    priceDelivery: menuItem.priceDelivery ?? v,
-                  })
-                }
-              }}
-              className="h-10 min-h-[40px] w-28 font-mono text-base font-semibold bg-primary/5 border-2 border-primary/30 text-primary [& input]:text-right"
-              step="0.01"
-            />
+            {readOnlyEdits ? (
+              <div className="h-10 min-h-[40px] w-28 px-3 flex items-center justify-end font-mono text-base font-semibold bg-muted/30 rounded-md border border-border text-primary">
+                {Number(menuItem.inclVat ?? 0).toFixed(2)}
+              </div>
+            ) : (
+              <Input
+                id="inclVat"
+                type="number"
+                value={menuItem.inclVat}
+                onChange={(e) => {
+                  const parsed = parseFloat(e.target.value)
+                  const v = Number.isFinite(parsed) ? parsed : 0
+                  /** Dine-In: 홀가(price)만 편집. Delivery: 배달가(price_delivery)만 편집 — 섞이면 저장 시 한쪽 가격이 잘못 갱신됨 */
+                  if (menuItem.serviceType === "Delivery") {
+                    onMenuItemChange({
+                      ...menuItem,
+                      inclVat: v,
+                      priceDelivery: v,
+                    })
+                  } else {
+                    onMenuItemChange({
+                      ...menuItem,
+                      inclVat: v,
+                      priceHall: v,
+                      priceDelivery: menuItem.priceDelivery ?? v,
+                    })
+                  }
+                }}
+                className="h-10 min-h-[40px] w-28 font-mono text-base font-semibold bg-primary/5 border-2 border-primary/30 text-primary [& input]:text-right"
+                step="0.01"
+              />
+            )}
           </div>
         </div>
 
@@ -398,14 +416,20 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
             <Label htmlFor="description" className="text-xs text-muted-foreground">
               {t("posCostDescription")}
             </Label>
-            <Input
-              id="description"
-              value={menuItem.description}
-              onChange={(e) =>
-                onMenuItemChange({ ...menuItem, description: e.target.value })
-              }
-              className="h-9 bg-secondary/50 border-border w-full"
-            />
+            {readOnlyEdits ? (
+              <div className="h-9 px-3 flex items-center text-sm bg-muted/30 rounded-md border border-border w-full truncate">
+                {menuItem.description || "—"}
+              </div>
+            ) : (
+              <Input
+                id="description"
+                value={menuItem.description}
+                onChange={(e) =>
+                  onMenuItemChange({ ...menuItem, description: e.target.value })
+                }
+                className="h-9 bg-secondary/50 border-border w-full"
+              />
+            )}
           </div>
           <div className="space-y-1.5 shrink-0">
             <Label className="text-xs text-muted-foreground">

@@ -5,6 +5,10 @@
 
 /** 공지 목록·필터링에 필요한 컬럼 */
 export const NOTICE_LIST_COLS =
+  'id,title,content,sender,target_store,target_role,target_permission_group,target_recipients,created_at,attachments,is_urgent,expires_at,scheduled_at'
+
+/** is_urgent 등 미배포 DB fallback */
+export const NOTICE_LIST_COLS_LEGACY =
   'id,title,content,sender,target_store,target_role,target_permission_group,target_recipients,created_at,attachments'
 
 /** 인사 규정 목록(본문·대상) */

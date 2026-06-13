@@ -10,6 +10,7 @@ import { MenuInfoPanel } from "@/components/cost-analysis/menu-info-panel"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
 import { CostChart } from "@/components/cost-analysis/cost-chart"
+import { PosCostCalculatorWhatIf } from "@/components/cost-analysis/pos-cost-calculator-what-if"
 import {
   emptyMenuItem,
   emptyFoodRecipe,
@@ -39,6 +40,8 @@ import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-ana
 import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
+  /** false면 조회만 (가맹·매니저) */
+  canEdit?: boolean
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
   onClearLoad?: () => void
   onSaveSuccess?: () => void
@@ -146,7 +149,7 @@ function savePayloadOptionId(row: PosMenuCostAnalysisRow): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
@@ -308,7 +311,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   }, [onClearLoad])
 
   const [saving, setSaving] = useState(false)
-  const canSave = !!initialLoadFromRow
+  const canSave = canEdit && !!initialLoadFromRow
   const handleSave = useCallback(async () => {
     if (!initialLoadFromRow || saving) return
     const menuId = Number(initialLoadFromRow.menuId)
@@ -437,15 +440,17 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            className="h-9 gap-1.5 px-3 text-xs"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("posCostReset")}
-          </Button>
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReset}
+              className="h-9 gap-1.5 px-3 text-xs"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              {t("posCostReset")}
+            </Button>
+          ) : null}
           {initialLoadFromRow && onReloadMenu && (
             <Button
               variant="outline"
@@ -469,17 +474,19 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
               {t("posCostLoadSaved") || "불러오기"}
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            className="h-9 gap-1.5 px-3 text-xs"
-            title={!canSave ? (t("posCostSaveHint") || "목록에서 메뉴를 선택한 후 저장할 수 있습니다.") : undefined}
-          >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
-          </Button>
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSave}
+              disabled={!canSave || saving}
+              className="h-9 gap-1.5 px-3 text-xs"
+              title={!canSave ? (t("posCostSaveHint") || "목록에서 메뉴를 선택한 후 저장할 수 있습니다.") : undefined}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -494,9 +501,10 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             onMenuSelect={onMenuSelect}
             onRequestChangeMenu={onClearLoad}
             readOnlyMenuInfo={!!initialLoadFromRow}
+            readOnlyEdits={!canEdit}
             menuId={initialLoadFromRow ? String(initialLoadFromRow.menuId) : undefined}
             onSaveCookingTime={
-              initialLoadFromRow
+              canEdit && initialLoadFromRow
                 ? async (id, cookingTimeMin) => {
                     try {
                       await savePosMenu({ id, cookingTimeMin }, { requireOnline: true })
@@ -518,6 +526,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
               addSauceDialogStoreUseRows={storeUseSauceRowsForDialog}
               ingredientPickerHideSauceUsageKinds={["store_use"]}
               refreshApiItemsBeforeAddDialog={refreshApiItemsForCostRuntime}
+              readOnly={!canEdit}
             />
             <IngredientTable
               title={t("posCostPackagingDelivery")}
@@ -527,6 +536,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
               addDialogRequireStandardUnits={false}
               costTextDark
               refreshApiItemsBeforeAddDialog={refreshApiItemsForCostRuntime}
+              readOnly={!canEdit}
             />
           </div>
         </div>
@@ -540,11 +550,13 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             vatIncluded={menuItem.vatIncluded !== false}
             serviceType={menuItem.serviceType}
             deliveryPercent={menuItem.deliveryPercent}
-            onDeliveryPercentChange={(v) => setMenuItem((prev) => ({ ...prev, deliveryPercent: v }))}
+            onDeliveryPercentChange={
+              canEdit ? (v) => setMenuItem((prev) => ({ ...prev, deliveryPercent: v })) : undefined
+            }
             miseIncludedInFood
-            editablePrice={!!initialLoadFromRow}
+            editablePrice={canEdit && !!initialLoadFromRow}
             onPriceChange={
-              initialLoadFromRow
+              canEdit && initialLoadFromRow
                 ? (priceHall, priceDelivery) =>
                     setMenuItem((prev) => ({
                       ...prev,
@@ -573,6 +585,18 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             misePercent={0}
             serviceType={menuItem.serviceType}
           />
+          {initialLoadFromRow ? (
+            <PosCostCalculatorWhatIf
+              foodItems={foodItems}
+              packagingItems={packagingItems}
+              priceHall={menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0}
+              priceDelivery={menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery}
+              vatIncluded={menuItem.vatIncluded !== false}
+              deliveryFeePercent={menuItem.deliveryPercent}
+              serviceType={menuItem.serviceType}
+              misePercent={menuItem.misePercent}
+            />
+          ) : null}
         </div>
       </div>
     </div>

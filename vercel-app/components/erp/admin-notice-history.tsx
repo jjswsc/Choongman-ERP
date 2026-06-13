@@ -11,9 +11,14 @@ import {
   ChevronDown,
   ChevronUp,
   BarChart2,
+  BellRing,
+  Pencil,
+  Languages,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -25,6 +30,8 @@ import {
   getNoticeReadDetail,
   getNoticeSenders,
   translateTexts,
+  updateNoticeAdmin,
+  remindNoticeUnread,
   type SentNoticeItem,
   type NoticeReadDetailItem,
 } from "@/lib/api-client"
@@ -40,26 +47,31 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { NoticeReaderStatsDialog } from "@/components/erp/notice-reader-stats-dialog"
+import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+type Props = {
+  compact?: boolean
 }
 
-export function AdminNoticeHistory() {
+export function AdminNoticeHistory({ compact = false }: Props) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const [startDate, setStartDate] = React.useState(todayStr)
-  const [endDate, setEndDate] = React.useState(todayStr)
+  const today = bangkokTodayYmd()
+  const defaultRange = bangkokInclusivePeriod(today, 7)
+  const [startDate, setStartDate] = React.useState(defaultRange.startYmd)
+  const [endDate, setEndDate] = React.useState(defaultRange.endYmd)
   const [senderFilter, setSenderFilter] = React.useState<string>("mine")
   const [senders, setSenders] = React.useState<string[]>([])
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [notices, setNotices] = React.useState<SentNoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
+  const [translateEnabled, setTranslateEnabled] = React.useState(false)
   const [readDetailOpen, setReadDetailOpen] = React.useState(false)
   const [readDetailTitle, setReadDetailTitle] = React.useState("")
   const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
@@ -69,7 +81,7 @@ export function AdminNoticeHistory() {
   const [searchType, setSearchType] = React.useState<"all" | "notice" | "order">("all")
   const [searchKeyword, setSearchKeyword] = React.useState("")
   const [listPage, setListPage] = React.useState(1)
-  const listPageSize = 15
+  const listPageSize = compact ? 10 : 15
   const [listTotal, setListTotal] = React.useState(0)
   const [listTruncated, setListTruncated] = React.useState(false)
   type SentListQuery = {
@@ -79,13 +91,31 @@ export function AdminNoticeHistory() {
     searchType: "all" | "notice" | "order"
     keyword: string
   }
-  const [listQuery, setListQuery] = React.useState<SentListQuery | null>(null)
+  const [listQuery, setListQuery] = React.useState<SentListQuery>(() => ({
+    startDate: defaultRange.startYmd,
+    endDate: defaultRange.endYmd,
+    senderFilter: "mine",
+    searchType: "all",
+    keyword: "",
+  }))
+  const [editOpen, setEditOpen] = React.useState(false)
+  const [editNotice, setEditNotice] = React.useState<SentNoticeItem | null>(null)
+  const [editTitle, setEditTitle] = React.useState("")
+  const [editContent, setEditContent] = React.useState("")
+  const [editUrgent, setEditUrgent] = React.useState(false)
+  const [editSaving, setEditSaving] = React.useState(false)
+  const [remindingId, setRemindingId] = React.useState<string | null>(null)
 
   const runSentListFetch = React.useCallback(
     (page: number, query: SentListQuery) => {
       if (!auth?.store || !auth?.user) return
       setLoading(true)
-      const sender = query.senderFilter === "all" ? "all" : query.senderFilter === "mine" ? auth.user : query.senderFilter
+      const sender =
+        query.senderFilter === "all"
+          ? "all"
+          : query.senderFilter === "mine"
+            ? auth.user
+            : query.senderFilter
       getSentNotices({
         sender: sender || auth.user,
         startDate: query.startDate,
@@ -148,32 +178,97 @@ export function AdminNoticeHistory() {
   }, [listQuery, listPage, runSentListFetch])
 
   React.useEffect(() => {
-    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
-    if (texts.length === 0) {
+    if (!translateEnabled) {
       setTransMap({})
       return
     }
+    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
+    if (texts.length === 0) return
     let cancelled = false
     translateTexts(texts, lang).then((translated) => {
       if (cancelled) return
       const map: Record<string, string> = {}
-      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      texts.forEach((txt, i) => {
+        map[txt] = translated[i] ?? txt
+      })
       setTransMap(map)
     }).catch(() => setTransMap({}))
-    return () => { cancelled = true }
-  }, [notices, lang])
+    return () => {
+      cancelled = true
+    }
+  }, [notices, lang, translateEnabled])
 
-  const getTrans = (text: string) => (text && transMap[text]) || text || ""
+  const getTrans = (text: string) => (translateEnabled && text && transMap[text]) || text || ""
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    if (!await appConfirm(t("noticeDeleteConfirm"))) return
+    if (!(await appConfirm(t("noticeDeleteConfirm")))) return
     const res = await deleteNoticeAdmin({ id: Number(id) })
     if (res.success) {
       setNotices((prev) => prev.filter((n) => n.id !== id))
       setExpandedId(null)
     } else {
       await appAlert(translateApiMessage(res.message, t) || t("noticeDeleteFail"))
+    }
+  }
+
+  const handleRemind = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    setRemindingId(id)
+    try {
+      const res = await remindNoticeUnread({ id: Number(id) })
+      await appAlert(translateApiMessage(res.message, t) || t("noticeRemindDone"))
+    } catch {
+      await appAlert(t("noticeRemindFail"))
+    } finally {
+      setRemindingId(null)
+    }
+  }
+
+  const openEdit = (e: React.MouseEvent, notice: SentNoticeItem) => {
+    e.stopPropagation()
+    setEditNotice(notice)
+    setEditTitle(notice.title)
+    setEditContent(notice.content || notice.preview || "")
+    setEditUrgent(Boolean(notice.isUrgent))
+    setEditOpen(true)
+  }
+
+  const handleEditSave = async () => {
+    if (!editNotice) return
+    if (!editTitle.trim()) {
+      await appAlert(t("adminNoticeSubjectRequired"))
+      return
+    }
+    setEditSaving(true)
+    try {
+      const res = await updateNoticeAdmin({
+        id: Number(editNotice.id),
+        title: editTitle.trim(),
+        content: editContent.trim(),
+        isUrgent: editUrgent,
+      })
+      if (res.success) {
+        setNotices((prev) =>
+          prev.map((n) =>
+            n.id === editNotice.id
+              ? {
+                  ...n,
+                  title: editTitle.trim(),
+                  content: editContent.trim(),
+                  preview: editContent.trim().slice(0, 100),
+                  isUrgent: editUrgent,
+                }
+              : n
+          )
+        )
+        setEditOpen(false)
+        await appAlert(t("noticeEditSaved"))
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || t("noticeSendFail"))
+      }
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -194,7 +289,7 @@ export function AdminNoticeHistory() {
   const handleOpenReadDetail = React.useCallback(
     async (e: React.MouseEvent, notice: SentNoticeItem) => {
       e.stopPropagation()
-      setReadDetailTitle(transMap[notice.title] || notice.title)
+      setReadDetailTitle(getTrans(notice.title) || notice.title)
       setReadDetailStoreFilter("")
       setReadDetailOpen(true)
       setReadDetailItems([])
@@ -208,31 +303,42 @@ export function AdminNoticeHistory() {
         setReadDetailLoading(false)
       }
     },
-    [transMap]
+    [getTrans]
   )
+
+  const kpiUnread = React.useMemo(() => {
+    let sum = 0
+    for (const n of notices) {
+      sum += Math.max(0, n.totalCount - n.readCount)
+    }
+    return sum
+  }, [notices])
 
   if (!auth?.store || !auth?.user) return null
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b px-6 py-4">
+    <div className={cn("rounded-xl border bg-card shadow-sm", compact && "rounded-2xl")}>
+      <div className="flex items-center gap-3 border-b px-4 sm:px-6 py-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/10">
           <Clock className="h-[18px] w-[18px] text-warning" />
         </div>
-        <div>
-          <h3 className="text-sm font-bold text-card-foreground">
-            {t("noticeHistoryTitle")}
-          </h3>
-          <p className="text-[11px] text-muted-foreground">
-            {t("noticeHistorySub")}
-          </p>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-bold">{t("noticeHistoryTitle")}</h3>
+          <p className="text-[11px] text-muted-foreground">{t("noticeHistorySub")}</p>
+        </div>
+        <div className="flex gap-2 text-center shrink-0">
+          <div className="rounded-lg bg-muted/50 px-3 py-1.5">
+            <p className="text-[10px] text-muted-foreground">{t("noticeKpiTotal")}</p>
+            <p className="text-sm font-bold tabular-nums">{listTotal}</p>
+          </div>
+          <div className="rounded-lg bg-warning/10 px-3 py-1.5">
+            <p className="text-[10px] text-warning">{t("noticeKpiUnread")}</p>
+            <p className="text-sm font-bold tabular-nums text-warning">{kpiUnread}</p>
+          </div>
         </div>
       </div>
 
-      {/* 1행: 공지사항 검색타입 + 검색창 + 검색 버튼 */}
-      {/* 2행: 내 발송분 + 기간 */}
-      <div className="border-b px-6 py-4 space-y-3 bg-muted/20">
+      <div className="border-b px-4 sm:px-6 py-4 space-y-3 bg-muted/20">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={searchType} onValueChange={(v) => setSearchType(v as "all" | "notice" | "order")}>
             <SelectTrigger className="h-9 w-[100px] text-xs">
@@ -245,202 +351,183 @@ export function AdminNoticeHistory() {
             </SelectContent>
           </Select>
           <Input
-            placeholder={
-              searchType === "all"
-                ? t("noticeSearchNoticePh")
-                : searchType === "notice"
-                  ? t("noticeSearchNoticePh")
-                  : t("noticeSearchOrderApprovalPh")
-            }
+            placeholder={t("noticeSearchNoticePh")}
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
-            className="h-9 flex-1 min-w-[140px] max-w-[280px] text-xs"
+            className="h-9 flex-1 min-w-[120px] max-w-[240px] text-xs"
           />
-          <Button
-            size="sm"
-            className="h-9 px-4 text-xs font-semibold shrink-0"
-            onClick={handleSearchNotices}
-            disabled={loading}
-          >
+          <Button size="sm" className="h-9 px-4 text-xs" onClick={handleSearchNotices} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {loading ? t("loading") : t("search")}
           </Button>
-          <span className="text-[11px] font-semibold text-muted-foreground ml-auto">
-            {t("noticeCountPrefix")}{" "}
-            <span className="text-foreground">{listQuery ? listTotal : 0}</span>
-            {t("noticeCountSuffix")}
-          </span>
-        </div>
-        {listQuery && listTruncated && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-500">
-            {t("noticeSentListTruncatedHint")}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-[120px]">
-            <Select value={senderFilter} onValueChange={setSenderFilter}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder={t("noticeSenderAll")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("noticeSenderAll")}</SelectItem>
-                <SelectItem value="mine">{t("noticeSenderMine")}</SelectItem>
-                {senders
-                  .filter((s) => s !== (auth?.user || ''))
-                  .map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="date-input-compact h-9 w-[140px] text-xs"
-          />
-          <span className="text-xs font-medium text-muted-foreground">~</span>
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="date-input-compact h-9 w-[140px] text-xs"
-          />
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 w-full sm:w-auto sm:ml-auto text-xs font-semibold shrink-0"
-            onClick={() => setStatsOpen(true)}
+            className="h-9 text-xs"
+            onClick={() => setTranslateEnabled((v) => !v)}
           >
+            <Languages className="mr-1.5 h-3.5 w-3.5" />
+            {translateEnabled ? t("noticeTranslateOff") : t("noticeTranslateOn")}
+          </Button>
+          <span className="text-[11px] font-semibold text-muted-foreground ml-auto">
+            {t("noticeCountPrefix")}{" "}
+            <span className="text-foreground">{listTotal}</span>
+            {t("noticeCountSuffix")}
+          </span>
+        </div>
+        {listTruncated && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-500">{t("noticeSentListTruncatedHint")}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={senderFilter} onValueChange={setSenderFilter}>
+            <SelectTrigger className="h-9 text-xs min-w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("noticeSenderAll")}</SelectItem>
+              <SelectItem value="mine">{t("noticeSenderMine")}</SelectItem>
+              {senders
+                .filter((s) => s !== (auth?.user || ""))
+                .map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="date-input-compact h-9 w-[130px] text-xs"
+          />
+          <span className="text-xs text-muted-foreground">~</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="date-input-compact h-9 w-[130px] text-xs"
+          />
+          <Button type="button" variant="outline" size="sm" className="h-9 text-xs" onClick={() => setStatsOpen(true)}>
             <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
             {t("noticeReaderStatsBtn")}
           </Button>
         </div>
       </div>
 
-      {/* Notice list */}
       <div className="flex flex-col">
-        {!listQuery ? (
-          <div className="py-12 px-6 text-center text-sm text-muted-foreground">
-            {t("msg_click_query") || "검색 버튼을 눌러 주세요."}
-          </div>
+        {loading && notices.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">{t("loading")}</div>
         ) : notices.length === 0 ? (
-          <div className="py-12 px-6 text-center text-sm text-muted-foreground">
-            {t("adminNoNoticesFound")}
+          <div className="py-12 px-6 text-center">
+            <p className="text-sm text-muted-foreground">{t("adminNoNoticesFound")}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t("noticeHistoryEmptyHint")}</p>
           </div>
         ) : (
           notices.map((notice, idx) => {
             const isExpanded = expandedId === notice.id
             const readPercent =
-              notice.totalCount > 0
-                ? Math.round((notice.readCount / notice.totalCount) * 100)
-                : 0
-            const allRead = notice.readCount === notice.totalCount
+              notice.totalCount > 0 ? Math.round((notice.readCount / notice.totalCount) * 100) : 0
+            const allRead = notice.readCount === notice.totalCount && notice.totalCount > 0
+            const unreadCount = Math.max(0, notice.totalCount - notice.readCount)
 
             return (
               <div
                 key={notice.id}
-                className={cn(
-                  "border-b last:border-b-0 transition-colors",
-                  isExpanded && "bg-muted/10"
-                )}
+                className={cn("border-b last:border-b-0", isExpanded && "bg-muted/10")}
               >
-                {/* Row */}
                 <button
                   type="button"
-                  onClick={() =>
-                    setExpandedId(isExpanded ? null : notice.id)
-                  }
-                  className="flex w-full flex-col gap-2 px-6 py-3 text-left hover:bg-muted/30 transition-colors"
+                  onClick={() => setExpandedId(isExpanded ? null : notice.id)}
+                  className="flex w-full flex-col gap-2 px-4 sm:px-6 py-3 text-left hover:bg-muted/30 transition-colors"
                 >
-                  {/* Line 1: Index + 제목 | 대상 | 내용 */}
-                  <div className="flex w-full items-center gap-3">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold tabular-nums text-muted-foreground">
+                  <div className="flex w-full items-start gap-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold tabular-nums">
                       {(listPage - 1) * listPageSize + idx + 1}
                     </div>
-                    <div className="min-w-0 flex-1 flex items-center gap-2 text-xs overflow-hidden">
-                      <span className="font-bold text-card-foreground shrink-0 max-w-[140px] truncate" title={getTrans(notice.title)}>
-                        {getTrans(notice.title)}
-                      </span>
-                      <span className="text-muted-foreground shrink-0">·</span>
-                      <div className="flex shrink-0 flex-wrap gap-1">
-                        {senderFilter === "all" && notice.sender && (
-                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                            {notice.sender}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        {notice.isUrgent && (
+                          <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                            {t("noticeUrgentBadge")}
                           </span>
                         )}
-                        {notice.recipients.map((r) => (
-                          <span
-                            key={r}
-                            className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary"
-                          >
-                            {r === "전체" ? t("noticeFilterAll") : r}
+                        {notice.isOrderRelated && (
+                          <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 dark:text-violet-300">
+                            {t("noticeTypeSystem")}
                           </span>
-                        ))}
+                        )}
+                        {!notice.isOrderRelated && (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                            {t("noticeTypeManual")}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-muted-foreground shrink-0">·</span>
-                      <span className="text-muted-foreground truncate min-w-0 flex-1" title={getTrans(notice.preview)}>
-                        {getTrans(notice.preview)}
-                      </span>
+                      <p className="text-sm font-bold truncate">{getTrans(notice.title)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {notice.date}
+                        {notice.sender && senderFilter === "all" ? ` · ${notice.sender}` : ""}
+                      </p>
                     </div>
-                  </div>
-                  {/* Line 2: 날짜 | 읽음 상태 | 액션 */}
-                  <div className="flex w-full items-center gap-4 pl-10">
-                    <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
-                      {notice.date}
-                    </span>
-                    <div className="flex shrink-0 items-center gap-2 w-28">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="shrink-0 w-24 sm:w-32">
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
                         <div
                           className={cn(
                             "h-full rounded-full transition-all",
-                            allRead ? "bg-success" : "bg-primary"
+                            allRead ? "bg-success" : readPercent < 50 ? "bg-warning" : "bg-primary"
                           )}
                           style={{ width: `${readPercent}%` }}
                         />
                       </div>
-                      <span
-                        className={cn(
-                          "text-[11px] font-bold tabular-nums shrink-0",
-                          allRead ? "text-success" : "text-muted-foreground"
-                        )}
-                      >
-                        {notice.readCount}/{notice.totalCount}
-                      </span>
+                      <p className="mt-1 text-[10px] font-bold tabular-nums text-right text-muted-foreground">
+                        {notice.readCount}/{notice.totalCount} ({readPercent}%)
+                      </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[10px] font-semibold"
-                        onClick={(e) => handleDelete(e, notice.id)}
-                      >
-                        {t("delete")}
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t bg-muted/10 px-4 sm:px-6 py-4 space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={(e) => openEdit(e, notice)}>
+                        <Pencil className="mr-1 h-3 w-3" />
+                        {t("edit")}
                       </Button>
+                      {unreadCount > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={(e) => handleRemind(e, notice.id)}
+                          disabled={remindingId === notice.id}
+                        >
+                          <BellRing className="mr-1 h-3 w-3" />
+                          {remindingId === notice.id ? t("loading") : t("noticeRemindUnread")}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[10px] font-semibold"
+                        className="h-8 text-xs"
                         onClick={(e) => handleOpenReadDetail(e, notice)}
                       >
                         <Eye className="mr-1 h-3 w-3" />
                         {t("noticeReadConfirm")}
                       </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={(e) => handleDelete(e, notice.id)}
+                      >
+                        {t("delete")}
+                      </Button>
                     </div>
-                    {isExpanded ? (
-                      <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground ml-auto" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground ml-auto" />
-                    )}
-                  </div>
-                </button>
-
-                {/* Expanded detail */}
-                {isExpanded && (
-                  <div className="border-t bg-muted/10 px-6 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* 전체 내용 */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="rounded-lg border bg-card px-4 py-3">
                         <div className="flex items-center gap-2 mb-2">
                           <FileText className="h-3.5 w-3.5 text-muted-foreground" />
@@ -448,43 +535,91 @@ export function AdminNoticeHistory() {
                             {t("noticePreview")}
                           </span>
                         </div>
-                        <p className="text-sm text-card-foreground leading-relaxed whitespace-pre-wrap">
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
                           {getTrans(notice.content || notice.preview || "") || t("noticeEmptyContent")}
                         </p>
+                        {notice.attachments && notice.attachments.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {notice.attachments.map((att, i) => {
+                              const isImg = att.mime?.startsWith("image/") || att.url?.startsWith("data:image/")
+                              if (isImg) {
+                                return (
+                                  <a
+                                    key={i}
+                                    href={att.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block max-w-[160px] rounded border overflow-hidden"
+                                  >
+                                    <img src={att.url} alt={att.name} className="max-h-24 object-contain" />
+                                  </a>
+                                )
+                              }
+                              return (
+                                <a
+                                  key={i}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px]"
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  {att.name}
+                                </a>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
-
-                      {/* Read status */}
-                      <div className="rounded-lg border bg-card px-4 py-3">
-                        <div className="flex items-center gap-2 mb-3">
+                      <div className="rounded-lg border bg-card px-4 py-3 space-y-3">
+                        <div className="flex items-center gap-2">
                           <Users className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-[11px] font-bold text-muted-foreground">
-                            {t("noticeReadStats")}
+                            {t("noticeTargetDetail")}
                           </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 py-3">
-                            <span className="text-lg font-extrabold tabular-nums text-card-foreground">
-                              {notice.totalCount}
-                            </span>
-                            <span className="text-[10px] font-semibold text-muted-foreground">
-                              {t("noticeTotal")}
-                            </span>
+                        <dl className="grid gap-1 text-xs">
+                          <div className="flex gap-2">
+                            <dt className="text-muted-foreground shrink-0">{t("store")}:</dt>
+                            <dd>{notice.targetStore || t("noticeFilterAll")}</dd>
                           </div>
-                          <div className="flex flex-col items-center gap-1 rounded-lg bg-success/10 py-3">
-                            <span className="text-lg font-extrabold tabular-nums text-success">
-                              {notice.readCount}
-                            </span>
-                            <span className="text-[10px] font-semibold text-success">
-                              {t("noticeRead")}
-                            </span>
+                          <div className="flex gap-2">
+                            <dt className="text-muted-foreground shrink-0">{t("noticeTargetDept")}:</dt>
+                            <dd>{notice.targetRole || t("noticeFilterAll")}</dd>
                           </div>
-                          <div className="flex flex-col items-center gap-1 rounded-lg bg-warning/10 py-3">
-                            <span className="text-lg font-extrabold tabular-nums text-warning">
-                              {notice.totalCount - notice.readCount}
-                            </span>
-                            <span className="text-[10px] font-semibold text-warning">
-                              {t("noticeUnread")}
-                            </span>
+                          {notice.targetPermissionGroup && (
+                            <div className="flex gap-2">
+                              <dt className="text-muted-foreground shrink-0">
+                                {t("adminTargetPermissionGroups")}:
+                              </dt>
+                              <dd>{notice.targetPermissionGroup}</dd>
+                            </div>
+                          )}
+                          {notice.scheduledAt && (
+                            <div className="flex gap-2">
+                              <dt className="text-muted-foreground shrink-0">{t("noticeScheduledAtLabel")}:</dt>
+                              <dd>{notice.scheduledAt}</dd>
+                            </div>
+                          )}
+                          {notice.expiresAt && (
+                            <div className="flex gap-2">
+                              <dt className="text-muted-foreground shrink-0">{t("noticeExpiresAtLabel")}:</dt>
+                              <dd>{notice.expiresAt}</dd>
+                            </div>
+                          )}
+                        </dl>
+                        <div className="grid grid-cols-3 gap-2 pt-2">
+                          <div className="rounded-lg bg-muted/50 py-2 text-center">
+                            <p className="text-lg font-extrabold tabular-nums">{notice.totalCount}</p>
+                            <p className="text-[10px] text-muted-foreground">{t("noticeTotal")}</p>
+                          </div>
+                          <div className="rounded-lg bg-success/10 py-2 text-center">
+                            <p className="text-lg font-extrabold tabular-nums text-success">{notice.readCount}</p>
+                            <p className="text-[10px] text-success">{t("noticeRead")}</p>
+                          </div>
+                          <div className="rounded-lg bg-warning/10 py-2 text-center">
+                            <p className="text-lg font-extrabold tabular-nums text-warning">{unreadCount}</p>
+                            <p className="text-[10px] text-warning">{t("noticeUnread")}</p>
                           </div>
                         </div>
                       </div>
@@ -495,8 +630,8 @@ export function AdminNoticeHistory() {
             )
           })
         )}
-        {listQuery && (
-          <div className="border-t px-6 py-3">
+        {listQuery && notices.length > 0 && (
+          <div className="border-t px-4 sm:px-6 py-3">
             <ListPaginationBar
               page={listPage}
               pageSize={listPageSize}
@@ -509,6 +644,34 @@ export function AdminNoticeHistory() {
       </div>
 
       <NoticeReaderStatsDialog open={statsOpen} onOpenChange={setStatsOpen} />
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("noticeEditTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-9 text-sm" />
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="min-h-[120px] text-sm"
+            />
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox checked={editUrgent} onCheckedChange={(v) => setEditUrgent(Boolean(v))} />
+              {t("noticeUrgentLabel")}
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editSaving}>
+              {t("cancel")}
+            </Button>
+            <Button onClick={handleEditSave} disabled={editSaving}>
+              {editSaving ? t("loading") : t("save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={readDetailOpen}
@@ -530,45 +693,35 @@ export function AdminNoticeHistory() {
           </DialogHeader>
           {!readDetailLoading && readDetailItems.length > 0 && readDetailStoreOptions.length > 1 ? (
             <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
-              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                {t("noticeReadDetailFilterStore")}
-              </span>
               <Select
                 value={readDetailStoreFilter || "__all__"}
                 onValueChange={(v) => setReadDetailStoreFilter(v === "__all__" ? "" : v)}
               >
-                <SelectTrigger className="h-8 min-w-[160px] max-w-full flex-1 text-xs">
+                <SelectTrigger className="h-8 min-w-[160px] text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">{t("noticeFilterAll")}</SelectItem>
                   {readDetailStoreOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-[11px] tabular-nums text-muted-foreground ml-auto">
-                {readDetailFilteredItems.length}/{readDetailItems.length}
-              </span>
             </div>
           ) : null}
           <div className="overflow-auto min-h-0 flex-1 -mx-1">
             {readDetailLoading ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                {t("loading")}
-              </div>
+              <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
             ) : readDetailItems.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">-</div>
             ) : (
               <table className="w-full text-xs border-collapse">
                 <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                   <tr className="border-b">
-                    <th className="p-2 text-left font-medium">{t("noticeReadDetailStore")}</th>
-                    <th className="p-2 text-left font-medium">{t("noticeReadDetailName")}</th>
-                    <th className="p-2 text-left font-medium">{t("noticeReadDetailReadAt")}</th>
-                    <th className="p-2 text-center font-medium w-20">{t("noticeReadStats")}</th>
+                    <th className="p-2 text-left">{t("noticeReadDetailStore")}</th>
+                    <th className="p-2 text-left">{t("noticeReadDetailName")}</th>
+                    <th className="p-2 text-left">{t("noticeReadDetailReadAt")}</th>
+                    <th className="p-2 text-center w-20">{t("noticeReadStats")}</th>
                   </tr>
                 </thead>
                 <tbody>

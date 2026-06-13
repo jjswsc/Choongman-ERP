@@ -18,7 +18,7 @@ import {
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 const LEGACY_SELECT =
-  'store_code,display_name,aliases,sort_order,is_active,photo_url,map_query,address'
+  'store_code,display_name,display_name_ko,display_name_en,display_name_th,aliases,sort_order,is_active,photo_url,map_query,address'
 const LEGACY_SELECT_BASIC = 'store_code,display_name,aliases,sort_order,is_active'
 
 function parseAliases(raw: unknown): string[] {
@@ -99,6 +99,9 @@ export async function POST(req: NextRequest) {
     const row: Record<string, unknown> = {
       store_code: storeCode,
       display_name: displayName,
+      display_name_ko: String(body.displayNameKo || '').trim() || null,
+      display_name_en: String(body.displayNameEn || '').trim() || null,
+      display_name_th: String(body.displayNameTh || '').trim() || null,
       aliases: parseAliases(body.aliases),
       sort_order: Number(body.sortOrder || 0),
       is_active: body.isActive !== false,

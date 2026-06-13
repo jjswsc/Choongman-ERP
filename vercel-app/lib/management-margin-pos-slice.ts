@@ -10,8 +10,10 @@ import { buildPosSalesCombinedDiscount } from '@/lib/pos-sales-combined-discount
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
 import {
   aggregateTheoreticalCostFromOrders,
+  collectTheoreticalCostUnmatchedLines,
   isDeliveryChannelOrderType,
   MANAGEMENT_MARGIN_MISE_RATE,
+  type TheoreticalCostUnmatchedLine,
 } from '@/lib/management-margin-theoretical-cost'
 
 export type ManagementMarginChannelKey = 'dine_in' | 'takeout' | 'delivery' | 'other'
@@ -44,6 +46,7 @@ export type ManagementMarginPosSlice = {
     totalCost: number
     matchedLineQty: number
     unmatchedLineQty: number
+    bomUnmatchedLines: TheoreticalCostUnmatchedLine[]
     costPctOfGross: number
     costPctOfNet: number
     miseRatePercent: number
@@ -112,6 +115,10 @@ export function buildManagementMarginPosSlice(params: {
     costIndex: params.costIndex,
     miseRatePercent: mise,
   })
+  const bomUnmatchedLines = collectTheoreticalCostUnmatchedLines({
+    orderRows: params.orderRows,
+    costIndex: params.costIndex,
+  })
 
   const channelKeys: ManagementMarginChannelKey[] = ['dine_in', 'takeout', 'delivery', 'other']
   const byChannelOrders = new Map<ManagementMarginChannelKey, OrderRow[]>()
@@ -160,6 +167,7 @@ export function buildManagementMarginPosSlice(params: {
     combined,
     theoreticalCost: {
       ...theory,
+      bomUnmatchedLines,
       costPctOfGross: pctOf(theory.totalCost, grossBefore),
       costPctOfNet: pctOf(theory.totalCost, netSales),
       miseRatePercent: mise,

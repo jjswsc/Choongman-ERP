@@ -1,15 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
-import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { NOTICE_LIST_COLS, NOTICE_LIST_COLS_LEGACY } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
+import { isNoticeReadStatus } from '@/lib/notice-read-status'
+import { isOrderRelatedNotice } from '@/lib/notice-read-aggregation'
+import { employeeReceivesBroadcast } from '@/lib/broadcast-notice-target'
+import { parseNoticeAttachments } from '@/lib/notice-recipient-estimate'
+import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 
 const SENT_NOTICES_DB_LIMIT = 400
 
+const TZ = 'Asia/Bangkok'
+
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 16).replace('T', ' ')
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 16).replace('T', ' ')
+  const d = typeof val === 'string' ? new Date(val) : val
+  if (isNaN(d.getTime())) return ''
+  const datePart = d.toLocaleDateString('en-CA', { timeZone: TZ })
+  const timePart = d.toLocaleTimeString('en-GB', {
+    timeZone: TZ,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${datePart} ${timePart}`
+}
+
+async function fetchNoticeRows(filter: string) {
+  try {
+    return (await supabaseSelectFilter('notices', filter, {
+      order: 'created_at.desc',
+      limit: SENT_NOTICES_DB_LIMIT,
+      select: NOTICE_LIST_COLS,
+    })) as NoticeRow[]
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/is_urgent|expires_at|scheduled_at|column/i.test(msg)) {
+      return (await supabaseSelectFilter('notices', filter, {
+        order: 'created_at.desc',
+        limit: SENT_NOTICES_DB_LIMIT,
+        select: NOTICE_LIST_COLS_LEGACY,
+      })) as NoticeRow[]
+    }
+    throw e
+  }
+}
+
+type NoticeRow = {
+  id: number
+  sender?: string
+  title?: string
+  content?: string
+  target_store?: string
+  target_role?: string
+  target_permission_group?: string | null
+  target_recipients?: string | null
+  created_at?: string
+  attachments?: string
+  is_urgent?: boolean
+  expires_at?: string | null
+  scheduled_at?: string | null
 }
 
 /** 발송한 공지 목록 (sender 기준, 날짜 필터) - readCount/totalCount 포함 */
@@ -27,58 +77,44 @@ export async function GET(request: NextRequest) {
 
   const isAllSenders = sender === '' || sender.toLowerCase() === 'all' || sender === '전체'
 
-  /** 물류관리 관련 (주문승인/반려/보류/강제출고/발주/입고/재고/배송/매장 수령 완료 등) 공지 여부 (admin-notice-history와 동일) */
-  const isOrderRelated = (title: string, content: string) => {
-    const t = (title || '').toLowerCase()
-    const c = (content || '').toLowerCase()
-    const text = t + ' ' + c
-    if (/주문.*(승인|반려|보류)/.test(t) || /주문\s*#\d+/.test(t)) return true
-    if (/강제|출고|발주|입고|재고|배송|물류|수령/.test(text)) return true
-    if (/주문.*확인|승인.*화면/.test(c)) return true
-    return false
-  }
-
   try {
     let filter = isAllSenders ? '' : `sender=ilike.${encodeURIComponent(sender)}`
-    if (startStr) filter += (filter ? '&' : '') + `created_at=gte.${startStr}`
-    if (endStr) {
-      const endPlus = endStr + 'T23:59:59'
-      filter += (filter ? '&' : '') + `created_at=lte.${endPlus}`
+    if (startStr && endStr) {
+      const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(startStr, endStr)
+      filter += (filter ? '&' : '') + `created_at=gte.${gteIso}`
+      filter += (filter ? '&' : '') + `created_at=lte.${lteIso}`
+    } else if (startStr) {
+      const { gteIso } = bangkokYmdRangeToIsoBounds(startStr, startStr)
+      filter += (filter ? '&' : '') + `created_at=gte.${gteIso}`
+    } else if (endStr) {
+      const { lteIso } = bangkokYmdRangeToIsoBounds(endStr, endStr)
+      filter += (filter ? '&' : '') + `created_at=lte.${lteIso}`
     }
     const effectiveFilter = filter || 'id=gte.0'
 
-    const rows = (await supabaseSelectFilter('notices', effectiveFilter, {
-      order: 'created_at.desc',
-      limit: SENT_NOTICES_DB_LIMIT,
-      select: NOTICE_LIST_COLS,
-    })) as {
-      id: number
-      sender?: string
-      title?: string
-      content?: string
-      target_store?: string
-      target_role?: string
-      target_recipients?: string | null
-      created_at?: string
-    }[]
+    const rows = await fetchNoticeRows(effectiveFilter)
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role,resign_date' })) as {
+    const empList = ((await supabaseSelect('employees', {
+      order: 'id.asc',
+      select: 'store,name,job,role,resign_date',
+    })) as {
       store?: string
       name?: string
       job?: string
       role?: string
       resign_date?: string
-    }[] || []
+    }[]) || []
 
     const noticeIds = (rows || []).map((r) => r.id)
     const readCountByNotice: Record<number, number> = {}
     if (noticeIds.length > 0) {
-      const allReadRows = (await supabaseSelectFilter(
+      const allReadRows = ((await supabaseSelectFilter(
         'notice_reads',
         `notice_id=in.(${noticeIds.join(',')})`,
-        { limit: 5000, select: 'notice_id' }
-      )) as { notice_id: number }[] || []
+        { limit: 10000, select: 'notice_id,status' }
+      )) as { notice_id: number; status?: string }[]) || []
       for (const r of allReadRows) {
+        if (!isNoticeReadStatus(String(r.status || ''))) continue
         readCountByNotice[r.notice_id] = (readCountByNotice[r.notice_id] || 0) + 1
       }
     }
@@ -93,18 +129,23 @@ export async function GET(request: NextRequest) {
       content: string
       readCount: number
       totalCount: number
+      isUrgent: boolean
+      isOrderRelated: boolean
+      targetStore: string
+      targetRole: string
+      targetPermissionGroup: string
+      attachments: Array<{ name: string; mime: string; url: string }>
+      expiresAt: string
+      scheduledAt: string
     }[] = []
 
     for (const row of rows || []) {
-      // searchType 필터: 물류관리/공지사항
-      if (searchType === 'order') {
-        if (!isOrderRelated(row.title || '', row.content || '')) continue
-      } else if (searchType === 'notice') {
-        if (isOrderRelated(row.title || '', row.content || '')) continue
-      }
+      const title = row.title || ''
+      const content = row.content || ''
+      const orderRel = isOrderRelatedNotice(title, content)
+      if (searchType === 'order' && !orderRel) continue
+      if (searchType === 'notice' && orderRel) continue
 
-      const targetStores = String(row.target_store || '전체').trim()
-      const targetRoles = String(row.target_role || '전체').trim()
       let targetRecipientsList: string[] = []
       try {
         const raw = row.target_recipients
@@ -118,35 +159,33 @@ export async function GET(request: NextRequest) {
         /* ignore */
       }
 
-      const isSpecificRecipients = targetRecipientsList.length > 0
       let totalCount = 0
       const recipientSet = new Set<string>()
 
-      if (isSpecificRecipients) {
+      if (targetRecipientsList.length > 0) {
         totalCount = targetRecipientsList.length
         targetRecipientsList.forEach((s) => {
           const [store] = s.split('|')
           if (store?.trim()) recipientSet.add(store.trim())
         })
       } else {
-        const isAllStores = targetStores === '전체' || targetStores.trim() === ''
-        const isAllRoles = targetRoles === '전체' || targetRoles.trim() === ''
-        const roleList = isAllRoles
-          ? []
-          : targetRoles
-              .split(',')
-              .map((s) => s.trim().toLowerCase())
-              .filter(Boolean)
         for (const e of empList) {
           const eStore = String(e.store || '').trim()
           const eName = String(e.name || '').trim()
           const resignDate = String(e.resign_date || '').trim()
-          if (!eName || (resignDate && resignDate !== '')) continue
+          if (!eName || resignDate) continue
           if (!eStore || eStore === '매장명' || eStore === 'Store') continue
-          const eRole = (String(e.job || e.role || '').trim() || 'Staff').toLowerCase()
-          const storeMatch = isAllStores || targetStores.split(',').map((s) => s.trim()).includes(eStore)
-          const roleMatch = isAllRoles || roleList.length === 0 || roleList.some((r) => eRole === r || eRole.indexOf(r) >= 0 || r.indexOf(eRole) >= 0)
-          if (storeMatch && roleMatch) {
+          if (
+            employeeReceivesBroadcast(
+              {
+                store: eStore,
+                name: eName,
+                job: String(e.job || '').trim(),
+                role: String(e.role || '').trim(),
+              },
+              row
+            )
+          ) {
             totalCount += 1
             recipientSet.add(eStore)
           }
@@ -154,11 +193,12 @@ export async function GET(request: NextRequest) {
       }
 
       const readCount = readCountByNotice[row.id] || 0
+      const targetStores = String(row.target_store || '전체').trim()
 
       let recipients: string[]
-      if (isSpecificRecipients) {
+      if (targetRecipientsList.length > 0) {
         recipients = recipientSet.size > 0 ? Array.from(recipientSet).sort() : [`${totalCount}명`]
-      } else if (targetStores === '전체' || targetStores.trim() === '') {
+      } else if (targetStores === '전체' || !targetStores) {
         recipients = ['전체']
       } else {
         recipients = Array.from(recipientSet).sort()
@@ -171,13 +211,21 @@ export async function GET(request: NextRequest) {
       list.push({
         id: String(row.id),
         sender: String(row.sender || '').trim(),
-        title: row.title || '',
+        title,
         date: toDateStr(row.created_at),
         recipients,
-        preview: (row.content || '').slice(0, 100),
-        content: row.content || '',
+        preview: (content || '').slice(0, 100),
+        content,
         readCount,
         totalCount,
+        isUrgent: Boolean(row.is_urgent),
+        isOrderRelated: orderRel,
+        targetStore: targetStores,
+        targetRole: String(row.target_role || '전체').trim(),
+        targetPermissionGroup: String(row.target_permission_group || '').trim(),
+        attachments: parseNoticeAttachments(row.attachments),
+        expiresAt: row.expires_at ? toDateStr(row.expires_at) : '',
+        scheduledAt: row.scheduled_at ? toDateStr(row.scheduled_at) : '',
       })
     }
 

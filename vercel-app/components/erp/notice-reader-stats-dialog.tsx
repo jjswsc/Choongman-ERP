@@ -195,14 +195,57 @@ export function NoticeReaderStatsDialog({ open, onOpenChange }: Props) {
             />
           </div>
         </div>
-        <Button
-          type="button"
-          className="h-9 w-full sm:w-auto"
-          onClick={runReaderStats}
-          disabled={statsLoading}
-        >
-          {statsLoading ? t("loading") : t("noticeReaderStatsRun")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="h-9 w-full sm:w-auto"
+            onClick={runReaderStats}
+            disabled={statsLoading}
+          >
+            {statsLoading ? t("loading") : t("noticeReaderStatsRun")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-full sm:w-auto"
+            onClick={() => {
+              if (statsItems.length === 0) return
+              const header = [
+                t("noticeReaderStatsColStore"),
+                t("noticeReaderStatsColName"),
+                t("noticeReaderStatsColJob"),
+                t("noticeReaderStatsColTarget"),
+                t("noticeReaderStatsColOk"),
+                t("noticeReaderStatsColMiss"),
+                t("noticeReaderStatsColRate"),
+              ]
+              const rows = statsItems.map((row) =>
+                [
+                  row.store,
+                  row.name,
+                  row.job,
+                  row.targeted,
+                  row.confirmed,
+                  row.missed,
+                  `${row.missRate}%`,
+                ]
+                  .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+                  .join(",")
+              )
+              const csv = [header.map((h) => `"${h}"`).join(","), ...rows].join("\n")
+              const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement("a")
+              a.href = url
+              a.download = `notice-reader-stats-${statsStart}-${statsEnd}.csv`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            disabled={statsLoading || statsItems.length === 0}
+          >
+            {t("noticeExportCsv")}
+          </Button>
+        </div>
         {statsTruncated && (
           <p className="text-[10px] text-amber-600 dark:text-amber-500">
             {t("noticeReaderStatsTruncated")}

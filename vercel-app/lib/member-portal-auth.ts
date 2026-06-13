@@ -204,6 +204,8 @@ export type PhoneBirthSignupErrorCode =
   | 'missing_phone'
   | 'missing_birth'
   | 'missing_gender'
+  | 'missing_store'
+  | 'invalid_store'
   | 'rate_limited'
   | 'exists_other_birth'
   | 'inactive'
@@ -300,6 +302,7 @@ export async function registerMemberByPhoneBirthDate(params: {
   phone: string
   birthDate: string
   gender?: string
+  joinStoreCode?: string
   consentMarketing?: boolean
   userAgent?: string
   deviceLabel?: string
@@ -319,6 +322,15 @@ export async function registerMemberByPhoneBirthDate(params: {
   if (!phone) throw new PhoneBirthSignupError('missing_phone', '전화번호를 입력해 주세요.')
   if (!birthDate) throw new PhoneBirthSignupError('missing_birth', '생년월일을 입력해 주세요.')
   if (!gender) throw new PhoneBirthSignupError('missing_gender', '성별을 선택해 주세요.')
+
+  const joinStoreCode = toText(params.joinStoreCode)
+  if (!joinStoreCode) {
+    throw new PhoneBirthSignupError('missing_store', '가입 매장을 선택해 주세요.')
+  }
+  const { isAllowedMemberSignupStoreCode } = await import('@/lib/member-signup-store')
+  if (!(await isAllowedMemberSignupStoreCode(joinStoreCode))) {
+    throw new PhoneBirthSignupError('invalid_store', '선택한 매장을 확인할 수 없습니다.')
+  }
 
   const failCount = await countRecentBirthLoginFailures(phone)
   if (failCount >= BIRTH_LOGIN_MAX_TRIES) {
@@ -365,6 +377,7 @@ export async function registerMemberByPhoneBirthDate(params: {
     gender,
     source: 'app',
     joinChannel: 'homepage',
+    joinStoreCode,
     consentMarketing,
   })
   const session = await createMemberPortalSession({

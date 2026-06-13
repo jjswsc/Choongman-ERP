@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
-  canAccessSaasAdmin,
   canAssignEmployeeDirectorRole,
   canAssignEmployeeOfficerRole,
   employeeRoleChangeTouchesDirector,
   employeeRoleChangeTouchesOfficer,
 } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
+import {
+  assertTenantInScope,
+  loadPartnerTenantIdSet,
+  requireSaasControlPlane,
+  type SaasScope,
+} from "@/lib/saas-control-plane-scope"
 import { hashPassword } from "@/lib/password"
 import {
   supabaseInsert,
@@ -46,16 +50,21 @@ type EmpPrevRow = {
   name?: string | null
 }
 
-async function loadTenantOptions(): Promise<TenantOpt[]> {
+async function loadTenantOptions(scope: SaasScope): Promise<TenantOpt[]> {
   try {
     const rows = (await supabaseSelect("tenants", {
       order: "company_name.asc",
       limit: 500,
       select: "id,company_name",
     })) as { id?: string; company_name?: string }[]
-    return (rows || [])
+    let opts = (rows || [])
       .map((r) => ({ id: String(r.id || "").trim(), companyName: String(r.company_name || "").trim() }))
       .filter((t) => t.id)
+    if (scope.kind === "partner") {
+      const allowed = await loadPartnerTenantIdSet(scope.partnerId)
+      opts = opts.filter((t) => allowed.has(t.id))
+    }
+    return opts
   } catch {
     return []
   }
@@ -70,11 +79,8 @@ export async function GET(req: NextRequest) {
   headers.set("Access-Control-Allow-Origin", "*")
   headers.set("Cache-Control", "no-store")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const { searchParams } = new URL(req.url)
@@ -83,7 +89,14 @@ export async function GET(req: NextRequest) {
     const offset = Math.min(100_000, Math.max(0, parseInt(searchParams.get("offset") || "0", 10) || 0))
     const limit = Math.min(500, Math.max(1, parseInt(searchParams.get("limit") || "200", 10) || 200))
 
-    const tenantOptions = await loadTenantOptions()
+    if (tenantId) {
+      const inScope = await assertTenantInScope(cp.scope, tenantId)
+      if (!inScope) {
+        return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
+      }
+    }
+
+    const tenantOptions = await loadTenantOptions(cp.scope)
     const cap = Math.min(limit, supabaseSelectPageCap())
 
     async function loadRaw(): Promise<Record<string, unknown>[]> {
@@ -213,11 +226,8 @@ export async function PATCH(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as PatchBody
@@ -235,6 +245,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, message: "대상 직원을 찾을 수 없습니다." }, { status: 404, headers })
     }
 
+    const prevTenantId = String(prev.tenant_id || "").trim()
+    if (prevTenantId) {
+      const inScope = await assertTenantInScope(cp.scope, prevTenantId)
+      if (!inScope) {
+        return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
+      }
+    }
+
     const patch: Record<string, unknown> = {}
     const hasRole = typeof body.role === "string"
     const hasJob = typeof body.job === "string"
@@ -245,7 +263,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: false, message: "role은 비워둘 수 없습니다." }, { status: 400, headers })
       }
       const prevRole = String(prev.role || "").trim()
-      const actorRole = authResult.auth.role || ""
+      const actorRole = cp.auth.role || ""
       if (employeeRoleChangeTouchesDirector(prevRole, role) && !canAssignEmployeeDirectorRole(actorRole)) {
         return NextResponse.json(
           { success: false, message: "Director 권한 변경은 Director급만 가능합니다." },
@@ -276,8 +294,8 @@ export async function PATCH(req: NextRequest) {
     }
 
     await supabaseUpdateByFilter("employees", `id=eq.${id}`, patch)
-    const actorName = String(authResult.auth.name || "unknown").trim() || "unknown"
-    const actorRole = String(authResult.auth.role || "unknown").trim() || "unknown"
+    const actorName = String(cp.auth.name || "unknown").trim() || "unknown"
+    const actorRole = String(cp.auth.role || "unknown").trim() || "unknown"
     const tenantId = String(prev.tenant_id || "").trim()
     const nextRole = Object.prototype.hasOwnProperty.call(patch, "role") ? String(patch.role || "").trim() : String(prev.role || "").trim()
     const nextJob = Object.prototype.hasOwnProperty.call(patch, "job") ? String(patch.job || "").trim() : String(prev.job || "").trim()
@@ -334,11 +352,8 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as CreateBody
@@ -356,6 +371,11 @@ export async function POST(req: NextRequest) {
     }
     if (rawPassword.length < 4) {
       return NextResponse.json({ success: false, message: "비밀번호는 4자 이상 입력해 주세요." }, { status: 400, headers })
+    }
+
+    const inScope = await assertTenantInScope(cp.scope, tenantId)
+    if (!inScope) {
+      return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
     }
 
     const tenantRows = (await supabaseSelectFilter("tenants", `id=eq.${encodeURIComponent(tenantId)}`, {
@@ -420,8 +440,8 @@ export async function POST(req: NextRequest) {
       await supabaseInsert("saas_audit_logs", {
         tenant_id: tenantId,
         action: "employee.created",
-        actor_name: String(authResult.auth.name || "unknown"),
-        actor_role: String(authResult.auth.role || "unknown"),
+        actor_name: String(cp.auth.name || "unknown"),
+        actor_role: String(cp.auth.role || "unknown"),
         summary: `employee created (${companyName} / ${storeName} / ${name}, role=${role})`,
         payload_json: {
           company: companyName,

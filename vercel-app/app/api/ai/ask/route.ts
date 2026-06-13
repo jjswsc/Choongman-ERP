@@ -6,8 +6,10 @@ import { runChatCompletion } from "@/lib/ai/llm"
 import { logAiUsage } from "@/lib/ai/audit"
 import { getExternalContextSummary } from "@/lib/ai/external-context"
 import { buildStaffingInsight, isStaffingQuestion } from "@/lib/ai/staffing-advisor"
+import { buildStoreOpsInsight, isStoreOpsQuestion } from "@/lib/ai/store-ops-advisor"
 import { applyAiDateRangePolicy, buildAiDataPolicy } from "@/lib/ai/policy"
 import { isAiRouteError } from "@/lib/ai/errors"
+import { buildAiIntentGuide, buildAiSystemPrompt, resolveAiResponseLanguage } from "@/lib/ai/llm-locale"
 import type { AiIntent } from "@/lib/ai/types"
 
 function parseIntent(raw: unknown): AiIntent {
@@ -24,6 +26,8 @@ function buildRuleBasedAnswer(input: {
   citations: { title: string; source: string }[]
   staffingSummary?: string
   staffingLines?: string[]
+  storeOpsSummary?: string
+  storeOpsLines?: string[]
 }): string {
   const intro =
     input.intent === "reporting"
@@ -39,7 +43,10 @@ function buildRuleBasedAnswer(input: {
       ? "- 오늘 우선 실행 1개 선정\n- 담당자/기한 지정\n- 승인 요청 생성"
       : "- 필요한 항목 확인\n- 작업 초안 작성\n- 매니저 승인 후 진행"
   const hasStaffing = Boolean(input.staffingSummary)
-  const contextHint = hasStaffing
+  const hasStoreOps = Boolean(input.storeOpsSummary)
+  const contextHint = hasStoreOps
+    ? "매출·본사매입 집계 데이터를 기반으로 계산했습니다."
+    : hasStaffing
     ? "인사/적정인원 데이터를 기반으로 계산했습니다."
     : input.contextBlock
       ? "내부 근거가 일부 존재합니다. 상세는 참조 출처를 확인하세요."
@@ -53,6 +60,10 @@ function buildRuleBasedAnswer(input: {
     hasStaffing ? `인력 분석 요약: ${input.staffingSummary}` : "",
     hasStaffing && input.staffingLines?.length
       ? `세부:\n${input.staffingLines.map((l) => `- ${l}`).join("\n")}`
+      : "",
+    hasStoreOps ? `매출·매입 분석 요약: ${input.storeOpsSummary}` : "",
+    hasStoreOps && input.storeOpsLines?.length
+      ? `세부:\n${input.storeOpsLines.map((l) => `- ${l}`).join("\n")}`
       : "",
     "",
     "근거 출처:",
@@ -88,6 +99,7 @@ export async function POST(req: NextRequest) {
 
   const query = String(body.query || "").trim()
   const intent = parseIntent(body.intent)
+  const lang = String(body.lang || "ko")
   const requestedStore = String(body.store || access.scoped.store || "All").trim()
   const dateRange = body.dateRange as { start?: string; end?: string } | undefined
   const requestedStart = String(dateRange?.start || "").trim().slice(0, 10)
@@ -116,6 +128,14 @@ export async function POST(req: NextRequest) {
         requestedStore: store,
       })
     : null
+  const storeOps = isStoreOpsQuestion(query)
+    ? await buildStoreOpsInsight({
+        scoped: access.scoped,
+        requestedStore: store,
+        start,
+        end,
+      })
+    : null
   const external = await getExternalContextSummary({
     scoped: access.scoped,
     store,
@@ -129,20 +149,13 @@ export async function POST(req: NextRequest) {
   const staffingBlock = staffing?.hasData
     ? `인력 분석 요약: ${staffing.summary}\n${(staffing.lines || []).map((l) => `- ${l}`).join("\n")}`
     : ""
+  const storeOpsBlock = storeOps?.hasData
+    ? `매출·매입 분석 요약: ${storeOps.summary}\n${(storeOps.lines || []).map((l) => `- ${l}`).join("\n")}`
+    : ""
 
-  const intentGuide =
-    intent === "reporting"
-      ? "질문에 대해 수치 중심 리포트 형태로 답하고, 실행 가능한 액션 3개를 제시한다."
-      : intent === "ops_recommend"
-        ? "운영 최적화 제안 중심으로 답하고, 우선순위 높은 실행안 3개를 단계별로 제시한다."
-        : "정확하고 간결하게 답하고, 필요한 경우 확인 질문 1~2개를 포함한다."
-
-  const systemPrompt =
-    "You are the ERP AI center assistant. " +
-    "Respond in Korean. Never invent facts. " +
-    "Respect role/store scope. " +
-    "If evidence is insufficient, clearly say what is missing. " +
-    "Always provide short actionable next steps."
+  const responseLang = resolveAiResponseLanguage(lang)
+  const intentGuide = buildAiIntentGuide(intent, responseLang)
+  const systemPrompt = buildAiSystemPrompt(lang)
 
   try {
     const llm = await runChatCompletion(
@@ -159,6 +172,7 @@ export async function POST(req: NextRequest) {
             `기간 정책: 최대 ${policy.maxDateRangeDays}일${ranged.isClamped ? " (요청 기간 보정됨)" : ""}\n` +
             `외부환경 요약: ${external.summaryText}\n` +
             `${staffingBlock ? `${staffingBlock}\n` : ""}` +
+            `${storeOpsBlock ? `${storeOpsBlock}\n` : ""}` +
             `질문: ${query}\n\n` +
             `참조 컨텍스트:\n${contextBlock || "(없음)"}\n\n` +
             `외부환경 상세(JSON):\n${JSON.stringify(external.signals.slice(0, 14))}`,
@@ -177,13 +191,28 @@ export async function POST(req: NextRequest) {
         citations: citations.map((c) => ({ title: c.title, source: c.source })),
         staffingSummary: staffing?.hasData ? staffing.summary : undefined,
         staffingLines: staffing?.hasData ? staffing.lines : undefined,
+        storeOpsSummary: storeOps?.hasData ? storeOps.summary : undefined,
+        storeOpsLines: storeOps?.hasData ? storeOps.lines : undefined,
       })
 
-    const plan = [
-      "현재 답변 기반으로 1차 실행안을 선택",
-      "실행 전 영향 범위(diff) 확인",
-      "승인 후 실행대기함에서 반영",
-    ]
+    const plan =
+      intent === "ops_recommend"
+        ? [
+            "우선순위 1개 실행안을 승인 요청으로 등록",
+            "담당 매장·기한·담당자 지정",
+            "실행대기함에서 승인 후 반영",
+          ]
+        : intent === "reporting"
+          ? [
+              "핵심 수치(매출·매입·인력) 재확인",
+              "이상 구간 원인 가설 2~3개 정리",
+              "후속 태스크 또는 공지 초안 생성",
+            ]
+          : [
+              "답변 근거(출처·집계) 확인",
+              "추가 확인이 필요하면 기간·매장 좁혀 재질의",
+              "실행이 필요하면 승인 요청 생성",
+            ]
 
     await logAiUsage({
       scoped: access.scoped,
@@ -213,25 +242,47 @@ export async function POST(req: NextRequest) {
           maxDateRangeDays: policy.maxDateRangeDays,
           isDateRangeClamped: ranged.isClamped,
         },
-        citations: staffing?.hasData
-          ? [
-              ...citations,
-              {
-                id: "staffing-employees",
-                source: "erp-table",
-                title: "employees (재직 인원 산출)",
-                snippet: "store/job/sal_type/join_date/resign_date 기반 FTE 계산",
-                updatedAt: null,
-              },
-              {
-                id: "staffing-target",
-                source: "erp-table",
-                title: "store_job_headcount (적정 인원 목표)",
-                snippet: "store/job/target_count 기준 목표 인원 비교",
-                updatedAt: null,
-              },
-            ]
-          : citations,
+        citations: [
+          ...citations,
+          ...(staffing?.hasData
+            ? [
+                {
+                  id: "staffing-employees",
+                  source: "erp-table",
+                  title: "employees (재직 인원 산출)",
+                  snippet: "store/job/sal_type/join_date/resign_date 기반 FTE 계산",
+                  updatedAt: null,
+                },
+                {
+                  id: "staffing-target",
+                  source: "erp-table",
+                  title: "store_job_headcount (적정 인원 목표)",
+                  snippet: "store/job/target_count 기준 목표 인원 비교",
+                  updatedAt: null,
+                },
+              ]
+            : []),
+          ...(storeOps?.hasData
+            ? [
+                {
+                  id: "store-ops-sales",
+                  source: "erp-aggregate",
+                  title: "POS 완료 매출 (posSalesByStore 동일)",
+                  snippet: storeOps.summary,
+                  updatedAt: null,
+                },
+                {
+                  id: "store-ops-hq-outbound",
+                  source: "erp-aggregate",
+                  title: "본사 창고 출고(매입)",
+                  snippet: (storeOps.lines || []).join(" · "),
+                  updatedAt: null,
+                },
+              ]
+            : []),
+        ],
+        storeOpsMetrics: storeOps?.metrics ?? null,
+        storeBreakdown: storeOps?.storeBreakdown ?? null,
         externalSummary: external.summaryText,
         externalSignals: external.signals.slice(0, 14),
         usage: llm.usage,

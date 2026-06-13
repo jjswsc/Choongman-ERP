@@ -14,6 +14,9 @@ import { aggregateSaasRevenueStats } from "@/lib/saas-module-billing"
 import { completedStepCount, firstIncompleteStep, isOnboardingComplete, ONBOARDING_STEP_ORDER, resolveOnboardingSteps, type OnboardingStatusRow, type OnboardingStepKey } from "@/lib/saas-onboarding-status"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
+import { SaasPartnerDashboard } from "@/components/saas/saas-partner-dashboard"
+import { SaasStatCard } from "@/components/saas/saas-stat-card"
 
 function normalizeTenantRows(rows: TenantItem[]): TenantItem[] {
   return rows.map((row) => ({
@@ -35,6 +38,7 @@ function StepIcon({ done }: { done: boolean }) {
 export default function SaasAdminPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const scope = useSaasScope()
   const [tenants, setTenants] = useState<TenantItem[]>([])
   const [statusMap, setStatusMap] = useState<Record<string, OnboardingStatusRow>>({})
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
@@ -118,6 +122,10 @@ export default function SaasAdminPage() {
         {loadNotice ? <p className="mt-2 text-xs text-amber-600">{loadNotice}</p> : null}
       </div>
 
+      {scope.isPartner ? <SaasPartnerDashboard tenants={tenants} loading={loading} /> : null}
+
+      {!scope.isPartner ? (
+      <>
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">{t("saasAdminDash_onboardCtaTitle")}</CardTitle>
@@ -151,42 +159,53 @@ export default function SaasAdminPage() {
         </Card>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminDash_mrrTotal")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : revenue.totalMrr.toLocaleString()} THB</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {tr(t, "saasAdminDash_mrrActiveTenants", { n: String(revenue.activeTenants) })}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminDash_mrrModule")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : revenue.moduleMrr.toLocaleString()} THB</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminDash_mrrStage")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : revenue.stageMrr.toLocaleString()} THB</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminDash_topCustomer")}</p>
-            <p className="text-lg font-semibold truncate">
-              {loading ? "…" : revenue.topModuleTenants[0]?.companyName || "—"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {revenue.topModuleTenants[0]
-                ? `${revenue.topModuleTenants[0].amount.toLocaleString()} THB`
-                : ""}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <SaasStatCard
+          tone="accent"
+          label={t("saasAdminDash_mrrTotal")}
+          value={loading ? "…" : `${revenue.totalMrr.toLocaleString()} THB`}
+          sub={tr(t, "saasAdminDash_mrrActiveTenants", { n: String(revenue.activeTenants) })}
+        />
+        <SaasStatCard
+          tone="wholesale"
+          label={t("saasAdminDash_mrrWholesale")}
+          value={loading ? "…" : `${revenue.wholesaleMrr.toLocaleString()} THB`}
+        />
+        <SaasStatCard
+          tone="margin"
+          label={t("saasAdminDash_mrrPartnerMargin")}
+          value={loading ? "…" : `${revenue.partnerMarginMrr.toLocaleString()} THB`}
+        />
+        <SaasStatCard
+          tone="retail"
+          label={t("saasAdminDash_mrrRetail")}
+          value={loading ? "…" : `${revenue.retailMrr.toLocaleString()} THB`}
+        />
+        <SaasStatCard
+          tone="default"
+          label={t("saasAdminDash_mrrModule")}
+          value={loading ? "…" : `${revenue.moduleMrr.toLocaleString()} THB`}
+        />
+        <SaasStatCard
+          tone="warning"
+          label={t("saasAdminDash_mrrStage")}
+          value={loading ? "…" : `${revenue.stageMrr.toLocaleString()} THB`}
+        />
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">{t("saasAdminDash_topCustomer")}</p>
+          <p className="text-lg font-semibold truncate">
+            {loading ? "…" : revenue.topModuleTenants[0]?.companyName || "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {revenue.topModuleTenants[0]
+              ? `${revenue.topModuleTenants[0].amount.toLocaleString()} THB`
+              : ""}
+          </p>
+        </CardContent>
+      </Card>
 
       {revenue.moduleAdoption.length > 0 ? (
         <Card>
@@ -249,6 +268,8 @@ export default function SaasAdminPage() {
             </Table>
           </CardContent>
         </Card>
+      ) : null}
+      </>
       ) : null}
 
       <Card>
@@ -344,6 +365,12 @@ export default function SaasAdminPage() {
       <div>
         <h2 className="text-lg font-semibold">{t("saasAdminDash_opsTitle")}</h2>
         <ul className="mt-2 list-inside list-disc text-sm text-primary">
+          <li>
+            <Link href="/saas-admin/partners" className="underline underline-offset-4">
+              {t("saasAdminNavPartners")}
+            </Link>{" "}
+            — {t("saasAdminPartners_pageIntro")}
+          </li>
           <li>
             <Link href="/saas-admin/pricing" className="underline underline-offset-4">
               {t("saasAdminNavPricing")}

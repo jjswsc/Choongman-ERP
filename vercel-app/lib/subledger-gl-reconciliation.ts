@@ -1,6 +1,7 @@
 import { sumPayablesBalance, sumReceivablesBalance } from '@/lib/accounting-balance-summaries'
 import { getGlBalancesAsOf, glBalanceForCode } from '@/lib/gl-balance-as-of'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
+import { resolveAccountingRollupStores } from '@/lib/accounting-store-scope'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildStoreFieldOrIlikeFragment } from '@/lib/accounting-store-match'
 
@@ -121,9 +122,10 @@ export async function computeSubledgerGlReconciliation(
   input: IncomeScopeInput
 ): Promise<SubledgerGlReconciliationReport> {
   const scope = normalizeIncomeScope(input)
-  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+  const rollupStores = resolveAccountingRollupStores(scope)
+  if (rollupStores && rollupStores.length > 1) {
     const perStore = await Promise.all(
-      scope.allowedStoresOnly.map((store) =>
+      rollupStores.map((store) =>
         computeSubledgerGlReconciliation({
           ...input,
           storeFilter: store,

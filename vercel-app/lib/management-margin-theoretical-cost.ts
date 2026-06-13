@@ -59,6 +59,114 @@ export type TheoreticalCostAgg = {
   unmatchedLineQty: number
 }
 
+export type BomUnmatchedReason = 'missing_menu_id' | 'missing_bom'
+
+export type TheoreticalCostUnmatchedLine = {
+  menuId: string
+  optionId: string
+  menuLabel: string
+  optionLabel: string
+  reason: BomUnmatchedReason
+  lineQty: number
+}
+
+function resolveLineMenuName(row: Record<string, unknown>): string {
+  return str(row.menuName ?? row.menu_name ?? row.name)
+}
+
+function resolveLineOptionName(row: Record<string, unknown>): string {
+  return str(row.optionName ?? row.option_name)
+}
+
+function unmatchedBucketKey(reason: BomUnmatchedReason, menuId: string, optionId: string): string {
+  return `${reason}|${menuId}|${optionId}`
+}
+
+function formatMenuLabel(menuId: string, menuName: string): string {
+  if (menuName) return menuName
+  if (menuId) return `#${menuId}`
+  return '—'
+}
+
+function formatOptionLabel(optionId: string, optionName: string): string {
+  if (optionName) return optionName
+  if (optionId) return `#${optionId}`
+  return '—'
+}
+
+export function collectTheoreticalCostUnmatchedLines(params: {
+  orderRows: { order_type?: string; items_json?: string }[]
+  costIndex: Map<string, PosMenuCostIndexEntry>
+}): TheoreticalCostUnmatchedLine[] {
+  const bucket = new Map<string, TheoreticalCostUnmatchedLine>()
+
+  const upsert = (key: string, row: TheoreticalCostUnmatchedLine, menuName: string, optionName: string) => {
+    const prev = bucket.get(key)
+    if (prev) {
+      prev.lineQty += row.lineQty
+      if (!prev.menuLabel || prev.menuLabel.startsWith('#')) {
+        prev.menuLabel = formatMenuLabel(prev.menuId, menuName || prev.menuLabel)
+      }
+      if (!prev.optionLabel || prev.optionLabel.startsWith('#')) {
+        prev.optionLabel = formatOptionLabel(prev.optionId, optionName || prev.optionLabel)
+      }
+      return
+    }
+    bucket.set(key, { ...row })
+  }
+
+  for (const order of params.orderRows) {
+    for (const row of parseOrderItems(order.items_json)) {
+      if (isLineCancelled(row)) continue
+      const qty = Math.max(0, resolveItemsJsonLineQty(row))
+      if (qty <= 0) continue
+      const menuName = resolveLineMenuName(row)
+      const optionName = resolveLineOptionName(row)
+      const menuId = resolveLineMenuId(row)
+      if (!menuId) {
+        const labelKey = menuName || '—'
+        const key = unmatchedBucketKey('missing_menu_id', labelKey, '')
+        upsert(
+          key,
+          {
+            menuId: '',
+            optionId: '',
+            menuLabel: formatMenuLabel('', menuName),
+            optionLabel: '—',
+            reason: 'missing_menu_id',
+            lineQty: qty,
+          },
+          menuName,
+          optionName
+        )
+        continue
+      }
+      const optionId = resolveLineOptionId(row)
+      const keyWithOpt = `${menuId}|${optionId}`
+      const keyBase = `${menuId}|`
+      const entry = params.costIndex.get(keyWithOpt) ?? params.costIndex.get(keyBase)
+      if (!entry) {
+        const key = unmatchedBucketKey('missing_bom', menuId, optionId)
+        upsert(
+          key,
+          {
+            menuId,
+            optionId,
+            menuLabel: formatMenuLabel(menuId, menuName),
+            optionLabel: formatOptionLabel(optionId, optionName),
+            reason: 'missing_bom',
+            lineQty: qty,
+          },
+          menuName,
+          optionName
+        )
+      }
+    }
+  }
+
+  return [...bucket.values()].sort((a, b) => b.lineQty - a.lineQty || a.menuLabel.localeCompare(b.menuLabel))
+}
+
 export function aggregateTheoreticalCostFromOrders(params: {
   orderRows: { order_type?: string; items_json?: string }[]
   costIndex: Map<string, PosMenuCostIndexEntry>

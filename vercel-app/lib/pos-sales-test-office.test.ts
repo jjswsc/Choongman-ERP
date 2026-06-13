@@ -5,6 +5,7 @@ import {
   filterPosTerminalStoreOptions,
   isPosSalesTestOfficeStoreCode,
   isSandboxStoreCode,
+  isLoginExcludedStoreKey,
 } from './pos-sales-test-office'
 
 describe('buildPosTerminalStoreCodes', () => {
@@ -35,6 +36,14 @@ describe('isSandboxStoreCode', () => {
     expect(isSandboxStoreCode('HQ')).toBe(true)
     expect(isSandboxStoreCode('CM Office')).toBe(false)
     expect(isSandboxStoreCode('CM Asoke')).toBe(false)
+  })
+})
+
+describe('isLoginExcludedStoreKey', () => {
+  it('excludes test only — SaaS HQ 본사 코드는 로그인 목록 허용', () => {
+    expect(isLoginExcludedStoreKey('test')).toBe(true)
+    expect(isLoginExcludedStoreKey('HQ')).toBe(false)
+    expect(isLoginExcludedStoreKey('본사')).toBe(false)
   })
 })
 

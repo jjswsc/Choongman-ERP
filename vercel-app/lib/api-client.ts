@@ -74,6 +74,9 @@ export interface NoticeItem {
   sender: string
   status: string
   attachments: NoticeAttachment[]
+  isUrgent?: boolean
+  expiresAt?: string
+  scheduledAt?: string
 }
 
 export async function getMyNotices(params: {
@@ -857,13 +860,21 @@ export async function sendNotice(params: {
   userStore?: string
   userRole?: string
   attachments?: Array<{ name: string; mime: string; url: string }>
+  isUrgent?: boolean
+  expiresAt?: string
+  scheduledAt?: string
 }) {
   const res = await apiFetchWithOffline('/api/sendNotice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    fcmSent?: number
+    fcmFailed?: number
+  }>
 }
 
 export async function presignNoticeAttachment(params: {
@@ -901,6 +912,14 @@ export interface SentNoticeItem {
   content?: string
   readCount: number
   totalCount: number
+  isUrgent?: boolean
+  isOrderRelated?: boolean
+  targetStore?: string
+  targetRole?: string
+  targetPermissionGroup?: string
+  attachments?: Array<{ name: string; mime: string; url: string }>
+  expiresAt?: string
+  scheduledAt?: string
 }
 
 export async function getNoticeSenders(params?: { startDate?: string; endDate?: string }) {
@@ -1235,6 +1254,82 @@ export async function deleteNoticeAdmin(params: { id: number }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function estimateNoticeRecipients(params: {
+  targetStore: string
+  targetRole: string
+  targetPermissionGroup?: string
+  targetRecipients?: Array<{ store: string; name: string }>
+}) {
+  const res = await apiFetchWithOffline('/api/estimateNoticeRecipients', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json()) as { success?: boolean; count?: number }
+  return { count: data.count ?? 0, success: Boolean(data.success) }
+}
+
+export async function updateNoticeAdmin(params: {
+  id: number
+  title: string
+  content: string
+  isUrgent?: boolean
+  expiresAt?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/updateNoticeAdmin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function remindNoticeUnread(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/remindNoticeUnread', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    reminded?: number
+    fcmSent?: number
+  }>
+}
+
+export interface NoticeTemplateItem {
+  id: number
+  title: string
+  content: string
+  createdBy?: string
+  createdAt?: string
+}
+
+export async function getNoticeTemplates() {
+  const res = await apiFetchWithOffline('/api/noticeTemplates')
+  const data = (await res.json()) as { items?: NoticeTemplateItem[] }
+  return { items: data.items ?? [] }
+}
+
+export async function saveNoticeTemplate(params: { title: string; content: string }) {
+  const res = await apiFetchWithOffline('/api/noticeTemplates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: number }>
+}
+
+export async function deleteNoticeTemplate(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/noticeTemplates', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getLeavePendingList(params: {
   startStr: string
   endStr: string
@@ -1522,13 +1617,15 @@ export async function getWorkLogStaffList() {
   }
 }
 
-export async function getWorkLogOfficeOptions() {
-  const res = await apiFetchWithOffline('/api/getWorkLogOfficeOptions')
+export async function getWorkLogOfficeOptions(scope?: 'all' | 'office') {
+  const q = scope ? `?scope=${scope}` : ''
+  const res = await apiFetchWithOffline(`/api/getWorkLogOfficeOptions${q}`)
   const raw: unknown = await res.json()
   const o = jsonAsPlainObject(raw)
   return {
-    staff: jsonAsArray<{ id: number; name: string; displayName: string }>(o.staff),
+    staff: jsonAsArray<{ id: number; name: string; displayName: string; store?: string }>(o.staff),
     depts: jsonAsStringArray(o.depts),
+    stores: jsonAsStringArray(o.stores),
   }
 }
 
@@ -1636,6 +1733,7 @@ export async function getWorkLogManagerReport(params: {
   dept?: string
   employee?: string
   status?: string
+  store?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -1644,6 +1742,7 @@ export async function getWorkLogManagerReport(params: {
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
   if (params.status && params.status !== 'all') q.set('status', params.status)
+  if (params.store && params.store !== 'all') q.set('store', params.store)
   const res = await apiFetchWithOffline(`/api/getWorkLogManagerReport?${q}`)
   return jsonAsArray<WorkLogManagerItem>(await res.json())
 }
@@ -1663,6 +1762,7 @@ export async function getWorkLogWeekly(params: {
   endStr: string
   dept?: string
   employee?: string
+  store?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -1670,6 +1770,7 @@ export async function getWorkLogWeekly(params: {
   })
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
+  if (params.store && params.store !== 'all') q.set('store', params.store)
   const res = await apiFetchWithOffline(`/api/getWorkLogWeekly?${q}`)
   const raw: unknown = await res.json()
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -1683,6 +1784,94 @@ export async function getWorkLogWeekly(params: {
     totalCarried: Number(o.totalCarried) || 0,
     overallAvg: Number(o.overallAvg) || 0,
   }
+}
+
+export interface WorkLogPeriodDay {
+  date: string
+  totalTasks: number
+  completed: number
+  inProgress: number
+  carried: number
+  avgProgress: number
+  hasActivity: boolean
+}
+
+export async function getWorkLogPeriodSummary(params: {
+  startStr: string
+  endStr: string
+  employeeId?: number
+  name?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
+  if (params.name) q.set('name', params.name)
+  const res = await apiFetchWithOffline(`/api/getWorkLogPeriodSummary?${q}`)
+  const raw = (await res.json()) as { days?: unknown }
+  return jsonAsArray<WorkLogPeriodDay>(raw.days)
+}
+
+export interface WorkLogAuditItem {
+  id?: number
+  action_type?: string
+  changed_at?: string
+  work_log_id?: string
+  log_date?: string
+  employee_id?: number
+  employee_name?: string
+  employee_store?: string
+  actor_name?: string
+  actor_role?: string
+  change_reason?: string
+  before_row?: Record<string, unknown>
+  after_row?: Record<string, unknown>
+}
+
+export async function getWorkLogAudit(params: {
+  startStr?: string
+  endStr?: string
+  employeeId?: string
+  store?: string
+  limit?: number
+}) {
+  const q = new URLSearchParams()
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  if (params.employeeId) q.set('employeeId', params.employeeId)
+  if (params.store) q.set('store', params.store)
+  if (params.limit) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline(`/api/getWorkLogAudit?${q}`)
+  const raw = (await res.json()) as { items?: unknown; forbidden?: boolean }
+  return {
+    items: jsonAsArray<WorkLogAuditItem>(raw.items),
+    forbidden: res.status === 403 || Boolean(raw.forbidden),
+  }
+}
+
+export interface WorkLogEmployeeInsights {
+  employeeName?: string
+  employeeStore?: string
+  work: { log_date: string; total_tasks: number; completed: number; carried: number; avg_progress: number }[]
+  attendance: { log_date: string; clock_in_count: number; clock_out_count: number; ot_min_sum: number }[]
+  evaluations: { eval_date: string; eval_type: string; final_grade: string; store_name: string; evaluator: string }[]
+}
+
+export async function getWorkLogEmployeeInsights(params: {
+  startStr: string
+  endStr: string
+  employeeId?: string
+  store?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.employeeId && params.employeeId !== 'all') q.set('employeeId', params.employeeId)
+  if (params.store && params.store !== 'all') q.set('store', params.store)
+  const res = await apiFetchWithOffline(`/api/getWorkLogEmployeeInsights?${q}`)
+  return (await res.json()) as WorkLogEmployeeInsights
 }
 
 // ─── 시간표 (Timesheet) ───
@@ -2578,6 +2767,14 @@ export type ManagementMarginBridgeData = {
     totalCost: number
     matchedLineQty: number
     unmatchedLineQty: number
+    bomUnmatchedLines: {
+      menuId: string
+      optionId: string
+      menuLabel: string
+      optionLabel: string
+      reason: 'missing_menu_id' | 'missing_bom'
+      lineQty: number
+    }[]
     costPctOfGross: number
     costPctOfNet: number
     miseRatePercent: number
@@ -2619,7 +2816,11 @@ export type ManagementMarginBridgeData = {
     storeCode: string
     orderCount: number
     netSales: number
+    bundleDiscount: number
+    paymentDiscount: number
     totalDiscount: number
+    bundleDiscountPctOfGross: number
+    paymentDiscountPctOfGross: number
     discountPctOfGross: number
     totalCost: number
     costPctOfNet: number
@@ -7910,6 +8111,12 @@ export interface PosCostAnalysisAuditRow {
   quantity: number
   lossRate: number
   ingredientType: string | null
+  beforeQuantity?: number | null
+  afterQuantity?: number | null
+  beforeLossRate?: number | null
+  afterLossRate?: number | null
+  beforeItemCode?: string | null
+  afterItemCode?: string | null
 }
 
 export async function getPosCostAnalysisAudit(params?: {
@@ -8014,7 +8221,12 @@ export async function deleteSauce(params: { id: number }) {
 
 export async function recalculateSauces() {
   const res = await apiFetchWithOffline('/api/sauces/recalculate', { method: 'POST' })
-  const data = await res.json().catch(() => ({})) as { success?: boolean; count?: number; message?: string }
+  const data = await res.json().catch(() => ({})) as {
+    success?: boolean
+    count?: number
+    affectedMenuCount?: number
+    message?: string
+  }
   if (!res.ok) {
     throw new Error(data?.message || `재계산 실패 (${res.status})`)
   }
@@ -8075,17 +8287,36 @@ export async function savePayrollHazGradeRules(params: { requireEvalGrade: boole
 
 export async function getCostSettings() {
   const res = await apiFetchWithOffline('/api/costSettings')
-  const data = await res.json().catch(() => ({})) as { defaultOverheadPercent?: number; globalOverheadPercent?: number; message?: string }
+  const data = await res.json().catch(() => ({})) as {
+    defaultOverheadPercent?: number
+    globalOverheadPercent?: number
+    defaultMisePercent?: number
+    costRatioGoodMax?: number
+    costRatioCautionMax?: number
+    categoryTargets?: Record<string, number>
+    message?: string
+  }
   if (!res.ok) {
     throw new Error(data?.message || `OH 설정 조회 실패 (${res.status})`)
   }
   return {
     defaultOverheadPercent: data?.defaultOverheadPercent ?? 5,
     globalOverheadPercent: data?.globalOverheadPercent ?? 5,
+    defaultMisePercent: data?.defaultMisePercent ?? 3,
+    costRatioGoodMax: data?.costRatioGoodMax ?? 35,
+    costRatioCautionMax: data?.costRatioCautionMax ?? 42,
+    categoryTargets: data?.categoryTargets ?? {},
   }
 }
 
-export async function updateCostSettings(params: { globalOverheadPercent?: number; defaultOverheadPercent?: number }) {
+export async function updateCostSettings(params: {
+  globalOverheadPercent?: number
+  defaultOverheadPercent?: number
+  defaultMisePercent?: number
+  costRatioGoodMax?: number
+  costRatioCautionMax?: number
+  categoryTargets?: Record<string, number>
+}) {
   const res = await apiFetchWithOffline('/api/costSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -12285,16 +12516,29 @@ export async function getMemberTiers() {
 
 export async function getMemberTierPolicy() {
   const res = await apiFetchWithOffline('/api/member-tiers/policy')
-  return res.json() as Promise<{ success: boolean; upgradeBasis?: 'amount' | 'points'; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    upgradeBasis?: 'amount' | 'points'
+    earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
+    message?: string
+  }>
 }
 
-export async function saveMemberTierPolicy(params: { upgradeBasis: 'amount' | 'points' }) {
+export async function saveMemberTierPolicy(params: {
+  upgradeBasis?: 'amount' | 'points'
+  earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
+}) {
   const res = await apiFetchWithOffline('/api/member-tiers/policy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; upgradeBasis?: 'amount' | 'points'; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    upgradeBasis?: 'amount' | 'points'
+    earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
+    message?: string
+  }>
 }
 
 export async function saveMemberTier(params: {
@@ -12407,6 +12651,7 @@ export interface Member {
   phone: string
   email: string
   joinChannel?: string
+  joinStoreCode?: string
   referredByMemberId?: number
   referralCode?: string
   consentMarketing?: boolean
@@ -12942,6 +13187,93 @@ export async function getOutboundStoreMonthMatrix(params: {
     throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
   }
   return res.json() as Promise<OutboundStoreMonthMatrixResult>
+}
+
+export type HqWarehouseMovementColumn = {
+  key: string
+  ymd: string
+  kind: 'in' | 'out' | 'adjust'
+  store?: string
+  label: string
+}
+
+export type HqWarehouseDailyItemRow = {
+  code: string
+  name: string
+  spec: string
+  unit: string
+  cost: number
+  price: number
+  category: string
+  cells: Record<string, number>
+  beginning: number
+  balance: number
+  minQty: number
+  totalIn: number
+  totalOut: number
+  avgOutPerDay: number
+  avgOutPerWeek: number
+  avgOutPerMonth: number
+  orderPeriodDays: number | null
+  costOfGoods: number
+  valuationUnitCost: number
+  priorTotalOut: number
+  outChangePct: number | null
+  sparkline: number[]
+}
+
+export type HqWarehouseDailyStockMatrixResult = {
+  startStr: string
+  endStr: string
+  warehouseKey: string
+  warehouseLabel: string
+  warehouseOptions: string[]
+  columns: HqWarehouseMovementColumn[]
+  items: HqWarehouseDailyItemRow[]
+  dayInvoices: HqWarehouseDayInvoice[]
+  stores: string[]
+  periodDays: number
+  hitRowCap: boolean
+  usedRpc: boolean
+  priorStartStr?: string
+  priorEndStr?: string
+}
+
+export type HqWarehouseDayInvoice = {
+  ymd: string
+  store: string
+  invoiceNo: string
+  type: 'Outbound' | 'Force'
+  orderId?: number
+  stockLogId?: number
+  subtotal: number
+  vat: number
+  grandTotal: number
+}
+
+/** 본사 창고 일별 입·출고 매트릭스 (Daily Stock Report) */
+export async function getHqWarehouseDailyStockMatrix(params: {
+  startStr: string
+  endStr: string
+  storeFilter?: string
+  categoryFilter?: string
+  warehouseKey?: string
+  includePriorPeriod?: boolean
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
+  if (params.categoryFilter?.trim()) q.set('categoryFilter', params.categoryFilter.trim())
+  if (params.warehouseKey?.trim()) q.set('warehouseKey', params.warehouseKey.trim())
+  if (params.includePriorPeriod === false) q.set('includePriorPeriod', '0')
+  const res = await apiFetchWithOffline(`/api/getHqWarehouseDailyStockMatrix?${q}`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
+  }
+  return res.json() as Promise<HqWarehouseDailyStockMatrixResult>
 }
 
 /** 출고 로그(stock_logs) 확정 단가·수량 수정 — 본사 권한, orders 미변경 */
@@ -14846,6 +15178,32 @@ export type CompanyHybridDocumentCategory = {
 /** 문서 관리 API: UI에서 401 시 알림 대신 로그인 이동용 */
 type CompanyHybridHttpMeta = { httpStatus: number }
 
+export type CompanyHybridDocumentEvent = {
+  id: number
+  document_id: number
+  action: string
+  store: string
+  actor_name: string | null
+  actor_store: string | null
+  detail: Record<string, unknown> | null
+  created_at: string
+}
+
+export type CompanyHybridDocumentsSummary = {
+  today: string
+  total: number
+  expiring_soon: number
+  expired: number
+  corr_overdue: number
+  stores: Array<{
+    store: string
+    total: number
+    expiring_soon: number
+    expired: number
+    compliance_pct: number
+  }>
+}
+
 export async function getCompanyHybridDocuments(params: {
   store: string
   relatedType?: string
@@ -14855,13 +15213,28 @@ export async function getCompanyHybridDocuments(params: {
   searchTitle?: string
   /** 제목 정렬 — 미지정 시 등록일 최신순 */
   sortTitle?: 'asc' | 'desc'
+  sortCreated?: 'asc' | 'desc'
+  sortValidTo?: 'asc' | 'desc'
   /** 공문(metadata.correspondence) 유무: all | yes | no */
   corrPresence?: 'all' | 'yes' | 'no'
   corrDirection?: 'outbound' | 'inbound'
   corrStatus?: 'draft' | 'sent' | 'filed' | 'replied'
   corrCounterpartySearch?: string
+  sourceFilter?: 'drive' | 'supabase'
+  visibilityFilter?: 'all' | 'office' | 'store_admin'
+  expiryFilter?: 'all' | 'expiring_soon' | 'expired' | 'no_expiry'
+  offset?: number
+  limit?: number
 }): Promise<
-  { success: boolean; list: CompanyHybridDocumentListItem[]; message?: string } & CompanyHybridHttpMeta
+  {
+    success: boolean
+    list: CompanyHybridDocumentListItem[]
+    total?: number
+    offset?: number
+    limit?: number
+    truncated?: boolean
+    message?: string
+  } & CompanyHybridHttpMeta
 > {
   const q = new URLSearchParams({ store: params.store })
   if (params.relatedType) q.set('relatedType', params.relatedType)
@@ -14872,12 +15245,27 @@ export async function getCompanyHybridDocuments(params: {
   }
   if (params.searchTitle?.trim()) q.set('searchTitle', params.searchTitle.trim())
   if (params.sortTitle === 'asc' || params.sortTitle === 'desc') q.set('sortTitle', params.sortTitle)
+  if (params.sortCreated === 'asc' || params.sortCreated === 'desc') q.set('sortCreated', params.sortCreated)
+  if (params.sortValidTo === 'asc' || params.sortValidTo === 'desc') q.set('sortValidTo', params.sortValidTo)
   if (params.corrPresence && params.corrPresence !== 'all') q.set('corrPresence', params.corrPresence)
   if (params.corrDirection) q.set('corrDirection', params.corrDirection)
   if (params.corrStatus) q.set('corrStatus', params.corrStatus)
   if (params.corrCounterpartySearch?.trim()) q.set('corrCounterpartySearch', params.corrCounterpartySearch.trim())
+  if (params.sourceFilter === 'drive' || params.sourceFilter === 'supabase') q.set('source', params.sourceFilter)
+  if (params.visibilityFilter && params.visibilityFilter !== 'all') q.set('visibility', params.visibilityFilter)
+  if (params.expiryFilter && params.expiryFilter !== 'all') q.set('expiryFilter', params.expiryFilter)
+  if (params.offset != null && params.offset >= 0) q.set('offset', String(Math.floor(params.offset)))
+  if (params.limit != null && params.limit > 0) q.set('limit', String(Math.floor(params.limit)))
   const res = await apiFetchWithOffline(`/api/getCompanyHybridDocuments?${q}`)
-  const data = (await res.json()) as { success: boolean; list: CompanyHybridDocumentListItem[]; message?: string }
+  const data = (await res.json()) as {
+    success: boolean
+    list: CompanyHybridDocumentListItem[]
+    total?: number
+    offset?: number
+    limit?: number
+    truncated?: boolean
+    message?: string
+  }
   return { ...data, httpStatus: res.status }
 }
 
@@ -14991,5 +15379,31 @@ export async function recordCompanyHybridDocumentView(params: {
     body: JSON.stringify(params),
   })
   const data = (await res.json()) as { success: boolean; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function getCompanyHybridDocumentEvents(params: {
+  documentId: number
+}): Promise<
+  { success: boolean; list: CompanyHybridDocumentEvent[]; message?: string } & CompanyHybridHttpMeta
+> {
+  const q = new URLSearchParams({ documentId: String(params.documentId) })
+  const res = await apiFetchWithOffline(`/api/getCompanyHybridDocumentEvents?${q}`)
+  const data = (await res.json()) as { success: boolean; list: CompanyHybridDocumentEvent[]; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function getCompanyHybridDocumentsSummary(params: {
+  store: string
+}): Promise<
+  { success: boolean; summary?: CompanyHybridDocumentsSummary; message?: string } & CompanyHybridHttpMeta
+> {
+  const q = new URLSearchParams({ store: params.store })
+  const res = await apiFetchWithOffline(`/api/getCompanyHybridDocumentsSummary?${q}`)
+  const data = (await res.json()) as {
+    success: boolean
+    summary?: CompanyHybridDocumentsSummary
+    message?: string
+  }
   return { ...data, httpStatus: res.status }
 }

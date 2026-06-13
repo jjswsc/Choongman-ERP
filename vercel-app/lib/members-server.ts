@@ -19,6 +19,12 @@ import {
 } from '@/lib/member-tier-policy'
 import { buildMemberSearchPostgrestOrFilter } from '@/lib/member-search-filter'
 import { memberPhoneLookupVariants, normalizeMemberPhone } from '@/lib/member-phone-lookup'
+import {
+  computeMemberPointEarn,
+  formatPointEarnLedgerNote,
+  resolvePointEarnChannel,
+} from '@/lib/member-point-earn-policy'
+import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 
 export type MemberSummary = {
   id: number
@@ -31,6 +37,7 @@ export type MemberSummary = {
   phone: string
   email: string
   joinChannel?: string
+  joinStoreCode?: string
   referredByMemberId?: number
   referralCode?: string
   consentMarketing?: boolean
@@ -63,6 +70,7 @@ type MemberRow = {
   gender?: string | null
   nationality?: string | null
   join_channel?: string | null
+  join_store_code?: string | null
   referred_by_member_id?: number | null
   referral_code?: string | null
   last_visited_at?: string | null
@@ -138,6 +146,7 @@ export type CreateMemberInput = {
   gender?: string
   nationality?: string
   joinChannel?: string
+  joinStoreCode?: string
   referralCode?: string
   referredByMemberId?: number
   source?: string
@@ -156,6 +165,7 @@ export type UpdateMemberInput = {
   gender?: string
   nationality?: string
   joinChannel?: string
+  joinStoreCode?: string
   referralCode?: string
   referredByMemberId?: number
   phone?: string
@@ -235,6 +245,7 @@ function toMemberSummary(
     phone: toText(member.phone),
     email: toText(member.email),
     joinChannel: toText(member.join_channel) || 'store',
+    joinStoreCode: toText(member.join_store_code) || undefined,
     referredByMemberId: Number(member.referred_by_member_id || 0) || undefined,
     referralCode: toText(member.referral_code),
     consentMarketing: Boolean(member.consent_marketing),
@@ -411,6 +422,7 @@ async function insertMemberBase(input: CreateMemberInput): Promise<MemberRow> {
       gender: toText(input.gender) || null,
       nationality: toText(input.nationality) || null,
       join_channel: toText(input.joinChannel) || 'store',
+      join_store_code: toText(input.joinStoreCode) || null,
       referral_code: referralCode,
       referred_by_member_id: referredByMemberId,
       source: toText(input.source) || 'manual',
@@ -577,6 +589,10 @@ export async function updateMember(input: UpdateMemberInput): Promise<MemberSumm
   if (input.gender != null) patch.gender = toText(input.gender) || null
   if (input.nationality != null) patch.nationality = toText(input.nationality) || null
   if (input.joinChannel != null) patch.join_channel = toText(input.joinChannel) || 'store'
+  if (input.joinStoreCode != null) {
+    const nextJoinStore = toText(input.joinStoreCode)
+    if (nextJoinStore) patch.join_store_code = nextJoinStore
+  }
   if (input.referralCode != null) patch.referral_code = toText(input.referralCode).toUpperCase() || null
   if (input.referredByMemberId != null) patch.referred_by_member_id = Number(input.referredByMemberId || 0) || null
   if (input.phone != null) patch.phone = normalizePhone(input.phone) || null
@@ -604,6 +620,7 @@ export async function registerLineMember(input: {
   phone?: string
   email?: string
   name?: string
+  joinStoreCode?: string
 }): Promise<MemberSummary> {
   const lineUserId = toText(input.lineUserId)
   if (!lineUserId) throw new Error('lineUserId가 필요합니다.')
@@ -675,12 +692,20 @@ export async function registerLineMember(input: {
     }
   }
 
+  const joinStoreCode = toText(input.joinStoreCode)
+  if (!joinStoreCode) throw new Error('missing_store')
+  const { isAllowedMemberSignupStoreCode } = await import('@/lib/member-signup-store')
+  if (!(await isAllowedMemberSignupStoreCode(joinStoreCode))) {
+    throw new Error('invalid_store')
+  }
+
   const created = await createMember({
     name: toText(input.name) || toText(input.displayName) || `LINE-${lineUserId.slice(0, 6)}`,
     phone: input.phone,
     email: input.email,
     source: 'line',
     joinChannel: 'line',
+    joinStoreCode: joinStoreCode,
     lineUserId,
     lineDisplayName: toText(input.displayName),
     linePictureUrl: toText(input.pictureUrl),
@@ -960,32 +985,127 @@ export async function adjustMemberPoints(params: {
   await recalculateMemberTier(memberId)
 }
 
+export async function computeMemberPointEarnForOrder(params: {
+  memberId: number
+  totalAmount: number
+  orderType?: string | null
+  createdBy?: string | null
+  orderAtYmd?: string
+}) {
+  const memberId = Number(params.memberId || 0)
+  if (!memberId) {
+    return {
+      pointEarned: 0,
+      baseEarn: 0,
+      effectiveMultiplier: 1,
+      tierCode: 'BRONZE' as string,
+      pointRate: 0,
+      birthdayApplied: false,
+      periodPromoApplied: false,
+      channel: 'dine_in' as const,
+      channelMultiplier: 1,
+    }
+  }
+  const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
+  const member = rows?.[0]
+  if (!member) {
+    return {
+      pointEarned: 0,
+      baseEarn: 0,
+      effectiveMultiplier: 1,
+      tierCode: 'BRONZE' as string,
+      pointRate: 0,
+      birthdayApplied: false,
+      periodPromoApplied: false,
+      channel: 'dine_in' as const,
+      channelMultiplier: 1,
+    }
+  }
+  const tiers = await getActiveTiers()
+  const currentTierCode = toText(member.tier_code) || 'BRONZE'
+  const currentTier = tiers.find((x) => toText(x.code) === currentTierCode)
+  const pointRate = Number(currentTier?.point_rate || 0.01)
+  const policy = await loadMemberPointEarnBonusPolicy()
+  const channel = resolvePointEarnChannel({
+    createdBy: params.createdBy,
+    orderType: params.orderType,
+  })
+  const breakdown = computeMemberPointEarn({
+    totalAmount: params.totalAmount,
+    pointRate,
+    policy,
+    channel,
+    birthDate: toText(member.birth_date) || null,
+    todayYmd: params.orderAtYmd,
+  })
+  return {
+    ...breakdown,
+    tierCode: currentTierCode,
+    pointRate,
+  }
+}
+
 export async function applyLoyaltyOnOrder(params: {
   memberId?: number
   orderId?: number
+  storeCode?: string
   totalAmount: number
   pointUsed: number
   pointEarned?: number
   orderNo?: string
   couponCode?: string
+  orderType?: string | null
+  createdBy?: string | null
+  orderAtYmd?: string
 }) {
   const memberId = Number(params.memberId || 0)
   if (!memberId) return { pointEarned: 0, tierCode: 'BRONZE' }
+  const orderId = Number(params.orderId || 0)
+  let stamp: import('@/lib/member-stamp-card').MemberStampRecordResult | null = null
+  if (orderId > 0) {
+    try {
+      const { recordMemberStampOnVisit } = await import('@/lib/member-stamp-card')
+      stamp = await recordMemberStampOnVisit({
+        memberId,
+        orderId,
+        storeCode: toText(params.storeCode),
+        totalAmount: Number(params.totalAmount || 0),
+        orderAtYmd: params.orderAtYmd,
+        createdBy: params.createdBy,
+        orderType: params.orderType,
+      })
+    } catch {
+      /* stamp tables may not be migrated yet */
+    }
+  }
   const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
   const member = rows?.[0]
-  if (!member) return { pointEarned: 0, tierCode: 'BRONZE' }
+  if (!member) return { pointEarned: 0, tierCode: 'BRONZE', stamp }
   const tiers = await getActiveTiers()
   const currentTierCode = toText(member.tier_code) || 'BRONZE'
   const currentTier = tiers.find((x) => toText(x.code) === currentTierCode)
   const pointRate = Number(currentTier?.point_rate || 0.01)
   const pointUsed = Math.max(0, Math.trunc(Number(params.pointUsed || 0)))
-  const autoEarn = Math.max(0, Math.floor(Number(params.totalAmount || 0) * pointRate))
-  const pointEarned = Math.max(0, Math.trunc(Number(params.pointEarned ?? autoEarn)))
-  const orderId = Number(params.orderId || 0) || null
-  const existingByOrder = orderId
+  const earnBreakdown = computeMemberPointEarn({
+    totalAmount: params.totalAmount,
+    pointRate,
+    policy: await loadMemberPointEarnBonusPolicy(),
+    channel: resolvePointEarnChannel({
+      createdBy: params.createdBy,
+      orderType: params.orderType,
+    }),
+    birthDate: toText(member.birth_date) || null,
+    todayYmd: params.orderAtYmd,
+  })
+  const explicitEarn = params.pointEarned != null ? Math.trunc(Number(params.pointEarned)) : null
+  const pointEarned =
+    explicitEarn != null && explicitEarn > 0 ? explicitEarn : earnBreakdown.pointEarned
+  const earnNote = formatPointEarnLedgerNote(toText(params.orderNo), earnBreakdown)
+  const orderIdForLedger = orderId || null
+  const existingByOrder = orderIdForLedger
     ? ((await supabaseSelectFilter(
         'member_points_ledger',
-        `member_id=eq.${memberId}&order_id=eq.${orderId}`,
+        `member_id=eq.${memberId}&order_id=eq.${orderIdForLedger}`,
         { select: 'kind', limit: 20 }
       )) as Array<{ kind?: string }>)
     : []
@@ -1018,7 +1138,7 @@ export async function applyLoyaltyOnOrder(params: {
       kind: 'earn',
       points: pointEarned,
       amount: Number(params.totalAmount || 0),
-      note: toText(params.orderNo) || 'order_earn',
+      note: earnNote,
       created_at: getBangkokDateTimeString(),
     })
   }
@@ -1048,7 +1168,7 @@ export async function applyLoyaltyOnOrder(params: {
     (appliedEarn > 0 ? appliedEarn : 0)
 
   if (!shouldInsertUse && !shouldInsertEarn) {
-    return { pointEarned: 0, tierCode: currentTierCode }
+    return { pointEarned: 0, tierCode: currentTierCode, stamp }
   }
 
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
@@ -1059,7 +1179,7 @@ export async function applyLoyaltyOnOrder(params: {
     updated_at: getBangkokDateTimeString(),
   })
   const recalc = await recalculateMemberTier(memberId)
-  return { pointEarned: appliedEarn, tierCode: recalc.tierCode }
+  return { pointEarned: appliedEarn, tierCode: recalc.tierCode, stamp }
 }
 
 export async function resolveMemberIdsSharingPhone(memberId: number): Promise<number[]> {

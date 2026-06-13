@@ -197,6 +197,8 @@ interface IngredientTableProps {
   ingredientPickerHideSauceUsageKinds?: Array<"for_sale" | "store_use">
   /** 「원재료 추가」열기 직전 품목 목록 갱신(품목 수정 직후 런타임 스냅샷 동기화) */
   refreshApiItemsBeforeAddDialog?: () => void | Promise<void>
+  /** true면 추가·삭제·수량 편집 불가 (조회 전용) */
+  readOnly?: boolean
 }
 
 export function IngredientTable({
@@ -211,6 +213,7 @@ export function IngredientTable({
   addSauceDialogStoreUseRows,
   ingredientPickerHideSauceUsageKinds,
   refreshApiItemsBeforeAddDialog,
+  readOnly = false,
 }: IngredientTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -481,28 +484,30 @@ export function IngredientTable({
             {items.length}{t("posCostItemsCount")}
           </span>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openAddDialog}
-            className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("posCostAddItem")}
-          </Button>
-          {type === "food" && (
+        {!readOnly ? (
+          <div className="flex gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setAddSauceDialogOpen(true)}
+              onClick={openAddDialog}
               className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
             >
               <Plus className="h-3.5 w-3.5" />
-              {t("posCostAddSauce") || "배합 재료 추가"}
+              {t("posCostAddItem")}
             </Button>
-          )}
-        </div>
+            {type === "food" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAddSauceDialogOpen(true)}
+                className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t("posCostAddSauce") || "배합 재료 추가"}
+              </Button>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto">
@@ -533,7 +538,7 @@ export function IngredientTable({
               <TableHead className="text-center text-xs font-medium text-muted-foreground">
                 {t("posCostCostThb")}
               </TableHead>
-              <TableHead className="w-10" />
+              {!readOnly ? <TableHead className="w-10" /> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -556,15 +561,21 @@ export function IngredientTable({
                     {getIngredientItemCode(item.ingredientCode) ?? ingredient?.code ?? "-"}
                   </TableCell>
                   <TableCell>
-                    <IngredientPicker
-                      value={item.ingredientCode}
-                      onChange={(code) => changeIngredient(index, code)}
-                      ingredients={availableIngredients}
-                      openRowIndex={openPickerRow}
-                      rowIndex={index}
-                      onOpenChange={setOpenPickerRow}
-                      t={t}
-                    />
+                    {readOnly ? (
+                      <span className="text-sm truncate block max-w-[200px]">
+                        {getIngredient(item.ingredientCode)?.name ?? "—"}
+                      </span>
+                    ) : (
+                      <IngredientPicker
+                        value={item.ingredientCode}
+                        onChange={(code) => changeIngredient(index, code)}
+                        ingredients={availableIngredients}
+                        openRowIndex={openPickerRow}
+                        rowIndex={index}
+                        onOpenChange={setOpenPickerRow}
+                        t={t}
+                      />
+                    )}
                   </TableCell>
                   <TableCell className="text-center text-xs text-muted-foreground">
                     {getRuntimeApiItems().find((i) => i.code === item.ingredientCode)?.categoryRaw ?? "—"}
@@ -583,33 +594,39 @@ export function IngredientTable({
                       const hasUnits = standardUnits && standardUnits.length > 0
                       const unitKey = rowUnitKeyFor(item)
                       return hasUnits ? (
-                        <Select
-                          value={unitKey}
-                          onValueChange={(v) => setRowUnitKey(index, v)}
-                        >
-                          <SelectTrigger className="h-8 w-full min-w-[72px] text-[11px] border-dashed">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {standardUnits!.map((o, optIdx) => (
-                              <SelectItem
-                                key={`u-${item.ingredientCode}-${index}-${optIdx}`}
-                                value={`${o.unit}::${o.totalQuantity}`}
-                              >
-                                {o.unit}
-                              </SelectItem>
-                            ))}
-                            {item.quantityUnitKey &&
-                              item.quantityUnitKey !== unitKey &&
-                              !standardUnits!.some(
-                                (o) => `${o.unit}::${o.totalQuantity}` === item.quantityUnitKey
-                              ) && (
-                                <SelectItem value={item.quantityUnitKey}>
-                                  {parseQuantityUnitKey(item.quantityUnitKey)?.unit ?? item.quantityUnitKey}
+                        readOnly ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            {parseQuantityUnitKey(unitKey)?.unit ?? unitKey}
+                          </span>
+                        ) : (
+                          <Select
+                            value={unitKey}
+                            onValueChange={(v) => setRowUnitKey(index, v)}
+                          >
+                            <SelectTrigger className="h-8 w-full min-w-[72px] text-[11px] border-dashed">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {standardUnits!.map((o, optIdx) => (
+                                <SelectItem
+                                  key={`u-${item.ingredientCode}-${index}-${optIdx}`}
+                                  value={`${o.unit}::${o.totalQuantity}`}
+                                >
+                                  {o.unit}
                                 </SelectItem>
-                              )}
-                          </SelectContent>
-                        </Select>
+                              ))}
+                              {item.quantityUnitKey &&
+                                item.quantityUnitKey !== unitKey &&
+                                !standardUnits!.some(
+                                  (o) => `${o.unit}::${o.totalQuantity}` === item.quantityUnitKey
+                                ) && (
+                                  <SelectItem value={item.quantityUnitKey}>
+                                    {parseQuantityUnitKey(item.quantityUnitKey)?.unit ?? item.quantityUnitKey}
+                                  </SelectItem>
+                                )}
+                            </SelectContent>
+                          </Select>
+                        )
                       ) : (
                         <span className="text-[11px] text-muted-foreground">
                           {type === "packaging" ? "ea" : "g"}
@@ -622,7 +639,11 @@ export function IngredientTable({
                       const standardUnits = getIngredientStandardUnits(item.ingredientCode)
                       const hasUnits = standardUnits && standardUnits.length > 0
                       const displayQty = getRowDisplayQuantity(item, item.quantity)
-                      return (
+                      return readOnly ? (
+                        <span className="font-mono text-sm text-right block">
+                          {hasUnits ? displayQty : item.quantity}
+                        </span>
+                      ) : (
                         <Input
                           type="number"
                           value={hasUnits ? displayQty : item.quantity}
@@ -639,18 +660,22 @@ export function IngredientTable({
                     })()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      value={item.misePercent ?? MISE_DEFAULT}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value)
-                        updateMisePercent(index, isNaN(val) ? MISE_DEFAULT : val)
-                      }}
-                      className="h-8 w-16 ml-auto text-right font-mono text-sm bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
-                      min="0"
-                      max="50"
-                      step="0.5"
-                    />
+                    {readOnly ? (
+                      <span className="font-mono text-sm">{(item.misePercent ?? MISE_DEFAULT).toFixed(1)}</span>
+                    ) : (
+                      <Input
+                        type="number"
+                        value={item.misePercent ?? MISE_DEFAULT}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value)
+                          updateMisePercent(index, isNaN(val) ? MISE_DEFAULT : val)
+                        }}
+                        className="h-8 w-16 ml-auto text-right font-mono text-sm bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
+                        min="0"
+                        max="50"
+                        step="0.5"
+                      />
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <span
@@ -662,28 +687,30 @@ export function IngredientTable({
                       {cost.toFixed(2)}
                     </span>
                   </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeItem(index)}
-                      className={cn(
-                        "h-7 w-7 p-0 transition-opacity",
-                        isHovered
-                          ? "opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          : "opacity-0"
-                      )}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TableCell>
+                  {!readOnly ? (
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeItem(index)}
+                        className={cn(
+                          "h-7 w-7 p-0 transition-opacity",
+                          isHovered
+                            ? "opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            : "opacity-0"
+                        )}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               )
             })}
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={readOnly ? 8 : 9}
                   className="h-20 text-center text-sm text-muted-foreground"
                 >
                   {t("posCostNoIngredients")}

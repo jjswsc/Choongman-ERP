@@ -34,6 +34,8 @@ import {
 } from '@/lib/hq-outbound-income-total'
 import {
   resolveAccountingStoreFilterFromAuth,
+  resolveAccountingRollupStores,
+  parseCommaSeparatedStoreFilter,
   resolveFranchiseeAccountingAllowedStoresOnly,
 } from '@/lib/accounting-store-scope'
 import {
@@ -470,6 +472,8 @@ export function normalizeIncomeScope(input: IncomeScopeInput): {
   isHQ: boolean
   /** 가맹 「내 매장 전체」— storeFilter All 이지만 이 목록만 합산 */
   allowedStoresOnly?: string[]
+  /** 본사·가맹 — 쉼표 구분 명시 복수 매장 선택 */
+  selectedStoresOnly?: string[]
 } {
   const authScope = {
     userRole: input.userRole,
@@ -479,11 +483,13 @@ export function normalizeIncomeScope(input: IncomeScopeInput): {
   const storeFilter = resolveAccountingStoreFilterFromAuth(input.storeFilter, authScope)
   const { yearMonth, startStr, endStr } = getBangkokMonthRange(input.yearMonth)
   const isHQ = isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter)
+  const multi = parseCommaSeparatedStoreFilter(storeFilter)
+  const selectedStoresOnly = multi && multi.length > 1 ? multi : undefined
   const allowedStoresOnly =
-    storeFilter === 'All' && !isHQ
+    !selectedStoresOnly && storeFilter === 'All' && !isHQ
       ? resolveFranchiseeAccountingAllowedStoresOnly(authScope)
       : undefined
-  return { yearMonth, startStr, endStr, storeFilter, isHQ, allowedStoresOnly }
+  return { yearMonth, startStr, endStr, storeFilter, isHQ, allowedStoresOnly, selectedStoresOnly }
 }
 
 type DirectInboundPurchaseOpts = {
@@ -984,9 +990,10 @@ function tagPurchaseVendorBasis(
 
 export async function computeIncomeStatementReport(input: IncomeScopeInput): Promise<IncomeStatementReport> {
   const scope = normalizeIncomeScope(input)
-  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+  const rollupStores = resolveAccountingRollupStores(scope)
+  if (rollupStores && rollupStores.length > 1) {
     const perStore = await Promise.all(
-      scope.allowedStoresOnly.map((store) =>
+      rollupStores.map((store) =>
         computeIncomeStatementReport({
           ...input,
           storeFilter: store,
@@ -1935,9 +1942,10 @@ const UNPOSTED_WITHDRAW_CATEGORIES = ['transfer', 'loan', 'advance', 'correction
 
 export async function computeBalanceSheetReport(input: IncomeScopeInput): Promise<BalanceSheetReport> {
   const scope = normalizeIncomeScope(input)
-  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+  const rollupStores = resolveAccountingRollupStores(scope)
+  if (rollupStores && rollupStores.length > 1) {
     const perStore = await Promise.all(
-      scope.allowedStoresOnly.map((store) =>
+      rollupStores.map((store) =>
         computeBalanceSheetReport({
           ...input,
           storeFilter: store,

@@ -2,6 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import {
   CalendarIcon,
   User,
@@ -12,10 +13,13 @@ import {
   Save,
   LogOut,
   Search,
+  Trash2,
+  BarChart3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -23,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -31,6 +36,7 @@ import {
   getWorkLogData,
   saveWorkLogData,
   submitDailyClose,
+  deleteWorkLogItem,
   translateTexts,
   type WorkLogItem,
   type WorkLogData,
@@ -38,28 +44,28 @@ import {
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
 import { normalizeWorkLogContent, workLogContentKey } from "@/lib/work-log-dedupe"
+import { WORK_LOG_PRIORITIES } from "@/lib/work-log-shared"
+import {
+  WorklogKpiCard,
+  WorklogManagerFeedback,
+  WorklogPriorityChip,
+  WorklogProgressBar,
+} from "./worklog-shared-ui"
+import { WorklogPeriodPanel } from "./worklog-period-panel"
 
-const PRIORITIES = [
-  { value: "긴급", key: "workLogPriorityUrgent" },
-  { value: "상", key: "workLogPriorityHigh" },
-  { value: "중", key: "workLogPriorityMedium" },
-  { value: "하", key: "workLogPriorityLow" },
-] as const
-
-/** 슬라이더 조정 후 자동 저장 대기(ms) */
 const PROGRESS_AUTO_SAVE_MS = 700
 
 interface WorklogMyProps {
   userName: string
-  /** 로그인 세션의 employees.id — 저장·조회 시 이름 오매칭 방지 */
   employeeId?: number
 }
 
 export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const [startStr, setStartStr] = React.useState(() => getBangkokTodayDateString())
-  const [endStr, setEndStr] = React.useState(() => getBangkokTodayDateString())
+  const searchParams = useSearchParams()
+  const aiTaskPrefillApplied = React.useRef(false)
+  const [dateStr, setDateStr] = React.useState(() => getBangkokTodayDateString())
   const [selectedStaff, setSelectedStaff] = React.useState(userName)
   const [staffList, setStaffList] = React.useState<{ id: number; name: string; displayName: string }[]>([])
   const [_data, setData] = React.useState<WorkLogData | null>(null)
@@ -71,6 +77,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const [selectedContinueIds, setSelectedContinueIds] = React.useState<Set<string>>(new Set())
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [viewMode, setViewMode] = React.useState<"day" | "period">("day")
   const [autoSaveStatus, setAutoSaveStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
   const localFinishRef = React.useRef(localFinish)
   const localContinueRef = React.useRef(localContinue)
@@ -78,6 +85,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveGenRef = React.useRef(0)
   const persistChainRef = React.useRef(Promise.resolve())
+
   const unfinishedCount = React.useMemo(() => {
     const continueCount = localContinue.filter((it) => {
       const hasContent = Boolean((it.content || "").trim())
@@ -92,11 +100,38 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     return continueCount + todayCount
   }, [localContinue, localToday])
 
+  const avgProgress = React.useMemo(() => {
+    const active = [...localContinue, ...localToday].filter((it) => (it.content || "").trim())
+    if (active.length === 0) return 0
+    const sum = active.reduce((a, it) => a + (Number(it.progress) || 0), 0)
+    return Math.round(sum / active.length)
+  }, [localContinue, localToday])
+
   React.useEffect(() => {
     localFinishRef.current = localFinish
     localContinueRef.current = localContinue
     localTodayRef.current = localToday
   }, [localFinish, localContinue, localToday])
+
+  React.useEffect(() => {
+    if (aiTaskPrefillApplied.current) return
+    const taskTitle = searchParams.get("aiTaskTitle")
+    if (!taskTitle?.trim()) return
+    aiTaskPrefillApplied.current = true
+    const taskDesc = searchParams.get("aiTaskDesc") || ""
+    const content = taskDesc.trim() ? `${taskTitle.trim()}\n${taskDesc.trim()}` : taskTitle.trim()
+    setLocalToday((prev) => [
+      ...prev,
+      {
+        id: `_temp_ai_${Date.now()}`,
+        content,
+        progress: 0,
+        status: "Today",
+        priority: "중",
+      },
+    ])
+    setHasSearched(true)
+  }, [searchParams])
 
   const cancelPendingAutoSave = React.useCallback(() => {
     if (autoSaveTimerRef.current) {
@@ -114,44 +149,48 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   }, [userName])
 
   React.useEffect(() => {
+    getWorkLogStaffList().then((r) => setStaffList(r.staff || []))
+  }, [])
+
+  React.useEffect(() => {
     if (staffList.length > 0 && selectedStaff && !staffList.some((s) => s.name === selectedStaff)) {
       const match = staffList.find((s) => s.displayName === selectedStaff || s.name === selectedStaff)
       if (match) setSelectedStaff(match.name)
     }
   }, [staffList, selectedStaff])
 
-  React.useEffect(() => {
-    getWorkLogStaffList().then((r) => setStaffList(r.staff || []))
-  }, [])
+  const loadData = React.useCallback(
+    async (opts?: { quiet?: boolean }) => {
+      if (!selectedStaff) return
+      cancelPendingAutoSave()
+      if (!opts?.quiet) setLoading(true)
+      try {
+        const res = await getWorkLogData({
+          dateStr,
+          name: selectedStaff,
+          ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
+        })
+        setData(res)
+        setLocalFinish(res.finish || [])
+        setLocalContinue(res.continueItems || [])
+        setLocalToday(res.todayItems || [])
+      } catch {
+        setData(null)
+        setLocalFinish([])
+        setLocalContinue([])
+        setLocalToday([])
+      } finally {
+        if (!opts?.quiet) setLoading(false)
+      }
+    },
+    [dateStr, selectedStaff, employeeId, cancelPendingAutoSave]
+  )
 
-  // 직원은 로그인 사용자로 고정
   React.useEffect(() => {
-    if (userName) setSelectedStaff(userName)
-  }, [userName])
-
-  const loadData = React.useCallback(async (opts?: { quiet?: boolean }) => {
     if (!selectedStaff) return
-    cancelPendingAutoSave()
-    if (!opts?.quiet) setLoading(true)
-    try {
-      const res = await getWorkLogData({
-        dateStr: endStr,
-        name: selectedStaff,
-        ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
-      })
-      setData(res)
-      setLocalFinish(res.finish || [])
-      setLocalContinue(res.continueItems || [])
-      setLocalToday(res.todayItems || [])
-    } catch {
-      setData(null)
-      setLocalFinish([])
-      setLocalContinue([])
-      setLocalToday([])
-    } finally {
-      if (!opts?.quiet) setLoading(false)
-    }
-  }, [endStr, selectedStaff, employeeId, cancelPendingAutoSave])
+    setHasSearched(true)
+    void loadData()
+  }, [dateStr, selectedStaff, loadData])
 
   const buildTodayLogsForSave = React.useCallback((): WorkLogItem[] => {
     return localTodayRef.current
@@ -185,10 +224,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       if (!selectedStaff || !hasSearched) return false
       if (!silent && unfinishedCount > 0) {
         const proceed = await appConfirm(
-          `미완료 업무가 ${unfinishedCount}건 있습니다.\n` +
-            `Save Progress만 하면 Continue가 생성되지 않습니다.\n` +
-            `익일 Continue 생성을 원하면 Daily Close를 눌러주세요.\n\n` +
-            `그래도 Save Progress를 진행할까요?`
+          t("workLogSaveUnfinishedConfirm").replace("{count}", String(unfinishedCount))
         )
         if (!proceed) return false
       }
@@ -199,7 +235,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         if (todayOnly && logs.length === 0) return true
 
         const res = await saveWorkLogData({
-          date: endStr,
+          date: dateStr,
           name: selectedStaff,
           logs,
           ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
@@ -228,7 +264,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       selectedStaff,
       hasSearched,
       unfinishedCount,
-      endStr,
+      dateStr,
       employeeId,
       buildAllLogs,
       buildTodayLogsForSave,
@@ -250,48 +286,41 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     [runPersistWorkLogProgress]
   )
 
-  const scheduleAutoSaveProgress = React.useCallback(() => {
-    if (!hasSearched || !selectedStaff) return
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    autoSaveTimerRef.current = setTimeout(() => {
-      autoSaveTimerRef.current = null
-      const gen = ++autoSaveGenRef.current
-      void (async () => {
-        setAutoSaveStatus("saving")
-        const ok = await persistWorkLogProgress({
-          silent: true,
-          reload: true,
-          todayOnly: true,
-        })
-        if (gen !== autoSaveGenRef.current) return
-        setAutoSaveStatus(ok ? "saved" : "error")
-        if (ok) {
-          setTimeout(() => {
-            setAutoSaveStatus((s) => (s === "saved" ? "idle" : s))
-          }, 2000)
-        }
-      })()
-    }, PROGRESS_AUTO_SAVE_MS)
-  }, [hasSearched, selectedStaff, persistWorkLogProgress])
+  const scheduleAutoSaveProgress = React.useCallback(
+    (opts?: { todayOnly?: boolean }) => {
+      if (!hasSearched || !selectedStaff) return
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = setTimeout(() => {
+        autoSaveTimerRef.current = null
+        const gen = ++autoSaveGenRef.current
+        void (async () => {
+          setAutoSaveStatus("saving")
+          const ok = await persistWorkLogProgress({
+            silent: true,
+            reload: true,
+            todayOnly: opts?.todayOnly ?? false,
+          })
+          if (gen !== autoSaveGenRef.current) return
+          setAutoSaveStatus(ok ? "saved" : "error")
+          if (ok) {
+            setTimeout(() => {
+              setAutoSaveStatus((s) => (s === "saved" ? "idle" : s))
+            }, 2000)
+          }
+        })()
+      }, PROGRESS_AUTO_SAVE_MS)
+    },
+    [hasSearched, selectedStaff, persistWorkLogProgress]
+  )
 
   const handleSearch = () => {
     setHasSearched(true)
-    loadData()
+    void loadData()
   }
 
   const contentsToTranslate = React.useMemo(() => {
     const set = new Set<string>()
-    for (const it of localFinish) {
-      if (it.content?.trim()) set.add(it.content.trim())
-      const c = it.managerComment?.trim()
-      if (c && !c.startsWith("⚡")) set.add(c)
-    }
-    for (const it of localContinue) {
-      if (it.content?.trim()) set.add(it.content.trim())
-      const c = it.managerComment?.trim()
-      if (c && !c.startsWith("⚡")) set.add(c)
-    }
-    for (const it of localToday) {
+    for (const it of [...localFinish, ...localContinue, ...localToday]) {
       if (it.content?.trim()) set.add(it.content.trim())
       const c = it.managerComment?.trim()
       if (c && !c.startsWith("⚡")) set.add(c)
@@ -299,7 +328,6 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     return Array.from(set)
   }, [localFinish, localContinue, localToday])
 
-  // 언어가 바뀌면 이전 언어로 번역된 캐시는 버린다
   React.useEffect(() => {
     setContentTransMap({})
   }, [lang])
@@ -310,19 +338,41 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     if (missing.length === 0) return
     let cancelled = false
     const handle = setTimeout(() => {
-      translateTexts(missing, lang).then((translated) => {
-        if (cancelled) return
-        setContentTransMap((prev) => {
-          const next = { ...prev }
-          missing.forEach((txt, i) => { next[txt] = translated[i] ?? txt })
-          return next
+      translateTexts(missing, lang)
+        .then((translated) => {
+          if (cancelled) return
+          setContentTransMap((prev) => {
+            const next = { ...prev }
+            missing.forEach((txt, i) => {
+              next[txt] = translated[i] ?? txt
+            })
+            return next
+          })
         })
-      }).catch(() => { /* 실패 시 원문 표시 유지 */ })
+        .catch(() => {})
     }, 350)
-    return () => { cancelled = true; clearTimeout(handle) }
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
   }, [contentsToTranslate.join("\u241E"), lang, contentTransMap])
 
-  const getTransContent = (content: string) => (content?.trim() && contentTransMap[content.trim()]) || content || t("workLogNoContent")
+  const getTransContent = (content: string) =>
+    (content?.trim() && contentTransMap[content.trim()]) || content || t("workLogNoContent")
+
+  const formatManagerComment = (comment: string) => {
+    if (!comment) return ""
+    return comment
+      .replace(/이월됨/g, t("workLogCarriedOver") || "Carried over")
+      .replace(/부터/g, t("workLogFrom") || "from")
+  }
+
+  const getTransComment = (comment: string) => {
+    const trimmed = comment?.trim()
+    if (!trimmed) return ""
+    if (trimmed.startsWith("⚡")) return formatManagerComment(trimmed)
+    return contentTransMap[trimmed] || formatManagerComment(trimmed)
+  }
 
   const addNewContinue = () => {
     setLocalContinue((prev) => [
@@ -335,6 +385,21 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         priority: "중",
       },
     ])
+    scheduleAutoSaveProgress({ todayOnly: false })
+  }
+
+  const addNewToday = () => {
+    setLocalToday((prev) => [
+      ...prev,
+      {
+        id: `_temp_${Date.now()}`,
+        content: "",
+        progress: 0,
+        status: "Today",
+        priority: "중",
+      },
+    ])
+    scheduleAutoSaveProgress({ todayOnly: true })
   }
 
   const toggleSelectContinue = (id: string) => {
@@ -365,82 +430,71 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       return next
     })
     setSelectedContinueIds(new Set())
+    scheduleAutoSaveProgress({ todayOnly: false })
   }
 
   const updateContent = (
     setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
     idOrIndex: string | number,
-    content: string
+    content: string,
+    todayOnly: boolean
   ) => {
     setList((prev) => {
-      if (typeof idOrIndex === 'number') {
+      if (typeof idOrIndex === "number") {
         return prev.map((it, i) => (i === idOrIndex ? { ...it, content } : it))
       }
       return prev.map((it) => (it.id === idOrIndex ? { ...it, content } : it))
     })
+    scheduleAutoSaveProgress({ todayOnly })
   }
 
   const updatePriority = (
     setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
     idOrIndex: string | number,
-    priority: string
+    priority: string,
+    todayOnly: boolean
   ) => {
     setList((prev) => {
-      if (typeof idOrIndex === 'number') {
+      if (typeof idOrIndex === "number") {
         return prev.map((it, i) => (i === idOrIndex ? { ...it, priority } : it))
       }
       return prev.map((it) => (it.id === idOrIndex ? { ...it, priority } : it))
     })
-  }
-
-  const formatManagerComment = (comment: string) => {
-    if (!comment) return ""
-    return comment
-      .replace(/이월됨/g, t("workLogCarriedOver") || "Carried over")
-      .replace(/부터/g, t("workLogFrom") || "from")
-  }
-
-  const getTransComment = (comment: string) => {
-    const trimmed = comment?.trim()
-    if (!trimmed) return ""
-    if (trimmed.startsWith("⚡")) return formatManagerComment(trimmed)
-    return contentTransMap[trimmed] || formatManagerComment(trimmed)
-  }
-
-  const ManagerFeedback = ({ item }: { item: WorkLogItem }) => {
-    const confirmed = item.managerCheck === "승인"
-    const rawComment = item.managerComment?.trim() || ""
-    const isCarryOverMsg = rawComment.startsWith("⚡")
-    const hasComment = !!rawComment && !isCarryOverMsg
-    if (!confirmed && !hasComment) return null
-    return (
-      <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-xs">
-        {confirmed && (
-          <span className="inline-flex items-center gap-1 font-semibold text-primary">
-            ✓ {t("workLogReviewConfirmed")}
-          </span>
-        )}
-        {hasComment && (
-          <p className="mt-1 text-foreground">
-            <span className="font-semibold text-muted-foreground">{t("workLogManagerFeedback")}:</span>{" "}
-            {getTransComment(rawComment)}
-          </p>
-        )}
-      </div>
-    )
+    scheduleAutoSaveProgress({ todayOnly })
   }
 
   const handleTodayProgressChange = (index: number, progress: number) => {
     setLocalToday((prev) => {
       const next = prev.map((it, i) =>
-        i === index
-          ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status }
-          : it
+        i === index ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status } : it
       )
       localTodayRef.current = next
       return next
     })
-    scheduleAutoSaveProgress()
+    scheduleAutoSaveProgress({ todayOnly: true })
+  }
+
+  const handleDeleteOwn = async (id: string | undefined, list: "continue" | "today", index?: number) => {
+    if (!id) return
+    if (!(await appConfirm(t("workLogDeleteConfirm")))) return
+    if (!id.startsWith("_temp_")) {
+      try {
+        const res = await deleteWorkLogItem({ id })
+        if (!res.success) {
+          await appAlert(t("workLogDeleteFail"))
+          return
+        }
+      } catch {
+        await appAlert(t("workLogDeleteFail"))
+        return
+      }
+    }
+    if (list === "continue") {
+      setLocalContinue((prev) => prev.filter((it) => it.id !== id))
+    } else if (typeof index === "number") {
+      setLocalToday((prev) => prev.filter((_, i) => i !== index))
+    }
+    void loadData({ quiet: true })
   }
 
   const handleSaveProgress = async () => {
@@ -452,211 +506,338 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const handleDailyClose = async () => {
     if (!selectedStaff) return
     cancelPendingAutoSave()
-    if (!await appConfirm(t("workLogDailyCloseConfirm"))) return
+    if (!(await appConfirm(t("workLogDailyCloseConfirm")))) return
     setSaving(true)
     try {
       const toClose = [...localContinue, ...localToday].filter((it) => it.content || it.id)
       const res = await submitDailyClose({
-        date: endStr,
+        date: dateStr,
         name: selectedStaff,
         logs: toClose,
         ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
       })
       if (res.success) {
-        loadData()
-        await appAlert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogCloseDone")))
+        await loadData()
+        await appAlert(
+          (res as { messageKey?: string }).messageKey
+            ? t((res as { messageKey?: string }).messageKey!)
+            : translateApiMessage(res.message, t) || t("workLogCloseDone")
+        )
       } else {
         const r = res as { messageKey?: string; message?: string }
-        await appAlert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${translateApiMessage(r.message, t)}` : t(r.messageKey || "workLogCloseFail"))
+        await appAlert(
+          r.message
+            ? `${t(r.messageKey || "workLogCloseFail")}: ${translateApiMessage(r.message, t)}`
+            : t(r.messageKey || "workLogCloseFail")
+        )
       }
-    } catch (_e) {
+    } catch {
       await appAlert(t("workLogCloseError"))
     } finally {
       setSaving(false)
     }
   }
 
+  const staffLabel = (() => {
+    const row = staffList.find((s) => s.name === selectedStaff || s.displayName === selectedStaff)
+    return row ? formatWorkLogStaffSelectLabel(row) : selectedStaff || userName
+  })()
+
+  const WorklogSection = ({
+    tone,
+    icon,
+    title,
+    headerExtra,
+    children,
+  }: {
+    tone: "success" | "warning" | "primary"
+    icon: React.ReactNode
+    title: string
+    headerExtra?: React.ReactNode
+    children: React.ReactNode
+  }) => {
+    const headerBg =
+      tone === "success" ? "bg-success/5" : tone === "warning" ? "bg-warning/5" : "bg-primary/5"
+    return (
+      <div className="flex min-h-0 flex-col rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className={cn("flex items-center gap-2.5 border-b px-4 py-3", headerBg)}>
+          {icon}
+          <h3 className="text-sm font-bold text-foreground">{title}</h3>
+          {headerExtra}
+        </div>
+        <div className="min-h-[120px] flex-1 overflow-y-auto p-3 space-y-2 max-h-[min(36rem,60vh)]">
+          {children}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Filters */}
+    <div className="relative flex flex-col gap-6 pb-20">
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-              <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-              {t("workLogPeriod")}
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
+              {t("workLogViewMode")}
             </label>
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                value={startStr}
-                onChange={(e) => {
-                  cancelPendingAutoSave()
-                  setStartStr(e.target.value)
-                  setHasSearched(false)
-                }}
-                className="h-9 w-32 text-xs shrink-0"
-              />
-              <span className="text-xs text-muted-foreground shrink-0">~</span>
-              <Input
-                type="date"
-                value={endStr}
-                onChange={(e) => {
-                  cancelPendingAutoSave()
-                  setEndStr(e.target.value)
-                  setHasSearched(false)
-                }}
-                className="h-9 w-32 text-xs shrink-0"
-              />
-            </div>
+            <Select
+              value={viewMode}
+              onValueChange={(v) => {
+                cancelPendingAutoSave()
+                setViewMode(v as "day" | "period")
+                if (v === "day") setHasSearched(false)
+              }}
+            >
+              <SelectTrigger className="h-9 w-28 text-xs shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">{t("workLogViewModeDay")}</SelectItem>
+                <SelectItem value="period">{t("workLogViewModePeriod")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+          {viewMode === "day" && (
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+              {t("workLogDateSelect")}
+            </label>
+            <Input
+              type="date"
+              value={dateStr}
+              onChange={(e) => {
+                cancelPendingAutoSave()
+                setDateStr(e.target.value)
+              }}
+              className="h-9 w-36 text-xs shrink-0"
+            />
+          </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <User className="h-3.5 w-3.5 text-primary" />
               {t("workLogEmployee")}
             </label>
             <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs font-medium">
-              {(() => {
-                const row = staffList.find(
-                  (s) => s.name === selectedStaff || s.displayName === selectedStaff
-                )
-                return row ? formatWorkLogStaffSelectLabel(row) : selectedStaff || userName
-              })()}
+              {staffLabel}
             </div>
           </div>
+          {viewMode === "day" && (
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleSearch} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("workLogSearch")}
           </Button>
-          <Button size="sm" variant="outline" className="h-9 px-4 text-xs font-semibold" onClick={handleSaveProgress} disabled={saving}>
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {t("workLogSaveProgress")}
-          </Button>
-          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleDailyClose} disabled={saving}>
-            <LogOut className="mr-1.5 h-3.5 w-3.5" />
-            {t("workLogDailyClose")}
-          </Button>
+          )}
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {viewMode === "period" ? t("workLogPeriodViewHint") : t("workLogFlowHint")}
+        </p>
       </div>
 
-      {!hasSearched ? (
+      {viewMode === "period" ? (
+        <WorklogPeriodPanel
+          employeeId={employeeId}
+          employeeName={selectedStaff}
+          embedded
+          onDatePick={(d) => {
+            setDateStr(d)
+            setViewMode("day")
+            setHasSearched(true)
+          }}
+        />
+      ) : !hasSearched ? (
         <div className="rounded-xl border bg-card py-16 text-center text-sm text-muted-foreground">
-          {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
+          {t("loading")}
         </div>
       ) : loading ? (
         <div className="flex items-center justify-center rounded-xl border bg-card py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {/* 직렬 배치: Finish → Continue → Today */}
-          {/* Finish Work */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2.5 border-b bg-success/5 px-5 py-3">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <h3 className="text-sm font-bold text-foreground">{t("workLogFinishWork")}</h3>
-            </div>
-            <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <WorklogKpiCard
+              icon={
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                </div>
+              }
+              label={t("workLogFinishWork")}
+              value={localFinish.length}
+              tone="success"
+            />
+            <WorklogKpiCard
+              icon={
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
+                  <ArrowRightFromLine className="h-4 w-4 text-warning" />
+                </div>
+              }
+              label={t("workLogContinueWork")}
+              value={localContinue.length}
+              tone="warning"
+            />
+            <WorklogKpiCard
+              icon={
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <Play className="h-4 w-4 text-primary" />
+                </div>
+              }
+              label={t("workLogTodayWork")}
+              value={localToday.length}
+              tone="primary"
+            />
+            <WorklogKpiCard
+              icon={
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </div>
+              }
+              label={t("workLogSummaryAvg")}
+              value={`${avgProgress}%`}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <WorklogSection
+              tone="success"
+              icon={<CheckCircle2 className="h-4 w-4 text-success" />}
+              title={t("workLogFinishWork")}
+            >
               {localFinish.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("workLogNoFinish")}</p>
               ) : (
                 localFinish.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3 text-sm">
-                    <p className="font-medium text-foreground whitespace-pre-wrap">{getTransContent(it.content || "")}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{it.progress}%</p>
-                    <ManagerFeedback item={it} />
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <p className="font-medium text-foreground whitespace-pre-wrap flex-1">
+                        {getTransContent(it.content || "")}
+                      </p>
+                      <WorklogPriorityChip priority={it.priority} />
+                    </div>
+                    <WorklogProgressBar value={it.progress} />
+                    <WorklogManagerFeedback item={it} getTransComment={getTransComment} t={t} />
                   </div>
                 ))
               )}
-            </div>
-          </div>
+            </WorklogSection>
 
-          {/* Continue Work */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2.5 border-b bg-warning/5 px-5 py-3">
-              <ArrowRightFromLine className="h-4 w-4 text-warning" />
-              <h3 className="text-sm font-bold text-foreground">{t("workLogContinueWork")}</h3>
-              <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={addNewContinue} title={t("workLogAddTask")}>
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            {selectedContinueIds.size > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b">
-                <Button size="sm" className="h-7 text-xs" onClick={moveSelectedToToday}>
-                  <Play className="mr-1 h-3 w-3" />
-                  {t("workLogStartToday")} ({selectedContinueIds.size})
+            <WorklogSection
+              tone="warning"
+              icon={<ArrowRightFromLine className="h-4 w-4 text-warning" />}
+              title={t("workLogContinueWork")}
+              headerExtra={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-7 px-2 text-xs"
+                  onClick={addNewContinue}
+                  title={t("workLogAddTask")}
+                >
+                  <Plus className="h-3.5 w-3.5" />
                 </Button>
-              </div>
-            )}
-            <div className="min-h-[160px] max-h-[min(32rem,55vh)] overflow-y-auto p-4 space-y-2">
+              }
+            >
+              {selectedContinueIds.size > 0 && (
+                <div className="mb-2 flex items-center gap-2 rounded-md bg-warning/10 px-2 py-1.5">
+                  <Button size="sm" className="h-7 text-xs" onClick={moveSelectedToToday}>
+                    <Play className="mr-1 h-3 w-3" />
+                    {t("workLogStartToday")} ({selectedContinueIds.size})
+                  </Button>
+                </div>
+              )}
               {localContinue.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("workLogNoContinue")}</p>
               ) : (
                 localContinue.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3">
                     <div className="flex items-start gap-2 mb-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={selectedContinueIds.has(it.id || "")}
-                        onChange={() => toggleSelectContinue(it.id || "")}
-                        className="mt-2.5 h-4 w-4 shrink-0"
+                        onCheckedChange={() => toggleSelectContinue(it.id || "")}
+                        className="mt-2 shrink-0"
                       />
                       <Textarea
                         value={it.content}
-                        onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value)}
+                        onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value, false)}
                         placeholder={t("workLogTaskPlaceholder")}
                         className="min-h-[4.5rem] text-xs flex-1 resize-y"
                         rows={3}
                       />
-                      <Select
-                        value={it.priority || ""}
-                        onValueChange={(v) => updatePriority(setLocalContinue, it.id, v)}
-                      >
-                        <SelectTrigger className="h-8 w-20 shrink-0 text-xs">
-                          <SelectValue placeholder={t("workLogPriority")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PRIORITIES.map((p) => (
-                            <SelectItem key={p.value} value={p.value}>
-                              {t(p.key)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <Select
+                          value={it.priority || ""}
+                          onValueChange={(v) => updatePriority(setLocalContinue, it.id, v, false)}
+                        >
+                          <SelectTrigger className="h-8 w-20 text-xs">
+                            <SelectValue placeholder={t("workLogPriority")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {WORK_LOG_PRIORITIES.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {t(p.key)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-1 text-destructive"
+                          onClick={() => void handleDeleteOwn(it.id, "continue")}
+                          title={t("workLogDeleteOwn")}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-xs font-bold text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {Number(it.progress) || 0}% · {t("workLogProgressHint")}
                     </p>
                     {it.managerComment?.startsWith("⚡") && (
-                      <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment)}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {formatManagerComment(it.managerComment)}
+                      </p>
                     )}
-                    <ManagerFeedback item={it} />
+                    <WorklogManagerFeedback item={it} getTransComment={getTransComment} t={t} />
                   </div>
                 ))
               )}
-            </div>
-          </div>
+            </WorklogSection>
 
-          {/* Today Work */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2.5 border-b bg-primary/5 px-5 py-3">
-              <Play className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-bold text-foreground">{t("workLogTodayWork")}</h3>
-              {autoSaveStatus !== "idle" && (
-                <span
-                  className={`ml-auto text-[10px] font-medium tabular-nums ${
-                    autoSaveStatus === "error" ? "text-destructive" : "text-muted-foreground"
-                  }`}
-                >
-                  {autoSaveStatus === "saving"
-                    ? t("loading")
-                    : autoSaveStatus === "saved"
-                      ? t("workLogSaveDone")
-                      : t("workLogSaveFail")}
-                </span>
-              )}
-            </div>
-            <div className="min-h-[160px] max-h-[min(32rem,55vh)] overflow-y-auto p-4 space-y-2">
+            <WorklogSection
+              tone="primary"
+              icon={<Play className="h-4 w-4 text-primary" />}
+              title={t("workLogTodayWork")}
+              headerExtra={
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-7 px-2 text-xs"
+                    onClick={addNewToday}
+                    title={t("workLogTodayAdd")}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                  {autoSaveStatus !== "idle" && (
+                    <span
+                      className={cn(
+                        "text-[10px] font-medium tabular-nums",
+                        autoSaveStatus === "error" ? "text-destructive" : "text-muted-foreground"
+                      )}
+                    >
+                      {autoSaveStatus === "saving"
+                        ? t("loading")
+                        : autoSaveStatus === "saved"
+                          ? t("workLogSaveDone")
+                          : t("workLogSaveFail")}
+                    </span>
+                  )}
+                </>
+              }
+            >
               {localToday.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("workLogNoToday")}</p>
               ) : (
@@ -665,43 +846,64 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                     <div className="flex items-start gap-2 mb-2">
                       <Textarea
                         value={it.content}
-                        onChange={(e) => updateContent(setLocalToday, idx, e.target.value)}
+                        onChange={(e) => updateContent(setLocalToday, idx, e.target.value, true)}
                         placeholder={t("workLogTaskPlaceholder")}
                         className="min-h-[4.5rem] text-xs flex-1 resize-y"
                         rows={3}
                       />
-                      <Select
-                        value={it.priority || ""}
-                        onValueChange={(v) => updatePriority(setLocalToday, idx, v)}
-                      >
-                        <SelectTrigger className="h-8 w-20 shrink-0 text-xs">
-                          <SelectValue placeholder={t("workLogPriority")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PRIORITIES.map((p) => (
-                            <SelectItem key={p.value} value={p.value}>
-                              {t(p.key)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <Select
+                          value={it.priority || ""}
+                          onValueChange={(v) => updatePriority(setLocalToday, idx, v, true)}
+                        >
+                          <SelectTrigger className="h-8 w-20 text-xs">
+                            <SelectValue placeholder={t("workLogPriority")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {WORK_LOG_PRIORITIES.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {t(p.key)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-1 text-destructive"
+                          onClick={() => void handleDeleteOwn(it.id, "today", idx)}
+                          title={t("workLogDeleteOwn")}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={it.progress}
-                        onChange={(e) => handleTodayProgressChange(idx, Number(e.target.value))}
-                        className="h-2 flex-1"
-                      />
-                      <span className="text-xs font-bold w-8">{it.progress}%</span>
-                    </div>
-                    <ManagerFeedback item={it} />
+                    <WorklogProgressBar value={it.progress} onChange={(v) => handleTodayProgressChange(idx, v)} />
+                    <WorklogManagerFeedback item={it} getTransComment={getTransComment} t={t} />
                   </div>
                 ))
               )}
-            </div>
+            </WorklogSection>
+          </div>
+        </>
+      )}
+
+      {hasSearched && !loading && viewMode === "day" && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:left-[var(--sidebar-width,0px)]">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-end gap-2">
+            {unfinishedCount > 0 && (
+              <span className="mr-auto text-xs text-warning">
+                {t("workLogInProgress")}: {unfinishedCount}
+              </span>
+            )}
+            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => void handleSaveProgress()} disabled={saving}>
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              {t("workLogStickySave")}
+            </Button>
+            <Button size="sm" className="h-9 text-xs" onClick={() => void handleDailyClose()} disabled={saving}>
+              <LogOut className="mr-1.5 h-3.5 w-3.5" />
+              {t("workLogStickyClose")}
+            </Button>
           </div>
         </div>
       )}

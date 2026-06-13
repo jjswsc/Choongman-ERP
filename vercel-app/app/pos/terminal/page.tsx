@@ -9749,6 +9749,18 @@ export default function PosTerminalPage() {
                 const queued = Boolean((res as { queued?: boolean }).queued)
                 const queuedWithoutServerId = queued && !(newOrderId != null && newOrderId > 0)
                 await notifyQueuedSave(orderNo, queued)
+                const stampPayload = (res as {
+                  stamp?: { stamped?: boolean; displayStamps?: number; cardSlots?: number; cardCompleted?: boolean }
+                }).stamp
+                if (stampPayload?.stamped && payload.memberId) {
+                  const stampMsg =
+                    (t('posStampEarned') || '스탬프 적립: {current}/{total}').replace(
+                      '{current}',
+                      String(stampPayload.displayStamps ?? stampPayload.cardSlots ?? '')
+                    ).replace('{total}', String(stampPayload.cardSlots ?? '')) +
+                    (stampPayload.cardCompleted ? ` · ${t('posStampCardComplete') || '카드 완성'}` : '')
+                  void appAlert(stampMsg)
+                }
                 let queuedLocalOrderNo: string | null =
                   queued && orderNo.startsWith('LOCAL-') ? orderNo : null
                 const markQueuedLocalPrintedIfNeeded = () => {

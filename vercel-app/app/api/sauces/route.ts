@@ -8,6 +8,7 @@ import {
   supabaseDeleteByFilter,
   supabaseInsertMany,
 } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** GET: 배합(sauces) 목록 + 레시피 + 계산된 원가 */
 export async function GET() {
@@ -282,6 +283,12 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+
     const body = await request.json()
     const id = body.id != null ? Number(body.id) : null
     const code = String(body.code ?? '').trim()

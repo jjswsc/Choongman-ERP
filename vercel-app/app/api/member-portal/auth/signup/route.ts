@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       phone?: string
       birthDate?: string
       gender?: string
+      joinStoreCode?: string
       consentMarketing?: boolean
       deviceLabel?: string
     }
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
       phone: String(body.phone || '').trim(),
       birthDate: String(body.birthDate || '').trim(),
       gender: String(body.gender || '').trim(),
+      joinStoreCode: String(body.joinStoreCode || '').trim(),
       consentMarketing: Boolean(body.consentMarketing),
       deviceLabel: String(body.deviceLabel || '').trim() || 'member-web',
       userAgent: req.headers.get('user-agent') || '',

@@ -3,7 +3,9 @@ import { supabaseSelect } from '@/lib/supabase-server'
 import { supabaseSelectEmployeesForLoginList } from '@/lib/employees-compat'
 import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
-import { isSandboxStoreCode } from '@/lib/pos-sales-test-office'
+import { legacyEmployeeStoreToCanonicalWithMap } from '@/lib/erp-store-master-shared'
+import { loadSaasLoginStoreEntries } from '@/lib/saas-tenant-stores-server'
+import { isLoginExcludedStoreKey } from '@/lib/pos-sales-test-office'
 
 type LoginDataPayload = {
   users: Record<string, string[]>
@@ -62,24 +64,44 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
   ).sort((a, b) => a.localeCompare(b))
   const storeCompanies: Record<string, string> = {}
   for (const row of empList || []) {
-    const s = String(row.store || '').trim()
+    const rawStore = String(row.store || '').trim()
     const c = String(row.company || '').trim()
-    if (!s || !c || storeCompanies[s]) continue
-    storeCompanies[s] = c
+    if (!rawStore || !c) continue
+    const canon = legacyEmployeeStoreToCanonicalWithMap(rawStore, built.legacyToCanonical, built.usedMaster)
+    for (const key of new Set([rawStore, canon].filter(Boolean))) {
+      if (!storeCompanies[key]) storeCompanies[key] = c
+    }
   }
 
   const users: Record<string, string[]> = {}
   for (const [storeKey, names] of Object.entries(built.users)) {
-    if (isSandboxStoreCode(storeKey)) continue
+    if (!names?.length) continue
+    if (isLoginExcludedStoreKey(storeKey)) continue
     users[storeKey] = names
   }
+
+  const storeLabels: Record<string, string> = { ...built.storeLabels }
+  const saasStores = await loadSaasLoginStoreEntries()
+  for (const entry of saasStores) {
+    if (!entry.storeName || isLoginExcludedStoreKey(entry.storeName)) continue
+    if (!users[entry.storeName]) users[entry.storeName] = []
+    if (!storeCompanies[entry.storeName]) storeCompanies[entry.storeName] = entry.companyName
+    if (entry.storeCode && entry.storeCode !== entry.storeName) {
+      if (!users[entry.storeCode]) users[entry.storeCode] = users[entry.storeName]!
+      if (!storeCompanies[entry.storeCode]) storeCompanies[entry.storeCode] = entry.companyName
+      storeLabels[entry.storeCode] = entry.storeName
+    }
+    if (!storeLabels[entry.storeName]) storeLabels[entry.storeName] = entry.storeName
+    if (entry.companyName && !companies.includes(entry.companyName)) companies.push(entry.companyName)
+  }
+  companies.sort((a, b) => a.localeCompare(b))
 
   return {
     users,
     vendors: vendorList,
     companies,
     storeCompanies,
-    storeLabels: built.storeLabels,
+    storeLabels,
     legacyToCanonical: built.legacyToCanonical,
     usedMaster: built.usedMaster,
   }

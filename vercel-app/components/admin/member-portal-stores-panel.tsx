@@ -15,6 +15,9 @@ import { memberPortalImageUploadCatchMessage } from "@/lib/member-portal-content
 type StoreRow = {
   storeCode: string
   displayName: string
+  displayNameKo?: string
+  displayNameEn?: string
+  displayNameTh?: string
   address: string
   mapQuery: string
   photoUrl: string
@@ -25,6 +28,9 @@ type StoreRow = {
 type StoreForm = {
   storeCode: string
   displayName: string
+  displayNameKo: string
+  displayNameEn: string
+  displayNameTh: string
   address: string
   mapQuery: string
   photoUrl: string
@@ -37,6 +43,9 @@ function emptyForm(): StoreForm {
   return {
     storeCode: "",
     displayName: "",
+    displayNameKo: "",
+    displayNameEn: "",
+    displayNameTh: "",
     address: "",
     mapQuery: "",
     photoUrl: "",
@@ -118,6 +127,9 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
         body: JSON.stringify({
           storeCode: form.storeCode,
           displayName: form.displayName,
+          displayNameKo: form.displayNameKo,
+          displayNameEn: form.displayNameEn,
+          displayNameTh: form.displayNameTh,
           address: form.address,
           mapQuery: form.mapQuery,
           photoUrl: form.photoUrl,
@@ -199,6 +211,9 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
       body: JSON.stringify({
         storeCode: payload.storeCode,
         displayName: payload.displayName,
+        displayNameKo: payload.displayNameKo,
+        displayNameEn: payload.displayNameEn,
+        displayNameTh: payload.displayNameTh,
         address: payload.address,
         mapQuery: payload.mapQuery,
         photoUrl: payload.photoUrl,
@@ -223,6 +238,9 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
         await persistStore({
           storeCode: row.storeCode,
           displayName: row.displayName,
+          displayNameKo: row.displayNameKo || "",
+          displayNameEn: row.displayNameEn || "",
+          displayNameTh: row.displayNameTh || "",
           address: row.address,
           mapQuery: row.mapQuery,
           photoUrl: row.photoUrl,
@@ -246,6 +264,9 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
     setForm({
       storeCode: s.storeCode,
       displayName: s.displayName,
+      displayNameKo: s.displayNameKo || "",
+      displayNameEn: s.displayNameEn || "",
+      displayNameTh: s.displayNameTh || "",
       address: s.address,
       mapQuery: s.mapQuery,
       photoUrl: s.photoUrl,
@@ -327,6 +348,30 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
                 value={form.displayName}
                 onChange={(e) => setForm((p) => ({ ...p, displayName: e.target.value }))}
                 placeholder="예: CM Silom"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("mpAdmin_storeDisplayNameKo")}</Label>
+              <Input
+                value={form.displayNameKo}
+                onChange={(e) => setForm((p) => ({ ...p, displayNameKo: e.target.value }))}
+                placeholder="예: CM 실롬"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("mpAdmin_storeDisplayNameEn")}</Label>
+              <Input
+                value={form.displayNameEn}
+                onChange={(e) => setForm((p) => ({ ...p, displayNameEn: e.target.value }))}
+                placeholder="CM Silom"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("mpAdmin_storeDisplayNameTh")}</Label>
+              <Input
+                value={form.displayNameTh}
+                onChange={(e) => setForm((p) => ({ ...p, displayNameTh: e.target.value }))}
+                placeholder="ซีเอ็ม สีลม"
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">

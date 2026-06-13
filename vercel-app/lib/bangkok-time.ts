@@ -41,6 +41,67 @@ export function getBangkokTodayDateString(base: Date = new Date()): string {
   return base.toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })
 }
 
+/** 방콕 기준 ISO 주(월요일~일요일). `offsetWeeks` 0=이번 주, -1=지난 주 */
+export function getBangkokWeekRange(offsetWeeks = 0, base: Date = new Date()): {
+  start: string
+  end: string
+  label: string
+} {
+  const today = getBangkokTodayDateString(base)
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: BANGKOK_TIMEZONE,
+    weekday: 'short',
+  }).format(base)
+  const dayMap: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 0,
+  }
+  const dow = dayMap[weekday] ?? 1
+  const daysSinceMonday = dow === 0 ? 6 : dow - 1
+  const monday = addBangkokCalendarDays(today, -daysSinceMonday + offsetWeeks * 7)
+  const sunday = addBangkokCalendarDays(monday, 6)
+  const fmt = (ymd: string) => {
+    const [y, m, d] = ymd.split('-')
+    return `${y}.${m}.${d}`
+  }
+  return { start: monday, end: sunday, label: `${fmt(monday)} ~ ${fmt(sunday)}` }
+}
+
+/** 방콕 기준 월 범위 + `offsetMonths` (0=이번 달) */
+export function getBangkokMonthRangeWithOffset(offsetMonths = 0, base: Date = new Date()): {
+  start: string
+  end: string
+  label: string
+  yearMonth: string
+} {
+  const today = getBangkokTodayDateString(base)
+  let y = Number(today.slice(0, 4))
+  let m = Number(today.slice(5, 7))
+  m += offsetMonths
+  while (m > 12) {
+    m -= 12
+    y += 1
+  }
+  while (m < 1) {
+    m += 12
+    y -= 1
+  }
+  const yearMonth = `${y}-${pad2(m)}`
+  const baseRange = getBangkokMonthRange(yearMonth, base)
+  const lastDay = Number(baseRange.endStr.slice(8, 10))
+  return {
+    start: baseRange.startStr,
+    end: baseRange.endStr,
+    yearMonth,
+    label: `${y}.${pad2(m)} (1 ~ ${lastDay}일)`,
+  }
+}
+
 /** 방콕 기준 해당 월의 시작/종료 날짜 (YYYY-MM-DD) */
 export function getBangkokMonthRange(yearMonth?: string, base: Date = new Date()): {
   yearMonth: string

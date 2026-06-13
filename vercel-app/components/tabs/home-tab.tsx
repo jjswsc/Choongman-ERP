@@ -381,7 +381,14 @@ export function HomeTab() {
                         <Bell className={`h-3 w-3 ${n.status === "New" || !isNoticeReadStatus(n.status) ? "text-destructive" : "text-primary"}`} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{getTrans(n.title)}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {n.isUrgent && (
+                            <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                              {t("noticeUrgentBadge")}
+                            </span>
+                          )}
+                          <p className="text-sm font-medium text-foreground">{getTrans(n.title)}</p>
+                        </div>
                         <p className="mt-0.5 text-xs text-muted-foreground">{n.date}</p>
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">{isExpanded ? "▲" : "▼"}</span>

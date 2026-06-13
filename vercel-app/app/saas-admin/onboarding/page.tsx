@@ -15,7 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SaasOnboardingStepIndicator } from "@/components/saas/saas-onboarding-step-indicator"
 import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { FALLBACK_TENANTS, type TenantItem } from "@/lib/saas-admin-control-plane"
+import { computeTenantPricingTotals } from "@/lib/saas-partner-settlement"
+import { SaasPricingBreakdownVisual } from "@/components/saas/saas-pricing-breakdown-visual"
 import { createNewTenantDraft } from "@/lib/saas-tenant-draft"
 import { fetchGlobalModulePrices } from "@/lib/saas-module-catalog-client"
 import { cloneDefaultModulePrices } from "@/lib/saas-module-pricing"
@@ -26,9 +29,13 @@ import {
   firstIncompleteStep,
   generateOnboardingPassword,
   isOnboardingComplete,
+  isOnboardingFlagsMissingApiResponse,
+  mergeLocalOnboardingFlags,
   onboardingStorageKey,
   ONBOARDING_STEP_ORDER,
+  readLocalOnboardingFlags,
   resolveOnboardingSteps,
+  type OnboardingFlags,
   type OnboardingStatusRow,
   type OnboardingStepKey,
 } from "@/lib/saas-onboarding-status"
@@ -48,6 +55,7 @@ type StoreOpt = { storeName: string; storeCode: string }
 type LoginCreds = { company: string; store: string; admin: string }
 
 export default function SaasOnboardingPage() {
+  const scope = useSaasScope()
   const { lang } = useLang()
   const t = useT(lang)
   const searchParams = useSearchParams()
@@ -105,9 +113,18 @@ export default function SaasOnboardingPage() {
       return partial
     }
     const row = statusMap[activeTenant.id]
-    if (row?.steps) return row.steps
-    return resolveOnboardingSteps({ tenant: activeTenant })
-  }, [activeTenant, activeTenantId, statusMap, step])
+    const localFlags = readLocalOnboardingFlags(activeTenant.id)
+    const flags: OnboardingFlags = { ...row?.flags, ...localFlags }
+    if (row?.steps && Object.keys(localFlags).length === 0) return row.steps
+    return resolveOnboardingSteps({
+      tenant: activeTenant,
+      flags,
+      enabledIntegrationCount: row?.counts?.enabledIntegrations ?? (integrationConfigured ? 1 : 0),
+      companyOk: row?.steps?.company ?? true,
+      storeOk: row?.steps?.store ?? activeTenant.usage.stores > 0,
+      adminOk: row?.steps?.admin ?? activeTenant.usage.managerAccounts > 0,
+    })
+  }, [activeTenant, activeTenantId, statusMap, step, integrationConfigured])
 
   const incompleteTenants = useMemo(
     () =>
@@ -138,7 +155,28 @@ export default function SaasOnboardingPage() {
       const statusRes = await apiFetch("/api/saasAdminOnboardingStatus")
       const statusJson = (await statusRes.json()) as { success?: boolean; map?: Record<string, OnboardingStatusRow> }
       if (statusRes.ok && statusJson.success === true && statusJson.map) {
-        setStatusMap(statusJson.map)
+        const merged: Record<string, OnboardingStatusRow> = {}
+        for (const [id, row] of Object.entries(statusJson.map)) {
+          const localFlags = readLocalOnboardingFlags(id)
+          if (Object.keys(localFlags).length === 0) {
+            merged[id] = row
+            continue
+          }
+          const tenant = rows.find((x) => x.id === id)
+          merged[id] = {
+            ...row,
+            flags: { ...row.flags, ...localFlags },
+            steps: resolveOnboardingSteps({
+              tenant: tenant ?? { usage: { stores: 0, managerAccounts: 0 } },
+              flags: { ...row.flags, ...localFlags },
+              enabledIntegrationCount: row.counts?.enabledIntegrations ?? 0,
+              companyOk: row.steps?.company,
+              storeOk: row.steps?.store,
+              adminOk: row.steps?.admin,
+            }),
+          }
+        }
+        setStatusMap(merged)
       }
     } catch (error) {
       setLoadNotice(tr(t, "saasAdminCust_loadFailed", { msg: String(error) }))
@@ -164,6 +202,37 @@ export default function SaasOnboardingPage() {
     return null
   }, [tenants])
 
+  const applyLocalOnboardingPatch = useCallback(
+    (
+      tenantId: string,
+      patch: OnboardingFlags,
+      tenant?: TenantItem | null,
+      enabledIntegrations = integrationConfigured ? 1 : 0
+    ): OnboardingStatusRow => {
+      const mergedFlags = mergeLocalOnboardingFlags(tenantId, patch)
+      const tnt = tenant ?? tenants.find((x) => x.id === tenantId)
+      const prev = statusMap[tenantId]
+      const steps = resolveOnboardingSteps({
+        tenant: tnt ?? { usage: { stores: 0, managerAccounts: 0 } },
+        flags: mergedFlags,
+        enabledIntegrationCount: prev?.counts?.enabledIntegrations ?? enabledIntegrations,
+        companyOk: prev?.steps?.company ?? true,
+        storeOk: prev?.steps?.store ?? (tnt?.usage.stores ?? 0) > 0,
+        adminOk: prev?.steps?.admin ?? (tnt?.usage.managerAccounts ?? 0) > 0,
+      })
+      const row: OnboardingStatusRow = {
+        tenantId,
+        found: true,
+        flags: mergedFlags,
+        steps,
+        counts: prev?.counts,
+      }
+      setStatusMap((prevMap) => ({ ...prevMap, [tenantId]: row }))
+      return row
+    },
+    [integrationConfigured, statusMap, tenants]
+  )
+
   const patchOnboardingFlags = useCallback(
     async (
       tenantId: string,
@@ -171,6 +240,8 @@ export default function SaasOnboardingPage() {
       tenant?: TenantItem | null
     ) => {
       const tnt = tenant ?? tenants.find((x) => x.id === tenantId)
+      applyLocalOnboardingPatch(tenantId, patch, tnt)
+
       const res = await apiFetch("/api/saasAdminOnboardingStatus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -181,19 +252,26 @@ export default function SaasOnboardingPage() {
           pricing: tnt?.pricing,
         }),
       })
-      const json = (await res.json()) as { success?: boolean; message?: string; row?: OnboardingStatusRow; code?: string }
+      const json = (await res.json()) as {
+        success?: boolean
+        message?: string
+        row?: OnboardingStatusRow
+        code?: string
+        flagsPersisted?: boolean
+        warning?: string
+      }
+      if (isOnboardingFlagsMissingApiResponse(json)) {
+        console.warn("[onboarding]", json.warning || json.message || "onboarding_flags column missing")
+        return applyLocalOnboardingPatch(tenantId, patch, tnt)
+      }
       if (!res.ok || json.success !== true) {
-        if (json.code === "onboarding_flags_missing") {
-          await appAlert(json.message || t("saasAdminOnboard_flagsSqlHint"))
-        } else {
-          await appAlert(json.message || t("saasAdminOnboard_flagsSaveFailed"))
-        }
-        return null
+        await appAlert(json.message || t("saasAdminOnboard_flagsSaveFailed"))
+        return applyLocalOnboardingPatch(tenantId, patch, tnt)
       }
       if (json.row) setStatusMap((prev) => ({ ...prev, [tenantId]: json.row! }))
-      return json.row ?? null
+      return json.row ?? applyLocalOnboardingPatch(tenantId, patch, tnt)
     },
-    [t, tenants]
+    [applyLocalOnboardingPatch, t, tenants]
   )
 
   const loadStoresForTenant = useCallback(async (tenantId: string) => {
@@ -390,6 +468,7 @@ export default function SaasOnboardingPage() {
       setActiveCompanyName(json.companyName || activeCompanyName)
       setStoreName("")
       setStoreCode("")
+      await loadStoresForTenant(tenantId)
       await loadTenants()
       await refreshTenantStatus(tenantId)
       goToStep("admin")
@@ -487,7 +566,8 @@ export default function SaasOnboardingPage() {
     if (!activeTenantId) return
     setLoading(true)
     try {
-      await patchOnboardingFlags(activeTenantId, { integrationsSkipped: true }, activeTenant)
+      applyLocalOnboardingPatch(activeTenantId, { integrationsSkipped: true }, activeTenant)
+      void patchOnboardingFlags(activeTenantId, { integrationsSkipped: true }, activeTenant)
       goToStep("verify")
     } finally {
       setLoading(false)
@@ -496,7 +576,8 @@ export default function SaasOnboardingPage() {
 
   const continueIntegrations = async () => {
     if (!activeTenantId) return
-    if (!integrationConfigured && !statusMap[activeTenantId]?.flags?.integrationsSkipped) {
+    const localSkipped = readLocalOnboardingFlags(activeTenantId).integrationsSkipped === true
+    if (!integrationConfigured && !localSkipped && !statusMap[activeTenantId]?.flags?.integrationsSkipped) {
       const ok = window.confirm(t("saasAdminOnboard_integrationsSkipConfirm"))
       if (!ok) return
       await skipIntegrations()
@@ -798,6 +879,25 @@ export default function SaasOnboardingPage() {
                 tenant={pricingDraft}
                 onChange={(updater) => setPricingDraft((prev) => (prev ? updater(prev) : prev))}
               />
+              {scope.isPartner && pricingDraft ? (
+                (() => {
+                  const totals = computeTenantPricingTotals(pricingDraft)
+                  return (
+                    <SaasPricingBreakdownVisual
+                      wholesale={totals.wholesale}
+                      margin={totals.margin}
+                      retail={totals.retail}
+                      currency={pricingDraft.pricing.currency}
+                      labels={{
+                        wholesale: t("saasAdminCust_wholesaleThb"),
+                        margin: t("saasAdminCust_marginThb"),
+                        retail: t("saasAdminCust_retailThb"),
+                      }}
+                      className="rounded-lg border border-emerald-200/60 bg-gradient-to-br from-emerald-50/80 to-violet-50/50 p-4 dark:border-emerald-900/40 dark:from-emerald-950/30 dark:to-violet-950/20"
+                    />
+                  )
+                })()
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={() => goToStep("admin")} disabled={loading}>
                   {t("saasAdminOnboard_back")}

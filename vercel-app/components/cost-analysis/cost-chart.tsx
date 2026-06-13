@@ -115,15 +115,15 @@ export function CostChart({ foodItems, packagingItems, misePercent, serviceType 
                     return [label ? `${label}: ${(value as number).toFixed(2)} THB` : `${(value as number).toFixed(2)} THB`, label]
                   }}
                   contentStyle={{
-                    backgroundColor: "#1e293b",
-                    border: "1px solid #334155",
+                    backgroundColor: "hsl(var(--popover))",
+                    border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
-                    color: "#f1f5f9",
+                    color: "hsl(var(--popover-foreground))",
                     fontSize: "12px",
                     fontFamily: "monospace",
                   }}
-                  itemStyle={{ color: "#f1f5f9" }}
-                  labelStyle={{ color: "#f1f5f9" }}
+                  itemStyle={{ color: "hsl(var(--popover-foreground))" }}
+                  labelStyle={{ color: "hsl(var(--popover-foreground))" }}
                 />
               </PieChart>
             </ResponsiveContainer>

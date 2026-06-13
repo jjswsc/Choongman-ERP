@@ -12,6 +12,7 @@ import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documen
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
 import { resolveCategoryIdForDocument } from '@/lib/company-hybrid-category-server'
 import { mergeMetadataWithCorrespondence } from '@/lib/company-hybrid-correspondence'
+import { parseCompanyHybridDocRelatedFromBody } from '@/lib/company-hybrid-documents-related'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
     const validFrom = parseCompanyHybridDocDate(body.validFrom)
     const validTo = parseCompanyHybridDocDate(body.validTo)
     const hasCorrespondenceKey = Object.prototype.hasOwnProperty.call(body, 'correspondence')
+    const related = parseCompanyHybridDocRelatedFromBody(body)
 
     if (!store) {
       return NextResponse.json({ success: false, message: '매장(store)이 필요합니다.' }, { status: 400, headers })
@@ -113,8 +115,8 @@ export async function POST(request: NextRequest) {
         await supabaseUpdate('company_hybrid_documents', id, {
           ...(oldStore !== store ? { store } : {}),
           title,
-          related_type: 'none',
-          related_id: null,
+          related_type: related.related_type,
+          related_id: related.related_id,
           doc_type: companyHybridDocVisibilityToDocType(visibility),
           category_id: categoryId,
           external_url: externalUrl,
@@ -128,8 +130,8 @@ export async function POST(request: NextRequest) {
         await supabaseUpdate('company_hybrid_documents', id, {
           ...(oldStore !== store ? { store } : {}),
           title,
-          related_type: 'none',
-          related_id: null,
+          related_type: related.related_type,
+          related_id: related.related_id,
           doc_type: companyHybridDocVisibilityToDocType(visibility),
           category_id: categoryId,
           valid_from: validFrom,
@@ -172,8 +174,8 @@ export async function POST(request: NextRequest) {
     )
     const inserted = await supabaseInsert('company_hybrid_documents', {
       store,
-      related_type: 'none',
-      related_id: null,
+      related_type: related.related_type,
+      related_id: related.related_id,
       doc_type: companyHybridDocVisibilityToDocType(visibility),
       category_id: categoryId,
       title,

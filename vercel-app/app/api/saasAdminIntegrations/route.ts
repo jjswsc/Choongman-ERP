@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { canAccessSaasAdmin } from '@/lib/permissions'
-import { requireAuth } from '@/lib/verify-auth'
+import { assertTenantInScope, requireSaasControlPlane } from '@/lib/saas-control-plane-scope'
 import {
   listAllTenantIntegrationsForAdmin,
   loadTenantIntegrationRaw,
@@ -28,15 +27,17 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
-  const authResult = await requireAuth(req, 'manager')
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || '')) {
-    return NextResponse.json({ success: false, message: 'SaaS 관리자 권한이 필요합니다.' }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   const tenantId = String(req.nextUrl.searchParams.get('tenantId') || '').trim()
   if (!tenantId) {
     return NextResponse.json({ success: false, message: 'tenantId가 필요합니다.' }, { status: 400, headers })
+  }
+
+  const inScope = await assertTenantInScope(cp.scope, tenantId)
+  if (!inScope) {
+    return NextResponse.json({ success: false, message: '해당 고객사에 접근할 수 없습니다.' }, { status: 403, headers })
   }
 
   try {
@@ -73,11 +74,8 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
-  const authResult = await requireAuth(req, 'manager')
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || '')) {
-    return NextResponse.json({ success: false, message: 'SaaS 관리자 권한이 필요합니다.' }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as SaveBody
@@ -86,6 +84,11 @@ export async function POST(req: NextRequest) {
     const level = body.level === 'store' ? 'store' : 'tenant'
     if (!tenantId || !provider) {
       return NextResponse.json({ success: false, message: 'tenantId/provider가 필요합니다.' }, { status: 400, headers })
+    }
+
+    const inScope = await assertTenantInScope(cp.scope, tenantId)
+    if (!inScope) {
+      return NextResponse.json({ success: false, message: '해당 고객사에 접근할 수 없습니다.' }, { status: 403, headers })
     }
 
     const incoming = readConfigRecord(body.config)

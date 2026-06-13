@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
       },
       'updatePosOrder'
     )) as {
@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
       total?: number
       paid_at?: string | null
       items_json?: unknown
+      created_by?: string | null
     }[] | null
 
     if (!existing?.length) {
@@ -422,10 +423,14 @@ export async function POST(req: NextRequest) {
       const loyalty = await applyLoyaltyOnOrder({
         memberId,
         orderId: id,
+        storeCode: String(current?.store_code ?? '').trim(),
         totalAmount: total,
         pointUsed,
         pointEarned: pointEarnedReq,
         couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
+        orderNo: String(current?.order_no ?? ''),
+        orderType: String(current?.order_type ?? body?.orderType ?? ''),
+        createdBy: String(current?.created_by ?? body?.createdBy ?? body?.created_by ?? ''),
       })
       pointEarned = loyalty.pointEarned
       await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {

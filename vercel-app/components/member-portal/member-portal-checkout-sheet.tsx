@@ -38,6 +38,9 @@ type CheckoutPreview = {
   qrAmount: number
   requiresQr: boolean
   finalTotal: number
+  pointEarnEstimate?: number
+  pointEarnMultiplier?: number
+  pointEarnBirthdayBonus?: boolean
 }
 
 type MemberPortalCheckoutSheetProps = {
@@ -336,6 +339,17 @@ export function MemberPortalCheckoutSheet({
                 <div className="flex justify-between text-xs text-emerald-700">
                   <span>{t("orderCheckoutCouponDiscount")}</span>
                   <span className="tabular-nums">-{formatBaht(preview.couponDiscountAmt)}</span>
+                </div>
+              ) : null}
+              {preview && (preview.pointEarnEstimate ?? 0) > 0 ? (
+                <div className="flex justify-between text-xs text-amber-700">
+                  <span>
+                    {t("orderCheckoutPointEarnEstimate", {
+                      points: String(preview.pointEarnEstimate ?? 0),
+                      multiplier: String(preview.pointEarnMultiplier ?? 1),
+                    })}
+                    {preview.pointEarnBirthdayBonus ? ` · ${t("orderCheckoutPointEarnBirthday")}` : ""}
+                  </span>
                 </div>
               ) : null}
             </div>

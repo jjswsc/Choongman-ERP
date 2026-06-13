@@ -8,6 +8,7 @@ export type WorkLogEmployeeRow = {
   name: string
   nick: string
   job: string
+  store: string
 }
 
 /**
@@ -18,8 +19,8 @@ export async function resolveWorkLogEmployeeById(employeeId: unknown): Promise<W
   if (!Number.isFinite(id) || id <= 0) return null
   const rows = (await supabaseSelectFilter('employees', `id=eq.${id}`, {
     limit: 1,
-    select: 'id,name,nick,job',
-  })) as { id?: number; name?: string; nick?: string; job?: string }[]
+    select: 'id,name,nick,job,store',
+  })) as { id?: number; name?: string; nick?: string; job?: string; store?: string }[]
   const r = rows?.[0]
   if (!r || r.id == null) return null
   const eid = Math.floor(Number(r.id))
@@ -29,6 +30,7 @@ export async function resolveWorkLogEmployeeById(employeeId: unknown): Promise<W
     name: workLogStoredNameFromEmployeeMaster(r.name),
     nick: String(r.nick || '').trim(),
     job: String(r.job || '').trim() || 'Staff',
+    store: String(r.store || '').trim(),
   }
 }
 

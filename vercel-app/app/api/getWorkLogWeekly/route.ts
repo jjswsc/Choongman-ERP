@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   supabaseSelect,
   supabaseSelectFilter,
+  supabaseRpc,
 } from '@/lib/supabase-server'
 import {
   resolveWorkLogFilterNameFromEmployeeIdParam,
@@ -19,10 +20,66 @@ export async function GET(req: NextRequest) {
     const endStr = searchParams.get('endStr') || searchParams.get('end') || ''
     const dept = searchParams.get('dept') || ''
     const employee = searchParams.get('employee') || ''
+    const store = searchParams.get('store') || ''
+
+    const employeeId =
+      employee && employee !== 'all' ? Number.parseInt(String(employee).trim(), 10) : NaN
+    const resolvedName =
+      employee && employee !== 'all'
+        ? await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
+        : null
+
+    try {
+      const rpcRows = await supabaseRpc<
+        {
+          employee_name: string
+          employee_role: string
+          total_tasks: number
+          completed: number
+          carried: number
+          in_progress: number
+          avg_progress: number
+        }[]
+      >('get_work_log_weekly_summary', {
+        p_start: startStr,
+        p_end: endStr,
+        p_dept: dept && dept !== 'all' ? dept : null,
+        p_employee_name:
+          employee && employee !== 'all' && resolvedName ? resolvedName : null,
+        p_employee_id:
+          Number.isFinite(employeeId) && employeeId > 0 ? employeeId : null,
+        p_store: store && store !== 'all' ? store : null,
+      })
+      if (Array.isArray(rpcRows) && rpcRows.length >= 0) {
+        const summaries = rpcRows.map((r) => ({
+          employee: r.employee_name,
+          role: r.employee_role || '',
+          totalTasks: Number(r.total_tasks) || 0,
+          completed: Number(r.completed) || 0,
+          carried: Number(r.carried) || 0,
+          inProgress: Number(r.in_progress) || 0,
+          avgProgress: Math.round(Number(r.avg_progress) || 0),
+        }))
+        const totalTasks = summaries.reduce((a, s) => a + s.totalTasks, 0)
+        const totalCompleted = summaries.reduce((a, s) => a + s.completed, 0)
+        const totalCarried = summaries.reduce((a, s) => a + s.carried, 0)
+        const overallAvg =
+          summaries.length > 0
+            ? Math.round(summaries.reduce((a, s) => a + s.avgProgress, 0) / summaries.length)
+            : 0
+        return NextResponse.json(
+          { summaries, totalTasks, totalCompleted, totalCarried, overallAvg },
+          { headers }
+        )
+      }
+    } catch {
+      /* RPC 미배포 — JS fallback */
+    }
 
     let fullFilter =
       `log_date=gte.${encodeURIComponent(startStr)}&log_date=lte.${encodeURIComponent(endStr)}`
     if (dept && dept !== 'all') fullFilter += `&dept=eq.${encodeURIComponent(dept)}`
+    if (store && store !== 'all') fullFilter += `&store=eq.${encodeURIComponent(store)}`
     if (employee && employee !== 'all') {
       const id = Number.parseInt(String(employee).trim(), 10)
       const resolvedFromId = await resolveWorkLogFilterNameFromEmployeeIdParam(employee)

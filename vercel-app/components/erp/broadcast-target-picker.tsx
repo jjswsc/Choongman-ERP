@@ -210,6 +210,16 @@ export function BroadcastTargetPicker({
     return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))
   }, [storeNamesForStaff, staffByStore, positionsToMatch, permissionGroupsToMatch])
 
+  const selectAllRecipients = () => {
+    patch({
+      selectedRecipients: employeeList.map((e) => `${e.store}|${e.name}`),
+    })
+  }
+
+  const clearAllRecipients = () => {
+    patch({ selectedRecipients: [] })
+  }
+
   if (!auth?.store) return null
 
   return (
@@ -336,6 +346,28 @@ export function BroadcastTargetPicker({
             {t("adminRecipientsCountSuffix")}
           </span>
         </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={selectAllRecipients}
+            disabled={employeeList.length === 0}
+          >
+            {t("noticeRecipientsSelectAll")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={clearAllRecipients}
+            disabled={selectedRecipients.length === 0}
+          >
+            {t("noticeRecipientsClearAll")}
+          </Button>
+        </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground">{t("hrPolicyTargetIndividualsHint")}</p>
         <ScrollArea
           className="mt-1.5 rounded-md border p-2"

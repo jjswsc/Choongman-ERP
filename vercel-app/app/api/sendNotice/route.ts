@@ -37,8 +37,11 @@ export async function POST(request: NextRequest) {
         .map((s) => String(s || '').trim())
         .filter(Boolean)
         .concat(userStore)
-    let attachmentsStr = '[]'
     const rawAttachments = body?.attachments
+    const isUrgent = Boolean(body?.isUrgent ?? body?.is_urgent)
+    const expiresAtRaw = String(body?.expiresAt ?? body?.expires_at ?? '').trim()
+    const scheduledAtRaw = String(body?.scheduledAt ?? body?.scheduled_at ?? '').trim()
+    let attachmentsStr = '[]'
     if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
       const sanitized = rawAttachments
         .filter((a: unknown) => a && typeof a === 'object' && 'name' in a && 'url' in a)
@@ -169,6 +172,9 @@ export async function POST(request: NextRequest) {
       attachments: attachmentsStr,
     }
     if (targetPermissionGroup != null && targetPermissionGroup !== '') noticeRow.target_permission_group = targetPermissionGroup
+    if (isUrgent) noticeRow.is_urgent = true
+    if (expiresAtRaw) noticeRow.expires_at = expiresAtRaw
+    if (scheduledAtRaw) noticeRow.scheduled_at = scheduledAtRaw
     try {
       await supabaseInsert('notices', noticeRow)
     } catch (colErr) {
@@ -176,12 +182,21 @@ export async function POST(request: NextRequest) {
       if (/target_permission_group|column.*does not exist/i.test(errMsg)) {
         delete noticeRow.target_permission_group
         await supabaseInsert('notices', noticeRow)
+      } else if (/is_urgent|expires_at|scheduled_at/i.test(errMsg)) {
+        delete noticeRow.is_urgent
+        delete noticeRow.expires_at
+        delete noticeRow.scheduled_at
+        await supabaseInsert('notices', noticeRow)
       } else {
         throw colErr
       }
     }
 
-    // FCM 푸시 알림
+    const scheduledFuture =
+      scheduledAtRaw && !isNaN(new Date(scheduledAtRaw).getTime()) &&
+      new Date(scheduledAtRaw).getTime() > Date.now()
+
+    // FCM 푸시 알림 (예약 시각이 미래면 노출 전이라 푸시 생략)
     let fcmRecipients: { store: string; name: string }[] = []
     if (recipientList.length > 0) {
       fcmRecipients = recipientList.map((s) => {
@@ -192,7 +207,7 @@ export async function POST(request: NextRequest) {
       fcmRecipients = await getRecipientsByTargetStoreRole(targetStore, targetRole, targetPermissionGroup ?? undefined)
     }
     let fcmResult: { sent: number; failed: number } | null = null
-    if (fcmRecipients.length > 0) {
+    if (!scheduledFuture && fcmRecipients.length > 0) {
       const settings = await getNotificationSettings()
       if (settings.pushNoticeEnabled) {
         try {
@@ -213,7 +228,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let message = '공지사항이 등록되었습니다.'
+    let message = scheduledFuture
+      ? '공지가 예약되었습니다. 지정 시각 이후 수신자에게 노출됩니다.'
+      : '공지사항이 등록되었습니다.'
     if (fcmResult && fcmRecipients.length > 0) {
       if (fcmResult.sent === 0 && fcmResult.failed === 0) {
         message += ` 푸시 알림: 수신자 ${fcmRecipients.length}명 중 푸시 토큰이 없습니다. 수신자가 홈 화면에서 "푸시 받기"를 등록했는지 확인하세요.`

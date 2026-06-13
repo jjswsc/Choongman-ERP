@@ -44,7 +44,7 @@ export async function fetchErpStoresMaster(): Promise<ErpStoreMasterRow[]> {
 
 async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
   const legacySelect =
-    'store_code,display_name,aliases,sort_order,is_active,photo_url,map_query,address'
+    'store_code,display_name,display_name_ko,display_name_en,display_name_th,aliases,sort_order,is_active,photo_url,map_query,address'
   const legacySelectBasic = 'store_code,display_name,aliases,sort_order,is_active'
   try {
     const rows = (await supabaseSelect('erp_stores', {
@@ -82,11 +82,13 @@ async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
             const rawCode = String(r.store_code || '').trim()
             const fallbackCode = `${tenant || 'tenant'}:${storeName || `store_${idx + 1}`}`
             const uniqueLabel = `${tenant || 'tenant'} / ${storeName || rawCode || fallbackCode}`
+            const aliases: string[] = []
+            if (storeName) aliases.push(storeName)
+            if (rawCode && rawCode !== storeName) aliases.push(rawCode)
             return {
               store_code: rawCode || fallbackCode,
-              // SaaS 다중 테넌트에서 "본사" 같은 동일 명칭 충돌을 피하기 위해 고유 라벨 사용
               display_name: uniqueLabel,
-              aliases: [],
+              aliases,
               sort_order: idx,
               is_active: r.is_active !== false,
             } as ErpStoreMasterRow

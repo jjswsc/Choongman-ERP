@@ -1,0 +1,2 @@
+-- ⚠️ 이 파일 단독 실행 대신 아래 통합본을 사용하세요.
+-- Supabase SQL Editor: vercel-app/sql/member_signup_store_all_in_one.sql (한 번에 붙여넣기)

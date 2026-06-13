@@ -8,6 +8,8 @@ import {
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 import { isEphemeralWorkLogId, normalizeWorkLogContent } from '@/lib/work-log-dedupe'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { workLogActorFromAuth, writeWorkLogAudit } from '@/lib/work-log-audit'
 
 async function findExistingWorkLogRowId(
   date: string,
@@ -66,20 +68,23 @@ export async function POST(req: NextRequest) {
         : []
 
     const staffList =
-      ((await supabaseSelect('employees', { order: 'id.asc', select: 'id,name,nick,job' })) || []) as {
+      ((await supabaseSelect('employees', { order: 'id.asc', select: 'id,name,nick,job,store' })) || []) as {
         id?: number
         name?: string
         nick?: string
         job?: string
+        store?: string
       }[]
     let savedName = name
     let savedDept = '기타'
+    let savedStore = ''
     let savedEmployeeId: number | null = null
 
     const byId = await resolveWorkLogEmployeeById(rawEmployeeId)
     if (byId) {
       savedName = byId.name
       savedDept = byId.job || 'Staff'
+      savedStore = byId.store || ''
       savedEmployeeId = byId.id
     } else {
       const sk = name.toLowerCase().replace(/\s+/g, '')
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
         if (sk === fn || (nn && sk === nn)) {
           savedName = workLogStoredNameFromEmployeeMaster(staffList[i].name)
           savedDept = staffList[i].job || 'Staff'
+          savedStore = String(staffList[i].store || '').trim()
           const eid = staffList[i].id != null ? Math.floor(Number(staffList[i].id)) : 0
           if (Number.isFinite(eid) && eid > 0) savedEmployeeId = eid
           break
@@ -114,6 +120,7 @@ export async function POST(req: NextRequest) {
         status,
         priority: item.priority || '',
         log_date: date,
+        ...(savedStore ? { store: savedStore } : {}),
         ...(savedEmployeeId != null ? { employee_id: savedEmployeeId } : {}),
       }
 
@@ -148,11 +155,24 @@ export async function POST(req: NextRequest) {
           priority: item.priority || '',
           manager_check: '대기',
           manager_comment: '',
+          ...(savedStore ? { store: savedStore } : {}),
           ...(savedEmployeeId != null ? { employee_id: savedEmployeeId } : {}),
         })
         savedIds.push({ id: newId, content })
       }
     }
+
+    const auth = await tryVerifyBearerFromRequest(req)
+    await writeWorkLogAudit({
+      actionType: 'update',
+      logDate: date,
+      employeeId: savedEmployeeId,
+      employeeName: savedName,
+      employeeStore: savedStore || null,
+      changeReason: 'save_progress',
+      afterRow: { savedCount: savedIds.length, ids: savedIds.map((x) => x.id) },
+      actor: workLogActorFromAuth(auth, savedName),
+    })
 
     return NextResponse.json(
       { success: true, messageKey: 'workLogSaveDone', savedIds },

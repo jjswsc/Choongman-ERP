@@ -171,6 +171,12 @@ export async function GET(request: NextRequest) {
         quantity,
         lossRate,
         ingredientType,
+        beforeQuantity: asNum(before?.quantity),
+        afterQuantity: asNum(after?.quantity),
+        beforeLossRate: asNum(before?.loss_rate),
+        afterLossRate: asNum(after?.loss_rate),
+        beforeItemCode: before ? String(before.item_code ?? '').trim() || null : null,
+        afterItemCode: after ? String(after.item_code ?? '').trim() || null : null,
       }
     })
 

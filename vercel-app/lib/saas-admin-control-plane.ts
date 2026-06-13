@@ -114,6 +114,9 @@ export type TenantItem = {
   pricing: TenantPricing
   billingHistory: BillingEventItem[]
   auditTrail: AuditLogItem[]
+  /** 담당 외부 대리점 (없으면 본사 직영) */
+  partnerId?: string | null
+  partnerName?: string | null
 }
 
 export const FEATURE_KEYS = [

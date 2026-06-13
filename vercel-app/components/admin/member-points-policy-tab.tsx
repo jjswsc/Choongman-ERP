@@ -10,6 +10,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { MemberTierBenefitsPreview } from "@/components/admin/member-tier-benefits-preview"
 import { getMemberTierPolicy, getMemberTiers, recalculateMemberTier, saveMemberTier, saveMemberTierPolicy } from "@/lib/api-client"
 import type { MemberPortalLang } from "@/lib/member-tier-public"
+import {
+  DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY,
+  type MemberPointEarnBonusPolicy,
+} from "@/lib/member-point-earn-policy"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
 
@@ -47,12 +51,34 @@ export function MemberPointsPolicyTab() {
   const [saving, setSaving] = React.useState(false)
   const [upgradeBasis, setUpgradeBasis] = React.useState<"amount" | "points">("points")
   const [policySaving, setPolicySaving] = React.useState(false)
+  const [earnBonus, setEarnBonus] = React.useState<MemberPointEarnBonusPolicy>(
+    DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY
+  )
+  const [earnBonusSaving, setEarnBonusSaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const [tiers, policy] = await Promise.all([getMemberTiers(), getMemberTierPolicy()])
     setRows(tiers as TierRow[])
     if (policy.upgradeBasis === "amount" || policy.upgradeBasis === "points") {
       setUpgradeBasis(policy.upgradeBasis)
+    }
+    if (policy.earnBonus) {
+      setEarnBonus({
+        ...DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY,
+        ...policy.earnBonus,
+        channelMultipliers: {
+          ...DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY.channelMultipliers,
+          ...policy.earnBonus.channelMultipliers,
+        },
+        birthday: {
+          ...DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY.birthday,
+          ...policy.earnBonus.birthday,
+        },
+        periodPromo: {
+          ...DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY.periodPromo,
+          ...policy.earnBonus.periodPromo,
+        },
+      })
     }
   }, [])
 
@@ -145,6 +171,184 @@ export function MemberPointsPolicyTab() {
             }}
           >
             {policySaving ? t("loading") : t("memberTierUpgradeBasisSave")}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("memberPointEarnBonusTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t("memberPointEarnBonusDesc")}</p>
+          <p className="text-sm text-muted-foreground">{t("memberPointEarnBonusNoStack")}</p>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(
+              [
+                ["dine_in", t("memberPointEarnChannelDineIn")],
+                ["takeout", t("memberPointEarnChannelTakeout")],
+                ["delivery", t("memberPointEarnChannelDelivery")],
+                ["member_portal", t("memberPointEarnChannelMemberPortal")],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key} className="space-y-1">
+                <Label>{label}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={String(earnBonus.channelMultipliers[key] ?? 1)}
+                  onChange={(e) =>
+                    setEarnBonus((prev) => ({
+                      ...prev,
+                      channelMultipliers: {
+                        ...prev.channelMultipliers,
+                        [key]: Number(e.target.value || 0),
+                      },
+                    }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-3">
+            <p className="text-sm font-medium">{t("memberPointEarnBirthdayTitle")}</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={earnBonus.birthday.enabled}
+                onChange={(e) =>
+                  setEarnBonus((prev) => ({
+                    ...prev,
+                    birthday: { ...prev.birthday, enabled: e.target.checked },
+                  }))
+                }
+              />
+              {t("memberPointEarnBirthdayEnabled")}
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>{t("memberPointEarnBirthdayWindowDays")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={31}
+                  value={String(earnBonus.birthday.windowDays)}
+                  onChange={(e) =>
+                    setEarnBonus((prev) => ({
+                      ...prev,
+                      birthday: {
+                        ...prev.birthday,
+                        windowDays: Number(e.target.value || 0),
+                      },
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("memberPointEarnBirthdayMultiplier")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={String(earnBonus.birthday.multiplier)}
+                  onChange={(e) =>
+                    setEarnBonus((prev) => ({
+                      ...prev,
+                      birthday: {
+                        ...prev.birthday,
+                        multiplier: Number(e.target.value || 0),
+                      },
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-3">
+            <p className="text-sm font-medium">{t("memberPointEarnPeriodTitle")}</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={earnBonus.periodPromo.enabled}
+                onChange={(e) =>
+                  setEarnBonus((prev) => ({
+                    ...prev,
+                    periodPromo: { ...prev.periodPromo, enabled: e.target.checked },
+                  }))
+                }
+              />
+              {t("memberPointEarnPeriodEnabled")}
+            </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label>{t("memberPointEarnPeriodStart")}</Label>
+                <Input
+                  type="date"
+                  value={earnBonus.periodPromo.startDate}
+                  onChange={(e) =>
+                    setEarnBonus((prev) => ({
+                      ...prev,
+                      periodPromo: { ...prev.periodPromo, startDate: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("memberPointEarnPeriodEnd")}</Label>
+                <Input
+                  type="date"
+                  value={earnBonus.periodPromo.endDate}
+                  onChange={(e) =>
+                    setEarnBonus((prev) => ({
+                      ...prev,
+                      periodPromo: { ...prev.periodPromo, endDate: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("memberPointEarnPeriodMultiplier")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={String(earnBonus.periodPromo.multiplier)}
+                  onChange={(e) =>
+                    setEarnBonus((prev) => ({
+                      ...prev,
+                      periodPromo: {
+                        ...prev.periodPromo,
+                        multiplier: Number(e.target.value || 0),
+                      },
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            disabled={earnBonusSaving}
+            onClick={async () => {
+              setEarnBonusSaving(true)
+              try {
+                const res = await saveMemberTierPolicy({ earnBonus })
+                if (!res.success) await appAlert(res.message || t("msg_save_fail"))
+                else {
+                  if (res.earnBonus) setEarnBonus(res.earnBonus)
+                  await appAlert(t("memberPointEarnBonusSaved"))
+                }
+              } finally {
+                setEarnBonusSaving(false)
+              }
+            }}
+          >
+            {earnBonusSaving ? t("loading") : t("memberPointEarnBonusSave")}
           </Button>
         </CardContent>
       </Card>

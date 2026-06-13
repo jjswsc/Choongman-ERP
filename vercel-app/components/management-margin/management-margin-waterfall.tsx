@@ -11,6 +11,8 @@ export type WaterfallStep = {
   kind: "start" | "subtract" | "subtotal" | "section" | "end"
   tone?: "pos" | "accounting"
   href?: string
+  /** 항목별 구성비(%) — 총매출 또는 순매출 기준 */
+  pct?: number | null
 }
 
 function stepAmountClass(kind: WaterfallStep["kind"], _amount: number): string {
@@ -93,17 +95,35 @@ export function ManagementMarginWaterfall({
               >
                 {step.kind === "subtract" ? "−" : ""}
                 {formatBath(Math.abs(displayAmount))}
+                {step.kind !== "end" && step.pct != null && Number.isFinite(step.pct) ? (
+                  <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                    ({step.pct.toFixed(1)}%)
+                  </span>
+                ) : null}
               </span>
             </div>
-            {(step.kind === "start" || step.kind === "subtract" || step.kind === "subtotal") && (
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    step.kind === "subtract" ? "bg-rose-400/80" : step.tone === "accounting" ? "bg-slate-400/70" : "bg-sky-500/80"
-                  )}
-                  style={{ width: `${barPct}%` }}
-                />
+            {(step.kind === "start" || step.kind === "subtract" || step.kind === "subtotal" || step.kind === "end") && (
+              <div className="mt-1 flex items-center gap-2">
+                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      step.kind === "subtract"
+                        ? "bg-rose-400/80"
+                        : step.kind === "end"
+                          ? "bg-emerald-500/80"
+                          : step.tone === "accounting"
+                            ? "bg-slate-400/70"
+                            : "bg-sky-500/80"
+                    )}
+                    style={{ width: `${barPct}%` }}
+                  />
+                </div>
+                {step.kind === "end" && step.pct != null && Number.isFinite(step.pct) ? (
+                  <span className="shrink-0 text-[11px] font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+                    {step.pct.toFixed(1)}%
+                  </span>
+                ) : null}
               </div>
             )}
           </div>

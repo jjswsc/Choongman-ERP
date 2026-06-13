@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  buildLineJoinStoreClearCookie,
   buildLineOAuthStateClearCookie,
   exchangeLineAuthCode,
   loginMemberWithLineProfile,
+  readLineJoinStoreCookie,
   readLineOAuthStateCookie,
   resolveMemberPortalOrigin,
 } from '@/lib/member-line-login'
@@ -26,6 +28,7 @@ function clientIp(req: NextRequest): string {
 function redirectWithError(req: NextRequest, code: string): NextResponse {
   const res = NextResponse.redirect(new URL(`/m?error=${encodeURIComponent(code)}`, req.url))
   res.headers.append('Set-Cookie', buildLineOAuthStateClearCookie(isProdLike()))
+  res.headers.append('Set-Cookie', buildLineJoinStoreClearCookie(isProdLike()))
   return res
 }
 
@@ -54,10 +57,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const origin = resolveMemberPortalOrigin(req.nextUrl.origin)
+    const joinStoreCode = readLineJoinStoreCookie(req.headers.get('cookie'))
     const { profile, friendFlag } = await exchangeLineAuthCode({ code, origin })
     const member = await loginMemberWithLineProfile(profile, {
       friendFlag,
       friendshipStatusChanged,
+      joinStoreCode,
     })
     const session = await createMemberPortalSessionForMember({
       member,
@@ -68,9 +73,13 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(buildSuccessRedirect(req, { friendshipStatusChanged, friendFlag }))
     res.headers.append('Set-Cookie', buildMemberSessionCookie(session.sessionToken))
     res.headers.append('Set-Cookie', buildLineOAuthStateClearCookie(secure))
+    res.headers.append('Set-Cookie', buildLineJoinStoreClearCookie(secure))
     return res
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'line_login_failed'
+    if (msg === 'missing_store' || msg === 'invalid_store') {
+      return redirectWithError(req, msg)
+    }
     return redirectWithError(req, msg.slice(0, 120))
   }
 }

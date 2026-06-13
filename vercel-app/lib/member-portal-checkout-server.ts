@@ -10,7 +10,7 @@ import {
 import { assertMemberPickupTimeAllowed } from '@/lib/member-portal-pickup-time'
 import { resolveMemberPortalPickupMinLeadMinutes } from '@/lib/member-portal-pickup-settings'
 import { generateMemberPortalKbankQr } from '@/lib/member-portal-kbank-qr'
-import { applyLoyaltyOnOrder, type MemberSummary } from '@/lib/members-server'
+import { applyLoyaltyOnOrder, computeMemberPointEarnForOrder, type MemberSummary } from '@/lib/members-server'
 import { buildMemberPortalTakeoutTableNameForStorage } from '@/lib/pos-member-portal-takeout-label'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
@@ -44,6 +44,9 @@ export type MemberPortalCheckoutPreview = {
   qrAmount: number
   requiresQr: boolean
   finalTotal: number
+  pointEarnEstimate: number
+  pointEarnMultiplier: number
+  pointEarnBirthdayBonus: boolean
 }
 
 type ResolvedCheckoutPricing = MemberPortalCheckoutPreview & {
@@ -166,6 +169,13 @@ async function resolveMemberPortalCheckoutPricing(params: {
     cardPaymentAmount: 0,
   })
 
+  const earnPreview = await computeMemberPointEarnForOrder({
+    memberId: params.member.id,
+    totalAmount: pricingFinal.finalTotal,
+    orderType: 'takeout',
+    createdBy: `member_portal:${params.member.id}`,
+  })
+
   return {
     prepayEnabled,
     subtotal,
@@ -182,6 +192,9 @@ async function resolveMemberPortalCheckoutPricing(params: {
     finalTotal: pricingFinal.finalTotal,
     appliedCoupons,
     appliedCouponsJson,
+    pointEarnEstimate: earnPreview.pointEarned,
+    pointEarnMultiplier: earnPreview.effectiveMultiplier,
+    pointEarnBirthdayBonus: earnPreview.birthdayApplied,
   }
 }
 
@@ -270,10 +283,11 @@ export async function finalizeMemberPortalPrepaidOrder(params: {
   const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
     limit: 1,
     select:
-      'id,order_no,store_code,status,total,subtotal,member_id,member_no,point_used,point_earned,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at,coupon_code,created_by,memo',
+      'id,order_no,store_code,status,total,subtotal,member_id,member_no,point_used,point_earned,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at,coupon_code,created_by,order_type,memo',
   })) as Array<{
     id?: number
     order_no?: string
+    store_code?: string | null
     status?: string
     total?: number
     member_id?: number | null
@@ -288,6 +302,7 @@ export async function finalizeMemberPortalPrepaidOrder(params: {
     paid_at?: string | null
     coupon_code?: string | null
     created_by?: string | null
+    order_type?: string | null
     memo?: string | null
   }>
   const order = rows?.[0]
@@ -343,11 +358,13 @@ export async function finalizeMemberPortalPrepaidOrder(params: {
     const loyalty = await applyLoyaltyOnOrder({
       memberId,
       orderId,
+      storeCode: String(order.store_code || '').trim(),
       totalAmount: total,
       pointUsed,
-      pointEarned: Math.max(0, Math.trunc(Number(order.point_earned || 0))),
       orderNo: String(order.order_no || ''),
       couponCode: String(order.coupon_code || '').trim() || undefined,
+      orderType: String(order.order_type || 'takeout'),
+      createdBy,
     })
     await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
       point_earned: loyalty.pointEarned,
@@ -363,16 +380,18 @@ export async function finalizeMemberPortalPrepaidOrder(params: {
 export async function finalizeMemberPortalPointsOnlyOrder(orderId: number): Promise<void> {
   const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
     limit: 1,
-    select: 'id,order_no,total,member_id,point_used,point_earned,coupon_code,created_by,paid_at',
+    select: 'id,order_no,store_code,total,member_id,point_used,point_earned,coupon_code,created_by,order_type,paid_at',
   })) as Array<{
     id?: number
     order_no?: string
+    store_code?: string | null
     total?: number
     member_id?: number | null
     point_used?: number | null
     point_earned?: number | null
     coupon_code?: string | null
     created_by?: string | null
+    order_type?: string | null
     paid_at?: string | null
   }>
   const order = rows?.[0]
@@ -390,11 +409,13 @@ export async function finalizeMemberPortalPointsOnlyOrder(orderId: number): Prom
     const loyalty = await applyLoyaltyOnOrder({
       memberId,
       orderId,
+      storeCode: String(order.store_code || '').trim(),
       totalAmount: Math.max(0, Number(order.total || 0)),
       pointUsed: Math.max(0, Math.trunc(Number(order.point_used || 0))),
-      pointEarned: Math.max(0, Math.trunc(Number(order.point_earned || 0))),
       orderNo: String(order.order_no || ''),
       couponCode: String(order.coupon_code || '').trim() || undefined,
+      orderType: String(order.order_type || 'takeout'),
+      createdBy: String(order.created_by || ''),
     })
     await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
       point_earned: loyalty.pointEarned,

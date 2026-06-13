@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseRpc } from '@/lib/supabase-server'
 import {
   resolveWorkLogFilterNameFromEmployeeIdParam,
   workLogsOrEmployeeIdOrNameFilter,
@@ -17,6 +17,71 @@ export async function GET(req: NextRequest) {
     const dept = searchParams.get('dept') || ''
     const employee = searchParams.get('employee') || ''
     const status = searchParams.get('status') || ''
+    const store = searchParams.get('store') || ''
+
+    const employeeId =
+      employee && employee !== 'all' ? Number.parseInt(String(employee).trim(), 10) : NaN
+    const resolvedName =
+      employee && employee !== 'all'
+        ? await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
+        : null
+
+    try {
+      const rpcRows = await supabaseRpc<
+        {
+          id: string
+          log_date: string
+          dept: string
+          name: string
+          content: string
+          progress: number
+          status: string
+          priority: string
+          manager_check: string
+          manager_comment: string
+        }[]
+      >('get_work_log_manager_report_rows', {
+        p_start: startStr,
+        p_end: endStr,
+        p_dept: dept && dept !== 'all' ? dept : null,
+        p_employee_name:
+          employee && employee !== 'all' && resolvedName ? resolvedName : null,
+        p_employee_id:
+          Number.isFinite(employeeId) && employeeId > 0 ? employeeId : null,
+        p_manager_check: status && status !== 'all' ? status : null,
+        p_store: store && store !== 'all' ? store : null,
+      })
+      if (Array.isArray(rpcRows)) {
+        const result = dedupeWorkLogReportByDateNameContent(
+          rpcRows.map((r) => ({
+            id: String(r.id ?? ''),
+            date: r.log_date ? String(r.log_date).slice(0, 10) : '',
+            dept: String(r.dept || ''),
+            name: String(r.name || ''),
+            content: String(r.content || ''),
+            progress: Number(r.progress) || 0,
+            status: String(r.status || ''),
+            priority: String(r.priority || ''),
+            managerCheck: String(r.manager_check || ''),
+            managerComment: String(r.manager_comment || ''),
+          }))
+        ).map((r) => ({
+          id: r.id,
+          date: r.date,
+          dept: r.dept,
+          name: r.name,
+          content: r.content,
+          progress: r.progress,
+          status: r.status,
+          priority: r.priority,
+          managerCheck: r.managerCheck,
+          managerComment: r.managerComment,
+        }))
+        return NextResponse.json(result, { headers })
+      }
+    } catch {
+      /* RPC 미배포 — JS fallback */
+    }
 
     const filters: string[] = []
     filters.push(`log_date=gte.${encodeURIComponent(startStr)}`)
@@ -36,6 +101,9 @@ export async function GET(req: NextRequest) {
     }
     if (status && status !== 'all') {
       filters.push(`manager_check=eq.${encodeURIComponent(status)}`)
+    }
+    if (store && store !== 'all') {
+      filters.push(`store=eq.${encodeURIComponent(store)}`)
     }
 
     const filterStr = filters.join('&')

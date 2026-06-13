@@ -14,8 +14,10 @@ import { ListPaginationBar } from "@/components/list-pagination-bar"
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
 const NOTICE_SERVER_FETCH_CAP = 100
 
+import { bangkokTodayYmd } from "@/lib/bangkok-date"
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return bangkokTodayYmd()
 }
 
 function isRead(status: string) {

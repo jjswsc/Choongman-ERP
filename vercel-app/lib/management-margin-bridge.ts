@@ -32,6 +32,7 @@ import {
   type ManagementMarginDataQuality,
 } from '@/lib/management-margin-data-quality'
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import { parseCommaSeparatedStoreFilter, resolvePosStoreCodesForAccountingScope } from '@/lib/accounting-store-scope'
 import { isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import type { PosSalesCombinedDiscountResult } from '@/lib/pos-sales-combined-discount-aggregate'
@@ -70,6 +71,14 @@ export type ManagementMarginBridgeReport = {
     totalCost: number
     matchedLineQty: number
     unmatchedLineQty: number
+    bomUnmatchedLines: {
+      menuId: string
+      optionId: string
+      menuLabel: string
+      optionLabel: string
+      reason: 'missing_menu_id' | 'missing_bom'
+      lineQty: number
+    }[]
     costPctOfGross: number
     costPctOfNet: number
     miseRatePercent: number
@@ -138,6 +147,23 @@ async function sumPurchasesFoodPackaging(params: {
   storeFilter: string
   isHQ: boolean
 }): Promise<{ food: number; packaging: number; total: number }> {
+  const multi = parseCommaSeparatedStoreFilter(params.storeFilter)
+  if (multi && multi.length > 1) {
+    const parts = await Promise.all(
+      multi.map((store) =>
+        sumPurchasesFoodPackaging({
+          ...params,
+          storeFilter: store,
+        })
+      )
+    )
+    return {
+      food: round2(parts.reduce((a, p) => a + p.food, 0)),
+      packaging: round2(parts.reduce((a, p) => a + p.packaging, 0)),
+      total: round2(parts.reduce((a, p) => a + p.total, 0)),
+    }
+  }
+
   const [itemAccountSubjectMap, subjectMeta] = await Promise.all([
     loadItemAccountSubjectMap(),
     loadAccountSubjectMeta(),
@@ -265,12 +291,7 @@ export async function computeManagementMarginBridge(
   let storeRanking: ManagementMarginStoreRankRow[] | null = null
   let storeRankingHighlights: { highDiscount: string[]; highCost: string[] } | null = null
 
-  const storeCodes =
-    storeFilter === 'All'
-      ? scopeProbe.allowedStoresOnly && scopeProbe.allowedStoresOnly.length > 0
-        ? scopeProbe.allowedStoresOnly
-        : undefined
-      : [storeFilter]
+  const storeCodes = resolvePosStoreCodesForAccountingScope(scopeProbe)
 
   const priorMeta = priorBangkokPeriodMonths(ymStart, ymEnd)
   const priorRange = priorMeta
@@ -316,7 +337,11 @@ export async function computeManagementMarginBridge(
     }
     theoreticalCost = slice.theoreticalCost
 
-    if (storeFilter === 'All') {
+    const showStoreRanking =
+      storeFilter === 'All' ||
+      Boolean(scopeProbe.selectedStoresOnly && scopeProbe.selectedStoresOnly.length > 1) ||
+      (parseCommaSeparatedStoreFilter(storeFilter)?.length ?? 0) > 1
+    if (showStoreRanking) {
       const ranking = buildManagementMarginStoreRanking({
         orderRows: currentFetch.completed,
         catalog,
@@ -437,7 +462,8 @@ export async function computeManagementMarginBridge(
           ...(pos && priorPosSlice
             ? [
                 buildMomDelta('netSales', pos.netSales, priorPosSlice.netSales),
-                buildMomDelta('totalDiscount', pos.totalDiscount, priorPosSlice.totalDiscount),
+                buildMomDelta('bundleDiscount', pos.bundleDiscount, priorPosSlice.bundleDiscount),
+                buildMomDelta('paymentDiscount', pos.paymentDiscount, priorPosSlice.paymentDiscount),
                 buildMomDelta(
                   'theoreticalCost',
                   theoreticalCost?.totalCost ?? 0,

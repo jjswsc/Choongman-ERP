@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { canAccessSaasAdmin } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
-import { supabaseCountFilter, supabaseSelect } from "@/lib/supabase-server"
+import { requireSaasControlPlane, loadAllPartnerAssignments, loadPartnerTenantIdSet, saasScopeToClientMeta } from "@/lib/saas-control-plane-scope"
+import { supabaseSelect, supabaseSelectFilter } from "@/lib/supabase-server"
+import {
+  loadTenantAuditRecentBatch,
+  loadTenantBillingRecentBatch,
+  loadTenantUsageBatch,
+  saasTenantInFilter,
+  SAAS_TENANT_LIST_LIMIT,
+} from "@/lib/saas-tenant-usage-server"
 import {
   applySalesStageFeatures,
   DEFAULT_FEATURE_FLAGS,
@@ -10,18 +16,14 @@ import {
   DEFAULT_STAGE_PRICES,
   FALLBACK_TENANTS,
   type BillingCycle,
-  type BillingEventItem,
   type FeatureFlags,
   type PlanTier,
   type StagePrice,
-  type AuditLogItem,
   type SalesStage,
   type TenantItem,
   type TenantLimits,
   resolveTenantStatus,
   resolveCurrentChargeAmount,
-  getBangkokMonthStartYmd,
-  toBangkokStartIso,
 } from "@/lib/saas-admin-control-plane"
 import {
   defaultModuleCatalogRows,
@@ -108,33 +110,15 @@ type TenantFeatureRow = {
   is_enabled: boolean
 }
 
-type BillingEventRow = {
-  id: number
-  tenant_id: string
-  event_type?: string | null
-  amount?: number | null
-  currency?: string | null
-  status?: string | null
-  happened_at?: string | null
-  memo?: string | null
-}
-
-type AuditLogRow = {
-  id: number
-  tenant_id: string
-  action?: string | null
-  actor_name?: string | null
-  actor_role?: string | null
-  changed_at?: string | null
-  summary?: string | null
-  payload_json?: unknown
-}
-
 type ModulePriceRow = {
   tenant_id: string
   module_key: string
   monthly_price?: number | null
   yearly_price?: number | null
+  wholesale_monthly?: number | null
+  wholesale_yearly?: number | null
+  margin_monthly?: number | null
+  margin_yearly?: number | null
   is_enabled?: boolean | null
   is_per_unit?: boolean | null
   is_custom_quote?: boolean | null
@@ -246,14 +230,6 @@ function pickLimits(base: TenantLimits, override?: TenantLimitRow): TenantLimits
   }
 }
 
-async function countSafe(filter: string, table: string): Promise<number> {
-  try {
-    return await supabaseCountFilter(table, filter)
-  } catch {
-    return 0
-  }
-}
-
 async function selectSafe(table: string, options: { order?: string; limit?: number } = {}) {
   try {
     return (await supabaseSelect(table, options)) as unknown[]
@@ -262,79 +238,84 @@ async function selectSafe(table: string, options: { order?: string; limit?: numb
   }
 }
 
-async function buildUsage(tenantId: string) {
-  const tenant = encodeURIComponent(tenantId)
-  const monthStart = getBangkokMonthStartYmd()
-  const monthStartIso = toBangkokStartIso(monthStart)
-  const stores = await countSafe(`tenant_id=eq.${tenant}`, "erp_stores")
-  const staff = await countSafe(`tenant_id=eq.${tenant}`, "employees")
-  const managers = await countSafe(
-    `tenant_id=eq.${tenant}&or=(role.ilike.*manager*,role.ilike.*franchisee*)`,
-    "employees"
-  )
-  const tablets = await countSafe(`tenant_id=eq.${tenant}&device_kind=eq.tablet&is_active=eq.true`, "tenant_device_registry")
-  const pos = await countSafe(`tenant_id=eq.${tenant}&device_kind=eq.pos&is_active=eq.true`, "tenant_device_registry")
-  const orders =
-    monthStartIso == null
-      ? 0
-      : await countSafe(
-          `tenant_id=eq.${tenant}&created_at=gte.${encodeURIComponent(monthStartIso)}`,
-          "pos_orders"
-        )
-  return {
-    stores,
-    managerAccounts: managers,
-    staffAccounts: staff,
-    tablets,
-    posDevices: pos,
-    monthlyOrders: orders,
-  }
-}
-
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
+  const { scope } = cp
+  const scopeMeta = saasScopeToClientMeta(scope)
 
   try {
-    const tenants = (await supabaseSelect("tenants", { order: "created_at.asc", limit: 300 })) as TenantRow[]
+    let tenants = (await supabaseSelect("tenants", {
+      order: "created_at.asc",
+      limit: SAAS_TENANT_LIST_LIMIT,
+    })) as TenantRow[]
     if (!Array.isArray(tenants) || tenants.length === 0) {
-      return NextResponse.json({ success: true, tenants: [] }, { headers })
+      return NextResponse.json({ success: true, tenants: [], scope: scopeMeta }, { headers })
     }
 
-    const [subs, plans, planLimits, tenantLimits, tenantPolicies, planFeatures, tenantFeatures, billingRows, auditRows, stagePriceRows, modulePriceRows, catalogDbRows] =
-      (await Promise.all([
-        supabaseSelect("tenant_subscriptions", { limit: 400 }),
-        supabaseSelect("saas_plans", { limit: 100 }),
-        supabaseSelect("saas_plan_limits", { limit: 100 }),
-        supabaseSelect("tenant_limit_overrides", { limit: 400 }),
-        supabaseSelect("tenant_policy_settings", { limit: 400 }),
-        supabaseSelect("saas_plan_features", { limit: 2000 }),
-        supabaseSelect("tenant_feature_overrides", { limit: 4000 }),
-        selectSafe("saas_billing_events", { order: "happened_at.desc", limit: 500 }),
-        selectSafe("saas_audit_logs", { order: "changed_at.desc", limit: 500 }),
-        selectSafe("tenant_stage_price_overrides", { limit: 5000 }),
-        selectSafe("tenant_module_pricing", { limit: 10000 }),
-        selectSafe("saas_module_price_catalog", { order: "sort_order.asc", limit: 100 }),
-      ])) as [
-        SubRow[],
-        PlanRow[],
-        PlanLimitRow[],
-        TenantLimitRow[],
-        TenantPolicyRow[],
-        PlanFeatureRow[],
-        TenantFeatureRow[],
-        BillingEventRow[],
-        AuditLogRow[],
-        StagePriceOverrideRow[],
-        ModulePriceRow[],
-        CatalogDbRow[],
-      ]
+    const partnerAssignmentMap = await loadAllPartnerAssignments()
+    if (scope.kind === "partner") {
+      const allowed = await loadPartnerTenantIdSet(scope.partnerId)
+      tenants = tenants.filter((t) => allowed.has(t.id))
+      if (tenants.length === 0) {
+        return NextResponse.json({ success: true, tenants: [], scope: scopeMeta }, { headers })
+      }
+    }
+
+    const tenantIds = tenants.map((t) => t.id)
+    const tenantFilter = saasTenantInFilter(tenantIds)
+
+    const [
+      subs,
+      plans,
+      planLimits,
+      tenantLimits,
+      tenantPolicies,
+      planFeatures,
+      tenantFeatures,
+      stagePriceRows,
+      modulePriceRows,
+      catalogDbRows,
+      usageMap,
+      auditMap,
+      billingMap,
+      licensedPosMap,
+    ] = (await Promise.all([
+      supabaseSelectFilter("tenant_subscriptions", tenantFilter, { limit: SAAS_TENANT_LIST_LIMIT }),
+      supabaseSelect("saas_plans", { limit: 100 }),
+      supabaseSelect("saas_plan_limits", { limit: 100 }),
+      supabaseSelectFilter("tenant_limit_overrides", tenantFilter, { limit: SAAS_TENANT_LIST_LIMIT }),
+      supabaseSelectFilter("tenant_policy_settings", tenantFilter, { limit: SAAS_TENANT_LIST_LIMIT }),
+      supabaseSelect("saas_plan_features", { limit: 2000 }),
+      supabaseSelectFilter("tenant_feature_overrides", tenantFilter, { limit: 8000 }),
+      supabaseSelectFilter("tenant_stage_price_overrides", tenantFilter, { limit: 5000 }),
+      supabaseSelectFilter("tenant_module_pricing", tenantFilter, { limit: 10000 }),
+      selectSafe("saas_module_price_catalog", { order: "sort_order.asc", limit: 100 }),
+      loadTenantUsageBatch(
+        tenants.map((t) => ({ id: t.id, companyName: t.company_name || "" }))
+      ),
+      loadTenantAuditRecentBatch(tenantIds),
+      loadTenantBillingRecentBatch(tenantIds),
+      loadLicensedPosByTenant(),
+    ])) as [
+      SubRow[],
+      PlanRow[],
+      PlanLimitRow[],
+      TenantLimitRow[],
+      TenantPolicyRow[],
+      PlanFeatureRow[],
+      TenantFeatureRow[],
+      StagePriceOverrideRow[],
+      ModulePriceRow[],
+      CatalogDbRow[],
+      Awaited<ReturnType<typeof loadTenantUsageBatch>>,
+      Awaited<ReturnType<typeof loadTenantAuditRecentBatch>>,
+      Awaited<ReturnType<typeof loadTenantBillingRecentBatch>>,
+      Awaited<ReturnType<typeof loadLicensedPosByTenant>>,
+    ]
 
     const catalogRows =
       Array.isArray(catalogDbRows) && catalogDbRows.length > 0
@@ -349,8 +330,6 @@ export async function GET(req: NextRequest) {
     const tenantPolicyMap = new Map((tenantPolicies || []).map((x) => [x.tenant_id, x]))
     const planFeaturesMap = new Map<string, FeatureFlags>()
     const tenantFeaturesMap = new Map<string, Partial<FeatureFlags>>()
-    const billingMap = new Map<string, BillingEventItem[]>()
-    const auditMap = new Map<string, AuditLogItem[]>()
     const stagePriceMap = new Map<string, Record<SalesStage, StagePrice>>()
     const currencyMap = new Map<string, string>()
 
@@ -367,43 +346,6 @@ export async function GET(req: NextRequest) {
       const prev = tenantFeaturesMap.get(row.tenant_id) || {}
       prev[mapped] = row.is_enabled === true
       tenantFeaturesMap.set(row.tenant_id, prev)
-    }
-    for (const row of (billingRows as BillingEventRow[]) || []) {
-      const key = String(row.tenant_id || "").trim()
-      if (!key) continue
-      const prev = billingMap.get(key) || []
-      if (prev.length >= 20) continue
-      prev.push({
-        id: Number(row.id || 0),
-        eventType: String(row.event_type || "billing.updated"),
-        amount: Number(row.amount || 0),
-        currency: String(row.currency || "THB"),
-        status: String(row.status || "unknown"),
-        happenedAt: String(row.happened_at || ""),
-        memo: String(row.memo || ""),
-      })
-      billingMap.set(key, prev)
-    }
-    for (const row of (auditRows as AuditLogRow[]) || []) {
-      const key = String(row.tenant_id || "").trim()
-      if (!key) continue
-      const prev = auditMap.get(key) || []
-      if (prev.length >= 20) continue
-      const payload = row.payload_json
-      const employeeId =
-        payload && typeof payload === "object" && "employeeId" in (payload as Record<string, unknown>)
-          ? Number((payload as Record<string, unknown>).employeeId || 0)
-          : 0
-      prev.push({
-        id: Number(row.id || 0),
-        action: String(row.action || "tenant.settings.updated"),
-        actorName: String(row.actor_name || "-"),
-        actorRole: String(row.actor_role || "-"),
-        changedAt: String(row.changed_at || ""),
-        summary: String(row.summary || ""),
-        employeeId: Number.isFinite(employeeId) && employeeId > 0 ? employeeId : null,
-      })
-      auditMap.set(key, prev)
     }
     for (const row of stagePriceRows || []) {
       const key = String(row.tenant_id || "").trim()
@@ -422,7 +364,6 @@ export async function GET(req: NextRequest) {
     }
 
     const rows: TenantItem[] = []
-    const licensedPosMap = await loadLicensedPosByTenant()
     for (const tenant of tenants) {
       const sub = subMap.get(tenant.id)
       const plan = sub?.plan_id ? planMap.get(sub.plan_id) : undefined
@@ -467,7 +408,14 @@ export async function GET(req: NextRequest) {
         autoSuspendOnOverdue: sub?.auto_suspend_on_overdue ?? DEFAULT_POLICY.autoSuspendOnOverdue,
         lastPaymentStatus: sub?.last_payment_status || null,
       })
-      const usageRaw = await buildUsage(tenant.id)
+      const usageRaw = usageMap.get(tenant.id) || {
+        stores: 0,
+        managerAccounts: 0,
+        staffAccounts: 0,
+        tablets: 0,
+        posDevices: 0,
+        monthlyOrders: 0,
+      }
       const licensedPosDevices = licensedPosMap.get(tenant.id) ?? 0
       const usage = { ...usageRaw, licensedPosDevices }
       const stagePrices = stagePriceMap.get(tenant.id) || { ...DEFAULT_STAGE_PRICES }
@@ -538,10 +486,12 @@ export async function GET(req: NextRequest) {
         },
         billingHistory: billingMap.get(tenant.id) || [],
         auditTrail: auditMap.get(tenant.id) || [],
+        partnerId: partnerAssignmentMap.get(tenant.id)?.partnerId ?? null,
+        partnerName: partnerAssignmentMap.get(tenant.id)?.partnerName ?? null,
       })
     }
 
-    return NextResponse.json({ success: true, tenants: rows }, { headers })
+    return NextResponse.json({ success: true, tenants: rows, scope: scopeMeta }, { headers })
   } catch (error) {
     console.error("getSaasTenantSettings:", error)
     return NextResponse.json(

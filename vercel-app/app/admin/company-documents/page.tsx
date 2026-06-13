@@ -3,7 +3,7 @@
 import { FileStack } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { CompanyHybridDocumentsPanel } from "@/components/erp/company-hybrid-documents-panel"
+import { CompanyHybridDocumentsPanel } from "@/components/erp/company-hybrid-documents/company-hybrid-documents-panel"
 
 export default function CompanyDocumentsPage() {
   const { lang } = useLang()
@@ -17,10 +17,10 @@ export default function CompanyDocumentsPage() {
             <FileStack className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
               {t("companyHybridDocuments")}
             </h1>
-            <p className="text-xs text-muted-foreground">{t("companyHybridDocumentsSub")}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{t("companyHybridDocumentsSub")}</p>
           </div>
         </div>
         <CompanyHybridDocumentsPanel />

@@ -18,6 +18,11 @@ export function isSandboxStoreCode(storeCode: unknown): boolean {
   return POS_SALES_EXCLUDED_STORE_CODES.has(norm)
 }
 
+/** ERP/POS 로그인 드롭다운 — `test` 만 제외. SaaS 본사 `store_code=HQ` 는 실제 계정이 있으면 표시 */
+export function isLoginExcludedStoreKey(storeKey: unknown): boolean {
+  return String(storeKey ?? '').trim().toLowerCase() === 'test'
+}
+
 export function isPosSalesTestOfficeStoreCode(storeCode: unknown): boolean {
   const raw = String(storeCode ?? '').trim()
   if (!raw) return false

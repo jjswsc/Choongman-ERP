@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { canAccessSaasAdmin } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
+import {
+  assertTenantInScope,
+  assignTenantToPartner,
+  requireSaasControlPlane,
+} from "@/lib/saas-control-plane-scope"
 import { supabaseInsert, supabaseSelectFilter, supabaseUpsert, supabaseUpsertMerge } from "@/lib/supabase-server"
 import {
   applySalesStageFeatures,
@@ -30,7 +33,9 @@ import {
   mergeTenantModulePricing,
   modulePricesFromCatalog,
   normalizeModulePrices,
+  syncMarginFromRetail,
   SAAS_MODULE_KEYS,
+  validateModulePricesFloor,
   type SaasModuleKey,
   type SaasModulePriceRow,
 } from "@/lib/saas-module-pricing"
@@ -87,7 +92,12 @@ function normalizePricingMode(raw: unknown): "stage" | "module" {
 }
 
 function normalizeModulePricesFromTenant(raw: unknown): Record<SaasModuleKey, SaasModulePriceRow> {
-  return normalizeModulePrices(raw)
+  const modules = normalizeModulePrices(raw)
+  const out = {} as Record<SaasModuleKey, SaasModulePriceRow>
+  for (const key of SAAS_MODULE_KEYS) {
+    out[key] = syncMarginFromRetail(modules[key])
+  }
+  return out
 }
 
 async function loadPreviousModulePrices(tenantId: string): Promise<Record<SaasModuleKey, SaasModulePriceRow> | null> {
@@ -144,11 +154,9 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
+  const { scope, auth } = cp
 
   try {
     const body = (await req.json()) as SaveBody
@@ -157,6 +165,34 @@ export async function POST(req: NextRequest) {
     const companyName = String(tenant?.companyName || "").trim()
     if (!tenantId || !companyName) {
       return NextResponse.json({ success: false, message: "tenant.id/companyName이 필요합니다." }, { status: 400, headers })
+    }
+
+    const existingTenant = (await supabaseSelectFilter("tenants", `id=eq.${encodeURIComponent(tenantId)}`, {
+      limit: 1,
+    })) as Array<{ id?: string }>
+    const isNewTenant = !existingTenant?.[0]?.id
+
+    if (!isNewTenant) {
+      const inScope = await assertTenantInScope(scope, tenantId)
+      if (!inScope) {
+        return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
+      }
+    }
+
+    if (scope.kind === "partner" && tenant.partnerId && tenant.partnerId !== scope.partnerId) {
+      return NextResponse.json({ success: false, message: "다른 대리점 고객사는 수정할 수 없습니다." }, { status: 403, headers })
+    }
+
+    if (scope.kind === "platform" && tenant.partnerId) {
+      try {
+        await assignTenantToPartner({
+          tenantId,
+          partnerId: String(tenant.partnerId),
+          assignedByEmployeeId: auth.employeeId ?? null,
+        })
+      } catch (assignErr) {
+        console.warn("saveSaasTenantSettings partner assign skipped:", assignErr)
+      }
     }
 
     const planTier = normalizeTier(tenant.planTier)
@@ -173,6 +209,10 @@ export async function POST(req: NextRequest) {
     )
     const stagePrices = normalizeStagePrices(tenant.pricing?.stagePrices)
     const modulePrices = normalizeModulePricesFromTenant(tenant.pricing?.modulePrices)
+    const floorCheck = validateModulePricesFloor(modulePrices)
+    if (!floorCheck.ok) {
+      return NextResponse.json({ success: false, message: floorCheck.message }, { status: 400, headers })
+    }
     const currency = String(tenant.pricing?.currency || "THB").trim() || "THB"
     const stageAmount = resolveCurrentChargeAmount(salesStage, billingCycle, stagePrices)
     const billingLimits = moduleBillingLimitsFromTenant(tenant)
@@ -201,6 +241,14 @@ export async function POST(req: NextRequest) {
       company_name: companyName,
       is_active: tenant.status !== "suspended",
     })
+
+    if (isNewTenant && scope.kind === "partner") {
+      await assignTenantToPartner({
+        tenantId,
+        partnerId: scope.partnerId,
+        assignedByEmployeeId: scope.employeeId,
+      })
+    }
 
     await supabaseUpsertMerge("saas_plans", "id", {
       id: planId,
@@ -312,6 +360,10 @@ export async function POST(req: NextRequest) {
           module_key: moduleKey,
           monthly_price: Math.max(0, Number(row.monthly || 0)),
           yearly_price: Math.max(0, Number(row.yearly || 0)),
+          wholesale_monthly: Math.max(0, Number(row.wholesaleMonthly ?? row.monthly ?? 0)),
+          wholesale_yearly: Math.max(0, Number(row.wholesaleYearly ?? row.yearly ?? 0)),
+          margin_monthly: Math.max(0, Number(row.marginMonthly ?? 0)),
+          margin_yearly: Math.max(0, Number(row.marginYearly ?? 0)),
           is_enabled: row.isEnabled === true,
           is_per_unit: row.isPerUnit === true,
           is_custom_quote: row.isCustomQuote === true,
@@ -328,8 +380,8 @@ export async function POST(req: NextRequest) {
       await supabaseInsert("saas_audit_logs", {
         tenant_id: tenantId,
         action: "tenant.settings.updated",
-        actor_name: authResult.auth.name || "unknown",
-        actor_role: authResult.auth.role || "unknown",
+        actor_name: auth.name || "unknown",
+        actor_role: auth.role || "unknown",
         summary: buildAuditSummary(tenant),
         payload_json: {
           planTier: planTier,
@@ -339,6 +391,8 @@ export async function POST(req: NextRequest) {
           limits: tenant.limits,
           policy: tenant.policy,
           features: tenant.features,
+          controlPlaneScope: scope.kind,
+          partnerId: scope.kind === "partner" ? scope.partnerId : tenant.partnerId ?? null,
           pricing: {
             currency,
             pricingMode,
@@ -358,8 +412,8 @@ export async function POST(req: NextRequest) {
         await supabaseInsert("saas_audit_logs", {
           tenant_id: tenantId,
           action: "tenant.module_pricing.updated",
-          actor_name: authResult.auth.name || "unknown",
-          actor_role: authResult.auth.role || "unknown",
+          actor_name: auth.name || "unknown",
+          actor_role: auth.role || "unknown",
           summary: summarizeModulePricingChanges(moduleChanges),
           payload_json: {
             changes: moduleChanges.map((c) => ({
@@ -369,6 +423,8 @@ export async function POST(req: NextRequest) {
             })),
             pricingMode,
             chargeAmount: chargeForBilling,
+            controlPlaneScope: scope.kind,
+            partnerId: scope.kind === "partner" ? scope.partnerId : tenant.partnerId ?? null,
           },
           changed_at: nowIso,
         })

@@ -9,6 +9,7 @@ import { StockTable } from "@/components/erp/stock-table"
 import { StockAdjustDialog } from "@/components/erp/stock-adjust-dialog"
 import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-history"
 import { StockReorderAssist } from "@/components/erp/stock-reorder-assist"
+import { StockDailyMatrixPanel } from "@/components/erp/stock-daily-matrix-panel"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -78,6 +79,16 @@ export default function StockPage() {
     () => canToggleItemOrderDisabled(auth?.role || ""),
     [auth?.role]
   )
+
+  const isOffice = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
+
+  const matrixStoreTargets = React.useMemo(() => {
+    return stores.filter((s) => {
+      if (s === "CM Office") return false
+      const low = s.toLowerCase()
+      return !OFFICE_STORES.some((o) => s === o || low === o.toLowerCase())
+    })
+  }, [stores])
 
   const storesForFilter = React.useMemo(() => {
     if (isManager && userStore) return [userStore]
@@ -229,6 +240,11 @@ export default function StockPage() {
                 <TabsTrigger value="history" className={adminTabsTriggerCn}>
                   {t("stockTabHistory")}
                 </TabsTrigger>
+                {isOffice && (
+                  <TabsTrigger value="dailyMatrix" className={adminTabsTriggerCn}>
+                    {t("stockTabDailyMatrix")}
+                  </TabsTrigger>
+                )}
               </TabsList>
           </AdminTabsBarWithHelp>
           <TabsContent value="list" className={adminTabsContentCn}>
@@ -269,6 +285,11 @@ export default function StockPage() {
           <TabsContent value="history" className={adminTabsContentCn}>
             <StockAdjustmentHistory isManager={isManager} userStore={userStore} />
           </TabsContent>
+          {isOffice && (
+            <TabsContent value="dailyMatrix" className={adminTabsContentCn}>
+              <StockDailyMatrixPanel storeTargets={matrixStoreTargets} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

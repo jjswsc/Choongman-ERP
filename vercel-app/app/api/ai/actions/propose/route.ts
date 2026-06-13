@@ -7,24 +7,7 @@ import { getBangkokDateTimeString } from "@/lib/bangkok-time"
 import { supabaseInsert } from "@/lib/supabase-server"
 import { logAiUsage } from "@/lib/ai/audit"
 import { isAiRouteError } from "@/lib/ai/errors"
-
-function toResponseRow(row: Record<string, unknown>) {
-  return {
-    id: Number(row.id || 0),
-    status: String(row.status || "pending_approval"),
-    actionType: String(row.action_type || ""),
-    reason: String(row.reason || ""),
-    payload: (row.payload_json as Record<string, unknown>) || {},
-    preview: String(row.preview || ""),
-    createdAt: String(row.created_at || ""),
-    requestedBy: String(row.requested_by || ""),
-    requestedStore: String(row.requested_store || ""),
-    approvedBy: row.approved_by == null ? null : String(row.approved_by),
-    approvedAt: row.approved_at == null ? null : String(row.approved_at),
-    executedAt: row.executed_at == null ? null : String(row.executed_at),
-    error: row.error_message == null ? null : String(row.error_message),
-  }
-}
+import { toAiActionResponseRow } from "@/lib/ai/action-response"
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -90,7 +73,7 @@ export async function POST(req: NextRequest) {
       note: `action=${actionType}`,
     })
 
-    return NextResponse.json({ request: toResponseRow(row) }, { headers })
+    return NextResponse.json({ request: toAiActionResponseRow(row) }, { headers })
   } catch (e) {
     const code = isAiRouteError(e) ? e.code : "AI_VALIDATION_ERROR"
     const status = isAiRouteError(e) ? e.status : 400

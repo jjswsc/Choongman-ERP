@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { canAccessSaasAdmin } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
+import { assertTenantInScope, requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
 import { supabaseSelectFilter } from "@/lib/supabase-server"
 import {
   DEFAULT_FEATURE_FLAGS,
@@ -138,17 +137,19 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   const tenantId = String(req.nextUrl.searchParams.get("tenantId") || "").trim()
   const format = String(req.nextUrl.searchParams.get("format") || "html").trim().toLowerCase()
   const lang = String(req.nextUrl.searchParams.get("lang") || "ko").trim()
   if (!tenantId) {
     return NextResponse.json({ success: false, message: "tenantId required" }, { status: 400, headers })
+  }
+
+  const inScope = await assertTenantInScope(cp.scope, tenantId)
+  if (!inScope) {
+    return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
   }
 
   const tenant = await loadTenantItem(tenantId)
@@ -175,11 +176,8 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as EmailBody
@@ -188,6 +186,11 @@ export async function POST(req: NextRequest) {
     const lang = String(body.lang || "ko").trim()
     if (!tenantId || !email) {
       return NextResponse.json({ success: false, message: "tenantId and email required" }, { status: 400, headers })
+    }
+
+    const inScope = await assertTenantInScope(cp.scope, tenantId)
+    if (!inScope) {
+      return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
     }
 
     const tenant = body.tenant?.id === tenantId ? body.tenant : await loadTenantItem(tenantId)

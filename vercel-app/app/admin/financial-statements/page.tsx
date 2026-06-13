@@ -34,6 +34,7 @@ import { IncomeStatementTab } from "@/components/tabs/income-statement-tab"
 import { BalanceSheetTab } from "@/components/tabs/balance-sheet-tab"
 import { LedgerReconciliationTab } from "@/components/tabs/ledger-reconciliation-tab"
 import { ManagementMarginTab } from "@/components/tabs/management-margin-tab"
+import { FinancialStatementStorePicker } from "@/components/financial-statements/financial-statement-store-picker"
 import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -117,15 +118,25 @@ export default function FinancialStatementsPage() {
     [storeList, storeLabels]
   )
   const managerStoreOptions = isManager ? scopedStoreChoices : []
+  const managerFranchiseOptions = React.useMemo(
+    () =>
+      managerStoreOptions.map((code) => ({
+        value: code,
+        label: storeLabels[code] || code,
+      })),
+    [managerStoreOptions, storeLabels]
+  )
+  const showMultiStorePicker =
+    isOffice || (canFranchiseeMultiStore && managerFranchiseOptions.length > 1)
+  const storePickerOptions = isOffice ? franchiseStoreOptions : managerFranchiseOptions
+  const storeAllLabel = isOffice
+    ? t("all")
+    : t("store_all_my_franchise_stores") || t("salesSelectMyFranchiseStoresAll") || "내 매장 전체"
 
   const yearMonthOptions = getBangkokRecentYearMonths(60).map((value) => {
     const [y, m] = value.split("-").map(Number)
     return { value, label: `${y}년 ${m}월` }
   })
-
-  React.useEffect(() => {
-    setQueryToken((v) => v + 1)
-  }, [yearMonthStart, yearMonthEnd, storeFilter])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -182,7 +193,16 @@ export default function FinancialStatementsPage() {
                 </Select>
               </div>
 
-              {(isOffice || isManager) && (
+              {(isOffice || isManager) && showMultiStorePicker ? (
+                <FinancialStatementStorePicker
+                  value={storeFilter}
+                  onChange={setStoreFilter}
+                  franchiseStoreOptions={storePickerOptions}
+                  showOfficeOption={isOffice}
+                  allLabel={storeAllLabel}
+                  disabled={!isOffice && managerStoreOptions.length === 0}
+                />
+              ) : (isOffice || isManager) ? (
                 <Select
                   value={storeFilter}
                   onValueChange={setStoreFilter}
@@ -208,12 +228,12 @@ export default function FinancialStatementsPage() {
                     {isManager &&
                       managerStoreOptions.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {storeLabels[s] || s}
                         </SelectItem>
                       ))}
                   </SelectContent>
                 </Select>
-              )}
+              ) : null}
 
               <Button size="sm" onClick={() => setQueryToken((v) => v + 1)}>
                 <Search className="h-4 w-4 mr-1" />

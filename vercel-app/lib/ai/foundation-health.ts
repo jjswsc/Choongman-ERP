@@ -1,4 +1,5 @@
-import { supabaseSelect } from "@/lib/supabase-server"
+import { supabaseSelect, supabaseRpc } from "@/lib/supabase-server"
+import { embedQuery, embeddingToPgVectorLiteral } from "@/lib/ai/embeddings"
 
 export const AI_CENTER_TABLES = [
   "ai_knowledge_chunks",
@@ -35,6 +36,7 @@ export async function getAiCenterFoundationHealth(): Promise<{
   tables: Record<AiCenterTableName, { ok: boolean; error?: string }>
   allTablesOk: boolean
   openaiConfigured: boolean
+  vectorSearchReady: boolean
   step: 0
   readyForStep1: boolean
 }> {
@@ -49,7 +51,24 @@ export async function getAiCenterFoundationHealth(): Promise<{
     tables,
     allTablesOk,
     openaiConfigured,
+    vectorSearchReady: await probeVectorSearch(),
     step: 0,
     readyForStep1: allTablesOk && openaiConfigured,
+  }
+}
+
+async function probeVectorSearch(): Promise<boolean> {
+  if (!process.env.OPENAI_API_KEY?.trim()) return false
+  try {
+    const emb = await embedQuery("health check")
+    if (!emb?.length) return false
+    await supabaseRpc("search_ai_knowledge_chunks", {
+      query_embedding: embeddingToPgVectorLiteral(emb),
+      match_count: 1,
+      filter_store: "All",
+    })
+    return true
+  } catch {
+    return false
   }
 }

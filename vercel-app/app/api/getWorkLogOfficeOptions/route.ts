@@ -1,59 +1,28 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
-import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { isEmployedAsOf } from '@/lib/employee-headcount-utils'
+import {
+  buildWorkLogFilterOptions,
+  isOfficeStaffStore,
+  loadEmployedEmployeesForWorkLog,
+} from '@/lib/work-log-store-scope'
 
-/** 업무일지용 - 오피스 소속 부서·직원만 (store 비었거나 본사/오피스인 경우, 매장명 있으면 제외) */
-const OFFICE_STORE_PATTERNS = ['본사', '오피스', 'office', 'hq', 'headquarters', '본점']
-
-function isOfficeStaff(store: string): boolean {
-  const s = String(store || '').trim().toLowerCase()
-  if (!s || s === '-' || s === 'null') return true
-  return OFFICE_STORE_PATTERNS.some((o) => s.includes(o.toLowerCase()))
-}
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const todayBkk = getBangkokTodayDateString()
-    const list =
-      (await supabaseSelect('employees', {
-        order: 'name.asc',
-        select: 'id,name,nick,job,store,join_date,resign_date',
-      })) || []
-    const all = list as {
-      id?: number
-      name?: string
-      nick?: string
-      job?: string
-      store?: string
-      join_date?: unknown
-      resign_date?: unknown
-    }[]
-    const officeOnly = all.filter((e) => {
-      if (!isOfficeStaff(e.store || '')) return false
-      return isEmployedAsOf(
-        e.join_date != null ? String(e.join_date) : '',
-        e.resign_date != null ? String(e.resign_date) : '',
-        todayBkk
-      )
-    })
-    const useList = officeOnly
-    const staff = useList.map((e) => {
-      const id = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
-      const n = String(e.name || '').trim()
-      const nick = String(e.nick || '').trim()
-      return { id, name: n, displayName: nick || n }
-    }).filter((e) => e.name && e.id > 0)
+    const { searchParams } = new URL(req.url)
+    const scope = searchParams.get('scope') || 'all'
 
-    const deptSet = new Set<string>()
-    for (const e of useList) {
-      const job = String((e as { job?: string }).job || '').trim()
-      if (job) deptSet.add(job)
-    }
-    // work_logs에 저장된 부서도 포함 (직원 직무 변경 후 과거 데이터 조회용)
+    const employed = await loadEmployedEmployeesForWorkLog()
+    const useList =
+      scope === 'office'
+        ? employed.filter((e) => isOfficeStaffStore(e.store || ''))
+        : employed
+
+    const { stores, depts: jobDepts, staff } = buildWorkLogFilterOptions(useList)
+
+    const deptSet = new Set(jobDepts)
     try {
       const logRows =
         (await supabaseSelect('work_logs', { select: 'dept', limit: 5000 })) as { dept?: string }[]
@@ -62,13 +31,19 @@ export async function GET() {
         if (d) deptSet.add(d)
       }
     } catch {
-      // ignore
+      /* ignore */
     }
-    const depts = Array.from(deptSet).sort()
 
-    return NextResponse.json({ staff, depts }, { headers })
+    return NextResponse.json(
+      {
+        staff: staff.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName, store: s.store })),
+        depts: Array.from(deptSet).sort(),
+        stores,
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('getWorkLogOfficeOptions:', e)
-    return NextResponse.json({ staff: [], depts: [] }, { headers })
+    return NextResponse.json({ staff: [], depts: [], stores: [] }, { headers })
   }
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
@@ -13,17 +14,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { tr, useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { resolveCurrentChargeAmount, type TenantItem } from "@/lib/saas-admin-control-plane"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
+import { SaasPricingBreakdownVisual, SaasPricingColumnHead } from "@/components/saas/saas-pricing-breakdown-visual"
+import { SAAS_PRICING_TONE } from "@/components/saas/saas-pricing-visual"
 import {
-  applyCatalogPricesToModules,
+  applyCatalogWholesaleToModules,
   cloneDefaultModulePrices,
   normalizeModulePrices,
   syncFeaturesFromModules,
+  syncMarginFromRetail,
   syncModuleEnabledFromFeatures,
+  syncRetailFromMargin,
   SAAS_MODULE_KEYS,
   SAAS_MODULE_LABEL_KEY,
   type SaasModuleKey,
   type SaasModulePriceRow,
 } from "@/lib/saas-module-pricing"
+import { applyCatalogWithRepricePolicy, type CatalogRepricePolicy } from "@/lib/saas-partner-pricing-policy"
 import {
   moduleBillingLimitsFromTenant,
   resolveEffectiveChargeWithLimits,
@@ -68,6 +75,7 @@ function withRecalcPricing(tenant: TenantItem, modules: Record<SaasModuleKey, Sa
 
 export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleChange = true }: Props) {
   const t = useT(useLang().lang)
+  const scope = useSaasScope()
   const [loadingCatalog, setLoadingCatalog] = useState(false)
   const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
   const modulePrices = ensureModulePrices(tenant)
@@ -123,7 +131,7 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
   const updateModule = (key: SaasModuleKey, patch: Partial<SaasModulePriceRow>) => {
     onChange((prev) => {
       const modules = ensureModulePrices(prev)
-      modules[key] = { ...modules[key], ...patch }
+      modules[key] = syncMarginFromRetail({ ...modules[key], ...patch })
       let next = withRecalcPricing(prev, modules)
       if (syncFeaturesOnModuleChange && pricingMode === "module" && patch.isEnabled != null) {
         next = { ...next, features: syncFeaturesFromModules(prev.features, modules) }
@@ -155,7 +163,42 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
         await appAlert(json.message || t("saasAdminPricing_errLoad"))
         return
       }
-      const modules = applyCatalogPricesToModules(modulePrices, normalizeModulePrices(json.modulePrices))
+      const catalog = normalizeModulePrices(json.modulePrices)
+      let modules: Record<SaasModuleKey, SaasModulePriceRow>
+      if (scope.isPlatform) {
+        modules = applyCatalogWholesaleToModules(modulePrices, catalog, {
+          marginPct: 0,
+          preserveRetailAboveWholesale: true,
+        })
+      } else if (scope.isPartner && scope.partnerId) {
+        let policy: CatalogRepricePolicy = "retain_margin_pct"
+        let moduleMarginPct: Partial<Record<SaasModuleKey, number>> = {}
+        try {
+          const partnerRes = await apiFetch(`/api/saasAdminPartners?partnerId=${encodeURIComponent(scope.partnerId)}`)
+          const partnerJson = (await partnerRes.json()) as {
+            success?: boolean
+            partner?: { defaultMarginPct?: number; catalogRepricePolicy?: CatalogRepricePolicy }
+            marginRules?: Array<{ moduleKey: SaasModuleKey; marginPct: number }>
+          }
+          if (partnerRes.ok && partnerJson.success === true && partnerJson.partner) {
+            policy = partnerJson.partner.catalogRepricePolicy || "retain_margin_pct"
+            for (const rule of partnerJson.marginRules || []) {
+              moduleMarginPct[rule.moduleKey] = rule.marginPct
+            }
+          }
+        } catch {
+          /* fallback to default policy */
+        }
+        modules = applyCatalogWithRepricePolicy(modulePrices, catalog, policy, {
+          defaultMarginPct: scope.defaultMarginPct,
+          moduleMarginPct,
+        })
+      } else {
+        modules = applyCatalogWholesaleToModules(modulePrices, catalog, {
+          marginPct: scope.isPartner ? scope.defaultMarginPct : 0,
+          preserveRetailAboveWholesale: scope.isPlatform,
+        })
+      }
       applyModules(modules)
       await appAlert(t("saasAdminCust_moduleCatalogLoaded"))
     } catch (e) {
@@ -166,9 +209,28 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
   }
 
   const priceCol = cycle === "yearly" ? "yearly" : "monthly"
+  const wholesaleCol = cycle === "yearly" ? "wholesaleYearly" : "wholesaleMonthly"
+  const marginCol = cycle === "yearly" ? "marginYearly" : "marginMonthly"
+
+  const wholesaleBreakdown = resolveModuleChargeWithLimits(
+    Object.fromEntries(
+      SAAS_MODULE_KEYS.map((key) => [
+        key,
+        {
+          ...modulePrices[key],
+          monthly: modulePrices[key].wholesaleMonthly ?? modulePrices[key].monthly,
+          yearly: modulePrices[key].wholesaleYearly ?? modulePrices[key].yearly,
+        },
+      ])
+    ) as Record<SaasModuleKey, SaasModulePriceRow>,
+    cycle,
+    tenant.usage,
+    limits
+  )
+  const marginTotal = Math.max(0, total - wholesaleBreakdown.total)
 
   return (
-    <div className="grid gap-3 rounded-md border p-3 space-y-3">
+    <div className="grid gap-3 rounded-lg border border-border/80 p-3 space-y-3 relative pb-28 shadow-sm bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">{t("saasAdminCust_modulePricingTitle")}</h3>
@@ -198,14 +260,27 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
         <Button type="button" variant="outline" size="sm" disabled={loadingCatalog} onClick={() => void loadGlobalCatalog()}>
           {t("saasAdminCust_moduleLoadCatalog")}
         </Button>
+        {scope.isPlatform ? (
+          <Button type="button" variant="secondary" size="sm" asChild>
+            <Link href="/saas-admin/pricing">{t("saasAdminCust_globalPricingLink")}</Link>
+          </Button>
+        ) : null}
       </div>
 
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
             <TableHead className="w-10">{t("saasAdminCust_moduleUse")}</TableHead>
             <TableHead>{t("saasAdminCust_moduleName")}</TableHead>
-            <TableHead>{cycle === "yearly" ? t("saasAdminCust_yearlyThb") : t("saasAdminCust_monthlyThb")}</TableHead>
+            <TableHead>
+              <SaasPricingColumnHead tone="wholesale" className="justify-start">{t("saasAdminCust_wholesaleThb")}</SaasPricingColumnHead>
+            </TableHead>
+            <TableHead>
+              <SaasPricingColumnHead tone="margin" className="justify-start">{t("saasAdminCust_marginThb")}</SaasPricingColumnHead>
+            </TableHead>
+            <TableHead>
+              <SaasPricingColumnHead tone="retail" className="justify-start">{t("saasAdminCust_retailThb")}</SaasPricingColumnHead>
+            </TableHead>
             <TableHead>{t("saasAdminCust_moduleQty")}</TableHead>
             <TableHead className="text-right">{t("saasAdminCust_moduleSubtotal")}</TableHead>
           </TableRow>
@@ -214,6 +289,8 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
           {SAAS_MODULE_KEYS.map((key) => {
             const row = modulePrices[key]
             const line = breakdown.lines.find((x) => x.key === key)
+            const wholesale = Number(row[wholesaleCol as keyof SaasModulePriceRow] ?? row[priceCol] ?? 0)
+            const margin = Number(row[marginCol as keyof SaasModulePriceRow] ?? 0)
             return (
               <TableRow key={key}>
                 <TableCell>
@@ -231,6 +308,9 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
                     <p className="text-xs text-amber-600">{t("saasAdminCust_moduleCustomQuote")}</p>
                   ) : null}
                 </TableCell>
+                <TableCell className={SAAS_PRICING_TONE.wholesale.cell + " !text-left text-sm"}>
+                  {row.isCustomQuote ? "—" : wholesale.toLocaleString()}
+                </TableCell>
                 <TableCell>
                   {row.isCustomQuote ? (
                     <span className="text-xs text-muted-foreground">—</span>
@@ -238,11 +318,34 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
                     <Input
                       type="number"
                       min={0}
-                      className="h-8 w-28"
+                      className="h-8 w-24 border-emerald-200 focus-visible:ring-emerald-500/30 dark:border-emerald-800"
+                      value={margin}
+                      onChange={(e) => {
+                        const nextMargin = Math.max(0, Number(e.target.value || 0))
+                        const patched = syncRetailFromMargin(
+                          {
+                            ...row,
+                            [marginCol]: nextMargin,
+                          } as SaasModulePriceRow,
+                          priceCol
+                        )
+                        updateModule(key, patched)
+                      }}
+                    />
+                  )}
+                </TableCell>
+                <TableCell className={SAAS_PRICING_TONE.retail.cell + " !text-left"}>
+                  {row.isCustomQuote ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    <Input
+                      type="number"
+                      min={wholesale}
+                      className="h-8 w-24 font-semibold text-violet-800 dark:text-violet-200"
                       value={row[priceCol]}
                       onChange={(e) =>
                         updateModule(key, {
-                          [priceCol]: Math.max(0, Number(e.target.value || 0)),
+                          [priceCol]: Math.max(wholesale, Number(e.target.value || 0)),
                         } as Partial<SaasModulePriceRow>)
                       }
                     />
@@ -263,11 +366,11 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
                     "—"
                   )}
                 </TableCell>
-                <TableCell className="text-right text-sm">
+                <TableCell className="text-right text-sm font-semibold tabular-nums">
                   {row.isEnabled && row.isCustomQuote ? (
                     <Badge variant="outline">{t("saasAdminCust_moduleCustomQuote")}</Badge>
                   ) : row.isEnabled ? (
-                    (line?.lineTotal ?? 0).toLocaleString()
+                    <span className={SAAS_PRICING_TONE.retail.value}>{(line?.lineTotal ?? 0).toLocaleString()}</span>
                   ) : (
                     "—"
                   )}
@@ -278,18 +381,33 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
         </TableBody>
       </Table>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-        <p className="text-xs text-muted-foreground">
-          {pricingMode === "module"
-            ? t("saasAdminCust_moduleBillingActive")
-            : t("saasAdminCust_stageBillingActive")}
+      <div className="sticky bottom-0 z-10 -mx-3 -mb-3 border-t border-violet-200/50 bg-gradient-to-t from-background via-background/98 to-background/90 px-3 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 dark:border-violet-900/40">
+        <p className="text-xs font-medium text-muted-foreground mb-2">
+          {pricingMode === "module" ? t("saasAdminCust_moduleBillingActive") : t("saasAdminCust_stageBillingActive")}
         </p>
-        <Badge variant="outline">
-          {tr(t, "saasAdminCust_currentCharge", {
-            amount: total.toLocaleString(),
-            currency: tenant.pricing.currency,
-          })}
-        </Badge>
+        {pricingMode === "module" ? (
+          <SaasPricingBreakdownVisual
+            size="sm"
+            wholesale={wholesaleBreakdown.total}
+            margin={marginTotal}
+            retail={total}
+            currency={tenant.pricing.currency}
+            labels={{
+              wholesale: t("saasAdminCust_wholesaleThb"),
+              margin: t("saasAdminCust_marginThb"),
+              retail: t("saasAdminCust_retailThb"),
+            }}
+          />
+        ) : (
+          <div className="flex justify-end">
+            <Badge variant="outline" className="text-base px-4 py-2 font-semibold border-primary/30 bg-primary/5">
+              {tr(t, "saasAdminCust_currentCharge", {
+                amount: total.toLocaleString(),
+                currency: tenant.pricing.currency,
+              })}
+            </Badge>
+          </div>
+        )}
       </div>
       {breakdown.hasCustomQuote && pricingMode === "module" ? (
         <p className="text-xs text-amber-600">{t("saasAdminCust_moduleCustomQuoteNote")}</p>

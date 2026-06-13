@@ -10,9 +10,14 @@ import {
   Building2,
   User,
   Trash2,
+  Download,
+  PauseCircle,
+  XCircle,
+  CheckCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -35,10 +40,24 @@ import {
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
+import { useAuth } from "@/lib/auth-context"
+import { canReviewWorkLog } from "@/lib/permissions"
+import {
+  WORK_LOG_PRIORITIES,
+  downloadCsv,
+  workLogReviewBadgeClass,
+  workLogWorkTypeBadgeClass,
+} from "@/lib/work-log-shared"
 
-type WorkLogStaffOpt = { id: number; name: string; displayName: string }
+type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string }
 
-export function WorklogApproval() {
+type Props = {
+  onPendingChange?: (count: number) => void
+}
+
+export function WorklogApproval({ onPendingChange }: Props) {
+  const { auth } = useAuth()
+  const canEdit = canReviewWorkLog(auth?.role || "")
   const { lang } = useLang()
   const t = useT(lang)
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
@@ -46,26 +65,33 @@ export function WorklogApproval() {
   const [endStr, setEndStr] = React.useState(() => getBangkokTodayDateString())
   const [deptFilter, setDeptFilter] = React.useState("all")
   const [employeeFilter, setEmployeeFilter] = React.useState("all")
+  const [storeFilter, setStoreFilter] = React.useState("all")
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [workTypeFilter, setWorkTypeFilter] = React.useState<string>("all")
   const [contentSearch, setContentSearch] = React.useState("")
   const [depts, setDepts] = React.useState<string[]>([])
+  const [stores, setStores] = React.useState<string[]>([])
   const [staffList, setStaffList] = React.useState<WorkLogStaffOpt[]>([])
   const [list, setList] = React.useState<WorkLogManagerItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [updating, setUpdating] = React.useState<string | null>(null)
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
 
   React.useEffect(() => {
     getWorkLogOfficeOptions().then((r) => {
       setDepts(r.depts || [])
+      setStores(r.stores || [])
       setStaffList((r.staff || []) as WorkLogStaffOpt[])
     })
   }, [])
 
   const staffOptions = React.useMemo(
-    () => staffList.map((s) => ({ ...s, label: formatWorkLogStaffSelectLabel(s) })),
-    [staffList]
+    () =>
+      staffList
+        .filter((s) => storeFilter === "all" || s.store === storeFilter)
+        .map((s) => ({ ...s, label: formatWorkLogStaffSelectLabel(s) })),
+    [staffList, storeFilter]
   )
 
   const loadData = React.useCallback(async () => {
@@ -77,21 +103,30 @@ export function WorklogApproval() {
         dept: deptFilter,
         employee: employeeFilter,
         status: statusFilter,
+        store: storeFilter,
       })
       setList(res)
+      const pending = res.filter((it) => it.managerCheck === "대기").length
+      onPendingChange?.(pending)
+      setSelectedIds(new Set())
     } catch {
       setList([])
+      onPendingChange?.(0)
     } finally {
       setLoading(false)
     }
-  }, [startStr, endStr, deptFilter, employeeFilter, statusFilter])
+  }, [startStr, endStr, deptFilter, employeeFilter, statusFilter, storeFilter, onPendingChange])
 
   const handleSearch = () => {
     setHasSearched(true)
-    loadData()
+    void loadData()
   }
 
-  // 언어가 바뀌면 이전 언어로 번역된 캐시는 버린다
+  React.useEffect(() => {
+    setHasSearched(true)
+    void loadData()
+  }, [loadData])
+
   React.useEffect(() => {
     setContentTransMap({})
   }, [lang])
@@ -110,69 +145,73 @@ export function WorklogApproval() {
     if (missing.length === 0) return
     let cancelled = false
     const handle = setTimeout(() => {
-      translateTexts(missing, lang).then((translated) => {
-        if (cancelled) return
-        setContentTransMap((prev) => {
-          const next = { ...prev }
-          missing.forEach((txt, i) => { next[txt] = translated[i] ?? txt })
-          return next
+      translateTexts(missing, lang)
+        .then((translated) => {
+          if (cancelled) return
+          setContentTransMap((prev) => {
+            const next = { ...prev }
+            missing.forEach((txt, i) => {
+              next[txt] = translated[i] ?? txt
+            })
+            return next
+          })
         })
-      }).catch(() => { /* 실패 시 원문 표시 유지 */ })
+        .catch(() => {})
     }, 350)
-    return () => { cancelled = true; clearTimeout(handle) }
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
   }, [texts, lang, contentTransMap])
 
-  const getTransContent = (content: string) => (content && contentTransMap[content]) || content || "-"
+  const getTransContent = (content: string) =>
+    (content && contentTransMap[content]) || content || "-"
+
   const formatManagerComment = (comment: string) => {
     if (!comment) return ""
     return comment
       .replace(/이월됨/g, t("workLogCarriedOver"))
       .replace(/부터/g, t("workLogFrom"))
   }
+
   const getTransComment = (comment: string) => {
     const trimmed = (comment || "").trim()
     if (!trimmed) return ""
     if (trimmed.startsWith("⚡")) return formatManagerComment(trimmed)
     return contentTransMap[trimmed] || formatManagerComment(trimmed)
   }
-  const getWorkTypeDisplay = (status: string) => {
+
+  const getWorkTypeLabel = (status: string) => {
     const s = (status || "").trim()
-    if (s === "Finish") return "Finish"
-    if (s === "Continue" || s === "Carry Over") return "Continue"
-    if (s === "Today") return "Today"
+    if (s === "Finish") return t("workLogTypeFinish")
+    if (s === "Continue" || s === "Carry Over") return t("workLogTypeContinue")
+    if (s === "Today") return t("workLogTypeToday")
     return s || "-"
   }
 
-  const getReviewStatusDisplay = (item: WorkLogManagerItem): React.ReactNode => {
+  const getReviewStatusLabel = (item: WorkLogManagerItem): string => {
     const check = item.managerCheck || ""
     const comment = (item.managerComment || "").trim()
     const hasComment = !!comment && !comment.startsWith("⚡")
-    if (check === "대기") return "Wait"
-    if (check === "승인") {
-      if (hasComment) {
-        return (
-          <span title={t("workLogCommentBtn")}>
-            <MessageSquarePlus className="inline h-3.5 w-3.5" />
-          </span>
-        )
-      }
-      return "OK"
-    }
+    if (check === "대기") return t("workLogReviewWaitShort")
+    if (check === "승인") return hasComment ? t("workLogStatusCommented") : t("workLogReviewOk")
+    if (check === "보류") return t("workLogStatusHold")
+    if (check === "반려") return t("workLogStatusRejected")
     return check
   }
-  const PRIORITIES = [
-    { value: "긴급", key: "workLogPriorityUrgent" },
-    { value: "상", key: "workLogPriorityHigh" },
-    { value: "중", key: "workLogPriorityMedium" },
-    { value: "하", key: "workLogPriorityLow" },
-  ] as const
 
   const handlePriorityChange = async (id: string, priority: string) => {
+    if (!canEdit) return
     setUpdating(id)
     try {
       const res = await updateWorkLogPriority({ id, priority })
-      if (res.success) loadData()
-      else await appAlert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : translateApiMessage((res as { message?: string }).message, t) || t("workLogSaveFail"))
+      if (res.success) await loadData()
+      else
+        await appAlert(
+          (res as { messageKey?: string; message?: string }).messageKey
+            ? t((res as { messageKey?: string }).messageKey!)
+            : translateApiMessage((res as { message?: string }).message, t) || t("workLogSaveFail")
+        )
     } catch {
       await appAlert(t("workLogProcessError"))
     } finally {
@@ -180,50 +219,88 @@ export function WorklogApproval() {
     }
   }
 
-  const handleConfirm = async (id: string) => {
-    setUpdating(id)
-    try {
-      const res = await updateWorkLogManagerCheck({ id, status: "승인" })
-      if (res.success) loadData()
-      else await appAlert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
-    } catch {
-      await appAlert(t("workLogProcessError"))
-    } finally {
-      setUpdating(null)
-    }
-  }
-
-  const handleAddComment = async (id: string, existingComment?: string) => {
-    const comment = await appPrompt(t("workLogCommentPrompt"), existingComment ?? "")
-    if (comment === null) return
+  const patchStatus = async (
+    id: string,
+    status: string,
+    comment?: string
+  ): Promise<boolean> => {
     setUpdating(id)
     try {
       const res = await updateWorkLogManagerCheck({
         id,
-        status: "승인",
-        comment: comment.trim() || undefined,
+        status,
+        comment: comment?.trim() || undefined,
       })
-      if (res.success) loadData()
-      else await appAlert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
+      if (res.success) {
+        await loadData()
+        return true
+      }
+      await appAlert(
+        (res as { messageKey?: string }).messageKey
+          ? t((res as { messageKey?: string }).messageKey!)
+          : translateApiMessage(res.message, t) || t("workLogProcessError")
+      )
+      return false
     } catch {
       await appAlert(t("workLogProcessError"))
+      return false
     } finally {
       setUpdating(null)
     }
   }
 
+  const handleConfirm = (id: string) => {
+    if (!canEdit) return
+    void patchStatus(id, "승인")
+  }
+
+  const handleHold = (id: string) => {
+    if (!canEdit) return
+    void patchStatus(id, "보류")
+  }
+
+  const handleReject = async (id: string) => {
+    if (!canEdit) return
+    const reason = await appPrompt(t("workLogRejectPrompt"), "")
+    if (reason === null) return
+    void patchStatus(id, "반려", reason)
+  }
+
+  const handleAddComment = async (id: string, existingComment?: string) => {
+    if (!canEdit) return
+    const comment = await appPrompt(t("workLogCommentPrompt"), existingComment ?? "")
+    if (comment === null) return
+    void patchStatus(id, "승인", comment)
+  }
+
   const handleDelete = async (id: string) => {
-    if (!await appConfirm(t("workLogDeleteConfirm"))) return
+    if (!canEdit) return
+    if (!(await appConfirm(t("workLogDeleteConfirm")))) return
     setUpdating(id)
     try {
       const res = await deleteWorkLogItem({ id })
-      if (res.success) loadData()
-      else await appAlert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage((res as { message?: string }).message, t) || t("workLogDeleteFail")))
+      if (res.success) await loadData()
+      else
+        await appAlert(
+          (res as { messageKey?: string; message?: string }).messageKey
+            ? t((res as { messageKey?: string }).messageKey!)
+            : translateApiMessage((res as { message?: string }).message, t) || t("workLogDeleteFail")
+        )
     } catch {
       await appAlert(t("workLogDeleteFail"))
     } finally {
       setUpdating(null)
     }
+  }
+
+  const handleBulkApprove = async () => {
+    if (!canEdit || selectedIds.size === 0) return
+    const msg = t("workLogBulkApproveConfirm").replace("{count}", String(selectedIds.size))
+    if (!(await appConfirm(msg))) return
+    for (const id of selectedIds) {
+      await updateWorkLogManagerCheck({ id, status: "승인" })
+    }
+    await loadData()
   }
 
   const filteredList = React.useMemo(() => {
@@ -242,7 +319,9 @@ export function WorklogApproval() {
   const filteredByWorkType = React.useMemo(() => {
     if (!workTypeFilter || workTypeFilter === "all") return filteredList
     if (workTypeFilter === "Continue") {
-      return filteredList.filter((it) => (it.status || "").trim() === "Continue" || (it.status || "").trim() === "Carry Over")
+      return filteredList.filter(
+        (it) => (it.status || "").trim() === "Continue" || (it.status || "").trim() === "Carry Over"
+      )
     }
     return filteredList.filter((it) => (it.status || "").trim() === workTypeFilter)
   }, [filteredList, workTypeFilter])
@@ -255,30 +334,68 @@ export function WorklogApproval() {
       Today: 2,
     }
     return [...filteredByWorkType].sort((a, b) => {
+      const pendingA = a.managerCheck === "대기" ? 0 : 1
+      const pendingB = b.managerCheck === "대기" ? 0 : 1
+      if (pendingA !== pendingB) return pendingA - pendingB
       const dateCmp = (a.date || "").localeCompare(b.date || "")
       if (dateCmp !== 0) return dateCmp
-      const orderA = statusOrder[(a.status || "").trim()] ?? 3
-      const orderB = statusOrder[(b.status || "").trim()] ?? 3
-      return orderA - orderB
+      const deptCmp = (a.dept || "").localeCompare(b.dept || "")
+      if (deptCmp !== 0) return deptCmp
+      return (a.name || "").localeCompare(b.name || "")
     })
   }, [filteredByWorkType])
 
-  const pendingItems = filteredByWorkType.filter((it) => it.managerCheck === "대기")
-  const byDept = React.useMemo(() => {
-    const map: Record<string, Record<string, WorkLogManagerItem[]>> = {}
-    for (const it of sortedList) {
-      const d = it.dept || "기타"
-      const n = it.name || ""
-      if (!map[d]) map[d] = {}
-      if (!map[d][n]) map[d][n] = []
-      map[d][n].push(it)
-    }
-    return map
-  }, [sortedList])
+  const pendingItems = sortedList.filter((it) => it.managerCheck === "대기")
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const employeeLabel = (name: string) => {
+    const row = staffList.find((s) => s.name === name || s.displayName === name)
+    return row ? formatWorkLogStaffSelectLabel(row) : name
+  }
+
+  const handleExportCsv = () => {
+    if (sortedList.length === 0) return
+    downloadCsv(
+      `work-log-review_${startStr}_${endStr}.csv`,
+      [
+        t("workLogColDate"),
+        t("workLogDept"),
+        t("workLogColEmployee"),
+        t("workLogColWorkType"),
+        t("workLogColContent"),
+        t("workLogPriority"),
+        t("workLogColProgress"),
+        t("workLogColReviewStatus"),
+      ],
+      sortedList.map((it) => [
+        it.date,
+        it.dept === "기타" ? t("workLogOther") : it.dept,
+        employeeLabel(it.name),
+        getWorkTypeLabel(it.status),
+        it.content,
+        it.priority,
+        `${it.progress}%`,
+        getReviewStatusLabel(it),
+      ])
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Filters */}
+      {!canEdit && (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-2.5 text-xs text-warning">
+          {t("workLogViewOnlyHint")}
+        </div>
+      )}
+
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
@@ -290,14 +407,20 @@ export function WorklogApproval() {
               <Input
                 type="date"
                 value={startStr}
-                onChange={(e) => { setStartStr(e.target.value); setHasSearched(false) }}
+                onChange={(e) => {
+                  setStartStr(e.target.value)
+                  setHasSearched(false)
+                }}
                 className="h-9 w-32 text-xs shrink-0"
               />
               <span className="text-xs text-muted-foreground shrink-0">~</span>
               <Input
                 type="date"
                 value={endStr}
-                onChange={(e) => { setEndStr(e.target.value); setHasSearched(false) }}
+                onChange={(e) => {
+                  setEndStr(e.target.value)
+                  setHasSearched(false)
+                }}
                 className="h-9 w-32 text-xs shrink-0"
               />
             </div>
@@ -307,7 +430,13 @@ export function WorklogApproval() {
               <Building2 className="h-3.5 w-3.5 text-primary" />
               {t("workLogDept")}
             </label>
-            <Select value={deptFilter} onValueChange={(v) => { setDeptFilter(v); setHasSearched(false) }}>
+            <Select
+              value={deptFilter}
+              onValueChange={(v) => {
+                setDeptFilter(v)
+                setHasSearched(false)
+              }}
+            >
               <SelectTrigger className="h-9 w-28 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
@@ -321,12 +450,46 @@ export function WorklogApproval() {
               </SelectContent>
             </Select>
           </div>
+          {stores.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <Building2 className="h-3.5 w-3.5 text-primary" />
+                {t("workLogStore")}
+              </label>
+              <Select
+                value={storeFilter}
+                onValueChange={(v) => {
+                  setStoreFilter(v)
+                  setEmployeeFilter("all")
+                  setHasSearched(false)
+                }}
+              >
+                <SelectTrigger className="h-9 w-28 text-xs shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("all")}</SelectItem>
+                  {stores.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <User className="h-3.5 w-3.5 text-primary" />
               {t("workLogEmployee")}
             </label>
-            <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setHasSearched(false) }}>
+            <Select
+              value={employeeFilter}
+              onValueChange={(v) => {
+                setEmployeeFilter(v)
+                setHasSearched(false)
+              }}
+            >
               <SelectTrigger className="h-9 w-32 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
@@ -355,14 +518,22 @@ export function WorklogApproval() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogStatus")}</label>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setHasSearched(false) }}>
-              <SelectTrigger className="h-9 w-24 text-xs shrink-0">
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => {
+                setStatusFilter(v)
+                setHasSearched(false)
+              }}
+            >
+              <SelectTrigger className="h-9 w-28 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
                 <SelectItem value="대기">{t("workLogStatusWait")}</SelectItem>
                 <SelectItem value="승인">{t("workLogStatusOkCommented")}</SelectItem>
+                <SelectItem value="보류">{t("workLogStatusHold")}</SelectItem>
+                <SelectItem value="반려">{t("workLogStatusRejected")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -384,18 +555,29 @@ export function WorklogApproval() {
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("workLogSearch")}
           </Button>
+          {sortedList.length > 0 && (
+            <Button size="sm" variant="outline" className="h-9 px-4 text-xs" onClick={handleExportCsv}>
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              {t("workLogExportCsv")}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Table by dept/employee */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center gap-2.5 border-b bg-muted/30 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-2.5 border-b bg-muted/30 px-6 py-3">
           <ShieldCheck className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-bold text-foreground">{t("workLogApprovalTitle")}</h3>
           {pendingItems.length > 0 && (
             <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-bold text-warning">
               {t("workLogPendingCount")} {pendingItems.length}
             </span>
+          )}
+          {canEdit && selectedIds.size > 0 && (
+            <Button size="sm" className="ml-auto h-8 text-xs" onClick={() => void handleBulkApprove()}>
+              <CheckCheck className="mr-1.5 h-3.5 w-3.5" />
+              {t("workLogBulkApprove")} ({selectedIds.size})
+            </Button>
           )}
         </div>
         <div className="overflow-x-auto">
@@ -408,147 +590,181 @@ export function WorklogApproval() {
               {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
             </div>
           ) : list.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {t("workLogNoResult")}
-            </div>
-          ) : filteredByWorkType.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {t("workLogNoSearchResult")}
-            </div>
+            <div className="py-12 text-center text-sm text-muted-foreground">{t("workLogNoResult")}</div>
+          ) : sortedList.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">{t("workLogNoSearchResult")}</div>
           ) : (
-            <div className="divide-y">
-              {Object.entries(byDept).map(([dept, byName]) => (
-                <div key={dept}>
-                  {Object.entries(byName).map(([name, items]) => (
-                    <div key={`${dept}-${name}`} className="border-b last:border-b-0">
-                      <div className="bg-muted/20 px-5 py-2 text-xs font-bold text-muted-foreground">
-                        {(dept === "기타" ? t("workLogOther") : dept)} ·{" "}
-                        {(() => {
-                          const row = staffList.find((s) => s.name === name || s.displayName === name)
-                          return row ? formatWorkLogStaffSelectLabel(row) : name
-                        })()}
-                      </div>
-                      <table className="w-full table-fixed text-left text-sm">
-                        <colgroup>
-                          <col className="w-32" />
-                          <col className="w-28" />
-                          <col />
-                          <col className="w-24" />
-                          <col className="w-20" />
-                          <col className="w-28" />
-                          <col className="w-40" />
-                        </colgroup>
-                        <thead>
-                          <tr className="border-b bg-muted/10">
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColDate")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColWorkType")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center min-w-0 align-top break-words">{t("workLogColContent")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogPriority")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColProgress")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColReviewStatus")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColAction")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((it) => (
-                            <tr key={it.id} className="border-b last:border-b-0 hover:bg-muted/5">
-                              <td className="px-5 py-2 text-xs tabular-nums text-center whitespace-nowrap align-top">{it.date}</td>
-                              <td className="px-5 py-2 text-center whitespace-nowrap align-top">
-                                <span
-                                  className={cn(
-                                    "inline-flex rounded px-2 py-0.5 text-[10px] font-semibold",
-                                    it.status === "Finish" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-                                    (it.status === "Continue" || it.status === "Carry Over") && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-                                    it.status === "Today" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
-                                  )}
-                                >
-                                  {getWorkTypeDisplay(it.status)}
-                                </span>
-                              </td>
-                              <td className="px-5 py-2 min-w-0 align-top break-words">
-                                <p className="text-sm text-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">{getTransContent(it.content || "")}</p>
-                                {it.managerComment && (
-                                  <p className="mt-0.5 text-[10px] text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">{getTransComment(it.managerComment)}</p>
-                                )}
-                              </td>
-                              <td className="px-5 py-2 text-center align-top whitespace-nowrap">
-                                <Select
-                                  value={it.priority || "_none"}
-                                  onValueChange={(v) => handlePriorityChange(it.id, v === "_none" ? "" : v)}
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead>
+                <tr className="border-b bg-muted/10">
+                  {canEdit && (
+                    <th className="w-10 px-3 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                      ✓
+                    </th>
+                  )}
+                  <th className="px-4 py-2 text-[11px] font-bold text-muted-foreground">{t("workLogColDate")}</th>
+                  <th className="px-4 py-2 text-[11px] font-bold text-muted-foreground">{t("workLogDept")}</th>
+                  <th className="px-4 py-2 text-[11px] font-bold text-muted-foreground">{t("workLogColEmployee")}</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                    {t("workLogColWorkType")}
+                  </th>
+                  <th className="px-4 py-2 text-[11px] font-bold text-muted-foreground">{t("workLogColContent")}</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                    {t("workLogPriority")}
+                  </th>
+                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                    {t("workLogColProgress")}
+                  </th>
+                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                    {t("workLogColReviewStatus")}
+                  </th>
+                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                    {t("workLogColAction")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedList.map((it) => {
+                  const hasComment =
+                    !!it.managerComment?.trim() && !it.managerComment.startsWith("⚡")
+                  const isPending = it.managerCheck === "대기"
+                  return (
+                    <tr key={it.id} className="border-b last:border-b-0 hover:bg-muted/5 align-top">
+                      {canEdit && (
+                        <td className="px-3 py-2 text-center">
+                          {isPending ? (
+                            <Checkbox
+                              checked={selectedIds.has(it.id)}
+                              onCheckedChange={() => toggleSelect(it.id)}
+                              aria-label="select"
+                            />
+                          ) : null}
+                        </td>
+                      )}
+                      <td className="px-4 py-2 text-xs tabular-nums whitespace-nowrap">{it.date}</td>
+                      <td className="px-4 py-2 text-xs whitespace-nowrap">
+                        {it.dept === "기타" ? t("workLogOther") : it.dept}
+                      </td>
+                      <td className="px-4 py-2 text-xs font-medium whitespace-nowrap">{employeeLabel(it.name)}</td>
+                      <td className="px-4 py-2 text-center">
+                        <span
+                          className={cn(
+                            "inline-flex rounded px-2 py-0.5 text-[10px] font-semibold",
+                            workLogWorkTypeBadgeClass(it.status)
+                          )}
+                        >
+                          {getWorkTypeLabel(it.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 min-w-[200px] max-w-md">
+                        <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">
+                          {getTransContent(it.content || "")}
+                        </p>
+                        {it.managerComment && (
+                          <p className="mt-1 text-[10px] text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">
+                            {getTransComment(it.managerComment)}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <Select
+                          value={it.priority || "_none"}
+                          onValueChange={(v) => handlePriorityChange(it.id, v === "_none" ? "" : v)}
+                          disabled={!canEdit || updating === it.id}
+                        >
+                          <SelectTrigger className="h-7 w-20 mx-auto text-[10px]">
+                            <SelectValue placeholder={t("workLogPriority")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">-</SelectItem>
+                            {WORK_LOG_PRIORITIES.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {t(p.key)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-4 py-2 text-center text-xs font-bold tabular-nums">{it.progress}%</td>
+                      <td className="px-4 py-2 text-center">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold",
+                            workLogReviewBadgeClass(it.managerCheck, hasComment)
+                          )}
+                        >
+                          {getReviewStatusLabel(it)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        {canEdit ? (
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            {isPending && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-success"
+                                onClick={() => handleConfirm(it.id)}
+                                disabled={updating === it.id}
+                                title={t("workLogConfirmBtn")}
+                              >
+                                ✓
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-primary"
+                              onClick={() => void handleAddComment(it.id, it.managerComment)}
+                              disabled={updating === it.id}
+                              title={t("workLogCommentBtn")}
+                            >
+                              <MessageSquarePlus className="h-3.5 w-3.5" />
+                            </Button>
+                            {isPending && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-warning"
+                                  onClick={() => handleHold(it.id)}
                                   disabled={updating === it.id}
+                                  title={t("workLogHoldBtn")}
                                 >
-                                  <SelectTrigger className="h-7 w-20 mx-auto text-[10px]">
-                                    <SelectValue placeholder={t("workLogPriority")} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="_none">-</SelectItem>
-                                    {PRIORITIES.map((p) => (
-                                      <SelectItem key={p.value} value={p.value}>
-                                        {t(p.key)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </td>
-                              <td className="px-5 py-2 text-center align-top whitespace-nowrap">
-                                <span className="text-xs font-bold tabular-nums">{it.progress}%</span>
-                              </td>
-                              <td className="px-5 py-2 text-center align-top whitespace-nowrap">
-                                <span
-                                  className={cn(
-                                    "inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold",
-                                    it.managerCheck === "승인" && (it.managerComment?.trim() && !it.managerComment.startsWith("⚡") ? "bg-primary/10 text-primary" : "bg-success/10 text-success"),
-                                    it.managerCheck === "대기" && "bg-warning/10 text-warning"
-                                  )}
+                                  <PauseCircle className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-destructive"
+                                  onClick={() => void handleReject(it.id)}
+                                  disabled={updating === it.id}
+                                  title={t("workLogRejectBtn")}
                                 >
-                                  {getReviewStatusDisplay(it)}
-                                </span>
-                              </td>
-                              <td className="px-5 py-2 align-top whitespace-nowrap">
-                                <div className="flex flex-row items-center justify-center gap-2">
-                                  {it.managerCheck === "대기" && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 w-7 p-0 text-success shrink-0"
-                                      onClick={() => handleConfirm(it.id)}
-                                      disabled={updating === it.id}
-                                      title={t("workLogConfirmBtn")}
-                                    >
-                                      ✓
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-[10px] text-primary shrink-0"
-                                    onClick={() => handleAddComment(it.id, it.managerComment)}
-                                    disabled={updating === it.id}
-                                    title={t("workLogCommentBtn")}
-                                  >
-                                    <MessageSquarePlus className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-[10px] text-destructive hover:text-destructive shrink-0"
-                                    onClick={() => handleDelete(it.id)}
-                                    disabled={updating === it.id}
-                                    title={t("workLogDeleteBtn")}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+                                  <XCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-destructive"
+                              onClick={() => void handleDelete(it.id)}
+                              disabled={updating === it.id}
+                              title={t("workLogDeleteBtn")}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       </div>

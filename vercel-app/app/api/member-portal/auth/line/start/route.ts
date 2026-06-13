@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   buildLineAuthorizeUrl,
+  buildLineJoinStoreCookie,
   buildLineOAuthStateCookie,
   createLineOAuthState,
   getLineLoginConfigIssue,
   resolveMemberPortalOrigin,
 } from '@/lib/member-line-login'
+import { isAllowedMemberSignupStoreCode } from '@/lib/member-signup-store'
 
 function isProdLike(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
@@ -17,10 +19,21 @@ export async function GET(req: NextRequest) {
     const code = issue === 'invalid_channel_id' ? 'line_bad_channel_id' : 'line_not_configured'
     return NextResponse.redirect(new URL(`/m?error=${code}`, req.url))
   }
+
+  const joinStore = String(req.nextUrl.searchParams.get('joinStore') || '').trim()
+  if (!joinStore) {
+    return NextResponse.redirect(new URL('/m?error=missing_store', req.url))
+  }
+  if (!(await isAllowedMemberSignupStoreCode(joinStore))) {
+    return NextResponse.redirect(new URL('/m?error=invalid_store', req.url))
+  }
+
   const origin = resolveMemberPortalOrigin(req.nextUrl.origin)
   const state = createLineOAuthState()
   const url = buildLineAuthorizeUrl({ origin, state })
+  const secure = isProdLike()
   const res = NextResponse.redirect(url)
-  res.headers.append('Set-Cookie', buildLineOAuthStateCookie(state, isProdLike()))
+  res.headers.append('Set-Cookie', buildLineOAuthStateCookie(state, secure))
+  res.headers.append('Set-Cookie', buildLineJoinStoreCookie(joinStore, secure))
   return res
 }

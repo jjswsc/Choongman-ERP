@@ -3,7 +3,7 @@ import { resolveCurrentChargeAmount } from "./saas-admin-control-plane"
 import type { PosDeviceBillingBasis } from "./saas-tenant-pos-licensed"
 import { resolvePosDeviceBillingBasis } from "./saas-tenant-pos-licensed"
 import {
-  applyCatalogPricesToModules,
+  applyCatalogWholesaleToModules,
   cloneDefaultModulePrices,
   normalizeModulePrices,
   resolveModuleChargeAmount,
@@ -185,6 +185,9 @@ export type SaasRevenueStats = {
   moduleMrr: number
   stageMrr: number
   totalMrr: number
+  wholesaleMrr: number
+  partnerMarginMrr: number
+  retailMrr: number
   moduleAdoption: Array<{ moduleKey: SaasModuleKey; labelKey: string; tenantCount: number }>
   topModuleTenants: Array<{ tenantId: string; companyName: string; amount: number; pricingMode: "stage" | "module" }>
 }
@@ -194,6 +197,8 @@ export function aggregateSaasRevenueStats(tenants: TenantItem[]): SaasRevenueSta
   const top: SaasRevenueStats["topModuleTenants"] = []
   let moduleMrr = 0
   let stageMrr = 0
+  let wholesaleMrr = 0
+  let partnerMarginMrr = 0
   let activeTenants = 0
 
   for (const tenant of tenants) {
@@ -203,6 +208,8 @@ export function aggregateSaasRevenueStats(tenants: TenantItem[]): SaasRevenueSta
     const limits = moduleBillingLimitsFromTenant(tenant)
     const modulePrices = normalizeModulePrices(tenant.pricing.modulePrices)
     let amount = 0
+    let wholesaleAmount = 0
+    let marginAmount = 0
 
     if (pricingMode === "module") {
       const breakdown = resolveModuleChargeWithLimits(
@@ -213,6 +220,27 @@ export function aggregateSaasRevenueStats(tenants: TenantItem[]): SaasRevenueSta
       )
       amount = breakdown.total
       moduleMrr += amount
+      const wholesaleBreakdown = resolveModuleChargeWithLimits(
+        normalizeModulePrices(
+          Object.fromEntries(
+            SAAS_MODULE_KEYS.map((key) => [
+              key,
+              {
+                ...modulePrices[key],
+                monthly: modulePrices[key].wholesaleMonthly ?? modulePrices[key].monthly,
+                yearly: modulePrices[key].wholesaleYearly ?? modulePrices[key].yearly,
+              },
+            ])
+          ) as Record<SaasModuleKey, SaasModulePriceRow>
+        ),
+        tenant.billingCycle,
+        tenant.usage,
+        limits
+      )
+      wholesaleAmount = wholesaleBreakdown.total
+      marginAmount = Math.max(0, amount - wholesaleAmount)
+      wholesaleMrr += wholesaleAmount
+      partnerMarginMrr += marginAmount
       for (const line of breakdown.lines) {
         if (line.isCustomQuote || line.lineTotal <= 0) continue
         adoption.set(line.key, (adoption.get(line.key) || 0) + 1)
@@ -220,6 +248,8 @@ export function aggregateSaasRevenueStats(tenants: TenantItem[]): SaasRevenueSta
     } else {
       amount = tenant.pricing.currentChargeAmount
       stageMrr += amount
+      wholesaleAmount = amount
+      wholesaleMrr += amount
     }
 
     top.push({ tenantId: tenant.id, companyName: tenant.companyName, amount, pricingMode })
@@ -240,6 +270,9 @@ export function aggregateSaasRevenueStats(tenants: TenantItem[]): SaasRevenueSta
     moduleMrr,
     stageMrr,
     totalMrr: moduleMrr + stageMrr,
+    wholesaleMrr,
+    partnerMarginMrr,
+    retailMrr: moduleMrr + stageMrr,
     moduleAdoption,
     topModuleTenants: top.slice(0, 10),
   }
@@ -247,12 +280,11 @@ export function aggregateSaasRevenueStats(tenants: TenantItem[]): SaasRevenueSta
 
 export function buildInitialTenantModulePrices(
   catalog: Record<SaasModuleKey, SaasModulePriceRow>,
-  features: FeatureFlags
+  features: FeatureFlags,
+  marginPct = 0
 ): Record<SaasModuleKey, SaasModulePriceRow> {
-  return syncModuleEnabledFromFeatures(
-    applyCatalogPricesToModules(cloneDefaultModulePrices(), catalog),
-    features
-  )
+  const enabled = syncModuleEnabledFromFeatures(cloneDefaultModulePrices(), features)
+  return applyCatalogWholesaleToModules(enabled, catalog, { marginPct })
 }
 
 export function buildNewTenantPricing(params: {
@@ -265,8 +297,13 @@ export function buildNewTenantPricing(params: {
   usage: Pick<TenantUsage, "posDevices" | "licensedPosDevices">
   limits: TenantLimits
   policy: TenantPolicy
+  partnerMarginPct?: number
 }): TenantItem["pricing"] {
-  const modulePrices = buildInitialTenantModulePrices(params.catalog, params.features)
+  const modulePrices = buildInitialTenantModulePrices(
+    params.catalog,
+    params.features,
+    params.partnerMarginPct ?? 0
+  )
   const pricingMode = params.policy.pricingMode ?? "module"
   const stageAmount = resolveCurrentChargeAmount(params.salesStage, params.billingCycle, params.stagePrices)
   const currentChargeAmount = resolveEffectiveChargeWithLimits({

@@ -5,6 +5,7 @@ import {
   canPosStaffAccessPath,
   canUpdateReceivableReceiveCheck,
   canAccessPosCostAnalysis,
+  canEditPosCostAnalysis,
   canAccessPosPrinters,
   canAccessPosTerminalSettings,
   canPickPosTerminalStore,
@@ -75,6 +76,11 @@ describe("RLS/권한 스코프 harness", () => {
     expect(canPosStaffAccessPath("/admin/pos-cost-analysis", "pos_staff")).toBe(false)
     expect(canAccessPosCostAnalysis("pos_staff")).toBe(false)
     expect(canAccessPosCostAnalysis("officer")).toBe(true)
+    expect(canAccessPosCostAnalysis("manager")).toBe(true)
+    expect(canAccessPosCostAnalysis("franchisee")).toBe(true)
+    expect(canEditPosCostAnalysis("officer")).toBe(true)
+    expect(canEditPosCostAnalysis("manager")).toBe(false)
+    expect(canEditPosCostAnalysis("franchisee")).toBe(false)
   })
 
   it("매장 필터는 단일 ilike 형태로 안전하게 생성된다", () => {

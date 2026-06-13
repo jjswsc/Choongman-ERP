@@ -7,24 +7,7 @@ import { executeAiAction, sanitizeAiActionPayloadScope } from "@/lib/ai/action-c
 import type { AiActionType } from "@/lib/ai/types"
 import { logAiUsage } from "@/lib/ai/audit"
 import { isAiRouteError } from "@/lib/ai/errors"
-
-function toResponseRow(row: Record<string, unknown>) {
-  return {
-    id: Number(row.id || 0),
-    status: String(row.status || "pending_approval"),
-    actionType: String(row.action_type || ""),
-    reason: String(row.reason || ""),
-    payload: (row.payload_json as Record<string, unknown>) || {},
-    preview: String(row.preview || ""),
-    createdAt: String(row.created_at || ""),
-    requestedBy: String(row.requested_by || ""),
-    requestedStore: String(row.requested_store || ""),
-    approvedBy: row.approved_by == null ? null : String(row.approved_by),
-    approvedAt: row.approved_at == null ? null : String(row.approved_at),
-    executedAt: row.executed_at == null ? null : String(row.executed_at),
-    error: row.error_message == null ? null : String(row.error_message),
-  }
-}
+import { toAiActionResponseRow } from "@/lib/ai/action-response"
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -114,7 +97,7 @@ export async function POST(req: NextRequest) {
       note: `request=${requestId},approve=false`,
     })
     const updated = { ...row, status: "rejected", approved_by: access.scoped.name, approved_at: now }
-    return NextResponse.json({ ok: true, request: toResponseRow(updated) }, { headers })
+    return NextResponse.json({ ok: true, request: toAiActionResponseRow(updated) }, { headers })
   }
 
   try {
@@ -185,8 +168,10 @@ export async function POST(req: NextRequest) {
       approved_at: now,
       executed_at: now,
       error_message: null,
+      execution_result_type: exec.resultType,
+      execution_result_id: exec.resultId,
     }
-    return NextResponse.json({ ok: true, request: toResponseRow(updated) }, { headers })
+    return NextResponse.json({ ok: true, request: toAiActionResponseRow(updated) }, { headers })
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
     const code = isAiRouteError(e) ? e.code : "AI_VALIDATION_ERROR"

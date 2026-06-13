@@ -22,6 +22,7 @@ export interface AiAskRequest {
   query: string
   intent: AiIntent
   store?: string
+  lang?: string
   dateRange?: { start?: string; end?: string }
 }
 
@@ -50,6 +51,22 @@ export interface AiAskResponse {
     holidayName: string | null
     eventTags: string[]
   }[]
+  storeOpsMetrics?: {
+    store: string
+    start: string
+    end: string
+    salesTotal: number
+    hqOutboundTotal: number
+    ratioPct: number | null
+    completedOrders: number
+  } | null
+  storeBreakdown?: {
+    store: string
+    salesTotal: number
+    hqOutboundTotal: number
+    ratioPct: number | null
+    completedOrders: number
+  }[] | null
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number } | null
   model?: string | null
 }
@@ -83,6 +100,7 @@ export interface AiCenterHealthResponse {
   label: string
   allTablesOk: boolean
   openaiConfigured: boolean
+  vectorSearchReady?: boolean
   readyForStep1: boolean
   tables: Record<string, { ok: boolean; error?: string }>
   nextActions: string[]
@@ -140,6 +158,9 @@ export interface AiActionRequestRow {
   approvedAt?: string | null
   executedAt?: string | null
   error?: string | null
+  executionResultType?: string | null
+  executionResultId?: number | null
+  continueUrl?: string | null
 }
 
 export async function proposeAiAction(payload: AiActionProposalInput): Promise<{ request: AiActionRequestRow }> {
@@ -226,4 +247,199 @@ export async function syncExternalContext(days = 7): Promise<{ ok: boolean; sync
     throw new AiApiError(parsed.message, res.status, parsed.code)
   }
   return JSON.parse(text) as { ok: boolean; synced: number; message?: string }
+}
+
+export interface AiNoticeDraftRow {
+  id: number
+  title: string
+  content: string
+  targetStore: string
+  source: string
+  createdBy: string
+  createdAt: string
+  continueUrl?: string
+}
+
+export interface AiFollowupTaskRow {
+  id: number
+  title: string
+  description: string
+  owner: string | null
+  storeScope: string
+  dueDate: string | null
+  status: string
+  source: string
+  createdBy: string
+  createdAt: string
+  continueUrl?: string
+}
+
+export interface AiConversationSummary {
+  id: number
+  title: string
+  lastIntent: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AiConversationMessage {
+  id: number
+  role: "user" | "assistant"
+  content: string
+  intent: string | null
+  createdAt: string
+}
+
+export async function getAiDrafts(
+  store?: string,
+  limit = 30
+): Promise<{ noticeDrafts: AiNoticeDraftRow[]; followupTasks: AiFollowupTaskRow[]; meta?: AiScopeMeta }> {
+  const sp = new URLSearchParams()
+  sp.set("limit", String(Math.max(1, Math.min(limit, 100))))
+  if (store && String(store).trim()) sp.set("store", String(store).trim())
+  const res = await apiFetchWithOffline(`/api/ai/drafts?${sp.toString()}`)
+  const text = await res.text()
+  if (!res.ok) {
+    const parsed = parseAiApiError(text, "AI 초안 조회 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+  return JSON.parse(text) as {
+    noticeDrafts: AiNoticeDraftRow[]
+    followupTasks: AiFollowupTaskRow[]
+    meta?: AiScopeMeta
+  }
+}
+
+export type AiAskStreamHandlers = {
+  onMeta?: (payload: Partial<AiAskResponse>) => void
+  onDelta?: (text: string) => void
+  onDone?: (payload: { model?: string | null; usage?: AiAskResponse["usage"] }) => void
+  onError?: (message: string) => void
+}
+
+export async function getStoreOpsInsight(store?: string, start?: string, end?: string): Promise<{
+  summary: string
+  lines: string[]
+  hasData: boolean
+  metrics?: AiAskResponse["storeOpsMetrics"]
+  storeBreakdown?: NonNullable<AiAskResponse["storeBreakdown"]>
+}> {
+  const sp = new URLSearchParams()
+  if (store && String(store).trim()) sp.set("store", String(store).trim())
+  if (start) sp.set("start", start)
+  if (end) sp.set("end", end)
+  const url = sp.toString() ? `/api/ai/store-ops?${sp.toString()}` : "/api/ai/store-ops"
+  const res = await apiFetchWithOffline(url)
+  const text = await res.text()
+  if (!res.ok) {
+    const parsed = parseAiApiError(text, "매장 운영 지표 조회 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+  return JSON.parse(text) as {
+    summary: string
+    lines: string[]
+    hasData: boolean
+    metrics?: AiAskResponse["storeOpsMetrics"]
+    storeBreakdown?: NonNullable<AiAskResponse["storeBreakdown"]>
+  }
+}
+
+export async function askAiCenterStream(payload: AiAskRequest, handlers: AiAskStreamHandlers): Promise<void> {
+  const res = await apiFetchWithOffline("/api/ai/ask/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok || !res.body) {
+    const text = await res.text()
+    const parsed = parseAiApiError(text, "AI 스트리밍 질의 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split("\n\n")
+    buffer = parts.pop() || ""
+    for (const part of parts) {
+      const line = part.trim()
+      if (!line.startsWith("data:")) continue
+      const raw = line.slice(5).trim()
+      if (raw === "[DONE]") continue
+      try {
+        const json = JSON.parse(raw) as Record<string, unknown>
+        const type = String(json.type || "")
+        if (type === "meta") handlers.onMeta?.(json as Partial<AiAskResponse>)
+        else if (type === "delta") handlers.onDelta?.(String(json.text || ""))
+        else if (type === "done") {
+          handlers.onDone?.({
+            model: json.model == null ? null : String(json.model),
+            usage: json.usage as AiAskResponse["usage"],
+          })
+        }         else if (type === "error") handlers.onError?.(String(json.message || "stream error"))
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+export async function getAiConversations(limit = 20): Promise<{ items: AiConversationSummary[] }> {
+  const sp = new URLSearchParams()
+  sp.set("limit", String(Math.max(1, Math.min(limit, 50))))
+  const res = await apiFetchWithOffline(`/api/ai/conversations?${sp.toString()}`)
+  const text = await res.text()
+  if (!res.ok) {
+    const parsed = parseAiApiError(text, "대화 이력 조회 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+  return JSON.parse(text) as { items: AiConversationSummary[] }
+}
+
+export async function getAiConversationDetail(id: number): Promise<{
+  conversation: AiConversationSummary | null
+  messages: AiConversationMessage[]
+}> {
+  const res = await apiFetchWithOffline(`/api/ai/conversations?id=${id}`)
+  const text = await res.text()
+  if (!res.ok) {
+    const parsed = parseAiApiError(text, "대화 상세 조회 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+  return JSON.parse(text) as {
+    conversation: AiConversationSummary | null
+    messages: AiConversationMessage[]
+  }
+}
+
+export async function saveAiConversationTurn(input: {
+  conversationId?: number
+  query: string
+  answer: string
+  intent: AiIntent
+  meta?: Record<string, unknown>
+}): Promise<{ conversationId: number }> {
+  const res = await apiFetchWithOffline("/api/ai/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    const parsed = parseAiApiError(text, "대화 저장 실패")
+    throw new AiApiError(parsed.message, res.status, parsed.code)
+  }
+  const json = JSON.parse(text) as { conversationId: number }
+  return { conversationId: json.conversationId }
+}
+
+export async function getAiModuleStatus(): Promise<{ enabled: boolean }> {
+  const res = await apiFetchWithOffline("/api/ai/module-status")
+  if (!res.ok) return { enabled: true }
+  return (await res.json()) as { enabled: boolean }
 }

@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt,paid_at',
+          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt,paid_at,member_id',
       },
       'updatePosOrderStatus'
     )) as {
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
       created_by?: string
       memo?: string
       paid_at?: string | null
+      member_id?: number | null
     }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
@@ -451,6 +452,15 @@ export async function POST(req: NextRequest) {
       } catch (couponErr) {
         pushFailedStep(failedSideEffects, 'reversal_coupon')
         console.error('updatePosOrderStatus reversal coupon:', couponErr)
+      }
+      const reversalMemberId = Math.trunc(Number(prev?.member_id || 0))
+      if (reversalMemberId > 0) {
+        try {
+          const { revokeMemberStampForOrder } = await import('@/lib/member-stamp-card')
+          await revokeMemberStampForOrder({ memberId: reversalMemberId, orderId: id })
+        } catch (stampErr) {
+          console.error('updatePosOrderStatus stamp revoke:', stampErr)
+        }
       }
     }
 

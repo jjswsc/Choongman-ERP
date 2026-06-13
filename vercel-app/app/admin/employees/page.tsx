@@ -36,6 +36,8 @@ import {
   adminTabsContentCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { formatEmployeeDisplayName, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import {
   getAdminEmployeeList,
   getEmployeeLatestGrades,
@@ -61,7 +63,6 @@ import {
   type EmployeeFormData,
   type EmployeeEvalJumpTarget,
 } from "@/components/employees"
-import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
 
@@ -207,6 +208,7 @@ export default function EmployeesPage() {
   const [searchText, setSearchText] = React.useState("")
   const [hasSearched, setHasSearched] = React.useState(false)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
+  const [formSheetOpen, setFormSheetOpen] = React.useState(false)
   const fullListRef = React.useRef<EmployeeTableRow[]>([])
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
@@ -267,11 +269,18 @@ export default function EmployeesPage() {
         setApiJobOptions(jobOpts)
 
         if (list.length === 0 && debug) {
+          const samples = debug.sampleStores
+            ? t("emp_list_debug_sample_stores").replace(
+                "{stores}",
+                JSON.stringify(debug.sampleStores)
+              )
+            : ""
+          const extra = debug.hint ? ` ${String(debug.hint)}` : ""
           setLoadError(
-            `[진단] userStore="${debug.userStore ?? ""}" userRole="${debug.userRole ?? ""}" role="${debug.role ?? ""}" ` +
-              `DB행수=${debug.totalRowsFromDb ?? 0}` +
-              (debug.sampleStores ? ` 샘플매장=${JSON.stringify(debug.sampleStores)}` : "") +
-              (debug.hint ? ` ${debug.hint}` : "")
+            `${t("emp_list_debug_prefix")} userStore="${String(debug.userStore ?? "")}" userRole="${String(debug.userRole ?? "")}" role="${String(debug.role ?? "")}" ` +
+              t("emp_list_debug_db_rows").replace("{rows}", String(debug.totalRowsFromDb ?? 0)) +
+              samples +
+              extra
           )
         }
 
@@ -322,12 +331,12 @@ export default function EmployeesPage() {
         setEmployeeCache([])
         setStores([])
         const msg = e instanceof Error ? e.message : String(e)
-        setLoadError(`조회 실패: ${msg}`)
+        setLoadError(t("emp_list_load_failed").replace("{msg}", msg))
       } finally {
         setLoading(false)
       }
     },
-    [userStore, userRole]
+    [userStore, userRole, t]
   )
 
   /** 급여 관리 등에서 ?employeeId= 또는 ?employeeCode=&store=&name= 로 진입 시 목록 조회 후 수정 폼 오픈 */
@@ -369,6 +378,7 @@ export default function EmployeesPage() {
       if (e) {
         setForm(adminRowToForm(e))
         setHasSearched(true)
+        setFormSheetOpen(true)
         setStoreFilter(String(e.store || "").trim() ? String(e.store) : "All")
         router.replace("/admin/employees", { scroll: false })
       }
@@ -440,7 +450,10 @@ export default function EmployeesPage() {
 
   const handleEdit = (idx: number) => {
     const e = filteredRows[idx]
-    if (e) setForm(adminRowToForm(e))
+    if (e) {
+      setForm(adminRowToForm(e))
+      setFormSheetOpen(true)
+    }
   }
 
   const handleDelete = async (rowId: number) => {
@@ -476,6 +489,7 @@ export default function EmployeesPage() {
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("msg_saved"))
         setForm({ ...emptyForm })
+        setFormSheetOpen(false)
         await loadEmployeeList({ updateDisplay: true })
       } else {
         await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
@@ -525,6 +539,7 @@ export default function EmployeesPage() {
     const base = { ...emptyForm }
     if ((isManager || isFranchiseeRole(userRole)) && userStore) base.store = resolveStoreKey(userStore)
     setForm(base)
+    setFormSheetOpen(true)
   }
   const storesForFilter = React.useMemo(() => {
     const seen = new Set<string>()
@@ -616,73 +631,90 @@ export default function EmployeesPage() {
           </AdminTabsBarWithHelp>
 
           <TabsContent value="list" className={adminTabsContentCn}>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-4 lg:sticky lg:top-0 lg:self-start">
-                <EmployeeForm
-                  form={form}
-                  onChange={setForm}
-                  stores={storesForForm}
-                  storeLabels={erpStoreLabels}
+            <div className="space-y-3">
+              {hasSearched && employeeCache.length > 0 && (
+                <JobCountSummary rows={filteredRows} t={t} />
+              )}
+              <div className="rounded-lg border border-border bg-card p-3">
+                <EmployeeFilterBar
+                  stores={storesForFilter}
+                  storeFilter={storeFilter}
+                  onStoreFilterChange={setStoreFilter}
                   jobOptions={jobOptions}
-                  onSave={handleSave}
+                  jobFilter={jobFilter}
+                  onJobFilterChange={setJobFilter}
+                  gradeFilter={gradeFilter}
+                  onGradeFilterChange={setGradeFilter}
+                  statusFilter={statusFilter}
+                  onStatusFilterChange={setStatusFilter}
+                  searchText={searchText}
+                  onSearchTextChange={setSearchText}
+                  onSearch={handleSearch}
                   onNew={handleNew}
-                  saving={saving}
-                  roleDisabled={isManager || isFranchiseeRole(userRole)}
-                  canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
-                  canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
-                  franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
-                  canEditFranchiseeExtraStores={isOffice}
-                  allStoresForFranchiseePick={storesForFilter}
-                  franchiseeMultiMaxStores={franchiseeMulti?.maxStores ?? 5}
                 />
               </div>
-              <div className="lg:col-span-8 space-y-3">
-                {/* 직무별 인원 요약 - 조회 버튼 클릭 후에만 표시 */}
-                {hasSearched && employeeCache.length > 0 && (
-                  <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-                    <JobCountSummary rows={filteredRows} t={t} />
-                  </div>
-                )}
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <EmployeeFilterBar
-                    stores={storesForFilter}
-                    storeFilter={storeFilter}
-                    onStoreFilterChange={setStoreFilter}
-                    jobOptions={jobOptions}
-                    jobFilter={jobFilter}
-                    onJobFilterChange={setJobFilter}
-                    gradeFilter={gradeFilter}
-                    onGradeFilterChange={setGradeFilter}
-                    statusFilter={statusFilter}
-                    onStatusFilterChange={setStatusFilter}
-                    searchText={searchText}
-                    onSearchTextChange={setSearchText}
-                    onSearch={handleSearch}
-                  />
+              {loadError && (
+                <div className="rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                  {loadError}
                 </div>
-                {loadError && (
-                  <div className="rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
-                    {loadError}
-                  </div>
-                )}
-                <div className="overflow-x-auto max-h-[600px]">
-                  {!hasSearched ? (
-                    <div className="py-16 text-center text-sm text-muted-foreground">
-                      {t("emp_search_hint")}
-                    </div>
-                  ) : (
-                  <EmployeeTable
-                    rows={filteredRows}
-                    loading={loading}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    t={t}
-                    statusFilter={statusFilter}
-                  />
-                  )}
+              )}
+              {!hasSearched ? (
+                <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+                  {t("emp_search_hint")}
                 </div>
-              </div>
+              ) : (
+                <EmployeeTable
+                  rows={filteredRows}
+                  loading={loading}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  t={t}
+                  statusFilter={statusFilter}
+                  selectedRowId={form.row}
+                />
+              )}
             </div>
+
+            <Sheet open={formSheetOpen} onOpenChange={setFormSheetOpen}>
+              <SheetContent
+                side="right"
+                className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+              >
+                <SheetHeader className="shrink-0 space-y-1 border-b px-4 py-3 pr-12 text-left">
+                  <SheetTitle className="text-base">
+                    {form.row > 0
+                      ? `${t("emp_edit")} · ${formatEmployeeDisplayName(form.name, form.nameTitle) || "—"}`
+                      : t("emp_new")}
+                  </SheetTitle>
+                  {form.row > 0 && String(form.employeeCode || "").trim() ? (
+                    <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                      {String(form.employeeCode).trim()}
+                    </p>
+                  ) : null}
+                </SheetHeader>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-4">
+                  <EmployeeForm
+                    key={form.row > 0 ? `edit-${form.row}` : "new"}
+                    embedded
+                    form={form}
+                    onChange={setForm}
+                    stores={storesForForm}
+                    storeLabels={erpStoreLabels}
+                    jobOptions={jobOptions}
+                    onSave={handleSave}
+                    onNew={handleNew}
+                    saving={saving}
+                    roleDisabled={isManager || isFranchiseeRole(userRole)}
+                    canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
+                    canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
+                    franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
+                    canEditFranchiseeExtraStores={isOffice}
+                    allStoresForFranchiseePick={storesForFilter}
+                    franchiseeMultiMaxStores={franchiseeMulti?.maxStores ?? 5}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
           </TabsContent>
 
           {showEmployeeInputHistoryTab && (

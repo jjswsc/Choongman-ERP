@@ -69,12 +69,14 @@ const MemberListTable = React.memo(function MemberListTable({
   loading,
   loadingLabel,
   onSelect,
+  joinStoreLabels,
   t,
 }: {
   members: Member[]
   loading: boolean
   loadingLabel: string
   onSelect: (m: Member) => void
+  joinStoreLabels: Record<string, string>
   t: ReturnType<typeof useT>
 }) {
   if (loading) {
@@ -93,6 +95,7 @@ const MemberListTable = React.memo(function MemberListTable({
             <th className="p-2 text-left">{t("memberNationality")}</th>
             <th className="p-2 text-left">{t("age")}</th>
             <th className="p-2 text-left">{t("memberNo")}</th>
+            <th className="p-2 text-left">{t("memberJoinStore")}</th>
             <th className="p-2 text-left">{t("memberTier")}</th>
             <th className="p-2 text-left">{t("status")}</th>
           </tr>
@@ -111,6 +114,11 @@ const MemberListTable = React.memo(function MemberListTable({
               <td className="p-2">{m.nationality || "-"}</td>
               <td className="p-2">{calcMemberAge(m.birthDate)}</td>
               <td className="p-2">{m.memberNo || "-"}</td>
+              <td className="p-2">
+                {m.joinStoreCode
+                  ? joinStoreLabels[m.joinStoreCode] || m.joinStoreCode
+                  : joinStoreLabels.__unset__ || "—"}
+              </td>
               <td className="p-2">{m.tierCode || "-"}</td>
               <td className="p-2">{m.status}</td>
             </tr>
@@ -151,6 +159,28 @@ export const MemberListPanel = React.memo(
     const [actionMessage, setActionMessage] = React.useState("")
     const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
     const importFileRef = React.useRef<HTMLInputElement | null>(null)
+    const [joinStoreLabels, setJoinStoreLabels] = React.useState<Record<string, string>>({
+      office: t("mpAdmin_signupStoreStatsOffice"),
+      __unset__: t("mpAdmin_signupStoreStatsUnset"),
+    })
+
+    React.useEffect(() => {
+      fetch(`/api/member-portal/signup-stores?lang=${encodeURIComponent(lang)}`)
+        .then((r) => r.json())
+        .then((data: { success?: boolean; stores?: Array<{ storeCode: string; displayName: string }>; officeStoreCode?: string }) => {
+          if (!data.success) return
+          const next: Record<string, string> = {
+            __unset__: t("mpAdmin_signupStoreStatsUnset"),
+          }
+          const officeCode = String(data.officeStoreCode || "office")
+          next[officeCode] = t("mpAdmin_signupStoreStatsOffice")
+          for (const row of data.stores || []) {
+            if (row.storeCode) next[row.storeCode] = row.displayName || row.storeCode
+          }
+          setJoinStoreLabels(next)
+        })
+        .catch(() => {})
+    }, [lang, t])
 
     const appliedQueryRef = React.useRef(appliedQuery)
     const pageCursorsRef = React.useRef(pageCursors)
@@ -360,6 +390,7 @@ export const MemberListPanel = React.memo(
             loading={loading}
             loadingLabel={t("loading")}
             onSelect={onSelectMember}
+            joinStoreLabels={joinStoreLabels}
             t={t}
           />
           {!loading && (

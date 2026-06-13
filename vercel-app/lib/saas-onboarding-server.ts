@@ -1,5 +1,6 @@
 import type { TenantItem } from "./saas-admin-control-plane"
 import { supabaseCountFilter, supabaseRpc, supabaseSelect, supabaseSelectFilter } from "./supabase-server"
+import { countErpStoresForTenant } from "./saas-tenant-stores-server"
 import {
   emptyOnboardingSteps,
   parseOnboardingFlags,
@@ -11,6 +12,10 @@ import {
 } from "./saas-onboarding-status"
 
 type TenantFlagsRow = { id?: string; onboarding_flags?: unknown; is_active?: boolean | null }
+
+export function isOnboardingFlagsColumnMissingError(msg: string): boolean {
+  return /column|onboarding_flags|42703|PGRST204/i.test(msg)
+}
 
 async function countEnabledIntegrations(tenantId: string): Promise<number> {
   try {
@@ -35,17 +40,20 @@ async function countEnabledModules(tenantId: string): Promise<number> {
 }
 
 async function countActiveStores(tenantId: string): Promise<number> {
+  let companyName = ""
   try {
-    return await supabaseCountFilter(
-      "erp_stores",
-      `tenant_id=eq.${encodeURIComponent(tenantId)}&is_active=eq.true`
-    )
+    const rows = (await supabaseSelectFilter("tenants", `id=eq.${encodeURIComponent(tenantId)}`, {
+      limit: 1,
+      select: "company_name",
+    })) as { company_name?: string }[]
+    companyName = String(rows[0]?.company_name ?? "").trim()
   } catch {
-    try {
-      return await supabaseCountFilter("erp_stores", `tenant_id=eq.${encodeURIComponent(tenantId)}`)
-    } catch {
-      return 0
-    }
+    /* optional */
+  }
+  try {
+    return await countErpStoresForTenant(tenantId, companyName)
+  } catch {
+    return 0
   }
 }
 
@@ -144,6 +152,7 @@ export async function buildOnboardingStatusForTenant(params: {
   tenantId: string
   usage?: { stores?: number; managerAccounts?: number }
   pricing?: { modulePrices?: unknown }
+  flagsOverride?: OnboardingFlags
 }): Promise<OnboardingStatusRow> {
   const usage = {
     stores: Math.max(0, Number(params.usage?.stores ?? 0)),
@@ -157,7 +166,7 @@ export async function buildOnboardingStatusForTenant(params: {
   const rpc = await tryRpcStatus(params.tenantId)
   if (rpc) return rpc
 
-  const flags = await loadTenantFlags(params.tenantId)
+  const flags = params.flagsOverride ?? (await loadTenantFlags(params.tenantId))
   const enabledIntegrationCount = await countEnabledIntegrations(params.tenantId)
   const activeStores = await countActiveStores(params.tenantId)
   const managers = await countManagersWithActiveStore(params.tenantId)

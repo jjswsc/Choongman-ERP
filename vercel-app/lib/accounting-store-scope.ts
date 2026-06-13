@@ -75,12 +75,49 @@ export function resolveFranchiseeAccountingAllowedStoresOnly(
  * 재무제표·시산 등 storeFilter 확정 (세무 원장 API와 동일 규칙).
  * 가맹 복수 매장: All/미지정 → All(허용 매장 합산). 단일 허용만 있으면 그 매장.
  */
+/** 쉼표 구분 복수 매장 — All·단일 특수값이 아닐 때만 */
+export function parseCommaSeparatedStoreFilter(raw: string | undefined | null): string[] | null {
+  const s = String(raw || '').trim()
+  if (!s || s === 'All' || s === '전체' || s === '*') return null
+  if (!s.includes(',')) return null
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of s.split(',')) {
+    const v = String(part || '').trim()
+    if (!v || seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out.length > 0 ? out : null
+}
+
+export function validateAccountingStoreSelection(
+  stores: string[],
+  auth: AccountingStoreAuthScope
+): void {
+  for (const store of stores) {
+    if (isOfficeStore(store) || isHeadOfficeLikeStoreName(store)) {
+      throw new AccountingStoreScopeForbidden()
+    }
+    if (canAccessAllAccountingStores(auth)) continue
+    const allowedStores = collectAccountingAllowedStores(auth)
+    const ok = allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+    if (!ok) throw new AccountingStoreScopeForbidden()
+  }
+}
+
 export function resolveAccountingStoreFilterFromAuth(
   requestedStoreFilter: string | undefined | null,
   auth: AccountingStoreAuthScope
 ): string {
   const requested = String(requestedStoreFilter || '').trim()
   const allowedStores = collectAccountingAllowedStores(auth)
+  const multi = parseCommaSeparatedStoreFilter(requested)
+  if (multi) {
+    if (multi.length === 1) return multi[0]!
+    validateAccountingStoreSelection(multi, auth)
+    return multi.join(',')
+  }
 
   if (canAccessAllAccountingStores(auth)) {
     if (requested && requested !== 'All' && requested !== '전체' && requested !== '*') {
@@ -114,6 +151,36 @@ export function resolveAccountingStoreFilterFromAuth(
   const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, effective))
   if (!allowed) throw new AccountingStoreScopeForbidden()
   return effective
+}
+
+export type AccountingIncomeScopeStores = {
+  storeFilter: string
+  allowedStoresOnly?: string[]
+  selectedStoresOnly?: string[]
+}
+
+/** per-store fetch 후 merge — 가맹 All 또는 명시 복수 선택 */
+export function resolveAccountingRollupStores(scope: AccountingIncomeScopeStores): string[] | undefined {
+  if (scope.selectedStoresOnly && scope.selectedStoresOnly.length > 1) {
+    return scope.selectedStoresOnly
+  }
+  if (scope.allowedStoresOnly && scope.allowedStoresOnly.length > 1) {
+    return scope.allowedStoresOnly
+  }
+  return undefined
+}
+
+/** POS·경영손익 등 storeCodes 파라미터 */
+export function resolvePosStoreCodesForAccountingScope(scope: AccountingIncomeScopeStores): string[] | undefined {
+  if (scope.selectedStoresOnly?.length) return scope.selectedStoresOnly
+  if (scope.storeFilter === 'All') {
+    return scope.allowedStoresOnly?.length ? scope.allowedStoresOnly : undefined
+  }
+  const multi = parseCommaSeparatedStoreFilter(scope.storeFilter)
+  if (multi?.length) return multi
+  const single = String(scope.storeFilter || '').trim()
+  if (!single || single === 'All') return undefined
+  return [single]
 }
 
 function normalizeStoreFilter(storeFilter?: string | null): string {

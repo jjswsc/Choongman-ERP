@@ -11,12 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
+import { MemberStampCardAdminPanel } from "@/components/admin/member-stamp-card-admin-panel"
 import type { MemberPortalContentAdminItem } from "@/lib/member-portal-content-admin"
 import { countContentForAdminTab } from "@/lib/member-portal-content-admin"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
-import { canEditMemberPortalAdmin } from "@/lib/permissions"
+import { useT, tr } from "@/lib/i18n"
+import { canEditMemberPortalAdmin, hasOfficeStaffScope } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
 import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 import {
@@ -31,6 +32,7 @@ export default function CrmMemberAppContentPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const canEdit = canEditMemberPortalAdmin(auth?.role || "", auth?.store)
+  const canViewAllSignupStats = hasOfficeStaffScope(auth?.role || "", auth?.store)
   const [activeTab, setActiveTab] = React.useState<
     "all" | "design" | "popup" | "promo" | "new_menu" | "info" | "stores" | "contact" | "delivery"
   >("all")
@@ -47,6 +49,32 @@ export default function CrmMemberAppContentPage() {
   const [loading, setLoading] = React.useState(false)
   const [contactSaving, setContactSaving] = React.useState(false)
   const [signupBenefitsSaving, setSignupBenefitsSaving] = React.useState(false)
+  const [signupStatsDays, setSignupStatsDays] = React.useState(30)
+  const [signupStatsStartYmd, setSignupStatsStartYmd] = React.useState("")
+  const [signupStatsEndYmd, setSignupStatsEndYmd] = React.useState("")
+  const [signupStatsLoading, setSignupStatsLoading] = React.useState(false)
+  const [signupGoalsLoading, setSignupGoalsLoading] = React.useState(false)
+  const [signupGoalsSaving, setSignupGoalsSaving] = React.useState(false)
+  const [signupGoalsMonth, setSignupGoalsMonth] = React.useState("")
+  const [signupGoals, setSignupGoals] = React.useState<
+    Array<{ storeCode: string; displayName: string; targetCount: number }>
+  >([])
+  const [canEditSignupGoals, setCanEditSignupGoals] = React.useState(false)
+  const [signupStats, setSignupStats] = React.useState<{
+    days: number | null
+    startYmd: string
+    endYmd: string
+    monthYmd: string
+    totalSignups: number
+    rows: Array<{
+      storeCode: string
+      displayName: string
+      signupCount: number
+      sharePct: number
+      targetCount: number
+      achievementPct: number
+    }>
+  } | null>(null)
   const [deliverySaving, setDeliverySaving] = React.useState(false)
   const [prepayEnabled, setPrepayEnabled] = React.useState(false)
   const [prepayStoreCodesText, setPrepayStoreCodesText] = React.useState("")
@@ -164,6 +192,137 @@ export default function CrmMemberAppContentPage() {
     }
   }, [])
 
+  const loadSignupStoreStats = React.useCallback(
+    async (opts?: { days?: number; startYmd?: string; endYmd?: string }) => {
+      setSignupStatsLoading(true)
+      try {
+        const q = new URLSearchParams()
+        q.set("lang", lang)
+        if (opts?.startYmd && opts?.endYmd) {
+          q.set("startYmd", opts.startYmd)
+          q.set("endYmd", opts.endYmd)
+        } else {
+          q.set("days", String(opts?.days ?? signupStatsDays))
+        }
+        const res = await apiFetch(`/api/member-portal/admin/settings/signup-stores/stats?${q.toString()}`, {
+          cache: "no-store",
+        })
+        const data = (await res.json()) as {
+          success?: boolean
+          stats?: typeof signupStats
+          scope?: { canEditGoals?: boolean }
+        }
+        if (!res.ok || !data.success || !data.stats) {
+          setSignupStats(null)
+          return
+        }
+        setSignupStats(data.stats)
+        setSignupGoalsMonth(data.stats.monthYmd)
+        setCanEditSignupGoals(Boolean(data.scope?.canEditGoals))
+      } catch {
+        setSignupStats(null)
+      } finally {
+        setSignupStatsLoading(false)
+      }
+    },
+    [lang, signupStatsDays]
+  )
+
+  const loadSignupStoreGoals = React.useCallback(
+    async (monthYmd?: string) => {
+      const fallbackMonth = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 7)
+      const month = String(monthYmd || signupGoalsMonth || signupStats?.monthYmd || fallbackMonth).trim()
+      setSignupGoalsLoading(true)
+      try {
+        const res = await apiFetch(
+          `/api/member-portal/admin/settings/signup-stores/goals?month=${encodeURIComponent(month)}&lang=${encodeURIComponent(lang)}`,
+          { cache: "no-store" }
+        )
+        const data = (await res.json()) as {
+          success?: boolean
+          goals?: typeof signupGoals
+          scope?: { canEditGoals?: boolean }
+        }
+        if (!res.ok || !data.success) return
+        setSignupGoals(data.goals || [])
+        setSignupGoalsMonth(month)
+        setCanEditSignupGoals(Boolean(data.scope?.canEditGoals))
+      } catch {
+        /* ignore */
+      } finally {
+        setSignupGoalsLoading(false)
+      }
+    },
+    [lang, signupGoalsMonth, signupStats?.monthYmd]
+  )
+
+  const saveSignupStoreGoals = React.useCallback(async () => {
+    if (!canEditSignupGoals) return
+    setSignupGoalsSaving(true)
+    setError("")
+    try {
+      const res = await apiFetch("/api/member-portal/admin/settings/signup-stores/goals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthYmd: signupGoalsMonth,
+          goals: signupGoals.map((g) => ({ storeCode: g.storeCode, targetCount: g.targetCount })),
+        }),
+      })
+      const data = (await res.json()) as { success?: boolean; message?: string }
+      if (!res.ok || !data.success) {
+        setError(data.message || t("mpAdmin_errSave"))
+        return
+      }
+      setNotice(t("mpAdmin_signupStoreStatsGoalsSaved"))
+      await loadSignupStoreGoals(signupGoalsMonth)
+      await loadSignupStoreStats(
+        signupStatsStartYmd && signupStatsEndYmd
+          ? { startYmd: signupStatsStartYmd, endYmd: signupStatsEndYmd }
+          : { days: signupStatsDays }
+      )
+    } catch {
+      setError(t("mpAdmin_errSaveGeneric"))
+    } finally {
+      setSignupGoalsSaving(false)
+    }
+  }, [
+    canEditSignupGoals,
+    loadSignupStoreGoals,
+    loadSignupStoreStats,
+    signupGoals,
+    signupGoalsMonth,
+    signupStatsDays,
+    signupStatsEndYmd,
+    signupStatsStartYmd,
+    t,
+  ])
+
+  const exportSignupStoreStats = React.useCallback(async () => {
+    const q = new URLSearchParams()
+    q.set("lang", lang)
+    if (signupStatsStartYmd && signupStatsEndYmd) {
+      q.set("startYmd", signupStatsStartYmd)
+      q.set("endYmd", signupStatsEndYmd)
+    } else {
+      q.set("days", String(signupStatsDays))
+    }
+    const res = await apiFetch(`/api/member-portal/admin/settings/signup-stores/stats/export?${q.toString()}`, {
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      setError(t("mpAdmin_errSave"))
+      return
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `member-signup-stores_${signupStats?.startYmd || "export"}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [lang, signupStats?.startYmd, signupStatsDays, signupStatsEndYmd, signupStatsStartYmd, t])
+
   const loadPrepaySettings = React.useCallback(async () => {
     try {
       const [prepayRes, storesRes, statsRes, pickupRes] = await Promise.all([
@@ -248,8 +407,19 @@ export default function CrmMemberAppContentPage() {
     loadDeliverySettings().catch(() => {})
     loadDesignSettings().catch(() => {})
     loadSignupBenefitsSettings().catch(() => {})
+    loadSignupStoreStats().catch(() => {})
+    loadSignupStoreGoals().catch(() => {})
     loadPrepaySettings().catch(() => {})
-  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, loadSignupBenefitsSettings, loadPrepaySettings, refresh])
+  }, [loadContactSettings, loadDeliverySettings, loadDesignSettings, loadSignupBenefitsSettings, loadSignupStoreGoals, loadSignupStoreStats, loadPrepaySettings, refresh])
+
+  const signupStoreStatLabel = React.useCallback(
+    (row: { storeCode: string; displayName: string }) => {
+      if (row.storeCode === "office") return t("mpAdmin_signupStoreStatsOffice")
+      if (row.storeCode === "__unset__") return t("mpAdmin_signupStoreStatsUnset")
+      return row.displayName || row.storeCode
+    },
+    [t]
+  )
 
   const saveContactSettings = React.useCallback(async () => {
     setContactSaving(true)
@@ -679,6 +849,191 @@ export default function CrmMemberAppContentPage() {
                     </Button>
                   </div>
                 </fieldset>
+              </CardContent>
+            </Card>
+            <MemberStampCardAdminPanel
+              canEdit={canEdit}
+              onNotice={setNotice}
+              onError={setError}
+            />
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_signupStoreStatsTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">{t("mpAdmin_signupStoreStatsDesc")}</p>
+                {!canViewAllSignupStats ? (
+                  <p className="text-sm text-amber-700">{t("mpAdmin_signupStoreStatsFranchiseNotice")}</p>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label className="text-sm">{t("mpAdmin_signupStoreStatsDays")}</Label>
+                  {[7, 30, 90].map((days) => (
+                    <Button
+                      key={days}
+                      type="button"
+                      size="sm"
+                      variant={signupStatsDays === days && !signupStatsStartYmd ? "default" : "outline"}
+                      onClick={() => {
+                        setSignupStatsDays(days)
+                        setSignupStatsStartYmd("")
+                        setSignupStatsEndYmd("")
+                        void loadSignupStoreStats({ days })
+                      }}
+                    >
+                      {days === 7
+                        ? t("mpAdmin_signupStoreStatsDays7")
+                        : days === 30
+                          ? t("mpAdmin_signupStoreStatsDays30")
+                          : t("mpAdmin_signupStoreStatsDays90")}
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={signupStatsLoading}
+                    onClick={() =>
+                      loadSignupStoreStats(
+                        signupStatsStartYmd && signupStatsEndYmd
+                          ? { startYmd: signupStatsStartYmd, endYmd: signupStatsEndYmd }
+                          : { days: signupStatsDays }
+                      ).catch(() => {})
+                    }
+                  >
+                    {signupStatsLoading ? t("mpAdmin_saving") : t("mpAdmin_reload")}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => exportSignupStoreStats().catch(() => {})}>
+                    {t("mpAdmin_signupStoreStatsExport")}
+                  </Button>
+                </div>
+                <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                  <div className="space-y-1.5">
+                    <Label>{t("mpAdmin_signupStoreStatsStart")}</Label>
+                    <Input type="date" value={signupStatsStartYmd} onChange={(e) => setSignupStatsStartYmd(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("mpAdmin_signupStoreStatsEnd")}</Label>
+                    <Input type="date" value={signupStatsEndYmd} onChange={(e) => setSignupStatsEndYmd(e.target.value)} />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!signupStatsStartYmd || !signupStatsEndYmd || signupStatsLoading}
+                    onClick={() =>
+                      loadSignupStoreStats({ startYmd: signupStatsStartYmd, endYmd: signupStatsEndYmd }).catch(() => {})
+                    }
+                  >
+                    {t("mpAdmin_signupStoreStatsApplyRange")}
+                  </Button>
+                </div>
+                {signupStats ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {tr(t, "mpAdmin_signupStoreStatsPeriod", {
+                        start: signupStats.startYmd,
+                        end: signupStats.endYmd,
+                      })}
+                    </p>
+                    <p className="text-sm font-medium">
+                      {t("mpAdmin_signupStoreStatsTotal")}: {signupStats.totalSignups.toLocaleString()}
+                    </p>
+                    {signupStats.rows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{t("mpAdmin_signupStoreStatsEmpty")}</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium">{t("mpAdmin_signupStoreStatsStore")}</th>
+                              <th className="px-3 py-2 text-left font-medium">{t("mpAdmin_signupStoreStatsCode")}</th>
+                              <th className="px-3 py-2 text-right font-medium">{t("mpAdmin_signupStoreStatsCount")}</th>
+                              <th className="px-3 py-2 text-right font-medium">{t("mpAdmin_signupStoreStatsTarget")}</th>
+                              <th className="px-3 py-2 text-right font-medium">{t("mpAdmin_signupStoreStatsAchievement")}</th>
+                              <th className="px-3 py-2 text-right font-medium">{t("mpAdmin_signupStoreStatsShare")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {signupStats.rows.map((row) => (
+                              <tr key={row.storeCode} className="border-t">
+                                <td className="px-3 py-2">{signupStoreStatLabel(row)}</td>
+                                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                                  {row.storeCode === "__unset__" ? "—" : row.storeCode}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums">{row.signupCount.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{row.targetCount.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{row.achievementPct.toFixed(1)}%</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{row.sharePct.toFixed(1)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : signupStatsLoading ? (
+                  <p className="text-sm text-muted-foreground">{t("mpAdmin_saving")}</p>
+                ) : null}
+                <div className="border-t pt-4 space-y-3">
+                  <div>
+                    <p className="font-medium">{t("mpAdmin_signupStoreStatsGoalsTitle")}</p>
+                    <p className="text-sm text-muted-foreground">{t("mpAdmin_signupStoreStatsGoalsDesc")}</p>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="space-y-1.5">
+                      <Label>{t("mpAdmin_signupStoreStatsGoalsMonth")}</Label>
+                      <Input
+                        type="month"
+                        value={signupGoalsMonth}
+                        onChange={(e) => setSignupGoalsMonth(e.target.value)}
+                      />
+                    </div>
+                    <Button type="button" variant="outline" disabled={signupGoalsLoading} onClick={() => loadSignupStoreGoals(signupGoalsMonth).catch(() => {})}>
+                      {signupGoalsLoading ? t("mpAdmin_saving") : t("mpAdmin_reload")}
+                    </Button>
+                    {canEditSignupGoals ? (
+                      <Button type="button" disabled={signupGoalsSaving} onClick={() => saveSignupStoreGoals().catch(() => {})}>
+                        {signupGoalsSaving ? t("mpAdmin_saving") : t("mpAdmin_signupStoreStatsGoalsSave")}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {signupGoals.length > 0 ? (
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium">{t("mpAdmin_signupStoreStatsStore")}</th>
+                            <th className="px-3 py-2 text-right font-medium">{t("mpAdmin_signupStoreStatsTarget")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {signupGoals.map((row) => (
+                            <tr key={row.storeCode} className="border-t">
+                              <td className="px-3 py-2">{signupStoreStatLabel(row)}</td>
+                              <td className="px-3 py-2 text-right">
+                                {canEditSignupGoals ? (
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    className="ml-auto w-28 text-right"
+                                    value={row.targetCount}
+                                    onChange={(e) => {
+                                      const n = Math.max(0, Math.trunc(Number(e.target.value || 0)))
+                                      setSignupGoals((prev) =>
+                                        prev.map((g) => (g.storeCode === row.storeCode ? { ...g, targetCount: n } : g))
+                                      )
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="tabular-nums">{row.targetCount.toLocaleString()}</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

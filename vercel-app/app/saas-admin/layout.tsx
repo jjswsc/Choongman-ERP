@@ -8,6 +8,7 @@ import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
 import { canAccessSaasAdmin } from "@/lib/permissions"
 import { SaasSidebar } from "@/components/saas/saas-sidebar"
 import { SaasHeader } from "@/components/saas/saas-header"
+import { SaasScopeLoader } from "@/components/saas/saas-scope-loader"
 
 export default function SaasAdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -42,12 +43,14 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <SidebarProvider>
-      <SaasSidebar />
-      <SidebarInset>
-        <SaasHeader />
-        {children}
-      </SidebarInset>
-    </SidebarProvider>
+    <SaasScopeLoader>
+      <SidebarProvider>
+        <SaasSidebar />
+        <SidebarInset>
+          <SaasHeader />
+          {children}
+        </SidebarInset>
+      </SidebarProvider>
+    </SaasScopeLoader>
   )
 }

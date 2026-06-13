@@ -10,19 +10,29 @@ export async function GET(req: NextRequest) {
   if (!access.ok) return access.response
 
   const health = await getAiCenterFoundationHealth()
+  const nextActions: string[] = []
+  if (!health.allTablesOk) {
+    nextActions.push("Supabase SQL Editor에서 sql/ai_center_foundation.sql 실행")
+    nextActions.push("sql/ai_center_foundation_verify.sql로 재확인")
+  } else if (!health.openaiConfigured) {
+    nextActions.push("Vercel에 OPENAI_API_KEY 설정 후 Redeploy")
+  } else {
+    if (!health.vectorSearchReady) {
+      nextActions.push("sql/ai_knowledge_vector.sql 실행 후 ai-embed-knowledge-backfill.cjs")
+    }
+    nextActions.push("매출·본사매입 질의 및 전 매장 비교 테스트")
+  }
+
   return NextResponse.json(
     {
       step: health.step,
       label: "AI Center 기반(0단계)",
       allTablesOk: health.allTablesOk,
       openaiConfigured: health.openaiConfigured,
+      vectorSearchReady: health.vectorSearchReady,
       readyForStep1: health.readyForStep1,
       tables: health.tables,
-      nextActions: health.allTablesOk
-        ? health.openaiConfigured
-          ? ["1단계: 매출·본사매입 지표 정의서 작성"]
-          : ["Vercel에 OPENAI_API_KEY 설정 후 Redeploy"]
-        : ["Supabase SQL Editor에서 sql/ai_center_foundation.sql 실행", "sql/ai_center_foundation_verify.sql로 재확인"],
+      nextActions,
     },
     { headers }
   )

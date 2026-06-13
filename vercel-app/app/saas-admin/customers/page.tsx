@@ -29,6 +29,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import {
@@ -54,12 +55,6 @@ import {
 } from "@/lib/saas-module-billing"
 import { createNewTenantDraft } from "@/lib/saas-tenant-draft"
 import { fetchGlobalModulePrices } from "@/lib/saas-module-catalog-client"
-
-const PLAN_TIER_NAME: Record<PlanTier, string> = {
-  starter: "Starter",
-  growth: "Growth",
-  enterprise: "Enterprise",
-}
 
 const STATUS_VARIANT = {
   trial: "secondary",
@@ -227,6 +222,11 @@ function escapeCsv(value: unknown): string {
   return `"${s.replace(/"/g, '""')}"`
 }
 
+function tenantPricingModeLabel(tenant: TenantItem, t: (k: string) => string): string {
+  const mode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
+  return mode === "module" ? t("saasAdminCust_pricingModeModule") : t("saasAdminCust_pricingModeStage")
+}
+
 function recalcTenantPricing(tenant: TenantItem, pricingPatch: Partial<TenantItem["pricing"]>): TenantItem["pricing"] {
   const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
   const stagePrices = pricingPatch.stagePrices ?? tenant.pricing.stagePrices
@@ -252,6 +252,7 @@ function recalcTenantPricing(tenant: TenantItem, pricingPatch: Partial<TenantIte
 export default function SaasCustomersPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const scope = useSaasScope()
   const router = useRouter()
   const searchParams = useSearchParams()
   const dateLocale = saasAdminDateLocale(lang)
@@ -273,6 +274,7 @@ export default function SaasCustomersPage() {
   const [newPhone, setNewPhone] = useState("")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expiryOnly, setExpiryOnly] = useState(false)
+  const [partnerFilter, setPartnerFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<"default" | "risk_desc" | "expiry_soon">("default")
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
   const [bulkPendingStatus, setBulkPendingStatus] = useState<TenantItem["status"] | null>(null)
@@ -287,6 +289,7 @@ export default function SaasCustomersPage() {
   const [auditPeriod, setAuditPeriod] = useState<AuditPeriodFilter>("all")
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("plan")
   const [bootstrapHint, setBootstrapHint] = useState(false)
+  const [partnerOptions, setPartnerOptions] = useState<Array<{ id: string; name: string }>>([])
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) ?? tenants[0] ?? fallbackTenant,
@@ -297,6 +300,10 @@ export default function SaasCustomersPage() {
     const keyword = search.trim().toLowerCase()
     const rows = tenants.filter((tenant) => {
       if (statusFilter !== "all" && tenant.status !== statusFilter) return false
+      if (scope.isPlatform && partnerFilter !== "all") {
+        if (partnerFilter === "__direct__" && tenant.partnerId) return false
+        if (partnerFilter !== "__direct__" && tenant.partnerId !== partnerFilter) return false
+      }
       if (!keyword) return true
       const bundle = `${tenant.id} ${tenant.companyName} ${tenant.ownerName} ${tenant.phone}`.toLowerCase()
       return bundle.includes(keyword)
@@ -315,7 +322,7 @@ export default function SaasCustomersPage() {
       })
     }
     return withExpiry
-  }, [expiryOnly, search, sortBy, statusFilter, t, tenants])
+  }, [expiryOnly, partnerFilter, scope.isPlatform, search, sortBy, statusFilter, t, tenants])
 
   const stats = useMemo(() => {
     const active = tenants.filter((x) => x.status === "active").length
@@ -378,6 +385,21 @@ export default function SaasCustomersPage() {
   useEffect(() => {
     void loadTenants()
   }, [loadTenants])
+
+  useEffect(() => {
+    if (!scope.isPlatform) return
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/saasAdminPartners")
+        const json = (await res.json()) as { success?: boolean; partners?: Array<{ id: string; name: string }> }
+        if (res.ok && json.success === true && Array.isArray(json.partners)) {
+          setPartnerOptions(json.partners.map((p) => ({ id: p.id, name: p.name })))
+        }
+      } catch {
+        setPartnerOptions([])
+      }
+    })()
+  }, [scope.isPlatform])
 
   useEffect(() => {
     const tenant = searchParams.get("tenant")?.trim()
@@ -473,6 +495,7 @@ export default function SaasCustomersPage() {
       ownerName: newOwnerName,
       phone: newPhone,
       catalog,
+      partnerMarginPct: scope.isPartner ? scope.defaultMarginPct : 0,
     })
 
     setLoading(true)
@@ -846,7 +869,7 @@ export default function SaasCustomersPage() {
         </Card>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="space-y-2">
           <Label>{t("saasAdminCust_searchLabel")}</Label>
           <Input
@@ -890,6 +913,25 @@ export default function SaasCustomersPage() {
             <span className="text-sm">{t("saasAdminCust_expiryOnly")}</span>
           </label>
         </div>
+        {scope.isPlatform ? (
+          <div className="space-y-2">
+            <Label>{t("saasAdminCust_partnerFilter")}</Label>
+            <Select value={partnerFilter} onValueChange={setPartnerFilter}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                <SelectItem value="__direct__">{t("saasAdminCust_partnerDirect")}</SelectItem>
+                {partnerOptions.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -970,7 +1012,18 @@ export default function SaasCustomersPage() {
                         <div className="font-medium">{tenant.companyName}</div>
                         <p className="text-xs text-muted-foreground">{tenant.ownerName}</p>
                       </TableCell>
-                      <TableCell>{PLAN_TIER_NAME[tenant.planTier]}</TableCell>
+                      <TableCell>
+                        <div className="font-medium tabular-nums">
+                          {tenant.pricing.currentChargeAmount.toLocaleString()} {tenant.pricing.currency}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {tenant.billingCycle === "yearly"
+                            ? t("saasAdminCust_billingYearly")
+                            : t("saasAdminCust_billingMonthly")}
+                          {" · "}
+                          {tenantPricingModeLabel(tenant, t)}
+                        </p>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">{saasAdminStageLabel(tenant.policy.salesStage, t)}</Badge>
                       </TableCell>
@@ -1042,6 +1095,30 @@ export default function SaasCustomersPage() {
               </TabsList>
 
               <TabsContent value="plan" className="space-y-4 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 p-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("saasAdminCust_planChargeSummary")}</p>
+                    <p className="text-lg font-semibold tabular-nums">
+                      {tr(t, "saasAdminCust_currentCharge", {
+                        amount: selectedTenant.pricing.currentChargeAmount.toLocaleString(),
+                        currency: selectedTenant.pricing.currency,
+                      })}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {selectedTenant.billingCycle === "yearly"
+                        ? t("saasAdminCust_billingYearly")
+                        : t("saasAdminCust_billingMonthly")}
+                      {" · "}
+                      {tenantPricingModeLabel(selectedTenant, t)}
+                    </p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href="/saas-admin/pricing">{t("saasAdminCust_globalPricingLink")}</Link>
+                  </Button>
+                </div>
+
+                <SaasModulePricingPanel tenant={selectedTenant} onChange={updateTenant} />
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>{t("saasAdminCust_planTier")}</Label>
@@ -1261,6 +1338,46 @@ export default function SaasCustomersPage() {
               <TabsContent value="policy" className="space-y-4 pt-2">
                 <p className="text-sm text-muted-foreground">{t("saasAdminCust_policyIntro")}</p>
 
+                {scope.isPlatform ? (
+                  <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="space-y-2">
+                      <Label>{t("saasAdminCust_assignedPartner")}</Label>
+                      <Select
+                        value={selectedTenant.partnerId || "__none__"}
+                        onValueChange={(value) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            partnerId: value === "__none__" ? null : value,
+                            partnerName:
+                              value === "__none__"
+                                ? null
+                                : partnerOptions.find((p) => p.id === value)?.name || value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">{t("saasAdminCust_partnerDirect")}</SelectItem>
+                          {partnerOptions.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">{t("saasAdminCust_assignedPartnerHint")}</p>
+                    </div>
+                  </div>
+                ) : selectedTenant.partnerName || scope.partnerName ? (
+                  <div className="rounded-md border p-3 text-sm">
+                    {tr(t, "saasAdminCust_partnerBadge", {
+                      name: selectedTenant.partnerName || scope.partnerName || "-",
+                    })}
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_auto] md:items-end">
                   <div className="space-y-2">
                     <Label>{t("saasAdminCust_salesStage")}</Label>
@@ -1340,8 +1457,6 @@ export default function SaasCustomersPage() {
                     <p className="text-xs text-muted-foreground">{t("saasAdminCust_posBillingBasisDesc")}</p>
                   </div>
                 </div>
-
-                <SaasModulePricingPanel tenant={selectedTenant} onChange={updateTenant} />
 
                 <div className="grid gap-3 rounded-md border p-3">
                   <div className="flex items-center justify-between">
@@ -1695,6 +1810,23 @@ export default function SaasCustomersPage() {
               </TabsContent>
 
               <TabsContent value="billing" className="space-y-3 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("saasAdminCust_billingEstimateTitle")}</p>
+                    <p className="text-base font-semibold tabular-nums">
+                      {tr(t, "saasAdminCust_currentCharge", {
+                        amount: selectedTenant.pricing.currentChargeAmount.toLocaleString(),
+                        currency: selectedTenant.pricing.currency,
+                      })}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{tenantPricingModeLabel(selectedTenant, t)}</p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href={`/saas-admin/customers?tenant=${encodeURIComponent(selectedTenant.id)}&tab=plan`}>
+                      {t("saasAdminCust_billingEditPricing")}
+                    </Link>
+                  </Button>
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm text-muted-foreground">{t("saasAdminCust_billingIntro")}</p>
                   <div className="flex flex-wrap gap-2">

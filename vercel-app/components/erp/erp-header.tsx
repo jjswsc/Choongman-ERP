@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download, Bot } from "lucide-react"
+import { AiCenterDrawer } from "@/components/ai/ai-center-drawer"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -98,11 +99,6 @@ export function ErpHeader() {
     else await appAlert((t("windowsInstallerCopyFail") || "") + r.url)
   }, [t])
   const autoTranslateLabel = t("header_auto_translate")
-
-  const aiCenterPrefillQ = useMemo(() => {
-    const path = pathname || "/admin"
-    return t("aiCenterHeaderPrefill").replace(/\{\{path\}\}/g, path)
-  }, [pathname, t])
 
   // ERP 내 이동 시 이전/현재 경로 저장 (뒤로가기용)
   useEffect(() => {
@@ -284,12 +280,7 @@ export function ErpHeader() {
         </Select>
         <Separator orientation="vertical" className="mx-1 h-5" />
         {/* Search */}
-        <Button variant="ghost" size="icon" asChild className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Link href={`/admin/ai-center?intent=qa&q=${encodeURIComponent(aiCenterPrefillQ)}`}>
-            <Bot className="h-4 w-4" />
-            <span className="sr-only">{t("aiCenter")}</span>
-          </Link>
-        </Button>
+        <AiCenterDrawer />
         <Button
           variant="ghost"
           size="icon"

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** POST: 배합 삭제 (CASCADE로 sauce_ingredients도 삭제) */
 export async function POST(request: NextRequest) {
@@ -7,6 +8,12 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+
     const body = await request.json()
     const id = body.id != null ? Number(body.id) : null
     if (id == null) {

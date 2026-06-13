@@ -321,7 +321,6 @@ const MANAGER_DENIED_PATHS = [
   "/admin/items",
   "/admin/vendors",
   "/admin/settings",
-  "/admin/pos-cost-analysis",
 ]
 
 /** 매니저·가맹점주가 해당 경로에 접근할 수 있는지 */
@@ -446,6 +445,25 @@ export function canPickAttendanceQrStoreFilter(role: string, authStore?: string)
   return isOfficeStore(String(authStore || ""))
 }
 
+/** 업무일지 검토·승인·첨언·보류·반려·삭제 (매장 매니저·가맹점주는 조회만) */
+export function canReviewWorkLog(role: string): boolean {
+  return (
+    isOfficeRole(role) ||
+    isAccountingRole(role) ||
+    isSupervisorRole(role) ||
+    isDirectorRole(role)
+  )
+}
+
+/** 업무 검토 탭 노출 (본사·순회 SV·회계 + 매장 매니저·가맹점주 조회) */
+export function canViewWorkLogApprovalTab(role: string): boolean {
+  return (
+    canReviewWorkLog(role) ||
+    isManagerRole(role) ||
+    isFranchiseeRole(role)
+  )
+}
+
 /** POS 주문 내역 가능 (관리자) */
 export function canAccessPosOrders(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
@@ -491,8 +509,13 @@ export function canAccessPosCoupons(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
-/** 원가 분석 가능 (오피스 직원만) */
+/** 원가 분석 조회 (본사 + 매장 매니저 + 가맹점주) */
 export function canAccessPosCostAnalysis(role: string): boolean {
+  return isOfficeRole(role) || isManagerOrFranchiseeRole(role)
+}
+
+/** 원가 분석 BOM·설정·배합 수정 (본사 오피스만) */
+export function canEditPosCostAnalysis(role: string): boolean {
   return isOfficeRole(role)
 }
 

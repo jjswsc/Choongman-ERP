@@ -1,12 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseUpdate } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** POST: 모든 배합 원가 재계산 및 cost_per_unit 캐시 업데이트 */
-export async function POST() {
+export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+
     const [sauceRows, ingRows, itemRows] = await Promise.all([
       supabaseSelect('sauces', { order: 'sort_order.asc,id.asc', limit: 500 }),
       supabaseSelect('sauce_ingredients', { limit: 5000, select: 'sauce_id,item_code,quantity,loss_rate' }),
@@ -79,7 +86,28 @@ export async function POST() {
       })
     }
 
-    return NextResponse.json({ success: true, count: sauceRowsArr.length }, { headers })
+    const sauceCodes = sauceRowsArr.map((s) => String(s.code ?? '').trim()).filter(Boolean)
+    let affectedMenuCount = 0
+    if (sauceCodes.length > 0) {
+      const ingMenuRows = (await supabaseSelect('pos_menu_ingredients', {
+        limit: 50000,
+        select: 'menu_id,item_code',
+      }).catch(() => [])) as { menu_id?: number; item_code?: string }[] | null
+      const codeSet = new Set(sauceCodes.map((c) => c.toLowerCase()))
+      const menuIds = new Set<number>()
+      for (const row of ingMenuRows || []) {
+        const ic = String(row.item_code ?? '').trim().toLowerCase()
+        if (!ic || !codeSet.has(ic)) continue
+        const mid = Number(row.menu_id ?? 0)
+        if (Number.isFinite(mid) && mid > 0) menuIds.add(mid)
+      }
+      affectedMenuCount = menuIds.size
+    }
+
+    return NextResponse.json(
+      { success: true, count: sauceRowsArr.length, affectedMenuCount },
+      { headers }
+    )
   } catch (e) {
     console.error('recalculateSauces:', e)
     return NextResponse.json({ success: false, message: String(e) }, { status: 500, headers })

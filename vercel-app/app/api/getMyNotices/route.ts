@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { NOTICE_LIST_COLS, NOTICE_LIST_COLS_LEGACY } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
@@ -13,6 +13,9 @@ export interface NoticeItem {
   sender: string
   status: string
   attachments: unknown[]
+  isUrgent?: boolean
+  expiresAt?: string
+  scheduledAt?: string
 }
 
 const DB_FETCH_LIMIT = 100
@@ -62,11 +65,7 @@ async function getMyNoticesHandler(
   }
 
   const built: NoticeItem[] = []
-  const rows = (await supabaseSelect('notices', {
-    order: 'created_at.desc',
-    limit: DB_FETCH_LIMIT,
-    select: NOTICE_LIST_COLS,
-  })) as {
+  let rows: {
     id: number
     title?: string
     content?: string
@@ -77,11 +76,44 @@ async function getMyNoticesHandler(
     target_recipients?: string | null
     created_at?: string
     attachments?: string
+    is_urgent?: boolean
+    expires_at?: string | null
+    scheduled_at?: string | null
   }[] | null
+
+  try {
+    rows = (await supabaseSelect('notices', {
+      order: 'created_at.desc',
+      limit: DB_FETCH_LIMIT,
+      select: NOTICE_LIST_COLS,
+    })) as typeof rows
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/is_urgent|expires_at|scheduled_at|column/i.test(msg)) {
+      rows = (await supabaseSelect('notices', {
+        order: 'created_at.desc',
+        limit: DB_FETCH_LIMIT,
+        select: NOTICE_LIST_COLS_LEGACY,
+      })) as typeof rows
+    } else {
+      throw e
+    }
+  }
+
+  const nowMs = Date.now()
 
   for (let i = 0; i < (rows || []).length; i++) {
     const row = rows![i]
     if (!employeeIsTargetedForRow(store, name, myJob, myRole, row)) continue
+
+    if (row.expires_at) {
+      const ex = new Date(row.expires_at).getTime()
+      if (!isNaN(ex) && ex < nowMs) continue
+    }
+    if (row.scheduled_at) {
+      const sch = new Date(row.scheduled_at).getTime()
+      if (!isNaN(sch) && sch > nowMs) continue
+    }
 
     let att: unknown[] = []
     if (row.attachments) {
@@ -105,6 +137,9 @@ async function getMyNoticesHandler(
       sender: row.sender || '',
       status: readMap[row.id] || 'New',
       attachments: att,
+      isUrgent: Boolean(row.is_urgent),
+      expiresAt: row.expires_at ? String(row.expires_at) : undefined,
+      scheduledAt: row.scheduled_at ? String(row.scheduled_at) : undefined,
     })
   }
 
@@ -129,6 +164,10 @@ async function getMyNoticesHandler(
   }
 
   filtered = [...filtered].sort((a, b) => {
+    const aUrgent = Boolean(a.isUrgent)
+    const bUrgent = Boolean(b.isUrgent)
+    if (aUrgent && !bUrgent) return -1
+    if (!aUrgent && bUrgent) return 1
     const aUnread = !isNoticeReadStatus(a.status)
     const bUnread = !isNoticeReadStatus(b.status)
     if (aUnread && !bUnread) return -1

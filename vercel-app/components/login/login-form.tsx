@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
-import { isSandboxStoreCode } from "@/lib/pos-sales-test-office"
+import { isLoginExcludedStoreKey } from "@/lib/pos-sales-test-office"
 import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
 import { useAuth, loadOfflineResumeAuth, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
 import {
@@ -695,7 +695,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return x === "본사" || x === "오피스" || x === "본점" || x.toLowerCase().includes("office")
   }
   const stores = Object.keys(loginData)
-    .filter((s) => !isSandboxStoreCode(s))
+    .filter((s) => !isLoginExcludedStoreKey(s))
     .sort((a, b) => {
     if (isOfficeStore(a) && !isOfficeStore(b)) return -1
     if (!isOfficeStore(a) && isOfficeStore(b)) return 1

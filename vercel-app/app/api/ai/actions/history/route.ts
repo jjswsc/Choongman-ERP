@@ -2,24 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAiAccess } from "@/lib/ai/auth"
 import { supabaseSelectFilter } from "@/lib/supabase-server"
 import { buildAiDataPolicy } from "@/lib/ai/policy"
-
-function toResponseRow(row: Record<string, unknown>) {
-  return {
-    id: Number(row.id || 0),
-    status: String(row.status || "pending_approval"),
-    actionType: String(row.action_type || ""),
-    reason: String(row.reason || ""),
-    payload: (row.payload_json as Record<string, unknown>) || {},
-    preview: String(row.preview || ""),
-    createdAt: String(row.created_at || ""),
-    requestedBy: String(row.requested_by || ""),
-    requestedStore: String(row.requested_store || ""),
-    approvedBy: row.approved_by == null ? null : String(row.approved_by),
-    approvedAt: row.approved_at == null ? null : String(row.approved_at),
-    executedAt: row.executed_at == null ? null : String(row.executed_at),
-    error: row.error_message == null ? null : String(row.error_message),
-  }
-}
+import { toAiActionResponseRow } from "@/lib/ai/action-response"
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -55,12 +38,12 @@ export async function GET(req: NextRequest) {
     order: "id.desc",
     limit,
     select:
-      "id,status,action_type,reason,payload_json,preview,created_at,requested_by,requested_store,approved_by,approved_at,executed_at,error_message",
+      "id,status,action_type,reason,payload_json,preview,created_at,requested_by,requested_store,approved_by,approved_at,executed_at,error_message,execution_result_type,execution_result_id",
   })) as Record<string, unknown>[] | null
 
   return NextResponse.json(
     {
-      items: (rows || []).map(toResponseRow),
+      items: (rows || []).map(toAiActionResponseRow),
       meta: {
         requestedStore: policy.requestedStore,
         resolvedStore: policy.resolvedStore,

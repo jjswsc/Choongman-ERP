@@ -28,6 +28,12 @@ export type SaasModulePriceRow = {
   isPerUnit?: boolean
   /** AI 센터 등 — 자동 합계 제외, 협의 */
   isCustomQuote?: boolean
+  /** 플랫폼 도매가 (floor) */
+  wholesaleMonthly?: number
+  wholesaleYearly?: number
+  /** 파트너 마진 */
+  marginMonthly?: number
+  marginYearly?: number
 }
 
 export type ModuleChargeLine = {
@@ -97,15 +103,167 @@ export function normalizeModulePrices(raw: unknown): Record<SaasModuleKey, SaasM
   for (const key of SAAS_MODULE_KEYS) {
     const row = obj[key]
     if (!row) continue
+    const monthly = Math.max(0, Number(row.monthly ?? base[key].monthly))
+    const yearly = Math.max(0, Number(row.yearly ?? base[key].yearly))
+    const wholesaleMonthly = Math.max(0, Number(row.wholesaleMonthly ?? row.monthly ?? base[key].monthly))
+    const wholesaleYearly = Math.max(0, Number(row.wholesaleYearly ?? row.yearly ?? base[key].yearly))
     base[key] = {
-      monthly: Math.max(0, Number(row.monthly ?? base[key].monthly)),
-      yearly: Math.max(0, Number(row.yearly ?? base[key].yearly)),
+      monthly: Math.max(monthly, wholesaleMonthly),
+      yearly: Math.max(yearly, wholesaleYearly),
       isEnabled: row.isEnabled === true,
       isPerUnit: row.isPerUnit ?? base[key].isPerUnit,
       isCustomQuote: row.isCustomQuote ?? base[key].isCustomQuote,
+      wholesaleMonthly,
+      wholesaleYearly,
+      marginMonthly: Math.max(0, monthly - wholesaleMonthly),
+      marginYearly: Math.max(0, yearly - wholesaleYearly),
     }
   }
   return base
+}
+
+function roundPrice(n: number): number {
+  return Math.max(0, Math.round(n))
+}
+
+/** 도매가 + 마진% → 소매가(청구가) 반영 */
+export function applyWholesaleWithMarginPct(
+  modules: Record<SaasModuleKey, SaasModulePriceRow>,
+  catalog: Record<SaasModuleKey, SaasModulePriceRow>,
+  marginPct: number
+): Record<SaasModuleKey, SaasModulePriceRow> {
+  const factor = 1 + Math.max(0, marginPct) / 100
+  const out = {} as Record<SaasModuleKey, SaasModulePriceRow>
+  for (const key of SAAS_MODULE_KEYS) {
+    const wholesaleM = roundPrice(catalog[key].monthly)
+    const wholesaleY = roundPrice(catalog[key].yearly)
+    const retailM = roundPrice(wholesaleM * factor)
+    const retailY = roundPrice(wholesaleY * factor)
+    out[key] = {
+      ...modules[key],
+      wholesaleMonthly: wholesaleM,
+      wholesaleYearly: wholesaleY,
+      marginMonthly: retailM - wholesaleM,
+      marginYearly: retailY - wholesaleY,
+      monthly: retailM,
+      yearly: retailY,
+      isPerUnit: catalog[key].isPerUnit ?? modules[key].isPerUnit,
+      isCustomQuote: catalog[key].isCustomQuote ?? modules[key].isCustomQuote,
+    }
+  }
+  return out
+}
+
+/** 글로벌 카탈로그 → 도매가 스냅샷 (소매·마진 유지 또는 marginPct로 재계산) */
+export function applyCatalogWholesaleToModules(
+  modules: Record<SaasModuleKey, SaasModulePriceRow>,
+  catalog: Record<SaasModuleKey, SaasModulePriceRow>,
+  options?: { marginPct?: number; preserveRetailAboveWholesale?: boolean }
+): Record<SaasModuleKey, SaasModulePriceRow> {
+  if (options?.marginPct != null) {
+    return applyWholesaleWithMarginPct(modules, catalog, options.marginPct)
+  }
+  const out = {} as Record<SaasModuleKey, SaasModulePriceRow>
+  for (const key of SAAS_MODULE_KEYS) {
+    const wholesaleM = roundPrice(catalog[key].monthly)
+    const wholesaleY = roundPrice(catalog[key].yearly)
+    const prevM = Math.max(modules[key].monthly, wholesaleM)
+    const prevY = Math.max(modules[key].yearly, wholesaleY)
+    const retailM = options?.preserveRetailAboveWholesale ? Math.max(prevM, wholesaleM) : wholesaleM
+    const retailY = options?.preserveRetailAboveWholesale ? Math.max(prevY, wholesaleY) : wholesaleY
+    out[key] = {
+      ...modules[key],
+      wholesaleMonthly: wholesaleM,
+      wholesaleYearly: wholesaleY,
+      monthly: retailM,
+      yearly: retailY,
+      marginMonthly: retailM - wholesaleM,
+      marginYearly: retailY - wholesaleY,
+      isPerUnit: catalog[key].isPerUnit,
+      isCustomQuote: catalog[key].isCustomQuote,
+    }
+  }
+  return out
+}
+
+export function syncRetailFromMargin(row: SaasModulePriceRow, cycle: "monthly" | "yearly"): SaasModulePriceRow {
+  const wholesaleM = Math.max(0, Number(row.wholesaleMonthly ?? row.monthly ?? 0))
+  const wholesaleY = Math.max(0, Number(row.wholesaleYearly ?? row.yearly ?? 0))
+  const marginM = Math.max(0, Number(row.marginMonthly ?? 0))
+  const marginY = Math.max(0, Number(row.marginYearly ?? 0))
+  return {
+    ...row,
+    wholesaleMonthly: wholesaleM,
+    wholesaleYearly: wholesaleY,
+    marginMonthly: marginM,
+    marginYearly: marginY,
+    monthly: wholesaleM + marginM,
+    yearly: wholesaleY + marginY,
+  }
+}
+
+export function syncMarginFromRetail(row: SaasModulePriceRow): SaasModulePriceRow {
+  const wholesaleM = Math.max(0, Number(row.wholesaleMonthly ?? 0))
+  const wholesaleY = Math.max(0, Number(row.wholesaleYearly ?? 0))
+  const retailM = Math.max(wholesaleM, Number(row.monthly ?? wholesaleM))
+  const retailY = Math.max(wholesaleY, Number(row.yearly ?? wholesaleY))
+  return {
+    ...row,
+    wholesaleMonthly: wholesaleM,
+    wholesaleYearly: wholesaleY,
+    monthly: retailM,
+    yearly: retailY,
+    marginMonthly: retailM - wholesaleM,
+    marginYearly: retailY - wholesaleY,
+  }
+}
+
+export function validateModulePricesFloor(
+  modules: Record<SaasModuleKey, SaasModulePriceRow>
+): { ok: true } | { ok: false; moduleKey: SaasModuleKey; message: string } {
+  for (const key of SAAS_MODULE_KEYS) {
+    const row = syncMarginFromRetail(modules[key])
+    const wholesaleM = Number(row.wholesaleMonthly ?? 0)
+    const wholesaleY = Number(row.wholesaleYearly ?? 0)
+    if (row.monthly < wholesaleM || row.yearly < wholesaleY) {
+      return { ok: false, moduleKey: key, message: `소매가는 도매가 이상이어야 합니다: ${key}` }
+    }
+  }
+  return { ok: true }
+}
+
+export function resolveWholesaleModuleChargeAmount(
+  modules: Record<SaasModuleKey, SaasModulePriceRow>,
+  cycle: BillingCycle,
+  usage: Pick<TenantUsage, "posDevices">
+): ModuleChargeResult {
+  const wholesaleModules = {} as Record<SaasModuleKey, SaasModulePriceRow>
+  for (const key of SAAS_MODULE_KEYS) {
+    const row = modules[key]
+    wholesaleModules[key] = {
+      ...row,
+      monthly: Number(row.wholesaleMonthly ?? row.monthly ?? 0),
+      yearly: Number(row.wholesaleYearly ?? row.yearly ?? 0),
+    }
+  }
+  return resolveModuleChargeAmount(wholesaleModules, cycle, usage)
+}
+
+export function resolveMarginModuleChargeAmount(
+  modules: Record<SaasModuleKey, SaasModulePriceRow>,
+  cycle: BillingCycle,
+  usage: Pick<TenantUsage, "posDevices">
+): ModuleChargeResult {
+  const marginModules = {} as Record<SaasModuleKey, SaasModulePriceRow>
+  for (const key of SAAS_MODULE_KEYS) {
+    const row = syncMarginFromRetail(modules[key])
+    marginModules[key] = {
+      ...row,
+      monthly: Number(row.marginMonthly ?? 0),
+      yearly: Number(row.marginYearly ?? 0),
+    }
+  }
+  return resolveModuleChargeAmount(marginModules, cycle, usage)
 }
 
 /** 신규 고객·기능 토글 연동 시 기본 ON 추론 (저장된 isEnabled 없을 때) */
@@ -276,17 +434,7 @@ export function applyCatalogPricesToModules(
   modules: Record<SaasModuleKey, SaasModulePriceRow>,
   catalog: Record<SaasModuleKey, SaasModulePriceRow>
 ): Record<SaasModuleKey, SaasModulePriceRow> {
-  const out = {} as Record<SaasModuleKey, SaasModulePriceRow>
-  for (const key of SAAS_MODULE_KEYS) {
-    out[key] = {
-      ...modules[key],
-      monthly: catalog[key].monthly,
-      yearly: catalog[key].yearly,
-      isPerUnit: catalog[key].isPerUnit,
-      isCustomQuote: catalog[key].isCustomQuote,
-    }
-  }
-  return out
+  return applyCatalogWholesaleToModules(modules, catalog, { preserveRetailAboveWholesale: true })
 }
 
 export function mergeTenantModulePricing(params: {
@@ -296,6 +444,10 @@ export function mergeTenantModulePricing(params: {
     module_key: string
     monthly_price?: number | null
     yearly_price?: number | null
+    wholesale_monthly?: number | null
+    wholesale_yearly?: number | null
+    margin_monthly?: number | null
+    margin_yearly?: number | null
     is_enabled?: boolean | null
     is_per_unit?: boolean | null
     is_custom_quote?: boolean | null
@@ -320,10 +472,15 @@ export function mergeTenantModulePricing(params: {
     base[key] = {
       monthly: Number(row.monthly_price ?? base[key].monthly),
       yearly: Number(row.yearly_price ?? base[key].yearly),
+      wholesaleMonthly: Number(row.wholesale_monthly ?? row.monthly_price ?? base[key].monthly),
+      wholesaleYearly: Number(row.wholesale_yearly ?? row.yearly_price ?? base[key].yearly),
+      marginMonthly: Number(row.margin_monthly ?? 0),
+      marginYearly: Number(row.margin_yearly ?? 0),
       isEnabled: row.is_enabled === true,
       isPerUnit: row.is_per_unit === true || base[key].isPerUnit,
       isCustomQuote: row.is_custom_quote === true || base[key].isCustomQuote,
     }
+    base[key] = syncMarginFromRetail(base[key])
   }
   return base
 }

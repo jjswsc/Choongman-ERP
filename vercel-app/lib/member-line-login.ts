@@ -79,6 +79,26 @@ export function buildLineOAuthStateClearCookie(secure: boolean): string {
   return `cm_line_oauth_state=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${flags}`
 }
 
+export function buildLineJoinStoreCookie(joinStoreCode: string, secure: boolean): string {
+  const flags = secure ? '; Secure' : ''
+  const value = encodeURIComponent(String(joinStoreCode || '').trim())
+  return `cm_line_join_store=${value}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax${flags}`
+}
+
+export function buildLineJoinStoreClearCookie(secure: boolean): string {
+  const flags = secure ? '; Secure' : ''
+  return `cm_line_join_store=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${flags}`
+}
+
+export function readLineJoinStoreCookie(cookieHeader: string | null): string {
+  if (!cookieHeader) return ''
+  for (const part of cookieHeader.split(';')) {
+    const [k, ...rest] = part.trim().split('=')
+    if (k === 'cm_line_join_store') return decodeURIComponent(rest.join('='))
+  }
+  return ''
+}
+
 export function readLineOAuthStateCookie(cookieHeader: string | null): string {
   if (!cookieHeader) return ''
   for (const part of cookieHeader.split(';')) {
@@ -193,7 +213,7 @@ export async function exchangeLineAuthCode(params: {
 
 export async function loginMemberWithLineProfile(
   profile: LineProfile,
-  options?: { friendFlag?: boolean | null; friendshipStatusChanged?: boolean }
+  options?: { friendFlag?: boolean | null; friendshipStatusChanged?: boolean; joinStoreCode?: string }
 ) {
   const lineUserId = toText(profile.userId)
   if (!lineUserId) throw new Error('LINE 사용자 ID가 없습니다.')
@@ -202,6 +222,7 @@ export async function loginMemberWithLineProfile(
     displayName: toText(profile.displayName),
     pictureUrl: toText(profile.pictureUrl),
     name: toText(profile.displayName),
+    joinStoreCode: toText(options?.joinStoreCode),
   })
   if (options?.friendFlag != null) {
     await updateMemberLineOaFriend({

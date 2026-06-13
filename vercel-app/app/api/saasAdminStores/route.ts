@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
-import { canAccessSaasAdmin } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
+import {
+  assertTenantInScope,
+  loadPartnerTenantIdSet,
+  requireSaasControlPlane,
+  type SaasScope,
+} from "@/lib/saas-control-plane-scope"
 import {
   supabaseInsert,
   supabaseSelect,
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
-  supabaseSelectFilterRange,
   supabaseSelectPageCap,
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
+import { loadErpStoreRowsForTenant } from "@/lib/saas-tenant-stores-server"
 
 export const dynamic = "force-dynamic"
 
@@ -48,16 +52,21 @@ function normalizeStoreCode(raw: string, tenantId: string, storeName: string): s
   return fallback.slice(0, 64)
 }
 
-async function loadTenantOptions(): Promise<TenantOpt[]> {
+async function loadTenantOptions(scope: SaasScope): Promise<TenantOpt[]> {
   try {
     const rows = (await supabaseSelect("tenants", {
       order: "company_name.asc",
       limit: 500,
       select: "id,company_name",
     })) as { id?: string; company_name?: string }[]
-    return (rows || [])
+    let opts = (rows || [])
       .map((r) => ({ id: String(r.id || "").trim(), companyName: String(r.company_name || "").trim() }))
       .filter((t) => t.id)
+    if (scope.kind === "partner") {
+      const allowed = await loadPartnerTenantIdSet(scope.partnerId)
+      opts = opts.filter((t) => allowed.has(t.id))
+    }
+    return opts
   } catch {
     return []
   }
@@ -102,11 +111,8 @@ export async function GET(req: NextRequest) {
   headers.set("Access-Control-Allow-Origin", "*")
   headers.set("Cache-Control", "no-store")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const { searchParams } = new URL(req.url)
@@ -115,7 +121,14 @@ export async function GET(req: NextRequest) {
     const offset = Math.min(100_000, Math.max(0, parseInt(searchParams.get("offset") || "0", 10) || 0))
     const limit = Math.min(500, Math.max(1, parseInt(searchParams.get("limit") || "200", 10) || 200))
 
-    const tenantOptions = await loadTenantOptions()
+    if (tenantId) {
+      const inScope = await assertTenantInScope(cp.scope, tenantId)
+      if (!inScope) {
+        return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
+      }
+    }
+
+    const tenantOptions = await loadTenantOptions(cp.scope)
     const companyByTenant = new Map(tenantOptions.map((t) => [t.id, t.companyName]))
 
     const cap = Math.min(limit, supabaseSelectPageCap())
@@ -149,21 +162,13 @@ export async function GET(req: NextRequest) {
         }
       }
     } else if (tenantId) {
-      try {
-        raw = (await supabaseSelectFilterRange("erp_stores", tenantFilter, {
-          order: "id.desc",
-          select: "*",
-          rangeStart: offset,
-          rangeEnd: offset + cap - 1,
-        })) as Record<string, unknown>[]
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (/column|42703|tenant_id/i.test(msg)) {
-          raw = []
-        } else {
-          throw e
-        }
-      }
+      const companyName = tenantOptions.find((t) => t.id === tenantId)?.companyName ?? ""
+      raw = await loadErpStoreRowsForTenant({
+        tenantId,
+        companyName,
+        offset,
+        limit: cap,
+      })
     } else {
       raw = (await supabaseSelect("erp_stores", {
         order: "id.desc",
@@ -202,11 +207,8 @@ export async function PATCH(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as UpdateBody
@@ -232,6 +234,13 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
+    if (tenantId) {
+      const inScope = await assertTenantInScope(cp.scope, tenantId)
+      if (!inScope) {
+        return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
+      }
+    }
+
     await supabaseUpdateByFilter("erp_stores", filter, { is_active: body.isActive })
     return NextResponse.json({ success: true }, { headers })
   } catch (error) {
@@ -244,11 +253,8 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   try {
     const body = (await req.json()) as CreateBody
@@ -257,6 +263,11 @@ export async function POST(req: NextRequest) {
     const storeCode = normalizeStoreCode(String(body.storeCode || ""), tenantId, storeName)
     if (!tenantId || !storeName) {
       return NextResponse.json({ success: false, message: "tenantId와 storeName은 필수입니다." }, { status: 400, headers })
+    }
+
+    const inScope = await assertTenantInScope(cp.scope, tenantId)
+    if (!inScope) {
+      return NextResponse.json({ success: false, message: "해당 고객사에 접근할 수 없습니다." }, { status: 403, headers })
     }
 
     const tenantRows = (await supabaseSelectFilter("tenants", `id=eq.${encodeURIComponent(tenantId)}`, {
@@ -302,6 +313,14 @@ export async function POST(req: NextRequest) {
           is_active: true,
           sort_order: 999,
         })
+        try {
+          await supabaseUpdateByFilter("erp_stores", `store_code=eq.${encodeURIComponent(storeCode)}`, {
+            tenant_id: tenantId,
+            store_name: storeName,
+          })
+        } catch {
+          /* tenant_id/store_name 컬럼 없으면 legacy 행만 유지 */
+        }
       } else {
         throw e
       }

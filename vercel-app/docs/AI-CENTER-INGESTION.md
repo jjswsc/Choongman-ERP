@@ -29,6 +29,19 @@ node scripts/ai-index-knowledge.cjs --source docs --sourceName docs --store All 
 - 문서 파일명은 검색 품질을 위해 의미 있는 이름 사용
 - 대용량 파일은 사전 분리 후 적재 권장
 
+## 벡터 RAG (pgvector)
+
+1. `sql/ai_knowledge_vector.sql` 실행 (extension + `search_ai_knowledge_chunks` RPC)
+2. 인덱싱 시 임베딩 포함:
+   ```bash
+   node scripts/ai-index-knowledge.cjs --source docs --sourceName docs --store All --role office --embed
+   ```
+3. 기존 청크 백필:
+   ```bash
+   node scripts/ai-embed-knowledge-backfill.cjs --limit 500
+   ```
+4. `/api/ai/health` → `vectorSearchReady: true` 확인
+
 ## 외부 환경(날씨/휴일) 연동
 1. `external_store_profiles`에 매장별 `lat`, `lon` 입력
 2. 관리자 권한으로 아래 API 실행

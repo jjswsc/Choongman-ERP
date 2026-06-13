@@ -40,6 +40,9 @@ export function isEffectivelyResignedForStaffRollup(
 export type ErpStoreMasterRow = {
   store_code: string
   display_name: string
+  display_name_ko?: string | null
+  display_name_en?: string | null
+  display_name_th?: string | null
   aliases?: string[] | null
   sort_order?: number | null
   is_active?: boolean | null

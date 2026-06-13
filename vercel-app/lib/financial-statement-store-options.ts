@@ -40,6 +40,54 @@ export function buildFinancialStatementFranchiseStoreOptions(
   return out
 }
 
+export function normalizeFinancialStatementStoreCodes(stores: string[]): string[] {
+  const out: string[] = []
+  for (const s of stores) {
+    const v = String(s || '').trim()
+    if (v && !out.includes(v)) out.push(v)
+  }
+  return out
+}
+
+/** UI 선택 → API storeFilter */
+export function encodeFinancialStatementStoreFilter(params: {
+  franchiseStoreCodes: string[]
+  selectedFranchiseStores: string[]
+  officeSelected: boolean
+  allFranchiseSelected: boolean
+}): string {
+  if (params.officeSelected) return '본사'
+  if (
+    params.allFranchiseSelected ||
+    (params.franchiseStoreCodes.length > 0 &&
+      params.selectedFranchiseStores.length === params.franchiseStoreCodes.length)
+  ) {
+    return 'All'
+  }
+  const normalized = normalizeFinancialStatementStoreCodes(params.selectedFranchiseStores)
+  if (normalized.length === 0) return 'All'
+  if (normalized.length === 1) return normalized[0]!
+  return normalized.join(',')
+}
+
+export function decodeFinancialStatementStoreFilter(
+  storeFilter: string,
+  franchiseStoreCodes: string[]
+): { selectedFranchiseStores: string[]; officeSelected: boolean } {
+  const trimmed = String(storeFilter || '').trim()
+  if (trimmed === '본사') {
+    return { selectedFranchiseStores: [], officeSelected: true }
+  }
+  if (!trimmed || trimmed === 'All') {
+    return { selectedFranchiseStores: [...franchiseStoreCodes], officeSelected: false }
+  }
+  if (trimmed.includes(',')) {
+    const selected = normalizeFinancialStatementStoreCodes(trimmed.split(','))
+    return { selectedFranchiseStores: selected, officeSelected: false }
+  }
+  return { selectedFranchiseStores: [trimmed], officeSelected: false }
+}
+
 export function resolveFinancialStatementStoreLabel(
   storeFilter: string,
   storeLabels: Record<string, string>,
@@ -51,6 +99,15 @@ export function resolveFinancialStatementStoreLabel(
       return t('store_all_my_franchise_stores') || t('salesSelectMyFranchiseStoresAll') || 'All my stores'
     }
     return t('all') || 'All'
+  }
+  const multi = storeFilter.includes(',')
+    ? storeFilter
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : null
+  if (multi && multi.length > 1) {
+    return multi.map((code) => labelForStore(storeLabels, code) || code).join(', ')
   }
   if (isFinancialStatementHeadOfficeStore(storeFilter, storeLabels)) {
     return t('pettyScopeOffice') || 'Office'

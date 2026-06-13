@@ -15,15 +15,17 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
 
 const ONBOARDING_NAV = [{ href: "/saas-admin/onboarding", titleKey: "saasAdminNavOnboarding" as const }]
 
 const OPS_NAV = [
-  { href: "/saas-admin", titleKey: "saasAdminNavDashboard" as const, exact: true },
-  { href: "/saas-admin/customers", titleKey: "saasAdminNavCustomers" as const, exact: false },
-  { href: "/saas-admin/pricing", titleKey: "saasAdminNavPricing" as const, exact: true },
-  { href: "/saas-admin/stores", titleKey: "saasAdminNavStores" as const, exact: false },
-  { href: "/saas-admin/users", titleKey: "saasAdminNavUsers" as const, exact: false },
+  { href: "/saas-admin", titleKey: "saasAdminNavDashboard" as const, exact: true, platformOnly: false },
+  { href: "/saas-admin/customers", titleKey: "saasAdminNavCustomers" as const, exact: false, platformOnly: false },
+  { href: "/saas-admin/partners", titleKey: "saasAdminNavPartners" as const, exact: true, platformOnly: true },
+  { href: "/saas-admin/pricing", titleKey: "saasAdminNavPricing" as const, exact: true, platformOnly: true },
+  { href: "/saas-admin/stores", titleKey: "saasAdminNavStores" as const, exact: false, platformOnly: false },
+  { href: "/saas-admin/users", titleKey: "saasAdminNavUsers" as const, exact: false, platformOnly: false },
 ]
 
 export function SaasSidebar() {
@@ -31,8 +33,10 @@ export function SaasSidebar() {
   const brand = useAppBrandConfig()
   const { lang } = useLang()
   const t = useT(lang)
+  const scope = useSaasScope()
 
   const isActive = (href: string, exact: boolean) => (exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`))
+  const opsNav = OPS_NAV.filter((item) => !item.platformOnly || scope.isPlatform)
 
   return (
     <Sidebar>
@@ -71,7 +75,7 @@ export function SaasSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>{t("saasAdminNavGroupOps")}</SidebarGroupLabel>
           <SidebarMenu>
-            {OPS_NAV.map((item) => {
+            {opsNav.map((item) => {
               const active = isActive(item.href, item.exact)
               const label = t(item.titleKey)
               return (

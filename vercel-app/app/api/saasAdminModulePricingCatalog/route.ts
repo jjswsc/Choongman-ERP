@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { canAccessSaasAdmin } from "@/lib/permissions"
-import { requireAuth } from "@/lib/verify-auth"
+import { requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
 import { supabaseSelect, supabaseUpsert } from "@/lib/supabase-server"
 import {
   defaultModuleCatalogRows,
@@ -57,11 +56,8 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
-  }
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
 
   const rows = await loadCatalogRows()
   const modulePrices = modulePricesFromCatalog(rows)
@@ -74,10 +70,10 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
-  const authResult = await requireAuth(req, "manager")
-  if (authResult.errorResponse) return authResult.errorResponse
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
-    return NextResponse.json({ success: false, message: "SaaS 관리자 권한이 필요합니다." }, { status: 403, headers })
+  const cp = await requireSaasControlPlane(req)
+  if (cp.errorResponse) return cp.errorResponse
+  if (cp.scope.kind !== "platform") {
+    return NextResponse.json({ success: false, message: "글로벌 요금 수정은 본사 관리자만 가능합니다." }, { status: 403, headers })
   }
 
   try {

@@ -529,17 +529,22 @@ export async function POST(req: NextRequest) {
     const paymentSum = paymentSumForStatus
     const paymentComplete = total > 0 && paymentSum >= total - 0.02
     let pointEarned = pointEarnedReq
+    let stampResult: import('@/lib/member-stamp-card').MemberStampRecordResult | null = null
     if (memberId > 0 && paymentComplete && created?.id) {
       const loyalty = await applyLoyaltyOnOrder({
         memberId,
         orderId: Number(created.id),
+        storeCode,
         totalAmount: total,
         pointUsed,
         pointEarned: pointEarnedReq,
         orderNo,
         couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
+        orderType,
+        createdBy,
       })
       pointEarned = loyalty.pointEarned
+      stampResult = loyalty.stamp ?? null
       await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
         point_earned: pointEarned,
       })
@@ -641,6 +646,7 @@ export async function POST(req: NextRequest) {
         orderId: created?.id,
         orderNo,
         pointEarned,
+        stamp: stampResult,
         perf: {
           elapsedMs: totalElapsedMs,
           allocateOrderNoMs,

@@ -123,6 +123,8 @@ export type MemberPortalKey =
   | 'orderCheckoutQrAmount'
   | 'orderCheckoutPayBtn'
   | 'orderCheckoutPayWithPoints'
+  | 'orderCheckoutPointEarnEstimate'
+  | 'orderCheckoutPointEarnBirthday'
   | 'orderCheckoutQrTitle'
   | 'orderCheckoutQrHint'
   | 'orderCheckoutQrWaiting'
@@ -175,6 +177,21 @@ export type MemberPortalKey =
   | 'quickOrderDelivery'
   | 'quickOrderStoreHint'
   | 'privilegeTitle'
+  | 'stampCardTitle'
+  | 'stampCardDesc'
+  | 'stampProgress'
+  | 'stampNextReward'
+  | 'stampTotalEarned'
+  | 'stampMilestoneAchieved'
+  | 'stampCelebrateEarn'
+  | 'stampCelebrateMilestone'
+  | 'stampViewCoupons'
+  | 'stampHistoryBtn'
+  | 'stampHistoryTitle'
+  | 'stampHistoryRevoke'
+  | 'stampHistoryAdjust'
+  | 'stampExpiresAt'
+  | 'stampCardSequence'
   | 'privilegeDesc'
   | 'couponsTitle'
   | 'couponsSub'
@@ -292,7 +309,15 @@ export type MemberPortalKey =
   | 'signup_success_existing'
   | 'signup_missing_name'
   | 'signup_missing_gender'
+  | 'signup_missing_store'
+  | 'signup_invalid_store'
   | 'signup_exists_other_birth'
+  | 'signupStoreLabel'
+  | 'signupStorePlaceholder'
+  | 'signupStoreOffice'
+  | 'joinStoreCompleteTitle'
+  | 'joinStoreCompleteDesc'
+  | 'joinStoreCompleteBtn'
   | 'lineBtnWithLogo'
   | 'bgPresetLabel'
   | 'bgPresetSoft'
@@ -633,6 +658,16 @@ const MS: Record<MemberPortalKey, Dict> = {
   orderCheckoutQrAmount: { en: 'Pay by QR', th: 'ชำระ QR', ko: 'QR 결제' },
   orderCheckoutPayBtn: { en: 'Pay with QR', th: 'ชำระด้วย QR', ko: 'QR로 결제' },
   orderCheckoutPayWithPoints: { en: 'Pay with points', th: 'ชำระด้วยพอยท์', ko: '포인트로 결제' },
+  orderCheckoutPointEarnEstimate: {
+    en: 'Points you will earn: {points}P ({multiplier}×)',
+    th: 'ได้รับพอยท์: {points} ({multiplier}×)',
+    ko: '적립 예정: {points}P ({multiplier}배)',
+  },
+  orderCheckoutPointEarnBirthday: {
+    en: 'Birthday bonus applied',
+    th: 'โบนัสวันเกิด',
+    ko: '생일 보너스 적용',
+  },
   orderCheckoutQrTitle: { en: 'Scan to pay', th: 'สแกนชำระ', ko: 'QR 스캔 결제' },
   orderCheckoutQrHint: {
     en: 'Scan with your banking app (PromptPay). Your order is sent to the store only after payment. QR expires in 5 minutes.',
@@ -809,6 +844,77 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Membership levels, coupons, points, and visit history in one place.',
     th: 'ระดับสมาชิก คูปอง แต้ม และประวัติการใช้บริการในหน้าเดียว',
     ko: '등급·혜택, 쿠폰, 포인트, 이용 내역을 한 화면에서 확인하세요.',
+  },
+  stampCardTitle: { en: 'Stamp card', th: 'บัตรสแตมป์', ko: '스탬프 카드' },
+  stampCardDesc: {
+    en: 'Earn a stamp when you visit and pay as a member.',
+    th: 'สะสมสแตมป์เมื่อมาใช้บริการและชำระเงินในฐานะสมาชิก',
+    ko: '회원으로 방문·결제할 때마다 스탬프가 쌓입니다.',
+  },
+  stampProgress: {
+    en: '{current} / {total} stamps',
+    th: 'สแตมป์ {current} / {total}',
+    ko: '스탬프 {current} / {total}',
+  },
+  stampNextReward: {
+    en: '{remaining} more stamp(s) until: {label}',
+    th: 'อีก {remaining} สแตมป์ถึง: {label}',
+    ko: '스탬프 {remaining}개 더 모으면: {label}',
+  },
+  stampTotalEarned: {
+    en: 'Total visits stamped: {count}',
+    th: 'สะสมสแตมป์แล้ว {count} ครั้ง',
+    ko: '누적 스탬프 {count}회',
+  },
+  stampMilestoneAchieved: {
+    en: 'Reward unlocked at {count} stamps: {label}',
+    th: 'ปลดล็อกที่ {count} สแตมป์: {label}',
+    ko: '{count}회 달성 혜택: {label}',
+  },
+  stampCelebrateEarn: {
+    en: 'Stamp earned!',
+    th: 'ได้รับสแตมป์แล้ว!',
+    ko: '스탬프가 적립되었습니다!',
+  },
+  stampCelebrateMilestone: {
+    en: 'Milestone reward unlocked!',
+    th: 'ปลดล็อกรางวัล milestone!',
+    ko: '마일스톤 혜택을 받았습니다!',
+  },
+  stampViewCoupons: {
+    en: 'View my coupons',
+    th: 'ดูคูปองของฉัน',
+    ko: '쿠폰함 보기',
+  },
+  stampHistoryBtn: {
+    en: 'History',
+    th: 'ประวัติ',
+    ko: '이력',
+  },
+  stampHistoryTitle: {
+    en: 'Recent stamp activity',
+    th: 'สแตมป์ล่าสุด',
+    ko: '최근 스탬프 이력',
+  },
+  stampHistoryRevoke: {
+    en: 'Revoked',
+    th: 'ยกเลิก',
+    ko: '회수',
+  },
+  stampHistoryAdjust: {
+    en: 'Adjusted',
+    th: 'ปรับ',
+    ko: '조정',
+  },
+  stampExpiresAt: {
+    en: 'Card valid until {date}',
+    th: 'ใช้ได้ถึง {date}',
+    ko: '카드 유효기간: {date}까지',
+  },
+  stampCardSequence: {
+    en: 'Card #{n}',
+    th: 'การ์ด #{n}',
+    ko: '카드 #{n}',
   },
   couponsTitle: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
   couponsSub: {
@@ -1100,6 +1206,46 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Phone already exists with a different birth date. Please use existing sign-in.',
     th: 'เบอร์นี้มีอยู่แล้วแต่วันเกิดไม่ตรง กรุณาใช้การเข้าสู่ระบบเดิม',
     ko: '해당 번호는 이미 등록되어 있으나 생년월일이 다릅니다. 기존 로그인으로 진행해 주세요.',
+  },
+  signup_missing_store: {
+    en: 'Please select where you are signing up.',
+    th: 'กรุณาเลือกร้านที่สมัครสมาชิก',
+    ko: '가입 매장을 선택해 주세요.',
+  },
+  signup_invalid_store: {
+    en: 'The selected store is not available. Please choose again.',
+    th: 'ร้านที่เลือกไม่พร้อมใช้งาน กรุณาเลือกใหม่',
+    ko: '선택한 매장을 확인할 수 없습니다. 다시 선택해 주세요.',
+  },
+  signupStoreLabel: {
+    en: 'Sign-up store',
+    th: 'ร้านที่สมัคร',
+    ko: '가입 매장',
+  },
+  signupStorePlaceholder: {
+    en: 'Select a store',
+    th: 'เลือกร้าน',
+    ko: '매장을 선택하세요',
+  },
+  signupStoreOffice: {
+    en: 'Online (Office)',
+    th: 'ออนไลน์ (สำนักงาน)',
+    ko: '온라인 (Office)',
+  },
+  joinStoreCompleteTitle: {
+    en: 'Select your sign-up store',
+    th: 'เลือกร้านที่สมัครสมาชิก',
+    ko: '가입 매장을 선택해 주세요',
+  },
+  joinStoreCompleteDesc: {
+    en: 'Please choose the store where you signed up to continue using the app.',
+    th: 'กรุณาเลือกร้านที่สมัครเพื่อใช้งานแอปต่อ',
+    ko: '앱 이용을 위해 가입 매장을 선택해 주세요.',
+  },
+  joinStoreCompleteBtn: {
+    en: 'Save and continue',
+    th: 'บันทึกและดำเนินการต่อ',
+    ko: '저장하고 계속',
   },
   lineBtnWithLogo: {
     en: 'Log in or sign up with LINE',

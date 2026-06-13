@@ -22,6 +22,25 @@ const storeScope = arg("store", "All")
 const roleScope = arg("role", "")
 const sourceName = arg("sourceName", "docs")
 const chunkSize = Math.max(400, Number(arg("chunkSize", "1500")))
+const withEmbed = process.argv.includes("--embed")
+const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim()
+const EMBED_MODEL = (process.env.OPENAI_ERP_EMBEDDING_MODEL || "text-embedding-3-small").trim()
+
+async function embedOne(text) {
+  if (!OPENAI_API_KEY) return null
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: EMBED_MODEL, input: text.slice(0, 8000) }),
+  })
+  const body = await res.text()
+  if (!res.ok) throw new Error(`embed failed: ${body.slice(0, 200)}`)
+  const json = JSON.parse(body)
+  return json.data?.[0]?.embedding || null
+}
 
 function listFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -78,14 +97,23 @@ async function main() {
     const parts = splitChunks(raw, chunkSize)
     for (let i = 0; i < parts.length; i += 1) {
       const title = `${path.basename(file)}#${i + 1}`
-      await insertChunk({
+      const row = {
         source: sourceName,
         title,
         content: parts[i],
         tags: [],
         store_scope: storeScope,
         role_scope: roleScope || null,
-      })
+      }
+      if (withEmbed) {
+        const emb = await embedOne(`${title}\n${parts[i]}`)
+        if (emb) {
+          row.embedding = `[${emb.join(",")}]`
+          row.embedding_model = EMBED_MODEL
+          row.embedded_at = new Date().toISOString().slice(0, 19).replace("T", " ")
+        }
+      }
+      await insertChunk(row)
       inserted += 1
     }
     console.log(`Indexed ${file} (${parts.length} chunks)`)

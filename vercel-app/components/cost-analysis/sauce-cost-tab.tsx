@@ -75,7 +75,7 @@ function suggestLinkedItemCodeForForSaleBlend(
   return null
 }
 
-export function SauceCostTab() {
+export function SauceCostTab({ canEdit = true }: { canEdit?: boolean }) {
   const { lang } = useLang()
   const t = useT(lang)
   const router = useRouter()
@@ -91,6 +91,8 @@ export function SauceCostTab() {
   const [saveLoading, setSaveLoading] = React.useState(false)
   /** 검색 전 「배합 추가」 클릭 시 목록·품목 선로드 */
   const [addOpenLoading, setAddOpenLoading] = React.useState(false)
+  const [recalcLoading, setRecalcLoading] = React.useState(false)
+  const [recalcAffected, setRecalcAffected] = React.useState<number | null>(null)
   const [editOpen, setEditOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<SauceRow | null>(null)
   const [formCode, setFormCode] = React.useState("")
@@ -261,7 +263,10 @@ export function SauceCostTab() {
         usageKind: formUsageKind,
         linkedItemCode: formUsageKind === "for_sale" ? formLinkedItemCode.trim() : undefined,
       })
-      await recalculateSauces()
+      const recalcRes = await recalculateSauces()
+      if (recalcRes.affectedMenuCount != null) {
+        setRecalcAffected(recalcRes.affectedMenuCount)
+      }
       setEditOpen(false)
       await load()
     } catch (e) {
@@ -359,8 +364,27 @@ export function SauceCostTab() {
     setFormTotalQuantity(sum)
   }, [])
 
+  const handleRecalcAll = React.useCallback(async () => {
+    setRecalcLoading(true)
+    try {
+      const res = await recalculateSauces()
+      setRecalcAffected(res.affectedMenuCount ?? null)
+      await load()
+      await appAlert(
+        `${t("posCostSauceRecalcAll")}: ${res.count ?? 0}. ${t("posCostSauceRecalcAffected")}: ${res.affectedMenuCount ?? 0}`
+      )
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setRecalcLoading(false)
+    }
+  }, [load, t])
+
   return (
     <div className="space-y-4">
+      {!canEdit ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300">{t("posCostViewOnlyHint")}</p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm flex items-center gap-2">
           <div className="relative flex-1">
@@ -410,11 +434,29 @@ export function SauceCostTab() {
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="h-9" onClick={() => void handleNew()} disabled={addOpenLoading || loading}>
-          <Plus className={cn("h-3.5 w-3.5 mr-1.5", addOpenLoading && "animate-pulse")} />
-          {addOpenLoading ? (t("loading") || "불러오는 중...") : (t("posCostSauceNew") || "배합 추가")}
-        </Button>
+        {canEdit ? (
+          <>
+            <Button size="sm" className="h-9" onClick={() => void handleNew()} disabled={addOpenLoading || loading}>
+              <Plus className={cn("h-3.5 w-3.5 mr-1.5", addOpenLoading && "animate-pulse")} />
+              {addOpenLoading ? (t("loading") || "불러오는 중...") : (t("posCostSauceNew") || "배합 추가")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              onClick={() => void handleRecalcAll()}
+              disabled={recalcLoading || loading}
+            >
+              {recalcLoading ? t("loading") : t("posCostSauceRecalcAll")}
+            </Button>
+          </>
+        ) : null}
       </div>
+      {recalcAffected != null && recalcAffected > 0 ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          {t("posCostSauceRecalcAffected")}: {recalcAffected} — {t("posCostClickSearchToLoad")}
+        </p>
+      ) : null}
 
       {loading ? (
         <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -445,7 +487,7 @@ export function SauceCostTab() {
                 <TableHead className="text-center">{t("posCostSauceCostPerUnit") || "단가"}</TableHead>
                 <TableHead className="text-center">{t("posCostSauceTotalCost") || "총원가"}</TableHead>
                 <TableHead className="text-center">{t("posCostSauceOh") || "OH%"}</TableHead>
-                <TableHead className="w-24 text-center"></TableHead>
+                {canEdit ? <TableHead className="w-24 text-center" /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -494,16 +536,18 @@ export function SauceCostTab() {
                   <TableCell className="text-right tabular-nums">{s.costPerUnit.toFixed(4)} ฿/{s.unit}</TableCell>
                   <TableCell className="text-right tabular-nums">{s.totalWithOverhead.toFixed(1)} ฿</TableCell>
                   <TableCell className="text-right tabular-nums">{s.overheadPercent}%</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => handleEdit(s)}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive hover:text-destructive" onClick={() => handleDelete(s)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {canEdit ? (
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => handleEdit(s)}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive hover:text-destructive" onClick={() => handleDelete(s)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

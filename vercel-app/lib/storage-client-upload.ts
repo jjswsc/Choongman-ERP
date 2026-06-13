@@ -8,9 +8,49 @@
 export async function putFileToSupabaseSignedUploadUrl(
   signedUrl: string,
   file: File | Blob,
-  options?: { upsert?: boolean; cacheControl?: string; timeoutMs?: number }
+  options?: { upsert?: boolean; cacheControl?: string; timeoutMs?: number; onProgress?: (pct: number) => void }
 ): Promise<Response> {
   const timeoutMs = options?.timeoutMs ?? 120000
+  const onProgress = options?.onProgress
+
+  if (onProgress && typeof XMLHttpRequest !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      const timer = setTimeout(() => {
+        xhr.abort()
+        reject(new Error('Upload timeout'))
+      }, timeoutMs)
+      xhr.open('PUT', signedUrl)
+      const contentType =
+        file instanceof Blob && file.type && file.type.length > 0 ? file.type : 'application/octet-stream'
+      xhr.setRequestHeader('Content-Type', contentType)
+      if (options?.upsert) xhr.setRequestHeader('x-upsert', 'true')
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && ev.total > 0) {
+          onProgress(Math.min(100, Math.round((ev.loaded / ev.total) * 100)))
+        }
+      }
+      xhr.onload = () => {
+        clearTimeout(timer)
+        resolve(
+          new Response(xhr.responseText, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+          })
+        )
+      }
+      xhr.onerror = () => {
+        clearTimeout(timer)
+        reject(new Error('Upload failed'))
+      }
+      xhr.onabort = () => {
+        clearTimeout(timer)
+        reject(new Error('Upload aborted'))
+      }
+      xhr.send(file)
+    })
+  }
+
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   const contentType =

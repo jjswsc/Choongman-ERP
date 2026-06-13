@@ -9,7 +9,11 @@ export type ManagementMarginStoreRankRow = {
   storeCode: string
   orderCount: number
   netSales: number
+  bundleDiscount: number
+  paymentDiscount: number
   totalDiscount: number
+  bundleDiscountPctOfGross: number
+  paymentDiscountPctOfGross: number
   discountPctOfGross: number
   totalCost: number
   costPctOfNet: number
@@ -64,7 +68,11 @@ export function buildManagementMarginStoreRanking(params: {
       storeCode,
       orderCount: slice.periodOrderCount,
       netSales: slice.netSales,
+      bundleDiscount: slice.bundleDiscount,
+      paymentDiscount: slice.paymentDiscount,
       totalDiscount: slice.totalDiscount,
+      bundleDiscountPctOfGross: pctOf(slice.bundleDiscount, slice.grossSalesBeforeDiscount),
+      paymentDiscountPctOfGross: pctOf(slice.paymentDiscount, slice.grossSalesBeforeDiscount),
       discountPctOfGross: pctOf(slice.totalDiscount, slice.grossSalesBeforeDiscount),
       totalCost: slice.theoreticalCost.totalCost,
       costPctOfNet: slice.theoreticalCost.costPctOfNet,
