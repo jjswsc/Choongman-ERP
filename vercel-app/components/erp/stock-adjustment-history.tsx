@@ -85,7 +85,7 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t("stockHistSearchPh") || "품목명 검색"}
+            placeholder={t("stockHistSearchPh")}
             className="h-9 pl-9 text-sm"
           />
         </div>
@@ -148,9 +148,9 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
                 <td colSpan={6} className="px-4 py-12 text-center">
                   <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                     <History className="h-10 w-10 opacity-50" />
-                    <p>{list.length === 0 ? t("stockHistNoData") : (t("stockHistNoMatch") || "검색 조건에 맞는 내역이 없습니다.")}</p>
+                    <p>{list.length === 0 ? t("stockHistNoData") : t("stockHistNoMatch")}</p>
                     {list.length > 0 && (
-                      <p className="text-xs opacity-80">{t("stockHistNoMatchHint") || "다른 품목명으로 검색해 보세요."}</p>
+                      <p className="text-xs opacity-80">{t("stockHistNoMatchHint")}</p>
                     )}
                   </div>
                 </td>

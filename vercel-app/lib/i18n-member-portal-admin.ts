@@ -14,7 +14,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_tabStores: '매장',
   mpAdmin_tabDesign: '디자인',
   mpAdmin_tabContact: '문의',
-  mpAdmin_tabDelivery: '배달',
+  mpAdmin_tabDelivery: '배달·포장',
 
   mpAdmin_designTitle: '배경화면 디자인 관리',
   mpAdmin_designDesc:
@@ -366,7 +366,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_tabStores: 'Stores',
   mpAdmin_tabDesign: 'Design',
   mpAdmin_tabContact: 'Contact',
-  mpAdmin_tabDelivery: 'Delivery',
+  mpAdmin_tabDelivery: 'Delivery · Takeout',
 
   mpAdmin_designTitle: 'Background design',
   mpAdmin_designDesc:
@@ -717,7 +717,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_tabStores: 'สาขา',
   mpAdmin_tabDesign: 'ดีไซน์',
   mpAdmin_tabContact: 'ติดต่อ',
-  mpAdmin_tabDelivery: 'เดลิเวอรี',
+  mpAdmin_tabDelivery: 'เดลิเวอรี · ห่อกลับ',
 
   mpAdmin_designTitle: 'จัดการพื้นหลัง',
   mpAdmin_designDesc:

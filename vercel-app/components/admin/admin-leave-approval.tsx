@@ -24,11 +24,12 @@ import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
 import { displayLabelShort } from "@/lib/utils"
 import { hasOfficeStaffScope } from "@/lib/permissions"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 export function AdminLeaveApproval() {

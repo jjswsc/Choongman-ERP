@@ -9,6 +9,10 @@ import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { canFranchiseeAggregateAllowedStores } from '@/lib/franchisee-multi-store'
 import { isAccountingRole, isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import {
+  FINANCIAL_STATEMENT_STORE_NONE,
+  isFinancialStatementStoreNone,
+} from '@/lib/financial-statement-store-options'
 import { addStoreNameAliasVariants, normStoreKey } from '@/lib/store-list-keys'
 
 export { findErpStoreMasterForScopeKey } from '@/lib/erp-store-identity'
@@ -111,6 +115,9 @@ export function resolveAccountingStoreFilterFromAuth(
   auth: AccountingStoreAuthScope
 ): string {
   const requested = String(requestedStoreFilter || '').trim()
+  if (isFinancialStatementStoreNone(requested)) {
+    return FINANCIAL_STATEMENT_STORE_NONE
+  }
   const allowedStores = collectAccountingAllowedStores(auth)
   const multi = parseCommaSeparatedStoreFilter(requested)
   if (multi) {

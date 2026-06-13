@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, Wallet, Link2, Check, X, Pencil, Trash2, Paperclip } from "lucide-react"
+import { MetricCard } from "@/components/cost-analysis/metric-card"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -678,46 +680,80 @@ export function ExpenseManagementTab() {
           </AdminTabsBarWithHelp>
 
         <TabsContent value="plan" className={cn(adminTabsContentCn, "space-y-4")}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <Input
-                type="date"
-                value={startStr}
-                onChange={(e) => setStartStr(e.target.value)}
-                className="h-9 w-full text-[13px] sm:w-[172px]"
+          {!loading ? (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <MetricCard
+                size="sm"
+                variant={approvablePlansForDay.length > 0 ? "warning" : "default"}
+                label={t("acct_kpi_expense_approve_pending")}
+                value={String(approvablePlansForDay.length)}
+                subLabel={startStr}
               />
-              <span className="hidden text-xs sm:inline">~</span>
-              <Input
-                type="date"
-                value={endStr}
-                onChange={(e) => setEndStr(e.target.value)}
-                className="h-9 w-full text-[13px] sm:w-[172px]"
+              <MetricCard
+                size="sm"
+                variant="primary"
+                label={t("acct_kpi_expense_remaining")}
+                value={`฿${filteredPlanTotals.expenseRemaining.toLocaleString()}`}
+              />
+              <MetricCard
+                size="sm"
+                label={t("acct_kpi_logistics_remaining")}
+                value={`฿${filteredPlanTotals.logisticsRemaining.toLocaleString()}`}
+              />
+              <MetricCard
+                size="sm"
+                label={tt("expensePlanTab", "Payment Plan")}
+                value={`฿${filteredPlanTotals.expensePlanned.toLocaleString()}`}
+                subLabel={`${startStr} ~ ${endStr}`}
               />
             </div>
-            <Select value={planTypeFilter} onValueChange={setPlanTypeFilter}>
-              <SelectTrigger className="w-[200px] h-9">
-                <SelectValue placeholder={tt("bankCategoryLabel", "Category")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{tt("all", "All")} {tt("bankCategoryLabel", "Category")}</SelectItem>
-                {withdrawalTypeOptions.map((cat) => (
-                  <SelectItem key={cat} value={cat.toLowerCase()}>
-                    {renderWithdrawalType(cat)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={planStoreFilter} onValueChange={setPlanStoreFilter}>
-              <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{tt("all", "All")} {tt("store", "Store")}</SelectItem>
-                {planStoreOptions.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          ) : null}
+          <AdminFilterBar>
+            <AdminFilterField label={t("date")}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  type="date"
+                  value={startStr}
+                  onChange={(e) => setStartStr(e.target.value)}
+                  className="h-9 w-full text-[13px] sm:w-[172px]"
+                />
+                <span className="hidden text-xs sm:inline">~</span>
+                <Input
+                  type="date"
+                  value={endStr}
+                  onChange={(e) => setEndStr(e.target.value)}
+                  className="h-9 w-full text-[13px] sm:w-[172px]"
+                />
+              </div>
+            </AdminFilterField>
+            <AdminFilterField label={tt("bankCategoryLabel", "Category")}>
+              <Select value={planTypeFilter} onValueChange={setPlanTypeFilter}>
+                <SelectTrigger className="w-full h-9 sm:w-[200px]">
+                  <SelectValue placeholder={tt("bankCategoryLabel", "Category")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{tt("all", "All")} {tt("bankCategoryLabel", "Category")}</SelectItem>
+                  {withdrawalTypeOptions.map((cat) => (
+                    <SelectItem key={cat} value={cat.toLowerCase()}>
+                      {renderWithdrawalType(cat)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </AdminFilterField>
+            <AdminFilterField label={t("store")}>
+              <Select value={planStoreFilter} onValueChange={setPlanStoreFilter}>
+                <SelectTrigger className="w-full h-9 sm:w-[180px]">
+                  <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{tt("all", "All")} {t("store")}</SelectItem>
+                  {planStoreOptions.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </AdminFilterField>
             <Button size="sm" onClick={() => void loadPlans()} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
               {t("btn_query")}
@@ -750,23 +786,7 @@ export function ExpenseManagementTab() {
             >
               {cleaningNoStore ? tt("loading", "...") : tt("expenseCleanNoStore", "Clean No-Store Plans")}
             </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">
-                {tt("expensePlannedTotal", "General Expense Planned Total")}
-                {planStoreFilter !== "__all__" ? ` · ${planStoreFilter}` : ""}
-              </div>
-              <div className="text-lg font-semibold tabular-nums">฿{(filteredPlanTotals.expensePlanned || 0).toLocaleString()}</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">
-                {tt("expenseLogisticsPlanTotal", "Logistics Expense Payment Plan")}
-                {planStoreFilter !== "__all__" ? ` · ${planStoreFilter}` : ""}
-              </div>
-              <div className="text-lg font-semibold tabular-nums">฿{(filteredPlanTotals.logisticsRemaining || 0).toLocaleString()}</div>
-            </div>
-          </div>
+          </AdminFilterBar>
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm font-semibold mb-2">{tt("expenseNonLogisticsSection", "General Expense Payment Plan")}</div>

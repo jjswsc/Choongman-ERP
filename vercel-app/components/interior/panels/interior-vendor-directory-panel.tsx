@@ -180,7 +180,7 @@ export function InteriorVendorDirectoryPanel({ embedded = false }: { embedded?: 
                 />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground">{t("posMenuCode")}</label>
+                <label className="text-xs text-muted-foreground">{t("interiorVendorCodeLabel")}</label>
                 <Input
                   value={editing.code || ""}
                   onChange={(e) => setEditing({ ...editing, code: e.target.value })}
@@ -258,7 +258,7 @@ export function InteriorVendorDirectoryPanel({ embedded = false }: { embedded?: 
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("interiorVendorName")}</TableHead>
-                  <TableHead className="w-24">{t("posMenuCode")}</TableHead>
+                  <TableHead className="w-24">{t("interiorVendorCodeLabel")}</TableHead>
                   <TableHead>{t("interiorVendorSpecialty")}</TableHead>
                   <TableHead>{t("emp_label_phone")}</TableHead>
                   <TableHead className="w-16 text-right">{t("interiorVendorUseCount")}</TableHead>

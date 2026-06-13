@@ -31,6 +31,15 @@ import { CollabManagementOverviewTab } from "@/components/marketing/collab-manag
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useSearchParams } from "next/navigation"
@@ -200,18 +209,22 @@ export default function MarketingCollabMenusPage() {
 
   return (
     <MarketingPageShell>
-      <MarketingPageHero icon={Handshake} title={t("adminMarketingCollabMenus")} />
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v === "overview" ? "overview" : "edit")} className="w-full">
-        <TabsList className="mb-4 h-auto flex-wrap justify-start gap-1 bg-muted/60 p-1">
-          <TabsTrigger value="edit" className="text-xs sm:text-sm">
-            {t("marketingCollabTabEdit")}
-          </TabsTrigger>
-          <TabsTrigger value="overview" className="text-xs sm:text-sm">
-            {t("marketingCollabTabOverview")}
-          </TabsTrigger>
-        </TabsList>
+      <MarketingPageHero icon={Handshake} title={t("adminMarketingCollabMenus")} description={t("marketingHeroDescCollab")} />
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v === "overview" ? "overview" : "edit")} className={adminTabsRootCn}>
+        <div className={cn(adminTabsBarCn, "px-2 py-2.5 sm:px-4")}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="edit" className={adminTabsTriggerCn}>
+                {t("marketingCollabTabEdit")}
+              </TabsTrigger>
+              <TabsTrigger value="overview" className={adminTabsTriggerCn}>
+                {t("marketingCollabTabOverview")}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="edit" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="edit" className={adminTabsContentCn}>
           {loading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
 
           {!loading && list.length === 0 && (
@@ -379,7 +392,7 @@ export default function MarketingCollabMenusPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="overview" className="mt-0 focus-visible:outline-none">
+        <TabsContent value="overview" className={adminTabsContentCn}>
           <Card>
             <CardContent className="p-4 sm:p-5">
               <CollabManagementOverviewTab

@@ -241,7 +241,25 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
           retryCount: item.retryCount,
         })
       }
-      const idempotencyKey = item.metadata?.localOrderNo || item.id
+      let idempotencyKey = item.metadata?.localOrderNo || item.id
+      if (item.api === '/api/processOrderReceive' && item.body) {
+        try {
+          const parsed = JSON.parse(item.body) as {
+            orderRowId?: number
+            orderId?: number
+            isPartialReceive?: boolean
+            inspectedIndices?: number[]
+            receivedQtys?: Record<string | number, number>
+            idempotencyKey?: string
+          }
+          const clientKey = String(parsed.idempotencyKey || '').trim()
+          if (clientKey) {
+            idempotencyKey = clientKey
+          }
+        } catch {
+          /* keep queue item id */
+        }
+      }
       const init: RequestInit = {
         method: item.method,
         headers: {

@@ -79,23 +79,23 @@ export function ItemPickerDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 border-b">
-          <h3 className="text-sm font-bold mb-3">{t("inFindItem") || "품목 찾기"}</h3>
+          <h3 className="text-sm font-bold mb-3">{t("inFindItem")}</h3>
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("itemsSearchPh") || "코드, 품목명"}
+                placeholder={t("itemsSearchPh")}
                 className="pl-9"
               />
             </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="h-9 w-full sm:w-[140px]">
-                <SelectValue placeholder={t("itemsCategoryAll") || "전체 카테고리"} />
+                <SelectValue placeholder={t("itemsCategoryAll")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{t("itemsCategoryAll") || "전체"}</SelectItem>
+                <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
                 {categories.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c}
@@ -119,7 +119,7 @@ export function ItemPickerDialog({
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                    {t("itemsNoResults") || "조회된 품목이 없습니다."}
+                    {t("itemsNoResults")}
                   </td>
                 </tr>
               ) : (
@@ -141,7 +141,7 @@ export function ItemPickerDialog({
                     <td className="py-2 px-2 text-muted-foreground text-xs">{item.spec || "-"}</td>
                     <td className="py-2 px-2">
                       <Button size="sm" variant="ghost" className="h-7 text-xs">
-                        {t("addCart") || "담기"}
+                        {t("addCart")}
                       </Button>
                     </td>
                   </tr>

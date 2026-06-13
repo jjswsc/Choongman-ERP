@@ -1,15 +1,26 @@
 "use client"
 
 import * as React from "react"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon, Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { cn } from "@/lib/utils"
 
 interface InboundFilterBarProps {
   totalAmount: string
   totalVat?: string
   isOffice?: boolean
-  /** 본사일 때 매장 필터 (전체/입고등록/매장명) */
   histStore?: string
   stores?: string[]
   onHistStoreChange?: (v: string) => void
@@ -23,13 +34,10 @@ interface InboundFilterBarProps {
   histVendor: string
   vendors: string[]
   onHistVendorChange: (v: string) => void
-  /** 품목 코드·명 부분 검색 (입고된 모든 품목 대상) */
   histItemSearch?: string
   onHistItemSearchChange?: (v: string) => void
-  /** 드롭다운 미선택 시 거래처명 부분 검색 */
   histVendorSearch?: string
   onHistVendorSearchChange?: (v: string) => void
-  /** 본사/매장 구분 필터 */
   histPurchaseSource?: "" | "hq" | "store"
   onHistPurchaseSourceChange?: (v: "" | "hq" | "store") => void
   onSearch: () => void
@@ -76,139 +84,162 @@ export function InboundFilterBar({
   }, [onMonthClick])
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Period */}
+    <AdminFilterBar className="items-end">
+      <AdminFilterField label={t("outFilterPeriod")}>
         <div className="flex items-center gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-            {t("outFilterPeriod")}
-          </label>
-          <input
+          <Input
             type="date"
             value={histStart}
             onChange={(e) => onHistStartChange(e.target.value)}
-            className="h-8 w-[110px] rounded border border-input bg-card px-2 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-9 w-[130px] text-xs"
           />
-          <input
+          <span className="text-xs text-muted-foreground">~</span>
+          <Input
             type="date"
             value={histEnd}
             onChange={(e) => onHistEndChange(e.target.value)}
-            className="h-8 w-[110px] rounded border border-input bg-card px-2 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-9 w-[130px] text-xs"
           />
         </div>
+      </AdminFilterField>
 
-        {/* Monthly */}
-        <button
-          type="button"
-          onClick={handleMonthButtonClick}
-          className="h-8 rounded border border-input bg-card px-3 text-xs font-medium text-card-foreground hover:bg-accent transition-colors"
-        >
-          {t("outFilterMonth")}
-        </button>
-
-        {/* Hidden month picker (opened by button click) */}
-        <div className="relative w-0 overflow-hidden">
-          <input
-            ref={monthInputRef}
-            type="month"
-            value={histMonth}
-            onChange={(e) => onHistMonthChange(e.target.value)}
-            title={t("inMonthHint")}
-            className="absolute -left-[9999px] h-0 w-0 opacity-0 pointer-events-none"
-            tabIndex={-1}
-            aria-hidden
-          />
-        </div>
-        {!!histMonth && (
-          <div className="inline-flex h-8 items-center gap-1 rounded border border-input bg-card px-2 text-xs text-card-foreground">
-            <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>{histMonth}</span>
+      <AdminFilterField label={t("outFilterMonth")}>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant={histMonth ? "default" : "outline"}
+            className="h-9 text-xs"
+            onClick={handleMonthButtonClick}
+          >
+            {t("outFilterMonth")}
+            {histMonth ? ` (${histMonth})` : ""}
+          </Button>
+          <div className="relative h-0 w-0 overflow-hidden">
+            <Input
+              ref={monthInputRef}
+              type="month"
+              value={histMonth}
+              onChange={(e) => onHistMonthChange(e.target.value)}
+              title={t("inMonthHint")}
+              className="pointer-events-none absolute opacity-0"
+              tabIndex={-1}
+              aria-hidden
+            />
           </div>
-        )}
+          {!!histMonth && (
+            <span className="inline-flex h-9 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 text-xs">
+              <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+              {histMonth}
+            </span>
+          )}
+        </div>
+      </AdminFilterField>
 
-        {isOffice && stores.length > 0 && onHistStoreChange && (
-          <select
+      {isOffice && stores.length > 0 && onHistStoreChange && (
+        <AdminFilterField label={t("store")}>
+          <Select
             value={histStore || "__all__"}
-            onChange={(e) => onHistStoreChange(e.target.value === "__all__" ? "" : e.target.value)}
-            className="h-8 rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+            onValueChange={(v) => onHistStoreChange(v === "__all__" ? "" : v)}
           >
-            <option value="__all__">{t("store_all_stores")}</option>
-            <option value="입고등록">{t("inLocationHQ")}</option>
-            {stores.filter((s) => s && s !== "All").map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        )}
-        {onHistPurchaseSourceChange && (
-          <select
+            <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("store_all_stores")}</SelectItem>
+              <SelectItem value="입고등록">{t("inLocationHQ")}</SelectItem>
+              {stores
+                .filter((s) => s && s !== "All")
+                .map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </AdminFilterField>
+      )}
+
+      {onHistPurchaseSourceChange && (
+        <AdminFilterField label={t("itemsPurchaseSource")}>
+          <Select
             value={histPurchaseSource || "__all__"}
-            onChange={(e) => onHistPurchaseSourceChange(e.target.value === "__all__" ? "" : (e.target.value as "hq" | "store"))}
-            className="h-8 rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+            onValueChange={(v) =>
+              onHistPurchaseSourceChange(v === "__all__" ? "" : (v as "hq" | "store"))
+            }
           >
-            <option value="__all__">{t("stockFilterStoreAll") || "전체"}</option>
-            <option value="hq">{t("itemsPurchaseSourceHq") || "본사"}</option>
-            <option value="store">{t("itemsPurchaseSourceStore") || "매장"}</option>
-          </select>
-        )}
-        <select
+            <SelectTrigger className="h-9 w-[120px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("stockFilterStoreAll")}</SelectItem>
+              <SelectItem value="hq">{t("itemsPurchaseSourceHq")}</SelectItem>
+              <SelectItem value="store">{t("itemsPurchaseSourceStore")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </AdminFilterField>
+      )}
+
+      <AdminFilterField label={t("inVendor")}>
+        <Select
           value={histVendor || "__all__"}
-          onChange={(e) => {
-            onHistVendorChange(e.target.value === "__all__" ? "" : e.target.value)
+          onValueChange={(v) => {
+            onHistVendorChange(v === "__all__" ? "" : v)
             onHistVendorSearchChange?.("")
           }}
-          className="h-8 min-w-[120px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
         >
-          <option value="__all__">{t("inVendorAll")}</option>
-          {vendors.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-        {onHistVendorSearchChange && (
-          <input
-            type="text"
+          <SelectTrigger className="h-9 w-[160px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">{t("inVendorAll")}</SelectItem>
+            {vendors.map((v) => (
+              <SelectItem key={v} value={v}>
+                {v}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </AdminFilterField>
+
+      {onHistVendorSearchChange && (
+        <AdminFilterField label={t("inVendorSearchPh")}>
+          <Input
             value={histVendorSearch}
             onChange={(e) => onHistVendorSearchChange(e.target.value)}
             disabled={!!histVendor}
-            title={histVendor ? t("inVendorAll") : t("inVendorSearchHint") || "거래처명 일부로 검색"}
-            placeholder={t("inVendorSearchPh") || "거래처 검색(부분)"}
-            className="h-8 w-[140px] rounded border border-input bg-card px-2 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            title={histVendor ? t("inVendorAll") : t("inVendorSearchHint")}
+            placeholder={t("inVendorSearchPh")}
+            className="h-9 w-[150px] text-xs"
           />
-        )}
-        {onHistItemSearchChange && (
-          <input
-            type="text"
+        </AdminFilterField>
+      )}
+
+      {onHistItemSearchChange && (
+        <AdminFilterField label={t("inItem")}>
+          <Input
             value={histItemSearch}
             onChange={(e) => onHistItemSearchChange(e.target.value)}
-            placeholder={t("inItemSearchPh") || "품목 코드·명 검색"}
-            className="h-8 w-[160px] rounded border border-input bg-card px-2 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            placeholder={t("inItemSearchPh")}
+            className="h-9 w-[160px] text-xs"
           />
-        )}
+        </AdminFilterField>
+      )}
 
-        {/* Search Button */}
-        <button
-          type="button"
-          onClick={onSearch}
-          className="h-8 rounded bg-primary px-4 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-colors shadow-sm"
-        >
-          {t("stockBtnSearch")}
-        </button>
+      <Button size="sm" className="h-9 gap-1.5 text-xs font-semibold" onClick={onSearch}>
+        <Search className="h-3.5 w-3.5" aria-hidden />
+        {t("stockBtnSearch")}
+      </Button>
 
-        {/* Total */}
-        <div className="ml-auto">
-          <div className="flex flex-col items-end">
-            <span className="text-sm font-bold text-[#16A34A]">
-              {t("inPeriodTotal")}: {totalAmount}
-            </span>
-            {totalVat ? (
-              <span className="text-xs font-semibold text-primary">
-                {t("posVatLabel") || "VAT"}: {totalVat}
-              </span>
-            ) : null}
-          </div>
-        </div>
+      <div className="ml-auto text-right">
+        <p className={cn("text-sm font-bold text-emerald-600 dark:text-emerald-400", ADMIN_NUMERIC_CN)}>
+          {t("inPeriodTotal")}: {totalAmount}
+        </p>
+        {totalVat ? (
+          <p className={cn("text-xs font-semibold text-primary", ADMIN_NUMERIC_CN)}>
+            {t("posVatLabel")}: {totalVat}
+          </p>
+        ) : null}
       </div>
-    </div>
+    </AdminFilterBar>
   )
 }

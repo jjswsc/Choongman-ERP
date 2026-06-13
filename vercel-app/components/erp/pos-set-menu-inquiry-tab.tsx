@@ -533,7 +533,162 @@ export function PosSetMenuInquiryTab({
       </div>
 
       {promosLoading && promos.length === 0 ? (
-        <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
+        inquiryMode === "campaign" ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-xl border bg-muted/40" />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
+        )
+      ) : inquiryMode === "campaign" ? (
+        <div className="space-y-3">
+          {filtered.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
+              {t("posSetInquiryEmpty")}
+            </div>
+          ) : (
+            filtered.map((p) => {
+              const b = busyId === p.id
+              const promoItems = (p as PosPromo & {
+                items?: { menuId: string; optionId: string | null; quantity: number }[]
+              }).items || []
+              const lines = promoItems.slice(0, 3).map((it) => {
+                const menuName = menuNameById[String(it.menuId)] || `#${String(it.menuId)}`
+                const optPart = it.optionId ? ` + ${String(it.optionId)}` : ""
+                return `${menuName}${optPart} ×${Math.max(1, Number(it.quantity) || 1)}`
+              })
+              const ec = economicsByPromoId[p.id]
+              const rateHallCell = ec == null || ec.lineCount === 0 ? "—" : `${ec.costRateHall.toFixed(1)}%`
+              const rateDelCell = ec == null || ec.lineCount === 0 ? "—" : `${ec.costRateDel.toFixed(1)}%`
+              return (
+                <div
+                  key={p.id}
+                  className="rounded-xl border border-border/80 bg-card p-4 shadow-sm transition-colors hover:bg-muted/20"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{p.code}</span>
+                        {p.isActive ? (
+                          <Badge className="bg-emerald-600/90 text-[10px]">{t("posSetInquiryActive")}</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {t("posSetInquiryInactive")}
+                          </Badge>
+                        )}
+                        {p.channelHall !== false ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {t("posOrderTypeHall")}
+                          </Badge>
+                        ) : null}
+                        {p.channelTakeout !== false ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {t("posOrderTypeTakeout")}
+                          </Badge>
+                        ) : null}
+                        {p.channelDelivery !== false ? (
+                          <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-[10px] text-sky-800 dark:text-sky-200">
+                            {t("posOrderTypeDelivery")}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1.5 text-base font-semibold leading-snug">{p.name}</p>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span>
+                          {t("posMenuPriceHall")}: ฿{Math.round(p.price ?? 0).toLocaleString()}
+                        </span>
+                        {p.priceDelivery != null && Number(p.priceDelivery) > 0 ? (
+                          <span>
+                            {t("posMenuPriceDelivery")}: ฿{Math.round(Number(p.priceDelivery)).toLocaleString()}
+                          </span>
+                        ) : null}
+                        <span>
+                          {t("posSetInquiryColCostRateHall")}: {economicsLoading && ec == null ? "…" : rateHallCell}
+                        </span>
+                        <span>
+                          {t("posSetInquiryColCostRateDel")}: {economicsLoading && ec == null ? "…" : rateDelCell}
+                        </span>
+                      </div>
+                      {lines.length > 0 ? (
+                        <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                          {lines.map((line, idx) => (
+                            <p key={`${p.id}-card-${idx}`} className="line-clamp-1">
+                              · {line}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-[11px]"
+                        disabled={b}
+                        onClick={() => onOpenInSetTab(p.id)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {t("posSetInquiryOpenInSetTab")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-[11px]"
+                        disabled={b}
+                        onClick={() => void handleCopy(p)}
+                      >
+                        <ClipboardCopy className="h-3 w-3" />
+                        {t("posSetInquiryCopy")}
+                      </Button>
+                      {p.isActive ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 gap-1 px-2 text-[11px]"
+                            disabled={b}
+                            onClick={() => void handleDeactivate(p)}
+                          >
+                            <Ban className="h-3 w-3" />
+                            {t("posSetInquirySuspend")}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
+                            disabled={b}
+                            onClick={() => void handleDelete(p)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            {t("posSetInquiryDelete")}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          className="h-8 gap-1 bg-emerald-600 px-2 text-[11px] hover:bg-emerald-700"
+                          disabled={b}
+                          onClick={() => void handleActivate(p)}
+                        >
+                          <Play className="h-3 w-3" />
+                          {t("posSetInquiryActivate")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border/80">
           <table className="w-full min-w-[1040px] border-collapse text-sm">

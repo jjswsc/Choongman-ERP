@@ -94,6 +94,97 @@ function formatOptionLabel(optionId: string, optionName: string): string {
   return '—'
 }
 
+function resolveLineMenuId2(row: Record<string, unknown>): string {
+  return str(row.menuId2 ?? row.menu_id2)
+}
+
+function resolveLineOptionId2(row: Record<string, unknown>): string {
+  return str(row.optionId2 ?? row.option_id2)
+}
+
+export type TheoreticalCostLookupLine = {
+  menuId: string
+  optionId: string
+  menuName: string
+  optionName: string
+  qty: number
+}
+
+function promoChildCostLines(row: Record<string, unknown>, parentQty: number): TheoreticalCostLookupLine[] {
+  const raw = row.promoItems ?? row.promo_items
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  const out: TheoreticalCostLookupLine[] = []
+  for (const child of raw) {
+    const c = child as Record<string, unknown>
+    const childQty = Math.max(0, resolveItemsJsonLineQty(c))
+    if (childQty <= 0) continue
+    const qty = parentQty * childQty
+    if (qty <= 0) continue
+    out.push({
+      menuId: str(c.menuId ?? c.menu_id),
+      optionId: str(c.optionId ?? c.option_id),
+      menuName: str(c.menuName ?? c.menu_name),
+      optionName: str(c.optionName ?? c.option_name),
+      qty,
+    })
+  }
+  return out
+}
+
+/** 주문 줄 → BOM lookup 단위(세트 promoItems·반반 menuId2 펼침) */
+export function expandOrderLineToCostLines(row: Record<string, unknown>): TheoreticalCostLookupLine[] {
+  const parentQty = Math.max(0, resolveItemsJsonLineQty(row))
+  if (parentQty <= 0) return []
+
+  const promoChildren = promoChildCostLines(row, parentQty)
+  if (promoChildren.length > 0) return promoChildren
+
+  const menuId = resolveLineMenuId(row)
+  const menuId2 = resolveLineMenuId2(row)
+  const menuName = resolveLineMenuName(row)
+  const optionName = resolveLineOptionName(row)
+
+  if (menuId && menuId2) {
+    const halfQty = parentQty * 0.5
+    return [
+      {
+        menuId,
+        optionId: resolveLineOptionId(row),
+        menuName,
+        optionName,
+        qty: halfQty,
+      },
+      {
+        menuId: menuId2,
+        optionId: resolveLineOptionId2(row),
+        menuName,
+        optionName,
+        qty: halfQty,
+      },
+    ]
+  }
+
+  return [
+    {
+      menuId,
+      optionId: resolveLineOptionId(row),
+      menuName,
+      optionName,
+      qty: parentQty,
+    },
+  ]
+}
+
+function lookupCostEntry(
+  costIndex: Map<string, PosMenuCostIndexEntry>,
+  menuId: string,
+  optionId: string
+): PosMenuCostIndexEntry | undefined {
+  const keyWithOpt = `${menuId}|${optionId}`
+  const keyBase = `${menuId}|`
+  return costIndex.get(keyWithOpt) ?? costIndex.get(keyBase)
+}
+
 export function collectTheoreticalCostUnmatchedLines(params: {
   orderRows: { order_type?: string; items_json?: string }[]
   costIndex: Map<string, PosMenuCostIndexEntry>
@@ -118,48 +209,43 @@ export function collectTheoreticalCostUnmatchedLines(params: {
   for (const order of params.orderRows) {
     for (const row of parseOrderItems(order.items_json)) {
       if (isLineCancelled(row)) continue
-      const qty = Math.max(0, resolveItemsJsonLineQty(row))
-      if (qty <= 0) continue
-      const menuName = resolveLineMenuName(row)
-      const optionName = resolveLineOptionName(row)
-      const menuId = resolveLineMenuId(row)
-      if (!menuId) {
-        const labelKey = menuName || '—'
-        const key = unmatchedBucketKey('missing_menu_id', labelKey, '')
-        upsert(
-          key,
-          {
-            menuId: '',
-            optionId: '',
-            menuLabel: formatMenuLabel('', menuName),
-            optionLabel: '—',
-            reason: 'missing_menu_id',
-            lineQty: qty,
-          },
-          menuName,
-          optionName
-        )
-        continue
-      }
-      const optionId = resolveLineOptionId(row)
-      const keyWithOpt = `${menuId}|${optionId}`
-      const keyBase = `${menuId}|`
-      const entry = params.costIndex.get(keyWithOpt) ?? params.costIndex.get(keyBase)
-      if (!entry) {
-        const key = unmatchedBucketKey('missing_bom', menuId, optionId)
-        upsert(
-          key,
-          {
-            menuId,
-            optionId,
-            menuLabel: formatMenuLabel(menuId, menuName),
-            optionLabel: formatOptionLabel(optionId, optionName),
-            reason: 'missing_bom',
-            lineQty: qty,
-          },
-          menuName,
-          optionName
-        )
+      for (const line of expandOrderLineToCostLines(row)) {
+        const { menuId, optionId, menuName, optionName, qty } = line
+        if (qty <= 0) continue
+        if (!menuId) {
+          const labelKey = menuName || '—'
+          const key = unmatchedBucketKey('missing_menu_id', labelKey, optionId)
+          upsert(
+            key,
+            {
+              menuId: '',
+              optionId,
+              menuLabel: formatMenuLabel('', menuName),
+              optionLabel: formatOptionLabel(optionId, optionName),
+              reason: 'missing_menu_id',
+              lineQty: qty,
+            },
+            menuName,
+            optionName
+          )
+          continue
+        }
+        if (!lookupCostEntry(params.costIndex, menuId, optionId)) {
+          const key = unmatchedBucketKey('missing_bom', menuId, optionId)
+          upsert(
+            key,
+            {
+              menuId,
+              optionId,
+              menuLabel: formatMenuLabel(menuId, menuName),
+              optionLabel: formatOptionLabel(optionId, optionName),
+              reason: 'missing_bom',
+              lineQty: qty,
+            },
+            menuName,
+            optionName
+          )
+        }
       }
     }
   }
@@ -182,26 +268,24 @@ export function aggregateTheoreticalCostFromOrders(params: {
     const isDelivery = isDeliveryChannelOrderType(order.order_type)
     for (const row of parseOrderItems(order.items_json)) {
       if (isLineCancelled(row)) continue
-      const qty = Math.max(0, resolveItemsJsonLineQty(row))
-      if (qty <= 0) continue
-      const menuId = resolveLineMenuId(row)
-      if (!menuId) {
-        unmatchedLineQty += qty
-        continue
+      for (const line of expandOrderLineToCostLines(row)) {
+        const { menuId, optionId, qty } = line
+        if (qty <= 0) continue
+        if (!menuId) {
+          unmatchedLineQty += qty
+          continue
+        }
+        const entry = lookupCostEntry(params.costIndex, menuId, optionId)
+        if (!entry) {
+          unmatchedLineQty += qty
+          continue
+        }
+        matchedLineQty += qty
+        const unitFood = entry.foodCost * miseMult
+        const unitPack = entry.packagingCost * miseMult
+        foodCost += unitFood * qty
+        if (isDelivery) packagingCost += unitPack * qty
       }
-      const optionId = resolveLineOptionId(row)
-      const keyWithOpt = `${menuId}|${optionId}`
-      const keyBase = `${menuId}|`
-      const entry = params.costIndex.get(keyWithOpt) ?? params.costIndex.get(keyBase)
-      if (!entry) {
-        unmatchedLineQty += qty
-        continue
-      }
-      matchedLineQty += qty
-      const unitFood = entry.foodCost * miseMult
-      const unitPack = entry.packagingCost * miseMult
-      foodCost += unitFood * qty
-      if (isDelivery) packagingCost += unitPack * qty
     }
   }
 

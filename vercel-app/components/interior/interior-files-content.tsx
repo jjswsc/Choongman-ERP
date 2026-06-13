@@ -2,7 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { Upload, Trash2, Download } from "lucide-react"
+import { Upload, Trash2, Download, FileText, Eye, ScanLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -24,12 +24,18 @@ import {
   getInteriorFiles,
   uploadInteriorFile,
   deleteInteriorFile,
+  saveInteriorProjectFile,
+  extractInteriorQuoteAmount,
   type InteriorProjectFile,
 } from "@/lib/api-client"
+import { AdminEmptyState } from "@/components/erp/admin-empty-state"
+import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
+import { tr } from "@/lib/i18n"
 
 const FILE_TYPES: { value: string; labelKey: string }[] = [
   { value: "drawing", labelKey: "interiorFileKindDrawing" },
   { value: "quote", labelKey: "interiorFileKindQuote" },
+  { value: "photo", labelKey: "interiorFileKindPhoto" },
 ]
 
 function fileTypeLabel(t: (k: string) => string, stored?: string | null) {
@@ -47,6 +53,7 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
   const [loading, setLoading] = React.useState(true)
   const [uploading, setUploading] = React.useState(false)
   const [deletingId, setDeletingId] = React.useState<number | null>(null)
+  const [extractingId, setExtractingId] = React.useState<number | null>(null)
   const [fileType, setFileType] = React.useState("drawing")
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -110,6 +117,45 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  const handleExtractQuote = async (item: InteriorProjectFile) => {
+    if (!item.id || !projectId) return
+    setExtractingId(item.id)
+    try {
+      const res = await extractInteriorQuoteAmount({ fileId: item.id, projectId })
+      if (!res.success || res.amount == null) {
+        await appAlert(res.message || t("interiorQuoteExtractFail"))
+        return
+      }
+      const saveRes = await saveInteriorProjectFile({ id: item.id, quoteAmount: res.amount })
+      if (saveRes.success) {
+        loadData()
+        await appAlert(
+          `${t("interiorQuoteExtractDone")}\n฿${res.amount.toLocaleString()}\n${tr(t, "interiorQuoteExtractMeta", { method: res.method || "?", confidence: res.confidence || "?" })}`
+        )
+      } else {
+        await appAlert(saveRes.message || t("msg_save_fail"))
+      }
+    } catch (err) {
+      await appAlert(String(err))
+    } finally {
+      setExtractingId(null)
+    }
+  }
+
+  const handleQuoteAmountBlur = async (item: InteriorProjectFile, raw: string) => {
+    if (!item.id) return
+    const next = Number(raw) || 0
+    if (next === (item.quoteAmount ?? 0)) return
+    const res = await saveInteriorProjectFile({ id: item.id, quoteAmount: next })
+    if (res.success) loadData()
+    else await appAlert(res.message || t("msg_save_fail"))
+  }
+
+  const isPreviewable = (fileName?: string | null) => {
+    const n = String(fileName || "").toLowerCase()
+    return /\.(png|jpe?g|gif|webp|pdf)$/.test(n)
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-card p-4 flex flex-wrap items-end gap-4">
@@ -148,13 +194,9 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
 
       <div className="rounded-lg border bg-card">
         {loading ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            {t("loading")}
-          </div>
+          <AdminTableSkeleton columns={5} rows={4} />
         ) : list.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            {t("interiorFilesEmpty")}
-          </div>
+          <AdminEmptyState icon={FileText} title={t("interiorFilesEmpty")} />
         ) : (
           <Table>
             <TableHeader>
@@ -163,6 +205,7 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
                 <TableHead>{t("interiorFileName")}</TableHead>
                 <TableHead className="w-20">{t("interiorFileSize")}</TableHead>
                 <TableHead className="w-40">{t("interiorUploadedAt")}</TableHead>
+                <TableHead className="w-24 text-right">{t("interiorFileQuoteAmount")}</TableHead>
                 <TableHead className="w-32"></TableHead>
               </TableRow>
             </TableHeader>
@@ -182,7 +225,43 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
                     {item.uploadedAt ? new Date(item.uploadedAt).toLocaleString() : "—"}
                   </TableCell>
                   <TableCell>
+                    {item.fileType === "quote" || (item.quoteAmount ?? 0) > 0 ? (
+                      <div className="flex flex-col gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          className="h-8 text-right font-mono"
+                          defaultValue={item.quoteAmount ?? 0}
+                          onBlur={(e) => void handleQuoteAmountBlur(item, e.target.value)}
+                        />
+                        {/\.(pdf|png|jpe?g|webp|gif)$/i.test(String(item.fileName || "")) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1 text-[10px]"
+                            disabled={extractingId === item.id}
+                            onClick={() => void handleExtractQuote(item)}
+                          >
+                            <ScanLine className="h-3 w-3" />
+                            {extractingId === item.id ? t("interiorQuoteExtracting") : t("interiorQuoteExtract")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <div className="flex gap-1">
+                      {item.filePath && isPreviewable(item.fileName) && (
+                        <Button variant="ghost" size="sm" className="h-7 gap-1" asChild>
+                          <a href={item.filePath} target="_blank" rel="noopener noreferrer">
+                            <Eye className="h-3.5 w-3.5" />
+                            {t("interiorFilePreview")}
+                          </a>
+                        </Button>
+                      )}
                       {item.filePath && (
                         <Button
                           variant="ghost"

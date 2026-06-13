@@ -120,8 +120,12 @@ export function MarketingCostsHubPanel({ campaignIdFromQuery = "" }: MarketingCo
       </div>
 
       <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        통장·Petty 등 <strong className="text-foreground">캠페인 ID</strong>로 연결된 실비입니다. 차트는 실비·예산이 있는 상위 캠페인만 표시합니다.
-        {campaignIdFromQuery && <span className="ml-1 text-primary">(허브 연결 캠페인으로 필터)</span>}
+        {t("marketingCostsHubNoteLead")}{" "}
+        <strong className="text-foreground">{t("marketingCostsHubNoteBold")}</strong>
+        {t("marketingCostsHubNoteTrail")}
+        {campaignIdFromQuery && (
+          <span className="ml-1 text-primary">{t("marketingCostsHubFilterHint")}</span>
+        )}
       </div>
 
       {!loading && list.length > 0 && (

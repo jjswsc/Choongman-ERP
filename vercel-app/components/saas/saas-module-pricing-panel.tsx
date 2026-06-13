@@ -172,7 +172,7 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
         })
       } else if (scope.isPartner && scope.partnerId) {
         let policy: CatalogRepricePolicy = "retain_margin_pct"
-        let moduleMarginPct: Partial<Record<SaasModuleKey, number>> = {}
+        const moduleMarginPct: Partial<Record<SaasModuleKey, number>> = {}
         try {
           const partnerRes = await apiFetch(`/api/saasAdminPartners?partnerId=${encodeURIComponent(scope.partnerId)}`)
           const partnerJson = (await partnerRes.json()) as {

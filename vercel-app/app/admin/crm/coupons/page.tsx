@@ -12,9 +12,12 @@ export default function CrmCouponsPage() {
 
   const onTabChange = React.useCallback(
     (next: CrmCouponAdminTab) => {
-      router.replace(`/admin/crm/coupons?tab=${next}`, { scroll: false })
+      const q = new URLSearchParams({ tab: next })
+      const audience = searchParams.get("audience")
+      if (next === "campaigns" && audience) q.set("audience", audience)
+      router.replace(`/admin/crm/coupons?${q.toString()}`, { scroll: false })
     },
-    [router]
+    [router, searchParams]
   )
 
   return <CrmCouponAdminPanel initialTab={tab} onTabChange={onTabChange} />

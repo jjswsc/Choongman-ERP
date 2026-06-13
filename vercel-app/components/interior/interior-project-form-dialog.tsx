@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { InteriorProject } from "@/lib/api-client"
+import { useStoreList } from "@/lib/api-client"
 
 interface InteriorProjectFormDialogProps {
   open: boolean
@@ -42,6 +43,7 @@ export function InteriorProjectFormDialog({
   onSave,
   t,
 }: InteriorProjectFormDialogProps) {
+  const { posStores, formatStoreLabel } = useStoreList()
   const [code, setCode] = React.useState("")
   const [name, setName] = React.useState("")
   const [location, setLocation] = React.useState("")
@@ -102,7 +104,7 @@ export function InteriorProjectFormDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label className="text-xs">{t("posMenuCode")}</Label>
+            <Label className="text-xs">{t("interiorProjectCode")}</Label>
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -112,12 +114,31 @@ export function InteriorProjectFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">{t("posMenuName")}</Label>
+            <Label className="text-xs">{t("interiorProjectName")}</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="CM Future Park Rangsit"
             />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">{t("interiorSelectStore")}</Label>
+            <Select
+              value={location.trim() ? location : "__none__"}
+              onValueChange={(v) => setLocation(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("interiorSelectStorePlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{t("interiorSelectStorePlaceholder")}</SelectItem>
+                {posStores.map((store) => (
+                  <SelectItem key={store} value={store}>
+                    {formatStoreLabel(store)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label className="text-xs">{t("interiorLocation")}</Label>

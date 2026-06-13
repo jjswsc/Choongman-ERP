@@ -6,7 +6,6 @@ import { Layers } from "lucide-react"
 import { TotalSalesTab } from "@/components/tabs/total-sales-tab"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { SalesSubnav } from "@/components/erp/sales-subnav"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,7 +15,6 @@ function TotalSalesBody() {
   return (
     <>
       <SalesPageHeader
-        href="/admin/total-sales"
         title={t("totalSalesTitle") || "Total Sales"}
         subtitle={t("totalSalesSubtitle") || "메뉴 판매량·판매액 (4단계 집계)"}
         icon={Layers}
@@ -35,7 +33,6 @@ export default function TotalSalesPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-        <SalesSubnav />
         <Suspense
           fallback={
             <div className="space-y-4">

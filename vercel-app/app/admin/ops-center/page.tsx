@@ -9,7 +9,6 @@ import { useT, tOr } from "@/lib/i18n"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useStoreList } from "@/lib/api-client"
 import { useStoreView, filterOperationalStorePickerOptions } from "@/lib/store-view-context"
-import { SalesSubnav } from "@/components/erp/sales-subnav"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -208,9 +207,7 @@ export default function AdminOpsCenterPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-        <SalesSubnav />
         <SalesPageHeader
-          href="/admin/ops-center"
           title={tOr(t, "adminOpsCenterTitle", t("adminOpsCenter"))}
           subtitle={t("adminOpsCenterSub")}
           icon={LayoutDashboard}

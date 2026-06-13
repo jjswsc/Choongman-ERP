@@ -5,22 +5,18 @@ import Link from "next/link"
 import {
   LayoutDashboard,
   RefreshCw,
-  Users,
-  Megaphone,
-  Tag,
-  LayoutPanelTop,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
-import { CrmPageHero, CrmKpiCard, CrmActionBar, CrmOutlineButton } from "@/components/crm/crm-shared-ui"
+import { CrmPageHero, CrmKpiCard } from "@/components/crm/crm-shared-ui"
 import { apiFetch } from "@/lib/api/fetch"
 import { CRM_SEGMENT_KEYS, CRM_SEGMENT_DESC_KEYS, type CrmSegmentKey } from "@/lib/i18n-crm"
 import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
 import { useLang } from "@/lib/lang-context"
-import { tr, useT } from "@/lib/i18n"
+import { useT } from "@/lib/i18n"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
 
 type Summary = {
@@ -179,46 +175,6 @@ export default function CrmDashboardPage() {
                 </Link>
               ))}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("crmDashQuickActions")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CrmActionBar>
-              <CrmOutlineButton asChild>
-                <Link href="/admin/crm/segments">
-                  <Users className="mr-1.5 h-3.5 w-3.5" />
-                  {t("crmSeg_extractBtn")}
-                </Link>
-              </CrmOutlineButton>
-              <CrmOutlineButton asChild>
-                <Link href="/admin/members/visits?tab=rfm">{t("adminCrmRfm")}</Link>
-              </CrmOutlineButton>
-              <CrmOutlineButton asChild>
-                <Link href="/admin/crm/coupons">
-                  <Tag className="mr-1.5 h-3.5 w-3.5" />
-                  {t("memberCoupons")}
-                </Link>
-              </CrmOutlineButton>
-              <CrmOutlineButton asChild>
-                <Link href="/admin/crm/campaigns">
-                  <Megaphone className="mr-1.5 h-3.5 w-3.5" />
-                  {t("adminCrmCampaigns")}
-                </Link>
-              </CrmOutlineButton>
-              <CrmOutlineButton asChild>
-                <Link href="/admin/crm/member-app">
-                  <LayoutPanelTop className="mr-1.5 h-3.5 w-3.5" />
-                  {t("mpAdmin_pageTitle")}
-                </Link>
-              </CrmOutlineButton>
-              <CrmOutlineButton asChild>
-                <Link href="/admin/marketing/integrations">LINE</Link>
-              </CrmOutlineButton>
-            </CrmActionBar>
           </CardContent>
         </Card>
       </div>

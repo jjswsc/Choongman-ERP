@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
-import { MemberStampCardAdminPanel } from "@/components/admin/member-stamp-card-admin-panel"
 import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
 import { CrmMemberAppPreview } from "@/components/crm/crm-member-app-preview"
 import type { MemberPortalContentAdminItem } from "@/lib/member-portal-content-admin"
@@ -852,11 +851,17 @@ export default function CrmMemberAppContentPage() {
                 </fieldset>
               </CardContent>
             </Card>
-            <MemberStampCardAdminPanel
-              canEdit={canEdit}
-              onNotice={setNotice}
-              onError={setError}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_stampCardTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">{t("crmCouponStampMovedHint")}</p>
+                <Button asChild variant="outline">
+                  <Link href="/admin/crm/coupons?tab=stamp">{t("crmCouponTabStamp")}</Link>
+                </Button>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_signupStoreStatsTitle")}</CardTitle>

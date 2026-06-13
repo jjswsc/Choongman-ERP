@@ -25,6 +25,7 @@ import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { isOfficeRole, isManagerRole, isFranchiseeRole } from "@/lib/permissions"
 import { PayrollHelpContent } from "@/components/admin/payroll-help-content"
+import { HrPageShell } from "@/components/hr/hr-page-shell"
 
 const PAYROLL_TABS = ["calc", "records", "salary_history", "holidays", "rules", "help"] as const
 type PayrollTab = (typeof PAYROLL_TABS)[number]
@@ -60,24 +61,14 @@ function PayrollPageInner() {
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-6 text-center max-w-md">
           <p className="font-semibold text-amber-800 dark:text-amber-200">{t("adminPayroll")}</p>
-          <p className="mt-2 text-sm text-muted-foreground">{t("adminPayrollDirectorOnly")}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t("adminPayrollAccessDenied")}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Wallet className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminPayroll")}</h1>
-            <p className="text-xs text-muted-foreground">{t("pay_month")}</p>
-          </div>
-        </div>
+    <HrPageShell icon={Wallet} title={t("adminPayroll")} subtitle={t("adminPayrollSub")}>
         <Tabs value={tabValue} onValueChange={setTab} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
@@ -120,8 +111,7 @@ function PayrollPageInner() {
             <PayrollHelpContent />
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </HrPageShell>
   )
 }
 

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { cn } from "@/lib/utils"
 
 export interface Vendor {
@@ -127,14 +128,22 @@ export function VendorTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {t("vendorSearchHint")}
+                <td colSpan={7} className="p-0">
+                  <LogisticsEmptyState
+                    icon={Search}
+                    title={t("vendorSearchHint")}
+                    className="border-0 bg-transparent py-10"
+                  />
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {t("vendorNoResults")}
+                <td colSpan={7} className="p-0">
+                  <LogisticsEmptyState
+                    icon={ListFilter}
+                    title={t("vendorNoResults")}
+                    className="border-0 bg-transparent py-10"
+                  />
                 </td>
               </tr>
             ) : (
@@ -224,7 +233,7 @@ export function VendorTable({
                         size="icon"
                         className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                         onClick={() => onEdit(vendor)}
-                        title={t("vendorBtnEdit") || t("itemsBtnEdit") || "수정"}
+                        title={t("vendorBtnEdit")}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -233,7 +242,7 @@ export function VendorTable({
                         size="icon"
                         className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onDelete(vendor)}
-                        title={t("vendorBtnDelete") || t("itemsBtnDelete") || "삭제"}
+                        title={t("vendorBtnDelete")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

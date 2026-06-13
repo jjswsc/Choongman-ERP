@@ -40,6 +40,7 @@ import { isMaterialHqOutboundOrderDiff } from "@/lib/income-statement-hq-diff"
 import { useAuth } from "@/lib/auth-context"
 import {
   buildFinancialStatementFranchiseStoreOptions,
+  isFinancialStatementStoreNone,
   resolveFinancialStatementStoreLabel,
 } from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
@@ -1731,6 +1732,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   const runIncomeFetch = React.useCallback(() => {
     const fetchSeq = ++incomeFetchSeqRef.current
+    if (isFinancialStatementStoreNone(queryStoreFilter)) {
+      setLoading(false)
+      setData(null)
+      setCompareIncomeRows([])
+      setCompareFetchError(t("salesSelectStoreHint") || "매장을 선택하세요.")
+      return
+    }
     const sf = queryStoreFilter !== "All" ? queryStoreFilter : undefined
     const months = periodMonths
     setCompareFetchError(null)

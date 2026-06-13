@@ -38,6 +38,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft, FileText, PencilLine, Trash2 } from "lucide-react"
+import { MetricCard } from "@/components/cost-analysis/metric-card"
+import { ReceivableAgingPanel } from "@/components/admin/receivable-aging-panel"
+import {
+  agingDaysBetween,
+  agingRowToneClass,
+  computeLedgerAging,
+  isAccrualRefType,
+} from "@/lib/receivable-aging"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -1001,6 +1009,11 @@ export function ReceivablePayableTab() {
     return { accrualSum, settlementSum, balanceSum, count }
   }, [listData, tab, filterUnpaidOnly])
 
+  const ledgerAging = React.useMemo(
+    () => computeLedgerAging(listData, tab, endStr),
+    [listData, tab, endStr]
+  )
+
   const amountGridCols = "grid grid-cols-[minmax(0,1fr)_110px_110px_110px_110px] gap-2 items-center"
 
   const getCumulativeForItem = React.useCallback(
@@ -1207,6 +1220,45 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
 
   return (
     <div className="space-y-4">
+      {hasSearchedList && !loading ? (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <MetricCard
+            size="sm"
+            variant="primary"
+            label={t("acct_kpi_cumulative_balance")}
+            value={`฿${cumulativeSummary.totalAmount.toLocaleString()}`}
+            subLabel={cumulativeBalanceLabel}
+          />
+          {listSearchTotals.count > 0 ? (
+            <>
+              <MetricCard
+                size="sm"
+                label={t("acct_kpi_period_net")}
+                value={`฿${listSearchTotals.balanceSum.toLocaleString()}`}
+              />
+              <MetricCard
+                size="sm"
+                label={t("acct_kpi_period_accrual")}
+                value={`฿${listSearchTotals.accrualSum.toLocaleString()}`}
+              />
+              <MetricCard
+                size="sm"
+                label={t("acct_kpi_period_settlement")}
+                value={`฿${listSearchTotals.settlementSum.toLocaleString()}`}
+              />
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {hasSearchedList && !loading && ledgerAging.openLineCount > 0 ? (
+        <ReceivableAgingPanel
+          ledger={tab}
+          asOfDate={endStr}
+          buckets={ledgerAging.buckets}
+          total={ledgerAging.total}
+          openLineCount={ledgerAging.openLineCount}
+        />
+      ) : null}
       {/* 인쇄용 영역 (화면에는 숨김) */}
       <div id="receivable-payable-print-area" className="hidden print:block p-6">
         <h1 className="text-lg font-bold mb-2">{printTitle}</h1>
@@ -1595,9 +1647,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               (rowOrderId != null ? `#${rowOrderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
                                               "-"
                                             : "-"
+                                    const isAccrualRow = isAccrualRefType(row.ref_type, "receivable")
+                                    const rowAgeDays =
+                                      isAccrualRow && Number(row.amount ?? 0) > 0
+                                        ? agingDaysBetween(endStr, row.trans_date || endStr)
+                                        : 0
                                     return (
                                     <React.Fragment key={row.id ?? recRowKey}>
-                                    <tr className="border-b border-border/50">
+                                    <tr
+                                      className={cn(
+                                        "border-b border-border/50",
+                                        rowAgeDays > 0 ? agingRowToneClass(rowAgeDays) : ""
+                                      )}
+                                    >
                                       <td
                                         className={cn(
                                           "py-1.5 px-2 w-[35px] text-center align-middle",
@@ -1617,7 +1679,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           )
                                         ) : null}
                                       </td>
-                                      <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
+                                      <td className="py-1.5 px-4 w-[115px]">
+                                        <span>{row.trans_date || "-"}</span>
+                                        {rowAgeDays > 30 ? (
+                                          <span className="ml-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+                                            {t("acct_aging_days_badge").replace("{n}", String(rowAgeDays))}
+                                          </span>
+                                        ) : null}
+                                      </td>
                                       <td className="py-1.5 px-4 w-[95px]">
                                         {row.ref_type === "Opening"
                                           ? (t("recTypeOpening") || "기초이월")
@@ -2120,9 +2189,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       isManualPayableBalanceRow(row) &&
                                       row.id != null &&
                                       canMutateManualPayableBalance(auth?.role || "")
+                                    const isPayAccrualRow = isAccrualRefType(row.ref_type, "payable")
+                                    const payRowAgeDays =
+                                      isPayAccrualRow && Number(row.amount ?? 0) > 0
+                                        ? agingDaysBetween(endStr, row.trans_date || endStr)
+                                        : 0
                                     return (
                                       <React.Fragment key={row.id ?? rowKey}>
-                                        <tr className="border-b border-border/50">
+                                        <tr
+                                          className={cn(
+                                            "border-b border-border/50",
+                                            payRowAgeDays > 0 ? agingRowToneClass(payRowAgeDays) : ""
+                                          )}
+                                        >
                                           <td
                                             className={cn(
                                               "py-1.5 px-4 w-[35px] text-center",
@@ -2140,7 +2219,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               )
                                             ) : null}
                                           </td>
-                                          <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
+                                          <td className="py-1.5 px-4 w-[115px]">
+                                            <span>{row.trans_date || "-"}</span>
+                                            {payRowAgeDays > 30 ? (
+                                              <span className="ml-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+                                                {t("acct_aging_days_badge").replace("{n}", String(payRowAgeDays))}
+                                              </span>
+                                            ) : null}
+                                          </td>
                                           <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "PO" ? (t("payTypePO") || "발주") : (t("payTypePayment") || "지급")}</td>
                                           <td
                                             className={cn(

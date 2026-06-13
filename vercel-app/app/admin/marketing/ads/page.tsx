@@ -393,7 +393,7 @@ export default function MarketingAdsPage() {
 
   return (
     <MarketingPageShell>
-        <MarketingPageHero icon={TrendingUp} title={t("adminMarketingAds")} />
+        <MarketingPageHero icon={TrendingUp} title={t("adminMarketingAds")} description={t("marketingHeroDescAds")} />
         {campaignIdFromQuery && (
           <div className="mb-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-foreground/90">
             {t("marketingAdsQueryBanner")}

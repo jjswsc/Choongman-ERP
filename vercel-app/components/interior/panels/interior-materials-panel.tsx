@@ -23,6 +23,9 @@ import {
   uploadInteriorFile,
   type InteriorMaterialSpec,
 } from "@/lib/api-client"
+import { downloadInteriorCsv } from "@/lib/interior-csv-export"
+import { AdminEmptyState } from "@/components/erp/admin-empty-state"
+import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
 
 export function InteriorMaterialsPanel({ projectId }: { projectId: string }) {
   const t = useT(useLang().lang)
@@ -124,6 +127,30 @@ export function InteriorMaterialsPanel({ projectId }: { projectId: string }) {
     }
   }
 
+  const handleExportCsv = () => {
+    downloadInteriorCsv(
+      `interior-materials-${projectId}.csv`,
+      [
+        t("interiorMaterialCode"),
+        t("interiorMaterialNameLabel"),
+        t("spec"),
+        t("interiorSupplier"),
+        t("interiorUnitLabel"),
+        t("interiorUnitCost"),
+        t("interiorStorageUseLocation"),
+      ],
+      list.map((row) => [
+        row.materialCode || "",
+        row.materialName || "",
+        row.spec || "",
+        row.supplier || "",
+        row.unit || "",
+        String(row.unitCost ?? 0),
+        row.location || "",
+      ])
+    )
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
@@ -134,10 +161,15 @@ export function InteriorMaterialsPanel({ projectId }: { projectId: string }) {
             </div>
             <h2 className="text-lg font-semibold">{t("interiorMaterialsPageTitle")}</h2>
           </div>
-          <Button size="sm" onClick={handleAdd} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            {t("add")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleExportCsv} disabled={list.length === 0} className="gap-1.5">
+              {t("interiorExportCsv")}
+            </Button>
+            <Button size="sm" onClick={handleAdd} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              {t("add")}
+            </Button>
+          </div>
         </div>
 
         {editing && (
@@ -205,15 +237,15 @@ export function InteriorMaterialsPanel({ projectId }: { projectId: string }) {
 
         <div className="rounded-lg border bg-card">
           {loading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">{t("loading")}</div>
+            <AdminTableSkeleton columns={8} rows={5} />
           ) : list.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">{t("interiorMaterialsEmpty")}</div>
+            <AdminEmptyState icon={PackageSearch} title={t("interiorMaterialsEmpty")} />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-16">{t("interiorColImage")}</TableHead>
-                  <TableHead>{t("posMenuCode")}</TableHead>
+                  <TableHead>{t("interiorMaterialCode")}</TableHead>
                   <TableHead>{t("interiorMaterialNameLabel")}</TableHead>
                   <TableHead>{t("spec")}</TableHead>
                   <TableHead>{t("interiorSupplier")}</TableHead>

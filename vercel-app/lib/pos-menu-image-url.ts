@@ -100,8 +100,12 @@ export function canonicalPosMenuUpstreamUrl(raw: string): string {
   return parsed.href
 }
 
+/** CDN에 잘못 캐시된 구 응답(64×64) 우회 — 배포 시 증가 */
+const POS_MENU_IMAGE_PROXY_RENDER_VERSION = 2
+
 export function toHybridProxiedMenuImageHref(absoluteUrl: string): string {
-  return `/api/posMenuImageProxy?u=${encodeURIComponent(canonicalPosMenuUpstreamUrl(absoluteUrl))}`
+  const u = encodeURIComponent(canonicalPosMenuUpstreamUrl(absoluteUrl))
+  return `/api/posMenuImageProxy?u=${u}&w=750&q=80&v=${POS_MENU_IMAGE_PROXY_RENDER_VERSION}`
 }
 
 function toGeneralImageProxyHref(absoluteUrl: string): string {

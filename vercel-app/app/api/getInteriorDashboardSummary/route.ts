@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabaseSelect, supabaseSelectAllPages } from "@/lib/supabase-server"
+import { supabaseRpc, supabaseSelect, supabaseSelectAllPages } from "@/lib/supabase-server"
 import {
   bangkokTodayYmd,
   isInteriorVendorTrackDelayed,
@@ -8,11 +8,61 @@ import {
 
 const INTERIOR_DASHBOARD_SCAN_MAX_ROWS = 1_000_000
 
+type DashboardRpcPayload = {
+  generatedAt?: string
+  totals?: {
+    activeProjectCount?: number
+    scheduleOverdueCount?: number
+    vendorDelayedCount?: number
+    overBudgetProjectCount?: number
+    projectsWithAnyAlert?: number
+  }
+  projects?: {
+    id?: number
+    paidTotal?: number
+    scheduleLateCount?: number
+    vendorDelayedCount?: number
+    overBudget?: boolean
+    hasAlert?: boolean
+  }[]
+}
+
+function normalizeDashboardPayload(raw: DashboardRpcPayload | null | undefined) {
+  const totals = raw?.totals ?? {}
+  return {
+    generatedAt: raw?.generatedAt || bangkokTodayYmd(),
+    totals: {
+      activeProjectCount: Number(totals.activeProjectCount) || 0,
+      scheduleOverdueCount: Number(totals.scheduleOverdueCount) || 0,
+      vendorDelayedCount: Number(totals.vendorDelayedCount) || 0,
+      overBudgetProjectCount: Number(totals.overBudgetProjectCount) || 0,
+      projectsWithAnyAlert: Number(totals.projectsWithAnyAlert) || 0,
+    },
+    projects: (raw?.projects ?? []).map((p) => ({
+      id: Number(p.id),
+      paidTotal: Number(p.paidTotal) || 0,
+      scheduleLateCount: Number(p.scheduleLateCount) || 0,
+      vendorDelayedCount: Number(p.vendorDelayedCount) || 0,
+      overBudget: !!p.overBudget,
+      hasAlert: !!p.hasAlert,
+    })).filter((p) => Number.isFinite(p.id)),
+  }
+}
+
 export async function GET() {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
 
   try {
+    try {
+      const rpc = await supabaseRpc<DashboardRpcPayload>("get_interior_dashboard_summary", {})
+      if (rpc && typeof rpc === "object") {
+        return NextResponse.json(normalizeDashboardPayload(rpc), { headers })
+      }
+    } catch (rpcErr) {
+      console.warn("getInteriorDashboardSummary RPC fallback:", rpcErr)
+    }
+
     const todayYmd = bangkokTodayYmd()
 
     const projectRows = (await supabaseSelect("interior_projects", {
@@ -216,6 +266,18 @@ export async function GET() {
           overBudgetProjectCount,
           projectsWithAnyAlert,
         },
+        projects: Array.from(alertProjectIds).map((id) => ({
+          id,
+          paidTotal: paidSumByProject.get(id) ?? 0,
+          scheduleLateCount: 0,
+          vendorDelayedCount: 0,
+          overBudget: (() => {
+            const budget = budgetByProject.get(id) ?? 0
+            const spent = paidSumByProject.get(id) ?? 0
+            return budget > 0 && spent > budget
+          })(),
+          hasAlert: true,
+        })),
       },
       { headers }
     )
@@ -231,6 +293,7 @@ export async function GET() {
           overBudgetProjectCount: 0,
           projectsWithAnyAlert: 0,
         },
+        projects: [],
       },
       { headers }
     )

@@ -2,9 +2,15 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { LayoutPanelTop, Plus, Pencil, Trash2, Undo2, Redo2 } from "lucide-react"
+import { LayoutPanelTop, Plus, Pencil, Trash2, Undo2, Redo2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -30,8 +36,12 @@ import {
   getInteriorMaterialSpecs,
   getInteriorLayoutEditorPrefs,
   saveInteriorLayoutEditorPrefs,
+  getInteriorFiles,
+  getInteriorLayoutZoneBackground,
+  saveInteriorLayoutZoneBackground,
   type InteriorLayoutItem,
   type InteriorMaterialSpec,
+  type InteriorProjectFile,
 } from "@/lib/api-client"
 
 const LAYOUT_STATUS: { value: string; labelKey: string }[] = [
@@ -127,6 +137,11 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
   const [historyPast, setHistoryPast] = React.useState<InteriorLayoutItem[][]>([])
   const [historyFuture, setHistoryFuture] = React.useState<InteriorLayoutItem[][]>([])
   const previewRef = React.useRef<HTMLDivElement | null>(null)
+  const [projectFiles, setProjectFiles] = React.useState<InteriorProjectFile[]>([])
+  const [backgroundFileId, setBackgroundFileId] = React.useState<number | null>(null)
+  const [backgroundOpacity, setBackgroundOpacity] = React.useState(0.35)
+  const zoneBgLoadedRef = React.useRef(false)
+  const [materialDropTargetId, setMaterialDropTargetId] = React.useState<number | null>(null)
   const duplicateOffsetStorageKey = React.useMemo(
     () => `${DUPLICATE_OFFSET_STORAGE_KEY_PREFIX}.${projectId || "global"}.${zone || "all"}`,
     [projectId, zone]
@@ -233,6 +248,61 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
     }, 300)
     return () => window.clearTimeout(timer)
   }, [auth?.store, auth?.user, auth?.employeeId, projectId, zone, duplicateOffsetX, duplicateOffsetY, snapEnabled, snapStep, nudgeSmall, nudgeMedium, nudgeLarge])
+
+  React.useEffect(() => {
+    if (!projectId) return
+    getInteriorFiles({ projectId })
+      .then((rows) => setProjectFiles(rows || []))
+      .catch(() => setProjectFiles([]))
+  }, [projectId])
+
+  React.useEffect(() => {
+    if (!projectId || !zone) return
+    zoneBgLoadedRef.current = false
+    getInteriorLayoutZoneBackground({ projectId, zone })
+      .then((bg) => {
+        setBackgroundFileId(bg?.backgroundFileId ?? null)
+        if (typeof bg?.backgroundOpacity === "number") {
+          setBackgroundOpacity(Math.min(1, Math.max(0.05, bg.backgroundOpacity)))
+        }
+      })
+      .finally(() => {
+        zoneBgLoadedRef.current = true
+      })
+  }, [projectId, zone])
+
+  React.useEffect(() => {
+    if (!projectId || !zone || !zoneBgLoadedRef.current) return
+    const timer = window.setTimeout(() => {
+      void saveInteriorLayoutZoneBackground({
+        projectId: Number(projectId),
+        zone,
+        backgroundFileId,
+        backgroundOpacity,
+      })
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [projectId, zone, backgroundFileId, backgroundOpacity])
+
+  const backgroundFile = React.useMemo(
+    () => projectFiles.find((f) => f.id === backgroundFileId),
+    [projectFiles, backgroundFileId]
+  )
+  const backgroundCandidates = React.useMemo(
+    () => projectFiles.filter((f) => {
+      const n = String(f.fileName || "").toLowerCase()
+      return f.fileType === "drawing" || f.fileType === "photo" || /\.(png|jpe?g|webp|gif)$/.test(n)
+    }),
+    [projectFiles]
+  )
+
+  const materialById = React.useMemo(() => {
+    const map = new Map<number, InteriorMaterialSpec>()
+    for (const m of materials) {
+      if (m.id) map.set(m.id, m)
+    }
+    return map
+  }, [materials])
 
   const applyDuplicatePreset = React.useCallback((preset: "right" | "down" | "diagonal" | "left") => {
     if (preset === "right") {
@@ -389,6 +459,33 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
     syncEditingFromList(nextSnapshot)
     await persistLayoutItems(nextSnapshot)
   }, [historyFuture, list, persistLayoutItems, syncEditingFromList])
+
+  const linkMaterialToItem = React.useCallback(
+    async (itemId: number, materialSpecId: number) => {
+      const item = list.find((x) => x.id === itemId)
+      const material = materialById.get(materialSpecId)
+      if (!item || !material) return
+      pushHistory(list)
+      try {
+        const res = await saveInteriorLayoutItem({
+          ...item,
+          projectId: Number(projectId),
+          zone,
+          itemName: item.itemName?.trim() || material.materialName || String(item.itemName || ""),
+          materialSpecId,
+        })
+        if (res.success) {
+          loadData()
+          await appAlert(t("msg_saved"))
+        } else {
+          await appAlert(res.message || t("msg_save_fail"))
+        }
+      } catch (e) {
+        await appAlert(String(e))
+      }
+    },
+    [list, materialById, projectId, zone, t, loadData, pushHistory]
+  )
 
   React.useEffect(() => {
     if (!interaction) return
@@ -899,16 +996,36 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
               <Button size="sm" variant="outline" onClick={() => { setDuplicateOffsetX(DUPLICATE_OFFSET); setDuplicateOffsetY(DUPLICATE_OFFSET) }} className="h-7 px-2 text-xs">{t("interiorDupOffsetReset")}</Button>
               <Button size="sm" variant="outline" onClick={() => setSnapStep(SNAP_STEP_DEFAULT)} className="h-7 px-2 text-xs">{t("interiorSnapReset")}</Button>
               <Button size="sm" variant="outline" onClick={() => { setNudgeSmall(NUDGE_SMALL_DEFAULT); setNudgeMedium(NUDGE_MEDIUM_DEFAULT); setNudgeLarge(NUDGE_LARGE_DEFAULT) }} className="h-7 px-2 text-xs">{t("interiorNudgeReset")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void alignSelectedItems("left")} disabled={selectedIds.length < 2} className="h-7 px-2 text-xs">{t("interiorAlignLeft")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void alignSelectedItems("right")} disabled={selectedIds.length < 2} className="h-7 px-2 text-xs">{t("interiorAlignRight")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void alignCenterSelectedItems("horizontal")} disabled={selectedIds.length < 2} className="h-7 px-2 text-xs">{t("interiorAlignCenterH")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void alignSelectedItems("top")} disabled={selectedIds.length < 2} className="h-7 px-2 text-xs">{t("interiorAlignTop")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void alignSelectedItems("bottom")} disabled={selectedIds.length < 2} className="h-7 px-2 text-xs">{t("interiorAlignBottom")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void alignCenterSelectedItems("vertical")} disabled={selectedIds.length < 2} className="h-7 px-2 text-xs">{t("interiorAlignCenterV")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void distributeSelectedItems("horizontal")} disabled={selectedIds.length < 3} className="h-7 px-2 text-xs">{t("interiorDistributeH")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void distributeSelectedItems("vertical")} disabled={selectedIds.length < 3} className="h-7 px-2 text-xs">{t("interiorDistributeV")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void duplicateSelectedItems()} disabled={selectedIds.length === 0} className="h-7 px-2 text-xs">{t("interiorDuplicate")}</Button>
-              <Button size="sm" variant="outline" onClick={() => void bulkDeleteSelected()} disabled={selectedIds.length === 0} className="h-7 px-2 text-xs text-destructive">{t("interiorDeleteSelected")}</Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+                    {t("interiorLayoutToolbarAlign")}
+                    <ChevronDown className="h-3 w-3 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={() => void alignSelectedItems("left")} disabled={selectedIds.length < 2}>{t("interiorAlignLeft")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void alignSelectedItems("right")} disabled={selectedIds.length < 2}>{t("interiorAlignRight")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void alignCenterSelectedItems("horizontal")} disabled={selectedIds.length < 2}>{t("interiorAlignCenterH")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void alignSelectedItems("top")} disabled={selectedIds.length < 2}>{t("interiorAlignTop")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void alignSelectedItems("bottom")} disabled={selectedIds.length < 2}>{t("interiorAlignBottom")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void alignCenterSelectedItems("vertical")} disabled={selectedIds.length < 2}>{t("interiorAlignCenterV")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void distributeSelectedItems("horizontal")} disabled={selectedIds.length < 3}>{t("interiorDistributeH")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void distributeSelectedItems("vertical")} disabled={selectedIds.length < 3}>{t("interiorDistributeV")}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+                    {t("interiorLayoutToolbarSelection")}
+                    <ChevronDown className="h-3 w-3 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onClick={() => void duplicateSelectedItems()} disabled={selectedIds.length === 0}>{t("interiorDuplicate")}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void bulkDeleteSelected()} disabled={selectedIds.length === 0} className="text-destructive">{t("interiorDeleteSelected")}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button size="sm" variant="outline" onClick={handleUndo} disabled={historyPast.length === 0} className="h-7 gap-1 px-2">
                 <Undo2 className="h-3.5 w-3.5" /> {t("interiorUndo")}
               </Button>
@@ -917,10 +1034,68 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
               </Button>
             </div>
           </div>
+          <div className="mb-3 flex flex-wrap items-end gap-3 rounded-md border bg-muted/10 p-3">
+            <div className="min-w-[12rem] flex-1 space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground">{t("interiorLayoutBackground")}</span>
+              <Select
+                value={backgroundFileId ? String(backgroundFileId) : "__none__"}
+                onValueChange={(v) => setBackgroundFileId(v === "__none__" ? null : Number(v))}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">{t("interiorLayoutBackgroundNone")}</SelectItem>
+                  {backgroundCandidates.map((f) => (
+                    <SelectItem key={f.id} value={String(f.id)}>
+                      {f.fileName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-[10rem] space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {t("interiorLayoutBackgroundOpacity")} ({Math.round(backgroundOpacity * 100)}%)
+              </span>
+              <Input
+                type="range"
+                min={5}
+                max={100}
+                value={Math.round(backgroundOpacity * 100)}
+                onChange={(e) => setBackgroundOpacity(Number(e.target.value) / 100)}
+                className="h-8"
+              />
+            </div>
+          </div>
+          {materials.filter((m) => m.id).length > 0 ? (
+            <div className="mb-3 rounded-md border bg-muted/10 p-3">
+              <p className="text-[11px] text-muted-foreground">{t("interiorMaterialPaletteHint")}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {materials
+                  .filter((m) => m.id)
+                  .map((m) => (
+                    <div
+                      key={m.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/x-interior-material-id", String(m.id))
+                        e.dataTransfer.setData("text/plain", String(m.id))
+                        e.dataTransfer.effectAllowed = "copy"
+                      }}
+                      className="cursor-grab rounded border border-dashed bg-background px-2 py-1 text-[11px] shadow-sm active:cursor-grabbing"
+                      title={tr(t, "interiorMaterialNumber", { n: String(m.id) })}
+                    >
+                      {m.materialName || tr(t, "interiorMaterialNumber", { n: String(m.id) })}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ) : null}
           <div className="mb-2 text-[11px] text-muted-foreground">{t("interiorLayoutTip")}</div>
           <div
             ref={previewRef}
-            className="relative mx-auto h-[320px] w-full max-w-4xl rounded-md border bg-muted/20 select-none"
+            className="relative mx-auto h-[320px] w-full max-w-4xl overflow-hidden rounded-md border bg-muted/20 select-none"
             onMouseDown={(ev) => {
               if (interaction) return
               if (ev.target !== ev.currentTarget) return
@@ -936,6 +1111,15 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
               })
             }}
           >
+            {backgroundFile?.filePath ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={backgroundFile.filePath}
+                alt=""
+                className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                style={{ opacity: backgroundOpacity }}
+              />
+            ) : null}
             {selectionBox && previewRef.current ? (() => {
               const rect = previewRef.current.getBoundingClientRect()
               const startX = clamp(((selectionBox.startClientX - rect.left) / rect.width) * 100, 0, 100)
@@ -964,12 +1148,47 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
               const width = `${(w / GRID_W) * 100}%`
               const height = `${(h / GRID_H) * 100}%`
               const isSelected = item.id ? selectedIds.includes(item.id) : false
+              const linkedMaterial = item.materialSpecId ? materialById.get(item.materialSpecId) : undefined
+              const isDropTarget = item.id != null && materialDropTargetId === item.id
               return (
                 <button
                   type="button"
                   key={item.id}
-                  className={`absolute rounded border bg-background/90 px-1 py-0.5 text-left text-[11px] shadow-sm hover:border-primary ${isSelected ? "border-primary ring-1 ring-primary/50" : ""}`}
+                  className={`absolute rounded border bg-background/90 px-1 py-0.5 text-left text-[11px] shadow-sm hover:border-primary ${
+                    isSelected ? "border-primary ring-1 ring-primary/50" : linkedMaterial ? "border-emerald-500/70" : ""
+                  } ${isDropTarget ? "ring-2 ring-emerald-400 ring-offset-1" : ""}`}
+                  aria-label={
+                    isDropTarget
+                      ? t("interiorMaterialDropHint")
+                      : linkedMaterial
+                        ? `${item.itemName || ""} — ${t("interiorMaterialLinked")}`
+                        : item.itemName || undefined
+                  }
                   style={{ left, top, width, height }}
+                  onDragOver={(ev) => {
+                    if (!item.id) return
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    ev.dataTransfer.dropEffect = "copy"
+                    setMaterialDropTargetId(item.id)
+                  }}
+                  onDragLeave={(ev) => {
+                    ev.stopPropagation()
+                    if (materialDropTargetId === item.id) setMaterialDropTargetId(null)
+                  }}
+                  onDrop={(ev) => {
+                    if (!item.id) return
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    setMaterialDropTargetId(null)
+                    const raw =
+                      ev.dataTransfer.getData("application/x-interior-material-id") ||
+                      ev.dataTransfer.getData("text/plain")
+                    const materialSpecId = Number(raw)
+                    if (Number.isFinite(materialSpecId) && materialSpecId > 0) {
+                      void linkMaterialToItem(item.id, materialSpecId)
+                    }
+                  }}
                   onMouseDown={(ev) => {
                     if (!item.id) return
                     if (ev.ctrlKey || ev.metaKey) return
@@ -1003,6 +1222,11 @@ export function InteriorLayoutItemsPanel({ projectId }: { projectId: string }) {
                   }}
                 >
                   <div className="truncate font-medium">{item.itemName}</div>
+                  {linkedMaterial ? (
+                    <div className="truncate text-[10px] text-emerald-700">
+                      {linkedMaterial.materialName || tr(t, "interiorMaterialNumber", { n: String(linkedMaterial.id) })}
+                    </div>
+                  ) : null}
                   <div className="truncate text-[10px] text-muted-foreground">{t("interiorQtyTag")} {item.qty ?? 1}</div>
                   <span
                     className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 cursor-se-resize rounded-sm border border-primary/60 bg-primary/30"

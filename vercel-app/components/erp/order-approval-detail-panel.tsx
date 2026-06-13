@@ -131,7 +131,7 @@ export function OrderApprovalDetailPanel({
                       <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-primary/5 border-b">
                         <Truck className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span className="text-xs font-bold text-foreground">
-                          {t("outWhWarehouseCol") || "출고지"}: {loc}
+                          {t("outWhWarehouseCol")}: {loc}
                         </span>
                         <Input
                           type="date"
@@ -155,7 +155,7 @@ export function OrderApprovalDetailPanel({
                             disabled={!!savingDeliveryDatesId}
                             onClick={(e) => { e.stopPropagation(); onSaveDeliveryDates(order.id) }}
                           >
-                            {savingDeliveryDatesId === order.id ? t("loading") || "저장 중..." : t("btnSave") || "저장"}
+                            {savingDeliveryDatesId === order.id ? t("loading") : t("btnSave")}
                           </Button>
                         )}
                       </div>
@@ -167,9 +167,9 @@ export function OrderApprovalDetailPanel({
                               <th
                                 className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20 cursor-pointer hover:bg-muted/50 select-none"
                                 onClick={(e) => { e.stopPropagation(); onCycleCodeSort() }}
-                                title={t("orderColCode") || "코드 (클릭 시 정렬)"}
+                                title={t("orderColCode")}
                               >
-                                {t("orderColCode") || "코드"}
+                                {t("orderColCode")}
                                 {detailSortByCode === "asc" && " ↑"}
                                 {detailSortByCode === "desc" && " ↓"}
                               </th>
@@ -342,11 +342,11 @@ export function OrderApprovalDetailPanel({
               <div className="ml-auto flex flex-wrap items-center gap-2 pb-4">
                 {order.status === "Pending" && (
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    <span className="text-xs font-semibold text-muted-foreground">{t("reasonPh") || "사유"}</span>
+                    <span className="text-xs font-semibold text-muted-foreground">{t("reasonPh")}</span>
                     <Input
                       type="text"
                       className="h-9 w-48 min-w-0 text-sm"
-                      placeholder={t("orderRejectReasonPh") || "거절 사유 입력 (필수)"}
+                      placeholder={t("orderRejectReasonPh")}
                       value={rejectReasonByOrderId[order.id] || ""}
                       onChange={(e) =>
                         onSetRejectReason((prev) => ({ ...prev, [order.id]: e.target.value }))

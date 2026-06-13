@@ -1,3 +1,9 @@
+import {
+  buildPayableAttributionMaps,
+  filterPayableRowsByStore,
+  isPayableStoreFilterActive,
+  type PayableTransactionRow,
+} from '@/lib/payable-attributed-store'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 
@@ -49,14 +55,14 @@ export async function sumReceivablesBalance(params: {
   return { total, source: 'select' }
 }
 
-/** 미지급금 잔액 — 전체는 RPC, 매장 스코프는 store 필터 페이지 합산 */
+/** 미지급금 잔액 — 전체는 RPC, 매장 스코프는 귀속 매장(ref·통장·지출 등) 필터 후 합산 */
 export async function sumPayablesBalance(params: {
   endStr: string
   storeFilter: string
   isHQ: boolean
 }): Promise<{ total: number; source: 'rpc' | 'select' }> {
   const { endStr, storeFilter, isHQ } = params
-  const useStoreScoped = !isHQ && storeFilter !== 'All'
+  const useStoreScoped = !isHQ && isPayableStoreFilterActive(storeFilter)
 
   if (!useStoreScoped) {
     try {
@@ -71,27 +77,20 @@ export async function sumPayablesBalance(params: {
     }
   }
 
-  let filter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
+  const filter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
+  const rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
+    select: 'amount,ref_type,ref_id,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id',
+    pageSize: 8000,
+    maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
+  })) as PayableTransactionRow[]
+
+  let scoped = rows
   if (useStoreScoped) {
-    filter += `&store_name=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`
+    const maps = await buildPayableAttributionMaps(rows)
+    scoped = filterPayableRowsByStore(rows, storeFilter, maps)
   }
-  let rows: { amount?: number }[] = []
-  try {
-    rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
-      select: 'amount',
-      pageSize: 8000,
-      maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
-    })) as { amount?: number }[]
-  } catch (firstErr) {
-    if (!useStoreScoped) throw firstErr
-    const fallback = filter.replace('store_name', 'store')
-    rows = (await supabaseSelectFilterAllPages('payable_transactions', fallback, {
-      select: 'amount',
-      pageSize: 8000,
-      maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
-    })) as { amount?: number }[]
-  }
-  const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+
+  const total = scoped.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
   return { total, source: 'select' }
 }
 

@@ -32,7 +32,8 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText } from "lucide-react"
+import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText, Wrench } from "lucide-react"
+import Link from "next/link"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -51,9 +52,13 @@ import {
   type CheckHistoryItem,
 } from "@/lib/api-client"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { Badge } from "@/components/ui/badge"
+import { StorePageShell } from "@/components/erp/store-page-shell"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 type CheckRow = { id: number; main: string; sub: string; name: string; val: "O" | "X"; remark: string }
@@ -90,6 +95,22 @@ export function AdminStoreCheck() {
   const [newName, setNewName] = useState("")
   const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [remarkModalIdx, setRemarkModalIdx] = useState<number | null>(null)
+  const [existsHint, setExistsHint] = useState(false)
+
+  const resultBadge = (result: string) => {
+    const isPass = String(result || "").toUpperCase().includes("PASS")
+    return (
+      <Badge variant={isPass ? "default" : "destructive"} className={isPass ? "bg-emerald-600 hover:bg-emerald-600" : ""}>
+        {isPass ? t("store_check_result_pass") : t("store_check_result_fail")}
+      </Badge>
+    )
+  }
+
+  const repairPrefillHref = (store: string, itemLabel: string) => {
+    const title = `[점검FAIL] ${itemLabel}`.slice(0, 120)
+    const q = new URLSearchParams({ tab: "new", store, title, category: "시설", priority: "보통" })
+    return `/admin/store-repairs?${q.toString()}`
+  }
 
   const isHQ = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
   const isManager = isManagerRole(auth?.role || "")
@@ -169,7 +190,18 @@ export function AdminStoreCheck() {
     setEditId("")
     setViewOnlyMode(false)
     setTotalMemo("")
+    setExistsHint(false)
     try {
+      const existing = await getCheckHistory({
+        startStr: dateSelect,
+        endStr: dateSelect,
+        store: storeSelect,
+      })
+      if (existing.length > 0) {
+        await loadHistoryIntoForm(existing[0], false)
+        setExistsHint(true)
+        return
+      }
       const items = await getChecklistItems(true)
       setCheckItems(items)
       if (items.length === 0) {
@@ -396,15 +428,12 @@ export function AdminStoreCheck() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <ClipboardCheck className="h-4 w-4 text-primary" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">{t("adminStoreCheck")}</h1>
-        </div>
-
+    <StorePageShell
+      icon={ClipboardCheck}
+      title={t("adminStoreCheck")}
+      subtitle={t("store_check_page_sub")}
+      maxWidthClass="max-w-6xl"
+    >
         <Tabs
           value={tab}
           onValueChange={(v) => {
@@ -464,18 +493,17 @@ export function AdminStoreCheck() {
                   </Button>
                 </div>
 
+                {existsHint && checkRows.length > 0 && (
+                  <div className="mb-3 p-3 rounded-md bg-blue-500/10 border border-blue-500/30 text-sm text-blue-900 dark:text-blue-100">
+                    {t("store_check_exists_hint")}
+                  </div>
+                )}
                 {viewOnlyMode && checkRows.length > 0 && (
                   <div className="mb-3 p-3 rounded-md bg-amber-500/15 border border-amber-500/40 text-sm text-amber-800 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
-                    <span>
-                      {lang === "ko"
-                        ? "읽기 전용입니다. 수정하려면 아래 버튼을 누르세요."
-                        : lang === "th"
-                          ? "โหมดดูอย่างเดียว กดปุ่มด้านล่างเพื่อแก้ไข"
-                          : "Read-only mode. Click the button below to edit."}
-                    </span>
+                    <span>{t("store_check_readonly_hint")}</span>
                     <Button size="sm" variant="outline" className="shrink-0 border-amber-600 text-amber-800 hover:bg-amber-500/20" onClick={() => setViewOnlyMode(false)}>
                       <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                      {lang === "ko" ? "수정 모드로 전환" : lang === "th" ? "แก้ไข" : "Switch to edit"}
+                      {t("store_check_switch_edit")}
                     </Button>
                   </div>
                 )}
@@ -632,32 +660,39 @@ export function AdminStoreCheck() {
           <TabsContent value="failedSummary" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
-                <div className="flex flex-wrap items-end gap-2 mb-4">
-                  <span className="text-xs font-semibold">{t("store_hist_period")}</span>
-                  <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 w-[130px] text-xs" />
-                  <span>~</span>
-                  <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
-                  <Select value={histStore} onValueChange={setHistStore}>
-                    <SelectTrigger className="h-9 w-[120px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((st) => (
-                        <SelectItem key={st} value={st}>{st === "All" ? t("store_all_stores") : st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={histInspector}
-                    onChange={(e) => setHistInspector(e.target.value)}
-                    placeholder={t("store_inspector_ph")}
-                    className="h-9 w-[140px] text-xs"
-                  />
-                  <Button className="h-9 font-medium" onClick={searchHistory} disabled={histLoading}>
+                <AdminFilterBar className="mb-4">
+                  <AdminFilterField label={t("store_filter_period")}>
+                    <div className="flex items-center gap-1">
+                      <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 w-[130px] text-xs" />
+                      <span className="text-muted-foreground">~</span>
+                      <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
+                    </div>
+                  </AdminFilterField>
+                  <AdminFilterField label={t("store_filter_store")}>
+                    <Select value={histStore} onValueChange={setHistStore}>
+                      <SelectTrigger className="h-9 w-[120px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stores.map((st) => (
+                          <SelectItem key={st} value={st}>{st === "All" ? t("store_all_stores") : st}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </AdminFilterField>
+                  <AdminFilterField label={t("store_check_inspector")}>
+                    <Input
+                      value={histInspector}
+                      onChange={(e) => setHistInspector(e.target.value)}
+                      placeholder={t("store_inspector_ph")}
+                      className="h-9 w-[140px] text-xs"
+                    />
+                  </AdminFilterField>
+                  <Button className="h-9 font-medium self-end" onClick={searchHistory} disabled={histLoading}>
                     <Search className="mr-1.5 h-3.5 w-3.5" />
                     {histLoading ? t("loading") : t("btn_query_go")}
                   </Button>
-                </div>
+                </AdminFilterBar>
                 {(() => {
                   type XRow = { date: string; store: string; inspector: string; main: string; sub: string; name: string; remark: string }
                   const xRows: XRow[] = []
@@ -690,23 +725,34 @@ export function AdminStoreCheck() {
                             <th className="p-2 text-center font-medium">{t("store_col_inspector")}</th>
                             <th className="p-2 text-center font-medium">{t("store_col_item_path")}</th>
                             <th className="p-2 text-left font-medium min-w-[200px]">{t("store_remark")}</th>
+                            <th className="p-2 text-center font-medium w-24">{t("store_col_manage")}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {histLoading ? (
-                            <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">{t("loading")}</td></tr>
+                            <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">{t("loading")}</td></tr>
                           ) : xRows.length === 0 ? (
-                            <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">-</td></tr>
+                            <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">-</td></tr>
                           ) : (
-                            xRows.map((x, i) => (
+                            xRows.map((x, i) => {
+                              const itemPath = [tr(x.main), tr(x.sub), tr(x.name)].filter(Boolean).join(" > ") || "-"
+                              return (
                               <tr key={`${x.date}-${x.store}-${i}`} className="border-b border-border/60 hover:bg-muted/30">
                                 <td className="p-2 text-center">{x.date}</td>
                                 <td className="p-2 text-center">{x.store}</td>
                                 <td className="p-2 text-center">{x.inspector}</td>
-                                <td className="p-2 text-center whitespace-nowrap">{[tr(x.main), tr(x.sub), tr(x.name)].filter(Boolean).join(" > ") || "-"}</td>
+                                <td className="p-2 text-center whitespace-nowrap">{itemPath}</td>
                                 <td className="p-2 whitespace-pre-wrap break-words">{tr(x.remark) || "-"}</td>
+                                <td className="p-2 text-center">
+                                  <Button asChild variant="outline" size="sm" className={ADMIN_BTN_XS_CN}>
+                                    <Link href={repairPrefillHref(x.store, itemPath)}>
+                                      <Wrench className="h-3 w-3 mr-1" />
+                                      {t("store_check_create_repair")}
+                                    </Link>
+                                  </Button>
+                                </td>
                               </tr>
-                            ))
+                            )})
                           )}
                         </tbody>
                       </table>
@@ -777,13 +823,13 @@ export function AdminStoreCheck() {
                             <td className="p-2 text-center">{h.date}</td>
                             <td className="p-2 text-center">{h.store}</td>
                             <td className="p-2 text-center">{h.inspector}</td>
-                            <td className="p-2 text-center">{h.result}</td>
+                            <td className="p-2 text-center">{resultBadge(h.result || "")}</td>
                             <td className="p-2">
                               <div className="flex gap-1 justify-center">
-                                <Button size="sm" variant="outline" className={ADMIN_BTN_XS_CN} onClick={() => loadHistoryIntoForm(h, true)} title={lang === "ko" ? "보기 (수정 불가)" : "View (read-only)"}>
+                                <Button size="sm" variant="outline" className={ADMIN_BTN_XS_CN} onClick={() => loadHistoryIntoForm(h, true)} title={t("store_check_view_readonly")}>
                                   <Eye className="h-3 w-3" />
                                 </Button>
-                                <Button size="sm" variant="outline" className={ADMIN_BTN_XS_CN} onClick={() => loadHistoryIntoForm(h, false)} title={lang === "ko" ? "수정하기" : "Edit"}>
+                                <Button size="sm" variant="outline" className={ADMIN_BTN_XS_CN} onClick={() => loadHistoryIntoForm(h, false)} title={t("store_check_edit_btn")}>
                                   <Pencil className="h-3 w-3" />
                                 </Button>
                                 <Button size="sm" variant="destructive" className={ADMIN_BTN_XS_CN} onClick={() => handleDeleteHistory(h.id)}>
@@ -926,7 +972,6 @@ export function AdminStoreCheck() {
             </TabsContent>
           )}
         </Tabs>
-      </div>
-    </div>
+    </StorePageShell>
   )
 }

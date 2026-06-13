@@ -16,10 +16,11 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeaveStats } from "@/lib/api-client"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { hasOfficeStaffScope } from "@/lib/permissions"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 export function AdminLeaveStats() {

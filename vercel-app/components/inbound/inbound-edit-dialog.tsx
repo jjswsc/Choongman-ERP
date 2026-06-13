@@ -77,7 +77,7 @@ export function InboundEditDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("edit") || "수정"} – {t("adminInbound")}</DialogTitle>
+          <DialogTitle>{t("edit")} – {t("adminInbound")}</DialogTitle>
         </DialogHeader>
         {loading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
@@ -98,7 +98,7 @@ export function InboundEditDialog({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold">{t("inPoNo") || "PO 번호"}</label>
+              <label className="text-xs font-semibold">{t("inPoNo")}</label>
               <Input
                 value={poNo}
                 onChange={(e) => setPoNo(e.target.value)}
@@ -107,7 +107,7 @@ export function InboundEditDialog({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold">{t("inInvoiceNo") || "인보이스 번호"}</label>
+              <label className="text-xs font-semibold">{t("inInvoiceNo")}</label>
               <Input
                 value={invoiceNo}
                 onChange={(e) => setInvoiceNo(e.target.value)}

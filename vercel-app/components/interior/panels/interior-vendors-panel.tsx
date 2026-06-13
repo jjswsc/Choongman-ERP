@@ -124,7 +124,7 @@ export function InteriorVendorsPanel({ projectId, embedded = false }: { projectI
       return
     }
     if (!String(editing.vendorCode || "").trim()) {
-      await appAlert(`${t("posMenuCode")} ${t("required")}`)
+      await appAlert(`${t("interiorVendorCodeLabel")} ${t("required")}`)
       return
     }
     try {
@@ -233,7 +233,7 @@ export function InteriorVendorsPanel({ projectId, embedded = false }: { projectI
                 ) : null}
               </div>
               <div>
-                <label className="text-xs text-muted-foreground">{t("posMenuCode")}</label>
+                <label className="text-xs text-muted-foreground">{t("interiorVendorCodeLabel")}</label>
                 <Input
                   list="interior-vendor-code-options"
                   value={editing.vendorCode || ""}

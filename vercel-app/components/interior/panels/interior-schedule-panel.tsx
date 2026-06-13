@@ -9,6 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getInteriorWorkPackages, saveInteriorWorkPackage, deleteInteriorWorkPackage, type InteriorWorkPackage } from "@/lib/api-client"
+import { bangkokTodayYmd } from "@/lib/bangkok-date"
+import { AdminEmptyState } from "@/components/erp/admin-empty-state"
+import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
 
 const PART_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "목공", labelKey: "interiorPartWoodwork" },
@@ -29,8 +32,20 @@ const WP_STATUS: { value: string; labelKey: string }[] = [
 ]
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const toDate = (v?: string | null) => (v ? new Date(`${v}T00:00:00`) : null)
+const toDate = (v?: string | null) => (v ? new Date(`${v.slice(0, 10)}T12:00:00+07:00`) : null)
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+
+function weekTicks(start: Date, end: Date) {
+  const ticks: { leftPct: number; label: string }[] = []
+  const cur = new Date(start)
+  cur.setHours(12, 0, 0, 0)
+  while (cur.getTime() <= end.getTime()) {
+    const leftPct = ((cur.getTime() - start.getTime()) / DAY_MS / Math.max(1, Math.floor((end.getTime() - start.getTime()) / DAY_MS) + 1)) * 100
+    ticks.push({ leftPct, label: ymd(cur).slice(5) })
+    cur.setDate(cur.getDate() + 7)
+  }
+  return ticks
+}
 
 function wpStatusLabel(t: (k: string) => string, status?: string | null) {
   const row = WP_STATUS.find((x) => x.value === status)
@@ -82,6 +97,13 @@ export function InteriorSchedulePanel({ projectId }: { projectId: string }) {
     return [new Date(Math.min(...dates.map((d) => d.getTime())) - DAY_MS * 2), new Date(Math.max(...dates.map((d) => d.getTime())) + DAY_MS * 2)]
   }, [filtered])
   const totalDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / DAY_MS) + 1)
+  const todayYmd = bangkokTodayYmd()
+  const todayLeftPct = React.useMemo(() => {
+    const t = toDate(todayYmd)
+    if (!t || t.getTime() < start.getTime() || t.getTime() > end.getTime()) return null
+    return ((t.getTime() - start.getTime()) / DAY_MS / totalDays) * 100
+  }, [todayYmd, start, end, totalDays])
+  const ganttWeekTicks = React.useMemo(() => weekTicks(start, end), [start, end])
 
   const partTypeLabel = (v?: string | null) => {
     const row = PART_OPTIONS.find((p) => p.value === (v || ""))
@@ -121,11 +143,31 @@ export function InteriorSchedulePanel({ projectId }: { projectId: string }) {
         )}
 
         <div className="rounded-lg border bg-card">
-          {loading ? <div className="py-12 text-center text-sm text-muted-foreground">{t("loading")}</div> : filtered.length === 0 ? <div className="py-12 text-center text-sm text-muted-foreground">{t("interiorNoScheduleForFilter")}</div> : (
+          {loading ? (
+            <AdminTableSkeleton columns={6} rows={5} />
+          ) : filtered.length === 0 ? (
+            <AdminEmptyState icon={Calendar} title={t("interiorNoScheduleForFilter")} />
+          ) : (
             <div className="overflow-x-auto">
               {viewMode === "gantt" ? (
                 <div className="min-w-[900px]">
-                  <div className="grid grid-cols-[260px_1fr] border-b bg-muted/40 text-xs"><div className="px-3 py-2 font-medium">{t("interiorGanttColProcess")}</div><div className="px-3 py-2 font-medium">{ymd(start)} ~ {ymd(end)}</div></div>
+                  <div className="grid grid-cols-[260px_1fr] border-b bg-muted/40 text-xs">
+                    <div className="px-3 py-2 font-medium">{t("interiorGanttColProcess")}</div>
+                    <div className="relative px-3 py-2 font-medium">
+                      {ymd(start)} ~ {ymd(end)}
+                      <div className="relative mt-2 h-4 border-t border-border/60">
+                        {ganttWeekTicks.map((tick) => (
+                          <span
+                            key={tick.label + tick.leftPct}
+                            className="absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground"
+                            style={{ left: `${Math.min(100, Math.max(0, tick.leftPct))}%` }}
+                          >
+                            {tick.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   {filtered.map((item) => {
                     const s = toDate(item.startDate) || start
                     const e = toDate(item.endDate) || s
@@ -135,7 +177,16 @@ export function InteriorSchedulePanel({ projectId }: { projectId: string }) {
                     return (
                       <div key={item.id || item.legacyId} className="grid grid-cols-[260px_1fr] border-b">
                         <button type="button" className="px-3 py-2 text-left hover:bg-muted/30" onClick={() => handleEdit(item)}><div className="truncate text-sm font-medium">{item.title || t("interiorUntitled")}</div><div className="text-[11px] text-muted-foreground">{partTypeLabel(item.partType)} · {wpStatusLabel(t, item.status)}</div></button>
-                        <div className="relative h-12"><div className="absolute top-2 h-8 rounded border border-primary/40 bg-primary/20" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, Math.max(2, width))}%` }}><div className="h-full rounded bg-primary/40" style={{ width: `${progress}%` }} /></div></div>
+                        <div className="relative h-12">
+                          {todayLeftPct != null ? (
+                            <div
+                              className="pointer-events-none absolute top-0 z-10 h-full w-px bg-destructive"
+                              style={{ left: `${todayLeftPct}%` }}
+                              title={t("interiorGanttToday")}
+                            />
+                          ) : null}
+                          <div className="absolute top-2 h-8 rounded border border-primary/40 bg-primary/20" style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, Math.max(2, width))}%` }}><div className="h-full rounded bg-primary/40" style={{ width: `${progress}%` }} /></div>
+                        </div>
                       </div>
                     )
                   })}

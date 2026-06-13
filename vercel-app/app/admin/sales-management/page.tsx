@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { BarChart3 } from "lucide-react"
-import { SalesSubnav } from "@/components/erp/sales-subnav"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
 
 const SalesTab = SalesManagementTab as React.ComponentType<{ offlineAware?: boolean }>
@@ -31,9 +30,7 @@ export default function SalesManagementPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-        <SalesSubnav />
         <SalesPageHeader
-          href="/admin/sales-management"
           title={t("salesManagementTitle") || "매출 관리"}
           subtitle={t("salesManagementPageSub")}
           icon={BarChart3}

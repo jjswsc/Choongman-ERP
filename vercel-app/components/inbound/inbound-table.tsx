@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, ChevronRight, PenLine, Trash2, Printer, FileSpreadsheet, FileCheck } from "lucide-react"
+import { ChevronDown, ChevronRight, PenLine, Trash2, Printer, FileSpreadsheet, FileCheck, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 export interface InboundTableRow {
@@ -164,9 +166,9 @@ export function InboundTable({
     if (sortKey !== key) return ""
     return sortDir === "asc" ? " ▲" : " ▼"
   }
-  const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
-  const vatLabel = t("posVatLabel") || "VAT"
-  const totalLabel = t("inv_total") || t("total") || "Total"
+  const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal")
+  const vatLabel = t("posVatLabel")
+  const totalLabel = t("inv_total") || t("total")
 
   const checkboxCol = showBulk ? 1 : 0
   const actionsCol = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 1 : 0
@@ -304,14 +306,14 @@ export function InboundTable({
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={colCount} className="py-12 text-center">
-                  {t("loading")}
+                <td colSpan={colCount} className="p-0">
+                  <LogisticsTableSkeleton rows={5} cols={4} />
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="py-12 text-center text-muted-foreground">
-                  {t("inNoData")}
+                <td colSpan={colCount} className="p-0">
+                  <LogisticsEmptyState icon={Package} title={t("inNoData")} className="border-0 bg-transparent py-10" />
                 </td>
               </tr>
             ) : (
@@ -382,9 +384,9 @@ function TableRow({
   const canInvoiceToggle = row.inboundBatchId != null && onInvoiceReceivedToggle
   const canPrint = !!onPrint
   const canExcel = !!onExcel
-  const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
-  const vatLabel = t("posVatLabel") || "VAT"
-  const totalLabel = t("inv_total") || t("total") || "Total"
+  const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal")
+  const vatLabel = t("posVatLabel")
+  const totalLabel = t("inv_total") || t("total")
 
   return (
     <>

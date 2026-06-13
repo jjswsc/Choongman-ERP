@@ -31,6 +31,16 @@ import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { cn } from '@/lib/utils'
 import {
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsTriggerCn,
+} from '@/lib/admin-tab-styles'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AdminFilterBar, AdminFilterField } from '@/components/erp/admin-filter-bar'
+import { AdminEmptyState } from '@/components/erp/admin-empty-state'
+import { AdminTableSkeleton } from '@/components/erp/admin-table-skeleton'
+import { ADMIN_NUMERIC_CN } from '@/lib/admin-ui-standards'
+import {
   drawerOpenOptionFromPrinterSettings,
   formatPosCashDrawerFailureMessage,
   shouldWarnPosCashDrawerFailure,
@@ -58,9 +68,11 @@ function expandDateRangeForInclusiveDate(startStr: string, endStr: string, inclu
 export interface CashManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용 */
   offlineAware?: boolean
+  /** 관리자 페이지: 상단 h1은 페이지에서, 서브탭·필터는 admin 스타일 */
+  adminLayout?: boolean
 }
 
-export function CashManagementTab({ offlineAware = false }: CashManagementTabProps = {}) {
+export function CashManagementTab({ offlineAware = false, adminLayout = false }: CashManagementTabProps = {}) {
   const searchParams = useSearchParams()
   const isPosDemo = isPosDemoFromQuery(searchParams)
   const { auth } = useAuth()
@@ -489,7 +501,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   ? t('posTillDayNetMovement') || 'Net till movement (this day)'
                   : t('pettyCurrentBalance') || '현재 잔액'}
               </div>
-              <div className="text-2xl font-bold tabular-nums text-primary">
+              <div className={cn('text-2xl font-bold text-primary', ADMIN_NUMERIC_CN)}>
                 ฿{(balanceCardAmount ?? 0).toLocaleString()}
               </div>
               {singleDayRange && (
@@ -504,7 +516,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               <div className="text-sm font-medium text-muted-foreground mb-1">
                 {t('pettyTodayCashSales') || '하루 현금 매출'}
               </div>
-              <div className="text-2xl font-bold tabular-nums">
+              <div className={cn('text-2xl font-bold', ADMIN_NUMERIC_CN)}>
                 ฿{(completedCash ?? 0).toLocaleString()}
               </div>
             </div>
@@ -514,6 +526,29 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
 
       <Card>
         <CardContent className="pt-4">
+          {adminLayout ? (
+            <Tabs
+              value={subTab}
+              onValueChange={(v) => setSubTab(v as SubTab)}
+              className={cn(adminTabsRootCn, 'border-0 shadow-none')}
+            >
+              <TabsList className={cn(adminTabsListRowCn, 'mb-4 w-full justify-start')} data-tour="pos-tour-cash-subtabs">
+                <TabsTrigger value="till" className={adminTabsTriggerCn}>
+                  {t('posCashInputOutput') || '시재 입출금'}
+                </TabsTrigger>
+                <TabsTrigger value="sales_withdrawal_list" className={adminTabsTriggerCn}>
+                  {t('posSalesWithdrawalList') || '매출액 출금 내역'}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="sales_withdrawal_list" className="mt-0 focus-visible:ring-0">
+                {renderSalesWithdrawalList()}
+              </TabsContent>
+              <TabsContent value="till" className="mt-0 focus-visible:ring-0">
+                {renderTillPanel()}
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <>
           <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <Wallet className="h-6 w-6 text-primary" />
@@ -543,7 +578,16 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </div>
           </div>
 
-          {subTab === 'sales_withdrawal_list' ? (
+          {subTab === 'sales_withdrawal_list' ? renderSalesWithdrawalList() : renderTillPanel()}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
+  function renderSalesWithdrawalList() {
+    return (
             <>
               <div className="mb-4 flex flex-wrap items-center gap-3" data-tour="pos-tour-cash-filters">
                 <Button size="sm" onClick={loadSalesWithdrawalList} disabled={salesWithdrawalListLoading}>
@@ -551,11 +595,9 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   {salesWithdrawalListLoading ? t('loading') : t('search') || '조회'}
                 </Button>
               </div>
-              {salesWithdrawalListLoading && (
-                <div className="mb-4 flex justify-center py-4">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                </div>
-              )}
+              {salesWithdrawalListLoading ? (
+                <AdminTableSkeleton columns={canSearchAll ? 7 : 6} rows={6} />
+              ) : (
               <div
                 className="overflow-auto max-h-[calc(100vh-320px)] min-h-[200px] rounded-xl border"
                 data-tour="pos-tour-cash-ledger-table"
@@ -568,17 +610,21 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                         <th className="px-4 py-3 text-left font-semibold">{t('store') || '매장'}</th>
                       )}
                       <th className="px-4 py-3 text-left font-semibold">{t('posSalesDateLabel') || '매출 대상일'}</th>
-                      <th className="px-4 py-3 text-right font-semibold">{t('pettyColAmount') || '금액'}</th>
+                      <th className={cn('px-4 py-3 text-right font-semibold', ADMIN_NUMERIC_CN)}>{t('pettyColAmount') || '금액'}</th>
                       <th className="px-4 py-3 text-left font-semibold">{t('pettyColMemo') || '내용'}</th>
                       <th className="px-4 py-3 text-left font-semibold">{t('pettyColUser') || '등록자'}</th>
                       <th className="w-px px-2 py-3 text-center font-semibold sr-only">{t('delete')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {salesWithdrawalList.length === 0 && !salesWithdrawalListLoading ? (
+                    {salesWithdrawalList.length === 0 ? (
                       <tr>
-                        <td colSpan={canSearchAll ? 7 : 6} className="px-4 py-12 text-center text-muted-foreground">
-                          {t('pettyNoData') || '데이터가 없습니다.'}
+                        <td colSpan={canSearchAll ? 7 : 6} className="p-0">
+                          <AdminEmptyState
+                            icon={Wallet}
+                            title={t('pettyNoData') || '데이터가 없습니다.'}
+                            className="border-0 bg-transparent py-10"
+                          />
                         </td>
                       </tr>
                     ) : (
@@ -587,7 +633,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                           <td className="px-4 py-3">{r.trans_date}</td>
                           {canSearchAll && <td className="px-4 py-3 truncate">{r.store}</td>}
                           <td className="px-4 py-3">{r.sales_date || '-'}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-destructive">
+                          <td className={cn('px-4 py-3 text-right text-destructive', ADMIN_NUMERIC_CN)}>
                             {r.amount >= 0 ? '' : '-'}
                             {fmt(Math.abs(r.amount))}
                           </td>
@@ -617,10 +663,14 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   </tbody>
                 </table>
               </div>
+              )}
             </>
-          ) : (
-            <>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" data-tour="pos-tour-cash-filters">
+    )
+  }
+
+  function renderTillPanel() {
+    const tillFilters = (
+      <>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Input
                 type="date"
@@ -641,8 +691,8 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               size="sm"
               className="h-9"
               onClick={() => {
-                setStartStr(todayStr)
-                setEndStr(todayStr)
+                setStartStr(todayStr())
+                setEndStr(todayStr())
               }}
             >
               {t('posToday') || '오늘'}
@@ -664,18 +714,76 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                 </SelectContent>
               </Select>
             )}
-            <Button size="sm" onClick={loadList} disabled={listLoading}>
+            <Button size="sm" className="h-9" onClick={loadList} disabled={listLoading}>
               <Search className="mr-1 h-4 w-4" />
               {listLoading ? t('loading') : t('search') || '조회'}
             </Button>
-          </div>
+      </>
+    )
 
-          {listLoading && (
-            <div className="mb-4 flex justify-center py-4">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            </div>
+    return (
+            <>
+          {adminLayout ? (
+            <AdminFilterBar className="mb-4" data-tour="pos-tour-cash-filters">
+              <AdminFilterField label={t('posFilterPeriod') || '조회 기간'}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="date"
+                    value={startStr}
+                    onChange={(e) => setStartStr(e.target.value)}
+                    className="h-9 w-[9.5rem] text-sm"
+                  />
+                  <span className="text-muted-foreground">~</span>
+                  <Input
+                    type="date"
+                    value={endStr}
+                    onChange={(e) => setEndStr(e.target.value)}
+                    className="h-9 w-[9.5rem] text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs"
+                    onClick={() => {
+                      const d = todayStr()
+                      setStartStr(d)
+                      setEndStr(d)
+                    }}
+                  >
+                    {t('posToday') || '오늘'}
+                  </Button>
+                </div>
+              </AdminFilterField>
+              {canSearchAll && storeOptions.length > 0 ? (
+                <AdminFilterField label={t('store') || '매장'}>
+                  <Select value={storeFilter || storeOptions[0]} onValueChange={setStoreFilter}>
+                    <SelectTrigger className="h-9 w-[140px]">
+                      <SelectValue placeholder={t('store') || '매장'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {storeOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+              ) : null}
+              <Button size="sm" className="h-9 self-end" onClick={loadList} disabled={listLoading}>
+                <Search className="mr-1 h-4 w-4" />
+                {listLoading ? t('loading') : t('search') || '조회'}
+              </Button>
+            </AdminFilterBar>
+          ) : (
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" data-tour="pos-tour-cash-filters">
+            {tillFilters}
+          </div>
           )}
 
+          {listLoading ? (
+            <AdminTableSkeleton columns={canSearchAll ? 7 : 6} rows={8} className="mb-4" />
+          ) : (
           <div
             className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border"
             data-tour="pos-tour-cash-ledger-table"
@@ -695,13 +803,14 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                 </tr>
               </thead>
               <tbody>
-                {listData.length === 0 && !listLoading ? (
+                {listData.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={canSearchAll ? 7 : 6}
-                      className="px-4 py-12 text-center text-muted-foreground"
-                    >
-                      {t('pettyNoData') || '데이터가 없습니다.'}
+                    <td colSpan={canSearchAll ? 7 : 6} className="p-0">
+                      <AdminEmptyState
+                        icon={Wallet}
+                        title={t('pettyNoData') || '데이터가 없습니다.'}
+                        className="border-0 bg-transparent py-10"
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -716,7 +825,8 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                       </td>
                       <td
                         className={cn(
-                          'px-4 py-3 text-right tabular-nums',
+                          'px-4 py-3 text-right',
+                          ADMIN_NUMERIC_CN,
                           r.amount < 0 ? 'text-destructive' : 'text-green-600'
                         )}
                       >
@@ -755,6 +865,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               </tbody>
             </table>
           </div>
+          )}
 
           <div className="mt-6 border-t pt-6" data-tour="pos-tour-cash-add-form">
             <p className="mb-3 text-sm font-medium">{t('pettyAddTitle') || '등록'}</p>
@@ -885,9 +996,6 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </form>
           </div>
             </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
+    )
+  }
 }

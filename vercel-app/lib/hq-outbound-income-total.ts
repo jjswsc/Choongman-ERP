@@ -49,6 +49,48 @@ export type HqOutboundProcessedLine = {
   qty: number
   unitPrice: number
   lineAmount: number
+  orderId: number | null
+}
+
+/** 수령 중복 등으로 동일 주문·품목·수량·일자·단가 출고 로그가 2건 이상일 때 손익 집계 키 */
+export function hqOutboundIncomeDedupeKey(line: Pick<
+  HqOutboundProcessedLine,
+  'orderId' | 'itemCode' | 'qty' | 'logDate' | 'unitPrice'
+>): string | null {
+  if (line.orderId == null || line.orderId <= 0) return null
+  return `${line.orderId}|${line.itemCode}|${line.qty}|${line.logDate}|${round2(line.unitPrice)}`
+}
+
+/**
+ * 주문 연동 출고 중복 stock_logs 제거 — 손익·출고 상세 합계가 2배로 잡히는 것 방지.
+ * 동일 fingerprint면 id가 작은(먼저 기록된) 행만 유지.
+ */
+export function dedupeHqOutboundIncomeLines(lines: HqOutboundProcessedLine[]): {
+  lines: HqOutboundProcessedLine[]
+  dedupedCount: number
+} {
+  const orderKeyed = new Map<string, HqOutboundProcessedLine>()
+  const passthrough: HqOutboundProcessedLine[] = []
+  let dedupedCount = 0
+
+  for (const line of lines) {
+    const key = hqOutboundIncomeDedupeKey(line)
+    if (!key) {
+      passthrough.push(line)
+      continue
+    }
+    const prev = orderKeyed.get(key)
+    if (prev) {
+      dedupedCount += 1
+      if (line.id < prev.id) orderKeyed.set(key, line)
+      continue
+    }
+    orderKeyed.set(key, line)
+  }
+
+  const merged = [...orderKeyed.values(), ...passthrough]
+  merged.sort((a, b) => b.logDate.localeCompare(a.logDate) || b.id - a.id)
+  return { lines: merged, dedupedCount }
 }
 
 function round2(n: number): number {
@@ -178,7 +220,7 @@ export async function loadHqOutboundProcessedLines(params: {
   startStr: string
   endStr: string
   storeFilter: string | null
-}): Promise<{ lines: HqOutboundProcessedLine[]; hitRowCap: boolean }> {
+}): Promise<{ lines: HqOutboundProcessedLine[]; hitRowCap: boolean; dedupedCount: number }> {
   const { startStr, endStr, storeFilter } = params
   const itemPriceByCode = await loadItemPriceByCode()
   const vendorForFilter =
@@ -270,6 +312,10 @@ export async function loadHqOutboundProcessedLines(params: {
 
     const typeCode = type === 'ForceOutbound' ? 'Force' : 'Outbound'
     const orderRowId = typeCode === 'Outbound' && row.order_id ? String(row.order_id) : ''
+    const orderId =
+      typeCode === 'Outbound' && row.order_id != null && Number(row.order_id) > 0
+        ? Number(row.order_id)
+        : null
     const cartForPrice =
       orderRowId && orderCartByOrderId[orderRowId]?.length ? orderCartByOrderId[orderRowId] : undefined
     const masterPrice = itemPriceByCode[code] ?? 0
@@ -293,11 +339,12 @@ export async function loadHqOutboundProcessedLines(params: {
       qty: qtyAbs,
       unitPrice: round2(unitPrice),
       lineAmount,
+      orderId,
     })
   }
 
-  lines.sort((a, b) => b.logDate.localeCompare(a.logDate) || b.id - a.id)
-  return { lines, hitRowCap }
+  const { lines: dedupedLines, dedupedCount } = dedupeHqOutboundIncomeLines(lines)
+  return { lines: dedupedLines, hitRowCap, dedupedCount }
 }
 
 export type HqOutboundIncomeSplit = {
@@ -306,6 +353,7 @@ export type HqOutboundIncomeSplit = {
   lineCount: number
   subtotalBeforeExpenseSplit: number
   hitRowCap: boolean
+  dedupedDuplicateCount: number
 }
 
 export type HqOutboundSalesAggregate = {
@@ -363,7 +411,7 @@ export async function sumHqOutboundSubtotalMatchingOutboundManagement(params: {
   endStr: string
   storeFilter: string | null
 }): Promise<HqOutboundIncomeSplit> {
-  const { lines, hitRowCap } = await loadHqOutboundProcessedLines({
+  const { lines, hitRowCap, dedupedCount } = await loadHqOutboundProcessedLines({
     startStr: params.startStr,
     endStr: params.endStr,
     storeFilter: params.storeFilter,
@@ -380,6 +428,7 @@ export async function sumHqOutboundSubtotalMatchingOutboundManagement(params: {
     lineCount: lines.length,
     subtotalBeforeExpenseSplit: purchaseTotal,
     hitRowCap,
+    dedupedDuplicateCount: dedupedCount,
   }
 }
 

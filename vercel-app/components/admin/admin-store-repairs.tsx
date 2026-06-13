@@ -4,6 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,6 +53,7 @@ import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { StoreRepairsProcessTab } from "@/components/admin/store-repairs-process-tab"
 import { useTranslatedTextMap, useDebouncedTranslatedText } from "@/lib/use-ui-translate"
 import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { StorePageShell } from "@/components/erp/store-page-shell"
 
 const CATEGORIES: { v: string; k: string }[] = [
   { v: "시설", k: "repair_cat_facility" },
@@ -105,6 +107,7 @@ function daysSinceReportedBangkok(reportedAt: string): number {
 }
 
 export function AdminStoreRepairs() {
+  const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -175,6 +178,27 @@ export function AdminStoreRepairs() {
   useEffect(() => {
     setForm((f) => ({ ...f, reporter: writerName }))
   }, [writerName])
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab")
+    const storeParam = searchParams.get("store")
+    const titleParam = searchParams.get("title")
+    const categoryParam = searchParams.get("category")
+    const priorityParam = searchParams.get("priority")
+    if (tabParam === "new" || tabParam === "dash" || tabParam === "list" || tabParam === "process") {
+      setTab(tabParam)
+    }
+    if (storeParam || titleParam || categoryParam || priorityParam) {
+      setForm((f) => ({
+        ...f,
+        store: storeParam || f.store,
+        title: titleParam || f.title,
+        category: categoryParam || f.category,
+        priority: priorityParam || f.priority,
+        description: titleParam ? `[점검 연계] ${titleParam}` : f.description,
+      }))
+    }
+  }, [searchParams])
 
   const loadList = useCallback(async () => {
     setListLoading(true)
@@ -385,18 +409,7 @@ export function AdminStoreRepairs() {
   const labelSt = (v: string) => STATUSES.find((c) => c.v === v)?.k || "repair_st_recv"
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Wrench className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">{t("adminStoreRepairs")}</h1>
-            <p className="text-xs text-muted-foreground">{t("repair_page_sub")}</p>
-          </div>
-        </div>
-
+    <StorePageShell icon={Wrench} title={t("adminStoreRepairs")} subtitle={t("repair_page_sub")}>
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
@@ -595,12 +608,13 @@ export function AdminStoreRepairs() {
                       <th className="px-3 py-2 text-left font-medium">{t("repair_col_reported")}</th>
                       <th className="px-3 py-2 text-left font-medium">{t("repair_col_lead")}</th>
                       <th className="px-3 py-2 text-center font-medium">{t("photo")}</th>
+                      <th className="px-3 py-2 text-center font-medium w-12">{t("repair_list_full_edit")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {listLoading ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                        <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                           {t("loading")}
                         </td>
                       </tr>
@@ -842,7 +856,6 @@ export function AdminStoreRepairs() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className={cn("max-w-lg", ADMIN_DIALOG_SCROLL_CN)}>
@@ -1023,6 +1036,6 @@ export function AdminStoreRepairs() {
             ))}
         </DialogContent>
       </Dialog>
-    </div>
+    </StorePageShell>
   )
 }

@@ -7,7 +7,6 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -19,6 +18,7 @@ import {
 import { useStoreList } from "@/lib/api-client"
 import {
   buildFinancialStatementFranchiseStoreOptions,
+  isFinancialStatementStoreNone,
 } from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
@@ -37,6 +37,9 @@ import { ManagementMarginTab } from "@/components/tabs/management-margin-tab"
 import { FinancialStatementStorePicker } from "@/components/financial-statements/financial-statement-store-picker"
 import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
+import { AccountingWorkflowLinks } from "@/components/erp/accounting-workflow-links"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 
 export default function FinancialStatementsPage() {
   const { auth } = useAuth()
@@ -107,7 +110,7 @@ export default function FinancialStatementsPage() {
     }
     const v = String(viewStore || "").trim()
     if (!v || v === "All") {
-      setStoreFilter("All")
+      setStoreFilter((prev) => (isFinancialStatementStoreNone(prev) ? prev : "All"))
       return
     }
     if (scopedStoreChoices.includes(v)) setStoreFilter(v)
@@ -139,20 +142,16 @@ export default function FinancialStatementsPage() {
   })
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">{t("adminFinancialStatements")}</h1>
-        </div>
+    <AccountingPageShell
+      icon={TrendingUp}
+      title={t("adminFinancialStatements")}
+      subtitle={t("adminFinancialStatementsSub")}
+    >
+      <AccountingWorkflowLinks context="financial" />
 
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground shrink-0">{t("fs_periodStartMonth")}</span>
+        <AdminFilterBar className="mb-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <AdminFilterField label={t("fs_periodStartMonth")}>
                 <Select
                   value={yearMonthStart}
                   onValueChange={(v) => {
@@ -171,8 +170,8 @@ export default function FinancialStatementsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-xs text-muted-foreground">~</span>
-                <span className="text-xs text-muted-foreground shrink-0">{t("fs_periodEndMonth")}</span>
+              </AdminFilterField>
+              <AdminFilterField label={t("fs_periodEndMonth")}>
                 <Select
                   value={yearMonthEnd}
                   onValueChange={(v) => {
@@ -191,57 +190,60 @@ export default function FinancialStatementsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </AdminFilterField>
 
               {(isOffice || isManager) && showMultiStorePicker ? (
-                <FinancialStatementStorePicker
-                  value={storeFilter}
-                  onChange={setStoreFilter}
-                  franchiseStoreOptions={storePickerOptions}
-                  showOfficeOption={isOffice}
-                  allLabel={storeAllLabel}
-                  disabled={!isOffice && managerStoreOptions.length === 0}
-                />
+                <AdminFilterField label={t("pL_store")}>
+                  <FinancialStatementStorePicker
+                    value={storeFilter}
+                    onChange={setStoreFilter}
+                    franchiseStoreOptions={storePickerOptions}
+                    showOfficeOption={isOffice}
+                    allLabel={storeAllLabel}
+                    disabled={!isOffice && managerStoreOptions.length === 0}
+                  />
+                </AdminFilterField>
               ) : (isOffice || isManager) ? (
-                <Select
-                  value={storeFilter}
-                  onValueChange={setStoreFilter}
-                  disabled={isManager ? managerStoreOptions.length === 0 : false}
-                >
-                  <SelectTrigger className="w-[160px] h-9">
-                    <SelectValue placeholder={t("pL_store")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {isOffice && <SelectItem value="All">{t("all")}</SelectItem>}
-                    {isOffice && (
-                      <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
-                    )}
-                    {isOffice &&
-                      franchiseStoreOptions.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    {isManager && canFranchiseeMultiStore ? (
-                      <SelectItem value="All">{t("store_all_my_franchise_stores")}</SelectItem>
-                    ) : null}
-                    {isManager &&
-                      managerStoreOptions.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {storeLabels[s] || s}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <AdminFilterField label={t("pL_store")}>
+                  <Select
+                    value={storeFilter}
+                    onValueChange={setStoreFilter}
+                    disabled={isManager ? managerStoreOptions.length === 0 : false}
+                  >
+                    <SelectTrigger className="w-[160px] h-9">
+                      <SelectValue placeholder={t("pL_store")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isOffice && <SelectItem value="All">{t("all")}</SelectItem>}
+                      {isOffice && (
+                        <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                      )}
+                      {isOffice &&
+                        franchiseStoreOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      {isManager && canFranchiseeMultiStore ? (
+                        <SelectItem value="All">{t("store_all_my_franchise_stores")}</SelectItem>
+                      ) : null}
+                      {isManager &&
+                        managerStoreOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {storeLabels[s] || s}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
               ) : null}
 
-              <Button size="sm" onClick={() => setQueryToken((v) => v + 1)}>
+              <Button size="sm" className="h-9" onClick={() => setQueryToken((v) => v + 1)}>
                 <Search className="h-4 w-4 mr-1" />
                 {t("btn_query")}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+        </AdminFilterBar>
 
         <Tabs
           value={tab}
@@ -302,7 +304,6 @@ export default function FinancialStatementsPage() {
             />
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </AccountingPageShell>
   )
 }

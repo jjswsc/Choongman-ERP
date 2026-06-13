@@ -1,31 +1,35 @@
 "use client"
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { TrendingUp } from "lucide-react"
 import { CrmPageHero } from "@/components/crm/crm-shared-ui"
+import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { MemberPointsPolicyTab } from "@/components/admin/member-points-policy-tab"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-/** 등급·적립율 관리는 포인트 메뉴 「매출 적립 규칙」탭으로 통합됨 */
-export default function MemberTiersRedirectPage() {
-  const router = useRouter()
+export default function MemberTiersPage() {
   const { lang } = useLang()
   const t = useT(lang)
-  useEffect(() => {
-    router.replace("/admin/members/points?tab=policy")
-  }, [router])
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
-      <CrmPageHero
-        icon={TrendingUp}
-        title={t("memberTiers")}
-        description={t("crmTiersRedirectHint")}
-        gradient="from-amber-50 to-orange-50"
-        border="border-amber-200/60"
-        iconClass="bg-amber-500/10 text-amber-600"
-      />
-      <p className="text-sm text-muted-foreground">{t("loading")}</p>
+    <div className="flex-1 overflow-auto">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <CrmPageHero
+          icon={TrendingUp}
+          title={t("memberTiers")}
+          description={
+            t("memberTiersPageSub") ||
+            "회원 등급 기준·혜택·승급 조건과 POS 매출 연동 적립 규칙을 관리합니다."
+          }
+          gradient="from-amber-50 to-orange-50"
+          border="border-amber-200/60"
+          iconClass="bg-amber-500/10 text-amber-600"
+        />
+        <CrmSubnav />
+        <div className="mt-4">
+          <MemberPointsPolicyTab />
+        </div>
+      </div>
     </div>
   )
 }

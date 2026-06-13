@@ -17,6 +17,7 @@ import {
   Layers,
   ArrowDownToLine,
   ArrowUpFromLine,
+  ArrowLeftRight,
   Users,
   CalendarClock,
   CalendarDays,
@@ -58,7 +59,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
-import { getInteriorDashboardSummary, type InteriorDashboardTotals } from "@/lib/api-client"
+import { getInteriorDashboardSummary, getStoreOpsAlertSummary, type InteriorDashboardTotals, type StoreOpsAlertSummary } from "@/lib/api-client"
 import {
   isManagerRole,
   isFranchiseeRole,
@@ -111,9 +112,8 @@ const menuSections: MenuSection[] = [
       { titleKey: "memberPoints", icon: Wallet, href: "/admin/members/points" },
       { titleKey: "memberCoupons", icon: Tag, href: "/admin/crm/coupons" },
       { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
-      { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/points?tab=policy" },
+      { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/tiers" },
       { titleKey: "adminCrmSegments", icon: Target, href: "/admin/crm/segments" },
-      { titleKey: "adminCrmCampaigns", icon: Megaphone, href: "/admin/crm/campaigns" },
       { titleKey: "memberAppContent", icon: LayoutPanelTop, href: "/admin/crm/member-app" },
     ],
   },
@@ -129,6 +129,7 @@ const menuSections: MenuSection[] = [
   {
     titleKey: "adminSectionMarketing",
     items: [
+      { titleKey: "marketingHomeTitle", icon: LayoutDashboard, href: "/admin/marketing" },
       { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
       { titleKey: "adminMarketingCollabMenus", icon: Handshake, href: "/admin/marketing/collab-menus" },
       { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
@@ -143,6 +144,7 @@ const menuSections: MenuSection[] = [
   {
     titleKey: "adminSectionStore",
     items: [
+      { titleKey: "adminStoreOps", icon: LayoutDashboard, href: "/admin/store-ops" },
       { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
       { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
       { titleKey: "adminStoreRepairs", icon: Wrench, href: "/admin/store-repairs" },
@@ -155,7 +157,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosOrder", icon: ShoppingCart, href: "/pos" },
       { titleKey: "adminPosOrderList", icon: Receipt, href: "/admin/pos-orders" },
       { titleKey: "adminPosSettlement", icon: Wallet, href: "/admin/pos-settlement" },
-      { titleKey: "adminPosCash", icon: Wallet, href: "/admin/pos-cash" },
+      { titleKey: "adminPosCash", icon: Banknote, href: "/admin/pos-cash" },
       { titleKey: "adminPosScreenConfig", icon: LayoutGrid, href: "/admin/pos-screen-config" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
@@ -166,6 +168,7 @@ const menuSections: MenuSection[] = [
   {
     titleKey: "adminSectionHr",
     items: [
+      { titleKey: "adminHrHome", icon: LayoutDashboard, href: "/admin/hr" },
       { titleKey: "adminEmployees", icon: Users, href: "/admin/employees" },
       { titleKey: "adminHrPolicies", icon: BookOpen, href: "/admin/hr-policies" },
       { titleKey: "adminHrCalendar", icon: CalendarDays, href: "/admin/hr-calendar" },
@@ -190,10 +193,10 @@ const menuSections: MenuSection[] = [
     items: [
       { titleKey: "adminAccountingPurchaseOrder", icon: FileText, href: "/admin/accounting/purchase-order" },
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
-      { titleKey: "adminReceivablePayable", icon: Banknote, href: "/admin/receivable-payable" },
-      { titleKey: "expenseManagementTitle", icon: Wallet, href: "/admin/expense-management" },
-      { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
-      { titleKey: "adminBankTransactions", icon: Banknote, href: "/admin/bank-transactions" },
+      { titleKey: "adminReceivablePayable", icon: ArrowLeftRight, href: "/admin/receivable-payable" },
+      { titleKey: "expenseManagementTitle", icon: Receipt, href: "/admin/expense-management" },
+      { titleKey: "adminPettyCash", icon: HandCoins, href: "/admin/petty-cash" },
+      { titleKey: "adminBankTransactions", icon: Landmark, href: "/admin/bank-transactions" },
       { titleKey: "adminDepreciation", icon: Calculator, href: "/admin/depreciation" },
       { titleKey: "adminFinancialStatements", icon: TrendingUp, href: "/admin/financial-statements" },
       { titleKey: "adminChartOfAccounts", icon: GitBranch, href: "/admin/chart-of-accounts" },
@@ -258,13 +261,41 @@ function interiorNavBadge(
 
 function logisticsNavBadge(
   href: string,
-  stats: { unapprovedOrders: number; leavePending: number }
+  stats: { unapprovedOrders: number; leavePending: number; attPending: number }
 ): { n: number; variant: "default" | "destructive" | "warning" } | null {
   if (href === "/admin/orders" && stats.unapprovedOrders > 0) {
     return { n: stats.unapprovedOrders, variant: "destructive" }
   }
   if (href === "/admin/leave" && stats.leavePending > 0) {
     return { n: stats.leavePending, variant: "warning" }
+  }
+  if (href === "/admin/attendance" && stats.attPending > 0) {
+    return { n: stats.attPending, variant: "warning" }
+  }
+  if (href === "/admin/hr") {
+    const n = (stats.leavePending || 0) + (stats.attPending || 0)
+    if (n > 0) return { n, variant: "warning" }
+  }
+  return null
+}
+
+function storeNavBadge(
+  href: string,
+  totals: { uncheckedToday: number; staleRepairs: number; openComplaints: number }
+): { n: number; variant: "default" | "destructive" | "warning" } | null {
+  if (href === "/admin/store-ops") {
+    const n = totals.uncheckedToday + totals.staleRepairs + totals.openComplaints
+    if (n > 0) return { n, variant: "warning" }
+    return null
+  }
+  if (href === "/admin/store-check" && totals.uncheckedToday > 0) {
+    return { n: totals.uncheckedToday, variant: "warning" }
+  }
+  if (href === "/admin/store-repairs" && totals.staleRepairs > 0) {
+    return { n: totals.staleRepairs, variant: "destructive" }
+  }
+  if (href === "/admin/complaints" && totals.openComplaints > 0) {
+    return { n: totals.openComplaints, variant: "destructive" }
   }
   return null
 }
@@ -303,6 +334,7 @@ export function ErpSidebar() {
   const brand = useAppBrandConfig()
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
   const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
+  const [storeOpsTotals, setStoreOpsTotals] = React.useState<StoreOpsAlertSummary | null>(null)
   const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
   const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
   const aiModuleEnabled = useAiCenterModuleEnabled()
@@ -315,6 +347,20 @@ export function ErpSidebar() {
       })
       .catch(() => {
         if (!cancelled) setInteriorDashTotals(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+    getStoreOpsAlertSummary()
+      .then((s) => {
+        if (!cancelled) setStoreOpsTotals(s)
+      })
+      .catch(() => {
+        if (!cancelled) setStoreOpsTotals(null)
       })
     return () => {
       cancelled = true
@@ -350,6 +396,44 @@ export function ErpSidebar() {
     setExpandedSections((prev) => {
       if (prev.adminSectionCustomerCrm === true) return prev
       const next = { ...prev, adminSectionCustomerCrm: true }
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [pathname])
+
+  /** 마케팅 화면에 있을 때 해당 섹션을 펼침 */
+  React.useEffect(() => {
+    if (!pathname.startsWith("/admin/marketing")) return
+    setExpandedSections((prev) => {
+      if (prev.adminSectionMarketing === true) return prev
+      const next = { ...prev, adminSectionMarketing: true }
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [pathname])
+
+  /** 매장 관리 화면에 있을 때 해당 섹션을 펼침 */
+  React.useEffect(() => {
+    if (
+      !pathname.startsWith("/admin/store-ops") &&
+      !pathname.startsWith("/admin/store-check") &&
+      !pathname.startsWith("/admin/store-visit") &&
+      !pathname.startsWith("/admin/store-repairs") &&
+      !pathname.startsWith("/admin/complaints")
+    ) {
+      return
+    }
+    setExpandedSections((prev) => {
+      if (prev.adminSectionStore === true) return prev
+      const next = { ...prev, adminSectionStore: true }
       try {
         localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
       } catch {
@@ -511,8 +595,12 @@ export function ErpSidebar() {
                           section.titleKey === "adminSectionHr"
                             ? logisticsNavBadge(item.href, dashboardStats)
                             : null
-                        const badgeVal = logisticsExtra?.n ?? interiorExtra?.n ?? item.badge
-                        const badgeVariantEff = logisticsExtra?.variant ?? interiorExtra?.variant ?? item.badgeVariant
+                        const storeExtra =
+                          section.titleKey === "adminSectionStore" && storeOpsTotals
+                            ? storeNavBadge(item.href, storeOpsTotals)
+                            : null
+                        const badgeVal = logisticsExtra?.n ?? interiorExtra?.n ?? storeExtra?.n ?? item.badge
+                        const badgeVariantEff = logisticsExtra?.variant ?? interiorExtra?.variant ?? storeExtra?.variant ?? item.badgeVariant
                         return (
                         <Link
                           key={item.href}

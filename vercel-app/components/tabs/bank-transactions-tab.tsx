@@ -57,7 +57,7 @@ import {
   type BankMemoRule,
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
-import { compressImageForUpload } from "@/lib/utils"
+import { compressImageForUpload, cn } from "@/lib/utils"
 import {
   coercePosStoreImportDepositCategory,
   isPosRevenueDepositCategory,
@@ -84,6 +84,16 @@ import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
+import { MetricCard } from "@/components/cost-analysis/metric-card"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import {
+  AccountingDataTable,
+  AccountingTbodyRow,
+  AccountingTd,
+  AccountingTh,
+  AccountingTheadRow,
+} from "@/components/erp/accounting-data-table"
+import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
 
 function todayStr() {
   return getBangkokTodayDateString()
@@ -302,6 +312,7 @@ export function BankTransactionsTab() {
   const [filterAccountSubjectId, setFilterAccountSubjectId] = React.useState<string>("")
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = React.useState(false)
   const [filterPlExpenseOnly, setFilterPlExpenseOnly] = React.useState(false)
+  const [filterNeedsAttention, setFilterNeedsAttention] = React.useState(false)
   const [filterInvoiceNotReceived, setFilterInvoiceNotReceived] = React.useState(false)
   const [importSaving, setImportSaving] = React.useState(false)
   const [applyCarryOverSaving, setApplyCarryOverSaving] = React.useState(false)
@@ -1334,6 +1345,10 @@ export function BankTransactionsTab() {
 
   const filteredList = React.useMemo(() => {
     return list.filter((r) => {
+      if (filterNeedsAttention) {
+        const edits = r.id ? queryRowEdits[r.id] : undefined
+        if (!bankRowNeedsAttention(r, edits).needsAttention) return false
+      }
       if (filterTransType && r.transType !== filterTransType) return false
       if (filterCategory && r.category !== filterCategory) return false
       if (filterVendorCode && String(r.vendorCode || "").trim() !== filterVendorCode) return false
@@ -1369,6 +1384,8 @@ export function BankTransactionsTab() {
     filterAccountSubjectEmpty,
     filterInvoiceNotReceived,
     filterPlExpenseOnly,
+    filterNeedsAttention,
+    queryRowEdits,
   ])
 
   const listFilterActive = Boolean(
@@ -1378,7 +1395,8 @@ export function BankTransactionsTab() {
       filterAccountSubjectId ||
       filterAccountSubjectEmpty ||
       filterInvoiceNotReceived ||
-      filterPlExpenseOnly
+      filterPlExpenseOnly ||
+      filterNeedsAttention
   )
 
   const clearListFilters = React.useCallback(() => {
@@ -1389,6 +1407,7 @@ export function BankTransactionsTab() {
     setFilterAccountSubjectEmpty(false)
     setFilterInvoiceNotReceived(false)
     setFilterPlExpenseOnly(false)
+    setFilterNeedsAttention(false)
   }, [])
 
   const displayPeriodDeposits = React.useMemo(() => {
@@ -1415,6 +1434,12 @@ export function BankTransactionsTab() {
       shownWithdraws: countType(filteredList, "withdraw"),
     }
   }, [filteredList, list])
+
+  const bankAttentionCounts = React.useMemo(
+    () =>
+      countBankAttentionRows(list, queryRowEdits, (row) => (row as { id?: number }).id),
+    [list, queryRowEdits]
+  )
 
   const depositsHiddenByFilter =
     listTypeCounts.deposits > 0 && listTypeCounts.shownDeposits === 0 && listTypeCounts.shownTotal > 0
@@ -1493,6 +1518,7 @@ export function BankTransactionsTab() {
     if (filterAccountSubjectEmpty) chips.push(t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만")
     if (filterInvoiceNotReceived) chips.push(t("poInvoiceNotReceived") || "인보이스 미수령만")
     if (filterPlExpenseOnly) chips.push(tt("bankFilterPlExpenseActive", "손익 비용(출금)만"))
+    if (filterNeedsAttention) chips.push(t("acct_bank_attention_filter"))
     return chips
   }, [
     accountSubjectOptions,
@@ -1502,6 +1528,7 @@ export function BankTransactionsTab() {
     filterCategory,
     filterInvoiceNotReceived,
     filterPlExpenseOnly,
+    filterNeedsAttention,
     filterTransType,
     filterVendorCode,
     revenueAccountOptions,
@@ -1976,18 +2003,42 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               ) : (
                 <>
                   {summary && (
-                    <div className="rounded-lg border bg-muted/30 px-4 py-2 mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                      <span className="text-muted-foreground">{t("bankOpeningBalance")}: <span className="font-mono font-medium">{fmt(summary.openingBalance)}</span></span>
-                      <span className="text-muted-foreground">+ {t("bankDeposit")}: <span className="font-mono text-green-600">{fmt(displayPeriodDeposits)}</span></span>
-                      <span className="text-muted-foreground">- {t("bankWithdraw")}: <span className="font-mono text-destructive">{fmt(displayPeriodWithdrawals)}</span></span>
+                    <div className="mb-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                        <MetricCard
+                          size="sm"
+                          label={t("bankDeposit")}
+                          value={fmt(displayPeriodDeposits)}
+                          variant="success"
+                        />
+                        <MetricCard
+                          size="sm"
+                          label={t("bankWithdraw")}
+                          value={fmt(displayPeriodWithdrawals)}
+                          variant="warning"
+                        />
+                        <MetricCard
+                          size="sm"
+                          variant="primary"
+                          label={t("acct_kpi_bank_balance")}
+                          value={fmt(summary.calculatedBalance)}
+                          subLabel={`${t("bankOpeningBalance")} ${fmt(summary.openingBalance)}`}
+                        />
+                        {diff !== null ? (
+                          <MetricCard
+                            size="sm"
+                            label={t("bankDifference")}
+                            value={`${diff >= 0 ? "+" : ""}${fmt(diff)}`}
+                            variant={diff === 0 ? "success" : "warning"}
+                          />
+                        ) : null}
+                      </div>
                       {listFilterActive ? (
-                        <span className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {tt("bankSummaryFilteredHint", "입·출금 합계는 아래 목록 필터 기준")}
-                        </span>
+                        </p>
                       ) : null}
-                      <span className="font-medium">{t("bankCalculatedBalance")}: <span className="font-mono font-bold">{fmt(summary.calculatedBalance)}</span></span>
-                      <div className="flex-1" />
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
                         <span className="text-muted-foreground text-xs">{t("bankVerifyHint")}</span>
                         <Input
                           type="text"
@@ -1996,11 +2047,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           onChange={(e) => setActualBalance(e.target.value)}
                           className="w-[140px] h-8 text-right"
                         />
-                        {diff !== null && (
-                          <span className={diff === 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
-                            {t("bankDifference")}: {diff >= 0 ? "+" : ""}{fmt(diff)}
-                          </span>
-                        )}
                       </div>
                     </div>
                   )}
@@ -2090,6 +2136,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       />
                       <span className="text-sm whitespace-nowrap">{t("poInvoiceNotReceived") || "인보이스 미수령만"}</span>
                     </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filterNeedsAttention}
+                        onChange={(e) => setFilterNeedsAttention(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span className="text-sm whitespace-nowrap">{t("acct_bank_attention_filter")}</span>
+                    </label>
                     <Button size="sm" variant="ghost" onClick={clearListFilters}>
                       {t("btn_reset") || "초기화"}
                     </Button>
@@ -2123,6 +2178,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </div>
                   ) : null}
 
+                  {!loading && bankAttentionCounts.total > 0 ? (
+                    <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                      <MetricCard
+                        size="sm"
+                        variant="warning"
+                        label={t("acct_bank_attention_unclassified")}
+                        value={String(bankAttentionCounts.unclassified)}
+                      />
+                      <MetricCard
+                        size="sm"
+                        variant="warning"
+                        label={t("acct_bank_attention_no_subject")}
+                        value={String(bankAttentionCounts.noSubject)}
+                      />
+                      <MetricCard
+                        size="sm"
+                        label={t("acct_bank_attention_filter")}
+                        value={String(bankAttentionCounts.total)}
+                        subLabel={t("acct_bank_attention_hint")}
+                      />
+                    </div>
+                  ) : null}
+
                   {!loading && accountId && accounts.length > 0 && (
                     <BankQuickMemoChipBar
                       className="mb-3"
@@ -2138,13 +2216,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     />
                   )}
 
-                  <div id="bank-query-list-wrap" className="rounded-lg border max-h-[70vh] min-h-[320px] overflow-auto">
+                  <AccountingDataTable
+                    id="bank-query-list-wrap"
+                    className="max-h-[70vh] min-h-[320px]"
+                    minWidthClass="min-w-[1100px] table-fixed"
+                  >
                     {loading ? (
-                      <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
+                      <tbody>
+                        <tr>
+                          <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
+                            {t("loadingItems")}
+                          </td>
+                        </tr>
+                      </tbody>
                     ) : filteredList.length === 0 ? (
-                      <p className="py-8 text-center text-sm text-muted-foreground">{list.length === 0 ? (t("pettyNoData") || "데이터 없음") : (t("bankNoMatchFilter") || "조건에 맞는 거래가 없습니다.")}</p>
+                      <tbody>
+                        <tr>
+                          <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
+                            {list.length === 0 ? (t("pettyNoData") || "데이터 없음") : (t("bankNoMatchFilter") || "조건에 맞는 거래가 없습니다.")}
+                          </td>
+                        </tr>
+                      </tbody>
                     ) : (
-                      <table className="w-full text-sm min-w-[1100px] table-fixed">
+                      <>
                         <colgroup>
                           <col style={{ width: "92px" }} />
                           <col style={{ width: "64px" }} />
@@ -2159,27 +2253,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "140px" }} />
                           <col style={{ width: "76px" }} />
                         </colgroup>
-                        <thead className="bg-muted/50 sticky top-0">
-                          <tr>
-                            <th className="p-2 text-center whitespace-nowrap">{t("date") || "날짜"}</th>
-                            <th className="p-2 text-center whitespace-nowrap">{t("pettyColType") || "유형"}</th>
-                            <th className="p-2 text-center whitespace-nowrap">{t("bankCategoryLabel") || "용도"}</th>
-                            <th className="p-2 text-center whitespace-nowrap">{t("accountSubject") || "계정과목"}</th>
-                            <th className="p-2 text-right whitespace-nowrap">{t("pettyColAmount") || "금액"}</th>
-                            <th
-                              className="p-2 text-center whitespace-nowrap text-xs"
-                              title={t("bankDepositWhtHint")}
-                            >
-                              {t("bankDepositWhtAmount")}
-                            </th>
-                            <th className="p-2 text-center whitespace-nowrap">{t("bankAttributedDate") || "인식일"}</th>
-                            <th className="p-2 text-center whitespace-nowrap">{t("bankRegisterLabel") || "지출 등록"}</th>
-                            <th className="p-2 text-center whitespace-nowrap" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</th>
-                            <th className="p-2 text-left whitespace-nowrap">{t("bankMemoLabel") || "은행 적요"}</th>
-                            <th className="p-2 text-center whitespace-nowrap">{t("bankNoteLabel") || "메모"}</th>
-                            <th className="p-2 text-center w-11"></th>
-                          </tr>
-                        </thead>
+                        <AccountingTheadRow sticky>
+                          <AccountingTh align="center">{t("date") || "날짜"}</AccountingTh>
+                          <AccountingTh align="center">{t("pettyColType") || "유형"}</AccountingTh>
+                          <AccountingTh align="center">{t("bankCategoryLabel") || "용도"}</AccountingTh>
+                          <AccountingTh align="center">{t("accountSubject") || "계정과목"}</AccountingTh>
+                          <AccountingTh align="right">{t("pettyColAmount") || "금액"}</AccountingTh>
+                          <AccountingTh align="center" className="text-xs" title={t("bankDepositWhtHint")}>
+                            {t("bankDepositWhtAmount")}
+                          </AccountingTh>
+                          <AccountingTh align="center">{t("bankAttributedDate") || "인식일"}</AccountingTh>
+                          <AccountingTh align="center">{t("bankRegisterLabel") || "지출 등록"}</AccountingTh>
+                          <AccountingTh align="center" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</AccountingTh>
+                          <AccountingTh>{t("bankMemoLabel") || "은행 적요"}</AccountingTh>
+                          <AccountingTh align="center">{t("bankNoteLabel") || "메모"}</AccountingTh>
+                          <AccountingTh align="center" className="w-11"></AccountingTh>
+                        </AccountingTheadRow>
                         <tbody>
                           {filteredList.map((r, i) => {
                             const edits = r.id ? queryRowEdits[r.id] : undefined
@@ -2188,11 +2277,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               r.transType === "withdraw" && rawCat === "fixed" ? "expense" : rawCat
                             const hasEdits = r.id && edits && Object.keys(edits).length > 0
                             const isSaving = querySavingId === r.id
+                            const attention = bankRowNeedsAttention(r, edits)
                             return (
-                            <tr
+                            <AccountingTbodyRow
                               id={r.id ? `bank-tx-row-${r.id}` : undefined}
                               key={r.id ?? i}
-                              className={`border-t ${rawCat === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""} ${r.id && restoredHighlightTxId === r.id ? "bg-primary/10 ring-2 ring-primary/60" : ""}`}
+                              className={cn(
+                                rawCat === "correction" && "bg-pink-50 dark:bg-pink-950/20",
+                                r.id && restoredHighlightTxId === r.id && "bg-primary/10 ring-2 ring-primary/60",
+                                attention.needsAttention &&
+                                  "bg-amber-50/80 dark:bg-amber-950/35 border-l-2 border-l-amber-500"
+                              )}
                             >
                               <td className="p-2 align-middle text-center">{r.transDate}</td>
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
@@ -2546,13 +2641,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ) : null}
                                 </div>
                               </td>
-                            </tr>
+                            </AccountingTbodyRow>
                           );
                           })}
                         </tbody>
-                      </table>
+                      </>
                     )}
-                  </div>
+                  </AccountingDataTable>
                 </>
               )}
             </CardContent>

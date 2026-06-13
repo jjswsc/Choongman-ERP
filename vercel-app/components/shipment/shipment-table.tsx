@@ -465,18 +465,18 @@ export function ShipmentTable({
           <tfoot>
             <tr className="sticky bottom-0 z-[1] border-t-2 border-border bg-muted/95 backdrop-blur">
               <td colSpan={9} className="px-2 py-2.5 text-right text-[11px] font-semibold sm:px-2.5 sm:py-3 sm:text-xs">
-                {t("inv_total") || "Total"}
+                {t("inv_total")}
               </td>
               <td className="px-2 py-2.5 text-center text-[11px] font-semibold tabular-nums sm:px-2.5 sm:py-3 sm:text-xs">
                 {summaryTotals.qty.toLocaleString()}
               </td>
               <td className="px-2 py-2 text-right text-[11px] font-semibold tabular-nums sm:px-2.5 sm:py-2.5 sm:text-xs">
                 <div className="flex flex-col items-end leading-tight">
-                  <span>{`${t("salesSupplyAmount") || t("subtotal") || "공급가액"}: ${summaryTotals.amount.toLocaleString()}`}</span>
+                  <span>{`${t("salesSupplyAmount") || t("subtotal")}: ${summaryTotals.amount.toLocaleString()}`}</span>
                   <span className="text-[10px] font-medium text-muted-foreground">
                     {`${t("inv_vat7")}: ${summaryVat.vatRounded.toLocaleString()}`}
                   </span>
-                  <span>{`${t("inv_total") || "Total"}: ${summaryVat.grandTotal.toLocaleString()}`}</span>
+                  <span>{`${t("inv_total")}: ${summaryVat.grandTotal.toLocaleString()}`}</span>
                 </div>
               </td>
             </tr>
@@ -527,7 +527,7 @@ export function ShipmentTable({
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setLineEdit(null)} disabled={lineEditSaving}>
-              {t("cancel") || "Cancel"}
+              {t("cancel")}
             </Button>
             <Button type="button" onClick={() => void handleSaveLineEdit()} disabled={lineEditSaving}>
               {lineEditSaving ? t("loading") : t("save")}
@@ -759,17 +759,17 @@ function TableRow({
                     <th
                       className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-card-foreground cursor-pointer hover:bg-muted/90 select-none sm:py-4 sm:text-[13px]"
                       onClick={toggleCodeSort}
-                      title={t("outColCode") || "코드 (클릭 시 정렬)"}
+                      title={t("outColCode")}
                     >
-                      {t("outColCode") || "코드"}
+                      {t("outColCode")}
                       {codeSort === "asc" && "↑"}
                       {codeSort === "desc" && "↓"}
                     </th>
                     <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColItem")}</th>
-                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColStatus") || "상태"}</th>
+                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColStatus")}</th>
                     <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("spec")}</th>
-                    <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("outWhWarehouseCol") || "출고지"}</th>
-                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("orderColDeliveryDate") || "배송일자"}</th>
+                    <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("outWhWarehouseCol")}</th>
+                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("orderColDeliveryDate")}</th>
                     <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColQty")}</th>
                     <th className="px-2 py-3.5 text-right text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("inColAmount")}</th>
                     {allowPriceEdit ? (
@@ -811,7 +811,7 @@ function TableRow({
                             )}
                           >
                             <span className="truncate" title={t("outItemUnreceived") || ""}>
-                              {t("outItemUnreceived") || "미수령"}
+                              {t("outItemUnreceived")}
                             </span>
                           </span>
                         ) : (

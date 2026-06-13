@@ -52,6 +52,9 @@ export const I18N_CRM_KO: Record<string, string> = {
   crmCouponKpiActive: '사용 가능',
   crmCouponOpenMember: '회원',
   crmCouponOpenOrder: '주문',
+  crmCouponSectionBasic: '기본 정보',
+  crmCouponSectionDiscount: '할인 · 기간',
+  crmCouponSectionRules: '사용 규칙',
   crmVisitsTabHistory: '방문 기록',
   crmVisitsTabAnalysis: '방문 분석',
   crmVisitsTabRfm: 'RFM 점수',
@@ -112,11 +115,19 @@ export const I18N_CRM_KO: Record<string, string> = {
   crmMemberAppPreview: '회원앱 미리보기',
   crmMemberAppPreviewHint: '저장 후 /m 에서 실제 반영을 확인하세요.',
   crmMemberAppUpload: '이미지 업로드',
-  crmTiersRedirectHint: '등급·적립율은 포인트 메뉴 「매출 적립 규칙」에서 관리합니다.',
+  memberTiersPageSub: '회원 등급 기준·혜택·승급 조건과 POS 매출 연동 적립 규칙을 관리합니다.',
+  memberPointsPageSub: '회원 포인트 잔액 조회·수기 조정과 적립 원장을 관리합니다.',
   adminCrmCampaigns: '쿠폰 캠페인',
-  helpSum_admin_crm_campaigns: '조건별 쿠폰 자동 발급 캠페인을 설정·실행하는 화면입니다.',
+  crmCouponTabCampaigns: '쿠폰 캠페인',
+  crmCouponTabStamp: '스탬프 카드',
+  crmCouponStampMovedHint: '스탬프 카드 정책·마일스톤·통계는 쿠폰 메뉴 「스탬프 카드」 탭에서 관리합니다.',
+  crmCouponHubSub: '쿠폰 정의·지급·캠페인·스탬프 카드·POS·회원앱 연동을 한 곳에서 관리합니다.',
+  helpSum_admin_crm_coupons: '쿠폰 정의·지급·캠페인·스탬프 카드를 한 화면에서 관리하고 POS·회원앱과 연동합니다.',
+  helpHow_admin_crm_coupons:
+    '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다.\n② 「회원 지급」: 회원 검색 후 쿠폰을 즉시 지급합니다.\n③ 「발급·이력」: 발급·사용·주문 번호를 조회합니다.\n④ 「쿠폰 캠페인」: 세그먼트 조건별 자동 대량 발급을 설정·실행합니다.\n⑤ 「스탬프 카드」: 방문 스탬프·완성 보상(쿠폰/포인트)을 설정합니다.',
+  helpSum_admin_crm_campaigns: '쿠폰 메뉴 「쿠폰 캠페인」 탭으로 이동합니다.',
   helpHow_admin_crm_campaigns:
-    '① 대상 조건·쿠폰·발급 상한을 설정합니다.\n② 「대상 미리보기」로 인원을 확인한 뒤 저장·실행합니다.\n③ 실행 이력에서 발급·중복·실패 건수를 확인합니다.',
+    '조건별 쿠폰 자동 발급은 쿠폰 → 「쿠폰 캠페인」 탭에서 설정·실행합니다.',
 }
 
 export const I18N_CRM_EN: Record<string, string> = {
@@ -172,6 +183,9 @@ export const I18N_CRM_EN: Record<string, string> = {
   crmCouponKpiActive: 'Available',
   crmCouponOpenMember: 'Member',
   crmCouponOpenOrder: 'Order',
+  crmCouponSectionBasic: 'Basic info',
+  crmCouponSectionDiscount: 'Discount & period',
+  crmCouponSectionRules: 'Usage rules',
   crmVisitsTabHistory: 'Visit log',
   crmVisitsTabAnalysis: 'Visit analysis',
   crmVisitsTabRfm: 'RFM scores',
@@ -232,11 +246,18 @@ export const I18N_CRM_EN: Record<string, string> = {
   crmMemberAppPreview: 'Member app preview',
   crmMemberAppPreviewHint: 'Confirm on /m after saving.',
   crmMemberAppUpload: 'Upload image',
-  crmTiersRedirectHint: 'Tiers and earn rates are under Points → Sales earn rules.',
+  memberTiersPageSub: 'Manage tier criteria, benefits, upgrade rules, and POS earn policies.',
+  memberPointsPageSub: 'Look up balances, manual adjustments, and point ledger history.',
   adminCrmCampaigns: 'Coupon campaigns',
-  helpSum_admin_crm_campaigns: 'Configure and run conditional coupon issue campaigns.',
-  helpHow_admin_crm_campaigns:
-    '① Set audience, coupon, and issue cap.\n② Use Preview audience, then save and run.\n③ Review issued, skipped, and failed counts in run history.',
+  crmCouponTabCampaigns: 'Coupon campaigns',
+  crmCouponTabStamp: 'Stamp card',
+  crmCouponStampMovedHint: 'Stamp card policy, milestones, and stats are under Coupons → Stamp card.',
+  crmCouponHubSub: 'Manage coupon definitions, issue, campaigns, stamp cards, and POS/member app sync in one place.',
+  helpSum_admin_crm_coupons: 'Manage coupon definitions, issue, campaigns, and stamp cards with POS/member app sync.',
+  helpHow_admin_crm_coupons:
+    '① Definitions: discount type, validity, member-issue mode.\n② Issue: search members and grant coupons.\n③ History: issued, used, and order links.\n④ Campaigns: segment-based bulk issue.\n⑤ Stamp card: visit stamps and completion rewards.',
+  helpSum_admin_crm_campaigns: 'Redirects to Coupons → Campaigns tab.',
+  helpHow_admin_crm_campaigns: 'Configure and run campaigns under Coupons → Campaigns.',
 }
 
 export const I18N_CRM_TH: Record<string, string> = {
@@ -292,6 +313,9 @@ export const I18N_CRM_TH: Record<string, string> = {
   crmCouponKpiActive: 'ใช้ได้',
   crmCouponOpenMember: 'สมาชิก',
   crmCouponOpenOrder: 'ออเดอร์',
+  crmCouponSectionBasic: 'ข้อมูลพื้นฐาน',
+  crmCouponSectionDiscount: 'ส่วนลด · ระยะเวลา',
+  crmCouponSectionRules: 'กฎการใช้',
   crmVisitsTabHistory: 'ประวัติการมา',
   crmVisitsTabAnalysis: 'วิเคราะห์การมา',
   crmVisitsTabRfm: 'คะแนน RFM',
@@ -352,11 +376,18 @@ export const I18N_CRM_TH: Record<string, string> = {
   crmMemberAppPreview: 'ตัวอย่างแอป',
   crmMemberAppPreviewHint: 'ตรวจที่ /m หลังบันทึก',
   crmMemberAppUpload: 'อัปโหลดรูป',
-  crmTiersRedirectHint: 'ระดับและอัตราสะสมอยู่ที่แต้ม → กฎสะสม',
+  memberTiersPageSub: 'จัดการเกณฑ์ระดับ สิทธิประโยชน์ กฎเลื่อนระดับ และนโยบายสะสมจาก POS',
+  memberPointsPageSub: 'ดูยอดแต้ม ปรับด้วยมือ และประวัติสมุดบัญชีแต้ม',
   adminCrmCampaigns: 'แคมเปญคูปอง',
-  helpSum_admin_crm_campaigns: 'ตั้งค่าและรันแคมเปญออกคูปองตามเงื่อนไข',
-  helpHow_admin_crm_campaigns:
-    '① ตั้งกลุ่มเป้า คูปอง และจำกัดการออก\n② ใช้ดูตัวอย่างกลุ่ม แล้วบันทึกและรัน\n③ ดูจำนวนออก/ข้าม/ล้มในประวัติ',
+  crmCouponTabCampaigns: 'แคมเปญคูปอง',
+  crmCouponTabStamp: 'บัตรสแตมป์',
+  crmCouponStampMovedHint: 'นโยบายสแตมป์ มайлสโตน และสถิติอยู่ที่คูปอง → บัตรสแตมป์',
+  crmCouponHubSub: 'จัดการคูปอง การออก แคมเปญ สแตมป์ และเชื่อม POS/แอปสมาชิกในที่เดียว',
+  helpSum_admin_crm_coupons: 'จัดการคูปอง การออก แคมเปญ และสแตมป์ พร้อมเชื่อม POS/แอป',
+  helpHow_admin_crm_coupons:
+    '① นิยามคูปอง ② ออกให้สมาชิก ③ ประวัติ ④ แคมเปญ ⑤ บัตรสแตมป์',
+  helpSum_admin_crm_campaigns: 'ไปที่คูปอง → แท็บแคมเปญ',
+  helpHow_admin_crm_campaigns: 'ตั้งค่าและรันแคมเปญที่คูปอง → แคมเปญ',
 }
 
 export const CRM_SEGMENT_KEYS = ['recent30', 'dormant90', 'new30', 'vip', 'atRisk'] as const

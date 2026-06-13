@@ -26,6 +26,9 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { StockStatusItem } from "@/lib/api-client"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -150,9 +153,9 @@ export function StockTable({
 <body>
 <table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
-<tr><td class="head">${escapeXml(t("stockColDate") || "날짜")}</td><td colspan="6">${escapeXml(dateStr)}</td></tr>
-<tr><td class="head">${escapeXml(t("stockFilterStore") || "매장")}</td><td colspan="6">${escapeXml(storeFilter || t("stockFilterStoreAll") || "전체")}</td></tr>
-<tr><td class="head">${escapeXml(t("stockTotalAmount") || "총 재고금액")}</td><td colspan="6">${escapeXml(totalAmount.toLocaleString())}</td></tr>
+<tr><td class="head">${escapeXml(t("stockColDate"))}</td><td colspan="6">${escapeXml(dateStr)}</td></tr>
+<tr><td class="head">${escapeXml(t("stockFilterStore"))}</td><td colspan="6">${escapeXml(storeFilter || t("stockFilterStoreAll"))}</td></tr>
+<tr><td class="head">${escapeXml(t("stockTotalAmount"))}</td><td colspan="6">${escapeXml(totalAmount.toLocaleString())}</td></tr>
 <tr></tr>
 <tr class="head">${headerCells.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
 ${filteredList.map((r) => {
@@ -193,55 +196,48 @@ ${filteredList.map((r) => {
         <span className="font-semibold">{t("stockFilterStore")}:</span> {storeFilter || t("stockFilterStoreAll")} |{" "}
         <span className="font-semibold">{t("stockTotalAmount")}:</span> {totalAmount.toLocaleString()}
       </div>
-      {/* 일렬 배치: 날짜 + 매장 Select + 검색 Input + 조회 + 인쇄 + 엑셀 */}
-      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-6 py-3 print:hidden">
+      <div className="border-b bg-muted/20 px-6 py-3 print:hidden">
+        <AdminFilterBar className="border-0 bg-transparent p-0 items-end">
         {setStockDateFilter && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold whitespace-nowrap">{t("stockFilterDate")}</label>
+          <AdminFilterField label={t("stockFilterDate")}>
             <Input
               type="date"
               value={stockDateFilter}
               onChange={(e) => setStockDateFilter(e.target.value)}
               className="h-9 w-36 text-xs"
             />
-          </div>
+          </AdminFilterField>
         )}
         {categoryOptions.length > 0 && setCategoryFilter && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold whitespace-nowrap">{t("itemsCategory") || "카테고리"}</label>
+          <AdminFilterField label={t("itemsCategory")}>
             <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
               <SelectTrigger className="h-9 w-32 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{t("stockFilterStoreAll") || "전체"}</SelectItem>
+                <SelectItem value="__all__">{t("stockFilterStoreAll")}</SelectItem>
                 {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </AdminFilterField>
         )}
         {setPurchaseSourceFilter && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold whitespace-nowrap">{t("itemsPurchaseSource") || "구분"}</label>
+          <AdminFilterField label={t("itemsPurchaseSource")}>
             <Select value={purchaseSourceFilter || "__all__"} onValueChange={(v) => setPurchaseSourceFilter(v === "__all__" ? "" : (v as "hq" | "store"))}>
               <SelectTrigger className="h-9 w-32 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{t("stockFilterStoreAll") || "전체"}</SelectItem>
-                <SelectItem value="hq">{t("itemsPurchaseSourceHq") || "본사"}</SelectItem>
-                <SelectItem value="store">{t("itemsPurchaseSourceStore") || "매장"}</SelectItem>
+                <SelectItem value="__all__">{t("stockFilterStoreAll")}</SelectItem>
+                <SelectItem value="hq">{t("itemsPurchaseSourceHq")}</SelectItem>
+                <SelectItem value="store">{t("itemsPurchaseSourceStore")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </AdminFilterField>
         )}
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground whitespace-nowrap">
-            <Package className="h-3.5 w-3.5 text-primary" />
-            {t("stockFilterStore")}
-          </label>
+        <AdminFilterField label={t("stockFilterStore")}>
           <Select value={storeFilter || "all"} onValueChange={(v) => setStoreFilter(v === "all" ? "" : v)} disabled={storeSelectDisabled}>
             <SelectTrigger className="h-9 w-36 text-xs">
               <SelectValue />
@@ -256,17 +252,19 @@ ${filteredList.map((r) => {
               )}
             </SelectContent>
           </Select>
-        </div>
-        <div className="relative flex items-center">
-          <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t("stockSearchPh")}
-            className="h-9 w-44 pl-8 text-xs"
-            onKeyDown={(e) => e.key === "Enter" && onSearch()}
-          />
-        </div>
+        </AdminFilterField>
+        <AdminFilterField label={t("search")}>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("stockSearchPh")}
+              className="h-9 w-44 pl-8 text-xs"
+              onKeyDown={(e) => e.key === "Enter" && onSearch()}
+            />
+          </div>
+        </AdminFilterField>
         <Button size="sm" className="h-9 px-3 text-xs font-semibold" onClick={onSearch}>
           <Search className="mr-1 h-3 w-3" />
           {t("stockBtnSearch")}
@@ -281,6 +279,7 @@ ${filteredList.map((r) => {
             {t("stockBtnExcel")}
           </Button>
         </div>
+        </AdminFilterBar>
       </div>
 
       <div className="overflow-x-auto" ref={tableRef}>
@@ -288,7 +287,7 @@ ${filteredList.map((r) => {
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage") || (t("photo") || "사진")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("stockColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[5rem] text-center">{t("stockColSpec")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColQty")}</th>
@@ -303,14 +302,18 @@ ${filteredList.map((r) => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={colCount} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {t("loading")}
+                <td colSpan={colCount} className="p-0">
+                  <LogisticsTableSkeleton rows={6} cols={5} />
                 </td>
               </tr>
             ) : filteredList.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {t("stockNoData")}
+                <td colSpan={colCount} className="p-0">
+                  <LogisticsEmptyState
+                    icon={BarChart3}
+                    title={storeFilter ? t("stockNoData") : t("stockSelectStoreHint")}
+                    className="border-0 bg-transparent py-10"
+                  />
                 </td>
               </tr>
             ) : (
@@ -436,7 +439,7 @@ ${filteredList.map((r) => {
                                   : "text-amber-600 border-amber-300 hover:bg-amber-50 hover:text-amber-700"
                               )}
                               onClick={() => onToggleOrderDisabled(row)}
-                              title={row.orderDisabled ? (t("itemsOrderResume") || "재개") : (t("itemsOrderDisabled") || "발주 중지")}
+                              title={row.orderDisabled ? t("itemsOrderResume") : t("itemsOrderDisabled")}
                             >
                               {row.orderDisabled ? (
                                 <PlayCircle className="h-3.5 w-3.5" />
@@ -499,8 +502,8 @@ ${filteredList.map((r) => {
                 referrerPolicy="no-referrer"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
-                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-                rotateRightLabel={t("imageRotateRight") || "시계"}
+                rotateLeftLabel={t("imageRotateLeft")}
+                rotateRightLabel={t("imageRotateRight")}
               />
             )}
             <Button

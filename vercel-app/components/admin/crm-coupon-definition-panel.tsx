@@ -5,8 +5,9 @@ import { Plus, RotateCw, Save, Tag, Trash2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -90,6 +91,41 @@ function couponToForm(c: PosCoupon): CouponForm {
     allowWithManualDiscount: c.allowWithManualDiscount !== false,
     isActive: c.isActive !== false,
   }
+}
+
+function CouponFormSection({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-xl border border-border/70 bg-card p-5 shadow-sm ring-1 ring-black/[0.02]">
+      <div className="mb-4 flex items-center gap-2 border-b border-border/60 pb-3">
+        <span className="h-4 w-1 rounded-full bg-indigo-500" aria-hidden />
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  )
+}
+
+function CouponFormField({
+  label,
+  children,
+  className,
+}: {
+  label: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  )
 }
 
 export function CrmCouponDefinitionPanel() {
@@ -301,138 +337,179 @@ export function CrmCouponDefinitionPanel() {
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Tag className="h-4 w-4" />
+        <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <SheetHeader className="shrink-0 space-y-2 border-b bg-muted/30 px-8 py-6 pr-14 text-left">
+            <SheetTitle className="flex items-center gap-3 text-lg">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 ring-1 ring-indigo-500/20">
+                <Tag className="h-4 w-4" />
+              </span>
               {editingId ? t("posCouponEdit") || "쿠폰 수정" : t("crmCouponNew") || "새 쿠폰"}
             </SheetTitle>
+            <SheetDescription className="max-w-prose pl-[3.25rem] text-xs leading-relaxed">
+              {t("crmCouponPosAppDesc") ||
+                "회원 발급 쿠폰은 CRM 지급 → 회원앱 혜택 → POS 결제 시 자동 적용됩니다."}
+            </SheetDescription>
           </SheetHeader>
-          <div className="mt-4 grid gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">{t("posCouponCode") || "쿠폰 코드"}</label>
-              <Input
-                value={form.code}
-                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
-                disabled={!!editingId}
-                className="mt-1 font-mono"
-                placeholder="WELCOME100"
-              />
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+            <div className="space-y-5 pb-4">
+              <CouponFormSection title={t("crmCouponSectionBasic") || "기본 정보"}>
+                <CouponFormField label={t("posCouponCode") || "쿠폰 코드"}>
+                  <Input
+                    value={form.code}
+                    onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                    disabled={!!editingId}
+                    className="font-mono"
+                    placeholder="WELCOME100"
+                  />
+                </CouponFormField>
+                <CouponFormField label={t("posCouponName") || "쿠폰명"}>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder={t("posCouponName") || "쿠폰명"}
+                  />
+                </CouponFormField>
+              </CouponFormSection>
+
+              <CouponFormSection title={t("crmCouponSectionDiscount") || "할인 · 기간"}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <CouponFormField label={t("posCouponType") || "할인 유형"}>
+                    <Select
+                      value={form.discountType}
+                      onValueChange={(v) =>
+                        setForm((f) => ({ ...f, discountType: v as CouponForm["discountType"] }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed">{t("posCouponTypeFixed") || "정액"}</SelectItem>
+                        <SelectItem value="percent">{t("posCouponTypePercent") || "정률"}</SelectItem>
+                        <SelectItem value="bogo">{t("posCouponTypeBogo") || "1+1"}</SelectItem>
+                        <SelectItem value="set_fixed">{t("posCouponTypeSetFixed") || "세트"}</SelectItem>
+                        <SelectItem value="item_fixed">{t("posCouponTypeItemFixed") || "품목"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CouponFormField>
+                  <CouponFormField
+                    label={
+                      form.discountType === "percent"
+                        ? t("posCouponDiscountPercentLabel") || "할인율 (%)"
+                        : t("posCouponDiscountValueLabel") || "할인 값"
+                    }
+                  >
+                    <Input
+                      type="number"
+                      value={form.discountValue}
+                      onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                      disabled={form.discountType === "bogo"}
+                    />
+                  </CouponFormField>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <CouponFormField label={t("posValidFrom") || "시작일"}>
+                    <Input
+                      type="date"
+                      value={form.validFrom}
+                      onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
+                    />
+                  </CouponFormField>
+                  <CouponFormField label={t("posValidTo") || "종료일"}>
+                    <Input
+                      type="date"
+                      value={form.validTo}
+                      onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))}
+                    />
+                  </CouponFormField>
+                </div>
+              </CouponFormSection>
+
+              <CouponFormSection title={t("crmCouponSectionRules") || "사용 규칙"}>
+                <CouponFormField label={t("posCouponRedemptionMode") || "사용 방식"}>
+                  <Select
+                    value={form.redemptionMode}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, redemptionMode: v as CouponForm["redemptionMode"] }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member_issue">
+                        {t("posCouponModeMemberRecommended") || t("posCouponModeMember") || "회원 발급 (권장)"}
+                      </SelectItem>
+                      <SelectItem value="reusable_code">{t("posCouponModeReusable") || "공통 코드"}</SelectItem>
+                      <SelectItem value="single_use_serial">{t("posCouponModeSerial") || "1회용 시리얼"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </CouponFormField>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <CouponFormField label={t("posCouponMinOrder") || "최소 주문"}>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.minOrderAmt}
+                      onChange={(e) => setForm((f) => ({ ...f, minOrderAmt: e.target.value }))}
+                    />
+                  </CouponFormField>
+                  <CouponFormField label={t("posCouponMaxPerOrder") || "주문당 장수"}>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.maxPerOrder}
+                      onChange={(e) => setForm((f) => ({ ...f, maxPerOrder: e.target.value }))}
+                    />
+                  </CouponFormField>
+                </div>
+                <CouponFormField label={t("posCouponStackMode") || "중복 규칙"}>
+                  <Select
+                    value={form.stackMode}
+                    onValueChange={(v) => setForm((f) => ({ ...f, stackMode: v as CouponForm["stackMode"] }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed_only">{t("posCouponStackFixed") || "정액만"}</SelectItem>
+                      <SelectItem value="percent_only">{t("posCouponStackPercent") || "정률만"}</SelectItem>
+                      <SelectItem value="any">{t("posCouponStackAny") || "혼합"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </CouponFormField>
+                <div className="space-y-2 rounded-lg border border-dashed bg-muted/20 px-4 py-3">
+                  <label className="flex cursor-pointer items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
+                      checked={form.isActive}
+                      onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                    />
+                    <span>{t("crmCouponActiveCheckbox") || "활성 (비활성 시 발급·사용 불가)"}</span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
+                      checked={form.allowWithManualDiscount}
+                      onChange={(e) => setForm((f) => ({ ...f, allowWithManualDiscount: e.target.checked }))}
+                    />
+                    <span>{t("crmCouponAllowManualDiscount") || "수동 할인과 동시 사용 허용"}</span>
+                  </label>
+                </div>
+              </CouponFormSection>
+
+              <CrmCouponMenuScopePicker value={itemScope} onChange={setItemScope} t={t} />
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">{t("posCouponName") || "쿠폰명"}</label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="mt-1"
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-xs text-muted-foreground">{t("posCouponType") || "할인 유형"}</label>
-                <Select
-                  value={form.discountType}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, discountType: v as CouponForm["discountType"] }))
-                  }
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="fixed">{t("posCouponTypeFixed") || "정액"}</SelectItem>
-                    <SelectItem value="percent">{t("posCouponTypePercent") || "정률"}</SelectItem>
-                    <SelectItem value="bogo">{t("posCouponTypeBogo") || "1+1"}</SelectItem>
-                    <SelectItem value="set_fixed">{t("posCouponTypeSetFixed") || "세트"}</SelectItem>
-                    <SelectItem value="item_fixed">{t("posCouponTypeItemFixed") || "품목"}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  {form.discountType === "percent"
-                    ? t("posCouponDiscountPercentLabel") || "할인율 (%)"
-                    : t("posCouponDiscountValueLabel") || "할인 값"}
-                </label>
-                <Input
-                  type="number"
-                  value={form.discountValue}
-                  onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
-                  className="mt-1"
-                  disabled={form.discountType === "bogo"}
-                />
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-xs text-muted-foreground">{t("posValidFrom") || "시작일"}</label>
-                <Input type="date" value={form.validFrom} onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))} className="mt-1" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">{t("posValidTo") || "종료일"}</label>
-                <Input type="date" value={form.validTo} onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))} className="mt-1" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">{t("posCouponRedemptionMode") || "사용 방식"}</label>
-              <Select
-                value={form.redemptionMode}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, redemptionMode: v as CouponForm["redemptionMode"] }))
-                }
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member_issue">
-                    {t("posCouponModeMemberRecommended") || t("posCouponModeMember") || "회원 발급 (권장)"}
-                  </SelectItem>
-                  <SelectItem value="reusable_code">{t("posCouponModeReusable") || "공통 코드"}</SelectItem>
-                  <SelectItem value="single_use_serial">{t("posCouponModeSerial") || "1회용 시리얼"}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-xs text-muted-foreground">{t("posCouponMinOrder") || "최소 주문"}</label>
-                <Input type="number" min={0} value={form.minOrderAmt} onChange={(e) => setForm((f) => ({ ...f, minOrderAmt: e.target.value }))} className="mt-1" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">{t("posCouponMaxPerOrder") || "주문당 장수"}</label>
-                <Input type="number" min={1} value={form.maxPerOrder} onChange={(e) => setForm((f) => ({ ...f, maxPerOrder: e.target.value }))} className="mt-1" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">{t("posCouponStackMode") || "중복 규칙"}</label>
-              <Select value={form.stackMode} onValueChange={(v) => setForm((f) => ({ ...f, stackMode: v as CouponForm["stackMode"] }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fixed_only">{t("posCouponStackFixed") || "정액만"}</SelectItem>
-                  <SelectItem value="percent_only">{t("posCouponStackPercent") || "정률만"}</SelectItem>
-                  <SelectItem value="any">{t("posCouponStackAny") || "혼합"}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))} />
-              {t("crmCouponActiveCheckbox") || "활성 (비활성 시 발급·사용 불가)"}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.allowWithManualDiscount}
-                onChange={(e) => setForm((f) => ({ ...f, allowWithManualDiscount: e.target.checked }))}
-              />
-              {t("crmCouponAllowManualDiscount") || "수동 할인과 동시 사용 허용"}
-            </label>
-            <CrmCouponMenuScopePicker value={itemScope} onChange={setItemScope} t={t} />
-            <div className="flex gap-2 pt-2">
-              <Button onClick={handleSave} disabled={saving}>
+          </div>
+
+          <div className="shrink-0 border-t bg-background/95 px-8 py-5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleSave} disabled={saving} className="min-w-[7.5rem]">
                 <Save className="mr-2 h-4 w-4" />
-                {saving ? "..." : t("itemsBtnSave") || "저장"}
+                {saving ? t("loading") : t("itemsBtnSave") || "저장"}
               </Button>
               <Button variant="outline" onClick={() => setSheetOpen(false)}>
                 {t("posCancel") || "취소"}

@@ -1,33 +1,26 @@
 "use client"
 
 import type { LucideIcon } from "lucide-react"
-import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
-import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { cn } from "@/lib/utils"
 
 type SalesPageHeaderProps = {
-  href: string
   title: string
   subtitle?: string
   icon: LucideIcon
   /** primary = 기본, emerald = 실시간 매출 */
   iconTone?: "primary" | "emerald"
   actions?: React.ReactNode
-  showHelp?: boolean
   className?: string
 }
 
 export function SalesPageHeader({
-  href,
   title,
   subtitle,
   icon: Icon,
   iconTone = "primary",
   actions,
-  showHelp = true,
   className,
 }: SalesPageHeaderProps) {
-  const helpKey = hrefToHelpSummaryKey(href)
   const iconWrap =
     iconTone === "emerald" ? "bg-emerald-500/10" : "bg-primary/10"
   const iconColor =
@@ -52,9 +45,6 @@ export function SalesPageHeader({
           </div>
           {subtitle ? (
             <p className="text-xs text-muted-foreground">{subtitle}</p>
-          ) : null}
-          {showHelp ? (
-            <HelpSumHowBlocks helpSumKey={helpKey} className="max-w-2xl" compact />
           ) : null}
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}

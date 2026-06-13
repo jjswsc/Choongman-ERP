@@ -132,10 +132,10 @@ export function OutboundStoreMonthMatrixPanel({
       t("orderColStore"),
       ...data.months.flatMap((m) => [
         `${monthLabel(m)} ${t("inColAmount")}`,
-        `${monthLabel(m)} ${t("inv_total") || "Total"}`,
+        `${monthLabel(m)} ${t("inv_total")}`,
       ]),
       `${t("outStoreMonthRowTotal")} ${t("inColAmount")}`,
-      `${t("outStoreMonthRowTotal")} ${t("inv_total") || "Total"}`,
+      `${t("outStoreMonthRowTotal")} ${t("inv_total")}`,
     ]
     const lines: string[] = [headers.map(esc).join(sep)]
     for (const store of data.stores) {

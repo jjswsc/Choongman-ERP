@@ -17,7 +17,7 @@ import {
   ManagementMarginWaterfall,
   type WaterfallStep,
 } from "@/components/management-margin/management-margin-waterfall"
-import { resolveFinancialStatementStoreLabel } from "@/lib/financial-statement-store-options"
+import { resolveFinancialStatementStoreLabel, isFinancialStatementStoreNone } from "@/lib/financial-statement-store-options"
 import {
   buildFinancialStatementsDrillUrl,
   buildSalesManagementDrillUrl,
@@ -388,6 +388,12 @@ export function ManagementMarginTab({
 
   React.useEffect(() => {
     if (queryToken <= 0) return
+    if (isFinancialStatementStoreNone(storeFilter)) {
+      setLoading(false)
+      setData(null)
+      setError(t("salesSelectStoreHint") || "매장을 선택하세요.")
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)

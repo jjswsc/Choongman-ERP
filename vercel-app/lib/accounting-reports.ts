@@ -190,6 +190,8 @@ export type IncomeStatementReport = {
       approvedOrdersTotal: number
       diff: number
     }
+    /** 매장: 동일 주문 출고 stock_logs 중복 행을 손익 집계에서 제외한 건수 */
+    hqOutboundDuplicateLinesDeduped?: number
     /** 매장만: 본사 거래처 직접입고·통장 매입지급을 매입 합계에서 제외한 금액(본사 창고 출고와 이중 방지) */
     purchaseExcludedHqBankPayments?: { key: string; amount: number; label?: string }[]
   }
@@ -343,6 +345,7 @@ async function sumHqOutboundPurchaseFromOffice(
   purchaseTotal: number
   expenseBySubject: Map<number | null, number>
   truncated?: boolean
+  dedupedDuplicateCount?: number
 }> {
   const split = await sumHqOutboundSubtotalMatchingOutboundManagement({
     startStr,
@@ -353,6 +356,7 @@ async function sumHqOutboundPurchaseFromOffice(
     purchaseTotal: split.purchaseTotal,
     expenseBySubject: new Map(),
     truncated: split.hitRowCap || split.lineCount >= 100_000,
+    dedupedDuplicateCount: split.dedupedDuplicateCount,
   }
 }
 
@@ -1040,6 +1044,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let purchaseHqOutboundBasis:
     | { outboundTotal: number; approvedOrdersTotal: number; diff: number }
     | undefined = undefined
+  let hqOutboundDuplicateLinesDeduped = 0
   let purchaseExcludedHqBankPayments: { key: string; amount: number; label?: string }[] | undefined = undefined
   const excludedHqVendorDupRaw: { key: string; amount: number }[] = []
 
@@ -1215,6 +1220,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       purchaseTotal: number
       expenseBySubject: Map<number | null, number>
       truncated?: boolean
+      dedupedDuplicateCount?: number
     }
     try {
       hqOutboundAgg = await sumHqOutboundPurchaseFromOffice(
@@ -1251,6 +1257,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     mergeExpenseSubjectMaps(expenseBySubjectMap, hqOutboundAgg.expenseBySubject)
     if (hqOutboundAgg.truncated) {
       warnings.push('stock_logs(본사 창고 출고) 조회 상한에 도달해 매입이 과소할 수 있습니다.')
+    }
+    if ((hqOutboundAgg.dedupedDuplicateCount || 0) > 0) {
+      hqOutboundDuplicateLinesDeduped = hqOutboundAgg.dedupedDuplicateCount || 0
+      warnings.push(
+        `본사 창고 출고 중복 stock_logs ${hqOutboundDuplicateLinesDeduped}건을 손익 매입에서 제외했습니다. (동일 발주 수령 이중 기록 가능)`
+      )
     }
     purchaseHqOutboundBasis = {
       outboundTotal: hqOutboundAgg.purchaseTotal,
@@ -1574,6 +1586,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       warnings.length > 0 ||
       purchaseInboundBankOverlapVendorKeys.length > 0 ||
       purchaseHqOutboundBasis != null ||
+      hqOutboundDuplicateLinesDeduped > 0 ||
       (purchaseExcludedHqBankPayments?.length ?? 0) > 0
         ? {
             warnings,
@@ -1582,6 +1595,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
               ? { purchaseInboundBankOverlapVendorKeys }
               : {}),
             ...(purchaseHqOutboundBasis ? { purchaseHqOutboundBasis } : {}),
+            ...(hqOutboundDuplicateLinesDeduped > 0 ? { hqOutboundDuplicateLinesDeduped } : {}),
             ...(purchaseExcludedHqBankPayments?.length ? { purchaseExcludedHqBankPayments } : {}),
           }
         : undefined,

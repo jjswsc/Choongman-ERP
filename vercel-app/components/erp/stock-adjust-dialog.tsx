@@ -140,7 +140,7 @@ export function StockAdjustDialog({
                 <label className="text-xs font-semibold">{t("stockAdjustDiff")}</label>
                 <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={addRow}>
                   <Plus className="h-3 w-3" />
-                  {t("itemsAdd") || "추가"}
+                  {t("itemsAdd")}
                 </Button>
               </div>
               <div className="max-h-[200px] space-y-2 overflow-y-auto">
@@ -151,15 +151,15 @@ export function StockAdjustDialog({
                       {unitOptions.length > 0 && (
                         <Select value={row.unitKey} onValueChange={(v) => setRow(idx, { unitKey: v })}>
                           <SelectTrigger className="h-9 w-[140px] min-w-[140px] shrink-0 overflow-hidden text-left text-sm">
-                            <SelectValue placeholder={t("stockAdjustUnit") || "단위"} />
+                            <SelectValue placeholder={t("stockAdjustUnit")} />
                           </SelectTrigger>
                           <SelectContent>
                             {unitOptions.map((o) => {
                               const val = o.kind === "spec" ? "spec" : `${o.unit}::${o.totalQuantity}`
                               const label =
                                 o.kind === "spec"
-                                  ? (t("stockAdjustUnitSpec") || "규격 (1개)")
-                                  : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit") || "규격"})`
+                                  ? t("stockAdjustUnitSpec")
+                                  : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit")})`
                               return (
                                 <SelectItem key={val} value={val}>
                                   {label}
@@ -194,9 +194,9 @@ export function StockAdjustDialog({
               <p className="text-[11px] text-muted-foreground">{t("stockAdjustHint")}</p>
               {rows.length >= 2 && (
                 <p className="text-xs font-medium text-foreground">
-                  {t("stockAdjustTotalLabel") || "합계"}:{" "}
+                  {t("stockAdjustTotalLabel")}:{" "}
                   <span className="font-semibold tabular-nums text-primary">{Math.round(totalSpecQty * 1e4) / 1e4}</span>{" "}
-                  {t("specUnit") || "규격"}
+                  {t("specUnit")}
                 </p>
               )}
             </div>

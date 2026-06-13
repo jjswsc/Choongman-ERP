@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   AccountingEmptyState,
@@ -18,7 +19,7 @@ import {
   accountingResultThCn,
 } from "@/lib/accounting-result-ui"
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
-import { cn } from "@/lib/utils"
+import { isFinancialStatementStoreNone } from "@/lib/financial-statement-store-options"
 
 type LedgerReconciliationTabProps = {
   yearMonth: string
@@ -40,6 +41,12 @@ export function LedgerReconciliationTab({
 
   React.useEffect(() => {
     if (!yearMonth || queryToken <= 0) return
+    if (isFinancialStatementStoreNone(storeFilter)) {
+      setLoading(false)
+      setData(null)
+      setError(t("salesSelectStoreHint") || "매장을 선택하세요.")
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)

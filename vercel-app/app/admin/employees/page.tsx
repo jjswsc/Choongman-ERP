@@ -65,6 +65,8 @@ import {
 } from "@/components/employees"
 import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
+import { HrPageShell } from "@/components/hr/hr-page-shell"
+import { EmployeeCsvImportDialog } from "@/components/employees/employee-csv-import-dialog"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
@@ -385,6 +387,17 @@ export default function EmployeesPage() {
     })
   }, [searchParams, loadEmployeeList, router, adminRowToForm])
 
+  /** 목록 탭 진입 시 재직 중 목록 자동 1회 로드 (딥링크 진입은 위 effect가 처리) */
+  React.useEffect(() => {
+    if (hrMainTab !== "list") return
+    const employeeId = searchParams.get("employeeId")?.trim()
+    const employeeCode = searchParams.get("employeeCode")?.trim()
+    if (employeeId || employeeCode) return
+    if (hasSearched) return
+    setHasSearched(true)
+    void loadEmployeeList({ updateDisplay: true })
+  }, [hrMainTab, searchParams, hasSearched, loadEmployeeList])
+
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions
     const set = new Set<string>()
@@ -582,18 +595,7 @@ export default function EmployeesPage() {
   }, [showEmployeeEvalTab, loadEmployeeList])
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Users className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("adminEmployees")}</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">{t("adminEmployeesSub")}</p>
-          </div>
-        </div>
-
+    <HrPageShell icon={Users} title={t("adminEmployees")} subtitle={t("adminEmployeesSub")} className="space-y-4">
         <Tabs value={hrMainTab} onValueChange={handleHrMainTabChange} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
@@ -635,6 +637,11 @@ export default function EmployeesPage() {
               {hasSearched && employeeCache.length > 0 && (
                 <JobCountSummary rows={filteredRows} t={t} />
               )}
+              {isOffice ? (
+                <div className="flex justify-end">
+                  <EmployeeCsvImportDialog onImported={() => void loadEmployeeList({ updateDisplay: true })} />
+                </div>
+              ) : null}
               <div className="rounded-lg border border-border bg-card p-3">
                 <EmployeeFilterBar
                   stores={storesForFilter}
@@ -769,7 +776,6 @@ export default function EmployeesPage() {
             </TabsContent>
           )}
         </Tabs>
-      </div>
-    </div>
+    </HrPageShell>
   )
 }

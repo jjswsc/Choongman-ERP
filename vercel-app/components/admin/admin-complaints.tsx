@@ -3,11 +3,12 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -24,7 +25,10 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Save, Image as ImageIcon } from "lucide-react"
+import { Search, Save, Image as ImageIcon, MessageSquareWarning, X } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -35,6 +39,7 @@ import {
   getComplaintLogList,
   saveComplaintLog,
   updateComplaintLog,
+  uploadComplaintPhoto,
   translateTexts,
   type ComplaintLogItem,
 } from "@/lib/api-client"
@@ -46,9 +51,14 @@ import {
 } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { StorePageShell } from "@/components/erp/store-page-shell"
+import { ComplaintProcessTab } from "@/components/admin/complaint-process-tab"
+
+const CHART_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#8b5cf6", "#6b7280"]
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 function timeStr() {
@@ -93,16 +103,25 @@ export function AdminComplaints() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const [tab, setTab] = useState<"input" | "list">("input")
+  const [tab, setTab] = useState<"dash" | "input" | "list" | "process">("dash")
   const [stores, setStores] = useState<string[]>([])
   const [editId, setEditId] = useState<string>("")
 
   const [form, setForm] = useState<Record<string, string>>(emptyForm())
   const [saveLoading, setSaveLoading] = useState(false)
+  const [uploadLoading, setUploadLoading] = useState(false)
 
-  const [listStart, setListStart] = useState(todayStr())
-  const [listEnd, setListEnd] = useState(todayStr())
+  const defaultEnd = getBangkokTodayDateString()
+  const defaultStart = (() => {
+    const d = new Date(`${defaultEnd}T12:00:00+07:00`)
+    d.setDate(d.getDate() - 30)
+    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+  })()
+
+  const [listStart, setListStart] = useState(defaultStart)
+  const [listEnd, setListEnd] = useState(defaultEnd)
   const [listStore, setListStore] = useState("All")
   const [listVisitPath, setListVisitPath] = useState("__all__")
   const [listType, setListType] = useState("__all__")
@@ -188,6 +207,61 @@ export function AdminComplaints() {
       setListLoading(false)
     }
   }, [listStart, listEnd, listStore, listVisitPath, listType, listStatus])
+
+  useEffect(() => {
+    if (tab === "list" || tab === "dash" || tab === "process") void loadList()
+  }, [tab, loadList])
+
+  const dashStats = useMemo(() => {
+    const open = listData.filter((x) => x.status === "접수" || x.status === "조사중" || x.status === "보류").length
+    const severe = listData.filter((x) => x.severity === "심각").length
+    const food = listData.filter((x) => x.type === "음식").length
+    const byType: Record<string, number> = {}
+    const byStatus: Record<string, number> = {}
+    for (const x of listData) {
+      const ty = x.type || "기타"
+      byType[ty] = (byType[ty] || 0) + 1
+      const st = x.status || "접수"
+      byStatus[st] = (byStatus[st] || 0) + 1
+    }
+    const typeChart = Object.entries(byType).map(([name, value]) => ({
+      name: typeToKey[name] ? t(typeToKey[name] as never) : name,
+      value,
+    }))
+    const statusChart = Object.entries(byStatus).map(([name, value]) => ({
+      name: statusToKey[name] ? t(statusToKey[name] as never) : name,
+      value,
+    }))
+    return { total: listData.length, open, severe, food, typeChart, statusChart }
+  }, [listData, t])
+
+  const typeChartConfig = useMemo(
+    () => Object.fromEntries(dashStats.typeChart.map((d, i) => [d.name, { label: d.name, color: CHART_COLORS[i % CHART_COLORS.length] }])),
+    [dashStats.typeChart]
+  )
+  const statusChartConfig = useMemo(
+    () => Object.fromEntries(dashStats.statusChart.map((d, i) => [d.name, { label: d.name, color: CHART_COLORS[i % CHART_COLORS.length] }])),
+    [dashStats.statusChart]
+  )
+
+  const handleUploadPhoto = async (files: FileList | null) => {
+    if (!files?.length || !form.store) {
+      if (!form.store) await appAlert(t("store_load_hint"))
+      return
+    }
+    setUploadLoading(true)
+    try {
+      const file = files[0]
+      const res = await uploadComplaintPhoto(form.store, file)
+      if (res.success && res.url) {
+        setForm((f) => ({ ...f, photoUrl: res.url! }))
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+      }
+    } finally {
+      setUploadLoading(false)
+    }
+  }
 
   const resetForm = useCallback(() => {
     setEditId("")
@@ -278,24 +352,108 @@ export function AdminComplaints() {
 
   const showPlatform = form.visitPath === "배달"
 
-  return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-4">
-          <h1 className="text-xl font-bold tracking-tight">{t("adminComplaints")}</h1>
-        </div>
+  const severityBadge = (val: string | undefined) => {
+    const v = val || ""
+    const variant = v === "심각" ? "destructive" : v === "보통" ? "secondary" : "outline"
+    return <Badge variant={variant}>{tr(v, severityToKey)}</Badge>
+  }
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "input" | "list")} className={adminTabsRootCn}>
+  const statusBadge = (val: string | undefined) => {
+    const v = val || ""
+    const open = v === "접수" || v === "조사중"
+    return (
+      <Badge variant={open ? "default" : v === "처리완료" ? "secondary" : "outline"}>
+        {tr(v, statusToKey)}
+      </Badge>
+    )
+  }
+
+  return (
+    <StorePageShell icon={MessageSquareWarning} title={t("adminComplaints")} subtitle={t("complaint_page_sub")} maxWidthClass="max-w-6xl">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as "dash" | "input" | "list" | "process")}
+          className={adminTabsRootCn}
+        >
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="dash" className={adminTabsTriggerCn}>
+                  {t("tab_complaint_dashboard")}
+                </TabsTrigger>
                 <TabsTrigger value="input" className={adminTabsTriggerCn}>
                   {t("tab_complaint_input")}
                 </TabsTrigger>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_complaint_list")}
                 </TabsTrigger>
+                <TabsTrigger value="process" className={adminTabsTriggerCn}>
+                  {t("tab_complaint_process")}
+                </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
+
+          <TabsContent value="dash" className={cn(adminTabsContentCn, "space-y-4")}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: t("complaint_kpi_total"), value: dashStats.total, className: "border-slate-500/40" },
+                { label: t("complaint_kpi_open"), value: dashStats.open, className: "border-amber-500/40" },
+                { label: t("complaint_kpi_severe"), value: dashStats.severe, className: "border-red-500/40" },
+                { label: t("complaint_kpi_food"), value: dashStats.food, className: "border-blue-500/40" },
+              ].map((k) => (
+                <Card key={k.label} className={`border-l-4 ${k.className}`}>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground">{k.label}</p>
+                    <p className="text-2xl font-bold tabular-nums">{listLoading ? "…" : k.value}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardContent className="pt-4">
+                  <h3 className="mb-2 text-sm font-semibold">{t("complaint_chart_by_type")}</h3>
+                  <ChartContainer config={typeChartConfig} className="h-[220px] w-full aspect-auto">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dashStats.typeChart}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                        <YAxis allowDecimals={false} width={28} tick={{ fontSize: 11 }} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]} fill="#2563eb" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <h3 className="mb-2 text-sm font-semibold">{t("complaint_chart_by_status")}</h3>
+                  <ChartContainer config={statusChartConfig} className="h-[220px] w-full aspect-auto">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Pie data={dashStats.statusChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                          {dashStats.statusChart.map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="process" className={adminTabsContentCn}>
+            <ComplaintProcessTab
+              items={listData}
+              loading={listLoading}
+              writerName={writerName}
+              getTrans={getTrans}
+              onSaved={() => void loadList()}
+            />
+          </TabsContent>
 
           <TabsContent value="input" className={adminTabsContentCn}>
             <Card>
@@ -448,15 +606,41 @@ export function AdminComplaints() {
                   <Textarea value={form.action} onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))} rows={2} className="text-xs" placeholder={t("complaint_ph_action")} />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold block mb-1">{t("complaint_photo")}</label>
-                    <Input value={form.photoUrl} onChange={(e) => setForm((f) => ({ ...f, photoUrl: e.target.value }))} className="h-9 text-xs" placeholder={t("complaint_ph_photo")} />
+                <div>
+                  <label className="text-xs font-semibold block mb-1">{t("complaint_photo")}</label>
+                  <p className="text-[11px] text-muted-foreground mb-2">{t("complaint_photo_hint")}</p>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      void handleUploadPhoto(e.target.files)
+                      e.target.value = ""
+                    }}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={uploadLoading} onClick={() => fileRef.current?.click()}>
+                      {uploadLoading ? t("loading") : t("complaint_photo_add")}
+                    </Button>
+                    {form.photoUrl ? (
+                      <>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setPhotoPreviewUrl(form.photoUrl)}>
+                          <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                          {t("photo")}
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setForm((f) => ({ ...f, photoUrl: "" }))}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold block mb-1">{t("store_remark")}</label>
-                    <Input value={form.remark} onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))} className="h-9 text-xs" />
-                  </div>
+                  <Input value={form.photoUrl} onChange={(e) => setForm((f) => ({ ...f, photoUrl: e.target.value }))} className="h-9 text-xs mt-2" placeholder={t("complaint_ph_photo")} />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold block mb-1">{t("store_remark")}</label>
+                  <Input value={form.remark} onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))} className="h-9 text-xs" />
                 </div>
 
                 <div className="flex gap-2">
@@ -567,8 +751,8 @@ export function AdminComplaints() {
                             <td className="p-2 text-center">{tr(item.visitPath, visitPathToKey)}</td>
                             <td className="p-2 text-center">{tr(item.type, typeToKey)}</td>
                             <td className="p-2 text-left max-w-[160px] truncate" title={getTrans(item.title || "") || item.title}>{getTrans(item.title || "") || "-"}</td>
-                            <td className="p-2 text-center">{tr(item.severity, severityToKey)}</td>
-                            <td className="p-2 text-center">{tr(item.status, statusToKey)}</td>
+                            <td className="p-2 text-center">{severityBadge(item.severity)}</td>
+                            <td className="p-2 text-center">{statusBadge(item.status)}</td>
                             <td className="p-2 text-center">
                               {item.photoUrl ? (
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPhotoPreviewUrl(item.photoUrl || null)} title={t("photo")}>
@@ -612,7 +796,6 @@ export function AdminComplaints() {
             )}
           </DialogContent>
         </Dialog>
-      </div>
-    </div>
+    </StorePageShell>
   )
 }

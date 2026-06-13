@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
 import { useT } from "@/lib/i18n"
 import { useLang, type LangCode } from "@/lib/lang-context"
@@ -12,6 +14,7 @@ import {
   type HrCalendarEvent,
   type HrCalendarEventKind,
 } from "@/lib/hr-calendar-events"
+import { HrSubnav } from "@/components/hr/hr-subnav"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -97,6 +100,16 @@ function formatHrCalTooltip(ev: HrCalendarEvent, t: (k: string) => string): stri
   return line1
 }
 
+function hrCalEmployeeHref(ev: HrCalendarEvent): string | null {
+  const code = String(ev.employeeCode || "").trim()
+  if (!code) return null
+  const q = new URLSearchParams()
+  q.set("employeeCode", code)
+  if (ev.store && ev.store !== "—") q.set("store", ev.store)
+  if (ev.employeeName) q.set("name", ev.employeeName)
+  return `/admin/employees?${q.toString()}`
+}
+
 function eventKindSurface(kind: HrCalendarEventKind): string {
   return cn(
     "border border-black/[0.06] dark:border-white/[0.08]",
@@ -140,6 +153,7 @@ function formatListDate(iso: string, lang: LangCode): string {
 export default function AdminHrCalendarPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const router = useRouter()
   const { auth } = useAuth()
   const userStore = auth?.store || ""
   const userRole = auth?.role || ""
@@ -235,6 +249,7 @@ export default function AdminHrCalendarPage() {
   return (
     <div className="flex-1 overflow-auto bg-gradient-to-b from-muted/40 via-background to-background">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <HrSubnav />
         <Card className="overflow-hidden border-border/60 shadow-md">
           <CardHeader className="space-y-4 border-b border-border/50 bg-gradient-to-br from-primary/[0.06] via-card to-card pb-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -474,18 +489,25 @@ export default function AdminHrCalendarPage() {
                               ) : null}
                             </div>
                             <div className="flex min-h-0 flex-1 flex-col gap-1">
-                              {dayEvents.map((ev) => (
+                              {dayEvents.map((ev) => {
+                                const empHref = hrCalEmployeeHref(ev)
+                                const chipCn = cn(
+                                  "truncate rounded-md px-1.5 py-1 text-left text-[10px] font-medium leading-tight outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                  eventKindSurface(ev.kind),
+                                  empHref ? "cursor-pointer hover:opacity-90" : "cursor-default"
+                                )
+                                return (
                                 <Tooltip key={ev.id}>
                                   <TooltipTrigger asChild>
-                                    <div
-                                      className={cn(
-                                        "cursor-default truncate rounded-md px-1.5 py-1 text-left text-[10px] font-medium leading-tight outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                        eventKindSurface(ev.kind)
-                                      )}
-                                      tabIndex={0}
-                                    >
-                                      {formatHrCalLabel(ev, t)}
-                                    </div>
+                                    {empHref ? (
+                                      <Link href={empHref} className={chipCn}>
+                                        {formatHrCalLabel(ev, t)}
+                                      </Link>
+                                    ) : (
+                                      <div className={chipCn} tabIndex={0}>
+                                        {formatHrCalLabel(ev, t)}
+                                      </div>
+                                    )}
                                   </TooltipTrigger>
                                   <TooltipContent
                                     side="top"
@@ -495,7 +517,8 @@ export default function AdminHrCalendarPage() {
                                     {formatHrCalTooltip(ev, t)}
                                   </TooltipContent>
                                 </Tooltip>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )
@@ -533,8 +556,16 @@ export default function AdminHrCalendarPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEvents.map((ev) => (
-                      <TableRow key={ev.id}>
+                    {filteredEvents.map((ev) => {
+                      const empHref = hrCalEmployeeHref(ev)
+                      return (
+                      <TableRow
+                        key={ev.id}
+                        className={empHref ? "cursor-pointer hover:bg-muted/40" : undefined}
+                        onClick={() => {
+                          if (empHref) router.push(empHref)
+                        }}
+                      >
                         <TableCell className="whitespace-nowrap pl-6 font-medium tabular-nums text-foreground">
                           {formatListDate(ev.date, lang)}
                         </TableCell>
@@ -554,7 +585,8 @@ export default function AdminHrCalendarPage() {
                           {ev.legalName ? t("hrCalTooltipLegalName").replace("{name}", ev.legalName) : "—"}
                         </TableCell>
                       </TableRow>
-                    ))}
+                      )
+                    })}
                   </TableBody>
                 </Table>
               )}

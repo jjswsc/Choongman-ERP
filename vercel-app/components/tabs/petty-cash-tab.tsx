@@ -57,6 +57,11 @@ import {
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
+import {
+  accountingResultTableCn,
+  accountingResultTbodyRowCn,
+  accountingResultTheadRowCn,
+} from "@/lib/accounting-result-ui"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { findStaffForScheduleSlotName, type StaffRowForScheduleMatch } from "@/lib/employee-display-name"
@@ -1699,9 +1704,9 @@ ${rows.map((row, ri) => {
                 ) : filteredMonthlyData.length === 0 ? (
                   <p className="px-4 py-10 text-center text-sm text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className="w-full text-xs min-w-[720px]">
-                    <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
-                      <tr>
+                  <table className={cn(accountingResultTableCn, "text-xs min-w-[720px]")}>
+                    <thead className="sticky top-0 z-[1] bg-muted/60 backdrop-blur-sm">
+                      <tr className={accountingResultTheadRowCn}>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColDate") || "날짜"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("store") || "매장"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColType") || "유형"}</th>
@@ -1717,7 +1722,7 @@ ${rows.map((row, ri) => {
                     </thead>
                     <tbody>
                       {filteredMonthlyData.map((r) => (
-                        <tr key={r.id} className="border-t border-border/40 transition-colors hover:bg-muted/20">
+                        <tr key={r.id} className={accountingResultTbodyRowCn}>
                           <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{r.trans_date}</td>
                           <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[5.5rem]">{formatStoreLabel(r.store)}</td>
                           <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>

@@ -17,6 +17,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getAppData, getItemCategories, getStockUsageAggregate, type AppItem } from "@/lib/api-client"
 import { isManagerRole } from "@/lib/permissions"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
 
 export interface StockReorderAssistProps {
   stores: string[]
@@ -186,9 +188,8 @@ export function StockReorderAssist({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold whitespace-nowrap">{t("stockFilterStore")}</label>
+      <AdminFilterBar className="items-end">
+        <AdminFilterField label={t("stockFilterStore")}>
           <Select
             value={storeFilter || "all"}
             onValueChange={(v) => setStoreFilter(v === "all" ? "" : v)}
@@ -206,18 +207,16 @@ export function StockReorderAssist({
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold whitespace-nowrap">{t("stockFilterDate")}</label>
+        </AdminFilterField>
+        <AdminFilterField label={t("stockFilterDate")}>
           <Input
             type="date"
             value={stockDateFilter}
             onChange={(e) => setStockDateFilter(e.target.value)}
             className="h-9 w-36 text-xs"
           />
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold whitespace-nowrap">{t("stockReorderDays")}</label>
+        </AdminFilterField>
+        <AdminFilterField label={t("stockReorderDays")}>
           <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
             <SelectTrigger className="h-9 w-[5.25rem] text-xs">
               <SelectValue />
@@ -233,18 +232,16 @@ export function StockReorderAssist({
               <SelectItem value="180">180</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold whitespace-nowrap">{t("stockReorderEndDate")}</label>
+        </AdminFilterField>
+        <AdminFilterField label={t("stockReorderEndDate")}>
           <Input
             type="date"
             value={usageEndYmd}
             onChange={(e) => setUsageEndYmd(e.target.value)}
             className="h-9 w-36 text-xs"
           />
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold whitespace-nowrap">{t("itemsCategory")}</label>
+        </AdminFilterField>
+        <AdminFilterField label={t("itemsCategory")}>
           <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
             <SelectTrigger className="h-9 w-32 text-xs">
               <SelectValue />
@@ -258,7 +255,7 @@ export function StockReorderAssist({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </AdminFilterField>
         <Button size="sm" className="h-9 px-3 text-xs font-semibold" onClick={load} disabled={loading || !storeFilter.trim()}>
           <Search className="mr-1 h-3 w-3" />
           {t("stockReorderBtnLoad")}
@@ -280,7 +277,7 @@ export function StockReorderAssist({
             </Button>
           )}
         </div>
-      </div>
+      </AdminFilterBar>
 
       {usageMeta ? (
         <div className="space-y-0.5 text-[11px] text-muted-foreground">
@@ -340,20 +337,20 @@ export function StockReorderAssist({
           <tbody>
             {!storeFilter.trim() ? (
               <tr>
-                <td colSpan={10} className="px-5 py-10 text-center text-sm text-muted-foreground">
-                  {t("stockReorderNoStore")}
+                <td colSpan={10} className="p-0">
+                  <LogisticsEmptyState icon={ClipboardList} title={t("stockReorderNoStore")} className="border-0 bg-transparent py-10" />
                 </td>
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={10} className="px-5 py-10 text-center text-sm text-muted-foreground">
-                  {t("loading")}
+                <td colSpan={10} className="p-0">
+                  <LogisticsTableSkeleton rows={6} cols={5} />
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-5 py-10 text-center text-sm text-muted-foreground">
-                  {t("stockNoData")}
+                <td colSpan={10} className="p-0">
+                  <LogisticsEmptyState icon={Search} title={t("stockNoData")} className="border-0 bg-transparent py-10" />
                 </td>
               </tr>
             ) : (

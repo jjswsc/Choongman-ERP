@@ -44,6 +44,7 @@ import {
   type InteriorExpenseItem,
   type InteriorDirectPurchase,
 } from "@/lib/api-client"
+import { bangkokTodayYmd } from "@/lib/bangkok-date"
 
 const EXPENSE_CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
   { value: "견적", labelKey: "interiorExpenseCatQuote" },
@@ -84,7 +85,7 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
   const [paymentItem, setPaymentItem] = React.useState<InteriorExpenseItem | null>(null)
   const [paymentAmount, setPaymentAmount] = React.useState("")
   const [paymentAccountId, setPaymentAccountId] = React.useState("")
-  const [paymentDate, setPaymentDate] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [paymentDate, setPaymentDate] = React.useState(() => bangkokTodayYmd())
   const [paymentMemo, setPaymentMemo] = React.useState("")
   const [paying, setPaying] = React.useState(false)
   const [accounts, setAccounts] = React.useState<{ id?: number; name?: string }[]>([])
@@ -446,7 +447,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
               </Select>
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground">{t("posMenuName")}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorDescription")}</label>
               <Input value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
             </div>
             <div>
@@ -482,7 +483,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
           <TableHeader>
             <TableRow>
               <TableHead className="w-20">{t("interiorCategory")}</TableHead>
-              <TableHead>{t("posMenuName")}</TableHead>
+              <TableHead>{t("interiorDescription")}</TableHead>
               <TableHead className="w-16 text-right">{t("qty")}</TableHead>
               <TableHead className="w-16">{t("unit")}</TableHead>
               <TableHead className="w-24 text-right">{t("price")}</TableHead>

@@ -20,13 +20,19 @@ import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-b
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
 import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
 import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
-import { SalesSubnav } from "@/components/erp/sales-subnav"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { storeMatches } from "@/lib/admin-employee-store-access"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { computeRealtimeTableTotal, mergeRealtimeStoreSalesRows } from "@/lib/pos-realtime-store-rows"
 import { useStoreList } from "@/lib/use-store-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
@@ -221,9 +227,7 @@ export default function AdminLiveStoreSalesPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-        <SalesSubnav />
         <SalesPageHeader
-          href="/admin/live-store-sales"
           title={tOr(t, "adminLiveStoreSales", "실시간 매출")}
           subtitle={liveSalesSubtitle}
           icon={Radio}
@@ -233,14 +237,22 @@ export default function AdminLiveStoreSalesPage() {
 
         {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
-        <Tabs defaultValue="realtime" className="space-y-4">
-          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-            <TabsTrigger value="realtime">{t("liveStoreSalesTabRealtime")}</TabsTrigger>
-            <TabsTrigger value="charts">{t("liveStoreSalesTabCharts")}</TabsTrigger>
-            <TabsTrigger value="ops">{t("liveStoreSalesTabOps")}</TabsTrigger>
-          </TabsList>
+        <Tabs defaultValue="realtime" className={adminTabsRootCn}>
+          <AdminTabsBarWithHelp>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="realtime" className={adminTabsTriggerCn}>
+                {t("liveStoreSalesTabRealtime")}
+              </TabsTrigger>
+              <TabsTrigger value="charts" className={adminTabsTriggerCn}>
+                {t("liveStoreSalesTabCharts")}
+              </TabsTrigger>
+              <TabsTrigger value="ops" className={adminTabsTriggerCn}>
+                {t("liveStoreSalesTabOps")}
+              </TabsTrigger>
+            </TabsList>
+          </AdminTabsBarWithHelp>
 
-          <TabsContent value="realtime" className="mt-0 space-y-4">
+          <TabsContent value="realtime" className={`${adminTabsContentCn} space-y-4`}>
             {showRealtimeBlock ? (
               <StoreSalesRealtimeView
                 effectiveStoreCode={effectiveStoreCode}
@@ -258,7 +270,7 @@ export default function AdminLiveStoreSalesPage() {
             ) : null}
           </TabsContent>
 
-          <TabsContent value="charts" className="mt-0">
+          <TabsContent value="charts" className={adminTabsContentCn}>
             <AdminSalesDashboardCharts
               effectiveStoreCode={effectiveStoreCode}
               isOfficeSelector={isOfficeSelector}
@@ -268,7 +280,7 @@ export default function AdminLiveStoreSalesPage() {
             />
           </TabsContent>
 
-          <TabsContent value="ops" className="mt-0">
+          <TabsContent value="ops" className={adminTabsContentCn}>
             <PosRevenueRealtimeDashboard
               effectiveStoreCode={effectiveStoreCode}
               isOfficeSelector={isOfficeSelector}

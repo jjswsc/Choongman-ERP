@@ -5,7 +5,6 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import {
   Search,
-  CalendarIcon,
   ChevronDown,
   ChevronUp,
   Package,
@@ -36,6 +35,9 @@ import { useStoreList, getAdminOrders, getAppData, processOrderDecision, updateO
 import { sanitizeCartLineRemarks } from "@/lib/outbound-order-line-match"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { OrderApprovalDetailPanel } from "@/components/erp/order-approval-detail-panel"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
+import { ADMIN_BADGE_BASE_CN, ADMIN_BADGE_WARNING_CN, ADMIN_BADGE_SUCCESS_CN, ADMIN_BADGE_DANGER_CN, ADMIN_BADGE_NEUTRAL_CN, ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
 
@@ -73,11 +75,11 @@ interface Order {
   deliveryDatesByOutbound?: Record<string, string>
 }
 
-const statusConfig: Record<OrderStatus, { labelKey: string; bg: string; text: string }> = {
-  Pending: { labelKey: "orderStatusPending", bg: "bg-warning/10", text: "text-warning" },
-  Approved: { labelKey: "orderStatusApproved", bg: "bg-success/10", text: "text-success" },
-  Rejected: { labelKey: "orderStatusRejected", bg: "bg-destructive/10", text: "text-destructive" },
-  Hold: { labelKey: "orderStatusHold", bg: "bg-muted", text: "text-muted-foreground" },
+const statusConfig: Record<OrderStatus, { labelKey: string; badgeCn: string }> = {
+  Pending: { labelKey: "orderStatusPending", badgeCn: ADMIN_BADGE_WARNING_CN },
+  Approved: { labelKey: "orderStatusApproved", badgeCn: ADMIN_BADGE_SUCCESS_CN },
+  Rejected: { labelKey: "orderStatusRejected", badgeCn: ADMIN_BADGE_DANGER_CN },
+  Hold: { labelKey: "orderStatusHold", badgeCn: ADMIN_BADGE_NEUTRAL_CN },
 }
 
 function mapApiToOrder(
@@ -342,12 +344,12 @@ export function OrderApproval() {
       return
     }
     if (decision === "Rejected" && !(rejectReasonByOrderId[idStr] || "").trim()) {
-      await appAlert(t("orderRejectReasonRequired") || "거절 사유를 입력해 주세요.")
+      await appAlert(t("orderRejectReasonRequired"))
       return
     }
     const selectedItems = approvedItems
     if (decision === "Approved" && selectedItems.length === 0) {
-      await appAlert(t("orderApproveNeedItems") || "승인할 품목을 선택해 주세요.")
+      await appAlert(t("orderApproveNeedItems"))
       return
     }
     const updatedCart = displayItems.map((it) => ({
@@ -434,17 +436,17 @@ export function OrderApproval() {
     )
   }, [orders, searchTerm])
 
+  const orderKpi = React.useMemo(() => {
+    const pending = filteredOrders.filter((o) => o.status === "Pending").length
+    const totalAmt = filteredOrders.reduce((sum, o) => sum + o.totalAmount, 0)
+    return { count: filteredOrders.length, pending, totalAmt }
+  }, [filteredOrders])
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Filter bar */}
-      <div className="rounded-xl border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-end gap-4">
+      <AdminFilterBar className="items-end">
           {!isManager && (
-            <div className="flex flex-col gap-1.5">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <Package className="h-3.5 w-3.5 text-primary" />
-                {t("orderFilterStore")}
-              </label>
+            <AdminFilterField label={t("orderFilterStore")}>
               <Select value={storeFilter} onValueChange={setStoreFilter}>
                 <SelectTrigger className="h-9 w-40 text-xs">
                   <SelectValue />
@@ -458,35 +460,28 @@ export function OrderApproval() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </AdminFilterField>
           )}
 
-          <div className="flex flex-col gap-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-              <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              {t("orderFilterPeriod")}
-            </label>
+          <AdminFilterField label={t("orderFilterPeriod")}>
             <div className="flex items-center gap-2">
               <Input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="h-9 w-40 text-xs"
+                className="h-9 w-36 text-xs"
               />
               <span className="text-xs font-medium text-muted-foreground">~</span>
               <Input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="h-9 w-40 text-xs"
+                className="h-9 w-36 text-xs"
               />
             </div>
-          </div>
+          </AdminFilterField>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">
-              {t("orderFilterStatus")}
-            </label>
+          <AdminFilterField label={t("orderFilterStatus")}>
             <div className="flex items-center gap-2">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="h-9 w-28 text-xs">
@@ -507,18 +502,34 @@ export function OrderApproval() {
                 className="h-9 w-28 text-xs"
               />
             </div>
-          </div>
+          </AdminFilterField>
 
           <Button size="sm" className="h-9 px-5 text-xs font-bold" onClick={fetchOrders}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("orderBtnSearch")}
           </Button>
-        </div>
-      </div>
 
-      {/* Order table */}
+          {orders.length > 0 && (
+            <div className="ml-auto flex flex-wrap items-center gap-3 text-xs">
+              <span className="text-muted-foreground">
+                {t("orderKpiCount")}:{" "}
+                <strong className={cn("text-foreground", ADMIN_NUMERIC_CN)}>{orderKpi.count}</strong>
+              </span>
+              <span className="text-muted-foreground">
+                {t("orderStatusPending")}:{" "}
+                <strong className={cn("text-amber-700 dark:text-amber-400", ADMIN_NUMERIC_CN)}>{orderKpi.pending}</strong>
+              </span>
+              <span className="text-muted-foreground">
+                {t("orderColTotal")}:{" "}
+                <strong className={cn("text-primary", ADMIN_NUMERIC_CN)}>{orderKpi.totalAmt.toLocaleString()} ฿</strong>
+              </span>
+            </div>
+          )}
+      </AdminFilterBar>
+
+      {/* Order table — desktop grid */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <div className="grid grid-cols-[40px_36px_1fr_120px_100px_90px_1fr_130px_100px] items-center gap-0 border-b bg-muted/40 px-4 py-3">
+        <div className="hidden md:grid grid-cols-[40px_36px_1fr_120px_100px_90px_1fr_130px_100px] items-center gap-0 border-b bg-muted/40 px-4 py-3">
           <div className="flex items-center justify-center">
             <Checkbox checked={allChecked} onCheckedChange={toggleAll} className="h-4 w-4" />
           </div>
@@ -533,7 +544,7 @@ export function OrderApproval() {
             {t("orderColStore")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
-            {t("orderOrderedBy") || "발주자"}
+            {t("orderOrderedBy")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
             {t("orderColSummary")}
@@ -547,15 +558,16 @@ export function OrderApproval() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-            {t("loading")}
-          </div>
+          <LogisticsTableSkeleton rows={5} cols={6} />
         ) : orders.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">
-            {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
-          </div>
+          <LogisticsEmptyState
+            icon={Package}
+            title={t("orderSearchHint")}
+            className="border-0 bg-transparent"
+          />
         ) : (
-          <div className="flex flex-col">
+          <>
+          <div className="hidden md:flex flex-col">
             {filteredOrders.map((order) => {
               const isExpanded = expandedId === order.id
               const sCfg = statusConfig[order.status]
@@ -602,14 +614,14 @@ export function OrderApproval() {
                         )}
                       </div>
                     </div>
-                    <span className="text-xs tabular-nums text-foreground">
+                    <span className={cn("text-xs tabular-nums text-foreground", ADMIN_NUMERIC_CN)}>
                       {order.orderDate}
                     </span>
                     <span className="text-xs text-muted-foreground">{order.deliveryDate}</span>
                     <span className="text-xs font-semibold text-foreground">{order.store}</span>
                     <span className="text-xs text-muted-foreground truncate">{order.userName || "-"}</span>
                     <span className="text-xs text-muted-foreground truncate">{order.summary}</span>
-                    <span className="text-sm font-bold tabular-nums text-primary text-right">
+                    <span className={cn("text-sm font-bold text-primary text-right", ADMIN_NUMERIC_CN)}>
                       {order.totalAmount.toLocaleString()} ฿
                     </span>
                     <div
@@ -623,9 +635,8 @@ export function OrderApproval() {
                     >
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-bold",
-                          sCfg.bg,
-                          sCfg.text,
+                          ADMIN_BADGE_BASE_CN,
+                          sCfg.badgeCn,
                           order.status === "Rejected" && "cursor-pointer hover:opacity-80"
                         )}
                       >
@@ -656,19 +667,86 @@ export function OrderApproval() {
               )
             })}
           </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden divide-y">
+            {filteredOrders.map((order) => {
+              const isExpanded = expandedId === order.id
+              const sCfg = statusConfig[order.status]
+              return (
+                <div key={order.id} className={cn(isExpanded && "bg-primary/5")}>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-left"
+                    onClick={() => toggleExpand(order.id)}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div
+                        className="pt-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={checkedOrders.has(order.id)}
+                          onCheckedChange={() => toggleOrder(order.id)}
+                          className="h-4 w-4"
+                        />
+                      </div>
+                      <div className="flex flex-1 items-start justify-between gap-2 min-w-0">
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-xs font-semibold text-foreground">{order.store}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{order.summary}</p>
+                        <p className={cn("text-[11px] tabular-nums text-muted-foreground", ADMIN_NUMERIC_CN)}>
+                          {order.orderDate} · #{order.id}
+                        </p>
+                      </div>
+                      <div className="shrink-0 space-y-1 text-right">
+                        <span className={cn(ADMIN_BADGE_BASE_CN, sCfg.badgeCn)}>{t(sCfg.labelKey)}</span>
+                        <p className={cn("text-sm font-bold text-primary", ADMIN_NUMERIC_CN)}>
+                          {order.totalAmount.toLocaleString()} ฿
+                        </p>
+                      </div>
+                      </div>
+                    </div>
+                  </button>
+                  <OrderApprovalDetailPanel
+                    order={order}
+                    isExpanded={isExpanded}
+                    displayItems={getDisplayItems(order)}
+                    detailSortByCode={detailSortByCode}
+                    isManager={isManager}
+                    canEditDeliveryDate={isOffice}
+                    submittingId={submittingId}
+                    deliveryDatesByOutboundByOrder={deliveryDatesByOutboundByOrder}
+                    rejectReasonByOrderId={rejectReasonByOrderId}
+                    onCycleCodeSort={cycleCodeSort}
+                    onUpdateOrderItem={updateOrderItem}
+                    onSetDeliveryDatesByOutbound={setDeliveryDatesByOutboundByOrder}
+                    onSetRejectReason={setRejectReasonByOrderId}
+                    onHandleDecision={handleDecision}
+                    onSaveDeliveryDates={isOffice ? handleSaveDeliveryDates : undefined}
+                    savingDeliveryDatesId={savingDeliveryDatesId}
+                  />
+                </div>
+              )
+            })}
+          </div>
+          </>
         )}
 
-        {!loading && filteredOrders.length === 0 && (
-          <div className="py-16 text-center text-sm text-muted-foreground">
-            {t("orderNoData")}
-          </div>
+        {!loading && orders.length > 0 && filteredOrders.length === 0 && (
+          <LogisticsEmptyState
+            icon={Search}
+            title={t("orderNoData")}
+            className="border-0 bg-transparent"
+          />
         )}
       </div>
 
       <Dialog open={!!rejectReasonPopupOrder} onOpenChange={(open) => !open && setRejectReasonPopupOrder(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{t("reasonPh") || "사유"}</DialogTitle>
+            <DialogTitle>{t("reasonPh")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{rejectReasonPopupOrder?.rejectReason || "-"}</p>
         </DialogContent>

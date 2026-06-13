@@ -2,15 +2,13 @@
 
 import { appAlert } from "@/lib/app-message"
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmPageHero } from "@/components/crm/crm-shared-ui"
-import { MemberPointsPolicyTab } from "@/components/admin/member-points-policy-tab"
 import { MemberPointsSearchPanel } from "@/components/admin/member-points-search-panel"
 import { adjustMemberPoints, getMembers, type Member } from "@/lib/api-client"
 import { apiFetch } from "@/lib/api/fetch"
@@ -37,9 +35,8 @@ function formatPointKind(kind: string, t: ReturnType<typeof useT>): string {
 export default function MemberPointsPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const router = useRouter()
   const searchParams = useSearchParams()
-  const initialTab = searchParams.get("tab") === "policy" ? "policy" : "ledger"
-  const [tab, setTab] = React.useState(initialTab)
   const [selectedMember, setSelectedMember] = React.useState<Member | null>(null)
   const [deltaPoints, setDeltaPoints] = React.useState("0")
   const [note, setNote] = React.useState("")
@@ -92,9 +89,10 @@ export default function MemberPointsPage() {
   }, [searchParams])
 
   React.useEffect(() => {
-    const next = searchParams.get("tab") === "policy" ? "policy" : "ledger"
-    setTab(next)
-  }, [searchParams])
+    if (searchParams.get("tab") === "policy") {
+      router.replace("/admin/members/tiers")
+    }
+  }, [router, searchParams])
 
   const handleSelectMember = React.useCallback((member: Member) => {
     setSelectedMember(member)
@@ -115,13 +113,7 @@ export default function MemberPointsPage() {
         />
         <CrmSubnav />
 
-        <Tabs value={tab} onValueChange={setTab} className="mt-4 space-y-4">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="ledger">{t("memberPointsTabLedger")}</TabsTrigger>
-            <TabsTrigger value="policy">{t("memberPointsTabPolicy")}</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="ledger" className="mt-0">
+        <div className="mt-4">
             <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
               <div className="lg:sticky lg:top-4 lg:self-start">
                 <MemberPointsSearchPanel
@@ -300,12 +292,7 @@ export default function MemberPointsPage() {
                 )}
               </div>
             </div>
-          </TabsContent>
-
-          <TabsContent value="policy" className="mt-0">
-            <MemberPointsPolicyTab />
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
     </div>
   )

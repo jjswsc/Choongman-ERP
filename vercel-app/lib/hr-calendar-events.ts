@@ -13,6 +13,9 @@ export interface HrCalendarEvent {
   legalName?: string
   /** 입사 후 경과 연수 (1 = 첫돌) */
   anniversaryYears?: number
+  /** 직원 관리 딥링크용 */
+  employeeCode?: string
+  employeeName?: string
 }
 
 function parseYmd(s: string): { y: number; m: number; d: number } | null {
@@ -72,6 +75,10 @@ export function buildHrCalendarEvents(
     const nick = nickRaw || nameRaw || "—"
     const legalName = nameRaw && nickRaw && nameRaw !== nickRaw ? nameRaw : undefined
     const store = String(emp.store || "").trim() || "—"
+    const empLink = {
+      employeeCode: String(emp.employeeCode || "").trim() || undefined,
+      employeeName: nameRaw || undefined,
+    }
 
     const resign = String(emp.resign || "").trim()
     const resignParts = resign ? parseYmd(resign) : null
@@ -83,6 +90,7 @@ export function buildHrCalendarEvents(
         nick,
         store,
         legalName,
+        ...empLink,
       })
     }
 
@@ -100,6 +108,7 @@ export function buildHrCalendarEvents(
           nick,
           store,
           legalName,
+          ...empLink,
         })
       }
     }
@@ -121,6 +130,7 @@ export function buildHrCalendarEvents(
         nick,
         store,
         legalName,
+        ...empLink,
       })
       continue
     }
@@ -135,6 +145,7 @@ export function buildHrCalendarEvents(
           store,
           legalName,
           anniversaryYears: n,
+          ...empLink,
         })
       }
     }

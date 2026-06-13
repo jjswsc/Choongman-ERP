@@ -8,6 +8,10 @@ export const adminTabsRootScrollableCn =
 
 export const adminTabsBarCn = 'border-b border-border bg-muted/25'
 
+/** 긴 탭 콘텐츠 스크롤 시 탭바 상단 고정 */
+export const adminTabsBarStickyCn =
+  'sticky top-0 z-20 border-b border-border/80 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/90'
+
 export const adminTabsScrollCn =
   'overflow-x-auto overflow-y-hidden [scrollbar-width:thin]'
 

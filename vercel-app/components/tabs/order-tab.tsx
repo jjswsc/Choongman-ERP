@@ -524,12 +524,18 @@ export function OrderTab() {
         })
       }
 
+      const receiveIdempotencyKey =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `recv-${modal.orderId}-${Date.now()}`
+
       const res = await processOrderReceive({
         orderRowId: modal.orderId,
         imageUrls: uploadedImageUrls,
         isPartialReceive: isPartialRecv,
         inspectedIndices: inspectedIndices.length > 0 ? inspectedIndices : undefined,
         receivedQtys: receivedQtysMap,
+        idempotencyKey: receiveIdempotencyKey,
       })
 
       if (res && res.success === true) {

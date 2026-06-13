@@ -828,7 +828,7 @@ export default function MarketingMaterialsPage() {
 
   return (
     <MarketingPageShell>
-        <MarketingPageHero icon={Package} title={t("adminMarketingMaterials")} />
+        <MarketingPageHero icon={Package} title={t("adminMarketingMaterials")} description={t("marketingHeroDescMaterials")} />
         <div className="mb-4 flex rounded-lg border border-input bg-muted/30 p-1 text-sm font-medium">
           <button
             type="button"

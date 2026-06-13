@@ -127,10 +127,10 @@ function ReceivePhotoGallery({ urls, t }: { urls: string[]; t: (k: string) => st
           src={current}
           alt=""
           imgClassName="max-w-full max-h-[70vh] object-contain rounded"
-          rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-          rotateRightLabel={t("imageRotateRight") || "시계"}
-          zoomInLabel={t("att_zoom_in") || "확대"}
-          zoomOutLabel={t("att_zoom_out") || "축소"}
+          rotateLeftLabel={t("imageRotateLeft")}
+          rotateRightLabel={t("imageRotateRight")}
+          zoomInLabel={t("att_zoom_in")}
+          zoomOutLabel={t("att_zoom_out")}
         />
       </div>
       {urls.length > 1 && (
@@ -467,7 +467,7 @@ export default function OutboundPage() {
 
   const fetchWarehouseOutbound = React.useCallback(async () => {
     if (!whStart || !whEnd) {
-      await appAlert(t("visit_stats_date_hint") || "시작일과 종료일을 선택해 주세요.")
+      await appAlert(t("visit_stats_date_hint"))
       return
     }
     setWhLoading(true)
@@ -703,7 +703,7 @@ export default function OutboundPage() {
               const style = tdStyle(rowIdx++)
               return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;min-width:52px;width:52px;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
             })
-            const totalRowHtml = `<tr style="background:#fef2f2;"><td colspan="3" style="padding:10px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${escape(t("inv_total") || "Total")}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#dc2626;">${sumQty}</td><td colspan="2" style="padding:10px 12px;border:1px solid #e2e8f0;"></td></tr>`
+            const totalRowHtml = `<tr style="background:#fef2f2;"><td colspan="3" style="padding:10px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${escape(t("inv_total"))}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#dc2626;">${sumQty}</td><td colspan="2" style="padding:10px 12px;border:1px solid #e2e8f0;"></td></tr>`
             const tableHtml = `<div style="margin-bottom:20px;">
             <h4 style="margin:0 0 8px 0; font-size:1rem; font-weight:600; color:#334155;">${whLabel}: ${escape(whDisplay)} — ${escape(label)}</h4>
             <table style="${tableStyle}">
@@ -711,7 +711,7 @@ export default function OutboundPage() {
               <tbody>${storeRows.join("")}${totalRowHtml}</tbody>
             </table>
           </div>`
-            const pageLabel = (t("outWhPrintPageOf") || "페이지 %1/%2")
+            const pageLabel = t("outWhPrintPageOf")
               .replace("%1", String(pageNum))
               .replace("%2", String(totalPageCount))
             const pageFooterHtml = totalPageCount > 0
@@ -1107,12 +1107,12 @@ export default function OutboundPage() {
     if (deletingOutbound) return
     const sortedIdx = Array.from(selectedForPrint).sort((a, b) => a - b)
     if (sortedIdx.length === 0) {
-      await appAlert(t("outSelectForDelete") || "삭제할 출고를 체크하세요.")
+      await appAlert(t("outSelectForDelete"))
       return
     }
     const selectedRows = sortedIdx.map((i) => shipmentTableRows[i]).filter(Boolean)
     if (selectedRows.length === 0) {
-      await appAlert(t("outSelectForDelete") || "삭제할 출고를 체크하세요.")
+      await appAlert(t("outSelectForDelete"))
       return
     }
     const jobs: OutboundDeleteJob[] = []
@@ -1147,7 +1147,7 @@ export default function OutboundPage() {
           ...(j.mode === "force" && j.stockLogIds?.length ? { stockLogIds: j.stockLogIds } : {}),
         })
         if (!preview?.success) {
-          await appAlert(translateApiMessage(preview?.message, t) || preview?.message || "삭제 대상 조회에 실패했습니다.")
+          await appAlert(translateApiMessage(preview?.message, t) || preview?.message || t("outDeletePreviewFailed"))
           return
         }
         if (preview.orderCancelWithoutOutboundLogs) anyOrderCancelOnly = true
@@ -1218,7 +1218,7 @@ export default function OutboundPage() {
           const conflictMsg = (result.conflicts || []).map((c) => `- ${c.message}`).join("\n")
           await appAlert(
             [
-              translateApiMessage(result.message, t) || result.message || "삭제 실패",
+              translateApiMessage(result.message, t) || result.message || t("outDeleteFailed"),
               `${j.target} / ${j.mode === "order" ? t("outTypeOrder") : t("outTypeForce")}`,
               conflictMsg,
             ]
@@ -1557,7 +1557,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       await appAlert(t("outNoData"))
       return
     }
-    const headers = [t("vendor"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total") || "Total"]
+    const headers = [t("vendor"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total")]
     const rows = summaryByTarget.map((row) => {
       const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
       return [
@@ -1568,7 +1568,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         String(vat.grandTotal),
       ]
     })
-    const summaryRow = [t("inv_total") || "Total", String(summaryTargetTotals.qty), String(summaryTargetTotals.amount), String(summaryTargetTotals.vat), String(summaryTargetTotals.total)]
+    const summaryRow = [t("inv_total"), String(summaryTargetTotals.qty), String(summaryTargetTotals.amount), String(summaryTargetTotals.vat), String(summaryTargetTotals.total)]
     downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_vendor")
   }, [summaryByTarget, summaryTargetTotals, downloadSummaryExcel, t])
 
@@ -1577,7 +1577,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       await appAlert(t("outNoData"))
       return
     }
-    const headers = [t("outSummaryMenuCol"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total") || "Total"]
+    const headers = [t("outSummaryMenuCol"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total")]
     const rows = summaryByMenu.map((row) => {
       const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
       return [
@@ -1588,7 +1588,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         String(vat.grandTotal),
       ]
     })
-    const summaryRow = [t("inv_total") || "Total", String(summaryMenuTotals.qty), String(summaryMenuTotals.amount), String(summaryMenuTotals.vat), String(summaryMenuTotals.total)]
+    const summaryRow = [t("inv_total"), String(summaryMenuTotals.qty), String(summaryMenuTotals.amount), String(summaryMenuTotals.vat), String(summaryMenuTotals.total)]
     downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_menu")
   }, [summaryByMenu, summaryMenuTotals, downloadSummaryExcel, t])
 
@@ -1610,7 +1610,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       t("outColQty"),
       t("inColAmount"),
       t("inv_vat7"),
-      t("inv_total") || "Total",
+      t("inv_total"),
     ]
     const dataRows: string[][] = []
     let sumAmount = 0
@@ -1655,7 +1655,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         ])
       }
     }
-    const summaryLabel = t("inv_total") || "Total"
+    const summaryLabel = t("inv_total")
     const summaryRow = headers.map(() => "")
     summaryRow[0] = summaryLabel
     summaryRow[9] = String(sumAmount)
@@ -1749,7 +1749,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))
       const printWindow = window.open("/admin/invoice-print", "_blank")
       if (!printWindow) {
-        await appAlert(t("invLoadFailed") + "\n\n" + (t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+        await appAlert(t("invLoadFailed") + "\n\n" + t("outPrintPopoverBlocked"))
         return
       }
       printWindow.focus()
@@ -2384,15 +2384,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       className="h-9"
                     />
                     <p className="text-xs text-muted-foreground">
-                      {histMonth
-                        ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
-                        : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
+                      {histMonth ? t("adminMonthFilterActiveHint") : t("adminMonthFilterManualHint")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Button type="button" variant="outline" onClick={pickCurrentSummaryMonth}>
-                        {t("thisMonth") || "이번 달"}
+                        {t("thisMonth")}
                       </Button>
                       <Button type="button" variant="outline" onClick={clearSummaryMonth}>
                         {t("all")}
@@ -2400,7 +2398,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     </div>
                     <div className="flex items-center gap-2">
                       <Button type="button" variant="outline" onClick={() => setSummaryMonthDialogOpen(false)}>
-                        {t("cancel") || "Cancel"}
+                        {t("cancel")}
                       </Button>
                       <Button type="button" onClick={applySummaryMonth}>
                         {t("btn_query")}
@@ -2445,7 +2443,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                             </button>
                           </th>
                           <th className="py-2 px-2 text-right">{t("inv_vat7")}</th>
-                          <th className="py-2 px-2 text-right">{t("inv_total") || "Total"}</th>
+                          <th className="py-2 px-2 text-right">{t("inv_total")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2472,7 +2470,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         )}
                         {summaryByTarget.length > 0 && (
                           <tr className="sticky bottom-0 bg-muted/90 border-t-2">
-                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
+                            <td className="py-2 px-2 font-semibold">{t("inv_total")}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.qty.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.amount.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.vat.toLocaleString()}</td>
@@ -2518,7 +2516,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                             </button>
                           </th>
                           <th className="py-2 px-2 text-right">{t("inv_vat7")}</th>
-                          <th className="py-2 px-2 text-right">{t("inv_total") || "Total"}</th>
+                          <th className="py-2 px-2 text-right">{t("inv_total")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2549,7 +2547,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         )}
                         {summaryByMenu.length > 0 && (
                           <tr className="sticky bottom-0 bg-muted/90 border-t-2">
-                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
+                            <td className="py-2 px-2 font-semibold">{t("inv_total")}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.qty.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.amount.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.vat.toLocaleString()}</td>

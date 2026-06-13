@@ -16,6 +16,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   buildFinancialStatementFranchiseStoreOptions,
+  isFinancialStatementStoreNone,
   resolveFinancialStatementStoreLabel,
 } from "@/lib/financial-statement-store-options"
 import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
@@ -233,6 +234,13 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
 
   const runBalanceFetch = React.useCallback(() => {
     const fetchSeq = ++balanceFetchSeqRef.current
+    if (isFinancialStatementStoreNone(queryStoreFilter)) {
+      setLoading(false)
+      setData(null)
+      setCompareBalanceRows([])
+      setFetchError(t("salesSelectStoreHint") || "매장을 선택하세요.")
+      return
+    }
     const sf = queryStoreFilter !== "All" ? queryStoreFilter : undefined
     const months = periodMonths
     setFetchError(null)

@@ -23,6 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/app/admin/items/page"
 
@@ -107,10 +109,10 @@ export function ItemTable({
         </Select>
         <Select value={outboundFilter} onValueChange={setOutboundFilter}>
           <SelectTrigger className="h-9 w-36 text-xs">
-            <SelectValue placeholder={t("outWhWarehouseCol") || "출고지"} />
+            <SelectValue placeholder={t("outWhWarehouseCol")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("outWhWarehouseAll") || "전체"}</SelectItem>
+            <SelectItem value="all">{t("outWhWarehouseAll")}</SelectItem>
             {outboundOptions.map((loc) => (
               <SelectItem key={loc} value={loc}>
                 {loc}
@@ -143,21 +145,29 @@ export function ItemTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[160px] text-center">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center" title={t("itemsListPriceCostBasis") || "공급가(부가세 제외) 기준"}>{t("itemsColPrice")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center" title={t("itemsListPriceCostBasis")}>{t("itemsColPrice")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
           </thead>
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {t("itemsSearchHint")}
+                <td colSpan={6} className="p-0">
+                  <LogisticsEmptyState
+                    icon={Search}
+                    title={t("itemsSearchHint")}
+                    className="border-0 bg-transparent py-10"
+                  />
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {t("itemsNoResults")}
+                <td colSpan={6} className="p-0">
+                  <LogisticsEmptyState
+                    icon={ListFilter}
+                    title={t("itemsNoResults")}
+                    className="border-0 bg-transparent py-10"
+                  />
                 </td>
               </tr>
             ) : (
@@ -199,7 +209,7 @@ export function ItemTable({
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <span className="text-xs tabular-nums text-foreground">
+                    <span className={cn("text-xs text-foreground", ADMIN_NUMERIC_CN)}>
                       {product.price > 0 ? product.price.toLocaleString() : "-"}
                     </span>
                   </td>
@@ -212,11 +222,11 @@ export function ItemTable({
                           className={cn(
                             "h-7 w-7",
                             product.orderDisabled
-                              ? "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-                              : "text-amber-600 border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+                              ? "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
+                              : "text-amber-600 border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
                           )}
                           onClick={() => onToggleOrderDisabled(product)}
-                          title={product.orderDisabled ? (t("itemsOrderResume") || "재개") : (t("itemsOrderDisabled") || "발주 중지")}
+                          title={product.orderDisabled ? t("itemsOrderResume") : t("itemsOrderDisabled")}
                         >
                           {product.orderDisabled ? (
                             <PlayCircle className="h-3.5 w-3.5" />
@@ -230,7 +240,7 @@ export function ItemTable({
                         size="icon"
                         className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                         onClick={() => onEdit(product)}
-                        title={t("itemsBtnEdit") || "수정"}
+                        title={t("itemsBtnEdit")}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -239,7 +249,7 @@ export function ItemTable({
                         size="icon"
                         className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onDelete(product)}
-                        title={t("itemsBtnDelete") || "삭제"}
+                        title={t("itemsBtnDelete")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -275,8 +285,8 @@ export function ItemTable({
                 referrerPolicy="no-referrer"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
-                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-                rotateRightLabel={t("imageRotateRight") || "시계"}
+                rotateLeftLabel={t("imageRotateLeft")}
+                rotateRightLabel={t("imageRotateRight")}
               />
             )}
             <Button

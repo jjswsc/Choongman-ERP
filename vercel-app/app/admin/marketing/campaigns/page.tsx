@@ -45,6 +45,15 @@ import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import {
   defaultMarketingMaterialTypeOptions,
   loadMarketingMaterialTypeOptions,
@@ -1381,7 +1390,11 @@ export default function MarketingCampaignsPage() {
 
   return (
     <MarketingPageShell maxWidthClass={hubTab === "compare" ? "max-w-7xl" : "max-w-4xl"}>
-        <MarketingPageHero icon={Megaphone} title={tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")} />
+        <MarketingPageHero
+          icon={Megaphone}
+          title={tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")}
+          description={t("marketingHeroDescCampaigns")}
+        />
 
         {/* 툴바 */}
         <div className="mb-4 flex flex-wrap gap-2">
@@ -1407,46 +1420,33 @@ export default function MarketingCampaignsPage() {
         {showSimulator && <PromoSetSimulator onClose={() => setShowSimulator(false)} />}
 
         {/* 등록·수정 / 목록 / A·B 비교 */}
-        <div className="mb-4 flex rounded-lg border bg-muted/30 p-1 text-sm font-medium">
-          <button
-            type="button"
-            onClick={() => navigateHubTab("form")}
-            className={cn(
-              "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md py-2.5 transition-colors",
-              hubTab === "form" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ClipboardPen className="h-4 w-4 shrink-0" />
-            <span className="truncate">{tr("등록·수정", "Create / Edit", "สร้าง / แก้ไข")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateHubTab("list")}
-            className={cn(
-              "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md py-2.5 transition-colors",
-              hubTab === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <List className="h-4 w-4 shrink-0" />
-            <span className="truncate">{tr("목록", "List", "รายการ")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateHubTab("compare")}
-            className={cn(
-              "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md py-2.5 transition-colors",
-              hubTab === "compare" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <GitCompare className="h-4 w-4 shrink-0" />
-            <span className="truncate">{tr("A/B 비교", "A/B Compare", "เปรียบเทียบ A/B")}</span>
-          </button>
-        </div>
+        <Tabs
+          value={hubTab}
+          onValueChange={(v) => navigateHubTab(v as "form" | "list" | "compare")}
+          className={adminTabsRootCn}
+        >
+          <div className={cn(adminTabsBarCn, "px-2 py-2.5 sm:px-4")}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="form" className={adminTabsTriggerCn}>
+                  <ClipboardPen className="mr-1.5 h-4 w-4 shrink-0" />
+                  {tr("등록·수정", "Create / Edit", "สร้าง / แก้ไข")}
+                </TabsTrigger>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
+                  <List className="mr-1.5 h-4 w-4 shrink-0" />
+                  {tr("목록", "List", "รายการ")}
+                </TabsTrigger>
+                <TabsTrigger value="compare" className={adminTabsTriggerCn}>
+                  <GitCompare className="mr-1.5 h-4 w-4 shrink-0" />
+                  {tr("A/B 비교", "A/B Compare", "เปรียบเทียบ A/B")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
         <div className="space-y-4">
 
-          {hubTab === "form" && (
-          <>
+          <TabsContent value="form" className={adminTabsContentCn}>
           {/* ── 캠페인 기본 정보 폼 ─────────────────────────────────────────── */}
           <div className="rounded-xl border bg-card p-4">
             <h3 className="mb-3 text-sm font-semibold">
@@ -2628,11 +2628,9 @@ export default function MarketingCampaignsPage() {
             </div>
           )}
 
-          </>
-          )}
+          </TabsContent>
 
-          {hubTab === "list" && (
-          <>
+          <TabsContent value="list" className={adminTabsContentCn}>
           {/* ── 캠페인 목록 (필터 + 검색 + 행별 연결 메뉴) ───────────────────────────── */}
           <div className="rounded-xl border bg-card">
             {listLoadError && (
@@ -3103,12 +3101,14 @@ export default function MarketingCampaignsPage() {
               ))}
             </div>
           </div>
-          </>
-          )}
+          </TabsContent>
 
-          {hubTab === "compare" && <CampaignAbComparePanel />}
+          <TabsContent value="compare" className={adminTabsContentCn}>
+            <CampaignAbComparePanel />
+          </TabsContent>
 
         </div>
+        </Tabs>
     </MarketingPageShell>
   )
 }

@@ -5,6 +5,10 @@ import { Search, Printer, Download, FileX, CalendarIcon, Store, Trash2 } from "l
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { Input } from "@/components/ui/input"
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -176,32 +180,31 @@ export function ShipmentFilterBar({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Period */}
+    <div className="space-y-2">
+    <AdminFilterBar className="items-end">
+        <AdminFilterField label={t("outFilterPeriod")}>
         <div className="flex items-center gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-            {t("outFilterPeriod")}
-          </label>
-          <input
+          <Input
             type="date"
             value={histStart}
             onChange={(e) => onHistStartChange(e.target.value)}
-            className="h-8 w-[110px] rounded border border-input bg-card px-2 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-9 w-[130px] text-xs"
           />
-          <input
+          <span className="text-xs text-muted-foreground">~</span>
+          <Input
             type="date"
             value={histEnd}
             onChange={(e) => onHistEndChange(e.target.value)}
-            className="h-8 w-[110px] rounded border border-input bg-card px-2 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-9 w-[130px] text-xs"
           />
         </div>
+        </AdminFilterField>
 
-        {/* Monthly */}
+        <AdminFilterField label={t("outFilterMonth")}>
         <button
           type="button"
           onClick={handleOpenMonthDialog}
-          className={`h-8 rounded border px-3 text-xs font-medium transition-colors ${
+          className={`h-9 rounded-md border px-3 text-xs font-medium transition-colors ${
             histMonth
               ? "border-primary bg-primary/10 text-primary hover:bg-primary/20"
               : "border-input bg-card text-card-foreground hover:bg-accent"
@@ -210,6 +213,7 @@ export function ShipmentFilterBar({
           {t("outFilterMonth")}
           {histMonth ? ` (${histMonth})` : ""}
         </button>
+        </AdminFilterField>
 
         {isOffice && (
           <>
@@ -260,7 +264,7 @@ export function ShipmentFilterBar({
                       setIsStoreDropdownOpen(true)
                     }}
                     onFocus={() => setIsStoreDropdownOpen(true)}
-                    placeholder={t("outStoreSearchPh") || `${t("outFilterStore")} 검색`}
+                    placeholder={t("outStoreSearchPh")}
                     className="h-8 w-[160px] rounded border border-input bg-card px-2 pr-8 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                   <Store className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -269,7 +273,7 @@ export function ShipmentFilterBar({
                   type="button"
                   onClick={() => (histStore ? handleStoreClear() : setIsStoreDropdownOpen(!isStoreDropdownOpen))}
                   className="h-8 px-2 rounded border border-input bg-card text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  title={histStore ? t("outFilterStoreAll") : (isStoreDropdownOpen ? "닫기" : "열기")}
+                  title={histStore ? t("outFilterStoreAll") : (isStoreDropdownOpen ? t("adminUiClose") : t("adminUiOpen"))}
                 >
                   {histStore ? "×" : (isStoreDropdownOpen ? "▲" : "▼")}
                 </button>
@@ -284,7 +288,7 @@ export function ShipmentFilterBar({
                     {t("outFilterStoreAll")}
                   </button>
                   {filteredStores.length === 0 ? (
-                    <div className="px-3 py-4 text-xs text-muted-foreground text-center">{t("outNoStoreMatch") || "검색 결과 없음"}</div>
+                    <div className="px-3 py-4 text-xs text-muted-foreground text-center">{t("outNoStoreMatch")}</div>
                   ) : (
                     filteredStores.map((s) => (
                       <button
@@ -391,25 +395,23 @@ export function ShipmentFilterBar({
 
         {/* Total */}
         <div className="ml-auto text-right">
-          <span className="text-sm font-bold text-[#16A34A]">
+          <span className={cn("text-sm font-bold text-emerald-600 dark:text-emerald-400", ADMIN_NUMERIC_CN)}>
             {t("outPeriodTotal")}: {totalAmount}
           </span>
           {totalVatAmount ? (
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className={cn("text-xs font-medium text-muted-foreground", ADMIN_NUMERIC_CN)}>
               {t("inv_vat7")}: {totalVatAmount}
             </p>
           ) : null}
           {totalWithVatAmount ? (
-            <p className="text-xs font-semibold text-foreground">
-              {t("inv_total") || "Total"}: {totalWithVatAmount}
+            <p className={cn("text-xs font-semibold text-foreground", ADMIN_NUMERIC_CN)}>
+              {t("inv_total")}: {totalWithVatAmount}
             </p>
           ) : null}
         </div>
-      </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        {histMonth
-          ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
-          : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
+    </AdminFilterBar>
+      <p className="text-[11px] text-muted-foreground px-1">
+        {histMonth ? t("adminMonthFilterActiveHint") : t("adminMonthFilterManualHint")}
       </p>
 
       <Dialog open={isMonthDialogOpen} onOpenChange={setIsMonthDialogOpen}>
@@ -420,11 +422,11 @@ export function ShipmentFilterBar({
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">{t("inMonthHint")}</label>
             <div className="relative">
-              <input
+              <Input
                 type="month"
                 value={draftMonth}
                 onChange={(e) => setDraftMonth(e.target.value)}
-                className="h-9 w-full rounded border border-input bg-card px-2 pr-8 text-sm text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="h-9 pr-8"
               />
               <CalendarIcon className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             </div>
@@ -432,7 +434,7 @@ export function ShipmentFilterBar({
           <DialogFooter className="gap-2 sm:justify-between">
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" onClick={handlePickCurrentMonth}>
-                {t("thisMonth") || "이번 달"}
+                {t("thisMonth")}
               </Button>
               <Button type="button" variant="outline" onClick={handleClearMonth}>
                 {t("all")}
@@ -440,7 +442,7 @@ export function ShipmentFilterBar({
             </div>
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" onClick={() => setIsMonthDialogOpen(false)}>
-                {t("cancel") || "Cancel"}
+                {t("cancel")}
               </Button>
               <Button type="button" onClick={handleApplyMonth}>
                 {t("btn_query")}

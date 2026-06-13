@@ -6,7 +6,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search, Copy, Megaphone } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search, Copy, Megaphone, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -100,6 +100,8 @@ import { cn } from "@/lib/utils"
 import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
 import { PosSetMenuTabWorkspace } from "@/components/erp/pos-set-menu-tab-workspace"
 import { PosSetMenuInquiryTab } from "@/components/erp/pos-set-menu-inquiry-tab"
+import { AdminEmptyState } from "@/components/erp/admin-empty-state"
+import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
 import { PosStoreFinalPriceSettings } from "@/components/erp/pos-store-final-price-settings"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
 import { PriceScheduleTab } from "@/components/erp/price-schedule-tab"
@@ -4376,11 +4378,6 @@ export default function PosMenusPage() {
           </DialogContent>
         </Dialog>
 
-        {loading && (
-          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-            {t("loading")}
-          </div>
-        )}
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
@@ -4409,7 +4406,7 @@ export default function PosMenusPage() {
                   {t("posPricingTab") || "최종가격"}
                 </TabsTrigger>
                 <TabsTrigger value="deliveryOps" className={adminTabsTriggerCn}>
-                  <Monitor className={adminTabsIconCn} aria-hidden />
+                  <Truck className={adminTabsIconCn} aria-hidden />
                   {t("posMenuTabDeliveryOps") || "배달앱 운영"}
                 </TabsTrigger>
               </TabsList>
@@ -5395,6 +5392,9 @@ export default function PosMenusPage() {
           </div>
 
           {/* Table */}
+          {loading ? (
+            <AdminTableSkeleton columns={7} rows={12} />
+          ) : (
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
               <h3 className="text-sm font-bold">{t("posMenuList") || "메뉴 목록"}</h3>
@@ -5522,8 +5522,12 @@ export default function PosMenusPage() {
                 <tbody>
                   {filteredMenus.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                        {t("itemsNoResults")}
+                      <td colSpan={7} className="p-0">
+                        <AdminEmptyState
+                          icon={UtensilsCrossed}
+                          title={t("itemsNoResults")}
+                          className="border-0 bg-transparent"
+                        />
                       </td>
                     </tr>
                   ) : (
@@ -5698,6 +5702,7 @@ export default function PosMenusPage() {
               </table>
             </div>
           </div>
+          )}
         </div>
           </TabsContent>
           <TabsContent value="optionsConfig" className={adminTabsContentCn}>

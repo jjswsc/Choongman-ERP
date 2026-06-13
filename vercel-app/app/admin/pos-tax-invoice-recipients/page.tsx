@@ -111,8 +111,8 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-4">
-      <div className="mx-auto max-w-6xl space-y-4">
+    <div className="flex-1 overflow-auto">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <FileText className="h-5 w-5 text-primary" />

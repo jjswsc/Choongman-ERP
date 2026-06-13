@@ -1,6 +1,8 @@
 "use client"
 
 import { AdminChartOfAccounts } from "@/components/admin/admin-chart-of-accounts"
+import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
+import { AccountingWorkflowLinks } from "@/components/erp/accounting-workflow-links"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { GitBranch } from "lucide-react"
@@ -8,16 +10,14 @@ import { GitBranch } from "lucide-react"
 export default function ChartOfAccountsPage() {
   const t = useT(useLang().lang)
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <GitBranch className="h-4 w-4 text-primary" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">{t("adminChartOfAccounts")}</h1>
-        </div>
-        <AdminChartOfAccounts />
-      </div>
-    </div>
+    <AccountingPageShell
+      icon={GitBranch}
+      title={t("adminChartOfAccounts")}
+      subtitle={t("adminChartOfAccountsSub")}
+      maxWidthClass="max-w-5xl"
+    >
+      <AccountingWorkflowLinks context="coa" />
+      <AdminChartOfAccounts />
+    </AccountingPageShell>
   )
 }

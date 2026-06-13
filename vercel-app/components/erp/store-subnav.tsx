@@ -2,26 +2,27 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BarChart3, Layers, LayoutDashboard, Radio } from "lucide-react"
+import { ClipboardCheck, LayoutDashboard, MapPin, MessageSquareWarning, Wrench } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const ITEMS = [
-  { href: "/admin/live-store-sales", titleKey: "adminLiveStoreSales" as const, icon: Radio },
-  { href: "/admin/ops-center", titleKey: "adminOpsCenter" as const, icon: LayoutDashboard },
-  { href: "/admin/sales-management", titleKey: "adminSalesManagement" as const, icon: BarChart3 },
-  { href: "/admin/total-sales", titleKey: "adminTotalSales" as const, icon: Layers },
+  { href: "/admin/store-ops", titleKey: "adminStoreOps" as const, icon: LayoutDashboard },
+  { href: "/admin/store-check", titleKey: "adminStoreCheck" as const, icon: ClipboardCheck },
+  { href: "/admin/store-visit", titleKey: "adminStoreVisit" as const, icon: MapPin },
+  { href: "/admin/store-repairs", titleKey: "adminStoreRepairs" as const, icon: Wrench },
+  { href: "/admin/complaints", titleKey: "adminComplaints" as const, icon: MessageSquareWarning },
 ] as const
 
-export function SalesSubnav() {
+export function StoreSubnav() {
   const pathname = usePathname()
   const t = useT(useLang().lang)
 
   return (
     <nav
       className="flex flex-wrap gap-1 border-b border-border/60 pb-3"
-      aria-label={t("salesSubnavAria")}
+      aria-label={t("storeSubnavAria")}
     >
       {ITEMS.map(({ href, titleKey, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`)

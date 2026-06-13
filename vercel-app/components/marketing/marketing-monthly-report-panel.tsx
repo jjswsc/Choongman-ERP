@@ -13,6 +13,7 @@ import {
   type MarketingCampaign,
 } from "@/lib/api-client"
 import { marketingCampaignTouchesClosedDateRange } from "@/lib/marketing-campaign-periods"
+import { getBangkokMonthRange } from "@/lib/bangkok-time"
 
 function campaignListLabel(c: MarketingCampaign) {
   const no = (c.campaignNo ?? "").trim()
@@ -28,7 +29,7 @@ export function MarketingMonthlyReportPanel({ campaignIdFromQuery = "" }: Market
   const t = useT(lang)
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [campaignFilter, setCampaignFilter] = React.useState("")
-  const [month, setMonth] = React.useState(() => new Date().toISOString().slice(0, 7))
+  const [month, setMonth] = React.useState(() => getBangkokMonthRange().yearMonth)
   const [loading, setLoading] = React.useState(false)
   const [summary, setSummary] = React.useState<{
     campaigns: number

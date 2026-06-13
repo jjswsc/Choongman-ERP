@@ -88,11 +88,16 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
   const clearScope = () => onChange({ menuIds: [], categoryCodes: [] })
 
   return (
-    <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">{t("crmCouponScopeTitle") || "적용 메뉴"}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+    <section className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm ring-1 ring-black/[0.02]">
+      <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="h-4 w-1 shrink-0 rounded-full bg-indigo-500" aria-hidden />
+            <h3 className="text-sm font-semibold tracking-tight text-foreground">
+              {t("crmCouponScopeTitle") || "적용 메뉴"}
+            </h3>
+          </div>
+          <p className="mt-1.5 pl-3 text-xs leading-relaxed text-muted-foreground">
             {t("crmCouponScopeHint") || "비워 두면 전체 주문에 적용됩니다. 메뉴 또는 카테고리를 선택하세요."}
           </p>
         </div>
@@ -103,7 +108,9 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
         ) : null}
       </div>
 
-      <p className="text-xs font-medium text-indigo-800">{summary}</p>
+      <p className="rounded-lg border border-indigo-200/70 bg-indigo-50/60 px-3 py-2 text-xs font-medium text-indigo-900">
+        {summary}
+      </p>
 
       {value.menuIds.length > 0 ? (
         <div className="flex flex-wrap gap-1">
@@ -162,7 +169,7 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           {t("crmCouponScopeShowInactive") || "비활성 메뉴 포함"}
         </label>
-        <div className="mt-2 max-h-52 overflow-y-auto rounded-md border bg-background">
+        <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border bg-muted/20">
           {loading ? (
             <p className="p-3 text-xs text-muted-foreground">{t("loading") || "불러오는 중…"}</p>
           ) : visibleMenus.length === 0 ? (
@@ -202,6 +209,6 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
           </p>
         ) : null}
       </div>
-    </div>
+    </section>
   )
 }

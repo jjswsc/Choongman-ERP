@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n"
 import {
   decodeFinancialStatementStoreFilter,
   encodeFinancialStatementStoreFilter,
+  isFinancialStatementStoreNone,
   normalizeFinancialStatementStoreCodes,
   type FinancialStatementStoreOption,
 } from "@/lib/financial-statement-store-options"
@@ -78,11 +79,11 @@ export function FinancialStatementStorePicker({
 
   const summaryLabel = React.useMemo(() => {
     if (decoded.officeSelected) return t("pettyScopeOffice") || "본사"
+    if (isFinancialStatementStoreNone(value) || decoded.selectedFranchiseStores.length === 0) {
+      return t("salesStoreDeselectAll") || "선택 없음"
+    }
     if (value === "All" || decoded.selectedFranchiseStores.length === franchiseCodes.length) {
       return allLabel
-    }
-    if (decoded.selectedFranchiseStores.length === 0) {
-      return t("salesStoreDeselectAll") || "선택 없음"
     }
     if (decoded.selectedFranchiseStores.length === 1) {
       const code = decoded.selectedFranchiseStores[0]!
@@ -136,7 +137,9 @@ export function FinancialStatementStorePicker({
               size="sm"
               variant="outline"
               className={ADMIN_BTN_XS_CN}
-              onClick={() => applySelection({ selectedFranchiseStores: [], officeSelected: false })}
+              onClick={() =>
+                applySelection({ selectedFranchiseStores: [...franchiseCodes], officeSelected: false })
+              }
             >
               {allLabel}
             </Button>
@@ -225,6 +228,9 @@ export function resolveFinancialStatementPickerLabel(
   t: (key: string) => string,
   opts?: { franchiseAggregateAll?: boolean }
 ): string {
+  if (isFinancialStatementStoreNone(storeFilter)) {
+    return t("salesStoreDeselectAll") || "선택 없음"
+  }
   if (storeFilter === "All") {
     return opts?.franchiseAggregateAll
       ? t("store_all_my_franchise_stores") || t("salesSelectMyFranchiseStoresAll") || "내 매장 전체"

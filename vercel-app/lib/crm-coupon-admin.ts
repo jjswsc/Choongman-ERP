@@ -1,6 +1,6 @@
 import type { PosCoupon } from '@/lib/api-client'
 
-export type CrmCouponAdminTab = 'definitions' | 'issue' | 'history'
+export type CrmCouponAdminTab = 'definitions' | 'issue' | 'history' | 'campaigns' | 'stamp'
 
 export type MemberCouponIssueRow = {
   id: number
@@ -24,7 +24,7 @@ export type MemberCouponIssueRow = {
 
 export function parseCrmCouponAdminTab(raw: string | null | undefined): CrmCouponAdminTab {
   const s = String(raw || '').trim().toLowerCase()
-  if (s === 'issue' || s === 'history' || s === 'definitions') return s
+  if (s === 'issue' || s === 'history' || s === 'definitions' || s === 'campaigns' || s === 'stamp') return s
   return 'definitions'
 }
 

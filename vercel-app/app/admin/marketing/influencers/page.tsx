@@ -555,7 +555,7 @@ export default function MarketingInfluencersPage() {
 
   return (
     <MarketingPageShell maxWidthClass="max-w-6xl">
-        <MarketingPageHero icon={Users} title={t("adminMarketingInfluencers")} />
+        <MarketingPageHero icon={Users} title={t("adminMarketingInfluencers")} description={t("marketingHeroDescInfluencers")} />
         {campaignIdFromQuery && (
           <div className="mb-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-foreground/90">
             {t("marketingHubFilteredAutoLinkNew")}

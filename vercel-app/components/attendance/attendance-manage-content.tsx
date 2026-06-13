@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { HrSubnav } from "@/components/hr/hr-subnav"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
@@ -465,13 +466,14 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   return (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        {!readOnly ? <HrSubnav /> : null}
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Clock className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminAttendance")}</h1>
-            <p className="text-xs text-muted-foreground">{t("tab_att_status")}</p>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("adminAttendance")}</h1>
+            <p className="text-sm text-muted-foreground">{t("adminAttendanceSub")}</p>
             {readOnly && (
               <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2 py-1.5">
                 {t("posAttendanceReadOnlyHint")}

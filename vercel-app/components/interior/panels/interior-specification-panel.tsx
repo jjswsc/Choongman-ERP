@@ -118,7 +118,7 @@ export function InteriorSpecificationPanel({ projectId }: { projectId: string })
                 <Input value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} placeholder={t("interiorSpecContentPh")} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground">{t("posMenuCode")}</label>
+                <label className="text-xs text-muted-foreground">{t("interiorMaterialCode")}</label>
                 <Input value={editing.code || ""} onChange={(e) => setEditing({ ...editing, code: e.target.value })} />
               </div>
               <div>
@@ -151,7 +151,7 @@ export function InteriorSpecificationPanel({ projectId }: { projectId: string })
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("interiorDescription")}</TableHead>
-                  <TableHead className="w-24">{t("posMenuCode")}</TableHead>
+                  <TableHead className="w-24">{t("interiorMaterialCode")}</TableHead>
                   <TableHead className="w-24">{t("interiorSizeMm")}</TableHead>
                   <TableHead className="w-28">{t("interiorSupplier")}</TableHead>
                   <TableHead className="w-28">{t("interiorLocation")}</TableHead>

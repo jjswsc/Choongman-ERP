@@ -4,7 +4,24 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
-import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2, Printer, Copy } from "lucide-react"
+import {
+  Receipt,
+  Search,
+  ChevronDown,
+  Pencil,
+  Plus,
+  Trash2,
+  Printer,
+  Copy,
+  Timer,
+  Link2,
+  Radio,
+  ScrollText,
+  CheckCircle2,
+  Banknote,
+  Clock,
+  XCircle,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -55,10 +72,15 @@ import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import {
   adminTabsContentFlushCn,
+  adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { AdminEmptyState } from "@/components/erp/admin-empty-state"
+import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
+import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { cn, escapeHtml } from "@/lib/utils"
 import {
   ADMIN_BADGE_BASE_CN,
@@ -68,6 +90,7 @@ import {
   ADMIN_BADGE_WARNING_CN,
   ADMIN_BTN_XS_CN,
   ADMIN_DIALOG_SCROLL_CN,
+  ADMIN_NUMERIC_CN,
 } from "@/lib/admin-ui-standards"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
@@ -1534,255 +1557,276 @@ export default function PosOrdersPage() {
           </div>
         </div>
 
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Input
-              type="date"
-              value={startStr}
-              onChange={(e) => setStartStr(e.target.value)}
-              className="h-9 w-40 text-sm"
-            />
-            <span className="text-muted-foreground">~</span>
-            <Input
-              type="date"
-              value={endStr}
-              onChange={(e) => setEndStr(e.target.value)}
-              className="h-9 w-40 text-sm"
-            />
-            <Button
-              variant={isToday ? "secondary" : "outline"}
-              size="sm"
-              className="h-9 px-3 text-xs"
-              onClick={() => {
-                const d = new Date().toISOString().slice(0, 10)
-                setStartStr(d)
-                setEndStr(d)
-              }}
-            >
-              {t("posToday") || "오늘"}
+        <AdminFilterBar className="mb-4 flex-col items-stretch gap-0 overflow-hidden p-0">
+          <div className="flex flex-wrap items-end gap-3 border-b border-border/60 p-4">
+            <AdminFilterField label={t("posFilterPeriod") || "조회 기간"}>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={startStr}
+                  onChange={(e) => setStartStr(e.target.value)}
+                  className="h-9 w-[9.5rem] text-sm"
+                />
+                <span className="text-muted-foreground">~</span>
+                <Input
+                  type="date"
+                  value={endStr}
+                  onChange={(e) => setEndStr(e.target.value)}
+                  className="h-9 w-[9.5rem] text-sm"
+                />
+                <Button
+                  variant={isToday ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-9 px-3 text-xs"
+                  onClick={() => {
+                    const d = new Date().toISOString().slice(0, 10)
+                    setStartStr(d)
+                    setEndStr(d)
+                  }}
+                >
+                  {t("posToday") || "오늘"}
+                </Button>
+              </div>
+            </AdminFilterField>
+            {canSearchAll ? (
+              <AdminFilterField label={t("store") || "매장"}>
+                <Select value={storeFilter} onValueChange={setStoreFilter}>
+                  <SelectTrigger className="h-9 w-[min(12rem,42vw)] min-w-[7rem] text-sm">
+                    <SelectValue placeholder={t("store") || "매장"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">{t("posStatusAll") || "전체"}</SelectItem>
+                    {stores.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </AdminFilterField>
+            ) : (auth?.store || "").trim() ? (
+              <AdminFilterField label={t("posOrdersStoreScope") || "조회 매장"}>
+                <span className="inline-flex h-9 max-w-[min(20rem,55vw)] items-center rounded-md border border-border bg-muted/40 px-2.5 text-xs text-muted-foreground">
+                  <span className="min-w-0 truncate font-medium text-foreground">{auth?.store}</span>
+                </span>
+              </AdminFilterField>
+            ) : null}
+            <Button size="sm" className="h-9 gap-1.5 px-4" onClick={handleSearchClick}>
+              <Search className="h-4 w-4" />
+              {t("itemsBtnSearch") || "조회"}
             </Button>
           </div>
-          {canSearchAll && (
-            <Select value={storeFilter} onValueChange={setStoreFilter}>
-              <SelectTrigger className="h-9 w-[min(12rem,42vw)] min-w-[7rem] text-sm">
-                <SelectValue placeholder={t("store") || "매장"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">{t("posStatusAll") || "전체"}</SelectItem>
-                {stores.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {!canSearchAll && (auth?.store || "").trim() ? (
-            <span className="inline-flex max-w-[min(20rem,55vw)] items-center gap-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
-              <span className="shrink-0">{t("posOrdersStoreScope") || "조회 매장"}:</span>
-              <span className="min-w-0 truncate font-medium text-foreground">{auth?.store}</span>
-            </span>
-          ) : null}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-32 text-sm">
-                <SelectValue placeholder={t("posStatus") || "상태"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
-                {Object.entries(statusLabels).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>
-                    {v}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
-            <Select value={channelFilter} onValueChange={setChannelFilter}>
-              <SelectTrigger className="h-9 w-36 text-sm">
-                <SelectValue placeholder={t("채널") || "채널"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
-                <SelectItem value="delivery">{t("posOrderTypeDelivery") || "배달"}</SelectItem>
-                <SelectItem value="grab">Grab</SelectItem>
-                <SelectItem value="lineman">LineMan</SelectItem>
-                <SelectItem value="shopee">Shopee</SelectItem>
-                <SelectItem value="dine_in">{t("posOrderTypeDineIn") || "매장"}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
-            <Select
-              value={cancelScopeFilter}
-              onValueChange={(v) => {
-                setCancelScopeFilter(v as "all" | "line" | "order")
-                setCancelReasonFilter("all")
-              }}
-            >
-              <SelectTrigger className="h-9 w-[min(10rem,40vw)] text-sm">
-                <SelectValue placeholder={t("posCancelReasonScopeLabel") || "취소 구분"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("posCancelReasonScopeAll") || "품목·전체 모두"}</SelectItem>
-                <SelectItem value="line">{t("posCancelReasonScopeLine") || "품목 취소만"}</SelectItem>
-                <SelectItem value="order">{t("posCancelReasonScopeOrder") || "주문 전체 취소만"}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
-            <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
-              <SelectTrigger className="h-9 w-[min(16rem,60vw)] text-sm">
-                <SelectValue placeholder={t("posCancelReasonSummaryTitle") || "취소 사유"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
-                {cancelReasonOptions.map((reason) => (
-                  <SelectItem key={reason} value={reason}>
-                    {displayPosCancelReasonKey(reason, t("posCancelReasonNotSet") || "사유 미입력")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {activeTab === "linkposFailed" && (
-            <Select
-              value={attemptStatusFilter}
-              onValueChange={(v) =>
-                setAttemptStatusFilter(v as "failed" | "all" | "approved" | "declined")
-              }
-            >
-              <SelectTrigger className="h-9 w-32 text-sm">
-                <SelectValue placeholder={t("posStatus") || "상태"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="failed">{attemptStatusLabels.failed}</SelectItem>
-                <SelectItem value="declined">{attemptStatusLabels.declined}</SelectItem>
-                <SelectItem value="approved">{attemptStatusLabels.approved}</SelectItem>
-                <SelectItem value="all">{attemptStatusLabels.all}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {activeTab === "grabIntegration" && (
-            <Select value={grabStatusFilter} onValueChange={setGrabStatusFilter}>
-              <SelectTrigger className="h-9 w-36 text-sm">
-                <SelectValue placeholder="Integration status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
-                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-                <SelectItem value="SYNCING">SYNCING</SelectItem>
-                <SelectItem value="FAILED">FAILED</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          <Button
-            size="sm"
-            className="h-9 gap-1.5 px-4"
-            onClick={handleSearchClick}
-          >
-            <Search className="h-4 w-4" />
-            {t("itemsBtnSearch") || "조회"}
-          </Button>
-          {activeTab === "linkposFailed" ? (
-            <Input
-              placeholder={"R1, 주문번호, 승인번호, 추적번호, 응답코드 검색"}
-              value={attemptSearchTerm}
-              onChange={(e) => setAttemptSearchTerm(e.target.value)}
-              className="h-9 flex-1 min-w-[200px] text-sm"
-            />
-          ) : activeTab === "grabIntegration" ? (
-            <Input
-              placeholder="partnerMerchantID 검색"
-              value={grabPartnerMerchantFilter}
-              onChange={(e) => setGrabPartnerMerchantFilter(e.target.value)}
-              className="h-9 flex-1 min-w-[200px] text-sm"
-            />
-          ) : activeTab === "auditTrail" ? (
-            <div className="flex flex-1 min-w-[360px] flex-wrap gap-2">
-              <Input
-                type="date"
-                value={auditStartStr}
-                onChange={(e) => setAuditStartStr(e.target.value)}
-                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditStartStr(""))}
-                className="h-9 w-[150px] text-sm"
-              />
-              <Input
-                type="date"
-                value={auditEndStr}
-                onChange={(e) => setAuditEndStr(e.target.value)}
-                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEndStr(""))}
-                className="h-9 w-[150px] text-sm"
-              />
-              <Input
-                placeholder="직원명/사번"
-                value={auditEmployeeFilter}
-                onChange={(e) => setAuditEmployeeFilter(e.target.value)}
-                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEmployeeFilter(""))}
-                className="h-9 w-[160px] text-sm"
-              />
-              <Input
-                placeholder={t("posOrderNo") || "주문번호"}
-                value={auditOrderNoFilter}
-                onChange={(e) => setAuditOrderNoFilter(e.target.value)}
-                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditOrderNoFilter(""))}
-                className="h-9 w-[160px] text-sm"
-              />
-            </div>
-          ) : (
-            <Input
-              placeholder={t("posSearchPh") || "주문번호, 테이블, 메뉴 검색"}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 flex-1 min-w-[160px] text-sm"
-            />
-          )}
-        </div>
-
-        {(loading || attemptsLoading || grabLoading || auditLoading) && (
-          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-            {t("loading")}
+          <div className="flex flex-wrap items-end gap-3 p-4">
+            {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && (
+              <>
+                <AdminFilterField label={t("posStatus") || "상태"}>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="h-9 w-32 text-sm">
+                      <SelectValue placeholder={t("posStatus") || "상태"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                      {Object.entries(statusLabels).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+                <AdminFilterField label={t("posOrderChannelFilter") || "채널"}>
+                  <Select value={channelFilter} onValueChange={setChannelFilter}>
+                    <SelectTrigger className="h-9 w-36 text-sm">
+                      <SelectValue placeholder={t("posOrderChannelFilter") || "채널"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                      <SelectItem value="delivery">{t("posOrderTypeDelivery") || "배달"}</SelectItem>
+                      <SelectItem value="grab">Grab</SelectItem>
+                      <SelectItem value="lineman">LineMan</SelectItem>
+                      <SelectItem value="shopee">Shopee</SelectItem>
+                      <SelectItem value="dine_in">{t("posOrderTypeDineIn") || "매장"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+                <AdminFilterField label={t("posCancelReasonScopeLabel") || "취소 구분"}>
+                  <Select
+                    value={cancelScopeFilter}
+                    onValueChange={(v) => {
+                      setCancelScopeFilter(v as "all" | "line" | "order")
+                      setCancelReasonFilter("all")
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-[min(10rem,40vw)] text-sm">
+                      <SelectValue placeholder={t("posCancelReasonScopeLabel") || "취소 구분"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("posCancelReasonScopeAll") || "품목·전체 모두"}</SelectItem>
+                      <SelectItem value="line">{t("posCancelReasonScopeLine") || "품목 취소만"}</SelectItem>
+                      <SelectItem value="order">{t("posCancelReasonScopeOrder") || "주문 전체 취소만"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+                <AdminFilterField label={t("posCancelReasonSummaryTitle") || "취소 사유"}>
+                  <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
+                    <SelectTrigger className="h-9 w-[min(16rem,60vw)] text-sm">
+                      <SelectValue placeholder={t("posCancelReasonSummaryTitle") || "취소 사유"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                      {cancelReasonOptions.map((reason) => (
+                        <SelectItem key={reason} value={reason}>
+                          {displayPosCancelReasonKey(reason, t("posCancelReasonNotSet") || "사유 미입력")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+                <AdminFilterField label={t("posSearch") || "검색"} className="min-w-[12rem] flex-1">
+                  <Input
+                    placeholder={t("posSearchPh") || "주문번호, 테이블, 메뉴 검색"}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 w-full min-w-[160px] text-sm"
+                  />
+                </AdminFilterField>
+              </>
+            )}
+            {activeTab === "linkposFailed" && (
+              <>
+                <AdminFilterField label={t("posStatus") || "상태"}>
+                  <Select
+                    value={attemptStatusFilter}
+                    onValueChange={(v) =>
+                      setAttemptStatusFilter(v as "failed" | "all" | "approved" | "declined")
+                    }
+                  >
+                    <SelectTrigger className="h-9 w-32 text-sm">
+                      <SelectValue placeholder={t("posStatus") || "상태"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="failed">{attemptStatusLabels.failed}</SelectItem>
+                      <SelectItem value="declined">{attemptStatusLabels.declined}</SelectItem>
+                      <SelectItem value="approved">{attemptStatusLabels.approved}</SelectItem>
+                      <SelectItem value="all">{attemptStatusLabels.all}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+                <AdminFilterField label={t("posSearch") || "검색"} className="min-w-[12rem] flex-1">
+                  <Input
+                    placeholder={t("posLinkposSearchPh") || "R1, 주문번호, 승인번호, 추적번호, 응답코드 검색"}
+                    value={attemptSearchTerm}
+                    onChange={(e) => setAttemptSearchTerm(e.target.value)}
+                    className="h-9 w-full min-w-[200px] text-sm"
+                  />
+                </AdminFilterField>
+              </>
+            )}
+            {activeTab === "grabIntegration" && (
+              <>
+                <AdminFilterField label={t("posGrabIntegrationStatus") || "연동 상태"}>
+                  <Select value={grabStatusFilter} onValueChange={setGrabStatusFilter}>
+                    <SelectTrigger className="h-9 w-36 text-sm">
+                      <SelectValue placeholder={t("posGrabIntegrationStatus") || "연동 상태"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                      <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                      <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                      <SelectItem value="SYNCING">SYNCING</SelectItem>
+                      <SelectItem value="FAILED">FAILED</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </AdminFilterField>
+                <AdminFilterField label={t("posSearch") || "검색"} className="min-w-[12rem] flex-1">
+                  <Input
+                    placeholder={t("posGrabPartnerSearchPh") || "partnerMerchantID 검색"}
+                    value={grabPartnerMerchantFilter}
+                    onChange={(e) => setGrabPartnerMerchantFilter(e.target.value)}
+                    className="h-9 w-full min-w-[200px] text-sm"
+                  />
+                </AdminFilterField>
+              </>
+            )}
+            {activeTab === "auditTrail" && (
+              <>
+                <AdminFilterField label={t("posFilterPeriod") || "조회 기간"}>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      type="date"
+                      value={auditStartStr}
+                      onChange={(e) => setAuditStartStr(e.target.value)}
+                      onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditStartStr(""))}
+                      className="h-9 w-[150px] text-sm"
+                    />
+                    <Input
+                      type="date"
+                      value={auditEndStr}
+                      onChange={(e) => setAuditEndStr(e.target.value)}
+                      onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEndStr(""))}
+                      className="h-9 w-[150px] text-sm"
+                    />
+                  </div>
+                </AdminFilterField>
+                <AdminFilterField label={t("posAuditEmployeeFilter") || "직원"}>
+                  <Input
+                    placeholder={t("posAuditEmployeeFilterPh") || "직원명/사번"}
+                    value={auditEmployeeFilter}
+                    onChange={(e) => setAuditEmployeeFilter(e.target.value)}
+                    onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEmployeeFilter(""))}
+                    className="h-9 w-[160px] text-sm"
+                  />
+                </AdminFilterField>
+                <AdminFilterField label={t("posOrderNo") || "주문번호"}>
+                  <Input
+                    placeholder={t("posOrderNo") || "주문번호"}
+                    value={auditOrderNoFilter}
+                    onChange={(e) => setAuditOrderNoFilter(e.target.value)}
+                    onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditOrderNoFilter(""))}
+                    className="h-9 w-[160px] text-sm"
+                  />
+                </AdminFilterField>
+              </>
+            )}
           </div>
-        )}
+        </AdminFilterBar>
 
         {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && hasSearchedOrders && todaySummary && (
-          <div className="mb-4 flex gap-4 rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {t("posTodayCompleted") || "오늘 완료"}:
-              </span>
-              <span className="font-bold text-amber-600">
-                {todaySummary.completedCount}
-                {t("posCount") || "건"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {t("posInputTotal") || "합계"}:
-              </span>
-              <span className="font-bold tabular-nums">
-                {todaySummary.completedTotal.toLocaleString()} ฿
-              </span>
-            </div>
-            {todaySummary.pendingCount > 0 && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {t("posPending") || "대기"}: {todaySummary.pendingCount}
-                {t("posCount") || "건"}
-              </div>
-            )}
-            {todaySummary.cancelledCount > 0 && (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-rose-700">
-                <span>
-                  {t("posTodayCancelled") || "오늘 취소"}: {todaySummary.cancelledCount}
-                  {t("posCount") || "건"}
-                </span>
-                <span className="tabular-nums text-muted-foreground">
-                  ({todaySummary.cancelledTotal.toLocaleString()} ฿)
-                </span>
-              </div>
-            )}
+          <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MetricCard
+              size="sm"
+              variant="primary"
+              label={t("posTodayCompleted") || "완료"}
+              value={`${todaySummary.completedCount}${t("posCount") || "건"}`}
+              subLabel={t("posOrderList") || "POS 주문"}
+              icon={<CheckCircle2 className="h-4 w-4" />}
+            />
+            <MetricCard
+              size="sm"
+              variant="success"
+              label={t("posInputTotal") || "합계"}
+              value={`${todaySummary.completedTotal.toLocaleString()} ฿`}
+              icon={<Banknote className="h-4 w-4" />}
+            />
+            {todaySummary.pendingCount > 0 ? (
+              <MetricCard
+                size="sm"
+                variant="warning"
+                label={t("posPending") || "대기"}
+                value={`${todaySummary.pendingCount}${t("posCount") || "건"}`}
+                icon={<Clock className="h-4 w-4" />}
+              />
+            ) : null}
+            {todaySummary.cancelledCount > 0 ? (
+              <MetricCard
+                size="sm"
+                variant="default"
+                label={t("posTodayCancelled") || "취소"}
+                value={`${todaySummary.cancelledCount}${t("posCount") || "건"}`}
+                subLabel={`${todaySummary.cancelledTotal.toLocaleString()} ฿`}
+                icon={<XCircle className="h-4 w-4" />}
+              />
+            ) : null}
           </div>
         )}
         {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && activeTab !== "auditTrail" && hasSearchedOrders && cancelledLineReasonSummary.length > 0 && (
@@ -1824,24 +1868,42 @@ export default function PosOrdersPage() {
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="orders" className={adminTabsTriggerCn}>
+                  <Receipt className={adminTabsIconCn} aria-hidden />
                   {t("posOrderList") || "POS 주문 내역"}
                 </TabsTrigger>
                 <TabsTrigger value="cookTime" className={adminTabsTriggerCn}>
+                  <Timer className={adminTabsIconCn} aria-hidden />
                   {t("posCookTimeAnalysisTab")}
                 </TabsTrigger>
                 <TabsTrigger value="linkposFailed" className={adminTabsTriggerCn}>
-                  LINKPOS 실패 관리
+                  <Link2 className={adminTabsIconCn} aria-hidden />
+                  {t("posOrderTabLinkposFailed") || "LINKPOS 실패 관리"}
                 </TabsTrigger>
                 <TabsTrigger value="grabIntegration" className={adminTabsTriggerCn}>
-                  Grab 연동 상태
+                  <Radio className={adminTabsIconCn} aria-hidden />
+                  {t("posOrderTabGrabIntegration") || "Grab 연동 상태"}
                 </TabsTrigger>
                 <TabsTrigger value="auditTrail" className={adminTabsTriggerCn}>
-                  감사로그
+                  <ScrollText className={adminTabsIconCn} aria-hidden />
+                  {t("posOrderTabAuditTrail") || "감사로그"}
                 </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
 
           <TabsContent value="orders" className={adminTabsContentFlushCn}>
+            {loading ? (
+              <AdminTableSkeleton columns={9} rows={10} />
+            ) : !hasSearchedOrders ? (
+              <AdminEmptyState
+                icon={Search}
+                title={t("posOrderListSearchHint") || "기간·매장·상태를 선택한 뒤 [조회] 버튼을 눌러 주세요."}
+              />
+            ) : filteredOrders.length === 0 ? (
+              <AdminEmptyState
+                icon={Receipt}
+                title={t("itemsNoResults") || "조회된 내역이 없습니다."}
+              />
+            ) : (
             <div className="rounded-xl border bg-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1862,7 +1924,7 @@ export default function PosOrdersPage() {
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-14">
                         {t("posOrderGuestCount") || "손님 수"}
                       </th>
-                      <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
+                      <th className={cn("px-5 py-3 text-[11px] font-bold text-center w-24", ADMIN_NUMERIC_CN)}>
                         {t("posInputTotal")}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
@@ -1875,26 +1937,7 @@ export default function PosOrdersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {!hasSearchedOrders ? (
-                      <tr>
-                        <td
-                          colSpan={9}
-                          className="px-5 py-12 text-center text-muted-foreground"
-                        >
-                          {t("posOrderListSearchHint") || "기간·매장·상태를 선택한 뒤 [조회] 버튼을 눌러 주세요."}
-                        </td>
-                      </tr>
-                    ) : filteredOrders.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={9}
-                          className="px-5 py-12 text-center text-muted-foreground"
-                        >
-                          {t("itemsNoResults") || "조회된 내역이 없습니다."}
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredOrders.map((o) => (
+                    {filteredOrders.map((o) => (
                         <React.Fragment key={o.id}>
                           <tr
                             id={`admin-pos-order-row-${o.id}`}
@@ -2109,22 +2152,22 @@ export default function PosOrdersPage() {
                                             LINKPOS
                                           </div>
                                           <div className="grid grid-cols-1 gap-y-0.5 text-[11px] text-muted-foreground sm:grid-cols-2 sm:gap-x-4">
-                                            <span>응답코드: {o.linkposResponseCode || '-'}</span>
-                                            <span>승인번호: {o.linkposApprovalCode || '-'}</span>
-                                            <span>추적번호: {o.linkposTraceNo || '-'}</span>
-                                            <span>참조번호: {o.linkposRefNo || '-'}</span>
-                                            <span>Bank ID: {o.linkposBankId || '-'}</span>
-                                            <span>R1: {o.linkposReference1 || '-'}</span>
-                                            <span>요청금액: {(o.linkposRequestedAmount ?? 0).toLocaleString()} ฿</span>
-                                            <span>승인금액: {(o.linkposApprovedAmount ?? 0).toLocaleString()} ฿</span>
+                                            <span>{t("posLinkposResponseCodeLabel")}: {o.linkposResponseCode || '-'}</span>
+                                            <span>{t("posLinkposApprovalCode")}: {o.linkposApprovalCode || '-'}</span>
+                                            <span>{t("posLinkposTraceNo")}: {o.linkposTraceNo || '-'}</span>
+                                            <span>{t("posLinkposRefNoLabel")}: {o.linkposRefNo || '-'}</span>
+                                            <span>{t("posLinkposBankIdLabel")}: {o.linkposBankId || '-'}</span>
+                                            <span>{t("posLinkposReference1Label")}: {o.linkposReference1 || '-'}</span>
+                                            <span>{t("posLinkposRequestedAmountLabel")}: {(o.linkposRequestedAmount ?? 0).toLocaleString()} ฿</span>
+                                            <span>{t("posLinkposApprovedAmountLabel")}: {(o.linkposApprovedAmount ?? 0).toLocaleString()} ฿</span>
                                             <span>
-                                              요청시각:{' '}
+                                              {t("posLinkposRequestedAt")}:{' '}
                                               {o.linkposRequestedAt
                                                 ? formatBangkokDateTime(o.linkposRequestedAt, bangkokDisplayLocale(lang))
                                                 : '-'}
                                             </span>
                                             <span>
-                                              응답시각:{' '}
+                                              {t("posLinkposRespondedAtLabel")}:{' '}
                                               {o.linkposRespondedAt
                                                 ? formatBangkokDateTime(o.linkposRespondedAt, bangkokDisplayLocale(lang))
                                                 : '-'}
@@ -2256,7 +2299,7 @@ export default function PosOrdersPage() {
                                                 }}
                                                 title={`${failureRec.lastTrackingId}\n${t("posTraceIdJumpOrder") || "Trace ID로 주문 이동"}`}
                                               >
-                                                Trace ID: {formatTraceIdTail(failureRec.lastTrackingId)}
+                                                {t("adminPosOrdersTraceIdLabel")}: {formatTraceIdTail(failureRec.lastTrackingId)}
                                               </button>
                                               <button
                                                 type="button"
@@ -2292,19 +2335,22 @@ export default function PosOrdersPage() {
                             </tr>
                           )}
                         </React.Fragment>
-                      ))
-                    )}
+                      ))}
                   </tbody>
                 </table>
               </div>
             </div>
+            )}
           </TabsContent>
 
           <TabsContent value="cookTime" className={adminTabsContentFlushCn}>
-            {!hasSearchedOrders ? (
-              <div className="rounded-xl border bg-card px-5 py-12 text-center text-sm text-muted-foreground">
-                {t("posOrderListSearchHint") || "기간·매장·상태를 선택한 뒤 [조회] 버튼을 눌러 주세요."}
-              </div>
+            {loading ? (
+              <AdminTableSkeleton columns={10} rows={8} />
+            ) : !hasSearchedOrders ? (
+              <AdminEmptyState
+                icon={Search}
+                title={t("posOrderListSearchHint") || "기간·매장·상태를 선택한 뒤 [조회] 버튼을 눌러 주세요."}
+              />
             ) : (
             <>
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
@@ -2349,8 +2395,12 @@ export default function PosOrdersPage() {
                   <tbody>
                     {cookingRows.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">
-                          {t("posCookTimeNoServedRows")}
+                        <td colSpan={10} className="p-0">
+                          <AdminEmptyState
+                            icon={Timer}
+                            title={t("posCookTimeNoServedRows")}
+                            className="border-0 bg-transparent"
+                          />
                         </td>
                       </tr>
                     ) : (
@@ -2413,15 +2463,15 @@ export default function PosOrdersPage() {
           <TabsContent value="linkposFailed" className={adminTabsContentFlushCn}>
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded bg-muted px-2 py-1">
-                조회: {filteredAttempts.length}
+                {t("posLinkposStatQueried")}: {filteredAttempts.length}
                 {t("posCount") || "건"}
               </span>
               <span className="rounded bg-muted px-2 py-1">
-                실패/거절: {filteredAttempts.filter((a) => a.status === "failed" || a.status === "declined").length}
+                {t("posLinkposStatFailedDeclined")}: {filteredAttempts.filter((a) => a.status === "failed" || a.status === "declined").length}
                 {t("posCount") || "건"}
               </span>
               <span className="rounded bg-muted px-2 py-1">
-                승인: {filteredAttempts.filter((a) => a.status === "approved").length}
+                {t("posLinkposStatApproved")}: {filteredAttempts.filter((a) => a.status === "approved").length}
                 {t("posCount") || "건"}
               </span>
             </div>
@@ -2572,6 +2622,9 @@ export default function PosOrdersPage() {
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
               <div className="overflow-x-auto">
+                {attemptsLoading ? (
+                  <AdminTableSkeleton columns={8} rows={8} className="border-0 rounded-none" />
+                ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
@@ -2678,14 +2731,15 @@ export default function PosOrdersPage() {
                     )}
                   </tbody>
                 </table>
+                )}
               </div>
             </div>
           </TabsContent>
           <TabsContent value="auditTrail" className={adminTabsContentFlushCn}>
-            <div className="mb-3 rounded-lg border border-amber-200/70 bg-amber-50/40 px-3 py-2 text-xs text-amber-900">
-              누가/언제/무엇을/이전값→변경값 기준으로 주문 변경 이력을 조회합니다.
-              <div className="mt-1 text-[11px] text-amber-800/90">
-                Enter: 즉시 조회 · Esc: 현재 입력 초기화 · Esc 2회(700ms 이내): 감사로그 필터 전체 초기화
+            <div className="mb-3 rounded-lg border border-amber-200/70 bg-amber-50/40 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+              {t("posAuditTrailHint")}
+              <div className="mt-1 text-[11px] text-amber-800/90 dark:text-amber-200/80">
+                {t("posAuditTrailKeyboardHint")}
               </div>
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
@@ -2693,11 +2747,11 @@ export default function PosOrdersPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-40">변경시각</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-28">직원</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">액션</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-40">{t("posAuditColChangedAt")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-28">{t("posAuditColEmployee")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posAuditColAction")}</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posOrderNo") || "주문번호"}</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[380px]">변경값 (이전 → 이후)</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[380px]">{t("posAuditColChangeDiff")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2725,7 +2779,7 @@ export default function PosOrdersPage() {
                                 type="button"
                                 className="font-medium text-primary hover:underline"
                                 onClick={() => applyAuditQuickFilter({ employee: row.changedBy })}
-                                title="직원 필터 적용"
+                                title={t("posAuditApplyEmployeeFilter")}
                               >
                                 {row.changedBy}
                               </button>
@@ -2737,7 +2791,7 @@ export default function PosOrdersPage() {
                                 type="button"
                                 className="text-muted-foreground hover:text-foreground hover:underline"
                                 onClick={() => applyAuditQuickFilter({ employee: row.changedByEmployeeCode })}
-                                title="사번 필터 적용"
+                                title={t("posAuditApplyEmployeeCodeFilter")}
                               >
                                 {row.changedByEmployeeCode}
                               </button>
@@ -2754,7 +2808,7 @@ export default function PosOrdersPage() {
                                 type="button"
                                 className="rounded bg-primary/10 px-2 py-0.5 font-semibold text-primary hover:bg-primary/20"
                                 onClick={() => applyAuditQuickFilter({ orderNo: row.orderNo || "" })}
-                                title="주문번호 필터 적용"
+                                title={t("posAuditApplyOrderNoFilter")}
                               >
                                 {row.orderNo || `#${row.orderId}`}
                               </button>
@@ -2762,9 +2816,9 @@ export default function PosOrdersPage() {
                                 type="button"
                                 className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
                                 onClick={() => jumpToOrderByOrderNo(row.orderNo, row.orderId)}
-                                title="주문 행으로 점프"
+                                title={t("posAuditJumpToOrderRow")}
                               >
-                                점프
+                                {t("posAuditJumpButton")}
                               </button>
                             </div>
                           </td>
@@ -2788,14 +2842,19 @@ export default function PosOrdersPage() {
                                     onClick={() => toggleAuditExpanded(row.id)}
                                   >
                                     {expandedAuditRows[row.id]
-                                      ? "접기"
-                                      : `전체 ${row.changedFields.length}건 보기 (+${row.changedFields.length - 6})`}
+                                      ? t("posAuditCollapse")
+                                      : i18nTr(t, "posAuditShowAllChanges", {
+                                          total: row.changedFields.length,
+                                          more: row.changedFields.length - 6,
+                                        })}
                                   </button>
                                 ) : null}
                               </div>
                             )}
                             {row.reason ? (
-                              <div className="mt-1 text-[11px] text-rose-700">사유: {row.reason}</div>
+                              <div className="mt-1 text-[11px] text-rose-700 dark:text-rose-300">
+                                {t("posAuditReasonLabel")}: {row.reason}
+                              </div>
                             ) : null}
                           </td>
                         </tr>
@@ -2813,11 +2872,11 @@ export default function PosOrdersPage() {
                   <thead>
                     <tr className="border-b bg-muted/30">
                       <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("status")}</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">grabMerchantID</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">partnerMerchantID</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">lastRequestID</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[240px]">lastMessage</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-44">updatedAt</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">{t("posGrabColMerchantId")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">{t("posGrabColPartnerMerchantId")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">{t("posGrabColLastRequestId")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[240px]">{t("posGrabColLastMessage")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-44">{t("posGrabColUpdatedAt")}</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -31,9 +31,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { POS_MAIN_CATEGORIES } from '@/lib/pos-menu-categories'
-import { Tag } from 'lucide-react'
 import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
+import { MarketingStickyHubBar } from '@/components/marketing/marketing-sticky-hub-bar'
+import { MarketingEmptyState } from '@/components/marketing/marketing-empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tag } from 'lucide-react'
 export default function MarketingPromosPage() {
   const searchParams = useSearchParams()
   const campaignIdFromQuery = searchParams.get('campaignId')?.trim() || ''
@@ -180,12 +183,16 @@ export default function MarketingPromosPage() {
 
   return (
     <MarketingPageShell maxWidthClass="max-w-[min(100%,1600px)]">
-        <MarketingPageHero icon={Tag} title={t('adminMarketingPromos')} />
-        {marketingPromoSetsBannerText ? (
-          <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
-            {marketingPromoSetsBannerText}
-          </div>
-        ) : null}
+        <MarketingPageHero
+          icon={Tag}
+          title={t('adminMarketingPromos')}
+          description={t('marketingHeroDescPromos')}
+          footer={
+            marketingPromoSetsBannerText ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">{marketingPromoSetsBannerText}</p>
+            ) : null
+          }
+        />
 
         {campaignIdFromQuery && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs leading-relaxed">
@@ -193,71 +200,82 @@ export default function MarketingPromosPage() {
           </div>
         )}
 
-        {pageLoading && (
-          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t('loading')}</div>
-        )}
-
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'compose' | 'inquiry')} className={adminTabsRootCn}>
-          <div className={cn(adminTabsBarCn, 'px-2 py-2.5 sm:px-4')}>
-            <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListRowCn}>
-                <TabsTrigger value="compose" className={adminTabsTriggerCn}>
-                  {t('marketingPromoTabsEditCompose')}
-                </TabsTrigger>
-                <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
-                  {t('marketingPromoTabsList')}
-                </TabsTrigger>
-              </TabsList>
+          <MarketingStickyHubBar>
+            <div className={cn(adminTabsBarCn, 'px-0 py-0')}>
+              <div className={adminTabsScrollCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="compose" className={adminTabsTriggerCn}>
+                    {t('marketingPromoTabsEditCompose')}
+                  </TabsTrigger>
+                  <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
+                    {t('marketingPromoTabsList')}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
             </div>
-          </div>
 
-          <MarketingHubCampaignContextStrip
-            value={workspaceCampaignId}
-            onChange={setWorkspaceCampaignId}
-            campaigns={campaigns}
-            allowEmpty
-            emptyOptionLabel={t('marketingPromoCampaignSelectRequiredOption')}
-            onRefresh={loadMenusAndMeta}
-            maxListHeightClass="max-h-56"
-            disabled={pageLoading}
-            summary={
-              selectedCampaign ? (
-                <div className="space-y-0.5 text-xs">
-                  <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-foreground">
-                    <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">
-                      [{selectedCampaign.campaignNo?.trim() || '—'}]
-                    </span>
-                    <span className="font-medium leading-snug">{selectedCampaign.topic}</span>
-                  </p>
-                  {(selectedCampaign.designStartDate || selectedCampaign.designEndDate) && (
-                    <p
-                      className={cn(
-                        'text-[11px]',
-                        selectedDesignOutOfRange ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
-                      )}
-                    >
-                      {t('marketingDesignLabelShort')}: {selectedCampaign.designStartDate || '—'} ~{' '}
-                      {selectedCampaign.designEndDate || '—'}
-                      {selectedDesignOutOfRange ? ` · ${t('marketingDesignTodayOutsidePeriod')}` : ''}
+            <MarketingHubCampaignContextStrip
+              value={workspaceCampaignId}
+              onChange={setWorkspaceCampaignId}
+              campaigns={campaigns}
+              allowEmpty
+              emptyOptionLabel={t('marketingPromoCampaignSelectRequiredOption')}
+              onRefresh={loadMenusAndMeta}
+              maxListHeightClass="max-h-56"
+              disabled={pageLoading}
+              className="mb-0 mt-3 rounded-lg border border-border/60 bg-muted/15 shadow-none"
+              summary={
+                selectedCampaign ? (
+                  <div className="space-y-0.5 text-xs">
+                    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-foreground">
+                      <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">
+                        [{selectedCampaign.campaignNo?.trim() || '—'}]
+                      </span>
+                      <span className="font-medium leading-snug">{selectedCampaign.topic}</span>
                     </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">{t('marketingPromoToolbarCampaignHint')}</p>
-              )
-            }
-          />
+                    {(selectedCampaign.designStartDate || selectedCampaign.designEndDate) && (
+                      <p
+                        className={cn(
+                          'text-[11px]',
+                          selectedDesignOutOfRange ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+                        )}
+                      >
+                        {t('marketingDesignLabelShort')}: {selectedCampaign.designStartDate || '—'} ~{' '}
+                        {selectedCampaign.designEndDate || '—'}
+                        {selectedDesignOutOfRange ? ` · ${t('marketingDesignTodayOutsidePeriod')}` : ''}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">{t('marketingPromoToolbarCampaignHint')}</p>
+                )
+              }
+            />
+          </MarketingStickyHubBar>
+
           {marketingPromoCampaignSelectHelpText ? (
             <p className="mb-4 text-[10px] leading-relaxed text-muted-foreground">{marketingPromoCampaignSelectHelpText}</p>
           ) : null}
 
           <TabsContent value="compose" className={adminTabsContentCn}>
             {!cidTrim ? (
-              <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
-                {t('marketingPromoListEmptyNeedCampaign')}
+              <MarketingEmptyState
+                icon={Tag}
+                title={t('marketingPromoListEmptyNeedCampaign')}
+                description={t('marketingPromoToolbarCampaignHint')}
+              />
+            ) : pageLoading && menus.length === 0 ? (
+              <div className="mb-4 space-y-3 rounded-xl border bg-card/50 p-4">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-48 w-full rounded-lg" />
+                <Skeleton className="h-48 w-full rounded-lg" />
               </div>
             ) : (campaignPromosLoading || pageLoading) && menus.length === 0 ? (
-              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t('loading')}</div>
+              <div className="mb-4 space-y-3 rounded-xl border bg-card/50 p-4">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-64 w-full rounded-lg" />
+              </div>
             ) : (
               <PosSetMenuTabWorkspace
                 key={cidTrim}

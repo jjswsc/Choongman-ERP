@@ -427,13 +427,18 @@ export async function processOrderReceive(params: {
   isPartialReceive?: boolean
   inspectedIndices?: number[]
   receivedQtys?: Record<number, number>
+  /** 동일 수령 제출·오프라인 큐 재전송 시 서버 중복 방지 */
+  idempotencyKey?: string
 }) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 90000)
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const idem = String(params.idempotencyKey || '').trim()
+    if (idem) headers['X-Idempotency-Key'] = idem
     const res = await apiFetchWithOffline('/api/processOrderReceive', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(params),
       signal: ctrl.signal,
     })
@@ -2633,6 +2638,7 @@ export interface IncomeStatementData {
       approvedOrdersTotal: number
       diff: number
     }
+    hqOutboundDuplicateLinesDeduped?: number
     purchaseExcludedHqBankPayments?: { key: string; amount: number; label?: string }[]
   }
   expenseByAccountSubject?: {
@@ -6397,6 +6403,15 @@ export async function deleteInteriorProject(params: { id: number }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export type InteriorProjectDashboardRow = {
+  id: number
+  paidTotal: number
+  scheduleLateCount: number
+  vendorDelayedCount: number
+  overBudget: boolean
+  hasAlert: boolean
+}
+
 export type InteriorDashboardTotals = {
   activeProjectCount: number
   scheduleOverdueCount: number
@@ -6408,6 +6423,7 @@ export type InteriorDashboardTotals = {
 export type InteriorDashboardSummary = {
   generatedAt: string
   totals: InteriorDashboardTotals
+  projects?: InteriorProjectDashboardRow[]
 }
 
 export async function getInteriorDashboardSummary() {
@@ -6815,6 +6831,8 @@ export interface InteriorProjectFile {
   filePath?: string
   fileSize?: number
   uploadedAt?: string | null
+  quoteAmount?: number
+  linkedExpenseId?: number | null
 }
 
 export async function getInteriorFiles(params: { projectId: string | number }) {
@@ -6878,6 +6896,68 @@ export async function uploadInteriorFile(params: {
 
 export async function deleteInteriorFile(params: { id: number }) {
   const res = await apiFetchWithOffline('/api/deleteInteriorFile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function saveInteriorProjectFile(params: {
+  id: number
+  quoteAmount?: number | null
+  linkedExpenseId?: number | null
+}) {
+  const res = await apiFetchWithOffline('/api/saveInteriorProjectFile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function extractInteriorQuoteAmount(params: { fileId: number; projectId: string | number }) {
+  const res = await apiFetchWithOffline('/api/extractInteriorQuoteAmount', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    amount?: number
+    label?: string
+    confidence?: string
+    method?: string
+    openaiUsed?: boolean
+  }>
+}
+
+export type InteriorLayoutZoneBackground = {
+  backgroundFileId?: number | null
+  backgroundOpacity?: number
+  updatedAt?: string | null
+}
+
+export async function getInteriorLayoutZoneBackground(params: {
+  projectId: string | number
+  zone: string
+}) {
+  const q = new URLSearchParams({
+    projectId: String(params.projectId),
+    zone: String(params.zone),
+  })
+  const res = await apiFetchWithOffline(`/api/getInteriorLayoutZoneBackground?${q}`)
+  return res.json() as Promise<InteriorLayoutZoneBackground>
+}
+
+export async function saveInteriorLayoutZoneBackground(params: {
+  projectId: number
+  zone: string
+  backgroundFileId?: number | null
+  backgroundOpacity?: number
+}) {
+  const res = await apiFetchWithOffline('/api/saveInteriorLayoutZoneBackground', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -14606,6 +14686,54 @@ export async function uploadStoreRepairPhoto(store: string, file: File) {
     return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
   }
   const ct = guessStoreRepairUploadContentType(file)
+  const body =
+    file.type === ct ? file : new File([file], file.name || 'upload', { type: ct, lastModified: file.lastModified })
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, body, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
+  }
+  return { success: true, url: pjson.publicUrl, message: undefined }
+}
+
+export type StoreOpsAlertSummary = {
+  today: string
+  totalStores: number
+  checkedToday: number
+  uncheckedToday: number
+  staleRepairs: number
+  openComplaints: number
+}
+
+export async function getStoreOpsAlertSummary(): Promise<StoreOpsAlertSummary> {
+  const res = await apiFetchWithOffline('/api/getStoreOpsAlertSummary')
+  return (await res.json()) as StoreOpsAlertSummary
+}
+
+/** 컴플레인 증빙 사진 업로드 */
+export async function uploadComplaintPhoto(store: string, file: File) {
+  const { apiFetch } = await import('./api/fetch')
+  const ct = file.type || 'image/jpeg'
+  const pres = await apiFetch('/api/uploadComplaintPhoto/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      store,
+      fileName: file.name,
+      contentType: ct,
+      fileSize: file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
+  }
   const body =
     file.type === ct ? file : new File([file], file.name || 'upload', { type: ct, lastModified: file.lastModified })
   const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')

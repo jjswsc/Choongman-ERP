@@ -1,6 +1,7 @@
 "use client"
 
-import { Pencil, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { CalendarClock, Pencil, Palmtree, Trash2, Wallet } from "lucide-react"
 import { displayLabelShort } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
@@ -90,6 +91,15 @@ function salTypeShort(salType: string, t: (k: string) => string): string {
   if (s === "Hourly") return t("emp_sal_hourly")
   if (s === "Part-time") return t("emp_sal_parttime")
   return s || "—"
+}
+
+function attendanceQuickHref(e: EmployeeTableRow): string {
+  const q = new URLSearchParams({ tab: "status" })
+  const store = String(e.store || "").trim()
+  const name = String(e.name || e.nick || "").trim()
+  if (store) q.set("store", store)
+  if (name) q.set("employee", name)
+  return `/admin/attendance?${q.toString()}`
 }
 
 interface EmployeeTableProps {
@@ -251,7 +261,31 @@ export function EmployeeTable({
                       <div className="text-[11px] text-muted-foreground">{salTypeShort(e.salType, t)}</div>
                     </td>
                     <td className="px-3 py-2.5 text-center" onClick={(ev) => ev.stopPropagation()}>
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <Link
+                          href="/admin/payroll?tab=calc"
+                          title={t("emp_quick_payroll")}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          onClick={(ev) => ev.stopPropagation()}
+                        >
+                          <Wallet className="h-3.5 w-3.5" />
+                        </Link>
+                        <Link
+                          href="/admin/leave"
+                          title={t("emp_quick_leave")}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          onClick={(ev) => ev.stopPropagation()}
+                        >
+                          <Palmtree className="h-3.5 w-3.5" />
+                        </Link>
+                        <Link
+                          href={attendanceQuickHref(e)}
+                          title={t("emp_quick_attendance")}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          onClick={(ev) => ev.stopPropagation()}
+                        >
+                          <CalendarClock className="h-3.5 w-3.5" />
+                        </Link>
                         <button
                           type="button"
                           onClick={() => onEdit(idx)}

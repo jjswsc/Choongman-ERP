@@ -134,7 +134,7 @@ export default function CrmSegmentsPage() {
                 {t("crmSegExportCsv")}
               </CrmOutlineButton>
               <CrmOutlineButton asChild>
-                <Link href={`/admin/crm/campaigns?audience=${segment}`}>
+                <Link href={`/admin/crm/coupons?tab=campaigns&audience=${segment}`}>
                   <Megaphone className="mr-1.5 h-3.5 w-3.5" />
                   {t("crmSegCreateCampaign")}
                 </Link>

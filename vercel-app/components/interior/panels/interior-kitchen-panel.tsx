@@ -21,6 +21,9 @@ import {
   deleteInteriorKitchenItem,
   type InteriorKitchenItem,
 } from "@/lib/api-client"
+import { downloadInteriorCsv } from "@/lib/interior-csv-export"
+import { AdminEmptyState } from "@/components/erp/admin-empty-state"
+import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
 
 export function InteriorKitchenPanel({ projectId }: { projectId: string }) {
   const t = useT(useLang().lang)
@@ -95,6 +98,30 @@ export function InteriorKitchenPanel({ projectId }: { projectId: string }) {
     }
   }
 
+  const handleExportCsv = () => {
+    downloadInteriorCsv(
+      `interior-kitchen-${projectId}.csv`,
+      [
+        t("interiorItemNameKr"),
+        t("interiorItemNameEn"),
+        t("interiorSizeMm"),
+        t("interiorZone"),
+        t("interiorSupplier"),
+        t("price"),
+        t("qty"),
+      ],
+      list.map((row) => [
+        row.itemNameKr || "",
+        row.itemNameEn || "",
+        row.sizeMm || "",
+        row.zone || "",
+        row.supplierCode || "",
+        String(row.price ?? 0),
+        String(row.quantity ?? 0),
+      ])
+    )
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
@@ -105,10 +132,15 @@ export function InteriorKitchenPanel({ projectId }: { projectId: string }) {
             </div>
             <h2 className="text-lg font-semibold">{t("interiorKitchen")}</h2>
           </div>
-          <Button size="sm" onClick={handleAdd} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            {t("add")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleExportCsv} disabled={list.length === 0} className="gap-1.5">
+              {t("interiorExportCsv")}
+            </Button>
+            <Button size="sm" onClick={handleAdd} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              {t("add")}
+            </Button>
+          </div>
         </div>
 
         {editing && (
@@ -152,9 +184,9 @@ export function InteriorKitchenPanel({ projectId }: { projectId: string }) {
 
         <div className="rounded-lg border bg-card">
           {loading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">{t("loading")}</div>
+            <AdminTableSkeleton columns={6} rows={5} />
           ) : list.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">{t("interiorKitchenEmptyHint")}</div>
+            <AdminEmptyState icon={UtensilsCrossed} title={t("interiorKitchenEmptyHint")} />
           ) : (
             <Table>
               <TableHeader>

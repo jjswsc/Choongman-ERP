@@ -9,6 +9,8 @@ import { normalizeIncomeScope } from '@/lib/accounting-reports'
 import {
   decodeFinancialStatementStoreFilter,
   encodeFinancialStatementStoreFilter,
+  FINANCIAL_STATEMENT_STORE_NONE,
+  isFinancialStatementStoreNone,
 } from '@/lib/financial-statement-store-options'
 
 const officeAuth = {
@@ -45,6 +47,15 @@ describe('resolveAccountingStoreFilterFromAuth', () => {
   it('franchisee multi-store: comma-separated subset', () => {
     expect(resolveAccountingStoreFilterFromAuth('CM Rama9,CM Ladprao', franchiseAuth)).toBe(
       'CM Rama9,CM Ladprao'
+    )
+  })
+
+  it('preserves UI deselect-all sentinel', () => {
+    expect(resolveAccountingStoreFilterFromAuth(FINANCIAL_STATEMENT_STORE_NONE, officeAuth)).toBe(
+      FINANCIAL_STATEMENT_STORE_NONE
+    )
+    expect(resolveAccountingStoreFilterFromAuth(FINANCIAL_STATEMENT_STORE_NONE, franchiseAuth)).toBe(
+      FINANCIAL_STATEMENT_STORE_NONE
     )
   })
 
@@ -88,6 +99,31 @@ describe('financial statement store encode/decode', () => {
       selectedFranchiseStores: ['A', 'C'],
       officeSelected: false,
     })
+  })
+
+  it('encodes deselect-all as __none__ (not All)', () => {
+    const encoded = encodeFinancialStatementStoreFilter({
+      franchiseStoreCodes: codes,
+      selectedFranchiseStores: [],
+      officeSelected: false,
+      allFranchiseSelected: false,
+    })
+    expect(encoded).toBe(FINANCIAL_STATEMENT_STORE_NONE)
+    expect(decodeFinancialStatementStoreFilter(encoded, codes)).toEqual({
+      selectedFranchiseStores: [],
+      officeSelected: false,
+    })
+    expect(isFinancialStatementStoreNone(encoded)).toBe(true)
+  })
+
+  it('encodes select-all as All', () => {
+    const encoded = encodeFinancialStatementStoreFilter({
+      franchiseStoreCodes: codes,
+      selectedFranchiseStores: [...codes],
+      officeSelected: false,
+      allFranchiseSelected: true,
+    })
+    expect(encoded).toBe('All')
   })
 })
 

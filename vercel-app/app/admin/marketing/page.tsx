@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { MarketingHomePanel } from "@/components/marketing/marketing-home-panel"
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 export default function MarketingPage() {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace("/admin/marketing/campaigns")
-  }, [router])
-  return null
+  return (
+    <MarketingPageShell maxWidthClass="max-w-6xl" showSubnav={false}>
+      <MarketingHomePanel />
+    </MarketingPageShell>
+  )
 }

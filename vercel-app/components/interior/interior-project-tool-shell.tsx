@@ -24,6 +24,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getInteriorProjects, type InteriorProject } from "@/lib/api-client"
 import { INTERIOR_ADMIN } from "@/lib/interior-admin-nav"
+import { InteriorPageShell } from "@/components/interior/interior-page-shell"
+import { InteriorProjectCompareBar } from "@/components/interior/interior-project-compare-bar"
 import { cn } from "@/lib/utils"
 
 type InteriorProjectToolShellProps = {
@@ -116,8 +118,9 @@ export function InteriorProjectToolShell({
   )
 
   return (
-    <div className="flex flex-1 flex-col overflow-auto">
-      <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+    <InteriorPageShell hideHeader showSubnav>
+      <div className="flex flex-1 flex-col overflow-auto -mx-4 -mt-2 sm:-mx-6 lg:-mx-8">
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="rounded-xl border bg-card p-4 sm:p-5">
           <div className="mb-3 flex items-center gap-2">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -267,6 +270,9 @@ export function InteriorProjectToolShell({
           </div>
         </div>
       </div>
+      {allowMultiProject && selectedProjectIds.length > 1 ? (
+        <InteriorProjectCompareBar projectIds={selectedProjectIds} />
+      ) : null}
       <div className="min-h-0 flex-1">
         {selectedProjectIds.length > 0 ? (
           selectedProjectIds.map((pid, idx) => {
@@ -297,5 +303,6 @@ export function InteriorProjectToolShell({
         )}
       </div>
     </div>
+    </InteriorPageShell>
   )
 }

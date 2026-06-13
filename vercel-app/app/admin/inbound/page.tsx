@@ -6,7 +6,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
-import { ArrowDownToLine } from "lucide-react"
+import { ArrowDownToLine, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -62,8 +62,11 @@ import {
   InboundTable,
   InboundEditDialog,
   InboundGuideContent,
+  InboundCartTable,
+  InboundSummaryTables,
   type InboundTableRow,
 } from "@/components/inbound"
+import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { parsePurchaseOrderCart } from "@/lib/purchase-order-cart"
 import {
   buildInboundPrintHtmlBulk,
@@ -73,7 +76,6 @@ import {
 import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/inbound-excel-html"
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
-import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -696,11 +698,6 @@ export default function InboundPage() {
     setSummaryItemSortDir("desc")
   }
 
-  const sortMark = (active: boolean, dir: "asc" | "desc") => {
-    if (!active) return ""
-    return dir === "desc" ? " ▼" : " ▲"
-  }
-
   const formatInboundLineName = React.useCallback(
     (it: Pick<InboundHistoryItem, "name">) =>
       it.name === "__BANK_PURCHASE_PAYMENT__" ? t("inBankPurchasePaymentLabel") : it.name || "",
@@ -958,7 +955,7 @@ export default function InboundPage() {
           await appAlert(translateApiMessage(res.message, t) || res.message)
         }
       } catch {
-        await appAlert(t("processFail") || "처리 실패")
+        await appAlert(t("processFail"))
       }
     },
     [t, fetchHistory]
@@ -980,7 +977,7 @@ export default function InboundPage() {
         if (res.success) fetchHistory()
         else await appAlert(translateApiMessage(res.message, t) || res.message)
       } catch {
-        await appAlert(t("processFail") || "처리 실패")
+        await appAlert(t("processFail"))
       } finally {
         setUpdatingInvoiceId(null)
       }
@@ -1001,9 +998,9 @@ export default function InboundPage() {
         vi: "vi-VN",
         ms: "ms-MY",
       }[lang] || "en-US"
-      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
-      const vatLabel = t("posVatLabel") || "VAT"
-      const totalLabel = t("inv_total") || t("total") || "Total"
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal")
+      const vatLabel = t("posVatLabel")
+      const totalLabel = t("inv_total") || t("total")
       return buildInboundPrintHtmlSingle(inboundTableRowToPrintBatch(row), {
         locale,
         lang,
@@ -1046,9 +1043,9 @@ export default function InboundPage() {
         vi: "vi-VN",
         ms: "ms-MY",
       }[lang] || "en-US"
-      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
-      const vatLabel = t("posVatLabel") || "VAT"
-      const totalLabel = t("inv_total") || t("total") || "Total"
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal")
+      const vatLabel = t("posVatLabel")
+      const totalLabel = t("inv_total") || t("total")
       const periodLabel =
         histStart && histEnd ? `${histStart} ~ ${histEnd}` : row.date || "—"
       const storeLabelRaw = isOffice
@@ -1135,9 +1132,9 @@ export default function InboundPage() {
         vi: "vi-VN",
         ms: "ms-MY",
       }[lang] || "en-US"
-      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
-      const vatLabel = t("posVatLabel") || "VAT"
-      const totalLabel = t("inv_total") || t("total") || "Total"
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal")
+      const vatLabel = t("posVatLabel")
+      const totalLabel = t("inv_total") || t("total")
       const html = buildInboundPrintHtmlBulk(rows.map(inboundTableRowToPrintBatch), {
         locale,
         lang,
@@ -1173,9 +1170,9 @@ export default function InboundPage() {
         vi: "vi-VN",
         ms: "ms-MY",
       }[lang] || "en-US"
-      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
-      const vatLabel = t("posVatLabel") || "VAT"
-      const totalLabel = t("inv_total") || t("total") || "Total"
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal")
+      const vatLabel = t("posVatLabel")
+      const totalLabel = t("inv_total") || t("total")
       const periodLabel = histStart && histEnd ? `${histStart} ~ ${histEnd}` : "—"
       const storeLabelRaw = isOffice
         ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
@@ -1263,7 +1260,7 @@ export default function InboundPage() {
                             <SelectContent>
                               <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
                                 <Input
-                                  placeholder={t("search") || "검색"}
+                                  placeholder={t("search")}
                                   value={inStoreSearch}
                                   onChange={(e) => setInStoreSearch(e.target.value)}
                                   className="h-7 text-xs"
@@ -1299,7 +1296,7 @@ export default function InboundPage() {
                           <SelectContent>
                             <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
                               <Input
-                                placeholder={t("search") || "검색"}
+                                placeholder={t("search")}
                                 value={inVendorSearch}
                                 onChange={(e) => setInVendorSearch(e.target.value)}
                                 className="h-7 text-xs"
@@ -1317,7 +1314,7 @@ export default function InboundPage() {
                         </Select>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold">{t("inPoNo") || "PO 번호"}</label>
+                        <label className="text-xs font-semibold">{t("inPoNo")}</label>
                         <Input
                           value={inPoNo}
                           onChange={(e) => setInPoNo(e.target.value)}
@@ -1327,7 +1324,7 @@ export default function InboundPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold">{t("inInvoiceNo") || "인보이스 번호"}</label>
+                        <label className="text-xs font-semibold">{t("inInvoiceNo")}</label>
                         <Input
                           value={inInvoiceNo}
                           onChange={(e) => setInInvoiceNo(e.target.value)}
@@ -1344,8 +1341,9 @@ export default function InboundPage() {
                             placeholder={t("inFindItem")}
                             className="h-9"
                           />
-                          <Button size="sm" className="h-9" onClick={() => setPickerOpen(true)}>
-                            🔍
+                          <Button size="sm" className="h-9 shrink-0" onClick={() => setPickerOpen(true)}>
+                            <Search className="h-4 w-4" aria-hidden />
+                            <span className="sr-only">{t("inFindItem")}</span>
                           </Button>
                         </div>
                       </div>
@@ -1367,83 +1365,14 @@ export default function InboundPage() {
                   </div>
                 </div>
                 <div className="md:col-span-3">
-                  <div className="rounded-xl border bg-card p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-bold">
-                        {t("inWaitList")} <span className="badge bg-muted px-2 py-0.5 rounded text-xs">{cart.length}</span>
-                        {fromPoId && (
-                          <span className="ml-2 rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                            {t("inFromPO")} #{fromPoId}
-                          </span>
-                        )}
-                      </h3>
-                    </div>
-                    <div className="overflow-x-auto max-h-[400px]">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-2">{t("inColItem")}</th>
-                            <th className="text-right py-2 px-2 w-20">{t("inColQty")}</th>
-                            <th className="text-right py-2 px-2 w-24">{t("inColCost")}</th>
-                            <th className="text-right py-2 px-2 w-20">{t("inColAmount")}</th>
-                            <th className="w-12"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cart.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="py-8 text-center text-muted-foreground text-sm">
-                                {t("inEmptyList")}
-                              </td>
-                            </tr>
-                          ) : (
-                            cart.map((c, idx) => {
-                              const qtyNum = parseFloat(String(c.qty).replace(/,/g, "")) || 0
-                              const costNum = parseFloat(String(c.cost).replace(/,/g, "")) || 0
-                              const amount = qtyNum * costNum
-                              return (
-                                <tr key={idx} className="border-b">
-                                  <td className="py-2 px-2">{c.name} {c.spec ? `(${c.spec})` : ""}</td>
-                                  <td className="py-2 px-2 text-right font-medium">{c.qty}</td>
-                                  <td className="py-2 px-2">
-                                    <Input
-                                      type="number"
-                                      value={c.cost}
-                                      onChange={(e) => handleUpdateCartCost(idx, e.target.value)}
-                                      className="h-8 w-full min-w-[80px] text-right text-sm"
-                                      min={0}
-                                      step="0.01"
-                                    />
-                                  </td>
-                                  <td className="py-2 px-2 text-right font-medium">
-                                    {amount.toLocaleString()}
-                                    {lang === "th" ? " THB" : ""}
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
-                                      onClick={() => handleRemoveFromCart(idx)}
-                                    >
-                                      {t("delete")}
-                                    </Button>
-                                  </td>
-                                </tr>
-                              )
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    <Button
-                      className="w-full mt-4"
-                      onClick={handleSave}
-                      disabled={saving || !cart.length}
-                    >
-                      {saving ? t("loading") : t("inSave")}
-                    </Button>
-                  </div>
+                  <InboundCartTable
+                    cart={cart}
+                    fromPoId={fromPoId}
+                    saving={saving}
+                    onUpdateCost={handleUpdateCartCost}
+                    onRemove={handleRemoveFromCart}
+                    onSave={handleSave}
+                  />
                 </div>
               </div>
             </TabsContent>
@@ -1544,84 +1473,108 @@ export default function InboundPage() {
 
           <TabsContent value="summary" className={adminTabsContentCn}>
             <div className="space-y-4">
-              <div className="rounded-xl border bg-card p-5 space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    type="date"
-                    value={summaryStart}
-                    onChange={(e) => handleSummaryStartChange(e.target.value)}
-                    className="w-[140px] h-9"
-                  />
-                  <Input
-                    type="date"
-                    value={summaryEnd}
-                    onChange={(e) => handleSummaryEndChange(e.target.value)}
-                    className="w-[140px] h-9"
-                  />
-                  <Button
-                    type="button"
-                    variant={summaryMonth ? "default" : "outline"}
-                    className="h-9"
-                    onClick={openSummaryMonthDialog}
-                  >
-                    {t("outFilterMonth")}
-                    {summaryMonth ? ` (${summaryMonth})` : ""}
-                  </Button>
+              <AdminFilterBar className="flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="flex flex-wrap items-end gap-3">
+                  <AdminFilterField label={t("outFilterPeriod")}>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="date"
+                        value={summaryStart}
+                        onChange={(e) => handleSummaryStartChange(e.target.value)}
+                        className="w-[140px] h-9 text-xs"
+                      />
+                      <span className="text-xs text-muted-foreground">~</span>
+                      <Input
+                        type="date"
+                        value={summaryEnd}
+                        onChange={(e) => handleSummaryEndChange(e.target.value)}
+                        className="w-[140px] h-9 text-xs"
+                      />
+                    </div>
+                  </AdminFilterField>
+                  <AdminFilterField label={t("outFilterMonth")}>
+                    <Button
+                      type="button"
+                      variant={summaryMonth ? "default" : "outline"}
+                      className="h-9 text-xs"
+                      onClick={openSummaryMonthDialog}
+                    >
+                      {t("outFilterMonth")}
+                      {summaryMonth ? ` (${summaryMonth})` : ""}
+                    </Button>
+                  </AdminFilterField>
                   {isOffice && (
-                    <Select value={summaryStoreFilter || "__all__"} onValueChange={(v) => setSummaryStoreFilter(v === "__all__" ? "" : v)}>
-                      <SelectTrigger className="w-[180px] h-9">
-                        <SelectValue placeholder={t("store")} />
+                    <AdminFilterField label={t("store")}>
+                      <Select
+                        value={summaryStoreFilter || "__all__"}
+                        onValueChange={(v) => setSummaryStoreFilter(v === "__all__" ? "" : v)}
+                      >
+                        <SelectTrigger className="w-[180px] h-9 text-xs">
+                          <SelectValue placeholder={t("store")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">{t("all")}</SelectItem>
+                          {histStoreOptions.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </AdminFilterField>
+                  )}
+                  <Button size="sm" className="h-9 text-xs" onClick={fetchSummaryHistory} disabled={summaryLoading}>
+                    {summaryLoading ? t("loading") : t("btn_query")}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <AdminFilterField label={t("vendor")}>
+                    <Select
+                      value={summaryVendorFilter || "__all__"}
+                      onValueChange={(v) => setSummaryVendorFilter(v === "__all__" ? "" : v)}
+                    >
+                      <SelectTrigger className="w-[200px] h-9 text-xs">
+                        <SelectValue placeholder={t("vendor")} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__all__">{t("all")}</SelectItem>
-                        {histStoreOptions.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
+                        {summaryVendorOptions.map((v) => (
+                          <SelectItem key={v} value={v}>
+                            {v}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  )}
-                  <Button size="sm" onClick={fetchSummaryHistory} disabled={summaryLoading}>
-                    {summaryLoading ? t("loading") : t("btn_query")}
-                  </Button>
+                  </AdminFilterField>
+                  <AdminFilterField label={t("itemsCategory")}>
+                    <Select
+                      value={summaryCategoryFilter || "__all__"}
+                      onValueChange={(v) => setSummaryCategoryFilter(v === "__all__" ? "" : v)}
+                    >
+                      <SelectTrigger className="w-[200px] h-9 text-xs">
+                        <SelectValue placeholder={t("itemsCategory")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">{t("all")}</SelectItem>
+                        {summaryCategoryOptions.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </AdminFilterField>
+                  <AdminFilterField label={t("inItem")}>
+                    <Input
+                      value={summaryItemSearch}
+                      onChange={(e) => setSummaryItemSearch(e.target.value)}
+                      placeholder={t("inItemSearchPh")}
+                      className="w-[200px] h-9 text-xs"
+                    />
+                  </AdminFilterField>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select value={summaryVendorFilter || "__all__"} onValueChange={(v) => setSummaryVendorFilter(v === "__all__" ? "" : v)}>
-                    <SelectTrigger className="w-[220px] h-9">
-                      <SelectValue placeholder={t("vendor")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">{t("all")}</SelectItem>
-                      {summaryVendorOptions.map((v) => (
-                        <SelectItem key={v} value={v}>
-                          {v}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={summaryCategoryFilter || "__all__"} onValueChange={(v) => setSummaryCategoryFilter(v === "__all__" ? "" : v)}>
-                    <SelectTrigger className="w-[220px] h-9">
-                      <SelectValue placeholder={t("itemsCategory")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">{t("all")}</SelectItem>
-                      {summaryCategoryOptions.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={summaryItemSearch}
-                    onChange={(e) => setSummaryItemSearch(e.target.value)}
-                    placeholder={t("inItemSearchPh")}
-                    className="w-[220px] h-9"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">{t("inSummaryHint")}</p>
-              </div>
+                <p className="w-full text-xs text-muted-foreground">{t("inSummaryHint")}</p>
+              </AdminFilterBar>
 
               <Dialog open={summaryMonthDialogOpen} onOpenChange={setSummaryMonthDialogOpen}>
                 <DialogContent className="sm:max-w-sm">
@@ -1637,15 +1590,13 @@ export default function InboundPage() {
                       className="h-9"
                     />
                     <p className="text-xs text-muted-foreground">
-                      {summaryMonth
-                        ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
-                        : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
+                      {summaryMonth ? t("adminMonthFilterActiveHint") : t("adminMonthFilterManualHint")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Button type="button" variant="outline" onClick={pickCurrentSummaryMonth}>
-                        {t("thisMonth") || "이번 달"}
+                        {t("thisMonth")}
                       </Button>
                       <Button type="button" variant="outline" onClick={handleClearSummaryMonthDialog}>
                         {t("all")}
@@ -1653,7 +1604,7 @@ export default function InboundPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Button type="button" variant="outline" onClick={() => setSummaryMonthDialogOpen(false)}>
-                        {t("cancel") || "Cancel"}
+                        {t("cancel")}
                       </Button>
                       <Button type="button" onClick={handleApplySummaryMonthDialog}>
                         {t("btn_query")}
@@ -1663,101 +1614,19 @@ export default function InboundPage() {
                 </DialogContent>
               </Dialog>
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <div className="rounded-xl border bg-card p-5">
-                  <h3 className="text-sm font-bold mb-3">{t("inSummaryByVendor")}</h3>
-                  <div className="overflow-x-auto max-h-[480px]">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-muted/80 backdrop-blur">
-                        <tr className="border-b">
-                          <th className="py-2 px-2 text-left">{t("vendor")}</th>
-                          <th className="py-2 px-2 text-right">
-                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryVendorSort("qty")}>
-                              {t("outColQty")}{sortMark(summaryVendorSortBy === "qty", summaryVendorSortDir)}
-                            </button>
-                          </th>
-                          <th className="py-2 px-2 text-right">
-                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryVendorSort("amount")}>
-                              {t("inColAmount")}{sortMark(summaryVendorSortBy === "amount", summaryVendorSortDir)}
-                            </button>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summaryByVendor.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="py-8 text-center text-muted-foreground">{t("inNoData")}</td>
-                          </tr>
-                        ) : (
-                          summaryByVendor.map((row) => (
-                            <tr key={row.vendor} className="border-b">
-                              <td className="py-2 px-2">{row.vendor}</td>
-                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
-                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
-                            </tr>
-                          ))
-                        )}
-                        {summaryByVendor.length > 0 && (
-                          <tr className="sticky bottom-0 bg-muted/90 border-t-2">
-                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
-                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryVendorTotals.qty.toLocaleString()}</td>
-                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryVendorTotals.amount.toLocaleString()}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-card p-5">
-                  <h3 className="text-sm font-bold mb-3">{t("inSummaryByItem")}</h3>
-                  <div className="overflow-x-auto max-h-[480px]">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-muted/80 backdrop-blur">
-                        <tr className="border-b">
-                          <th className="py-2 px-2 text-left">{t("inSummaryItemCol")}</th>
-                          <th className="py-2 px-2 text-right">
-                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryItemSort("qty")}>
-                              {t("outColQty")}{sortMark(summaryItemSortBy === "qty", summaryItemSortDir)}
-                            </button>
-                          </th>
-                          <th className="py-2 px-2 text-right">
-                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryItemSort("amount")}>
-                              {t("inColAmount")}{sortMark(summaryItemSortBy === "amount", summaryItemSortDir)}
-                            </button>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summaryByItem.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="py-8 text-center text-muted-foreground">{t("inNoData")}</td>
-                          </tr>
-                        ) : (
-                          summaryByItem.map((row) => (
-                            <tr key={`${row.code}-${row.name}-${row.spec}`} className="border-b">
-                              <td className="py-2 px-2">
-                                {row.code ? `[${row.code}] ` : ""}
-                                {formatInboundLineName({ name: row.name })}
-                                {row.spec ? ` (${row.spec})` : ""}
-                              </td>
-                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
-                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
-                            </tr>
-                          ))
-                        )}
-                        {summaryByItem.length > 0 && (
-                          <tr className="sticky bottom-0 bg-muted/90 border-t-2">
-                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
-                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryItemTotals.qty.toLocaleString()}</td>
-                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryItemTotals.amount.toLocaleString()}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              <InboundSummaryTables
+                vendorRows={summaryByVendor}
+                itemRows={summaryByItem}
+                vendorTotals={summaryVendorTotals}
+                itemTotals={summaryItemTotals}
+                vendorSortBy={summaryVendorSortBy}
+                vendorSortDir={summaryVendorSortDir}
+                itemSortBy={summaryItemSortBy}
+                itemSortDir={summaryItemSortDir}
+                onToggleVendorSort={toggleSummaryVendorSort}
+                onToggleItemSort={toggleSummaryItemSort}
+                formatLineName={(name) => formatInboundLineName({ name })}
+              />
             </div>
           </TabsContent>
 

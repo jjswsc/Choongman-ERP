@@ -64,7 +64,7 @@ export default function MarketingReportHubPage() {
 
   return (
     <MarketingPageShell maxWidthClass={wide ? "max-w-7xl" : "max-w-4xl"}>
-        <MarketingPageHero icon={FileText} title={t("adminMarketingReportHubTitle")} />
+        <MarketingPageHero icon={FileText} title={t("adminMarketingReportHubTitle")} description={t("marketingHeroDescReport")} />
 
         <Tabs value={activeTab} onValueChange={(v) => setTab(normalizeTab(v))} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>

@@ -76,25 +76,25 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
           })
         }
 
-        const rows: ChartRow[] = []
-        for (const c of scoped) {
-          if (!marketingCampaignHasDefinedPeriod(c) || !c.kpiTarget) continue
-          const res = await getMarketingCampaignResults({ campaignId: c.id })
-          if (res.success && res.totalOrders != null) {
+        const eligible = scoped.filter((c) => marketingCampaignHasDefinedPeriod(c) && c.kpiTarget)
+        const resultRows = await Promise.all(
+          eligible.map(async (c) => {
+            const res = await getMarketingCampaignResults({ campaignId: c.id })
+            if (!res.success || res.totalOrders == null) return null
             const topic = c.topic
             const short = topic.length > 18 ? topic.slice(0, 18) + "…" : topic
             const no = (c.campaignNo ?? "").trim()
-            rows.push({
+            return {
               id: c.id,
               campaignNo: no,
               topic,
               label: no ? `[${no}] ${short}` : short,
               target: c.kpiTarget ?? 0,
               actual: res.totalOrders ?? 0,
-            })
-          }
-        }
-        setChartData(rows)
+            } satisfies ChartRow
+          })
+        )
+        setChartData(resultRows.filter((r): r is ChartRow => r != null))
       })
       .catch(() => {
         setCampaigns([])

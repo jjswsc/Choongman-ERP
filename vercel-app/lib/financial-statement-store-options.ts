@@ -7,6 +7,13 @@ export type FinancialStatementStoreOption = {
   label: string
 }
 
+/** UI 전용 — 매장 미선택(전체 해제). API storeFilter All 과 구분 */
+export const FINANCIAL_STATEMENT_STORE_NONE = '__none__'
+
+export function isFinancialStatementStoreNone(storeFilter: string | undefined | null): boolean {
+  return String(storeFilter || '').trim() === FINANCIAL_STATEMENT_STORE_NONE
+}
+
 /** 손익·대차 매장 선택 — 본사/오피스 여부 (코드·표시명 모두 검사) */
 export function isFinancialStatementHeadOfficeStore(
   storeCode: string,
@@ -65,7 +72,7 @@ export function encodeFinancialStatementStoreFilter(params: {
     return 'All'
   }
   const normalized = normalizeFinancialStatementStoreCodes(params.selectedFranchiseStores)
-  if (normalized.length === 0) return 'All'
+  if (normalized.length === 0) return FINANCIAL_STATEMENT_STORE_NONE
   if (normalized.length === 1) return normalized[0]!
   return normalized.join(',')
 }
@@ -75,6 +82,9 @@ export function decodeFinancialStatementStoreFilter(
   franchiseStoreCodes: string[]
 ): { selectedFranchiseStores: string[]; officeSelected: boolean } {
   const trimmed = String(storeFilter || '').trim()
+  if (trimmed === FINANCIAL_STATEMENT_STORE_NONE) {
+    return { selectedFranchiseStores: [], officeSelected: false }
+  }
   if (trimmed === '본사') {
     return { selectedFranchiseStores: [], officeSelected: true }
   }
@@ -94,6 +104,9 @@ export function resolveFinancialStatementStoreLabel(
   t: (key: string) => string,
   opts?: { franchiseAggregateAll?: boolean }
 ): string {
+  if (isFinancialStatementStoreNone(storeFilter)) {
+    return t('salesStoreDeselectAll') || 'No selection'
+  }
   if (storeFilter === 'All') {
     if (opts?.franchiseAggregateAll) {
       return t('store_all_my_franchise_stores') || t('salesSelectMyFranchiseStoresAll') || 'All my stores'

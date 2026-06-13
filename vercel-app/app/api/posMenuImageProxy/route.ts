@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { canonicalPosMenuUpstreamUrl } from '@/lib/pos-menu-image-url'
+import { clampPosMenuProxyInt } from '@/lib/pos-menu-image-proxy-params'
 import { supabaseFetch } from '@/lib/supabase-server'
 
 /** 브라우저·POS 단말 — CDN HIT 후에도 주기적 재검증은 SWR로 완화 */
@@ -14,12 +15,6 @@ const CDN_CACHE_CONTROL = 'public, s-maxage=86400, stale-while-revalidate=604800
 const DEFAULT_RENDER_WIDTH = 750
 const MAX_RENDER_WIDTH = 1200
 const DEFAULT_RENDER_QUALITY = 80
-
-function clampInt(raw: string | null, fallback: number, min: number, max: number): number {
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return fallback
-  return Math.min(max, Math.max(min, Math.round(n)))
-}
 
 function isAllowedUpstream(parsed: URL): boolean {
   const h = parsed.hostname.toLowerCase()
@@ -113,8 +108,18 @@ export async function GET(request: NextRequest) {
     return new NextResponse(null, { status: 403 })
   }
 
-  const width = clampInt(request.nextUrl.searchParams.get('w'), DEFAULT_RENDER_WIDTH, 64, MAX_RENDER_WIDTH)
-  const quality = clampInt(request.nextUrl.searchParams.get('q'), DEFAULT_RENDER_QUALITY, 40, 100)
+  const width = clampPosMenuProxyInt(
+    request.nextUrl.searchParams.get('w'),
+    DEFAULT_RENDER_WIDTH,
+    64,
+    MAX_RENDER_WIDTH
+  )
+  const quality = clampPosMenuProxyInt(
+    request.nextUrl.searchParams.get('q'),
+    DEFAULT_RENDER_QUALITY,
+    40,
+    100
+  )
 
   const fetchImage = (href: string) =>
     fetch(href, {
