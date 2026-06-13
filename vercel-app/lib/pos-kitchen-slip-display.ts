@@ -9,6 +9,7 @@ import {
   isLikelyPosOptionCode,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
+import { isBanbanKitchenLine, parseBanbanFlavorsFromDisplayName } from '@/lib/pos-banban-utils'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import {
   isLikelyPosMenuSkuCode,
@@ -655,9 +656,13 @@ export function buildKitchenHallStyleSlipLines(
       grabInbound && isLikelyCodeLikeMenuName(lineSplit.mainName || String(it.name ?? ''))
         ? deriveGrabMenuNameFromCodeLikeNote(String(it.note ?? ''))
         : ''
-    const resolvedMainName = fallbackNameFromNote
-      ? fallbackNameFromNote
-      : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
+    const banbanLine = isBanbanKitchenLine(it)
+    const banbanFromName = parseBanbanFlavorsFromDisplayName(String(it.name ?? ''))
+    const resolvedMainName = banbanLine && banbanFromName
+      ? stripLeadingPrintCodeBrackets(String(it.name ?? ''))
+      : fallbackNameFromNote
+        ? fallbackNameFromNote
+        : resolveCodeLikeLineName(lineSplit.mainName || String(it.name ?? ''))
     const formattedNote = formatItemNoteForPrint(resolvedNote)
     // 옵션 표기 누락 방지: 코드(optc:) 조회 결과가 비면(=일시적 네트워크 실패·콜드 캐시·
     // 카탈로그 미수록 등으로 사이즈가 간헐적으로 사라지는 경우 포함) 이름에 이미 적힌
@@ -667,7 +672,15 @@ export function buildKitchenHallStyleSlipLines(
       !formattedNote && lineSplit.optionLine
         ? String(lineSplit.optionLine).trim()
         : ''
-    const effectiveNote = formattedNote || optionLineFallback
+    const hasBanbanFlavorsToken = /banbanFlavors:/i.test(String(resolvedNote ?? ''))
+    const effectiveNote =
+      banbanLine && banbanFromName
+        ? undefined
+        : banbanLine && hasBanbanFlavorsToken
+          ? formatGrabLineNoteForKitchenPrint(resolvedNote, optionNameByCode) ||
+            formattedNote ||
+            optionLineFallback
+          : formattedNote || optionLineFallback
     const dedupedNote =
       fallbackNameFromNote &&
       effectiveNote &&

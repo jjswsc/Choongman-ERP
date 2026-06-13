@@ -718,22 +718,42 @@ export function resolveGrabPrintNoteRequestWithoutEco(
   return translateGrabRequestSummaryChunks(summary, t)
 }
 
-/** 주방 슬립·주방 줄 메모: 옵션 + 고객 요청(1회용 eco: 제외) */
+/** 주방 슬립·주방 줄 메모: 옵션 + 고객 요청(1회용 eco: 제외). 반반 `banbanFlavors:` 토큰은 HTML 단계 맛 복원용으로 유지 */
 export function formatGrabLineNoteForKitchenPrint(
   rawNote: string | null | undefined,
   optionNameByCode?: Map<string, string> | Record<string, string>
 ): string {
   const raw = String(rawNote ?? '').trim()
   if (!raw) return ''
+  const chunks = raw
+    .split('·')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const banbanFlavorsChunk = chunks.find((chunk) => /^banbanFlavors:/i.test(chunk)) ?? ''
+  const workNote = chunks
+    .filter((chunk) => !/^banbanFlavors:/i.test(chunk) && !/^eco:/i.test(chunk))
+    .join(' · ')
   const map = toOptionNameByCodeMap(optionNameByCode)
-  const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(raw)
-  const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(raw) || hasGrabOptionToken
-  if (!shouldUseGrabParser) return normalizePosLineNote(raw, { keepOptionSummary: false })
-  const grabMeta = resolveGrabDeliveryLineNote(raw, map)
-  const option = String(grabMeta.optionSummary || '').trim()
-  const request = omitGrabEcoFromJoinedNote(String(grabMeta.requestSummary || ''))
-  if (option || request) return [option, request].filter(Boolean).join(' · ')
-  return normalizePosLineNote(raw, { keepOptionSummary: false })
+  const hasGrabOptionToken = /(?:^|[\s·,])[A-Za-z][A-Za-z0-9]*-\d+/.test(workNote)
+  const shouldUseGrabParser = /(?:^|\s)(mods?:|optc:)/i.test(workNote) || hasGrabOptionToken
+  let body = ''
+  if (!workNote) {
+    body = ''
+  } else if (!shouldUseGrabParser) {
+    body = normalizePosLineNote(workNote, { keepOptionSummary: false })
+  } else {
+    const grabMeta = resolveGrabDeliveryLineNote(workNote, map)
+    const option = String(grabMeta.optionSummary || '').trim()
+    const request = omitGrabEcoFromJoinedNote(String(grabMeta.requestSummary || ''))
+    body =
+      option || request
+        ? [option, request].filter(Boolean).join(' · ')
+        : normalizePosLineNote(workNote, { keepOptionSummary: false })
+  }
+  if (banbanFlavorsChunk) {
+    return body ? `${body} · ${banbanFlavorsChunk}` : banbanFlavorsChunk
+  }
+  return body
 }
 
 function normalizeGrabPrintNameKey(raw: string): string {

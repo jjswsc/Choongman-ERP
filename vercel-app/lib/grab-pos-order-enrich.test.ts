@@ -352,6 +352,19 @@ describe('grab-pos-order-enrich', () => {
     ])
   })
 
+  it('formatGrabLineNoteForKitchenPrint keeps banbanFlavors token for kitchen HTML restore (GF-708)', () => {
+    const note =
+      'banbanFlavors:SNOW ONION,SWEET YANGNYEOM · eco:no plastic cutlery requested'
+    expect(formatGrabLineNoteForKitchenPrint(note)).toBe(
+      'banbanFlavors:SNOW ONION,SWEET YANGNYEOM'
+    )
+    const withMods =
+      'mods:Kimchi · optc:C024-1 · banbanFlavors:SNOW ONION,SWEET YANGNYEOM · eco:no plastic cutlery requested'
+    expect(formatGrabLineNoteForKitchenPrint(withMods)).toBe(
+      'Kimchi · banbanFlavors:SNOW ONION,SWEET YANGNYEOM'
+    )
+  })
+
   it('collectGrabPrintOptionLines returns one chip per option', () => {
     const catalog = buildGrabPosCatalog(
       [],

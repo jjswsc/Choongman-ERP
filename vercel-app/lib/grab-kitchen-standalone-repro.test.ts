@@ -11,6 +11,7 @@ import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display
 import { formatGrabLineNoteForKitchenPrint } from '@/lib/grab-pos-order-enrich'
 import { buildKitchenSlipItemsHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
+import { enrichBanbanKitchenLineForPrint } from '@/lib/pos-banban-utils'
 
 // 실제 Grab 주문(CM Silom / The Street, 2026-06-12) 데이터를 그대로 주방 인쇄 파이프라인에 흘려
 // 맛·사이즈가 주방 슬립 HTML에 남는지 회귀 검증한다.
@@ -33,7 +34,10 @@ const OPTION_MAP = new Map<string, string>([
   ['C024-2', 'Pickled Radish'],
 ])
 
-function renderKitchenHtml(rawItems: Record<string, unknown>[]): string {
+function renderKitchenHtml(
+  rawItems: Record<string, unknown>[],
+  designOverrides?: Parameters<typeof resolveKitchenSlipDesign>[0]
+): string {
   const mapped = rawItems.map((it) =>
     mapPosOrderRowForKitchenPrint(it, { menus: MENUS, deliveryAppCode: 'grab' })
   )
@@ -50,7 +54,7 @@ function renderKitchenHtml(rawItems: Record<string, unknown>[]): string {
     kitchen3: 'ครัว 3',
   } as any)
   const slips = buildKitchenSlipGroups(prepared, groupOpts)
-  const design = resolveKitchenSlipDesign({})
+  const design = resolveKitchenSlipDesign(designOverrides ?? {})
   let html = ''
   for (const slip of slips) {
     const rows = mapKitchenSlipGroupItemsForPrint(slip.items, {
@@ -160,5 +164,25 @@ describe('kitchen print preserves Grab flavor/size (real Silom/The Street data)'
     expect(html).toContain('SNOW ONION')
     expect(html).toContain('SPICY YANGNYEOM')
     expect(html).toContain('Size S')
+  })
+
+  it('GF-708 plain Banban name + banbanFlavors survives flavor group policy off', () => {
+    const item = enrichBanbanKitchenLineForPrint(
+      {
+        id: 'grab:item-75-c024',
+        name: 'Banban Chicken',
+        price: 279,
+        qty: 1,
+        note: 'banbanFlavors:SNOW ONION,SWEET YANGNYEOM · eco:no plastic cutlery requested',
+        menuId1: '11',
+      },
+      MENUS
+    )
+    const html = renderKitchenHtml([item as Record<string, unknown>], {
+      kitchenSlipOptionGroupPrint: { flavor: false },
+    })
+    expect(html).toContain('Banban Chicken')
+    expect(html).toContain('SNOW ONION')
+    expect(html).toContain('SWEET YANGNYEOM')
   })
 })
